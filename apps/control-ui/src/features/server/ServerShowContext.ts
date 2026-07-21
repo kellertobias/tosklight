@@ -61,5 +61,4 @@ export interface ServerShowContext {
 		input: import("../../api/types").SpeedGroupActionInput,
 	) => Promise<import("../../api/types").SpeedGroupSoundState>;
 	saveDeskLayout: (layout: StoredDeskLayout) => Promise<void>;
-	saveStageLayout: (layout: StoredStageLayout) => Promise<void>;
 }

@@ -59,7 +59,6 @@ export interface ServerCoreContext
 	cueObjects: VersionedObject<import("../../api/types").CueList>[];
 	deskLayout: VersionedObject<StoredDeskLayout> | null;
 	deskLayoutScope: string | null;
-	stageLayout: VersionedObject<StoredStageLayout> | null;
 	unresolvedMvrFixtures: VersionedObject<Record<string, unknown>>[];
 	commandLine: string;
 	commandTargetMode: CommandTargetMode;

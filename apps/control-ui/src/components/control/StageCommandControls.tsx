@@ -1,6 +1,11 @@
 import { useEffect } from "react";
 import { useApp } from "../../state/AppContext";
 import { usePatchedFixturesView } from "../../features/patch/PatchState";
+import { useStageLayoutActions } from "../../features/stageLayout/StageLayoutActionsProvider";
+import {
+  useStagePositions,
+  useStagePositions3d,
+} from "../../features/stageLayout/StageLayoutState";
 import { useServer } from "../../api/ServerContext";
 import { VerticalTouchFader } from "./VerticalTouchFader";
 import { DualVerticalTouchFader } from "./DualVerticalTouchFader";
@@ -22,14 +27,17 @@ export function StageCommandControls() {
   const hardwareConnected = Boolean(server.bootstrap?.hardware_connected || state.midiProfile);
   const selected = selection.fixtureIds;
   const patchedFixtures = usePatchedFixturesView();
-  const positions = Object.fromEntries(patchedFixtures.map((fixture, index) => [fixture.fixture_id, server.stageLayout?.body.positions3d?.[fixture.fixture_id] ?? migrateStagePosition(server.stageLayout?.body.positions?.[fixture.fixture_id], index)]));
+  const stagePositions = useStagePositions();
+  const stagePositions3d = useStagePositions3d();
+  const stageLayoutActions = useStageLayoutActions();
+  const positions = Object.fromEntries(patchedFixtures.map((fixture, index) => [fixture.fixture_id, stagePositions3d[fixture.fixture_id] ?? migrateStagePosition(stagePositions[fixture.fixture_id], index)]));
   const first = positions[selected[0]];
   const update = (key: keyof StagePosition3d, nextValue: number) => {
     if (!first) return;
     const delta = nextValue - first[key];
     const nextPositions = { ...positions };
     for (const id of selected) if (nextPositions[id]) nextPositions[id] = { ...nextPositions[id], [key]: nextPositions[id][key] + delta };
-    void server.saveStageLayout({ version: 2, positions: server.stageLayout?.body.positions ?? {}, positions3d: nextPositions });
+    void stageLayoutActions?.saveStageLayout({ version: 2, positions: stagePositions, positions3d: nextPositions });
   };
   useEffect(() => {
     if (!hardwareConnected) return;

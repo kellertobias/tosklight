@@ -91,6 +91,10 @@ export function useServerState() {
 	useEffect(() => {
 		configurationStore.install(configuration);
 	}, [configuration, configurationStore]);
+	const stageLayoutStore = featureStores.stageLayoutStore;
+	useEffect(() => {
+		stageLayoutStore.install(stageLayout);
+	}, [stageLayout, stageLayoutStore]);
 	return {
 		client,
 		status,

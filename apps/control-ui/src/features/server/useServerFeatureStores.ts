@@ -11,6 +11,7 @@ import { ProgrammerPriorityStore } from "../programmerPriority/store";
 import { ProgrammerValuesStore } from "../programmerValues/store";
 import { ProgrammingInteractionStore } from "../programmingInteraction/store";
 import { SpeedGroupRuntimeStore } from "../speedGroupRuntime/store";
+import { StageLayoutStore } from "../stageLayout/store";
 
 /** Stable external stores kept outside the broad React server-state update path. */
 export function useServerFeatureStores() {
@@ -20,6 +21,7 @@ export function useServerFeatureStores() {
 	speedGroupRuntimeStore.current ??= new SpeedGroupRuntimeStore();
 	return {
 		configurationStore: useRef(new ConfigurationStore()).current,
+		stageLayoutStore: useRef(new StageLayoutStore()).current,
 		outputRuntimeStore: outputRuntimeStore.current,
 		speedGroupRuntimeStore: speedGroupRuntimeStore.current,
 		playbackRuntimeStore: useRef(new PlaybackRuntimeStore()).current,

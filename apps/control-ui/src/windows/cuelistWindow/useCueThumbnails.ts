@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { usePatchedFixturesView } from "../../features/patch/PatchState";
+import {
+	useStagePositions,
+	useStagePositions3d,
+} from "../../features/stageLayout/StageLayoutState";
 import { useServer } from "../../api/ServerContext";
 import type {
 	AttributeValue,
@@ -26,6 +30,8 @@ const NO_SUBSCRIPTION = () => () => undefined;
 function useStageFixtures(enabled: boolean) {
 	const server = useServer();
 	const fixtures = usePatchedFixturesView(enabled);
+	const stagePositions = useStagePositions();
+	const stagePositions3d = useStagePositions3d();
 	return useMemo(() => {
 		if (!enabled) return [];
 		return fixtures.flatMap((fixture, fixtureIndex) =>
@@ -55,18 +61,18 @@ function useStageFixtures(enabled: boolean) {
 					instanceId: instance.id,
 					index,
 					position:
-						server.stageLayout?.body.positions3d?.[instance.id] ??
+						stagePositions3d[instance.id] ??
 						located ??
 						migrateStagePosition(
 							instanceIndex
 								? undefined
-								: server.stageLayout?.body.positions[fixture.fixture_id],
+								: stagePositions[fixture.fixture_id],
 							index,
 						),
 				};
 			}),
 		);
-	}, [enabled, fixtures, server.stageLayout]);
+	}, [enabled, fixtures, stagePositions, stagePositions3d]);
 }
 
 function cueChanges(cue: Cue, groups: readonly ShowObject<"group">[]) {

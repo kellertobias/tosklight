@@ -26,7 +26,6 @@ export function createServerSnapshotValue(
 	| "cueObjects"
 	| "deskLayout"
 	| "deskLayoutScope"
-	| "stageLayout"
 	| "unresolvedMvrFixtures"
 	| "commandLine"
 	| "commandTargetMode"
@@ -60,7 +59,6 @@ export function createServerSnapshotValue(
 		cueObjects,
 		deskLayout,
 		deskLayoutScope,
-		stageLayout,
 		unresolvedMvrFixtures,
 		commandTargetMode,
 		commandLine,
@@ -96,7 +94,6 @@ export function createServerSnapshotValue(
 		cueObjects,
 		deskLayout,
 		deskLayoutScope,
-		stageLayout,
 		unresolvedMvrFixtures,
 		commandLine,
 		commandTargetMode,
