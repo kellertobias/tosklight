@@ -1,4 +1,5 @@
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { clearProgrammerValues } from "../apps/control-ui/e2e/bench/programmerValues";
 import {
 	assertCueReplayBoundaries,
 	connectHardware,
@@ -28,7 +29,11 @@ export function registerFixtureTimingTest(): void {
 	}) => {
 		const hardware: HardwareState = {};
 		try {
-			await loadCanonicalCopy(api, bench, "time-002-fixture-cue");
+			const show = await loadCanonicalCopy(
+				api,
+				bench,
+				"time-002-fixture-cue",
+			);
 			const fixtureId = (await fixtureIdsByNumber(api))[1];
 			await connectHardware(api, bench, hardware, "time-002-fixture-cue");
 			await desk.open(bench.baseUrl);
@@ -69,7 +74,10 @@ export function registerFixtureTimingTest(): void {
 				fade_millis: 3_000,
 			});
 
-			await api.command("programmer.clear", {});
+			await clearProgrammerValues(api, {
+				surface: "api",
+				showId: show.id,
+			});
 			await expect.poll(async () => (await programmer(api)).values).toEqual([]);
 			await openFixtures(page);
 			await api.request("POST", "/api/v1/cuelists/1/go", {});
@@ -91,7 +99,7 @@ export function registerGroupTimingTest(): void {
 	}) => {
 		const hardware: HardwareState = {};
 		try {
-			await loadCanonicalCopy(api, bench, "time-002-group-cue");
+			const show = await loadCanonicalCopy(api, bench, "time-002-group-cue");
 			const fixtureIds = await fixtureIdsByNumber(api);
 			await connectHardware(api, bench, hardware, "time-002-group-cue");
 			await desk.open(bench.baseUrl);
@@ -130,7 +138,10 @@ export function registerGroupTimingTest(): void {
 				fade_millis: 3_000,
 			});
 
-			await api.command("programmer.clear", {});
+			await clearProgrammerValues(api, {
+				surface: "api",
+				showId: show.id,
+			});
 			await expect
 				.poll(async () => (await programmer(api)).group_values)
 				.toEqual({});

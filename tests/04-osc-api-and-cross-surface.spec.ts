@@ -2,6 +2,7 @@ import type { ApiDriver, Session } from "../apps/control-ui/e2e/bench/api";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import type { OscHardware } from "../apps/control-ui/e2e/bench/protocols";
+import { setProgrammerGroupValue } from "../apps/control-ui/e2e/bench/programmerValues";
 import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import {
   executeProgrammerCommand,
@@ -803,10 +804,22 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 });
 
 function registerGroupOutputPair(id: string, percent: number, byte: number, title: string) {
-  pairedScenario<{}>({
+  pairedScenario<{ showId: string }>({
     id, title,
-    arrange: async ({ api, bench }, surface) => { await loadCanonicalCopy(api, bench, `${id.toLowerCase()}-${surface}`); return {}; },
-    api: async ({ api }) => { await api.command("programmer.group.set", { group_id: "1", attribute: "intensity", value: percent / 100 }); },
+    arrange: async ({ api, bench }, surface) => {
+      const show = await loadCanonicalCopy(api, bench, `${id.toLowerCase()}-${surface}`);
+      return { showId: show.id };
+    },
+    api: async ({ api }, state) => {
+      await setProgrammerGroupValue(api, {
+        surface: "api",
+        showId: state.showId,
+        groupId: "1",
+        attribute: "intensity",
+        value: { kind: "normalized", value: percent / 100 },
+        timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+      });
+    },
     ui: async ({ bench, desk, page }) => { await desk.open(bench.baseUrl); await pressCommand(page, `GROUP 1 AT ${percent}`); },
     assert: async ({ bench }) => {
       const mark = bench.artnet.mark(); await bench.tick(3_000);

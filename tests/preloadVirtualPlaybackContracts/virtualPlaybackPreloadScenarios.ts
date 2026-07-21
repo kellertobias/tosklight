@@ -13,6 +13,7 @@ import {
 	goProgrammerPreload,
 	releaseProgrammerPreload,
 } from "../../apps/control-ui/e2e/bench/programmerPreloadLifecycle";
+import { clearProgrammerValues } from "../../apps/control-ui/e2e/bench/programmerValues";
 import { programmer } from "../support/catalog";
 import {
 	activePlayback,
@@ -252,7 +253,10 @@ const preload004ApiSupplement = async ({
 	expect(await activePlayback(api, 43)).toMatchObject({ enabled: true });
 	// The disabled programmer domain was proven live above; remove it before measuring the
 	// independently captured virtual playback transition.
-	await api.command("programmer.clear", {});
+	await clearProgrammerValues(api, {
+		surface: "api",
+		showId: prepared.showId,
+	});
 	await bench.tick(100);
 	const committed = (
 		await goProgrammerPreload(api, {

@@ -3,6 +3,7 @@ import {
 	expect,
 	test,
 } from "../../apps/control-ui/e2e/bench/fixtures";
+import { setProgrammerFixtureValue } from "../../apps/control-ui/e2e/bench/programmerValues";
 import {
 	loadCanonicalCopy,
 	object,
@@ -201,15 +202,21 @@ async function exerciseCueUpdate(
 		authoritativeCueBaseline,
 	} = state;
 	await api.command("selection.set", { fixtures: [first, second] });
-	await api.command("programmer.set", {
-		fixture_id: first,
+	await setProgrammerFixtureValue(api, {
+		surface: "api",
+		showId: show.id,
+		fixtureId: first,
 		attribute: "intensity",
-		value: 0.8,
+		value: { kind: "normalized", value: 0.8 },
+		timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 	});
-	await api.command("programmer.set", {
-		fixture_id: second,
+	await setProgrammerFixtureValue(api, {
+		surface: "api",
+		showId: show.id,
+		fixtureId: second,
 		attribute: "intensity",
-		value: 0.7,
+		value: { kind: "normalized", value: 0.7 },
+		timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 	});
 	const unrelatedBeforeCue = await objectRows(
 		showEntry.path,

@@ -1,5 +1,7 @@
+import type { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
 import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../../apps/control-ui/e2e/bench/pairedScenario";
+import { setProgrammerFixtureValue } from "../../apps/control-ui/e2e/bench/programmerValues";
 import {
 	loadCanonicalCopy,
 	object,
@@ -58,11 +60,7 @@ pairedScenario<HighlightScenarioState>({
 		);
 		const fixtures = await fixturesByNumber(api, [101, 102, 103]);
 		await api.command("selection.set", { fixtures: [fixtures[0].id] });
-		await api.command("programmer.set", {
-			fixture_id: fixtures[0].id,
-			attribute: "pan",
-			value: 0.63,
-		});
+		await setPan(api, show.id, fixtures[0].id, 0.63);
 		await api.command("selection.set", { fixtures: fixtureIds(fixtures) });
 		return { showId: show.id, fixtures, storedPresetId: "197" };
 	},
@@ -74,18 +72,10 @@ pairedScenario<HighlightScenarioState>({
 		);
 		await highlightAction(api, "next");
 		const first = (await programmer(api)).selected[0];
-		await api.command("programmer.set", {
-			fixture_id: first,
-			attribute: "pan",
-			value: 0.41,
-		});
+		await setPan(api, state.showId, first, 0.41);
 		await highlightAction(api, "next");
 		const second = (await programmer(api)).selected[0];
-		await api.command("programmer.set", {
-			fixture_id: second,
-			attribute: "pan",
-			value: 0.52,
-		});
+		await setPan(api, state.showId, second, 0.52);
 		await highlightAction(api, "off");
 		await storeCurrentProgrammerPreset(api, state.showId, state.storedPresetId);
 	},
@@ -101,17 +91,9 @@ pairedScenario<HighlightScenarioState>({
 			fixtureIds(state.fixtures),
 		);
 		await clickHighlightKey(page, api, "NEXT", [state.fixtures[0].id]);
-		await api.command("programmer.set", {
-			fixture_id: state.fixtures[0].id,
-			attribute: "pan",
-			value: 0.41,
-		});
+		await setPan(api, state.showId, state.fixtures[0].id, 0.41);
 		await clickHighlightKey(page, api, "NEXT", [state.fixtures[1].id]);
-		await api.command("programmer.set", {
-			fixture_id: state.fixtures[1].id,
-			attribute: "pan",
-			value: 0.52,
-		});
+		await setPan(api, state.showId, state.fixtures[1].id, 0.52);
 		await clickHighlightKey(page, api, "HIGH");
 		await expect
 			.poll(async () => (await highlightState(api)).active)
@@ -167,6 +149,22 @@ pairedScenario<HighlightScenarioState>({
 		).toBe(true);
 	},
 });
+
+function setPan(
+	api: ApiDriver,
+	showId: string,
+	fixtureId: string,
+	value: number,
+) {
+	return setProgrammerFixtureValue(api, {
+		surface: "api",
+		showId,
+		fixtureId,
+		attribute: "pan",
+		value: { kind: "normalized", value },
+		timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+	});
+}
 
 pairedScenario<HighlightSurfaceState>({
 	id: "HIGHLIGHT-002",

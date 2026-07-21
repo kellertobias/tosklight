@@ -3,6 +3,7 @@ import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import { mapExistingPlaybackToSlot } from "../apps/control-ui/e2e/bench/mapExistingPlaybackToSlot";
 import { setOutputRuntime } from "../apps/control-ui/e2e/bench/outputRuntime";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
+import { clearProgrammerValues } from "../apps/control-ui/e2e/bench/programmerValues";
 import {
 	installGroupCue,
 	playbackRuntime,
@@ -57,8 +58,14 @@ export function registerShow001PairedScenario(): void {
 				slot: 1,
 				playbackNumber: 1,
 			});
-			await api.command("programmer.clear", {});
-			await api.command("programmer.clear", {});
+			await clearProgrammerValues(api, {
+				surface: "api",
+				showId: state.copyId,
+			});
+			await clearProgrammerValues(api, {
+				surface: "api",
+				showId: state.copyId,
+			});
 			await api.request("POST", "/api/v1/cuelists/1/go", {});
 			await api.executeCommandLine("FIXTURE 12 AT 65");
 			await api.request("POST", `/api/v1/shows/${state.copyId}/revisions`, {

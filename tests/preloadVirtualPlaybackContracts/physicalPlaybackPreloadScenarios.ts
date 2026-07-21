@@ -13,6 +13,7 @@ import {
 	goProgrammerPreload,
 	releaseProgrammerPreload,
 } from "../../apps/control-ui/e2e/bench/programmerPreloadLifecycle";
+import { clearProgrammerValues } from "../../apps/control-ui/e2e/bench/programmerValues";
 import { programmer } from "../support/catalog";
 import {
 	activePlayback,
@@ -210,7 +211,10 @@ const preload002ApiSupplement = async ({
 	expect((await programmer(api)).group_values["1"]).toBeDefined();
 	// The disabled-domain assertion is complete; clear its live value so the playback timing
 	// checkpoint below measures only the queued GO result.
-	await api.command("programmer.clear", {});
+	await clearProgrammerValues(api, {
+		surface: "api",
+		showId: prepared.showId,
+	});
 	const verbs = [
 		[1, "go"],
 		[2, "go-minus"],

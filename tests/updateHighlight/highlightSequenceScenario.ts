@@ -1,5 +1,6 @@
 import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../../apps/control-ui/e2e/bench/pairedScenario";
+import { setProgrammerFixtureValue } from "../../apps/control-ui/e2e/bench/programmerValues";
 import {
 	loadCanonicalCopy,
 	object,
@@ -98,10 +99,13 @@ pairedScenario<HighlightSequenceState>({
 		]);
 
 		await restoreSecondStep(api);
-		await api.command("programmer.set", {
-			fixture_id: state.fixtures[1].id,
+		await setProgrammerFixtureValue(api, {
+			surface: "api",
+			showId: state.showId,
+			fixtureId: state.fixtures[1].id,
 			attribute: "pan",
-			value: 0.72,
+			value: { kind: "normalized", value: 0.72 },
+			timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 		});
 		await api.executeCommandLine(
 			`RECORD GROUP ${state.singletonGroupId}`,

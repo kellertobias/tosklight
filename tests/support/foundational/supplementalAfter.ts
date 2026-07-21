@@ -1,6 +1,7 @@
 import type { ApiDriver } from "../../../apps/control-ui/e2e/bench/api";
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
 import { recallPreset } from "../../../apps/control-ui/e2e/bench/presetRecall";
+import { clearProgrammerValues } from "../../../apps/control-ui/e2e/bench/programmerValues";
 import type { FoundationalCase } from "./case";
 import {
 	command,
@@ -35,8 +36,9 @@ async function prepareSpreadRig(
 	bench: BenchDriver,
 	name: string,
 ) {
-	await loadCompactRig(api, bench, name);
+	const showId = await loadCompactRig(api, bench, name);
 	await overwriteGroupByNumbers(api, "1", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+	return showId;
 }
 
 async function createCuePlayback(api: ApiDriver, number: number) {
@@ -126,7 +128,11 @@ async function verifyBasicSpreadPermutations(
 }
 
 async function verifyLiveSpreadStorage(api: ApiDriver, bench: BenchDriver) {
-	await prepareSpreadRig(api, bench, "prog-002-live-storage-api");
+	const showId = await prepareSpreadRig(
+		api,
+		bench,
+		"prog-002-live-storage-api",
+	);
 	const cueListId = await createCuePlayback(api, 1);
 	await command(api, "GROUP 1 AT 0 THRU 100");
 	await command(api, "RECORD 1.1");
@@ -151,7 +157,7 @@ async function verifyLiveSpreadStorage(api: ApiDriver, bench: BenchDriver) {
 	await overwriteGroupByNumbers(api, "1", [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 	const expected = [26, 51, 77, 102, 128, 153, 179, 204, 230, 255, 0, 0];
 	await expectSlotsAfterTick(bench, 3_000, expected);
-	await api.command("programmer.clear", {});
+	await clearProgrammerValues(api, { surface: "api", showId });
 	await command(api, "GROUP 1 AT 1.1");
 	await expectProgrammer(api, (state) => {
 		expect(state.group_values["1"]?.[INTENSITY]?.value).toMatchObject({
@@ -161,7 +167,7 @@ async function verifyLiveSpreadStorage(api: ApiDriver, bench: BenchDriver) {
 		expect(state.values).toHaveLength(0);
 	});
 	await expectSlotsAfterTick(bench, 3_000, expected);
-	await api.command("programmer.clear", {});
+	await clearProgrammerValues(api, { surface: "api", showId });
 	await api.command("playback.go", { cue_list_id: cueListId });
 	await expectSlotsAfterTick(bench, 3_000, expected);
 }
@@ -170,7 +176,11 @@ async function verifyDereferencedSpreadStorage(
 	api: ApiDriver,
 	bench: BenchDriver,
 ) {
-	await prepareSpreadRig(api, bench, "prog-002-dereferenced-storage-api");
+	const showId = await prepareSpreadRig(
+		api,
+		bench,
+		"prog-002-dereferenced-storage-api",
+	);
 	const cueListId = await createCuePlayback(api, 2);
 	await command(api, "DEGRP 1 AT 0 THRU 100");
 	await expectProgrammer(api, (state) => {
@@ -188,14 +198,14 @@ async function verifyDereferencedSpreadStorage(
 	await overwriteGroupByNumbers(api, "1", [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 	const expected = [0, 28, 57, 85, 113, 142, 170, 198, 227, 255, 0, 0];
 	await expectSlotsAfterTick(bench, 3_000, expected);
-	await api.command("programmer.clear", {});
+	await clearProgrammerValues(api, { surface: "api", showId });
 	await command(api, "DEGRP 1 AT 1.2");
 	await expectProgrammer(api, (state) => {
 		expect(Object.keys(state.group_values)).toHaveLength(0);
 		expect(state.values).toHaveLength(10);
 	});
 	await expectSlotsAfterTick(bench, 3_000, expected);
-	await api.command("programmer.clear", {});
+	await clearProgrammerValues(api, { surface: "api", showId });
 	await api.command("playback.go", { cue_list_id: cueListId });
 	await expectSlotsAfterTick(bench, 3_000, expected);
 }
@@ -310,7 +320,7 @@ export const supplementalAfter: FoundationalCase[] = [
 	{
 		title: "PROG-004 @supplemental › direct API clear-stage boundary",
 		run: async ({ api, bench }) => {
-			await loadCompactRig(api, bench, "prog-004-api");
+			const showId = await loadCompactRig(api, bench, "prog-004-api");
 			await command(api, "1 + 2 AT 50");
 			await select(api, []);
 			await expectProgrammer(api, (state) => {
@@ -322,7 +332,7 @@ export const supplementalAfter: FoundationalCase[] = [
 				3_000,
 				[128, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 			);
-			await api.command("programmer.clear", {});
+			await clearProgrammerValues(api, { surface: "api", showId });
 			await expectProgrammer(api, (state) =>
 				expect(state.values).toHaveLength(0),
 			);

@@ -3,6 +3,7 @@ import {
 	commandLineOwnership,
 } from "../../../apps/control-ui/e2e/bench/api";
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
+import { clearProgrammerValues } from "../../../apps/control-ui/e2e/bench/programmerValues";
 import { loadCanonicalCopy } from "../catalog";
 import type { ProgrammerState, ShowEntry, VersionedObject } from "./contracts";
 
@@ -13,7 +14,7 @@ export async function loadCompactRig(
 ): Promise<string> {
 	const show = await loadCanonicalCopy(api, bench, name);
 	await api.command("selection.set", { fixtures: [] });
-	await api.command("programmer.clear", {});
+	await clearProgrammerValues(api, { surface: "api", showId: show.id });
 	const group4 = (await objects(api, "group")).find(
 		(group) => group.id === "4",
 	);
