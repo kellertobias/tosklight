@@ -1,20 +1,20 @@
 # Major Refactoring Progress
 
-Estimated progress: **96%**
+Estimated progress: **97%**
 
-Estimated Codex ETA: **roughly 18–30 hours of active Codex execution**, to repository-wide
-acceptance. Typed Cue transfer is complete. Physical Playback authority still requires an exact
-map-existing action and a page create/rename action before the broad Playback snapshot can be
-retired; the remaining compatibility callers, public test-DSL handoff, and final performance and
-desktop acceptance follow. This corrected estimate reflects the audited compatibility surface,
-not a regression in completed work.
+Estimated Codex ETA: **roughly 14–24 hours of active Codex execution**, to repository-wide
+acceptance. Typed Cue transfer, exact existing-Playback mapping, and the primary physical Playback
+bank are complete. Typed page create/rename and the companion page, shortcut, summary, Numeric Pad,
+secondary-screen, and Product Demo callers remain before the broad Playback snapshot can be
+retired; public test-DSL convergence and final performance/desktop acceptance follow.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after completing typed Cue COPY/MOVE Plain/Status authority from the
-Programming application boundary through the scoped frontend writer.
+Last updated: 2026-07-20 after completing typed existing-Playback mapping and moving the primary
+physical Playback bank/configuration surface onto scoped topology, runtime, desk, command-line, and
+conditional Group authority.
 
 ## Guardrails
 
@@ -60,8 +60,8 @@ Programming application boundary through the scoped frontend writer.
 - [x] Migrated the primary manual, automatic, scheduled, OSC, Preload, current-page, and
   explicit-page Playback action paths into the typed application service and v2 runtime contract.
   Virtual exclusion peers and startup normalization now use that boundary; exact semantic no-op
-  reporting is complete. Portable topology and Cuelist mutation are complete below, while the
-  physical compatibility panes remain.
+  reporting is complete. Portable topology, Cuelist mutation, and the primary physical bank are
+  complete below, while companion page and shortcut compatibility callers remain.
 - [x] Removed mutable Playback-service lock exposure from the migrated paths: Engine callers use
   typed commands and immutable projections, Preload installs generation-bound prepared batches,
   and application-owned units of work serialize page changes, automatic render transitions, and
@@ -70,9 +70,10 @@ Programming application boundary through the scoped frontend writer.
   activated only by mounted Playback/Cuelist views, desk-only views request no runtime identities,
   and gaps and malformed messages repair from authoritative snapshots. Concurrent fader and page
   mutations use independent optimistic overlays with request-ordered rollback and authoritative
-  event/outcome reconciliation. Unmigrated physical panes remain on the broad v1 `/playbacks`
+  event/outcome reconciliation. Unmigrated companion panes remain on the broad v1 `/playbacks`
   snapshot; they do not poll periodically. Real Playback/Page topology events trigger a coalesced
-  compatibility reload, and legacy mutation callers may issue an additional explicit reload.
+  compatibility reload, and remaining legacy mutation callers may issue an additional explicit
+  reload.
 - [x] Added typed portable Playback topology actions for Cuelist save, slot configure, and mapped
   Playback clear. One show-revisioned application action preserves legacy storage identities and
   unknown fields, returns one coherent Page/Playback/Cuelist projection, publishes at most one
@@ -84,6 +85,18 @@ Programming application boundary through the scoped frontend writer.
   Empty-slot assignment and mapped clear remain one serialized network action, held Flash/Swap
   releases survive same-Show session replacement without crossing a Show switch, and inactive
   panes open no snapshot/socket and subscribe to no topology/runtime selectors.
+- [x] Added exact typed mapping of an existing Cuelist Playback into one Page slot without cloning
+  or rewriting its source Playback. Changed and replay/no-change outcomes contain one authoritative
+  Page, retain request/correlation and event authority, validate exact source/Page identities and
+  revisions, and publish at most one Show event. Capability transactions compile compatibility
+  migrations in memory without silently persisting unrelated objects, and canonical Cuelist,
+  Playback, and Page storage-key collisions fail before mutation rather than overwriting legacy
+  data. The primary physical bank and configuration dialog now consume scoped topology, exact
+  runtime identities, desk and command-line authority, and Groups only when a visible target needs
+  them. Cuelist assignment, configure, and clear are typed revision-checked actions with no textual
+  `SET` or broad refresh. Stale runtime targets render no controls, broad parent updates are
+  memo-suppressed, and held Flash/Swap releases retain their original semantic and cannot overtake
+  a delayed or retried press.
 - [x] Migrated inline Cue-editor writes, Cuelist settings, and atomic renumbering from generic
   show-object mutation plus broad refresh onto the typed Playback topology action. Writes capture
   the exact storage identity and revision, preserve lossless body extensions, return authoritative
@@ -408,10 +421,11 @@ Programming application boundary through the scoped frontend writer.
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
-- [ ] Finish the remaining Playback ownership callers: add exact typed map-existing Playback and
-  page create/rename actions, move the physical bank and companion page tools onto committed
-  topology/runtime/desk boundaries, then retire broad `/playbacks` consumers. Update, Cue transfer,
-  Cue editor/Cuelist settings, and Virtual Playback are complete.
+- [ ] Finish the remaining Playback ownership callers: add typed page create/rename, move companion
+  page tools, hardware summary, shortcuts, Numeric Pad, secondary screens, and Product Demo onto
+  committed topology/runtime/desk boundaries, then retire broad `/playbacks` consumers. Exact
+  map-existing assignment, the primary physical bank/configuration, Update, Cue transfer, Cue
+  editor/Cuelist settings, and Virtual Playback are complete.
 - [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
   legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
   command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
@@ -420,11 +434,11 @@ Programming application boundary through the scoped frontend writer.
 
 ## Remaining architecture work
 
-1. Complete physical Playback authority without changing desk semantics. Add a typed
-   `map_existing_playback` action that retains the existing Playback number instead of allocating a
-   clone, then add typed page create/rename. Migrate the bank, configuration, page tools, hardware
-   summary, shortcuts, Numeric Pad, secondary screens, and Product Demo onto exact topology,
-   runtime, Group, and desk projections before deleting the broad `/playbacks` snapshot.
+1. Finish the companion physical Playback authority without changing desk semantics. Add typed
+   page create/rename, then migrate page tools, hardware summary, shortcuts, Numeric Pad, secondary
+   screens, and Product Demo onto exact topology, runtime, Group, and desk projections before
+   deleting the broad `/playbacks` snapshot. Exact existing-Playback mapping and the primary bank/
+   configuration surface are complete.
 2. Publish the remaining externally observable transitions once through typed events: Highlight
    movement, transition completion, output health/overload, and any remaining automatic runtime
    changes.
@@ -761,6 +775,26 @@ helper.
   second authenticated user rather than only forged contexts. Wire generation retains only the
   known non-fatal `ts-rs`
   `deny_unknown_fields` warning; Serde and checked-in schemas remain strict.
+- Existing-Playback mapping and primary physical-bank convergence pass 16 application topology
+  tests, 4 strict wire tests, generated-contract verification, and all 7 server topology tests.
+  Coverage proves changed/no-change/replay/conflict behavior, one Page-only projection and event,
+  same-user two-desk and second-user active-Show behavior, authentication and forged-scope
+  rejection, absent-Page creation, source identity/revision checks, Cuelist-only sources, lossless
+  Page extensions, no source rewrite, and rejection of occupied canonical Cuelist/Playback/Page
+  storage keys. The focused frontend contract passes 104 tests across transport, decoding, writer,
+  provider, configuration, bank, fader, and Group dormancy; the complete frontend suite passes
+  1,412 tests in 207 files and typecheck passes. Frontend coverage includes response/event ordering,
+  replay/no-change, rollback and narrow conflict repair, authority replacement and late responses,
+  loading and mismatched-runtime refusal, exact Cuelist semantic IDs, conditional Group hydration,
+  unrelated-parent rerender suppression, typed assignment with captured revisions, preserved
+  geometry/interception, and ordered Flash/Swap safety release after cancel, lost capture, unmount,
+  or topology replacement. Strict application/wire/server Clippy passes with the established
+  `too_many_arguments` allowance; the no-default-features server check, formatting,
+  dependency-direction check, generated contracts, source-size hard-limit ratchet, and whitespace
+  validation pass. Wire generation retains the existing non-fatal `ts-rs`
+  `deny_unknown_fields` warning. Remaining limitations are explicit: page create/rename and the
+  companion broad consumers listed above have not moved, and exact conflict repair cannot discover
+  a replacement noncanonical storage key without the later collection-level topology repair.
 
 ## Wrap-up handoff
 
@@ -783,12 +817,11 @@ helper.
   remains a separate future milestone.
 - Preload now prepares one final-state-aware batch, and virtual-exclusion restart authority is
   private, desk-exact, migration-compatible, and absent from public runtime projections.
-- Recommended next slice: add typed `map_existing_playback` and migrate the physical Playback bank
-  onto exact topology/runtime/desk authority. Preserve the existing Playback number, hardware and
-  touch geometry, Record/Update interception, explicit-page behavior, `surface: "physical"`, and
-  Flash/Swap release cleanup. Page create/rename and the remaining broad Playback consumers follow;
-  keep the public test DSL and final repository-wide acceptance/performance run as the closing
-  milestones.
+- Recommended next slice: add typed Page create/rename and migrate the companion page controls,
+  hardware summary, shortcuts, Numeric Pad, secondary screens, and Product Demo. Preserve explicit
+  versus current-page addressing and independent-screen page semantics, then delete the broad
+  `/playbacks` snapshot only after the last consumer moves. Keep public test-DSL convergence and the
+  final repository-wide acceptance/performance run as the closing milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
