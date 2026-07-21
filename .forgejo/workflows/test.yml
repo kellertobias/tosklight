@@ -1,0 +1,96 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: test-${{ forgejo.ref }}
+  cancel-in-progress: ${{ forgejo.ref != 'refs/heads/main' }}
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - uses: https://github.com/dtolnay/rust-toolchain@stable
+      - uses: https://code.forgejo.org/actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/control-ui/package-lock.json }
+      - run: npm ci
+        working-directory: apps/control-ui
+      - run: ./test unit
+
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { suite: api, shard: 1/1, artifact: api }
+          - { suite: ui, shard: 1/1, artifact: ui }
+          - { suite: supplemental, shard: 1/1, artifact: supplemental }
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - uses: https://github.com/dtolnay/rust-toolchain@stable
+      - uses: https://code.forgejo.org/actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/control-ui/package-lock.json }
+      - run: npm ci
+        working-directory: apps/control-ui
+      - run: npx playwright install --with-deps chrome
+        working-directory: apps/control-ui
+      - run: ./test e2e-${{ matrix.suite }} --shard=${{ matrix.shard }}
+      - uses: https://code.forgejo.org/actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-${{ matrix.artifact }}
+          path: .artifacts/test/results
+
+  # Semantic release lives here, not on the GitHub mirror: the tag is only created
+  # once the authoritative suite has passed on main. GitHub reacts to the tag.
+  release:
+    needs: [unit, e2e]
+    if: forgejo.ref == 'refs/heads/main' && forgejo.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.FORGEJO_TOKEN }}
+      - uses: https://code.forgejo.org/actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Determine next version from Conventional Commits
+        id: version
+        run: echo "value=$(node tools/next-version.mjs)" >> "$GITHUB_OUTPUT"
+      - name: Tag and push the release
+        if: steps.version.outputs.value != ''
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          git config user.name "Forgejo CI"
+          git config user.email "ci@tokenet.de"
+          node tools/set-version.mjs "$VERSION"
+          # Keep Cargo.lock in step with the bumped workspace version.
+          cargo update --workspace --offline || cargo update --workspace
+          git add -A
+          git commit -m "chore(release): v$VERSION [skip ci]"
+          git tag -a "v$VERSION" -m "v$VERSION"
+          git push origin HEAD:main
+          git push origin "v$VERSION"
+      - name: Report no release
+        if: steps.version.outputs.value == ''
+        run: echo "No release-worthy commits since the last tag."
+
+  desktop-smoke:
+    runs-on: macos-14
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - uses: https://github.com/dtolnay/rust-toolchain@stable
+      - uses: https://code.forgejo.org/actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/control-ui/package-lock.json }
+      - run: npm ci
+        working-directory: apps/control-ui
+      - run: ./test desktop-smoke
+      - uses: https://code.forgejo.org/actions/upload-artifact@v4
+        if: failure()
+        with: { name: desktop-smoke-data, path: .artifacts/build/cargo/debug/bundle/macos }

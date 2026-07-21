@@ -1,0 +1,173 @@
+name: Release
+
+# The GitHub mirror does not run the test suite — Forgejo is the authoritative CI and
+# creates the tag only after that suite passes. This workflow reacts to the tag alone.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS (Apple Silicon)
+            runner: macos-14
+            target: aarch64-apple-darwin
+            slug: macos-arm64
+            server_binary: light-server
+            desktop: true
+          - label: Linux (x86_64)
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            slug: linux-amd64
+            server_binary: light-server
+            desktop: true
+          # Raspberry Pi 4 and 5 (Cortex-A72/A76). Statically linked against musl so one
+          # binary runs on any Pi OS release; cross-compiled with zigbuild rather than
+          # renting an arm64 runner. Server only — no Tauri desktop app for this target.
+          - label: Linux (ARM64 / Raspberry Pi)
+            runner: ubuntu-22.04
+            target: aarch64-unknown-linux-musl
+            slug: linux-arm64
+            server_binary: light-server
+            desktop: false
+            cross: true
+            # musl has no ALSA, so native-midi is dropped, matching ./build archive.
+            cargo_flags: --no-default-features
+          - label: Windows (x86_64)
+            runner: windows-2022
+            target: x86_64-pc-windows-msvc
+            slug: windows-amd64
+            server_binary: light-server.exe
+            desktop: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/control-ui/package-lock.json }
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      # Tauri's Linux bundler needs the webkit/appindicator stack present on the runner.
+      - name: Install Linux bundling dependencies
+        if: runner.os == 'Linux' && matrix.desktop
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            libgtk-3-dev libsoup-3.0-dev build-essential
+
+      # zigbuild supplies the musl sysroot and cross linker, so no arm64 runner is needed.
+      - name: Install the cross-compilation toolchain
+        if: matrix.cross
+        run: |
+          pip install ziglang
+          cargo install cargo-zigbuild --locked
+
+      - name: Install UI dependencies
+        working-directory: apps/control-ui
+        run: npm ci
+
+      - name: Build the control UI bundle
+        working-directory: apps/control-ui
+        run: npm run build
+
+      # The standalone server embeds the built UI, so it must come after the bundle above.
+      - name: Build the standalone server
+        run: |
+          ${{ matrix.cross && 'cargo zigbuild' || 'cargo build' }} \
+            --release --locked --target ${{ matrix.target }} \
+            ${{ matrix.cargo_flags }} \
+            -p light-server --bin light-server
+        shell: bash
+
+      - name: Build the ToskLight desktop application
+        if: matrix.desktop
+        working-directory: apps/control-ui
+        run: npm run tauri:build -- --target ${{ matrix.target }}
+
+      - name: Stage release artifacts
+        shell: bash
+        env:
+          SLUG: ${{ matrix.slug }}
+          TARGET: ${{ matrix.target }}
+          SERVER_BINARY: ${{ matrix.server_binary }}
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          out=".artifacts/release"
+          mkdir -p "$out"
+
+          # Standalone server: binary plus the fixture library it expects beside it.
+          stage="$(mktemp -d)/light-server-$version-$SLUG"
+          mkdir -p "$stage"
+          cp ".artifacts/build/cargo/$TARGET/release/$SERVER_BINARY" "$stage/"
+          cp -R assets/fixture-library "$stage/fixture-library"
+          (cd "$(dirname "$stage")" && zip -q -r "$OLDPWD/$out/light-server-$version-$SLUG.zip" "$(basename "$stage")")
+
+          # Desktop application: whatever installer Tauri produced for this platform.
+          bundle=".artifacts/build/cargo/$TARGET/release/bundle"
+          case "$SLUG" in
+            macos-arm64)
+              ditto -c -k --sequesterRsrc --keepParent \
+                "$bundle/macos/ToskLight.app" "$out/tosklight-$version-macos-arm64.zip"
+              ;;
+            linux-amd64)
+              cp "$bundle"/appimage/*.AppImage "$out/tosklight-$version-linux-amd64.AppImage"
+              cp "$bundle"/deb/*.deb "$out/tosklight-$version-linux-amd64.deb"
+              ;;
+            linux-arm64)
+              # Server-only target: the Raspberry Pi build ships no desktop bundle.
+              ;;
+            windows-amd64)
+              cp "$bundle"/nsis/*-setup.exe "$out/tosklight-$version-windows-amd64-setup.exe"
+              ;;
+          esac
+          ls -la "$out"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.slug }}
+          path: .artifacts/release/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: artifacts/*
+          fail_on_unmatched_files: true
