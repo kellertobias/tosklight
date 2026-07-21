@@ -2,6 +2,7 @@ import { type CSSProperties, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useServer } from "../../api/ServerContext";
 import type { SpeedGroupId } from "../../api/types";
+import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import { useApp } from "../../state/AppContext";
 import { Button } from "../common";
 import { useCommandLineSurface } from "./commandLine/useCommandLineSurface";
@@ -26,21 +27,10 @@ export function PlaybackTools() {
 	const { state, dispatch } = useApp();
 	const server = useServer();
 	const command = useCommandLineSurface({ observeCommand: false });
-	const speedBpms = server.configuration?.speed_groups_bpm ?? [
-		120, 90, 60, 30, 15,
-	];
+	const speedGroups = useSpeedGroupRuntimeView();
 	const [soundGroup, setSoundGroup] = useState<SpeedGroupId | null>(null);
-	const sound = useSoundToLight();
-	useEffect(() => {
-		const keyboardTap = (event: Event) =>
-			void sound.action((event as CustomEvent<SpeedGroupId>).detail, {
-				action: "learn",
-				captured_at_millis: monotonicEpochMillis(),
-			});
-		window.addEventListener("light:speed-group-tap", keyboardTap);
-		return () =>
-			window.removeEventListener("light:speed-group-tap", keyboardTap);
-	}, [sound.action]);
+	const sound = useSoundToLight(soundGroup !== null);
+	useSpeedGroupKeyboardTap(sound.action);
 	const pressCommandKey = (key: SoftwareKey) => {
 		const currentCommand = command.read();
 		if (key === "SHIFT") {
@@ -114,15 +104,28 @@ export function PlaybackTools() {
 			<div className="speed-group-stack">
 				{(["A", "B", "C", "D", "E"] as const).map((group, index) => {
 					const speedState = sound.states[group];
-					const bpm = speedState?.snapshot.effective_bpm ?? speedBpms[index];
-					const displayBpm = Number.isInteger(bpm)
-						? String(bpm)
-						: bpm.toFixed(1);
+					const bpm = speedGroups.ready
+						? speedGroups.projection?.groups[index]?.manualBpm
+						: undefined;
+					const displayBpm =
+						bpm === undefined
+							? "—"
+							: Number.isInteger(bpm)
+								? String(bpm)
+								: bpm.toFixed(1);
 					return (
 						<Button
-							style={{ "--bpm": bpm } as CSSProperties}
+							style={
+								bpm === undefined
+									? undefined
+									: ({ "--bpm": bpm } as CSSProperties)
+							}
 							className={`active ${speedState?.configuration.enabled ? "sound-enabled" : ""}`}
-							aria-label={`Speed group ${group}, ${displayBpm} BPM`}
+							aria-label={
+								bpm === undefined
+									? `Speed group ${group}, loading`
+									: `Speed group ${group}, ${displayBpm} BPM`
+							}
 							title={`Open Speed Group ${group} Sound-to-Light configuration`}
 							key={group}
 							onClick={() => setSoundGroup(group)}
@@ -160,6 +163,19 @@ export function PlaybackTools() {
 			)}
 		</div>
 	);
+}
+
+function useSpeedGroupKeyboardTap(action: SoundToLightController["action"]) {
+	useEffect(() => {
+		const keyboardTap = (event: Event) =>
+			void action((event as CustomEvent<SpeedGroupId>).detail, {
+				action: "learn",
+				captured_at_millis: monotonicEpochMillis(),
+			});
+		window.addEventListener("light:speed-group-tap", keyboardTap);
+		return () =>
+			window.removeEventListener("light:speed-group-tap", keyboardTap);
+	}, [action]);
 }
 
 function SoundToLightLoading({

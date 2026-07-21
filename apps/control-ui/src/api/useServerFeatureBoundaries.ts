@@ -21,6 +21,7 @@ import { useProgrammerPreloadLifecycleBoundaries } from "./useProgrammerPreloadL
 import { useProgrammerPriorityBoundaries } from "./useProgrammerPriorityBoundaries";
 import { useProgrammerValuesBoundaries } from "./useProgrammerValuesBoundaries";
 import { useProgrammingUpdateBoundaries } from "./useProgrammingUpdateBoundaries";
+import { useSpeedGroupRuntimeBoundaries } from "./useSpeedGroupRuntimeBoundaries";
 
 export function useServerFeatureBoundaries(state: ServerState) {
 	const programmingErrors = useMemo(
@@ -33,6 +34,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		useProgrammerPreloadLifecycleBoundaries(state);
 	const programmerPriority = useProgrammerPriorityBoundaries(state);
 	const outputRuntime = useOutputRuntimeBoundaries(state);
+	const speedGroupRuntime = useSpeedGroupRuntimeBoundaries(state);
 	const presetRecording = usePresetRecordingBoundaries(state);
 	const presetRecall = usePresetRecallBoundaries(state);
 	const groupRecording = useGroupRecordingBoundaries(state);
@@ -145,6 +147,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		...programmerPreloadLifecycle,
 		...programmerPriority,
 		...outputRuntime,
+		...speedGroupRuntime,
 		...programmerValues,
 		...presetRecording,
 		...presetRecall,

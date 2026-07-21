@@ -25,6 +25,7 @@ import {
 } from "./soundToLightModel";
 
 interface SoundCaptureOptions {
+	enabled: boolean;
 	states: SoundGroupMap<SpeedGroupSoundState>;
 	previews: SoundGroupMap<SoundToLightConfig>;
 	deviceIds: SoundGroupMap<string>;
@@ -42,6 +43,7 @@ export function shouldPublishSoundObservation(
 }
 
 export function useSoundCapture({
+	enabled,
 	states,
 	previews,
 	deviceIds,
@@ -114,6 +116,17 @@ export function useSoundCapture({
 	);
 
 	useEffect(() => {
+		if (!enabled) {
+			analyzers.current.forEach(({ analyzer }) => {
+				analyzer.stop();
+			});
+			analyzers.current.clear();
+			latestObservations.current = {};
+			setCaptures((current) =>
+				Object.keys(current).length === 0 ? current : {},
+			);
+			return;
+		}
 		for (const group of speedGroupIds) {
 			const saved = states[group]?.configuration;
 			const preview = previews[group];
@@ -168,6 +181,7 @@ export function useSoundCapture({
 		}
 	}, [
 		deviceIds,
+		enabled,
 		mounted,
 		postObservation,
 		previews,

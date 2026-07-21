@@ -5,8 +5,8 @@ import { PlaybackRuntimeViewProvider } from "../features/playbackRuntime/Playbac
 import { PresetRecallProvider } from "../features/presetRecall/PresetRecallProvider";
 import { ProgrammerCaptureModeViewProvider } from "../features/programmerCaptureMode/ProgrammerCaptureModeView";
 import { ProgrammerLifecycleViewProvider } from "../features/programmerLifecycle/ProgrammerLifecycleView";
-import { ProgrammerPreloadPlaybackQueueViewProvider } from "../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
 import { ProgrammerPreloadLifecycleProvider } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
+import { ProgrammerPreloadPlaybackQueueViewProvider } from "../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
 import { ProgrammerPreloadValuesViewProvider } from "../features/programmerPreloadValues/ProgrammerPreloadValuesView";
 import { ProgrammerPriorityProvider } from "../features/programmerPriority/ProgrammerPriorityView";
 import { ProgrammerValuesViewProvider } from "../features/programmerValues/ProgrammerValuesView";
@@ -18,6 +18,7 @@ import { useSelectedGroupMembership } from "../features/server/useSelectedGroupM
 import type { useServerState } from "../features/server/useServerState";
 import { usePortableGroups } from "../features/showObjects/ShowObjectsState";
 import { ShowObjectDetailSubscription } from "../features/showObjects/ShowObjectsView";
+import { SpeedGroupRuntimeProvider } from "../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import type { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
 
 interface ServerProgrammingProvidersProps {
@@ -87,18 +88,41 @@ export function ServerProgrammingProviders(
 ) {
 	const { state, boundaries } = props;
 	return (
-		<ServerOutputRuntimeBoundary state={state} boundaries={boundaries}>
-			<ProgrammerPriorityProvider
-				userId={state.session?.user.id ?? null}
-				authorityKey={boundaries.programmerPriorityAuthorityKey}
-				store={state.programmerPriorityStore}
-				transport={boundaries.programmerPriorityTransport}
-				onSessionError={boundaries.reportProgrammerPrioritySessionError}
-				onMutationError={boundaries.reportProgrammerPriorityMutationError}
-			>
-				<ServerShowProgrammingProviders {...props} />
-			</ProgrammerPriorityProvider>
-		</ServerOutputRuntimeBoundary>
+		<ServerSpeedGroupRuntimeBoundary state={state} boundaries={boundaries}>
+			<ServerOutputRuntimeBoundary state={state} boundaries={boundaries}>
+				<ProgrammerPriorityProvider
+					userId={state.session?.user.id ?? null}
+					authorityKey={boundaries.programmerPriorityAuthorityKey}
+					store={state.programmerPriorityStore}
+					transport={boundaries.programmerPriorityTransport}
+					onSessionError={boundaries.reportProgrammerPrioritySessionError}
+					onMutationError={boundaries.reportProgrammerPriorityMutationError}
+				>
+					<ServerShowProgrammingProviders {...props} />
+				</ProgrammerPriorityProvider>
+			</ServerOutputRuntimeBoundary>
+		</ServerSpeedGroupRuntimeBoundary>
+	);
+}
+
+export function ServerSpeedGroupRuntimeBoundary({
+	children,
+	state,
+	boundaries,
+}: PropsWithChildren<
+	Pick<ServerProgrammingProvidersProps, "state" | "boundaries">
+>) {
+	return (
+		<SpeedGroupRuntimeProvider
+			deskId={state.session?.desk.id ?? null}
+			authorityKey={boundaries.speedGroupRuntimeAuthorityKey}
+			store={state.speedGroupRuntimeStore}
+			transport={boundaries.speedGroupRuntimeTransport}
+			onSessionError={boundaries.reportSpeedGroupSessionError}
+			onMutationError={boundaries.reportSpeedGroupMutationError}
+		>
+			{children}
+		</SpeedGroupRuntimeProvider>
 	);
 }
 

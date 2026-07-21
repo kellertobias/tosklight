@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+	type Dispatch,
+	type SetStateAction,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { useServer } from "../../api/ServerContext";
 import type {
 	SoundToLightConfig,
@@ -47,26 +54,23 @@ export interface SoundToLightController {
 	) => Promise<SpeedGroupSoundState>;
 }
 
-export function useSoundToLight(): SoundToLightController {
+export function useSoundToLight(enabled = true): SoundToLightController {
 	const server = useServer();
 	const serverRef = useRef(server);
 	serverRef.current = server;
 	const deskId = server.session?.desk.id ?? null;
 	const sessionId = server.session?.session_id ?? null;
-	const [states, setStates] = useState<SoundGroupMap<SpeedGroupSoundState>>({});
 	const [previews, setPreviews] = useState<SoundGroupMap<SoundToLightConfig>>(
 		{},
 	);
-	const [loading, setLoading] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	const mounted = useRef(true);
-
-	useEffect(
-		() => () => {
-			mounted.current = false;
-		},
-		[],
+	const { states, setStates, loading, error, setError } = useSoundGroupStates(
+		enabled,
+		sessionId,
+		serverRef,
 	);
+	const mounted = useMountedRef();
+	const enabledRef = useRef(enabled);
+	enabledRef.current = enabled;
 
 	const {
 		devices,
@@ -75,49 +79,23 @@ export function useSoundToLight(): SoundToLightController {
 		setPermission,
 		refreshInputs,
 		setDevice,
-	} = useSoundDeviceSelection(deskId, mounted);
+	} = useSoundDeviceSelection(enabled ? deskId : null, mounted, enabled);
 
 	useEffect(() => {
-		if (!sessionId) {
-			setStates({});
-			return;
-		}
-		let cancelled = false;
-		setLoading(true);
-		void Promise.all(
-			speedGroupIds.map((group) => serverRef.current.speedGroup(group)),
-		)
-			.then((loaded) => {
-				if (cancelled) return;
-				setStates(
-					Object.fromEntries(
-						loaded.map((state) => [state.group, state]),
-					) as SoundGroupMap<SpeedGroupSoundState>,
-				);
-				setError(null);
-			})
-			.catch((reason) => {
-				if (!cancelled) {
-					setError(
-						`Unable to load Speed Groups: ${soundToLightErrorMessage(reason)}`,
-					);
-				}
-			})
-			.finally(() => {
-				if (!cancelled) setLoading(false);
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [sessionId]);
+		if (!enabled)
+			setPreviews((current) =>
+				Object.keys(current).length === 0 ? current : {},
+			);
+	}, [enabled]);
 
 	const acceptState = useCallback((state: SpeedGroupSoundState) => {
-		if (!mounted.current) return state;
+		if (!mounted.current || !enabledRef.current) return state;
 		setStates((current) => ({ ...current, [state.group]: state }));
 		return state;
 	}, []);
 
 	const captures = useSoundCapture({
+		enabled,
 		states,
 		previews,
 		deviceIds,
@@ -190,4 +168,70 @@ export function useSoundToLight(): SoundToLightController {
 		save,
 		action,
 	};
+}
+
+function useSoundGroupStates(
+	enabled: boolean,
+	sessionId: string | null,
+	server: { current: ReturnType<typeof useServer> },
+) {
+	const [states, setStates] = useState<SoundGroupMap<SpeedGroupSoundState>>({});
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const loadedSession = useRef<string | null>(null);
+	useEffect(() => {
+		if (!sessionId || !enabled) {
+			clearSoundStates(setStates);
+			loadedSession.current = null;
+			setLoading(false);
+			return;
+		}
+		if (loadedSession.current === sessionId) return;
+		clearSoundStates(setStates);
+		let cancelled = false;
+		setLoading(true);
+		void Promise.all(
+			speedGroupIds.map((group) => server.current.speedGroup(group)),
+		)
+			.then((loaded) => {
+				if (cancelled) return;
+				loadedSession.current = sessionId;
+				setStates(
+					Object.fromEntries(
+						loaded.map((state) => [state.group, state]),
+					) as SoundGroupMap<SpeedGroupSoundState>,
+				);
+				setError(null);
+			})
+			.catch((reason) => {
+				if (!cancelled)
+					setError(
+						`Unable to load Speed Groups: ${soundToLightErrorMessage(reason)}`,
+					);
+			})
+			.finally(() => {
+				if (!cancelled) setLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [enabled, server, sessionId]);
+	return { states, setStates, loading, error, setError };
+}
+
+function clearSoundStates(
+	setStates: Dispatch<SetStateAction<SoundGroupMap<SpeedGroupSoundState>>>,
+) {
+	setStates((current) => (Object.keys(current).length === 0 ? current : {}));
+}
+
+function useMountedRef() {
+	const mounted = useRef(true);
+	useEffect(() => {
+		mounted.current = true;
+		return () => {
+			mounted.current = false;
+		};
+	}, []);
+	return mounted;
 }

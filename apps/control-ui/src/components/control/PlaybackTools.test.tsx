@@ -20,6 +20,8 @@ const state = {
 };
 let playbackDesk: { active_page: number } | null = { active_page: 1 };
 let runtimeStatus: "ready" | "loading" | "error" = "ready";
+let speedRuntimeReady = true;
+let speedRuntimeBpms = [120, 90, 60, 30, 15];
 let topologyReady = true;
 let pageObjects = [
 	{
@@ -46,7 +48,8 @@ const commandProjection = {
 const commandActions = {
 	replace: vi.fn(async (text: string) => {
 		commandProjection.text = text;
-		commandProjection.pristine = text.trim().toUpperCase() === commandProjection.target;
+		commandProjection.pristine =
+			text.trim().toUpperCase() === commandProjection.target;
 		return true;
 	}),
 	reset: vi.fn().mockResolvedValue(true),
@@ -108,6 +111,25 @@ vi.mock("../../features/playbackTopology/PlaybackTopologyView", () => ({
 		pages: topologyReady ? pageObjects : [],
 	}),
 }));
+vi.mock("../../features/speedGroupRuntime/SpeedGroupRuntimeView", () => ({
+	useSpeedGroupRuntimeView: () => ({
+		ready: speedRuntimeReady,
+		projection: speedRuntimeReady
+			? {
+					authorityId: "00000000-0000-4000-8000-000000000001",
+					revision: 1,
+					groups: (["A", "B", "C", "D", "E"] as const).map((group, index) => ({
+						group,
+						manualBpm: speedRuntimeBpms[index],
+						paused: false,
+						speedMasterScale: 1,
+						synchronizedWith: null,
+						phaseOriginMillis: 0,
+					})),
+				}
+			: null,
+	}),
+}));
 vi.mock(
 	"../../features/programmingInteraction/ProgrammingInteractionView",
 	async (importOriginal) => ({
@@ -124,6 +146,8 @@ afterEach(() => {
 	server.session = null;
 	playbackDesk = { active_page: 1 };
 	runtimeStatus = "ready";
+	speedRuntimeReady = true;
+	speedRuntimeBpms = [120, 90, 60, 30, 15];
 	topologyReady = true;
 	pageObjects = [
 		{
@@ -137,6 +161,7 @@ afterEach(() => {
 	state.playbackPage = 0;
 	state.playbackSetArmed = false;
 	state.shiftArmed = false;
+	server.configuration.speed_groups_bpm = [120, 90, 60, 30, 15];
 	topologyActions.error = null;
 	commandProjection.text = "FIXTURE";
 	commandProjection.pristine = true;
@@ -270,7 +295,9 @@ describe("PlaybackTools", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "Next playback page" }));
 
-		const dialog = await screen.findByRole("dialog", { name: "Playback pages" });
+		const dialog = await screen.findByRole("dialog", {
+			name: "Playback pages",
+		});
 		expect(await within(dialog).findByRole("alert")).toHaveTextContent(
 			"Playback Page 2 could not be created.",
 		);
@@ -369,7 +396,9 @@ describe("PlaybackTools", () => {
 			within(dialog).getByRole("textbox", { name: "Playback page name" }),
 			{ target: { value: "Act One" } },
 		);
-		fireEvent.click(within(dialog).getByRole("button", { name: "Rename Page" }));
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Rename Page" }),
+		);
 
 		await waitFor(() =>
 			expect(within(dialog).getByRole("alert")).toHaveTextContent(
@@ -380,8 +409,12 @@ describe("PlaybackTools", () => {
 
 		pageObjects = [{ ...pageObjects[0], revision: 4 }];
 		view.rerender(<PlaybackTools />);
-		fireEvent.click(within(dialog).getByRole("button", { name: "Rename Page" }));
-		await waitFor(() => expect(topologyActions.renamePage).toHaveBeenCalledTimes(2));
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Rename Page" }),
+		);
+		await waitFor(() =>
+			expect(topologyActions.renamePage).toHaveBeenCalledTimes(2),
+		);
 		expect(topologyActions.renamePage).toHaveBeenLastCalledWith(1, "Act One", {
 			expectedPageRevision: 4,
 			expectedPageObjectId: "legacy-page-one",
@@ -400,8 +433,12 @@ describe("PlaybackTools", () => {
 			screen.getByRole("button", { name: "Select playback page. Page 1 Main" }),
 		);
 		const dialog = screen.getByRole("dialog", { name: "Playback pages" });
-		fireEvent.click(within(dialog).getByRole("button", { name: "Add new page" }));
-		await waitFor(() => expect(topologyActions.createPage).toHaveBeenCalledOnce());
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Add new page" }),
+		);
+		await waitFor(() =>
+			expect(topologyActions.createPage).toHaveBeenCalledOnce(),
+		);
 
 		const close = within(dialog).getByRole("button", {
 			name: "Close Playback pages",
@@ -412,7 +449,9 @@ describe("PlaybackTools", () => {
 		expect(dialog).toBeInTheDocument();
 
 		await act(async () => resolveCreate({}));
-		await waitFor(() => expect(runtimeActions.setActivePage).toHaveBeenCalledWith(2));
+		await waitFor(() =>
+			expect(runtimeActions.setActivePage).toHaveBeenCalledWith(2),
+		);
 		await waitFor(() => expect(dialog).not.toBeInTheDocument());
 	});
 
@@ -441,7 +480,9 @@ describe("PlaybackTools", () => {
 		fireEvent.click(rename);
 
 		expect(topologyActions.renamePage).toHaveBeenCalledOnce();
-		expect(within(dialog).getByRole("button", { name: "Renaming…" })).toBeDisabled();
+		expect(
+			within(dialog).getByRole("button", { name: "Renaming…" }),
+		).toBeDisabled();
 		resolveRename({});
 		await waitFor(() => expect(dialog).not.toBeInTheDocument());
 	});
@@ -500,9 +541,13 @@ describe("PlaybackTools", () => {
 		);
 		const view = render(<PlaybackTools />);
 		fireEvent.click(screen.getByRole("button", { name: "Next playback page" }));
-		await waitFor(() => expect(topologyActions.createPage).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(topologyActions.createPage).toHaveBeenCalledOnce(),
+		);
 
-		topologyActions.createPage = vi.fn(async (): Promise<object | null> => ({}));
+		topologyActions.createPage = vi.fn(
+			async (): Promise<object | null> => ({}),
+		);
 		view.rerender(<PlaybackTools />);
 		await act(async () => resolveCreate({}));
 
@@ -532,7 +577,9 @@ describe("PlaybackTools", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Previous playback page" }),
 		);
-		await waitFor(() => expect(runtimeActions.setActivePage).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(runtimeActions.setActivePage).toHaveBeenCalledOnce(),
+		);
 
 		runtimeActions.setActivePage = vi.fn(async () => true);
 		view.rerender(<PlaybackTools />);
@@ -550,9 +597,7 @@ describe("PlaybackTools", () => {
 			screen.getByRole("button", { name: "Select playback page. Page 1 Main" }),
 		);
 		const pages = screen.getByRole("dialog", { name: "Playback pages" });
-		fireEvent.click(
-			within(pages).getByRole("button", { name: /Main/ }),
-		);
+		fireEvent.click(within(pages).getByRole("button", { name: /Main/ }));
 
 		expect(await within(pages).findByRole("alert")).toHaveTextContent(
 			"Playback Page 1 could not be selected.",
@@ -611,10 +656,11 @@ describe("PlaybackTools", () => {
 			soundState(group),
 		);
 		render(<PlaybackTools />);
-		await waitFor(() => expect(server.speedGroup).toHaveBeenCalledTimes(5));
+		expect(server.speedGroup).not.toHaveBeenCalled();
 		fireEvent.click(
 			screen.getByRole("button", { name: "Speed group A, 120 BPM" }),
 		);
+		await waitFor(() => expect(server.speedGroup).toHaveBeenCalledTimes(5));
 		expect(
 			await screen.findByRole("dialog", {
 				name: "Speed Group A Sound to Light",
@@ -625,5 +671,38 @@ describe("PlaybackTools", () => {
 		).toBeInTheDocument();
 		expect(server.setControlTiming).not.toHaveBeenCalled();
 		expect(server.speedGroupAction).not.toHaveBeenCalled();
+	});
+
+	it("uses only scoped manual BPM authority and exposes loading safely", () => {
+		server.configuration.speed_groups_bpm = [1, 2, 3, 4, 5];
+		speedRuntimeBpms = [128.5, 64, 32, 16, 8];
+		const view = render(<PlaybackTools />);
+		expect(
+			screen.getByRole("button", { name: "Speed group A, 128.5 BPM" }),
+		).toBeInTheDocument();
+
+		speedRuntimeReady = false;
+		view.rerender(<PlaybackTools />);
+		expect(
+			screen.getByRole("button", { name: "Speed group A, loading" }),
+		).toHaveTextContent("A—BPM");
+		expect(server.speedGroup).not.toHaveBeenCalled();
+	});
+
+	it("keeps an explicit keyboard Learn action without eager Sound hydration", async () => {
+		server.speedGroupAction.mockResolvedValueOnce(soundState("B"));
+		render(<PlaybackTools />);
+
+		window.dispatchEvent(
+			new CustomEvent<SpeedGroupId>("light:speed-group-tap", { detail: "B" }),
+		);
+
+		await waitFor(() =>
+			expect(server.speedGroupAction).toHaveBeenCalledWith("B", {
+				action: "learn",
+				captured_at_millis: expect.any(Number),
+			}),
+		);
+		expect(server.speedGroup).not.toHaveBeenCalled();
 	});
 });

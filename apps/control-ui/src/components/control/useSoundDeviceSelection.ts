@@ -24,12 +24,14 @@ function browserLocalStorage(): Storage | null {
 export function useSoundDeviceSelection(
 	deskId: string | null,
 	mounted: RefObject<boolean>,
+	enabled = true,
 ) {
 	const [devices, setDevices] = useState<AudioInputDevice[]>([]);
 	const [deviceIds, setDeviceIds] = useState<SoundGroupMap<string>>({});
 	const [permission, setPermission] = useState<MicrophonePermission>("unknown");
 
 	const refreshInputs = useCallback(async () => {
+		if (!enabled) return;
 		const [nextPermission, nextDevices] = await Promise.all([
 			microphonePermission(),
 			enumerateAudioInputs().catch(() => []),
@@ -37,19 +39,22 @@ export function useSoundDeviceSelection(
 		if (!mounted.current) return;
 		setPermission(nextPermission);
 		setDevices(nextDevices);
-	}, [mounted]);
+	}, [enabled, mounted]);
 
 	useEffect(() => {
+		if (!enabled) return;
 		void refreshInputs();
 		const changed = () => void refreshInputs();
 		navigator.mediaDevices?.addEventListener?.("devicechange", changed);
 		return () =>
 			navigator.mediaDevices?.removeEventListener?.("devicechange", changed);
-	}, [refreshInputs]);
+	}, [enabled, refreshInputs]);
 
 	useEffect(() => {
-		if (!deskId) {
-			setDeviceIds({});
+		if (!enabled || !deskId) {
+			setDeviceIds((current) =>
+				Object.keys(current).length === 0 ? current : {},
+			);
 			return;
 		}
 		const mappings: SoundGroupMap<string> = {};
@@ -59,11 +64,11 @@ export function useSoundDeviceSelection(
 			if (selected) mappings[group] = selected;
 		}
 		setDeviceIds(mappings);
-	}, [deskId]);
+	}, [deskId, enabled]);
 
 	const setDevice = useCallback(
 		(group: SpeedGroupId, deviceId: string) => {
-			if (!deskId) return;
+			if (!enabled || !deskId) return;
 			const key = soundDeviceStorageKey(deskId, group);
 			const storage = browserLocalStorage();
 			if (deviceId) storage?.setItem(key, deviceId);
@@ -75,7 +80,7 @@ export function useSoundDeviceSelection(
 				return next;
 			});
 		},
-		[deskId],
+		[deskId, enabled],
 	);
 
 	return {
