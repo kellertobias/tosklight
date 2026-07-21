@@ -654,6 +654,12 @@ configuration field are both gone from the frontend facade.
   polling, bootstrap, and the three actions write straight into the store, and the store compares
   the complete lock state so an unchanged poll publishes nothing. `DeskLockOverlay` no longer uses
   `useServer()` at all.
+- [x] Scoped connection status and the shared operator error, removing `status` and `error` from the
+  facade. Both are scalars written from many places, so an error raised by one feature previously
+  rerendered every unrelated consumer; a status reader is now not woken by an error change and vice
+  versa. The duplicated modal-error markup across seven surfaces became one `ServerErrorNotice`
+  that reads the error itself, so a surface that only displays errors no longer subscribes to shell
+  status at all.
 
 ## In progress
 
@@ -720,6 +726,13 @@ new scenarios may not add a direct family or raw v1 action without an exact base
   readiness/log/operator-path verification.
 
 ## Current verification snapshot
+
+- The shell-status slice passes the full frontend suite of 1,974 tests in 275 files, including 5 new
+  tests proving a status reader is not woken by an error change and vice versa, that each reader
+  rerenders for its own change, that an equivalent install publishes nothing, and that a reader
+  outside a mounted boundary sees the initial snapshot. Typecheck, the production build, and all
+  ratchets pass.
+  Known gaps: no desktop `./build open` run and no Playwright acceptance run for this slice.
 
 - The polled-value churn fix adds 5 tests and brings the frontend suite to 1,969 tests in 274 files;
   typecheck, the production build, and all ratchets pass. The saving is reasoned from the removed
