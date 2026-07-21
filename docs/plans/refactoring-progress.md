@@ -1,19 +1,20 @@
 # Major Refactoring Progress
 
-Estimated progress: **97%**
+Estimated progress: **97.5%**
 
-Estimated Codex ETA: **roughly 25–45 hours of active Codex execution**, plus required reference-
+Estimated Codex ETA: **roughly 23–42 hours of active Codex execution**, plus required reference-
 hardware measurement time, to repository-wide acceptance. The Programmer, Playback, Output,
-Speed Group, and public command-family foundations are mature. Remaining work is concentrated in
-Group management, Patch and configuration authority, the last broad frontend facade consumers,
+Speed Group, Group management, and public command-family foundations are mature. Remaining work is
+concentrated in Patch and configuration authority, the last broad frontend facade consumers,
 residual portable mutations/events, and final performance/desktop acceptance.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-21 after completing scoped Speed Group production/public ownership, typed
-whole-Cue deletion and public migration, and the shared scoped Visualization runtime.
+Last updated: 2026-07-21 after completing typed Group management end to end: the application action
+family, wire contract, server route, and the scoped frontend authority that retires the last four
+Group mutations from the broad server facade.
 
 ## Guardrails
 
@@ -571,16 +572,47 @@ whole-Cue deletion and public migration, and the shared scoped Visualization run
 - [x] Added the architecture overview, state-ownership matrix, code tour, extension recipes, test
   map, refactoring test-boundary guide, frontend performance baseline, and Selective Show Import
   guide under `docs/engineering`.
+- [x] Completed typed Group management end to end. One application action family owns Group
+  property update, undo, frozen refresh, and derived detach. Each request carries request/
+  correlation identity and exact Show, Group storage ID, Group revision, optional source Group
+  identity/revision, desk, user, and session authority through the existing Active Show boundary.
+  One revisioned transaction preserves unknown fields, ordered fixture membership, stored-empty
+  Groups, and derived/frozen metadata; it returns the authoritative lossless projection with
+  changed/no-change and replay status, Show and object revisions, an event sequence only when
+  emitted, and any persistence warning. Exactly one Show event is published per semantic mutation
+  and none for a no-op or replay; a failed revision or invalid source mutates nothing.
+  Frozen refresh resolves its source under the same Show transaction, stores the refreshed snapshot
+  with source revision and timestamp, and leaves the originating desk selection on the frozen
+  source. Its selection event is published inside the held show-mutation gate and strictly before
+  the owning Show event, so no nested desk lock is taken. The active-show helper gained
+  `transact_with_unit` so a capability can read adapter-owned object history inside the same
+  transaction that commits it.
+  The frontend adds a feature-owned Group management authority: strict wire decoding, an
+  authenticated action-only HTTP transport, an action-only provider mounted through the feature
+  composition layer, and a request-ordered writer that installs authoritative Groups into the
+  existing Show Objects store in one notification. No broad snapshot and no additional global
+  context were introduced. Authority is scoped by server, session, active Show, authenticated
+  desk/user, exact Group storage ID, and revision; undeclared fields, foreign scope, inconsistent
+  revisions, and late outcomes after a writer or authority replacement are rejected. Reconciliation
+  is order-independent for response-before-event and event-before-response, and supports rollback,
+  replay/no-change, revision-conflict repair from the authoritative object rather than bootstrap,
+  retry limited to ambiguous transport failures, and scope replacement.
+  `GroupContextMenu` and `GroupPropertiesDialog` no longer use `useServer()`; `updateGroup`,
+  `undoGroup`, `refreshFrozenGroup`, and `detachDerivedGroup` were removed from
+  `ServerProgrammingContext` and their superseded legacy adapters deleted. These four operations
+  never had a server-side v1 or WebSocket handler — they were client-side compositions over the
+  generic v1 object endpoints, which already route through `ActiveShowService`, so no group-specific
+  compatibility adapter remained to re-route.
 
 ## In progress
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, generic show-object mutation, and one-off polling. The next coherent
-  owners are Group management, remaining Patch readers, configuration/layout state, and the
-  one-shot Cue-thumbnail Visualization read.
-- [ ] Add the remaining typed actions required to remove compatibility facades: Group property/
-  undo/refresh/detach operations, standalone Playback `SET`, command-line bare `UPDATE`, Preset
-  delete/transfer, output-route/user-layout, and residual portable-show mutations.
+  owners are the remaining Patch readers, configuration/layout state, and the one-shot
+  Cue-thumbnail Visualization read.
+- [ ] Add the remaining typed actions required to remove compatibility facades: standalone Playback
+  `SET`, command-line bare `UPDATE`, Preset delete/transfer, output-route/user-layout, and residual
+  portable-show mutations.
 - [ ] Continue converging the public test DSL, then run the final repository-wide performance,
   unrestricted socket, desktop, migration, and operator-path acceptance suite.
 
@@ -635,6 +667,29 @@ new scenarios may not add a direct family or raw v1 action without an exact base
   readiness/log/operator-path verification.
 
 ## Current verification snapshot
+
+- The Group management slice passes `cargo fmt --all -- --check`; all 386 `light-application` tests
+  including 12 new Group-management candidate tests; all 79 `light-wire` unit tests plus
+  `cargo test -p light-wire --test generated_contracts`; and the full server library run of 408
+  passing tests with 1 ignored, including 5 new Group-management route contract tests and 2 wire
+  translation tests. Coverage spans property update, undo, frozen refresh, derived detach, semantic
+  no-op, exact replay, rollback, and revision and source conflict; stored-empty and ordered
+  membership preservation; lossless unknown fields; exactly one authoritative Show event per real
+  mutation and none for a no-op or replay; selection-before-Show ordering for frozen refresh; and
+  rejection of missing authentication, forged desk/user/session/show scope, and a foreign Show.
+  The frontend passes 1,945 tests in 269 files, including 13 writer tests, 7 wire-decoding tests,
+  and 2 provider tests; the 4 fewer tests than the previous snapshot are the deleted legacy
+  `groupEditing`/`groupDerivation` adapter tests. Frontend typecheck and the production Vite build
+  pass with only the existing large-chunk advisory. `node tools/check-architecture.mjs`,
+  `node tools/check-source-size.mjs`, `node tools/test-command-boundaries.mjs`, and
+  `git diff --check` all pass; the source-size ratchet reports 0 files above 1,200 lines and 0
+  functions above 150 lines, with design-goal debt at 140 files above 400 lines and 5,879 functions
+  above 20. Every new production file in this slice is below 400 lines. Wire generation still prints
+  the known non-fatal `ts-rs` `deny_unknown_fields` warning.
+  Not covered by this slice: no real desktop `./build open` run, no Playwright acceptance run, and
+  no multi-desk frozen-refresh test at the HTTP boundary — same-Show multi-desk isolation is covered
+  for Group recording but the new management family is exercised from a single desk plus explicit
+  forged-scope rejection.
 
 - Every production file and function touched by this slice remains within the hard 1,200-line and
   150-line limits; the values wire implementation is split into feature-owned projection, event,
