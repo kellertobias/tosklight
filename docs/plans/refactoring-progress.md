@@ -2,19 +2,20 @@
 
 Estimated progress: **96%**
 
-Estimated Codex ETA: **roughly 50–90 hours of active Codex execution**, plus required reference-
+Estimated Codex ETA: **roughly 45–80 hours of active Codex execution**, plus required reference-
 hardware measurement time, to repository-wide acceptance. The lower percentage and wider ETA are
 an intentional correction after the refreshed public-boundary inventory: the scoped runtime and
-Programmer foundations are mature, but Preload lifecycle, residual portable mutations, production
-facade retirement, public-DSL convergence, event gaps, and final performance/desktop acceptance
-remain substantive work rather than cleanup.
+Programmer foundations are mature, but production Preload convergence, residual portable
+mutations, production facade retirement, public-DSL convergence, event gaps, and final
+performance/desktop acceptance remain substantive work rather than cleanup.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-21 after completing the remaining production Patch mutation callers, public
-session/desktop/OSC test adapters, and the typed Programmer-priority and Preset-recall backend.
+Last updated: 2026-07-21 after completing the production Programmer-priority and Preset-recall
+authorities, their public test intents, the hosted-file-picker adapter, and the typed Preload
+lifecycle backend.
 
 ## Guardrails
 
@@ -467,6 +468,25 @@ session/desktop/OSC test adapters, and the typed Programmer-priority and Preset-
   exact Preset and Group revisions are captured once, ordered values apply in one Programmer
   transaction, open selection gestures close through one sparse interaction event, interaction-only
   outcomes omit the complete values projection, and v1 compatibility reuses the typed service.
+  Both now have dormant production providers, strict HTTP/WebSocket adapters, request-ordered
+  optimistic writers, narrow repair, tombstone/recreation handling, replacement guards, and no
+  bootstrap fallback. Preset cards activate only the exact Show collection and user authorities
+  they need; Priority remains action-only until a consumer mounts.
+- [x] Added typed Preload lifecycle actions for Enter, GO, pending clear, and release through the
+  Programming boundary. Exact capture, values, queue, selection, portable-Show, and filtered
+  Playback cursor preconditions are checked after replay lookup. GO retains one prepared Playback
+  batch and one install, returns ordered execution/runtime metadata, and publishes each changed
+  authority once; no-op and replay outcomes remain sparse. Same-user desks share the user-owned
+  state, foreign paths are rejected, failed GO rolls Programmer and Playback back atomically, and
+  legacy WebSocket commands reuse the typed service without duplicate compatibility events.
+- [x] Added feature-owned hosted-file-picker control for public acceptance tests. Browser scenarios
+  drive the real hosted picker contract rather than dispatching raw private `light:*` events, and
+  the private-boundary ratchet rejects restoring that shortcut.
+- [x] Added production-decoder-backed public Priority and Preset intents and migrated every direct
+  `programmer.priority` and `preset.apply` scenario call. The command-boundary scanner now inventories
+  every literal v1 action by both file and family and requires exact baseline updates even for a
+  partial shrink. API-004's edit/target/error-envelope checks and CUE-015's dedicated navigation
+  compatibility spec remain the explicit retained v1 inventory.
 - [x] Added typed action-time Cue recording. One Programming action captures only normal or pending-
   Preload recordable values, resolves explicit or authoritative active targets under the portable
   Show revision, and atomically creates, updates, or deletes the Cue plus any required Cuelist,
@@ -511,13 +531,11 @@ session/desktop/OSC test adapters, and the typed Programmer-priority and Preset-
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
-- [ ] Complete the Priority and Preset-recall frontend/public-DSL owners, then add the typed public
-  actions still required by acceptance scenarios: Preload lifecycle, Output master/blackout,
-  remaining command grammar families, output-route/user-layout, and residual portable-show
-  mutations.
-- [ ] Replace the final raw hosted-file-picker test event, converge the public test DSL, then run
-  the final repository-wide performance, unrestricted socket, desktop, migration, and operator-path
-  acceptance suite.
+- [ ] Complete the production/public Preload lifecycle owners and the revisioned Output master/
+  blackout authority, then add the remaining command grammar, output-route/user-layout, and
+  residual portable-show actions required by acceptance scenarios.
+- [ ] Continue converging the public test DSL, then run the final repository-wide performance,
+  unrestricted socket, desktop, migration, and operator-path acceptance suite.
 
 ## Remaining architecture work
 
@@ -529,32 +547,29 @@ session/desktop/OSC test adapters, and the typed Programmer-priority and Preset-
 3. Replace production `useServer()` callers with feature-local stores/hooks. Remove broad global
    React update ownership, DOM/custom-event SET/Store/Update routing, and polling-based refreshes.
 4. Add typed public actions for the compatibility families and direct v1 actions still exercised by
-   acceptance coverage. Priority and Preset recall now have backend owners; their production/public
-   callers and Preload lifecycle are active. Output runtime mutation, Speed Group, whole-Cue delete,
-   standalone Playback `SET`, bare `UPDATE`, and Preset transfer follow as separate
+   acceptance coverage. Priority and Preset recall are complete; production/public Preload and the
+   Output runtime mutation are active. Speed Group, whole-Cue delete, standalone Playback `SET`,
+   bare `UPDATE`, and Preset transfer follow as separate
    application-owned actions.
 5. Complete public portable-show mutation seams for output routes, user layouts, standalone
    Playback/Page operations, typed undo, and any remaining Patch/setup callers. Preserve lossless
    extensions, one transaction/event, revision checks, replay, and stored-empty semantics.
-6. Finish the feature-owned hosted-file-picker test adapter. Session-handoff, desktop, and OSC
-   adapters already prevent public scenarios from reading private storage or fabricating Tauri
-   globals; the hosted picker is the sole remaining raw `light:*` test event.
-7. Expand the public test DSL and migrate remaining legacy command helpers. Tests must express the
+6. Expand the public test DSL and migrate remaining legacy command helpers. Tests must express the
    intended operator workflow and keep software, command-line, and OSC surfaces explicit rather
    than hiding meaningful parity behind one generic implementation shortcut.
-8. Remove REST/WebSocket v1 and `useServer()` compatibility only after every production caller and
+7. Remove REST/WebSocket v1 and `useServer()` compatibility only after every production caller and
    acceptance test has moved to a typed replacement.
-9. Repair the remaining stale feature-plan links and keep the committed `docs/engineering` handoff
+8. Repair the remaining stale feature-plan links and keep the committed `docs/engineering` handoff
    synchronized as compatibility adapters are retired.
 
-The refreshed public-boundary audit counts 157 direct v1 `ApiDriver.command()` scenario calls and
-184 generic show-object mutation call sites. Of the direct commands, 104 already have typed owners,
-43 still need public action seams, nine are deliberate external-v1 coverage, and one unknown-command
-case should move to v2 rejection coverage. The retained v1 allowlist is API-004's three edit/target/
-unknown-envelope calls plus CUE-015's six dedicated navigation compatibility calls. The remaining
-generic writes cover 62 Cuelists, 33 Playbacks, 32 Groups, 19 output routes, 16 Playback Pages, ten
-patched fixtures, ten Presets, and two user layouts. These inventories must reach their explicit
-ratchets rather than being concealed behind a generic helper.
+The refreshed public-boundary audit now counts 145 direct v1 `ApiDriver.command()` scenario calls
+and 184 generic show-object mutation call sites. Priority, Preset recall, and the duplicated unknown-
+input path have moved to typed v2 intents; Preload lifecycle is the next 31-call cohort. The retained
+v1 allowlist is API-004's three edit/target/unknown-envelope calls plus CUE-015's six dedicated
+navigation compatibility calls. The remaining generic writes cover 62 Cuelists, 33 Playbacks, 32
+Groups, 19 output routes, 16 Playback Pages, ten patched fixtures, ten Presets, and two user layouts.
+These inventories must reach their explicit ratchets rather than being concealed behind a generic
+helper.
 
 ## Performance and acceptance still required
 
@@ -939,6 +954,29 @@ ratchets rather than being concealed behind a generic helper.
   Show-open/object-event broad Playback fetch, and retained exact Screens refresh. Architecture,
   all 10 source-size scanner tests, all eight command-boundary scanner tests, zero hard-limit
   violations, and `git diff --check` pass; the largest touched production file is 395 lines.
+- Preset recall passes 54 focused transport/provider/writer/UI tests and the complete 1,701-test
+  frontend suite. Programmer Priority passes 53 focused store/session/writer/provider tests, 29
+  strict wire/transport tests, and the complete 1,754-test frontend suite in 241 files. Both pass
+  typecheck, production build, Biome, architecture, source-size, command-boundary, and whitespace
+  checks; the build retains only the existing large-chunk advisory. Coverage includes first-view
+  dormancy, exact-user traffic, same-user desk convergence, response/event ordering, replay/no-
+  change, rollback, repair, gaps, tombstones, scope replacement, late responses, and unrelated-
+  render suppression.
+- The public Priority/Preset intent cohort passes 6 focused Vitest cases, both Priority API cases,
+  both supplemental Preset cases, and OSC-004 through both API and OSC surfaces. The widened
+  command-boundary scanner passes all 11 unit tests and the aggregate architecture command. The
+  sole exploratory MERGE-002 UI timeout waited for an unrelated Playback card; its API sibling
+  passed twice. The hosted-picker adapter is included in the green full frontend suite and private-
+  boundary architecture ratchet.
+- Typed Preload lifecycle passes 8 focused application tests; the full application, Programmer,
+  Engine, and Playback suites at 355, 91, 74, and 88 tests; 8 focused server route/compatibility
+  tests plus atomic failed-GO rollback; all 69 wire tests and generated-contract verification; and
+  the unrestricted full server library at 381 passed and 1 ignored. The sandboxed server run fails
+  only the known CITP localhost bind with `EPERM`. Strict server Clippy, formatting, architecture,
+  source-size, and whitespace checks pass. Coverage includes every action/no-op, replay before
+  stale preconditions, all captured revision conflicts, portable Show versus Engine divergence,
+  targeted cursor acceptance/conflict/gap behavior, exact event cardinality, shared user desks,
+  foreign rejection, rollback, and v1 payload/event compatibility.
 
 ## Wrap-up handoff
 
@@ -957,15 +995,15 @@ ratchets rather than being concealed behind a generic helper.
 - Public bootstrap no longer contains Programmer state. The authenticated v1 compatibility list
   is restricted to same-user session rows and remains only for startup and the shrinking
   compatibility surfaces tracked above.
-- Patch/setup selection and explicit Cue pending-choice authority are complete. The public test DSL
-  remains a separate future milestone.
+- Patch/setup selection and explicit Cue pending-choice authority are complete. Public Priority,
+  Preset, hosted-picker, session, desktop, and OSC intents are complete; Preload and the residual
+  command families remain.
 - Preload now prepares one final-state-aware batch, and virtual-exclusion restart authority is
   private, desk-exact, migration-compatible, and absent from public runtime projections.
-- Recommended next slice: finish the production/public Priority and Preset-recall owners while the
-  typed Preload lifecycle wraps the existing final-state-aware commit. Then publish Output runtime
-  mutation before closing the remaining command-grammar and portable-show action gaps. Keep the
-  one-owner public DSL migration, repository-wide acceptance, and reference-hardware performance as
-  the closing milestones.
+- Recommended next slice: finish the active production/public Preload owners and revisioned Output
+  runtime mutation, then close Speed Group, Cue delete, standalone Playback `SET`, bare `UPDATE`,
+  Preset transfer, and the remaining portable-show action gaps. Keep public-DSL convergence,
+  repository-wide acceptance, and reference-hardware performance as the closing milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
