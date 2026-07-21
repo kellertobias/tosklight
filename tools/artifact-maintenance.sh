@@ -19,7 +19,7 @@ light_check_runtime_migration() {
   fi
   if light_directory_has_entries "$legacy"; then
     echo "error: legacy development runtime data is still at $legacy" >&2
-    echo "Move it safely with: ./build migrate-artifacts" >&2
+    echo "Move it safely with: npm run migrate-artifacts" >&2
     return 1
   fi
 }
@@ -82,7 +82,7 @@ light_clean_runtime() {
   light_assert_safe_cleanup_target "$LIGHT_RUNTIME_DATA_DIR" "$LIGHT_ARTIFACTS_DIR" || return 1
   [[ "$confirmation" == "$LIGHT_RUNTIME_DATA_DIR" ]] || {
     echo "error: runtime cleanup includes local shows and desk state" >&2
-    echo "Confirm with: ./build clean runtime '$LIGHT_RUNTIME_DATA_DIR'" >&2
+    echo "Confirm with: npm run clean -- runtime '$LIGHT_RUNTIME_DATA_DIR'" >&2
     return 1
   }
   [[ ! -e "$LIGHT_RUNTIME_DATA_DIR" ]] || rm -rf -- "$LIGHT_RUNTIME_DATA_DIR"

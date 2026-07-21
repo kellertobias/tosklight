@@ -1,0 +1,54 @@
+{
+  "name": "tosklight",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ToskLight show-lighting control desk, engine, and control server.",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kellertobias/tosklight.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "bash tools/dev.sh both",
+    "dev:ui": "bash tools/dev.sh ui",
+    "dev:server": "bash tools/dev.sh server",
+    "dev:app": "bash tools/dev.sh app",
+    "storybook": "npm --prefix apps/control-ui run storybook",
+    "codesafari": "bash tools/build.sh codesafari",
+    "open": "bash tools/build.sh open",
+    "bundle": "bash tools/build.sh archive",
+    "bundle:install": "bash tools/build.sh archive install",
+    "manual": "bash tools/build.sh manual",
+    "pages:generate": "bash tools/build.sh pages",
+    "pages:serve": "bash tools/build.sh pages-serve",
+    "clean": "bash tools/build.sh clean",
+    "migrate-artifacts": "bash tools/build.sh migrate-artifacts",
+    "artifact-path": "bash tools/build.sh path",
+    "test": "bash tools/test.sh unit",
+    "test:unit": "bash tools/test.sh unit",
+    "test:architecture": "bash tools/test.sh architecture",
+    "test:e2e": "bash tools/test.sh e2e",
+    "test:e2e-api": "bash tools/test.sh e2e-api",
+    "test:e2e-ui": "bash tools/test.sh e2e-ui",
+    "test:e2e-supplemental": "bash tools/test.sh e2e-supplemental",
+    "test:app-icons": "bash tools/test.sh app-icons",
+    "test:artifact-paths": "bash tools/test.sh artifact-paths",
+    "test:help-screenshots": "bash tools/test.sh help-screenshots",
+    "test:record": "bash tools/test.sh record",
+    "test:demo": "bash tools/test.sh demo",
+    "test:desktop-smoke": "bash tools/test.sh desktop-smoke",
+    "test:all": "bash tools/test.sh all",
+    "release": "semantic-release"
+  },
+  "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.0",
+    "@semantic-release/exec": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/release-notes-generator": "^14.0.3",
+    "semantic-release": "^24.2.3"
+  }
+}

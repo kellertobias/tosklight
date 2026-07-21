@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/artifact-paths.sh"
 source "$ROOT/tools/artifact-maintenance.sh"
 light_init_artifact_paths "$ROOT"
@@ -19,21 +19,23 @@ HARDWARE_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-hardware-artifacts.json"
 DEV_SERVER_LABEL="de.tokenet.tosklight.dev-server"
 CODESAFARI_VERSION="1.0.0"
 
+# This script backs the root package.json scripts; run it through npm rather than directly.
 usage() {
   cat <<'EOF'
-Usage:
-  ./build open             Build debug server and app, stop old instances, and open ToskLight
-  ./build manual           Build PDF and deployable HTML manuals from docs/help Markdown
-  ./build safari           Export the CodeSafari static site from .tour
-  ./build pages            Assemble the public site: landing page, manual, and code safari
-  ./build archive          Create self-contained server archives for macOS, Windows, Linux AMD64, and Linux ARM64
-  ./build archive install  Also install and open ToskLight.app in ~/Applications
-  ./build migrate-artifacts
-                           Move legacy ./light-data to the canonical development runtime directory
-  ./build clean            Remove reproducible artifacts while preserving development runtime data
-  ./build clean runtime PATH
-                           Remove runtime data after confirming its exact absolute path
-  ./build path NAME        Print a resolved artifact path (for CI and tooling)
+tools/build.sh is invoked by the root package.json scripts:
+  npm run open                 Build debug server and app, stop old instances, and open ToskLight
+  npm run manual               Build PDF and deployable HTML manuals from docs/help Markdown
+  npm run pages:generate       Assemble the public site: landing page, manual, and code safari
+  npm run pages:serve [PORT]   Serve the assembled public site locally
+  npm run codesafari           Run the CodeSafari code tour locally
+  npm run bundle               Create self-contained server archives for macOS, Windows, Linux AMD64/ARM64
+  npm run bundle:install       Also install and open ToskLight.app in ~/Applications
+  npm run migrate-artifacts    Move legacy ./light-data to the canonical development runtime directory
+  npm run clean                Remove reproducible artifacts while preserving development runtime data
+  npm run artifact-path NAME   Print a resolved artifact path (for CI and tooling)
+
+Direct subcommands: open | manual | safari | pages | pages-serve [PORT] | codesafari |
+  archive [install] | migrate-artifacts | clean [runtime PATH] | path NAME
 EOF
 }
 
@@ -88,6 +90,22 @@ build_pages() {
     }
   done
   echo "Created $LIGHT_PAGES_DIR"
+}
+
+# Live CodeSafari server for browsing the code tour during development.
+run_safari_dev() {
+  require npx
+  npx --yes "@tobisk/codesafari@$CODESAFARI_VERSION" dev "$ROOT"
+}
+
+# Serve the already-assembled public site from a static file server.
+serve_pages() {
+  require node
+  [[ -f "$LIGHT_PAGES_DIR/index.html" ]] || {
+    echo "error: no assembled site at $LIGHT_PAGES_DIR; run 'npm run pages:generate' first" >&2
+    exit 1
+  }
+  node "$ROOT/tools/serve-pages.mjs" "$LIGHT_PAGES_DIR" "${1:-8080}"
 }
 
 ensure_manual_dependencies() {
@@ -378,6 +396,14 @@ case "${1:-}" in
   pages)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
     build_pages
+    ;;
+  codesafari)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    run_safari_dev
+    ;;
+  pages-serve)
+    [[ $# -le 2 ]] || { usage >&2; exit 2; }
+    serve_pages "${2:-}"
     ;;
   open)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }

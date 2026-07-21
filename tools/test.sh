@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/artifact-paths.sh"
 source "$ROOT/tools/artifact-maintenance.sh"
 light_init_artifact_paths "$ROOT"
 UI="$ROOT/apps/control-ui"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
-usage(){ echo "Usage: ./test {app-icons|architecture|artifact-paths|unit|e2e|e2e-api|e2e-ui|e2e-supplemental|help-screenshots|record|demo|desktop-smoke|all}"; }
+# Backs the root package.json test scripts; invoke via `npm run test:<name>`.
+usage(){ echo "Usage: npm run test:{unit|architecture|e2e|e2e-api|e2e-ui|e2e-supplemental|app-icons|artifact-paths|help-screenshots|record|demo|desktop-smoke|all}"; }
 build_e2e(){ (cd "$UI" && npm run build); cargo build --manifest-path "$ROOT/Cargo.toml" -p light-server --no-default-features; }
 architecture(){
   node "$ROOT/tools/check-architecture.mjs"
