@@ -408,6 +408,28 @@ impl CommandHttpScenario {
             .unwrap()
     }
 
+    async fn group_management_action(
+        &self,
+        show_id: &str,
+        token: Option<&str>,
+        input: serde_json::Value,
+    ) -> Response {
+        let mut request = Request::post(format!("/api/v2/shows/{show_id}/groups/manage"));
+        if let Some(token) = token {
+            request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
+        }
+        self.app
+            .clone()
+            .oneshot(
+                request
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(input.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
     async fn group_recording_action(
         &self,
         show_id: &str,

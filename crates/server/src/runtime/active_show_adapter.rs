@@ -6,7 +6,7 @@ use light_application::{
     ActionContext, ActionError, ActionErrorKind, ActiveShowPorts, ActiveShowUnitOfWork,
     BackupIdentity,
 };
-use light_core::ShowId;
+use light_core::{SessionId, ShowId};
 use light_engine::{EngineError, EngineSnapshot, PreparedEngineSnapshot};
 use light_show::{
     PortableShowCommit, PortableShowDocument, PortableShowObjectUndo, PortableShowTransaction,
@@ -82,6 +82,9 @@ pub(super) struct ServerActiveShowPorts {
     state: AppState,
     backup_kind: ActiveShowBackupKind,
     programming_owner: Option<ProgrammingInstallOwner>,
+    /// Acting session for a frozen Group refresh, whose selection is installed inside the owning
+    /// Show transaction.
+    frozen_selection_session: Option<SessionId>,
 }
 
 impl ServerActiveShowPorts {
@@ -90,6 +93,7 @@ impl ServerActiveShowPorts {
             state,
             backup_kind: ActiveShowBackupKind::OutputRoute,
             programming_owner: None,
+            frozen_selection_session: None,
         }
     }
 
@@ -98,6 +102,7 @@ impl ServerActiveShowPorts {
             state,
             backup_kind: ActiveShowBackupKind::ShowObjects,
             programming_owner: None,
+            frozen_selection_session: None,
         }
     }
 
@@ -109,7 +114,29 @@ impl ServerActiveShowPorts {
             state,
             backup_kind: ActiveShowBackupKind::ShowObjects,
             programming_owner: Some(owner),
+            frozen_selection_session: None,
         }
+    }
+
+    pub(super) fn group_management(
+        state: AppState,
+        owner: ProgrammingInstallOwner,
+        session_id: SessionId,
+    ) -> Self {
+        Self {
+            state,
+            backup_kind: ActiveShowBackupKind::ShowObjects,
+            programming_owner: Some(owner),
+            frozen_selection_session: Some(session_id),
+        }
+    }
+
+    pub(crate) const fn frozen_selection_session(&self) -> Option<SessionId> {
+        self.frozen_selection_session
+    }
+
+    pub(crate) const fn state(&self) -> &AppState {
+        &self.state
     }
 }
 

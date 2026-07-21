@@ -47,6 +47,12 @@ mod cue_transfer_routes;
 mod cue_transfer_wire;
 #[path = "command_http/events.rs"]
 mod events;
+#[path = "command_http/group_management_ports.rs"]
+mod group_management_ports;
+#[path = "command_http/group_management_routes.rs"]
+mod group_management_routes;
+#[path = "command_http/group_management_wire.rs"]
+mod group_management_wire;
 #[path = "command_http/group_recording_ports.rs"]
 mod group_recording_ports;
 #[path = "command_http/group_recording_routes.rs"]

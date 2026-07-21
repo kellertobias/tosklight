@@ -1,9 +1,10 @@
 use super::ProgrammingService;
+use crate::ActionContext;
 use crate::{
     ActionEnvelope, ActionError, ActionErrorKind, GroupManagementCommit,
     GroupManagementCommitResult, GroupManagementOperation, GroupManagementOutcome,
     GroupManagementPorts, GroupManagementProjection, GroupManagementRequest, GroupManagementResult,
-    GroupPropertiesUpdate,
+    GroupManagementSelection, GroupPropertiesUpdate, ProgrammingInteractionChange,
 };
 use light_core::{SessionId, UserId};
 use std::sync::Arc;
@@ -45,6 +46,33 @@ impl ProgrammingService {
         result.persistence_warning = ports.persist_group_management(&envelope.context);
         self.remember_group_management(identity, envelope.command, result.clone());
         Ok(result)
+    }
+
+    /// Installs a refreshed frozen selection on the acting session and publishes its interaction
+    /// event.
+    ///
+    /// The caller already owns the show-mutation ordering gate, so this deliberately takes no desk
+    /// or user gate and publishes strictly before the owning Show event.
+    pub fn install_frozen_group_selection(
+        &self,
+        context: &ActionContext,
+        session_id: SessionId,
+        selection: &GroupManagementSelection,
+    ) {
+        self.programmers.select_expression(
+            session_id,
+            selection.fixtures.clone(),
+            light_programmer::SelectionExpression::FrozenGroup {
+                group_id: selection.source_group_id.clone(),
+                source_revision: selection.source_revision,
+            },
+        );
+        let change = ProgrammingInteractionChange::from_components(
+            context.desk_id,
+            None,
+            Some(self.programmers.selection(session_id).unwrap_or_default()),
+        );
+        self.publish_interaction(context, change);
     }
 
     fn assert_group_management_owner(
