@@ -6,10 +6,7 @@ fn atomic_family_filter_uses_the_execution_parser_after_timing_clauses() {
         compatibility_only_family("TIME 1 RECORD GROUP 1").unwrap(),
         Some("RECORD")
     );
-    assert_eq!(
-        compatibility_only_family("DELAY 0.5 CUE 2").unwrap(),
-        Some("CUE")
-    );
+    assert_eq!(compatibility_only_family("DELAY 0.5 CUE 2").unwrap(), None);
     assert_eq!(
         compatibility_only_family("GROUP 1 AT 50 TIME 1").unwrap(),
         None
@@ -37,6 +34,22 @@ fn atomic_family_filter_owns_typed_preset_group_and_cue_recording() {
     assert_eq!(
         compatibility_only_family("RECORD 2.7 TIME 1").unwrap(),
         Some("RECORD")
+    );
+}
+
+#[test]
+fn atomic_family_filter_owns_typed_cue_navigation() {
+    assert_eq!(compatibility_only_family("CUE 3").unwrap(), None);
+    assert_eq!(compatibility_only_family("CUE CUE 2").unwrap(), None);
+    assert_eq!(compatibility_only_family("CUE SET 1 CUE 3").unwrap(), None);
+    assert_eq!(
+        compatibility_only_family("CUE CUE SET 1 . 2 CUE 2").unwrap(),
+        None
+    );
+    // Whole-Cue deletion and Cue transfer remain owned by their own families.
+    assert_eq!(
+        compatibility_only_family("DELETE SET 1 CUE 2").unwrap(),
+        Some("DELETE")
     );
 }
 

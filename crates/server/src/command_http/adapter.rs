@@ -202,6 +202,7 @@ pub(super) fn compatibility_only_family(command: &str) -> Result<Option<&'static
     if preset_record_address(command)?.is_some()
         || group_record_command(command)?.is_some()
         || super::cue_recording_command::parse(command)?.is_some()
+        || super::cue_navigation_command::parse(command)?.is_some()
     {
         return Ok(None);
     }
@@ -209,7 +210,6 @@ pub(super) fn compatibility_only_family(command: &str) -> Result<Option<&'static
         return Ok(None);
     };
     Ok(match family.as_str() {
-        "CUE" => Some("CUE"),
         "SPD" => Some("SPD GRP"),
         "RECORD" | "REC" => Some("RECORD"),
         "UPDATE" => Some("UPDATE"),

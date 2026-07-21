@@ -404,11 +404,10 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       .toEqual(Array(12).fill(128));
   });
 
-  // The single retained direct exercise of the v1 textual command-line WebSocket envelope.
-  // Every other scenario states operator intent through the v2 command-line HTTP contract or the
-  // categorized compatibility helper; this test owns the envelope itself so the wire shape stays
-  // covered while the remaining compatibility families move to typed services.
-  test("API-004 @api › retained v1 WebSocket command-line envelope contract", async ({ api, bench }) => {
+  // The retained direct exercise of v1 command-line editing and target selection. CUE execution
+  // has one dedicated compatibility spec; every other scenario states execution intent through
+  // the v2 command-line HTTP contract or a categorized compatibility helper.
+  test("API-004 @api › retained v1 WebSocket command-edit envelope contract", async ({ api, bench }) => {
     await loadCanonicalCopy(api, bench, "api-004-v1-command-line-envelope");
 
     const accepted = await api.command<unknown>("programmer.command_line", { value: "GROUP 1 +" });
@@ -421,10 +420,6 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     const target = await api.command<unknown>("programmer.command_target", { value: "FIXTURE" });
     expect(target).toMatchObject({ protocol_version: 1, ok: true });
     expect(target.revision).toBeGreaterThanOrEqual(accepted.revision);
-
-    // Textual execution reports its rejection through the same envelope rather than an HTTP status.
-    await expect(api.command("programmer.execute", { value: "CUE 4242" }))
-      .rejects.toThrow(/programmer\.execute failed/i);
 
     // Unknown commands stay a transport-level error, which is what compatibility callers observe.
     await expect(api.command("not.a.command", {})).rejects.toThrow("unknown command");

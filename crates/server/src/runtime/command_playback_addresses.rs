@@ -8,6 +8,11 @@ pub(super) struct CommandPlaybackAddress {
 }
 
 impl CommandPlaybackAddress {
+    /// CUE navigation was the last production reader; it now parses its own syntactic address and
+    /// lets the Playback application service resolve it. The remaining production callers use only
+    /// `playback` and `cue`, so this stays as the characterization of the current-page versus
+    /// explicit-page mapping that `parse_update_playback_address` still depends on.
+    #[cfg(test)]
     pub(super) fn application_address(self) -> light_application::PlaybackAddress {
         self.application
     }

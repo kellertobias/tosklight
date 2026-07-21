@@ -5,6 +5,12 @@
 
 #[path = "command_http/adapter.rs"]
 mod adapter;
+#[path = "command_http/cue_navigation_action.rs"]
+mod cue_navigation_action;
+#[path = "command_http/cue_navigation_command.rs"]
+mod cue_navigation_command;
+#[path = "command_http/cue_navigation_programming_ports.rs"]
+mod cue_navigation_programming_ports;
 #[path = "command_http/cue_recording_command.rs"]
 mod cue_recording_command;
 #[path = "command_http/cue_recording_environment.rs"]
@@ -81,6 +87,7 @@ mod wire;
 pub(super) use adapter::{
     ExistingCommandOutcome, ExistingCommandPolicy, execute_existing_command, route_osc_command_key,
 };
+pub(super) use cue_navigation_action::execute_compatibility as execute_compatibility_cue_navigation;
 pub(crate) use cue_recording_osc::intercept_armed_playback as intercept_armed_cue_playback;
 pub(crate) use cue_transfer_ports::ServerProgrammingCueTransferPorts;
 pub(super) use interaction_wire::interaction_change;

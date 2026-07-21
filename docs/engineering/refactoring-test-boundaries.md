@@ -143,6 +143,7 @@ legacy family:
 | `RECORD\|REC <preset address>` | Preset recording |
 | `RECORD\|REC [+\|-] (CUE\|SET) …` | Cue recording |
 | `MOVE\|COPY [PLAIN\|STATUS] SET … AT SET …` | Cue transfer |
+| `CUE [CUE] [SET <playback>\|SET <page> . <slot>] [CUE] <cue>` | Cue navigation (Playback `GoTo`/`Load`) |
 
 `commandLineOwnership()` in the bench API driver mirrors exactly that rule. It is a **static**
 decision. Attempting v2 and falling back to v1 is prohibited: it would silently absorb an ownership
@@ -162,12 +163,18 @@ regression instead of failing.
 
 | Family | Sites | Waiting for |
 | --- | --- | --- |
-| `cue_navigation` | 10 | typed Playback `go_to`/`load` owning the command grammar |
 | `speed_group` | 8 | any application-owned Speed Group BPM/copy action |
 | `cue_delete` | 5 | whole-Cue deletion; Cue recording subtract is a different operation |
 | `playback_set` | 1 | `map_existing_playback` integrated into command execution |
 | `preset_transfer` | 0 | Preset `MOVE`/`COPY` ownership (only Cue transfer is intercepted) |
 | `update` | 0 | `UPDATE` grammar routed through the typed Update workflow |
+
+`cue_navigation` is retired. `CUE`/`CUE CUE` Go To and Load now parse into the typed
+`PlaybackAction::GoTo`/`PlaybackAction::Load` and execute through the Playback application service,
+so `CUE-014` states its intent through `executeCommandLine`. The Programming interaction boundary
+still owns the shared command-line transition, history, and reset, and the temporary v1
+`playback_changed` notification is emitted only for the compatibility WebSocket and OSC surfaces.
+`CUE-015 @api` is the dedicated retained v1 WebSocket envelope test for that family.
 
 `setCompatibilityCommandTarget` is a separate named v1 caller: the FIXTURE/GROUP command target has
 no typed v2 owner, and the production frontend still issues it from `api/client/programming.ts`.

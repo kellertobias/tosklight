@@ -209,7 +209,12 @@ fn ws_typed_recording(
     context: &light_application::ActionContext,
 ) -> Option<command_http::ExistingCommandOutcome> {
     let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
-    let outcome = ports.record_typed_command(&state.programmers, context, command)?;
+    let outcome = ports.record_typed_command(
+        &state.programmers,
+        context,
+        command,
+        light_application::ExecutionPolicy::Compatibility,
+    )?;
     Some(match outcome {
         light_application::ProgrammingExecution::Accepted { applied, warning } => {
             command_http::ExistingCommandOutcome::Accepted {

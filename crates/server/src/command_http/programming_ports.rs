@@ -45,11 +45,13 @@ impl<'a> ServerProgrammingPorts<'a> {
         programmers: &ProgrammerRegistry,
         context: &ActionContext,
         command: &str,
+        policy: ExecutionPolicy,
     ) -> Option<ProgrammingExecution> {
         self.record_group_command(programmers, context, command)
             .or_else(|| self.record_preset_command(programmers, context, command))
             .or_else(|| self.record_cue_command(programmers, context, command))
             .or_else(|| self.transfer_cue_command(programmers, context, command))
+            .or_else(|| self.navigate_cue_command(programmers, context, command, policy))
     }
 
     fn record_group_command(
@@ -299,7 +301,7 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         command: &str,
         policy: ExecutionPolicy,
     ) -> ProgrammingExecution {
-        if let Some(outcome) = self.record_typed_command(programmers, context, command) {
+        if let Some(outcome) = self.record_typed_command(programmers, context, command, policy) {
             return outcome;
         }
         let policy = match policy {
