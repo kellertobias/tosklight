@@ -15,7 +15,6 @@ import { createMvrActions } from "./mvr";
 import { createOutputActions } from "./output";
 import { createPatchActions } from "./patch";
 import { createPreloadActions } from "./preload";
-import { createPresetActions } from "./presets";
 import { createProgrammerSelectionActions } from "./programmerSelection";
 import { createSessionActions } from "./session";
 import { createShowLifecycleActions } from "./showLifecycle";
@@ -43,7 +42,6 @@ export function composeServerContextValue(model: ServerController) {
 		...createPreloadActions(model),
 		...createGroupEditingActions(model),
 		...createGroupDerivationActions(model),
-		...createPresetActions(model),
 		...createSystemActions(model),
 		...createMediaActions(model),
 		...createFixtureLibraryActions(model),

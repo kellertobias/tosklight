@@ -39,9 +39,17 @@ export interface ProgrammerValuesViewProviderProps {
 	onMutationError?: (error: Error | null) => void;
 }
 
+/** Stable lifecycle seam for action-only features that depend on exact values. */
+export interface ProgrammerValuesAuthority {
+	store: ProgrammerValuesStore;
+	activate(): () => void;
+	repairAuthority(error: Error): Promise<void>;
+}
+
 const StoreContext = createContext<ProgrammerValuesStore | null>(null);
 const SessionContext = createContext<ProgrammerValuesSession | null>(null);
 const ActionsContext = createContext<ProgrammerValuesActions | null>(null);
+const AuthorityContext = createContext<ProgrammerValuesAuthority | null>(null);
 const fallbackStore = new ProgrammerValuesStore();
 
 export function ProgrammerValuesViewProvider({
@@ -105,6 +113,17 @@ export function ProgrammerValuesViewProvider({
 			userId,
 		],
 	);
+	const authority = useMemo<ProgrammerValuesAuthority | null>(
+		() =>
+			session
+				? {
+						store,
+						activate: () => session.activate(),
+						repairAuthority: (error) => session.repairAuthority(error),
+					}
+				: null,
+		[session, store],
+	);
 	useLayoutEffect(() => {
 		store.reset(showId, userId, authorityKey);
 	}, [authorityKey, showId, store, userId]);
@@ -113,9 +132,11 @@ export function ProgrammerValuesViewProvider({
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>
-				<ActionsContext.Provider value={actions ?? writer}>
-					{children}
-				</ActionsContext.Provider>
+				<AuthorityContext.Provider value={authority}>
+					<ActionsContext.Provider value={actions ?? writer}>
+						{children}
+					</ActionsContext.Provider>
+				</AuthorityContext.Provider>
 			</SessionContext.Provider>
 		</StoreContext.Provider>
 	);
@@ -154,6 +175,10 @@ export function useProgrammerValuesStatus() {
 
 export function useProgrammerValuesActions() {
 	return useContext(ActionsContext);
+}
+
+export function useProgrammerValuesAuthority() {
+	return useContext(AuthorityContext);
 }
 
 export function useProgrammerValuesStore() {

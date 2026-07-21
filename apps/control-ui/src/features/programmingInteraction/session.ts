@@ -6,8 +6,8 @@ import type {
 import { ProgrammingViewScope } from "./scope";
 import type { ProgrammingInteractionStore } from "./store";
 import {
-	type ProgrammingEventStream,
 	type ProgrammingEventScope,
+	type ProgrammingEventStream,
 	type ProgrammingEventTransport,
 	ProgrammingProtocolError,
 } from "./transport";
@@ -32,9 +32,11 @@ export class ProgrammingInteractionSession {
 	private readonly loadSnapshot: ProgrammingInteractionSessionOptions["loadSnapshot"];
 	private readonly onError?: (error: Error | null) => void;
 	private stream: ProgrammingEventStream | null = null;
-	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null =
+		null;
 	private refreshScheduled = false;
 	private repairGeneration: number | null = null;
+	private repairPromise: Promise<void> | null = null;
 	private hydratedScopeKey: string | null = null;
 	private hydratedScope: ProgrammingEventScope | null = null;
 	private storeScope: number | null = null;
@@ -71,6 +73,22 @@ export class ProgrammingInteractionSession {
 		this.clearReconnect();
 		this.closeStream();
 		this.storeScope = null;
+	}
+
+	async repairAuthority(capability: ProgrammingCapability, error: Error) {
+		const key = this.scope.key();
+		const generation = this.lifecycle;
+		if (
+			this.stopped ||
+			this.storeScope === null ||
+			!this.scope.subscription()[capability]
+		)
+			throw new Error(`Programming ${capability} authority is unavailable`);
+		await this.repair(generation, key, error);
+		if (!this.isCurrent(generation, key))
+			throw new Error(`Programming ${capability} authority was replaced`);
+		const state = this.store.getSnapshot();
+		if (state.status === "error") throw state.error ?? error;
 	}
 
 	private scheduleRefresh(delay = 0) {
@@ -139,11 +157,7 @@ export class ProgrammingInteractionSession {
 		this.openStream(generation, key, snapshot.cursor);
 	}
 
-	private openStream(
-		generation: number,
-		key: string,
-		cursor: number | null,
-	) {
+	private openStream(generation: number, key: string, cursor: number | null) {
 		if (!this.transport) return;
 		let stream: ProgrammingEventStream;
 		try {
@@ -205,9 +219,19 @@ export class ProgrammingInteractionSession {
 		}
 	}
 
-	private async repair(generation: number, key: string) {
-		if (this.repairGeneration === generation) return;
+	private repair(generation: number, key: string, error?: Error) {
+		if (this.repairGeneration === generation)
+			return this.repairPromise ?? Promise.resolve();
 		this.repairGeneration = generation;
+		const repair = this.performRepair(generation, key, error).finally(() => {
+			if (this.repairGeneration === generation) this.repairGeneration = null;
+			if (this.repairPromise === repair) this.repairPromise = null;
+		});
+		this.repairPromise = repair;
+		return repair;
+	}
+
+	private async performRepair(generation: number, key: string, error?: Error) {
 		try {
 			const snapshot = await this.loadSnapshot();
 			if (!this.isCurrent(generation, key)) return;
@@ -224,10 +248,7 @@ export class ProgrammingInteractionSession {
 			this.onError?.(null);
 		} catch (reason) {
 			if (this.isCurrent(generation, key))
-				this.protocolReset(asError(reason));
-		} finally {
-			if (this.repairGeneration === generation)
-				this.repairGeneration = null;
+				this.protocolReset(asError(reason ?? error));
 		}
 	}
 

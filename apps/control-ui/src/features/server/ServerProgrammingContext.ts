@@ -1,5 +1,5 @@
 import type { StoredGroup } from "../../api/types";
-import type { PresetAddress, PresetFamily } from "../../presetFamilies";
+import type { PresetFamily } from "../../presetFamilies";
 
 export interface ServerProgrammingContext {
 	undoProgrammer: () => Promise<void>;
@@ -56,5 +56,4 @@ export interface ServerProgrammingContext {
 	undoGroup: (id: string) => Promise<void>;
 	refreshFrozenGroup: (id: string) => Promise<void>;
 	detachDerivedGroup: (id: string) => Promise<void>;
-	applyPreset: (address: PresetAddress) => Promise<void>;
 }

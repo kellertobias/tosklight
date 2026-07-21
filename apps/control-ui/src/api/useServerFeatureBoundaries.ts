@@ -13,6 +13,7 @@ import { useCueRecordingBoundaries } from "./useCueRecordingBoundaries";
 import { useCueTransferBoundaries } from "./useCueTransferBoundaries";
 import { useGroupRecordingBoundaries } from "./useGroupRecordingBoundaries";
 import { usePlaybackTopologyBoundaries } from "./usePlaybackTopologyBoundaries";
+import { usePresetRecallBoundaries } from "./usePresetRecallBoundaries";
 import { usePresetRecordingBoundaries } from "./usePresetRecordingBoundaries";
 import { useProgrammerLifecycleBoundaries } from "./useProgrammerLifecycleBoundaries";
 import { useProgrammerValuesBoundaries } from "./useProgrammerValuesBoundaries";
@@ -26,6 +27,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	const programmerValues = useProgrammerValuesBoundaries(state);
 	const programmerLifecycle = useProgrammerLifecycleBoundaries(state);
 	const presetRecording = usePresetRecordingBoundaries(state);
+	const presetRecall = usePresetRecallBoundaries(state);
 	const groupRecording = useGroupRecordingBoundaries(state);
 	const cueRecording = useCueRecordingBoundaries(state);
 	const cueTransfer = useCueTransferBoundaries(state);
@@ -135,6 +137,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		...programmerLifecycle,
 		...programmerValues,
 		...presetRecording,
+		...presetRecall,
 		...groupRecording,
 		...cueRecording,
 		...cueTransfer,

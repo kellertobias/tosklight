@@ -277,28 +277,6 @@ describe("LightApiClient programmer and preset contracts", () => {
 			["preset.generate_fixture_values", { fixture_ids: ["fixture-a"] }],
 		]);
 	});
-	it("addresses applied presets by family and pool-local number", async () => {
-		const fetchMock = vi.fn().mockResolvedValueOnce(
-			new Response(
-				JSON.stringify({
-					session_id: "session-a",
-					token: "token-a",
-					user: { id: "user-a", name: "Operator", enabled: true },
-				}),
-				{ status: 200, headers: { "content-type": "application/json" } },
-			),
-		);
-		vi.stubGlobal("fetch", fetchMock);
-		const client = new LightApiClient("http://desk.local");
-		await client.login("Operator");
-		const command = vi.spyOn(client, "command").mockResolvedValue({});
-
-		await client.applyPreset({ family: "Color", number: 1 });
-		expect(command).toHaveBeenCalledWith("preset.apply", {
-			family: "Color",
-			number: 1,
-		});
-	});
 });
 
 describe("LightApiClient show lifecycle contracts", () => {

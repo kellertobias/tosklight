@@ -1,4 +1,3 @@
-import type { PresetAddress } from "../../presetFamilies";
 import type {
 	CommandLineProjection,
 	ProgrammingSnapshot,
@@ -6,13 +5,13 @@ import type {
 	SelectionActionRequest,
 } from "../../features/programmingInteraction/contracts";
 import {
-	decodeProgrammingCommandLine,
-	decodeProgrammingInteractionSnapshot,
-} from "../programmingWire";
-import {
 	decodeSelectionActionOutcome,
 	encodeSelectionActionRequest,
 } from "../programmingSelectionWire";
+import {
+	decodeProgrammingCommandLine,
+	decodeProgrammingInteractionSnapshot,
+} from "../programmingWire";
 import type { GeneratedFixturePresetResult, ProgrammerState } from "../types";
 import type { LiveClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
@@ -156,9 +155,5 @@ export class ProgrammingApiClient {
 
 	undoProgrammer() {
 		return this.transport.command("programmer.undo", {});
-	}
-
-	applyPreset(address: PresetAddress) {
-		return this.transport.command("preset.apply", address);
 	}
 }

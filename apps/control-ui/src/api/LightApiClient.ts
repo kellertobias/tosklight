@@ -212,8 +212,6 @@ export class LightApiClient extends LightClientRuntime {
 		"executeCommandLine",
 	);
 	undoProgrammer = bindClientMethod(this.programmingApi, "undoProgrammer");
-	applyPreset = bindClientMethod(this.programmingApi, "applyPreset");
-
 	playbackRuntimeSnapshot = bindClientMethod(
 		this.playbackApi,
 		"playbackRuntimeSnapshot",

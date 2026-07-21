@@ -1,6 +1,7 @@
 import { type PropsWithChildren, useCallback } from "react";
 import { CueTransferProvider } from "../features/cueTransfer/CueTransferProvider";
 import { PlaybackRuntimeViewProvider } from "../features/playbackRuntime/PlaybackRuntimeView";
+import { PresetRecallProvider } from "../features/presetRecall/PresetRecallProvider";
 import { ProgrammerCaptureModeViewProvider } from "../features/programmerCaptureMode/ProgrammerCaptureModeView";
 import { ProgrammerLifecycleViewProvider } from "../features/programmerLifecycle/ProgrammerLifecycleView";
 import { ProgrammerPreloadPlaybackQueueViewProvider } from "../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
@@ -37,6 +38,47 @@ function SelectedGroupMembershipSync({
 	return null;
 }
 
+function PresetRecallBoundary({
+	children,
+	showId,
+	userId,
+	state,
+	boundaries,
+}: PropsWithChildren<
+	Pick<ServerProgrammingProvidersProps, "state" | "boundaries"> & {
+		showId: string | null;
+		userId: string | null;
+	}
+>) {
+	const loadPreset = useCallback(
+		(show: string, objectId: string) =>
+			boundaries.loadShowObjectSnapshot(show, "preset", objectId),
+		[boundaries.loadShowObjectSnapshot],
+	);
+	return (
+		<PresetRecallProvider
+			showId={showId}
+			userId={userId}
+			deskId={state.session?.desk.id ?? null}
+			authorityKey={boundaries.presetRecallAuthorityKey}
+			showStore={state.showObjectsStore}
+			transport={boundaries.presetRecallTransport}
+			loadPreset={loadPreset}
+			onError={boundaries.reportPresetRecallError}
+		>
+			{children}
+		</PresetRecallProvider>
+	);
+}
+
+function useCommandExecution(value: ServerContextValue) {
+	return useCallback(
+		({ command, target, pristine }: CommandExecutionRequest) =>
+			value.executeCommandLine(command, { target, pristine }),
+		[value.executeCommandLine],
+	);
+}
+
 export function ServerProgrammingProviders({
 	children,
 	state,
@@ -45,13 +87,7 @@ export function ServerProgrammingProviders({
 }: PropsWithChildren<ServerProgrammingProvidersProps>) {
 	const showId = state.bootstrap?.active_show?.id ?? null;
 	const userId = state.session?.user.id ?? null;
-	// The command surface owns no transport. Execution is injected here as one
-	// narrow feature action over the existing command-execution path.
-	const executeCommand = useCallback(
-		({ command, target, pristine }: CommandExecutionRequest) =>
-			value.executeCommandLine(command, { target, pristine }),
-		[value.executeCommandLine],
-	);
+	const executeCommand = useCommandExecution(value);
 	return (
 		<ProgrammingUpdateProvider
 			showId={showId}
@@ -163,12 +199,19 @@ export function ServerProgrammingProviders({
 												boundaries.reportProgrammingMutationError
 											}
 										>
-											<SelectedGroupMembershipSync state={state} />
-											<ShowObjectDetailSubscription
-												kind="group"
-												objectId={value.selectedGroupId}
-											/>
-											{children}
+											<PresetRecallBoundary
+												showId={showId}
+												userId={userId}
+												state={state}
+												boundaries={boundaries}
+											>
+												<SelectedGroupMembershipSync state={state} />
+												<ShowObjectDetailSubscription
+													kind="group"
+													objectId={value.selectedGroupId}
+												/>
+												{children}
+											</PresetRecallBoundary>
 										</ProgrammingInteractionViewProvider>
 									</ProgrammerPreloadPlaybackQueueViewProvider>
 								</ProgrammerPreloadValuesViewProvider>

@@ -9,18 +9,16 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
+import type { ExecuteCommandLine } from "./commandExecution";
 import {
-	type CommandExecutionOutcome,
-	createCommandLineExecution,
-	type ExecuteCommandLine,
-} from "./commandExecution";
+	type ProgrammingCommandLineActions,
+	useProgrammingCommandLineActionsValue,
+} from "./commandLineActionsValue";
 import {
-	type CommandLineExecutionResult,
 	ProgrammingCommandLineWriter,
 	type ProgrammingCommandLineWriterOptions,
 } from "./commandLineWriter";
 import type {
-	CommandLinePatch,
 	ProgrammingCapability,
 	SelectionActionOutcome,
 	SelectionRule,
@@ -56,31 +54,36 @@ interface ProgrammingInteractionViewProviderProps {
 	onMutationError?: (error: Error | null) => void;
 }
 
-export interface ProgrammingCommandLineActions {
-	replace(text: string): Promise<boolean>;
-	reset(): Promise<boolean>;
-	flush(): Promise<boolean>;
-	/** Settles pending edits, then runs the command against the scoped authority. */
-	execute(value?: string): Promise<CommandExecutionOutcome>;
-	executeAfterPendingWrites(
-		execute: () => Promise<boolean>,
-		optimisticReset: CommandLinePatch,
-	): Promise<CommandLineExecutionResult>;
-}
-
 export interface ProgrammingSelectionActions {
-	replace(intent: ProgrammingSelectionReplacementIntent): Promise<SelectionActionOutcome | null>;
-	gesture(intent: ProgrammingSelectionGestureIntent): Promise<SelectionActionOutcome | null>;
-	selectGroup(intent: ProgrammingGroupSelectionIntent): Promise<SelectionActionOutcome | null>;
+	replace(
+		intent: ProgrammingSelectionReplacementIntent,
+	): Promise<SelectionActionOutcome | null>;
+	gesture(
+		intent: ProgrammingSelectionGestureIntent,
+	): Promise<SelectionActionOutcome | null>;
+	selectGroup(
+		intent: ProgrammingGroupSelectionIntent,
+	): Promise<SelectionActionOutcome | null>;
 	applyRule(rule: SelectionRule): Promise<SelectionActionOutcome | null>;
 }
 
+/** Stable lifecycle seam for action-only features that depend on selection. */
+export interface ProgrammingSelectionAuthority {
+	store: ProgrammingInteractionStore;
+	activate(): () => void;
+	repairAuthority(error: Error): Promise<void>;
+}
+
 const StoreContext = createContext<ProgrammingInteractionStore | null>(null);
-const SessionContext = createContext<ProgrammingInteractionSession | null>(null);
+const SessionContext = createContext<ProgrammingInteractionSession | null>(
+	null,
+);
 const CommandLineActionsContext =
 	createContext<ProgrammingCommandLineActions | null>(null);
 const SelectionActionsContext =
 	createContext<ProgrammingSelectionActions | null>(null);
+const SelectionAuthorityContext =
+	createContext<ProgrammingSelectionAuthority | null>(null);
 const fallbackStore = new ProgrammingInteractionStore();
 
 export function ProgrammingInteractionViewProvider({
@@ -164,30 +167,12 @@ export function ProgrammingInteractionViewProvider({
 			store,
 		],
 	);
-	const commandLineActions = useMemo<ProgrammingCommandLineActions | null>(() => {
-		if (!commandLineWriter) return null;
-		const executeAfterPendingWrites: ProgrammingCommandLineActions["executeAfterPendingWrites"] =
-			(execute, optimisticReset) => {
-				const run = () =>
-					commandLineWriter.executeAfterPendingWrites(execute, optimisticReset);
-				return selectionWriter
-					? selectionWriter.runAfterPendingWrites(run, "write_failed")
-					: run();
-			};
-		return {
-			replace: (text) => commandLineWriter.replace(text),
-			reset: () => commandLineWriter.replace(""),
-			flush: () => commandLineWriter.flush(),
-			execute: createCommandLineExecution({
-				store,
-				// Selection writes share this barrier, so Enter still settles every
-				// pending desk edit before the command runs.
-				executeAfterPendingWrites,
-				execute: executeCommand,
-			}),
-			executeAfterPendingWrites,
-		};
-	}, [commandLineWriter, executeCommand, selectionWriter, store]);
+	const commandLineActions = useProgrammingCommandLineActionsValue(
+		commandLineWriter,
+		selectionWriter,
+		store,
+		executeCommand,
+	);
 	const selectionActions = useMemo<ProgrammingSelectionActions | null>(
 		() =>
 			selectionWriter
@@ -200,6 +185,18 @@ export function ProgrammingInteractionViewProvider({
 				: null,
 		[selectionWriter],
 	);
+	const selectionAuthority = useMemo<ProgrammingSelectionAuthority | null>(
+		() =>
+			session
+				? {
+						store,
+						activate: () => session.activate("selection"),
+						repairAuthority: (error) =>
+							session.repairAuthority("selection", error),
+					}
+				: null,
+		[session, store],
+	);
 	useLayoutEffect(() => {
 		store.reset(showId, deskId, authorityKey);
 		return () => session?.stop();
@@ -209,20 +206,19 @@ export function ProgrammingInteractionViewProvider({
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>
-				<CommandLineActionsContext.Provider value={commandLineActions}>
-					<SelectionActionsContext.Provider value={selectionActions}>
-						{children}
-					</SelectionActionsContext.Provider>
-				</CommandLineActionsContext.Provider>
+				<SelectionAuthorityContext.Provider value={selectionAuthority}>
+					<CommandLineActionsContext.Provider value={commandLineActions}>
+						<SelectionActionsContext.Provider value={selectionActions}>
+							{children}
+						</SelectionActionsContext.Provider>
+					</CommandLineActionsContext.Provider>
+				</SelectionAuthorityContext.Provider>
 			</SessionContext.Provider>
 		</StoreContext.Provider>
 	);
 }
 
-export function useProgrammingCommandLineView(
-	enabled = true,
-	observe = true,
-) {
+export function useProgrammingCommandLineView(enabled = true, observe = true) {
 	useProgrammingCapabilityView("commandLine", enabled);
 	return useProgrammingSelector(
 		useCallback(
@@ -231,6 +227,7 @@ export function useProgrammingCommandLineView(
 			[enabled, observe],
 		),
 		Object.is,
+		enabled,
 	);
 }
 
@@ -249,6 +246,7 @@ export function useProgrammingCommandLineReady(enabled = true) {
 			[enabled],
 		),
 		Object.is,
+		enabled,
 	);
 }
 
@@ -261,6 +259,7 @@ export function useProgrammingPendingCommandChoiceView(enabled = true) {
 			[enabled],
 		),
 		Object.is,
+		enabled,
 	);
 }
 
@@ -273,6 +272,7 @@ export function useProgrammingSelectionView(enabled = true) {
 			[enabled],
 		),
 		Object.is,
+		enabled,
 	);
 }
 
@@ -294,6 +294,10 @@ export function useProgrammingSelectionActions(enabled = true) {
 	return enabled ? actions : null;
 }
 
+export function useProgrammingSelectionAuthority() {
+	return useContext(SelectionAuthorityContext);
+}
+
 function useProgrammingCapabilityView(
 	capability: ProgrammingCapability,
 	enabled: boolean,
@@ -308,24 +312,48 @@ function useProgrammingCapabilityView(
 function useProgrammingSelector<T>(
 	selector: (state: ProgrammingInteractionState) => T,
 	equal: (left: T, right: T) => boolean,
+	enabled = true,
 ) {
 	const store = useProgrammingInteractionStore();
-	const cache = useRef<{ state: ProgrammingInteractionState | null; value?: T }>({
+	const cache = useRef<{
+		state: ProgrammingInteractionState | null;
+		selector: ((state: ProgrammingInteractionState) => T) | null;
+		equal: ((left: T, right: T) => boolean) | null;
+		value?: T;
+	}>({
 		state: null,
+		selector: null,
+		equal: null,
 	});
 	const getSelection = useCallback(() => {
 		const state = store.getSnapshot();
-		if (cache.current.state === state) return cache.current.value as T;
+		if (
+			cache.current.state === state &&
+			cache.current.selector === selector &&
+			cache.current.equal === equal
+		)
+			return cache.current.value as T;
 		const value = selector(state);
-		if (cache.current.state && equal(cache.current.value as T, value)) {
+		if (
+			cache.current.selector === selector &&
+			cache.current.equal === equal &&
+			cache.current.state &&
+			equal(cache.current.value as T, value)
+		) {
 			cache.current.state = state;
 			return cache.current.value as T;
 		}
-		cache.current = { state, value };
+		cache.current = { state, selector, equal, value };
 		return value;
 	}, [equal, selector, store]);
-	return useSyncExternalStore(store.subscribe, getSelection, getSelection);
+	return useSyncExternalStore(
+		enabled ? store.subscribe : NO_SUBSCRIPTION,
+		getSelection,
+		getSelection,
+	);
 }
+
+const NO_SUBSCRIPTION = () => () => undefined;
 
 function selectStatus(state: ProgrammingInteractionState) {
 	return { status: state.status, error: state.error };

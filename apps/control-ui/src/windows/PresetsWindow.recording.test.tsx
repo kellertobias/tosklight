@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PresetsWindow } from "./PresetsWindow";
 
@@ -17,27 +23,26 @@ const mocks = vi.hoisted(() => ({
 	record: vi.fn(),
 	commandReset: vi.fn(async () => true),
 	storePreload: vi.fn(async () => true),
-	applyPreset: vi.fn(async () => undefined),
+	recall: vi.fn(async () => null),
 }));
 
 vi.mock("../api/ServerContext", () => ({
 	useServer: () => ({
 		bootstrap: { active_show: { id: "show-a" } },
 		storePreload: mocks.storePreload,
-		applyPreset: mocks.applyPreset,
 	}),
 }));
 vi.mock("../state/AppContext", () => ({
 	useApp: () => ({ state: mocks.state, dispatch: mocks.dispatch }),
 }));
-vi.mock("../features/showObjects/ShowObjectsView", () => ({
-	useShowObjectView: () => undefined,
-}));
 vi.mock("../features/showObjects/ShowObjectsState", () => ({
 	usePresets: () => mocks.presets,
 }));
-vi.mock("../features/programmingInteraction/ProgrammingInteractionView", () => ({
-	useProgrammingSelectionView: () => ({ selected: ["fixture-a"] }),
+vi.mock("../features/presetRecall/PresetRecallProvider", () => ({
+	usePresetRecall: () => ({
+		actions: { recall: mocks.recall },
+		selection: { selected: ["fixture-a"] },
+	}),
 }));
 vi.mock("../features/presetRecording/PresetRecordingProvider", () => ({
 	usePresetRecording: () => ({ record: mocks.record }),
@@ -62,11 +67,39 @@ beforeEach(() => {
 	mocks.record.mockResolvedValue(null);
 	mocks.commandReset.mockClear();
 	mocks.storePreload.mockClear();
+	mocks.recall.mockClear();
 });
 
 afterEach(cleanup);
 
 describe("PresetsWindow normal recording boundary", () => {
+	it("recalls an existing Preset through the scoped typed action", () => {
+		mocks.state.storeArmed = false;
+		mocks.presets = [
+			{
+				kind: "preset",
+				id: "2.1",
+				revision: 4,
+				updated_at: "",
+				body: {
+					name: "Blue",
+					number: 1,
+					family: "Color",
+					values: {},
+				},
+			},
+		];
+		render(<PresetsWindow compact />);
+
+		fireEvent.click(firstPresetCell());
+
+		expect(mocks.recall).toHaveBeenCalledOnce();
+		expect(mocks.recall).toHaveBeenCalledWith({
+			objectId: "2.1",
+			address: { family: "Color", number: 1 },
+		});
+	});
+
 	it("records an empty cell as one action-time overwrite at revision zero", () => {
 		render(<PresetsWindow compact />);
 
@@ -184,5 +217,4 @@ describe("PresetsWindow normal recording boundary", () => {
 		);
 		expect(mocks.commandReset).not.toHaveBeenCalled();
 	});
-
 });

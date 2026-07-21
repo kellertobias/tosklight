@@ -7,9 +7,10 @@ import {
 	DESK_ID,
 	FakeProgrammingTransport,
 	programmingSnapshot,
+	SHOW_ID,
+	selection,
 	selectionChange,
 	settleSession,
-	SHOW_ID,
 } from "./testFixtures";
 import {
 	type ProgrammingEventTransport,
@@ -152,6 +153,15 @@ describe("ProgrammingInteractionSession scope", () => {
 		});
 	});
 
+	it("does not activate a capability when an action-only authority is repaired", async () => {
+		const harness = createHarness();
+
+		await expect(
+			harness.session.repairAuthority("selection", new Error("stale")),
+		).rejects.toThrow(/unavailable/);
+		expect(harness.loadSnapshot).not.toHaveBeenCalled();
+	});
+
 	it("recovers from a synchronous subscription failure", async () => {
 		vi.useFakeTimers();
 		const failure = new Error("WebSocket constructor failed");
@@ -187,6 +197,30 @@ describe("ProgrammingInteractionSession scope", () => {
 });
 
 describe("ProgrammingInteractionSession events", () => {
+	it("repairs an active selection authority from an action response", async () => {
+		const harness = createHarness();
+		const transport = harness.transport as FakeProgrammingTransport;
+		harness.session.activate("selection");
+		await settleSession();
+		harness.loadSnapshot.mockResolvedValueOnce(
+			programmingSnapshot({
+				sequence: 42,
+				selected: selection(9),
+			}),
+		);
+
+		await harness.session.repairAuthority(
+			"selection",
+			new Error("Preset recall response arrived before its event"),
+		);
+
+		expect(harness.store.getSnapshot()).toMatchObject({
+			eventSequence: 42,
+			selection: { revision: 9 },
+		});
+		expect(transport.subscriptions[0].repair).toHaveBeenCalledWith(42);
+	});
+
 	it("accepts filtered global sequence gaps and ignores unrelated changes", async () => {
 		const harness = createHarness();
 		const transport = harness.transport as FakeProgrammingTransport;
@@ -267,13 +301,19 @@ describe("ProgrammingInteractionSession events", () => {
 		await Promise.resolve();
 
 		harness.loadSnapshot.mockResolvedValueOnce(
-			programmingSnapshot({ sequence: 20, command: commandLine(5, "GROUP 20") }),
+			programmingSnapshot({
+				sequence: 20,
+				command: commandLine(5, "GROUP 20"),
+			}),
 		);
 		first.observer.error(new ProgrammingProtocolError("reset", 14));
 		await settleSession();
 		const second = transport.subscriptions[1];
 		harness.loadSnapshot.mockResolvedValueOnce(
-			programmingSnapshot({ sequence: 25, command: commandLine(6, "GROUP 25") }),
+			programmingSnapshot({
+				sequence: 25,
+				command: commandLine(6, "GROUP 25"),
+			}),
 		);
 		second.observer.message({
 			type: "gap",
@@ -336,7 +376,10 @@ describe("ProgrammingInteractionSession events", () => {
 		harness.session.activate("commandLine");
 		await settleSession();
 		harness.loadSnapshot.mockResolvedValueOnce(
-			programmingSnapshot({ sequence: 20, command: commandLine(5, "GROUP 20") }),
+			programmingSnapshot({
+				sequence: 20,
+				command: commandLine(5, "GROUP 20"),
+			}),
 		);
 		const first = transport.subscriptions[0];
 
@@ -361,7 +404,10 @@ describe("ProgrammingInteractionSession events", () => {
 			harness.session.activate("commandLine");
 			await settleSession();
 			harness.loadSnapshot.mockResolvedValueOnce(
-				programmingSnapshot({ sequence: 20, command: commandLine(5, "GROUP 20") }),
+				programmingSnapshot({
+					sequence: 20,
+					command: commandLine(5, "GROUP 20"),
+				}),
 			);
 			const first = transport.subscriptions[0];
 

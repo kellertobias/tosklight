@@ -14,7 +14,7 @@ import {
 	selectPortableGroups,
 	selectPresets,
 } from "./selectors";
-import { ShowObjectsStore, type ShowObjectsSnapshot } from "./store";
+import type { ShowObjectsSnapshot, ShowObjectsStore } from "./store";
 
 export {
 	selectCueLists,
@@ -64,20 +64,28 @@ export function useShowObjectsStore(): ShowObjectsStore {
 	return store;
 }
 
-export function usePresets(): readonly PresetObject[] {
-	return useShowObjectsSelector(selectPresets, shallowEqualArray);
+export function usePresets(enabled = true): readonly PresetObject[] {
+	return useShowObjectsSelector(selectPresets, shallowEqualArray, enabled);
 }
 
 export function useCueLists(enabled = true): readonly ShowObject<"cue_list">[] {
 	return useShowObjectsSelector(selectCueLists, shallowEqualArray, enabled);
 }
 
-export function usePlaybackDefinitions(enabled = true): readonly ShowObject<"playback">[] {
+export function usePlaybackDefinitions(
+	enabled = true,
+): readonly ShowObject<"playback">[] {
 	return useShowObjectsSelector(selectPlaybacks, shallowEqualArray, enabled);
 }
 
-export function usePlaybackPages(enabled = true): readonly ShowObject<"playback_page">[] {
-	return useShowObjectsSelector(selectPlaybackPages, shallowEqualArray, enabled);
+export function usePlaybackPages(
+	enabled = true,
+): readonly ShowObject<"playback_page">[] {
+	return useShowObjectsSelector(
+		selectPlaybackPages,
+		shallowEqualArray,
+		enabled,
+	);
 }
 
 export function useShowObjectMutationState(
@@ -95,10 +103,9 @@ export function useShowObjectMutationState(
 	return useShowObjectsSelector(selector, equalMutationState);
 }
 
-export function useShowObjectsStatus(enabled = true): Pick<
-	ShowObjectsSnapshot,
-	"status" | "error"
-> {
+export function useShowObjectsStatus(
+	enabled = true,
+): Pick<ShowObjectsSnapshot, "status" | "error"> {
 	return useShowObjectsSelector(selectStatus, equalStatus, enabled);
 }
 
