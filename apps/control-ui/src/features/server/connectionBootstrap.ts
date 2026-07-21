@@ -143,7 +143,7 @@ export async function bootstrapConnection(
 	state.setSession(session);
 	state.setConnectionGeneration((current) => current + 1);
 	state.setCommandHistory(await state.client.commandHistory());
-	state.setDeskLock(deskLock);
+	state.deskLockStore.install(deskLock);
 	installInitialResources(state, resources);
 	await loadShowObjects(
 		bootstrap.active_show_error ? null : (bootstrap.active_show?.id ?? null),

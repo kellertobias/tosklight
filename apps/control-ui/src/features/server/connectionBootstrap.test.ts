@@ -60,7 +60,7 @@ function createHarness() {
 		setSession: vi.fn(),
 		setConnectionGeneration: vi.fn(),
 		setCommandHistory: vi.fn(),
-		setDeskLock: vi.fn(),
+		deskLockStore: { install: vi.fn() },
 		setShows: vi.fn(),
 		setConfiguration: vi.fn(),
 		setMatter: vi.fn(),

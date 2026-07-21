@@ -2,7 +2,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QuickSetupModal } from "./QuickSetupModal";
 
+vi.mock("../../features/deskLock/DeskLockActionsProvider", () => ({
+  useDeskLockActions: () => ({ lockDesk: mocks.lockDesk }),
+}));
+
 const mocks = vi.hoisted(() => ({
+  lockDesk: vi.fn(),
   dispatch: vi.fn(),
   fileContent: vi.fn(),
   server: {
@@ -42,7 +47,6 @@ const mocks = vi.hoisted(() => ({
     saveScreen: vi.fn(),
     createUser: vi.fn(),
     changeUser: vi.fn(),
-    lockDesk: vi.fn(),
     shutdownServer: vi.fn(),
     previewMvr: vi.fn(),
     applyMvr: vi.fn(),
@@ -225,12 +229,12 @@ describe("QuickSetupModal show workflows", () => {
 
 describe("QuickSetupModal operator actions", () => {
   it("locks the desk directly from the Show menu and closes the menu", async () => {
-    mocks.server.lockDesk.mockResolvedValue(undefined);
+    mocks.lockDesk.mockResolvedValue(undefined);
     render(<QuickSetupModal />);
 
     fireEvent.click(screen.getByRole("button", { name: "Lock Desk" }));
 
-    await waitFor(() => expect(mocks.server.lockDesk).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mocks.lockDesk).toHaveBeenCalledOnce());
     expect(mocks.dispatch).toHaveBeenCalledWith({
       type: "SET_MODAL",
       modal: "setupOpen",

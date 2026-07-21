@@ -19,14 +19,14 @@ function useMediaPreviewCleanup(state: ServerState) {
 }
 
 function useDeskLockPolling(state: ServerState) {
-	const { client, session, setDeskLock } = state;
+	const { client, session, deskLockStore } = state;
 	useEffect(() => {
 		if (!session) return;
 		let cancelled = false;
 		const refresh = () =>
 			void client
 				.deskLock()
-				.then((value) => !cancelled && setDeskLock(value))
+				.then((value) => !cancelled && deskLockStore.install(value))
 				.catch(() => undefined);
 		refresh();
 		const timer = window.setInterval(refresh, 500);
@@ -34,7 +34,7 @@ function useDeskLockPolling(state: ServerState) {
 			cancelled = true;
 			window.clearInterval(timer);
 		};
-	}, [client, session, setDeskLock]);
+	}, [client, session, deskLockStore]);
 }
 
 function useHighlightPolling(state: ServerState) {

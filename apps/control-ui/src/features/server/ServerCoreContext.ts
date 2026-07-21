@@ -36,15 +36,6 @@ export interface ServerCoreContext
 	>;
 	bootstrap: BootstrapSnapshot | null;
 	session: SessionResponse | null;
-	deskLock: import("../../api/types").DeskLockState | null;
-	configureDeskLock: (input: {
-		message: string;
-		wallpaper: string | null;
-		unlock_mode: "button" | "pin";
-		pin?: string;
-	}) => Promise<boolean>;
-	lockDesk: () => Promise<void>;
-	unlockDesk: (pin?: string) => Promise<boolean>;
 	createUser: (name: string) => Promise<void>;
 	changeUser: (user: import("../../api/types").DeskUser) => Promise<void>;
 	outputRoutes: VersionedObject<OutputRoute>[];

@@ -9,22 +9,26 @@ import {
 	TextAreaField,
 	TextField,
 } from "../common";
+import { useDeskLockActions } from "../../features/deskLock/DeskLockActionsProvider";
+import { useDeskLock } from "../../features/deskLock/DeskLockState";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
 
 export function DeskLockSettingsModal({ onClose }: { onClose: () => void }) {
 	const server = useServer();
-	const [message, setMessage] = useState(server.deskLock?.message ?? "Desk locked");
-	const [wallpaper, setWallpaper] = useState<string | null>(server.deskLock?.wallpaper ?? null);
-	const [unlockMode, setUnlockMode] = useState<"button" | "pin">(server.deskLock?.unlock_mode ?? "button");
+	const deskLock = useDeskLock();
+	const deskLockActions = useDeskLockActions();
+	const [message, setMessage] = useState(deskLock?.message ?? "Desk locked");
+	const [wallpaper, setWallpaper] = useState<string | null>(deskLock?.wallpaper ?? null);
+	const [unlockMode, setUnlockMode] = useState<"button" | "pin">(deskLock?.unlock_mode ?? "button");
 	const [pin, setPin] = useState("");
 	useEffect(() => {
-		if (!server.deskLock) return;
-		setMessage(server.deskLock.message);
-		setWallpaper(server.deskLock.wallpaper);
-		setUnlockMode(server.deskLock.unlock_mode);
-	}, [server.deskLock]);
+		if (!deskLock) return;
+		setMessage(deskLock.message);
+		setWallpaper(deskLock.wallpaper);
+		setUnlockMode(deskLock.unlock_mode);
+	}, [deskLock]);
 	const save = async () => {
-		const saved = await server.configureDeskLock({
+		const saved = await deskLockActions?.configureDeskLock({
 			message,
 			wallpaper,
 			unlock_mode: unlockMode,

@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import { DeskLockOverlay } from "./DeskLockOverlay";
 
 const mocks = vi.hoisted(() => ({ unlockDesk: vi.fn(), deskLock: { locked: true, message: "Call the operator", wallpaper: null, unlock_mode: "pin" as const } }));
-vi.mock("../../api/ServerContext", () => ({ useServer: () => mocks }));
+vi.mock("../../features/deskLock/DeskLockState", () => ({
+  useDeskLock: () => mocks.deskLock,
+}));
+vi.mock("../../features/deskLock/DeskLockActionsProvider", () => ({
+  useDeskLockActions: () => ({ unlockDesk: mocks.unlockDesk }),
+}));
 
 describe("DeskLockOverlay", () => {
   it("covers the desk and retains the lock after an incorrect PIN", async () => {

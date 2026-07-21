@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { ConfigurationStore } from "../configuration/store";
+import { DeskLockStore } from "../deskLock/store";
 import { OutputRuntimeStore } from "../outputRuntime/store";
 import { PlaybackRuntimeStore } from "../playbackRuntime/store";
 import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
@@ -21,6 +22,7 @@ export function useServerFeatureStores() {
 	speedGroupRuntimeStore.current ??= new SpeedGroupRuntimeStore();
 	return {
 		configurationStore: useRef(new ConfigurationStore()).current,
+		deskLockStore: useRef(new DeskLockStore()).current,
 		stageLayoutStore: useRef(new StageLayoutStore()).current,
 		outputRuntimeStore: outputRuntimeStore.current,
 		speedGroupRuntimeStore: speedGroupRuntimeStore.current,

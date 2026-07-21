@@ -33,9 +33,6 @@ export function useServerState() {
 	const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null);
 	const [session, setSession] = useState<SessionResponse | null>(null);
 	const [connectionGeneration, setConnectionGeneration] = useState(0);
-	const [deskLock, setDeskLock] = useState<
-		import("../../api/types").DeskLockState | null
-	>(null);
 	const [outputRoutes, setOutputRoutes] = useState<
 		VersionedObject<OutputRoute>[]
 	>([]);
@@ -107,8 +104,6 @@ export function useServerState() {
 		setSession,
 		connectionGeneration,
 		setConnectionGeneration,
-		deskLock,
-		setDeskLock,
 		outputRoutes,
 		setOutputRoutes,
 		patchLayers,

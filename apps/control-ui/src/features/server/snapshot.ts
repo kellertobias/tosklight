@@ -12,7 +12,6 @@ export function createServerSnapshotValue(
 	| "readServerLogs"
 	| "bootstrap"
 	| "session"
-	| "deskLock"
 	| "outputRoutes"
 	| "patchLayers"
 	| "screens"
@@ -45,7 +44,6 @@ export function createServerSnapshotValue(
 		setError,
 		bootstrap,
 		session,
-		deskLock,
 		outputRoutes,
 		patchLayers,
 		screens,
@@ -80,7 +78,6 @@ export function createServerSnapshotValue(
 		readServerLogs: () => client.auditEvents(),
 		bootstrap,
 		session,
-		deskLock,
 		outputRoutes,
 		patchLayers,
 		screens,

@@ -1,6 +1,8 @@
 import { type PropsWithChildren, useCallback } from "react";
 import { ConfigurationActionsProvider } from "../features/configuration/ConfigurationActionsProvider";
 import { ConfigurationStateProvider } from "../features/configuration/ConfigurationState";
+import { DeskLockActionsProvider } from "../features/deskLock/DeskLockActionsProvider";
+import { DeskLockStateProvider } from "../features/deskLock/DeskLockState";
 import type { StoredStageLayout } from "../features/server/contracts";
 import type { useServerState } from "../features/server/useServerState";
 import { StageLayoutActionsProvider } from "../features/stageLayout/StageLayoutActionsProvider";
@@ -48,6 +50,14 @@ export function ServerDeskBoundaries({
 		[state.client],
 	);
 	return (
+		<DeskLockStateProvider store={state.deskLockStore}>
+		<DeskLockActionsProvider
+			store={state.deskLockStore}
+			configure={state.client.configureDeskLock}
+			lock={state.client.lockDesk}
+			unlock={state.client.unlockDesk}
+			onError={state.setError}
+		>
 		<ConfigurationStateProvider store={state.configurationStore}>
 			<ConfigurationActionsProvider
 				store={state.configurationStore}
@@ -69,5 +79,7 @@ export function ServerDeskBoundaries({
 				</StageLayoutStateProvider>
 			</ConfigurationActionsProvider>
 		</ConfigurationStateProvider>
+		</DeskLockActionsProvider>
+		</DeskLockStateProvider>
 	);
 }

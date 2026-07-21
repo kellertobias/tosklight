@@ -5,9 +5,6 @@ export function createSessionActions(
 	model: ServerController,
 ): Pick<
 	ServerContextValue,
-	| "configureDeskLock"
-	| "lockDesk"
-	| "unlockDesk"
 	| "createUser"
 	| "changeUser"
 	| "updateControlDesk"
@@ -19,37 +16,8 @@ export function createSessionActions(
 		setError,
 		setBootstrap,
 		setSession,
-		setDeskLock,
 	} = model;
 	return {
-		configureDeskLock: async (input) => {
-			try {
-				setDeskLock(await client.configureDeskLock(input));
-				setError(null);
-				return true;
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
-				return false;
-			}
-		},
-		lockDesk: async () => {
-			try {
-				setDeskLock(await client.lockDesk());
-				setError(null);
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
-			}
-		},
-		unlockDesk: async (pin) => {
-			try {
-				setDeskLock(await client.unlockDesk(pin));
-				setError(null);
-				return true;
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
-				return false;
-			}
-		},
 		createUser: async (name) => {
 			try {
 				if (model.sessionRole !== "primary")

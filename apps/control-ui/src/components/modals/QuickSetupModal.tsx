@@ -8,6 +8,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useApp } from "../../state/AppContext";
+import { useDeskLockActions } from "../../features/deskLock/DeskLockActionsProvider";
 import { useServer } from "../../api/ServerContext";
 import { useScreens } from "../../features/screens/ScreensContext";
 import { Button, Input, ModalTitleBar, NumberField, SelectField, TextInput } from "../common";
@@ -173,6 +174,7 @@ function stackedModal(content: ReactNode, closeLayer: () => void) {
 export function QuickSetupModal() {
   const { state, dispatch } = useApp();
   const server = useServer();
+  const deskLockActions = useDeskLockActions();
   const selectiveImport = useSelectiveImport();
   const desktop = useDesktopBridge();
   const [showName, setShowName] = useState("");
@@ -282,7 +284,7 @@ export function QuickSetupModal() {
   }
   async function lockDesk() {
     close();
-    await server.lockDesk();
+    await deskLockActions?.lockDesk();
   }
   async function inspectExport(show: ShowEntry) { setMvrTarget(show); setMvrBusy(true); try { setMvrExportPreview(await server.previewMvrExport(show.id)); } finally { setMvrBusy(false); } }
   function openMvrImport(closeSource: () => void) { closeSource(); setMvrMode("new"); setMvrTarget(null); setMvrPreview(null); }
