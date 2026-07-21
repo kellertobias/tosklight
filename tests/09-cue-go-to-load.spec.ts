@@ -8,7 +8,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await loadCanonicalCopy(api, bench, "cue-go-to-load", "compact-rig");
     await installTwinPlaybacks(api);
     await desk.open(bench.baseUrl);
-    api.session = await page.evaluate(() => JSON.parse(localStorage.getItem("light.primary-session")!));
+    api.session = await desk.session();
     await page.locator(".mode-toggle").click();
 
     await page.keyboard.press("Shift+KeyZ");

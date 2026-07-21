@@ -9,6 +9,10 @@ import {
   readTestSources,
   scanTestCommandBoundaries,
 } from "./test-command-boundaries.mjs";
+import {
+  readPrivateBoundarySources,
+  scanPrivateTestBoundaries,
+} from "./test-private-boundaries.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
@@ -225,6 +229,12 @@ function testCommandBoundaries() {
   for (const failure of evaluateTestCommandBoundaries(scan, baseline)) fail(failure);
 }
 
+function privateTestBoundaries() {
+  for (const failure of scanPrivateTestBoundaries(
+    readPrivateBoundarySources(repositoryRoot),
+  )) fail(failure);
+}
+
 rustDependencyDirections();
 serverEntrypointIsThin();
 activeShowMutationDirections();
@@ -232,6 +242,7 @@ playbackOwnershipBoundaries();
 typeScriptDependencyDirections();
 legacyPlaybackSnapshotBoundaries();
 testCommandBoundaries();
+privateTestBoundaries();
 
 if (failures.length > 0) {
   for (const failure of failures) console.error(`architecture error: ${failure}`);

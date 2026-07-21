@@ -72,7 +72,7 @@ async function configureFromRecordedAudio({ api, bench, desk, page }: BenchUiCon
   await installRecordedKickInput(page);
   await desk.recordStep("OPEN SPEED GROUP A", "Open the existing Speed Group control; this must configure Sound-to-Light rather than perform a Learn tap.");
   await desk.open(bench.baseUrl);
-  api.session = await page.evaluate(() => JSON.parse(localStorage.getItem("light.primary-session")!));
+  api.session = await desk.session();
   await page.locator(".mode-toggle").click();
   await expect(page.locator(".playback-tools")).toBeVisible();
   await page.getByRole("button", { name: /Speed group A, .* BPM/ }).click();

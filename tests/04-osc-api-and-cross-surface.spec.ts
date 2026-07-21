@@ -78,7 +78,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     },
     ui: async ({ bench, desk, page }, state) => {
       await desk.open(bench.baseUrl);
-      state.session = await browserSession(page);
+      state.session = await desk.session();
       state.hardware = await bench.osc();
       await state.hardware.subscribe(state.clientId, state.session.desk.osc_alias);
       await state.hardware.expectAfter(0, `/light/${state.session.desk.osc_alias}/feedback/speed-group/5`);
@@ -134,7 +134,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     },
     ui: async ({ api, bench, desk, page }, state) => {
       await desk.open(bench.baseUrl);
-      state.first = await browserSession(page);
+      state.first = await desk.session();
       for (const key of ["GRP", "1", "+"]) await page.getByRole("button", { name: key, exact: true }).click();
       await expect.poll(async () => normalizeCommand(await programmerCommand(api, state.first!))).toBe("GROUP 1 +");
       await subscribeIsolatedHardware(bench, state);
@@ -222,7 +222,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     },
     ui: async ({ bench, desk, page }, state) => {
       await desk.open(bench.baseUrl);
-      state.first = await browserSession(page);
+      state.first = await desk.session();
       await pressCommand(page, "GROUP 7 + 8 AT 50");
     },
     assert: async ({ api, bench }, state) => {
@@ -267,7 +267,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     },
     ui: async ({ bench, desk, page }, state) => {
       await desk.open(bench.baseUrl);
-      state.session = await browserSession(page);
+      state.session = await desk.session();
       await page.locator(".mode-toggle").click();
       await selectPlaybackPage(page, "Page 2");
       const bank = page.locator(".playback-fader-bank");
@@ -604,13 +604,10 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     await loadCanonicalCopy(api, bench, "osc-005-mixed");
     await ensureGroupSeven(api);
     await desk.open(bench.baseUrl);
-    const firstSession = await browserSession(page);
+    const firstSession = await desk.session();
     const secondContext = await browser.newContext();
     const secondPage = await secondContext.newPage();
-    await secondPage.goto(bench.baseUrl);
-    await expect(secondPage.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
-    await expect(secondPage.locator(".connection-banner")).toBeHidden({ timeout: 10_000 });
-    const secondSession = await browserSession(secondPage);
+    const secondSession = await desk.openPeer(secondPage, bench.baseUrl);
     expect(secondSession.desk.osc_alias).not.toBe(firstSession.desk.osc_alias);
     const firstHardware = await bench.osc();
     const secondHardware = await bench.osc();
@@ -700,7 +697,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     await loadCanonicalCopy(api, bench, "osc-006-wire");
     await installPlayback(api);
     await desk.open(bench.baseUrl);
-    const firstSession = await browserSession(page);
+    const firstSession = await desk.session();
     const secondSession = await createSession(api, crypto.randomUUID());
     await setDeskPage(api, secondSession, 2);
     const firstHardware = await bench.osc();
@@ -1045,10 +1042,6 @@ function normalizedValue(value: any): number | null {
   let current = value;
   while (current && typeof current === "object" && "value" in current) current = current.value;
   return typeof current === "number" ? current : null;
-}
-
-async function browserSession(page: Page): Promise<Session> {
-  return page.evaluate(() => JSON.parse(localStorage.getItem("light.primary-session") ?? "null"));
 }
 
 async function selectPlaybackPage(page: Page, name: string): Promise<void> {

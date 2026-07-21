@@ -1,7 +1,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import net from "node:net";
-import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
+import type { Locator } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { ControllableHardwareOscDriver } from "../apps/control-ui/e2e/bench/hardwareControls";
 
 let hardwareServer: ChildProcessWithoutNullStreams | undefined;
 let hardwareUrl = "";
@@ -38,7 +39,8 @@ test.describe("docs/plans/Done/21-completion-coverage-and-release-verification.D
 
   test("HIGHLIGHT-006 @ui › the production hardware simulator preserves geometry and sends independent full-height faders", async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 1100 });
-    await installTauriHarness(page);
+    const hardware = new ControllableHardwareOscDriver(page);
+    await hardware.install();
     await page.goto(hardwareUrl);
 
     await expect(page.locator(".hardware-number-block")).toBeVisible();
@@ -70,49 +72,50 @@ test.describe("docs/plans/Done/21-completion-coverage-and-release-verification.D
     expect(programmerBox.y).toBeGreaterThanOrEqual(fadeArea.y);
     expect(cueBox.y + cueBox.height).toBeLessThanOrEqual(fadeArea.y + fadeArea.height + 1.5);
 
-    await clearInvocations(page);
+    hardware.clear();
     await setRange(programmerFade.locator('input[type="range"]'), 0.7);
-    await expect.poll(() => controlWrites(page, "programmer/prog-fade")).toEqual([0.7]);
-    expect(await controlWrites(page, "programmer/cue-fade")).toEqual([]);
+    await expect.poll(() => hardware.values("programmer/prog-fade")).toEqual([0.7]);
+    expect(hardware.values("programmer/cue-fade")).toEqual([]);
 
-    await clearInvocations(page);
+    hardware.clear();
     await setRange(cueFade.locator('input[type="range"]'), 0.35);
-    await expect.poll(() => controlWrites(page, "programmer/cue-fade")).toEqual([0.35]);
-    expect(await controlWrites(page, "programmer/prog-fade")).toEqual([]);
+    await expect.poll(() => hardware.values("programmer/cue-fade")).toEqual([0.35]);
+    expect(hardware.values("programmer/prog-fade")).toEqual([]);
 
-    await clearInvocations(page);
+    hardware.clear();
     await setRange(programmerFade.locator('input[type="range"]'), 0);
     await setRange(programmerFade.locator('input[type="range"]'), 1);
     await setRange(cueFade.locator('input[type="range"]'), 0);
     await setRange(cueFade.locator('input[type="range"]'), 1);
-    expect(await controlWrites(page, "programmer/prog-fade")).toEqual([0, 1]);
-    expect(await controlWrites(page, "programmer/cue-fade")).toEqual([0, 1]);
+    await expect.poll(() => hardware.values("programmer/prog-fade")).toEqual([0, 1]);
+    await expect.poll(() => hardware.values("programmer/cue-fade")).toEqual([0, 1]);
   });
 
   test("UPDATE-002 @ui › actual simulator pointer gestures emit complete, mutually exclusive Shift and Record sequences", async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 1100 });
-    await installTauriHarness(page);
+    const hardware = new ControllableHardwareOscDriver(page);
+    await hardware.install();
     await page.goto(hardwareUrl);
     const shift = page.locator('[data-keypad-key="SHIFT"]');
     const record = page.locator('[data-keypad-key="RECORD"]');
 
-    await clearInvocations(page);
+    hardware.clear();
     await pointerDown(shift, 1);
     await pointerPress(record, 2);
     await pointerUp(shift, 1);
-    expect(await programmerButtonWrites(page)).toEqual([
+    await expect.poll(() => hardware.programmerButtonWrites()).toEqual([
       ["programmer/shift", true],
       ["programmer/record", true],
       ["programmer/record", false],
       ["programmer/shift", false],
     ]);
 
-    await clearInvocations(page);
+    hardware.clear();
     await pointerDown(shift, 1);
     await pointerPress(record, 2);
     await pointerPress(record, 2);
     await pointerUp(shift, 1);
-    expect(await programmerButtonWrites(page)).toEqual([
+    await expect.poll(() => hardware.programmerButtonWrites()).toEqual([
       ["programmer/shift", true],
       ["programmer/record", true],
       ["programmer/record", false],
@@ -121,13 +124,13 @@ test.describe("docs/plans/Done/21-completion-coverage-and-release-verification.D
       ["programmer/shift", false],
     ]);
 
-    await clearInvocations(page);
+    hardware.clear();
     await pointerDown(shift, 1);
     await pointerDown(record, 2);
     await expect(record.getByText("LONG", { exact: true })).toBeVisible({ timeout: 1_000 });
     await pointerUp(record, 2);
     await pointerUp(shift, 1);
-    expect(await programmerButtonWrites(page)).toEqual([
+    await expect.poll(() => hardware.programmerButtonWrites()).toEqual([
       ["programmer/shift", true],
       ["programmer/record", true],
       ["programmer/record", false],
@@ -165,31 +168,6 @@ async function waitForServer(url: string, process: ChildProcessWithoutNullStream
   throw new Error(`Hardware-controls Vite server did not become ready.\n${output}`);
 }
 
-async function installTauriHarness(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    const callbacks = new Map<number, (...args: unknown[]) => void>();
-    let callbackId = 0;
-    // Synthetic multi-touch PointerEvents are not registered as active browser pointers, so the
-    // native capture call would reject before React reaches the production onDown handler.
-    Element.prototype.setPointerCapture = () => undefined;
-    (window as any).__hardwareInvocations = [];
-    (window as any).__TAURI_INTERNALS__ = {
-      invoke: async (cmd: string, args: unknown) => {
-        (window as any).__hardwareInvocations.push({ cmd, args });
-        if (cmd === "plugin:event|listen") return 1;
-        return null;
-      },
-      transformCallback: (callback: (...args: unknown[]) => void) => {
-        const id = ++callbackId;
-        callbacks.set(id, callback);
-        return id;
-      },
-      unregisterCallback: (id: number) => callbacks.delete(id),
-    };
-    (window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => undefined };
-  });
-}
-
 async function requiredBox(locator: Locator) {
   await expect(locator).toBeVisible();
   const box = await locator.boundingBox();
@@ -203,22 +181,6 @@ function centerX(box: { x: number; width: number }) {
 
 async function setRange(locator: Locator, value: number) {
   await locator.fill(String(value));
-}
-
-async function clearInvocations(page: Page) {
-  await page.evaluate(() => { (window as any).__hardwareInvocations = []; });
-}
-
-async function controlWrites(page: Page, path: string): Promise<number[]> {
-  return page.evaluate((expectedPath: string) => (window as any).__hardwareInvocations
-    .filter((entry: any) => entry.cmd === "send_control" && entry.args.path === expectedPath)
-    .map((entry: any) => entry.args.args[0]), path);
-}
-
-async function programmerButtonWrites(page: Page): Promise<Array<[string, boolean]>> {
-  return page.evaluate(() => (window as any).__hardwareInvocations
-    .filter((entry: any) => entry.cmd === "send_control" && /^programmer\/(?:shift|record)$/.test(entry.args.path))
-    .map((entry: any) => [entry.args.path, entry.args.args[0]]));
 }
 
 async function pointerDown(locator: Locator, pointerId: number) {

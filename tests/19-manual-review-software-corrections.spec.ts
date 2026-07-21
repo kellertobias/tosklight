@@ -284,8 +284,9 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
       enabled: true,
       minimum_slots: 128,
     }, true, 0);
-    await page.addInitScript(() => Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} }));
+    const desktop = await desk.enableControllableDesktop();
     await desk.open(api.baseUrl);
+    await expect.poll(() => desktop.actions).toContainEqual({ type: "frontend_ready" });
 
     await desk.recordStep("HELP COLUMNS", "Embedded Help keeps navigation on the left and the selected topic on the right at the same vertical position.");
     const help = await addPaneToNewDesktop(page, "Help");
@@ -351,7 +352,8 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     const picker = page.getByRole("heading", { name: "Open Window" }).locator("xpath=..");
     await expect(picker.getByRole("button", { name: "Development", exact: true })).toHaveCount(0);
     await picker.getByRole("button", { name: "Cancel", exact: true }).click();
-    await page.evaluate(() => window.dispatchEvent(new CustomEvent("light:desk-action", { detail: "shift-0" })));
+    await page.getByRole("button", { name: "SHIFT", exact: true }).click();
+    await page.getByRole("button", { name: "0", exact: true }).click();
     await expect(page.locator(".development-window")).toHaveCount(0);
 
     await desk.recordStep("DEVELOPER TOOLING", "Desk Status deliberately retains the Development component catalog for diagnostics and help maintenance.");

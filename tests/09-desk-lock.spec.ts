@@ -13,7 +13,7 @@ interface DeskSessionProjection {
 test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 	test("LOCK-001 @ui @api @osc › PIN lock covers every screen and drops every desk input without changing output", async ({ api, bench, desk, page }) => {
 		await desk.open(bench.baseUrl);
-		const pageDeskSession = await page.evaluate(() => JSON.parse(localStorage.getItem("light.primary-session")!));
+		const pageDeskSession = await desk.session();
 		const otherDeskSession = await api.request<typeof pageDeskSession>("POST", "/api/v1/sessions", {
 			username: "Operator",
 			client_id: crypto.randomUUID(),
@@ -83,7 +83,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 
 	test("LOCK-001 @ui › button mode has no PIN and uses the readable fallback lock screen", async ({ api, bench, desk, page }) => {
 		await desk.open(bench.baseUrl);
-		api.session = await page.evaluate(() => JSON.parse(localStorage.getItem("light.primary-session")!));
+		api.session = await desk.session();
 		await api.request("PUT", "/api/v1/desk-lock", {
 			message: "",
 			wallpaper: "https://invalid.example.test/unavailable-lock-screen.png",
@@ -102,7 +102,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 
 	test("LOCK-001 @ui › Screens owns shortcut configuration and the Desk Lock settings modal", async ({ api, bench, desk, page }) => {
 		await desk.open(bench.baseUrl);
-		api.session = await page.evaluate(() => JSON.parse(localStorage.getItem("light.primary-session")!));
+		api.session = await desk.session();
 		await page.getByRole("button", { name: /Open show menu/ }).click();
 		await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
 		await page.locator(".setup-window nav").getByRole("button", { name: "Screens & playback", exact: true }).click();

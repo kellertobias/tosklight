@@ -5,6 +5,10 @@ import type {
   ControllerSettings,
   FeedbackMessage,
 } from "../controller/types";
+import {
+	injectedOscBridge,
+	type ControllableOscWindow,
+} from "./controllableOscBridge";
 
 export type DisposeFeedbackListener = () => void;
 
@@ -31,3 +35,19 @@ export const tauriOscBridge: OscBridge = {
     });
   },
 };
+
+export function createOscBridge(
+	runtime: ControllableOscWindow | undefined = browserWindow(),
+): OscBridge {
+	if (runtime) {
+		const injected = injectedOscBridge(runtime);
+		if (injected) return injected;
+	}
+	return tauriOscBridge;
+}
+
+function browserWindow(): ControllableOscWindow | undefined {
+	return typeof window === "undefined"
+		? undefined
+		: (window as ControllableOscWindow);
+}

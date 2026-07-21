@@ -1,4 +1,9 @@
 import { browserDesktopBridge } from "./browserDesktopBridge";
+import {
+	controllableBrowserDesktopBridge,
+	injectedDesktopPort,
+	type ControllableDesktopWindow,
+} from "./controllableBrowserDesktopBridge";
 import { tauriDesktopBridge } from "./tauriDesktopBridge";
 
 export { DesktopProvider, useDesktopBridge } from "./DesktopContext";
@@ -11,9 +16,19 @@ export type {
 	DesktopWindowState,
 } from "./types";
 
-export function createDesktopBridge() {
-	if (typeof window === "undefined") return browserDesktopBridge;
-	return "__TAURI_INTERNALS__" in window
+export function createDesktopBridge(
+	runtime: ControllableDesktopWindow | undefined = browserWindow(),
+) {
+	if (!runtime) return browserDesktopBridge;
+	const injected = injectedDesktopPort(runtime);
+	if (injected) return controllableBrowserDesktopBridge(injected);
+	return "__TAURI_INTERNALS__" in runtime
 		? tauriDesktopBridge
 		: browserDesktopBridge;
+}
+
+function browserWindow(): ControllableDesktopWindow | undefined {
+	return typeof window === "undefined"
+		? undefined
+		: (window as ControllableDesktopWindow);
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useHardwareController } from "./controller/useHardwareController";
+import type { OscBridge } from "./transport/oscBridge";
 import { GridSurface } from "./surfaces/GridSurface";
 import { PlaybackSurface } from "./surfaces/PlaybackSurface";
 import { ProgrammerSurface } from "./surfaces/ProgrammerSurface";
@@ -8,8 +9,8 @@ import { NavigationRail } from "./surfaces/playback/NavigationRail";
 
 type ControllerTab = "console" | "grid" | "settings";
 
-export function App() {
-  const controller = useHardwareController();
+export function App({ bridge }: { bridge?: OscBridge } = {}) {
+  const controller = useHardwareController({ bridge });
   const [tab, setTab] = useState<ControllerTab>("console");
   const { feedback, settings, send } = controller;
 

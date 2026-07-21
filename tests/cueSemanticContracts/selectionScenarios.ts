@@ -97,9 +97,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			{ name: "Selection Two" },
 		);
 		await desk.open(bench.baseUrl);
-		api.session = await page.evaluate(() =>
-			JSON.parse(localStorage.getItem("light.primary-session")!),
-		);
+		api.session = await desk.session();
 		await page.locator(".mode-toggle").click();
 		await page.keyboard.press("Shift+KeyZ");
 		await expect(page.getByLabel("Command line")).toHaveValue("SELECT");

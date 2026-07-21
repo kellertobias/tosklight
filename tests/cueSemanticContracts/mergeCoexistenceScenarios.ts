@@ -258,9 +258,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await bench.tick(1);
 		expect(await visualizationLevel(api, bFixture, "blue")).toBe(0.8);
 		await desk.open(bench.baseUrl);
-		api.session = await page.evaluate(() =>
-			JSON.parse(localStorage.getItem("light.primary-session")!),
-		);
+		api.session = await desk.session();
 		expect(await visualizationLevel(api, bFixture, "blue")).toBe(0.8);
 		await page.locator(".mode-toggle").click();
 		await page.keyboard.press("Shift+KeyZ");

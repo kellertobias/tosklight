@@ -1,10 +1,17 @@
 import { expect, type Locator, type Page } from "@playwright/test";
+import type { SessionResponse } from "../../src/api/types";
+import { BrowserSessionHandoff } from "./sessionHandoff";
+import { ControllableDesktopDriver } from "./desktopBridge";
 
 export class DeskDriver {
   private recordingStep = { title: "STARTING", description: "Preparing the test application." };
   private recordingInstalled = false;
   private recordingCatalogEnabled = false;
   private recordingNavigationHandler?: () => void;
+  private readonly sessionHandoffs = new Map<Page, BrowserSessionHandoff>();
+  private baseUrl = "";
+  private auditRevision = 0;
+  private controllableDesktop?: ControllableDesktopDriver;
 
   constructor(
     readonly page: Page,
@@ -16,23 +23,27 @@ export class DeskDriver {
   async dispose(): Promise<void> {
     if (this.recordingNavigationHandler) this.page.off("domcontentloaded", this.recordingNavigationHandler);
     this.recordingNavigationHandler = undefined;
+    for (const handoff of this.sessionHandoffs.values()) handoff.dispose();
+    this.sessionHandoffs.clear();
   }
 
   async open(baseUrl: string): Promise<void> {
+    this.baseUrl = baseUrl;
+    const handoff = await this.prepareSessionHandoff(this.page);
+    const checkpoint = handoff.checkpoint();
     if (this.controlDeskId) {
       await this.page.addInitScript((deskId) => {
         localStorage.setItem("light.control-desk", deskId);
       }, this.controlDeskId);
     }
     await this.page.goto(baseUrl);
+    await handoff.adoptCurrentDocument();
     await expect(this.page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
     await expect(this.page.locator(".connection-banner")).toBeHidden({ timeout: 10_000 });
-    if (this.controlDeskId) {
-      await expect.poll(() => this.page.evaluate(() => {
-        const session = JSON.parse(localStorage.getItem("light.primary-session") ?? "null");
-        return session?.desk?.id ?? null;
-      })).toBe(this.controlDeskId);
-    }
+    await handoff.waitForCapture(
+      checkpoint,
+      (session) => !this.controlDeskId || session.desk.id === this.controlDeskId,
+    );
     if (process.env.LIGHT_VISUAL_RECORDING === "1") {
       const url = new URL(baseUrl);
       this.recordingCatalogEnabled = url.searchParams.get("demo") !== "product"
@@ -48,6 +59,37 @@ export class DeskDriver {
           : this.recordingStep.description,
       );
     }
+  }
+
+  async enableControllableDesktop(): Promise<ControllableDesktopDriver> {
+    this.controllableDesktop ??= new ControllableDesktopDriver(this.page);
+    await this.controllableDesktop.install();
+    return this.controllableDesktop;
+  }
+
+  async session(): Promise<SessionResponse> {
+    const handoff = await this.prepareSessionHandoff(this.page);
+    return handoff.currentSession() ?? handoff.waitForCapture(-1);
+  }
+
+  async openPeer(page: Page, baseUrl: string): Promise<SessionResponse> {
+    const handoff = await this.prepareSessionHandoff(page);
+    const checkpoint = handoff.checkpoint();
+    await page.goto(baseUrl);
+    await handoff.adoptCurrentDocument();
+    await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
+    await expect(page.locator(".connection-banner")).toBeHidden({ timeout: 10_000 });
+    return handoff.waitForCapture(checkpoint);
+  }
+
+  private async prepareSessionHandoff(page: Page) {
+    let handoff = this.sessionHandoffs.get(page);
+    if (!handoff) {
+      handoff = new BrowserSessionHandoff(page);
+      this.sessionHandoffs.set(page, handoff);
+    }
+    await handoff.install();
+    return handoff;
   }
 
   /** Shows a full-screen chapter card over a blurred application background. */
@@ -190,7 +232,7 @@ export class DeskDriver {
 
   private async installRecordingOverlay(): Promise<void> {
     if (this.recordingInstalled) return;
-    await this.page.exposeFunction("__lightVisualOscSummary", () => this.externalOscSummary());
+    await this.page.exposeFunction("__lightVisualDeskState", () => this.visualDeskState());
     await this.renderRecordingOverlay();
     this.recordingInstalled = true;
   }
@@ -336,38 +378,24 @@ export class DeskDriver {
         const description = document.querySelector("#light-catalog-description")!;
         description.textContent = `${description.textContent} Keyboard: ${event.key}.`;
       }, true);
-      const visualWindow = window as Window & { __lightVisualOscSummary?: () => Promise<string> };
-      let revision = 0;
+      const visualWindow = window as Window & {
+        __lightVisualDeskState?: () => Promise<{
+          dmx: string;
+          event: string;
+          osc: string;
+        }>;
+      };
       let updating = false;
       const update = async () => {
         if (updating) return;
         updating = true;
         try {
-          const oscSummary = await visualWindow.__lightVisualOscSummary?.();
+          const state = await visualWindow.__lightVisualDeskState?.();
+          if (!state) return;
           const oscOutput = document.querySelector("#light-catalog-osc");
-          if (oscOutput) oscOutput.textContent = oscSummary || "No external OSC yet";
-          const session = JSON.parse(localStorage.getItem("light.primary-session") ?? "null");
-          if (!session?.token) return;
-          const headers = { Authorization: `Bearer ${session.token}` };
-          const [dmxResponse, eventsResponse] = await Promise.all([
-            fetch("/api/v1/dmx", { headers }),
-            fetch(`/api/v1/audit?after=${revision}`, { headers }),
-          ]);
-          if (dmxResponse.ok) {
-            const dmx = await dmxResponse.json();
-            const slots = dmx.universes?.find((universe: { universe: number }) => universe.universe === 1)?.slots?.slice(0, 12) ?? [];
-            document.querySelector("#light-catalog-dmx")!.textContent = slots.map((value: number, index: number) => `${index + 1}:${value}`).join(" · ") || "No Universe 1 frame";
-          }
-          if (eventsResponse.ok) {
-            const events = await eventsResponse.json() as Array<{ revision: number; kind: string; payload: Record<string, unknown> }>;
-            if (events.length) {
-              revision = Math.max(revision, ...events.map((event) => event.revision));
-              const visible = events.filter((event) => event.kind === "desk_action" || event.payload?.source === "osc" || event.kind.includes("playback") || event.kind.includes("speed_group"));
-              const latest = (visible.at(-1) ?? events.at(-1))!;
-              const action = latest.payload?.action ?? latest.payload?.command ?? latest.payload?.source ?? "state changed";
-              document.querySelector("#light-catalog-events")!.textContent = `${latest.kind} · ${String(action)}`;
-            }
-          }
+          if (oscOutput) oscOutput.textContent = state.osc || "No external OSC yet";
+          document.querySelector("#light-catalog-dmx")!.textContent = state.dmx;
+          if (state.event) document.querySelector("#light-catalog-events")!.textContent = state.event;
         } catch {
           // The overlay is evidence only; a transient refresh error must not alter the test.
         } finally {
@@ -377,6 +405,26 @@ export class DeskDriver {
       void update();
       window.setInterval(() => void update(), 500);
     }, { testTitle: this.testTitle, recordingStep: this.recordingStep });
+  }
+
+  private async visualDeskState() {
+    const session = await this.session();
+    const headers = { Authorization: `Bearer ${session.token}` };
+    const [dmxResponse, eventsResponse] = await Promise.all([
+      fetch(`${this.baseUrl}/api/v1/dmx`, { headers }),
+      fetch(`${this.baseUrl}/api/v1/audit?after=${this.auditRevision}`, { headers }),
+    ]);
+    const dmx = dmxResponse.ok ? await dmxResponse.json() : null;
+    const events = eventsResponse.ok ? await eventsResponse.json() as VisualEvent[] : [];
+    if (events.length) this.auditRevision = Math.max(
+      this.auditRevision,
+      ...events.map((event) => event.revision),
+    );
+    return {
+      dmx: visualDmx(dmx),
+      event: visualEvent(events),
+      osc: this.externalOscSummary(),
+    };
   }
 
   async command(value: string, visibleValue = formatVisibleCommand(value)): Promise<void> {
@@ -398,6 +446,33 @@ export class DeskDriver {
     await this.page.getByRole("button", { name: "BUILT-INS" }).click();
     await this.page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
   }
+}
+
+interface VisualEvent {
+  revision: number;
+  kind: string;
+  payload?: Record<string, unknown>;
+}
+
+function visualDmx(value: unknown) {
+  const dmx = value as { universes?: Array<{ universe: number; slots: number[] }> } | null;
+  const slots = dmx?.universes
+    ?.find((universe) => universe.universe === 1)?.slots.slice(0, 12) ?? [];
+  return slots.map((slot, index) => `${index + 1}:${slot}`).join(" · ") ||
+    "No Universe 1 frame";
+}
+
+function visualEvent(events: VisualEvent[]) {
+  const visible = events.filter((event) =>
+    event.kind === "desk_action" ||
+    event.payload?.source === "osc" ||
+    event.kind.includes("playback") ||
+    event.kind.includes("speed_group"));
+  const latest = visible.at(-1) ?? events.at(-1);
+  if (!latest) return "";
+  const action = latest.payload?.action ?? latest.payload?.command ??
+    latest.payload?.source ?? "state changed";
+  return `${latest.kind} · ${String(action)}`;
 }
 
 function formatVisibleCommand(value: string): string {

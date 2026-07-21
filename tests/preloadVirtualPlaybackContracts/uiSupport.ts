@@ -67,26 +67,13 @@ export async function assignVirtualSource(
 			name: new RegExp(`Virtual playback page 1 cell ${cell} empty`),
 		})
 		.click();
-	await expect
-		.poll(async () => await pageObjectFromUi(page, cell))
-		.not.toBeUndefined();
-}
-
-export async function pageObjectFromUi(page: Page, cell: number) {
-	return page.evaluate(async (slot) => {
-		const session = JSON.parse(
-			localStorage.getItem("light.primary-session") ?? "null",
-		);
-		if (!session?.token) return undefined;
-		const response = await fetch("/api/v1/playbacks", {
-			headers: { Authorization: `Bearer ${session.token}` },
-		});
-		if (!response.ok) return undefined;
-		const state = await response.json();
-		return state.pages.find(
-			(candidate: any) => candidate.number === state.active_page,
-		)?.slots?.[String(slot)];
-	}, cell);
+	await expect(
+		restored.getByRole("button", {
+			name: new RegExp(
+				`Virtual playback page 1 cell ${cell} ${escapeRegExp(sourceName)}`,
+			),
+		}),
+	).toBeVisible();
 }
 
 export function selectTrigger(container: Locator, label: string): Locator {
@@ -122,4 +109,8 @@ export async function longPressPreload(page: Page) {
 	await expect(
 		page.getByRole("button", { name: "PRELOAD", exact: true }),
 	).toBeVisible();
+}
+
+function escapeRegExp(value: string) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

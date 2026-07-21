@@ -12,7 +12,7 @@ test("records the complete desk with OSC and DMX observers", async ({ api, bench
   await desk.open(bench.baseUrl);
   await installRecordingOverlay(page);
   const hardware = await bench.osc();
-  const browserSession = await page.evaluate(() => JSON.parse(localStorage.getItem("light.primary-session") ?? "null"));
+  const browserSession = await desk.session();
   const alias = browserSession.desk.osc_alias as string;
   const sent: string[] = [];
   const video = page.video();

@@ -26,17 +26,28 @@ async function assertWorkflowThemes(page: any) {
   expect(await colors(record)).toMatchObject({ border: "rgb(255, 78, 85)", theme: "#ff4e55" });
   await record.getByRole("button", { name: "Close Record Settings" }).click();
 
-  await page.evaluate(() => window.dispatchEvent(new Event("light:update-settings")));
+  await rec.dispatchEvent("pointerdown", {
+    pointerId: 2,
+    pointerType: "mouse",
+    button: 0,
+    shiftKey: true,
+  });
+  await page.waitForTimeout(700);
+  await rec.dispatchEvent("pointerup", { pointerId: 2, pointerType: "mouse", button: 0 });
   const update = page.getByRole("dialog", { name: "Update Settings" });
   await expect(update).toContainText("UPDATE");
   expect(await colors(update)).toMatchObject({ border: "rgb(244, 185, 66)", theme: "#f4b942" });
   await update.getByRole("button", { name: "Close Update Settings" }).click();
 
   expect((await colors(rec)).border).toBe("rgb(255, 78, 85)");
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("light:update-armed", { detail: true })));
+  await page.waitForTimeout(1_050);
+  await rec.click({ modifiers: ["Shift"] });
   await expect(rec).toContainText("UPDATE ARMED");
   await expect.poll(async () => (await colors(rec)).border).toBe("rgb(244, 185, 66)");
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("light:update-armed", { detail: false })));
+  await rec.click({ modifiers: ["Shift"] });
+  const targets = page.getByRole("dialog", { name: "Update Update" });
+  await targets.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(rec).toHaveText("REC");
 }
 
 async function colors(locator: any) {

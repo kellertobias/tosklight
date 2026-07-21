@@ -18,6 +18,7 @@ import { GroupRecordingProvider } from "../features/groupRecording/GroupRecordin
 import { CueRecordingProvider } from "../features/cueRecording/CueRecordingProvider";
 import { PlaybackTopologyProvider } from "../features/playbackTopology/PlaybackTopologyProvider";
 import type { SessionRole } from "../features/session/ownership";
+import { useSessionHandoff } from "../features/session/SessionHandoffContext";
 import { ShowObjectsViewProvider } from "../features/showObjects/ShowObjectsView";
 import { VirtualPlaybackZonesProvider } from "../features/virtualPlaybackZones/VirtualPlaybackZonesContext";
 import { ServerProgrammingProviders } from "./ServerProgrammingProviders";
@@ -45,7 +46,8 @@ export function ServerProvider({
 	useServerPolling(state);
 	const loadShowObjects = useShowObjects(state);
 	const refresh = useServerRefresh(state, loadShowObjects);
-	useServerConnection(state, loadShowObjects, sessionRole);
+	const sessionHandoff = useSessionHandoff();
+	useServerConnection(state, loadShowObjects, sessionRole, sessionHandoff);
 	const commandLine = useCommandLineController(state);
 	const fileAccess = useFileAccess(state);
 	const boundaries = useServerFeatureBoundaries(state);

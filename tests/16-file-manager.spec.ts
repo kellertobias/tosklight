@@ -307,6 +307,8 @@ function propertiesFor(manager: Locator) {
 }
 
 async function openHostedPicker(page: Page, configuration: Record<string, unknown>) {
+  // Retained private boundary: replace with a feature-owned hosted-picker test port, not a generic
+  // browser escape hatch. tools/test-private-boundaries.mjs allows only this exact event and file.
   await page.evaluate((options) => {
     const state = window as Window & { __filePickerResult?: unknown };
     state.__filePickerResult = "pending";
