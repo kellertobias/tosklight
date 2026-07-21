@@ -1,20 +1,21 @@
 # Major Refactoring Progress
 
-Estimated progress: **97%**
+Estimated progress: **98%**
 
-Estimated Codex ETA: **roughly 14–24 hours of active Codex execution**, to repository-wide
-acceptance. Typed Cue transfer, exact existing-Playback mapping, and the primary physical Playback
-bank are complete. Typed page create/rename and the companion page, shortcut, summary, Numeric Pad,
-secondary-screen, and Product Demo callers remain before the broad Playback snapshot can be
-retired; public test-DSL convergence and final performance/desktop acceptance follow.
+Estimated Codex ETA: **roughly 8–14 hours of active Codex execution**, to repository-wide
+acceptance. Typed Playback Page creation/rename and strict desk selection, the companion Page and
+Playback surfaces, scoped command execution, Group selection, Cuelist authority, and typed CUE
+navigation are complete. Portable Group decoupling, System Controls and direct Group-master
+authority, broad frontend `/playbacks` retirement, public test-DSL convergence, and final
+performance/desktop acceptance remain.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-20 after completing typed existing-Playback mapping and moving the primary
-physical Playback bank/configuration surface onto scoped topology, runtime, desk, command-line, and
-conditional Group authority.
+Last updated: 2026-07-21 after completing the Playback Page and companion-surface cohort, strict
+command-line and Group/Cuelist authority migrations, and typed CUE navigation with one dedicated v1
+compatibility specification.
 
 ## Guardrails
 
@@ -61,7 +62,8 @@ conditional Group authority.
   explicit-page Playback action paths into the typed application service and v2 runtime contract.
   Virtual exclusion peers and startup normalization now use that boundary; exact semantic no-op
   reporting is complete. Portable topology, Cuelist mutation, and the primary physical bank are
-  complete below, while companion page and shortcut compatibility callers remain.
+  complete below, as are the Page and shortcut companion callers. The remaining broad Playback
+  consumers are isolated to Group-runtime and System Controls compatibility work tracked below.
 - [x] Removed mutable Playback-service lock exposure from the migrated paths: Engine callers use
   typed commands and immutable projections, Preload installs generation-bound prepared batches,
   and application-owned units of work serialize page changes, automatic render transitions, and
@@ -70,10 +72,10 @@ conditional Group authority.
   activated only by mounted Playback/Cuelist views, desk-only views request no runtime identities,
   and gaps and malformed messages repair from authoritative snapshots. Concurrent fader and page
   mutations use independent optimistic overlays with request-ordered rollback and authoritative
-  event/outcome reconciliation. Unmigrated companion panes remain on the broad v1 `/playbacks`
-  snapshot; they do not poll periodically. Real Playback/Page topology events trigger a coalesced
-  compatibility reload, and remaining legacy mutation callers may issue an additional explicit
-  reload.
+  event/outcome reconciliation. The remaining Group-runtime and System Controls compatibility
+  readers still use the broad v1 `/playbacks` snapshot; they do not poll periodically. Real
+  Playback/Page topology events trigger a coalesced compatibility reload until those last readers
+  move.
 - [x] Added typed portable Playback topology actions for Cuelist save, slot configure, and mapped
   Playback clear. One show-revisioned application action preserves legacy storage identities and
   unknown fields, returns one coherent Page/Playback/Cuelist projection, publishes at most one
@@ -97,6 +99,22 @@ conditional Group authority.
   `SET` or broad refresh. Stale runtime targets render no controls, broad parent updates are
   memo-suppressed, and held Flash/Swap releases retain their original semantic and cannot overtake
   a delayed or retried press.
+- [x] Added typed Playback Page create and rename actions and strict existing-Page desk selection.
+  Page mutations validate exact storage identity and revision, preserve lossless extensions,
+  retain request replay, return changed/no-change authority, and publish at most one retained Show
+  event.
+  Scoped desk selection rejects a missing Page without creating topology or emitting a desk event,
+  while explicit compatibility callers retain their documented auto-create behavior. The strict
+  frontend transport and writer validate authoritative outcomes, serialize operations, repair
+  conflicts, and prevent preflight, retry, repair, or late outcomes from crossing a Show, session,
+  server, or writer replacement.
+- [x] Moved the Page dialogs and controls, hardware summary, keyboard Playback shortcuts, Numeric
+  Pad Page action, secondary Screens, Cuelist Window, and Product Demo Playback controls onto exact
+  topology, desk, and runtime authority. Independent Screens read and write only their own Page;
+  Follow Main reads only the desk Page. Product Demo resolves portable Page assignments and exact
+  mapped runtime identities without a bootstrap fallback. All surfaces refuse stale or loading
+  authority, preserve held Flash/Swap release ordering, reject abandoned renders and replaced
+  writers, and remain dormant when their owning view is not mounted.
 - [x] Migrated inline Cue-editor writes, Cuelist settings, and atomic renumbering from generic
   show-object mutation plus broad refresh onto the typed Playback topology action. Writes capture
   the exact storage identity and revision, preserve lossless body extensions, return authoritative
@@ -231,6 +249,21 @@ conditional Group authority.
   transition publishes at most one sparse interaction event. The production modal consumes only
   the scoped projection, reconciles optimistic Cancel with rollback, ignores legacy response-local
   choice data, and rejects late outcomes after server/session authority replacement.
+- [x] Removed the production command-line editor's final `useServer()` execution and mutation
+  fallbacks. A scoped, explicitly injected execution capability now owns readiness and Enter;
+  disabled, unmounted, loading, or writerless views refuse reads and writes instead of borrowing
+  stale global state. Edit-before-Enter ordering, optimistic response/event races, recoverable
+  failure, request replay, command-choice cancellation, authority replacement, and late outcomes
+  are covered through the real Programming interaction provider. Broad test harnesses install an
+  explicit feature-owned authority rather than weakening production ownership.
+- [x] Added a typed v2 CUE navigation action for `CUE`, `CUE CUE`, decimal Cue numbers, selected-
+  Playback, pool `SET <playback>`, and explicit-Page `SET <page> . <slot>` addressing. Pure grammar
+  parsing is state-independent; execution resolves
+  exact desk selection and Page topology before calling the existing Playback application action.
+  The Programming boundary owns command reset and history exactly once, request replay repeats no
+  interaction or notification, and no-change emits no typed or compatibility event. The former
+  CUE compatibility family is removed from the public helper and ratchet; one dedicated v1
+  WebSocket specification remains as the intentional compatibility proof.
 - [x] Migrated the complete Stage selection path, Stage command controls, and Stage/Fixture pane
   counts onto the ordered Programming selection projection. Covered panes do not hydrate or
   subscribe, peer and OSC changes update the mounted view without a legacy reload, Stage gestures
@@ -377,6 +410,13 @@ conditional Group authority.
   a strict action-only client that captures the dialog-open revision, reconciles stored/deleted
   outcomes in either event/response order, repairs only the conflicted Group, and clears the scoped
   `RECORD` command only after success. The old multi-request Group store/refresh adapter is gone.
+- [x] Moved Group Strip and Group Pool activation onto scoped Programming selection actions.
+  Live activation sends one ordered gesture; frozen activation captures the exact Group rule and
+  Show revision at interaction time. Stored-empty Groups remain selectable, inactive surfaces open
+  no authority, missing authority sends nothing, and legacy `server.playbacks` membership cannot
+  retarget selection. Cuelist Window follow-selection, current-Cue display, and pool masters now
+  read exact desk/runtime projections, while Cue-pane and Fixture Sheet Cuelist pickers hydrate only
+  their feature-owned portable Show-object views.
 - [x] Added typed action-time Cue recording. One Programming action captures only normal or pending-
   Preload recordable values, resolves explicit or authoritative active targets under the portable
   Show revision, and atomically creates, updates, or deletes the Cue plus any required Cuelist,
@@ -421,45 +461,54 @@ conditional Group authority.
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
-- [ ] Finish the remaining Playback ownership callers: add typed page create/rename, move companion
-  page tools, hardware summary, shortcuts, Numeric Pad, secondary screens, and Product Demo onto
-  committed topology/runtime/desk boundaries, then retire broad `/playbacks` consumers. Exact
-  map-existing assignment, the primary physical bank/configuration, Update, Cue transfer, Cue
-  editor/Cuelist settings, and Virtual Playback are complete.
-- [ ] Move the remaining selection consumers onto the scoped Programming store, then remove their
-  legacy bootstrap fields and broad Programmer refresh paths. Group Pool, Group Strip, and the
-  command bar, Stage, Stage/Fixture pane chrome, Channels, Fixture Sheet, Patch, and Presets have
-  moved, as have Patch setup, the complete parameter bank, and selection-driven operator modals;
-  a small number of keypad/miscellaneous readers still use the facade.
+- [ ] Replace the remaining non-runtime Group reads derived from broad Playback state with portable
+  Group authority, then remove the dead Playback facade actions and broad Cuelist-definition
+  paperwork dependency.
+- [ ] Add direct scoped Group-master authority and move System Controls off broad Playback
+  enumeration. Once those two semantic blockers are gone, remove frontend `/playbacks` hydration,
+  refresh, event reconciliation, context state, and compatibility rerenders as one bounded slice.
+- [ ] Converge the remaining public test DSL and run the final repository-wide performance,
+  unrestricted socket, desktop, migration, and operator-path acceptance suite.
 
 ## Remaining architecture work
 
-1. Finish the companion physical Playback authority without changing desk semantics. Add typed
-   page create/rename, then migrate page tools, hardware summary, shortcuts, Numeric Pad, secondary
-   screens, and Product Demo onto exact topology, runtime, Group, and desk projections before
-   deleting the broad `/playbacks` snapshot. Exact existing-Playback mapping and the primary bank/
-   configuration surface are complete.
-2. Publish the remaining externally observable transitions once through typed events: Highlight
+1. Decouple the remaining non-semantic Group consumers from broad Playback state. Parameter
+   projection, Cue thumbnails, Group derivation, Show-object selectors, and the remaining selected-
+   membership synchronization should read visibility-scoped portable Groups with no bootstrap or
+   global Playback dependency. Delete dead Playback facade actions and load paperwork Cuelists on
+   demand through the existing portable authority.
+2. Move System Controls onto scoped portable Playback/Cuelist definitions plus the exact runtime
+   identities it displays or releases. It must remain dormant while closed and preserve release-
+   all semantics for mapped and direct Cuelist Playbacks without cloning the broad snapshot.
+3. Add a direct typed Group-master application, snapshot, action-outcome, and event authority.
+   Migrate Groups Window, Fixture Sheet, and Group editing onto its dormant frontend store while
+   preserving stored-empty Groups, unassigned Group masters, exact no-op behavior, and existing
+   Matter/WebSocket compatibility.
+4. Excise the broad frontend `/playbacks` path after those blockers move: remove bootstrap/session
+   ownership, global refresh, compatibility event reconciliation, context state, and unrelated
+   rerenders. Keep the backend v1 endpoint/events only where external compatibility still requires
+   them, and retain `/screens` refresh only for its separately owned screen state.
+5. Publish the remaining externally observable transitions once through typed events: Highlight
    movement, transition completion, output health/overload, and any remaining automatic runtime
    changes.
-3. Migrate remaining layout and miscellaneous portable-show mutations, then remove generic
+6. Migrate remaining layout and miscellaneous portable-show mutations, then remove generic
    frontend show-object mutation.
-4. Replace production `useServer()` callers with feature-local stores/hooks. Remove broad global
+7. Replace production `useServer()` callers with feature-local stores/hooks. Remove broad global
    React update ownership, DOM/custom-event SET/Store/Update routing, and polling-based refreshes.
-5. Expand the public test DSL and migrate remaining legacy command helpers. Tests must express the
+8. Expand the public test DSL and migrate remaining legacy command helpers. Tests must express the
    intended operator workflow and keep software, command-line, and OSC surfaces explicit rather
    than hiding meaningful parity behind one generic implementation shortcut.
-6. Remove REST/WebSocket v1 and `useServer()` compatibility only after every production caller and
+9. Remove REST/WebSocket v1 and `useServer()` compatibility only after every production caller and
    acceptance test has moved to a typed replacement.
-7. Repair the remaining stale feature-plan links and keep the committed `docs/engineering` handoff
+10. Repair the remaining stale feature-plan links and keep the committed `docs/engineering` handoff
    synchronized as compatibility adapters are retired.
 
-The audited public test boundary still contains 145 direct v1 WebSocket commands, 40 legacy text
-commands, and 142 generic show-object writes. The first test-DSL migration should converge visible
-command-line, software-key, and OSC command intent while retaining one explicit v1 compatibility
-test. Missing typed seams for priority, Preset recall, output-route/user-layout mutation, session
-handoff, and DesktopBridge must remain visible work rather than being hidden behind a generic test
-helper.
+The last complete public-boundary audit counted 145 direct v1 WebSocket commands, 40 legacy text
+commands, and 142 generic show-object writes; that inventory predates the current CUE navigation
+migration and must be regenerated before the closing DSL slice. CUE navigation now uses command-
+line HTTP for its API path and retains one dedicated v1 WebSocket compatibility specification.
+Missing typed seams for priority, Preset recall, output-route/user-layout mutation, session handoff,
+and DesktopBridge must remain visible work rather than being hidden behind a generic test helper.
 
 ## Performance and acceptance still required
 
@@ -792,9 +841,30 @@ helper.
   `too_many_arguments` allowance; the no-default-features server check, formatting,
   dependency-direction check, generated contracts, source-size hard-limit ratchet, and whitespace
   validation pass. Wire generation retains the existing non-fatal `ts-rs`
-  `deny_unknown_fields` warning. Remaining limitations are explicit: page create/rename and the
-  companion broad consumers listed above have not moved, and exact conflict repair cannot discover
-  a replacement noncanonical storage key without the later collection-level topology repair.
+  `deny_unknown_fields` warning. At that milestone, Page create/rename and the companion consumers
+  remained; the current cohort closes those items below. Exact conflict repair still cannot
+  discover a replacement noncanonical storage key without collection-level topology repair.
+- The current integrated Page/CUE/scoped-authority cohort passes all 1,596 frontend tests in 219
+  files, frontend typecheck, and the production Vite build; the build reports only the existing
+  large-chunk advisory. Focused Rust verification passes 20 Playback-topology application tests, 5
+  Page-route server tests, 9 navigation server tests, all 63 `light-wire --no-default-features`
+  tests, and generated-contract verification. The complete server library reports 365 passing, 1
+  ignored, and one failure: the CITP thumbnail socket test cannot bind in the sandbox and fails with
+  `Operation not permitted`. Re-running the library with only that test skipped reports 365 passed,
+  0 failed, 1 ignored, and 1 filtered. Strict Clippy passes for application, wire, and server with
+  the established `too_many_arguments` allowance; wire generation retains only its known non-fatal
+  `ts-rs` warnings.
+- The focused CUE acceptance paths pass all 3 API/UI/OSC cases in
+  `09-cue-go-to-load.spec.ts`, and the dedicated v1 compatibility specification passes its single
+  case when run outside the sandbox. `cargo fmt --all -- --check`, generated contracts,
+  the aggregate architecture check, the command-boundary scanner and all 8 scanner unit tests,
+  `git diff --check`, and the source-size hard-limit ratchet pass. The current size report has zero
+  hard file or function violations; its design-goal inventory is 118 production files above 400
+  lines and 5,162 production functions above 20 lines. Focused frontend coverage includes strict
+  missing-Page refusal, legacy auto-create compatibility, response-before-event and event-before-
+  response reconciliation, rollback/replay/no-change/conflict repair, abandoned-render and scope-
+  replacement safety, inactive-view dormancy, no broad bootstrap request, and unrelated-render
+  suppression.
 
 ## Wrap-up handoff
 
@@ -817,11 +887,11 @@ helper.
   remains a separate future milestone.
 - Preload now prepares one final-state-aware batch, and virtual-exclusion restart authority is
   private, desk-exact, migration-compatible, and absent from public runtime projections.
-- Recommended next slice: add typed Page create/rename and migrate the companion page controls,
-  hardware summary, shortcuts, Numeric Pad, secondary screens, and Product Demo. Preserve explicit
-  versus current-page addressing and independent-screen page semantics, then delete the broad
-  `/playbacks` snapshot only after the last consumer moves. Keep public test-DSL convergence and the
-  final repository-wide acceptance/performance run as the closing milestones.
+- Recommended next slice: decouple parameter projection, Cue thumbnails, Group derivation, and
+  Show-object selectors from broad Playback state by using visibility-scoped portable Groups.
+  Follow with scoped System Controls and direct Group-master authority; only then remove the broad
+  frontend `/playbacks` snapshot. Keep public test-DSL convergence and the final repository-wide
+  acceptance/performance run as the closing milestones.
 
 Test files may exceed the hard limits, but should still be split when it improves readability and
 makes operator intent more visible.
