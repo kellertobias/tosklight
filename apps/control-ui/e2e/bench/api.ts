@@ -41,13 +41,79 @@ export type CommandOperationResponse = CommandOperationBase & (
     }
 );
 
-const LEGACY_COMMAND_FAMILIES = new Set([
-  "CUE", "SPD", "RECORD", "REC", "UPDATE", "DELETE", "DEL", "MOVE", "MOV", "COPY", "CPY", "SET",
-]);
+/**
+ * Command families whose complete mutation still belongs to the v1 compatibility grammar.
+ *
+ * Each variant names the production boundary that does not exist yet, so a scenario states which
+ * ownership gap it is riding on rather than hiding behind an anonymous "legacy" call.
+ */
+export type CompatibilityCommandFamily =
+  /** Cue navigation and load; the typed Playback go_to/load actions do not own the grammar yet. */
+  | "cue_navigation"
+  /** `SPD GRP` BPM and synchronization; no application-owned Speed Group action exists. */
+  | "speed_group"
+  /** Whole-Cue deletion; Cue recording subtract is a different operation and is not a substitute. */
+  | "cue_delete"
+  /** Preset `MOVE`/`COPY`; only Cue transfer is intercepted by the typed Programming boundary. */
+  | "preset_transfer"
+  /** `SET <cuelist> AT <page>.<slot>`; awaits the typed map-existing Playback topology action. */
+  | "playback_set"
+  /** `UPDATE`; the command grammar is not yet routed through the typed Update workflow. */
+  | "update";
 
-export function commandLineRequiresLegacyCompatibility(command: string): boolean {
-  const family = command.trim().match(/^[A-Za-z]+/)?.[0]?.toUpperCase();
-  return family !== undefined && LEGACY_COMMAND_FAMILIES.has(family);
+export interface CompatibilityProgrammerCommand {
+  family: CompatibilityCommandFamily;
+  command: string;
+}
+
+export type CommandLineOwnership =
+  | { via: "command-line-http" }
+  | { via: "compatibility"; family: CompatibilityCommandFamily };
+
+const CUE_TRANSFER = /^(?:MOVE|MOV|COPY|CPY)\s+(?:(?:PLAIN|STATUS)\s+)?SET\b/i;
+const CUE_OR_GROUP_RECORD = /^(?:RECORD|REC)\s+(?:[+-]\s+)?(?:GROUP|CUE|SET)\b/i;
+const PRESET_RECORD = /^(?:RECORD|REC)\s+\S+(?:\s+\S+){0,2}$/i;
+const GROUP_DELETE = /^(?:DELETE|DEL)\s+GROUP\b/i;
+
+/**
+ * Classifies one command against the grammars the server intercepts before its atomic-family check.
+ *
+ * `record_typed_command` routes Group recording, Preset recording, Cue recording, and Cue transfer
+ * through the typed Programming boundary, so those reach the public v2 command-line HTTP contract.
+ * Everything else in a legacy family is still compatibility-owned. This is a static ownership
+ * decision on purpose: attempting v2 and falling back to v1 would hide an ownership regression.
+ */
+export function commandLineOwnership(command: string): CommandLineOwnership {
+  const trimmed = command.trim();
+  if (
+    CUE_TRANSFER.test(trimmed) ||
+    CUE_OR_GROUP_RECORD.test(trimmed) ||
+    GROUP_DELETE.test(trimmed) ||
+    PRESET_RECORD.test(trimmed)
+  ) {
+    return { via: "command-line-http" };
+  }
+  const family = trimmed.match(/^[A-Za-z]+/)?.[0]?.toUpperCase();
+  switch (family) {
+    case "CUE":
+      return { via: "compatibility", family: "cue_navigation" };
+    case "SPD":
+      return { via: "compatibility", family: "speed_group" };
+    case "DELETE":
+    case "DEL":
+      return { via: "compatibility", family: "cue_delete" };
+    case "MOVE":
+    case "MOV":
+    case "COPY":
+    case "CPY":
+      return { via: "compatibility", family: "preset_transfer" };
+    case "SET":
+      return { via: "compatibility", family: "playback_set" };
+    case "UPDATE":
+      return { via: "compatibility", family: "update" };
+    default:
+      return { via: "command-line-http" };
+  }
 }
 
 const WEB_SOCKET_TIMEOUT_MILLIS = 5_000;
@@ -90,6 +156,22 @@ export class ApiDriver {
     return parseRevisionedCommandLine(response);
   }
 
+  /** Replaces the visible command-line text against its current revision. */
+  async setCommandLineText(text: string): Promise<RevisionedCommandLine> {
+    const { commandLine } = await this.getCommandLine();
+    return this.replaceCommandLine(text, commandLine.revision);
+  }
+
+  /**
+   * Sets the FIXTURE/GROUP command target.
+   *
+   * The command target has no typed v2 owner yet; the production frontend still issues this v1
+   * command from `api/client/programming.ts`, so acceptance coverage matches that surface.
+   */
+  async setCompatibilityCommandTarget(target: CommandTarget): Promise<CommandResponse> {
+    return this.command("programmer.command_target", { value: target });
+  }
+
   async sendCommandKey(
     key: SoftwareKey,
     phase: CommandKeyPhase = "press",
@@ -110,8 +192,31 @@ export class ApiDriver {
     return response;
   }
 
-  /** Temporary, deliberately named compatibility path for command families not yet atomic in v2. */
-  async executeLegacyCommandLine(command: string): Promise<CommandResponse> {
+  /**
+   * Executes one command family that is still owned by the v1 compatibility grammar.
+   *
+   * The caller names the missing production boundary, so the remaining compatibility surface stays
+   * countable and reviewable instead of looking like an ordinary command-line action.
+   */
+  async executeCompatibilityProgrammerCommand(
+    request: CompatibilityProgrammerCommand,
+  ): Promise<CommandResponse> {
+    const ownership = commandLineOwnership(request.command);
+    if (ownership.via === "command-line-http") {
+      throw new Error(
+        `${request.command} is owned by the v2 command-line HTTP contract; use executeCommandLine`,
+      );
+    }
+    if (ownership.family !== request.family) {
+      throw new Error(
+        `${request.command} belongs to the ${ownership.family} compatibility family, not ${request.family}`,
+      );
+    }
+    return this.sendCompatibilityCommandLine(request.command);
+  }
+
+  /** Raw v1 textual command envelope. Private so new scenarios cannot reach it directly. */
+  private async sendCompatibilityCommandLine(command: string): Promise<CommandResponse> {
     return this.command("programmer.execute", { value: command });
   }
 
