@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GroupManagementRequest",
+  "type": "object",
+  "properties": {
+    "expected_object_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0
+    },
+    "group_id": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1
+    },
+    "operation": {
+      "$ref": "#/$defs/GroupManagementOperation"
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "group_id",
+    "operation",
+    "expected_object_revision"
+  ],
+  "$defs": {
+    "GroupManagementOperation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "properties": {
+              "$ref": "#/$defs/GroupPropertiesUpdate"
+            },
+            "type": {
+              "type": "string",
+              "const": "update_properties"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "properties"
+          ]
+        },
+        {
+          "description": "Declared as an empty struct variant so `deny_unknown_fields` still applies; serde does not\nenforce it for an internally tagged unit variant.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "undo"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expected_source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/GroupSourceExpectation"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "refresh_frozen"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expected_source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/GroupSourceExpectation"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "detach_derived"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "GroupPropertiesUpdate": {
+      "type": "object",
+      "properties": {
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "GroupSourceExpectation": {
+      "description": "Exact source authority a client observed. A mismatch fails before anything mutates.",
+      "type": "object",
+      "properties": {
+        "expected_source_revision": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0
+        },
+        "source_group_id": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source_group_id"
+      ]
+    }
+  }
+}

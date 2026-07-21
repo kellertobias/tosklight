@@ -5,6 +5,7 @@ use crate::v2::cue_deletion::*;
 use crate::v2::cue_recording::*;
 use crate::v2::cue_transfer::*;
 use crate::v2::events::*;
+use crate::v2::group_management::*;
 use crate::v2::group_recording::*;
 use crate::v2::output_runtime::*;
 use crate::v2::patch::*;
@@ -217,6 +218,14 @@ fn programming(config: &Config) -> Vec<String> {
         PresetRecallOutcome::decl(config),
         PresetRecallErrorKind::decl(config),
         PresetRecallErrorResponse::decl(config),
+        GroupPropertiesUpdate::decl(config),
+        GroupSourceExpectation::decl(config),
+        GroupManagementOperation::decl(config),
+        GroupManagementRequest::decl(config),
+        GroupManagementObjectProjection::decl(config),
+        GroupManagementOutcome::decl(config),
+        GroupManagementErrorKind::decl(config),
+        GroupManagementErrorResponse::decl(config),
         GroupRecordOperation::decl(config),
         GroupRecordRequest::decl(config),
         RecordedGroupProjection::decl(config),

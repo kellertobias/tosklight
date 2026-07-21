@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GroupManagementErrorResponse",
+  "type": "object",
+  "properties": {
+    "current_related_revision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "current_revision": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "error": {
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/GroupManagementErrorKind"
+    },
+    "retryable": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "error",
+    "current_revision",
+    "current_related_revision",
+    "retryable"
+  ],
+  "$defs": {
+    "GroupManagementErrorKind": {
+      "type": "string",
+      "enum": [
+        "invalid",
+        "unauthorized",
+        "forbidden",
+        "not_found",
+        "conflict",
+        "unavailable",
+        "internal"
+      ]
+    }
+  }
+}

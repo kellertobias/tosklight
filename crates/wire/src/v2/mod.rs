@@ -5,6 +5,7 @@ pub mod cue_deletion;
 pub mod cue_recording;
 pub mod cue_transfer;
 pub mod events;
+pub mod group_management;
 pub mod group_recording;
 pub mod output_runtime;
 pub mod patch;

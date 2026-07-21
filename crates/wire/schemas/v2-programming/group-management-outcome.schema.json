@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GroupManagementOutcome",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "group": {
+          "$ref": "#/$defs/GroupManagementObjectProjection"
+        },
+        "persistence_warning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "show_event_sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "changed"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "request_id",
+        "correlation_id",
+        "replayed",
+        "show_id",
+        "show_revision",
+        "group",
+        "show_event_sequence",
+        "persistence_warning"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "group": {
+          "$ref": "#/$defs/GroupManagementObjectProjection"
+        },
+        "persistence_warning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "no_change"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "request_id",
+        "correlation_id",
+        "replayed",
+        "show_id",
+        "show_revision",
+        "group",
+        "persistence_warning"
+      ]
+    }
+  ],
+  "$defs": {
+    "GroupManagementObjectProjection": {
+      "description": "Authoritative lossless Group projection. These operations never delete their target.",
+      "type": "object",
+      "properties": {
+        "body": true,
+        "object_id": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "object_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "object_id",
+        "object_revision",
+        "body"
+      ]
+    }
+  }
+}

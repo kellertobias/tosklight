@@ -221,6 +221,22 @@ export type PresetRecallErrorKind = "invalid" | "unauthorized" | "forbidden" | "
 
 export type PresetRecallErrorResponse = { kind: PresetRecallErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
 
+export type GroupPropertiesUpdate = { name: string, color?: string | null, icon?: string | null, };
+
+export type GroupSourceExpectation = { source_group_id: string, expected_source_revision?: number | null, };
+
+export type GroupManagementOperation = { "type": "update_properties", properties: GroupPropertiesUpdate, } | { "type": "undo", } | { "type": "refresh_frozen", expected_source?: GroupSourceExpectation | null, } | { "type": "detach_derived", expected_source?: GroupSourceExpectation | null, };
+
+export type GroupManagementRequest = { request_id: string, group_id: string, operation: GroupManagementOperation, expected_object_revision: number, };
+
+export type GroupManagementObjectProjection = { object_id: string, object_revision: number, body: unknown, };
+
+export type GroupManagementOutcome = { "status": "changed", request_id: string, correlation_id: string, replayed: boolean, show_id: string, show_revision: number, group: GroupManagementObjectProjection, show_event_sequence: number, persistence_warning?: string | null, } | { "status": "no_change", request_id: string, correlation_id: string, replayed: boolean, show_id: string, show_revision: number, group: GroupManagementObjectProjection, persistence_warning?: string | null, };
+
+export type GroupManagementErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type GroupManagementErrorResponse = { kind: GroupManagementErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
+
 export type GroupRecordOperation = "overwrite" | "merge" | "subtract" | "delete";
 
 export type GroupRecordRequest = { request_id: string, group_id: string, operation: GroupRecordOperation, expected_object_revision: number, };

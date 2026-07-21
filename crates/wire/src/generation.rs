@@ -18,6 +18,9 @@ use crate::v2::cue_deletion::{CueDeletionErrorResponse, CueDeletionOutcome, CueD
 use crate::v2::cue_recording::{CueRecordErrorResponse, CueRecordOutcome, CueRecordRequest};
 use crate::v2::cue_transfer::{CueTransferErrorResponse, CueTransferOutcome, CueTransferRequest};
 use crate::v2::events::{EventClientMessage, EventServerMessage, OutputRuntimeSnapshot};
+use crate::v2::group_management::{
+    GroupManagementErrorResponse, GroupManagementOutcome, GroupManagementRequest,
+};
 use crate::v2::group_recording::{
     GroupRecordErrorResponse, GroupRecordOutcome, GroupRecordRequest,
 };
@@ -184,6 +187,11 @@ fn programming_artifacts() -> Vec<GeneratedArtifact> {
         programming_request_schema::<PresetRecallRequest>("preset-recall-request"),
         programming_response_schema::<PresetRecallOutcome>("preset-recall-outcome"),
         programming_response_schema::<PresetRecallErrorResponse>("preset-recall-error-response"),
+        programming_request_schema::<GroupManagementRequest>("group-management-request"),
+        programming_response_schema::<GroupManagementOutcome>("group-management-outcome"),
+        programming_response_schema::<GroupManagementErrorResponse>(
+            "group-management-error-response",
+        ),
         programming_request_schema::<GroupRecordRequest>("group-record-request"),
         programming_response_schema::<GroupRecordOutcome>("group-record-outcome"),
         programming_response_schema::<GroupRecordErrorResponse>("group-record-error-response"),
