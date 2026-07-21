@@ -98,7 +98,7 @@ pub(in crate::runtime) fn capture_mode_change(
     }
 }
 
-fn capture_mode_projection(
+pub(super) fn capture_mode_projection(
     projection: &application::ProgrammingCaptureModeProjection,
 ) -> wire::ProgrammingCaptureModeProjection {
     wire::ProgrammingCaptureModeProjection {

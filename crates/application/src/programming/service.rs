@@ -29,6 +29,12 @@ mod group_recording;
 mod group_recording_replay;
 #[path = "service/lifecycle_publication.rs"]
 mod lifecycle_publication;
+#[path = "service/preload_lifecycle.rs"]
+mod preload_lifecycle;
+#[path = "service/preload_lifecycle_replay.rs"]
+mod preload_lifecycle_replay;
+#[path = "service/preload_lifecycle_validation.rs"]
+mod preload_lifecycle_validation;
 #[path = "service/preload_values.rs"]
 mod preload_values;
 #[path = "service/preload_values_replay.rs"]
@@ -74,6 +80,7 @@ use cue_recording_replay::CueRecordingReplayCache;
 use cue_transfer_replay::{CueTransferChoiceCache, CueTransferReplayCache};
 use group_recording_replay::GroupRecordingReplayCache;
 use lifecycle_publication::LifecyclePublicationGate;
+use preload_lifecycle_replay::PreloadLifecycleReplayCache;
 use preload_values_replay::PreloadValuesReplayCache;
 use preset_recall_replay::PresetRecallReplayCache;
 use preset_recording_replay::PresetRecordingReplayCache;
@@ -101,6 +108,7 @@ pub struct ProgrammingService {
     replay: Arc<Mutex<ReplayCache>>,
     values_replay: Arc<Mutex<ValuesReplayCache>>,
     preload_values_replay: Arc<Mutex<PreloadValuesReplayCache>>,
+    preload_lifecycle_replay: Arc<Mutex<PreloadLifecycleReplayCache>>,
     priority_replay: Arc<Mutex<PriorityReplayCache>>,
     cue_recording_replay: Arc<Mutex<CueRecordingReplayCache>>,
     cue_transfer_choices: Arc<Mutex<CueTransferChoiceCache>>,
@@ -127,6 +135,7 @@ impl ProgrammingService {
             replay: Arc::default(),
             values_replay: Arc::default(),
             preload_values_replay: Arc::default(),
+            preload_lifecycle_replay: Arc::default(),
             priority_replay: Arc::default(),
             cue_recording_replay: Arc::default(),
             cue_transfer_choices: Arc::default(),

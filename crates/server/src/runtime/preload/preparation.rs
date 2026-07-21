@@ -18,12 +18,12 @@ pub(super) struct PreparedPreloadCommit {
 pub(super) fn prepare_preload_commit(
     state: &AppState,
     session: &Session,
+    context: light_application::ActionContext,
 ) -> Result<PreparedPreloadCommit, String> {
     let pending = pending_actions(state, session)?;
     validate_playback_definitions(&pending, &state.engine.snapshot())?;
     let committed_at = state.programmers.clock().now();
     let programmer_fade_millis = state.configuration.read().programmer_fade_millis;
-    let context = action_context(session);
     let mut commands = preload_batch_commands(&pending)?;
     attach_shared_exclusions(state, session, committed_at, &pending, &mut commands);
     let prepared_playback =
@@ -86,15 +86,6 @@ fn validate_playback_definitions(
         }
     }
     Ok(())
-}
-
-fn action_context(session: &Session) -> light_application::ActionContext {
-    light_application::ActionContext::operator(
-        session.desk.id,
-        session.user.id.0,
-        session.id.0,
-        light_application::ActionSource::UserInterface,
-    )
 }
 
 fn attach_shared_exclusions(

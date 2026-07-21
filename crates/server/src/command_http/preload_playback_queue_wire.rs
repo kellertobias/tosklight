@@ -20,7 +20,7 @@ pub(in crate::runtime) fn change(
     }
 }
 
-fn projection(
+pub(super) fn projection(
     projection: &application::ProgrammingPreloadPlaybackQueueProjection,
 ) -> wire::ProgrammingPreloadPlaybackQueueProjection {
     wire::ProgrammingPreloadPlaybackQueueProjection {
@@ -30,7 +30,7 @@ fn projection(
     }
 }
 
-fn queue_item(
+pub(super) fn queue_item(
     item: application::ProgrammingPreloadPlaybackQueueItem,
 ) -> wire::ProgrammingPreloadPlaybackQueueItem {
     wire::ProgrammingPreloadPlaybackQueueItem {

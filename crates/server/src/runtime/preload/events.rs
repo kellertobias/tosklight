@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 
 pub(super) struct PreloadChangeEvents {
     pub(super) drafts: Vec<light_application::EventDraft>,
+    pub(super) projections: Vec<PlaybackProjection>,
     exclusion_activations: Vec<(u16, Vec<u16>)>,
 }
 
@@ -17,14 +18,15 @@ pub(super) fn preload_change_events(
     let after = preparation::read_projections(state, context, identities)?;
     let transitions = ordered_transitions(before, after)?;
     let exclusion_activations = final_exclusion_activations(&transitions, actions);
-    let drafts = transitions
+    let (drafts, projections) = transitions
         .into_iter()
         .filter_map(|(identity, before, projection)| {
             change_event(context, identity, before, projection, actions)
         })
-        .collect();
+        .unzip();
     Ok(PreloadChangeEvents {
         drafts,
+        projections,
         exclusion_activations,
     })
 }
@@ -74,13 +76,14 @@ fn change_event(
     before: PlaybackProjection,
     projection: PlaybackProjection,
     actions: &[StagedPreloadPlaybackAction],
-) -> Option<light_application::EventDraft> {
+) -> Option<(light_application::EventDraft, PlaybackProjection)> {
     let cause = final_event_cause(actions, identity.clone());
     let action = if playback_was_released(&before, &projection) {
         light_application::PlaybackAction::Off { pressed: true }
     } else {
         cause.action
     };
+    let outcome = projection.clone();
     light_application::committed_playback_effect_event(
         context,
         action,
@@ -89,6 +92,7 @@ fn change_event(
         projection,
         cause.addressed_effect_changed,
     )
+    .map(|draft| (draft, outcome))
 }
 
 #[derive(Clone, Copy)]

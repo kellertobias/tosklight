@@ -10,6 +10,7 @@ mod lifecycle;
 mod lifecycle_projection;
 mod operation;
 mod ports;
+mod preload_lifecycle;
 mod preload_playback_queue_projection;
 mod preload_values_action;
 mod preload_values_projection;
@@ -72,6 +73,13 @@ pub use operation::{
 pub use ports::{
     ProgrammingExecution, ProgrammingPorts, ProgrammingReconciliation,
     ProgrammingSelectionEnvironment, ProgrammingSelectionQuery, ProgrammingValuesEnvironment,
+};
+pub use preload_lifecycle::{
+    ProgrammingPreloadCommitResult, ProgrammingPreloadExecutedPlaybackAction,
+    ProgrammingPreloadLifecycleAction, ProgrammingPreloadLifecyclePorts,
+    ProgrammingPreloadLifecycleRequest, ProgrammingPreloadLifecycleResult,
+    ProgrammingPreloadLifecycleState, ProgrammingPreloadRevisionExpectation,
+    ProgrammingPreloadRuntimeChange,
 };
 pub use preload_playback_queue_projection::{
     ProgrammingPreloadPlaybackAction, ProgrammingPreloadPlaybackQueueChange,

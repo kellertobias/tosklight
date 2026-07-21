@@ -12,20 +12,54 @@ pub(super) fn ws_programmer_clear(
 
 pub(super) fn ws_preload_enter(
     state: &AppState,
+    _session: &Session,
+    _command: &WsCommand,
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> Result<WsTypedProgrammingAction, String> {
+    let result = typed_preload_action(
+        state,
+        context,
+        ports,
+        light_application::ProgrammingPreloadLifecycleAction::Enter,
+    )?;
+    Ok(compatibility_action(
+        serde_json::json!({"blind":true}),
+        result,
+    ))
+}
+
+pub(super) fn ws_preload_go(
+    state: &AppState,
     session: &Session,
     _command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    let capture_programmer = state.configuration.read().preload_programmer_changes;
-    state
-        .programmers
-        .arm_preload(session.id, capture_programmer);
-    persist_programmer(state, session).map_err(|e| e.message)?;
-    emit(
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> Result<WsTypedProgrammingAction, String> {
+    let show_id = state
+        .active_show
+        .read()
+        .as_ref()
+        .map(|show| show.id)
+        .ok_or("no active show is loaded")?;
+    let current = light_application::ProgrammingPreloadRevisionExpectation::Current;
+    let result = typed_preload_action(
         state,
-        "programmer_changed",
-        serde_json::json!({"session_id":session.id,"preload_armed":true}),
-    );
-    Ok(serde_json::json!({"blind":true}))
+        context,
+        ports,
+        light_application::ProgrammingPreloadLifecycleAction::Go {
+            show_id,
+            expected_show_revision: current,
+            expected_playback_event_sequence: current,
+        },
+    )?;
+    let payload = compatibility_go_payload(&result)?;
+    if !result.replayed
+        && result.state == light_application::ProgrammingPreloadLifecycleState::Changed
+    {
+        emit_compatibility_go(state, session, &payload);
+    }
+    Ok(compatibility_action(payload, result))
 }
 
 pub(super) fn ws_preload_group_set(
@@ -60,29 +94,66 @@ pub(super) fn ws_preload_group_set(
 
 pub(super) fn ws_preload_clear(
     state: &AppState,
-    session: &Session,
+    _session: &Session,
     _command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    state.programmers.clear_preload_pending(session.id);
-    persist_programmer(state, session).map_err(|e| e.message)?;
-    Ok(serde_json::json!({"pending_cleared":true,"active_unchanged":true}))
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> Result<WsTypedProgrammingAction, String> {
+    let result = typed_preload_action(
+        state,
+        context,
+        ports,
+        light_application::ProgrammingPreloadLifecycleAction::ClearPending,
+    )?;
+    Ok(compatibility_action(
+        serde_json::json!({"pending_cleared":true,"active_unchanged":true}),
+        result,
+    ))
 }
 
 pub(super) fn ws_preload_release(
     state: &AppState,
-    session: &Session,
+    _session: &Session,
     _command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    let released = state.programmers.release_preload(session.id);
-    if released {
-        persist_programmer(state, session).map_err(|e| e.message)?;
-        emit(
-            state,
-            "programmer_changed",
-            serde_json::json!({"session_id":session.id,"preload_released":true}),
-        );
-    }
-    Ok(serde_json::json!({"released":released}))
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> Result<WsTypedProgrammingAction, String> {
+    let result = typed_preload_action(
+        state,
+        context,
+        ports,
+        light_application::ProgrammingPreloadLifecycleAction::Release,
+    )?;
+    let released = result.state == light_application::ProgrammingPreloadLifecycleState::Changed;
+    Ok(compatibility_action(
+        serde_json::json!({"released":released}),
+        result,
+    ))
+}
+
+fn typed_preload_action(
+    state: &AppState,
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+    action: light_application::ProgrammingPreloadLifecycleAction,
+) -> Result<light_application::ProgrammingPreloadLifecycleResult, String> {
+    let current = light_application::ProgrammingPreloadRevisionExpectation::Current;
+    state
+        .programming
+        .handle_preload_lifecycle(
+            light_application::ActionEnvelope {
+                context: context.clone(),
+                command: light_application::ProgrammingPreloadLifecycleRequest {
+                    expected_capture_mode_revision: current,
+                    expected_values_revision: current,
+                    expected_queue_revision: current,
+                    expected_selection_revision: current,
+                    action,
+                },
+            },
+            ports,
+        )
+        .map_err(|error| error.message)
 }
 
 pub(super) fn ws_programmer_command_line(

@@ -54,7 +54,10 @@ pub(super) fn ws_preset_apply(
             "applied":result.applied_fixtures,
             "programmer":state.programmers.get(session.id),
         }),
+        interaction_changed: result.interaction_event_sequence.is_some(),
         values_changed,
+        preload_values_changed: false,
+        preload_queue_changed: false,
         replayed: result.replayed,
     })
 }

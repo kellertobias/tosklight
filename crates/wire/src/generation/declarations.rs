@@ -8,6 +8,7 @@ use crate::v2::group_recording::*;
 use crate::v2::patch::*;
 use crate::v2::playback::*;
 use crate::v2::playback_topology::*;
+use crate::v2::preload_lifecycle::*;
 use crate::v2::preload_playback_queue::*;
 use crate::v2::preload_values::*;
 use crate::v2::preset_recall::*;
@@ -161,6 +162,14 @@ fn programming(config: &Config) -> Vec<String> {
         ProgrammingPreloadPlaybackQueueProjection::decl(config),
         ProgrammingPreloadPlaybackQueueChange::decl(config),
         ProgrammingPreloadPlaybackQueueSnapshot::decl(config),
+        ProgrammingPreloadLifecycleAction::decl(config),
+        ProgrammingPreloadLifecycleRequest::decl(config),
+        ProgrammingPreloadRuntimeOutcome::decl(config),
+        ProgrammingPreloadCommitOutcome::decl(config),
+        ProgrammingPreloadLifecycleState::decl(config),
+        ProgrammingPreloadLifecycleOutcome::decl(config),
+        ProgrammingPreloadLifecycleErrorKind::decl(config),
+        ProgrammingPreloadLifecycleErrorResponse::decl(config),
         PresetRecordingFamily::decl(config),
         PresetRecordingAddress::decl(config),
         PresetRecordingMode::decl(config),

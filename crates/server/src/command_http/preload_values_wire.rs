@@ -97,7 +97,7 @@ pub(in crate::runtime) fn change(
     }
 }
 
-fn projection_from_application(
+pub(super) fn projection_from_application(
     projection: &application::ProgrammingPreloadValuesProjection,
 ) -> wire::ProgrammingPreloadValuesProjection {
     wire::ProgrammingPreloadValuesProjection {

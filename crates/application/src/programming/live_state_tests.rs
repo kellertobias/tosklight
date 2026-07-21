@@ -21,6 +21,8 @@ mod group_recording;
 mod lifecycle;
 #[path = "live_state_tests/lifecycle_publication.rs"]
 mod lifecycle_publication;
+#[path = "live_state_tests/preload_lifecycle.rs"]
+mod preload_lifecycle;
 #[path = "live_state_tests/preload_playback_queue.rs"]
 mod preload_playback_queue;
 #[path = "live_state_tests/preload_values_actions.rs"]

@@ -1,5 +1,6 @@
 use super::super::{
-    ProgrammingPreloadValuesOutcome, ProgrammingPreloadValuesResult, ProgrammingValuesOutcome,
+    ProgrammingPreloadPlaybackQueueProjection, ProgrammingPreloadValuesOutcome,
+    ProgrammingPreloadValuesProjection, ProgrammingPreloadValuesResult, ProgrammingValuesOutcome,
     ProgrammingValuesProjection, ProgrammingValuesResult,
 };
 use crate::ActionContext;
@@ -12,7 +13,9 @@ use std::mem::size_of;
 
 // Each values authority gets its own bounded replay cache. The byte budget counts the complete
 // retained outcome projection plus dynamic result/key storage and deliberately overestimates
-// shared Arc allocations so cache ownership cannot hide a large retained projection.
+// shared Arc allocations so cache ownership cannot hide a large retained projection. The fixed
+// overhead reserves space for the hash/deque nodes and Arc/Box allocator headers that Rust does
+// not expose through `size_of_val`; dynamic vectors and strings are still counted separately.
 const REQUEST_CACHE_LIMIT: usize = 4_096;
 const REQUEST_CACHE_BYTE_LIMIT: usize = 16 * 1024 * 1024;
 pub(super) const ENTRY_CONTAINER_OVERHEAD: usize = 256;
@@ -68,26 +71,42 @@ pub(super) fn preload_result_retained_bytes(result: &ProgrammingPreloadValuesRes
     let mut bytes = size_of::<ProgrammingPreloadValuesResult>()
         + result_dynamic_bytes(&result.context, &result.warning);
     if let ProgrammingPreloadValuesOutcome::Changed { projection, .. } = &result.outcome {
-        bytes = bytes.saturating_add(size_of_val(projection.as_ref()) + 2 * size_of::<usize>());
-        bytes = bytes.saturating_add(
-            projection.fixture_values.capacity() * size_of::<PreloadProgrammerFixtureValue>(),
-        );
-        bytes = bytes.saturating_add(
-            projection.group_values.capacity() * size_of::<PreloadProgrammerGroupValue>(),
-        );
-        for value in &projection.fixture_values {
-            bytes = bytes
-                .saturating_add(value.attribute.0.capacity() + attribute_value_bytes(&value.value));
-        }
-        for value in &projection.group_values {
-            bytes = bytes.saturating_add(
-                value.group_id.capacity()
-                    + value.attribute.0.capacity()
-                    + attribute_value_bytes(&value.value),
-            );
-        }
+        bytes = bytes.saturating_add(preload_projection_retained_bytes(projection));
     }
     bytes
+}
+
+pub(super) fn preload_projection_retained_bytes(
+    projection: &ProgrammingPreloadValuesProjection,
+) -> usize {
+    let mut bytes = size_of_val(projection) + 2 * size_of::<usize>();
+    bytes = bytes.saturating_add(
+        projection.fixture_values.capacity() * size_of::<PreloadProgrammerFixtureValue>(),
+    );
+    bytes = bytes.saturating_add(
+        projection.group_values.capacity() * size_of::<PreloadProgrammerGroupValue>(),
+    );
+    for value in &projection.fixture_values {
+        bytes = bytes
+            .saturating_add(value.attribute.0.capacity() + attribute_value_bytes(&value.value));
+    }
+    for value in &projection.group_values {
+        bytes = bytes.saturating_add(
+            value.group_id.capacity()
+                + value.attribute.0.capacity()
+                + attribute_value_bytes(&value.value),
+        );
+    }
+    bytes
+}
+
+pub(super) fn preload_queue_projection_retained_bytes(
+    projection: &ProgrammingPreloadPlaybackQueueProjection,
+) -> usize {
+    size_of_val(projection).saturating_add(
+        projection.actions.capacity()
+            * size_of::<super::super::ProgrammingPreloadPlaybackQueueItem>(),
+    )
 }
 
 fn result_dynamic_bytes(context: &ActionContext, warning: &Option<String>) -> usize {

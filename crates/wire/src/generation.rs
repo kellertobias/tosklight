@@ -30,6 +30,10 @@ use crate::v2::playback::{
 use crate::v2::playback_topology::{
     PlaybackTopologyActionOutcome, PlaybackTopologyActionRequest, PlaybackTopologyErrorResponse,
 };
+use crate::v2::preload_lifecycle::{
+    ProgrammingPreloadLifecycleErrorResponse, ProgrammingPreloadLifecycleOutcome,
+    ProgrammingPreloadLifecycleRequest,
+};
 use crate::v2::preload_playback_queue::ProgrammingPreloadPlaybackQueueSnapshot;
 use crate::v2::preload_values::{
     ProgrammingPreloadValuesActionOutcome, ProgrammingPreloadValuesActionRequest,
@@ -142,6 +146,15 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         ),
         programming_response_schema::<ProgrammingPreloadPlaybackQueueSnapshot>(
             "programming-preload-playback-queue-snapshot",
+        ),
+        programming_request_schema::<ProgrammingPreloadLifecycleRequest>(
+            "programming-preload-lifecycle-request",
+        ),
+        programming_response_schema::<ProgrammingPreloadLifecycleOutcome>(
+            "programming-preload-lifecycle-outcome",
+        ),
+        programming_response_schema::<ProgrammingPreloadLifecycleErrorResponse>(
+            "programming-preload-lifecycle-error-response",
         ),
         programming_request_schema::<PresetRecordRequest>("preset-record-request"),
         programming_response_schema::<PresetRecordOutcome>("preset-record-outcome"),

@@ -49,6 +49,12 @@ mod interaction_wire;
 mod lifecycle_routes;
 #[path = "command_http/lifecycle_wire.rs"]
 mod lifecycle_wire;
+#[path = "command_http/preload_lifecycle_ports.rs"]
+mod preload_lifecycle_ports;
+#[path = "command_http/preload_lifecycle_routes.rs"]
+mod preload_lifecycle_routes;
+#[path = "command_http/preload_lifecycle_wire.rs"]
+mod preload_lifecycle_wire;
 #[path = "command_http/preload_playback_queue_routes.rs"]
 mod preload_playback_queue_routes;
 #[path = "command_http/preload_playback_queue_wire.rs"]

@@ -91,11 +91,11 @@ fn dispatch_ws_payload(
         }
         "programmer.release" => ws_programmer_release(state, session, command),
         "programmer.clear" => ws_programmer_clear(state, session, command),
-        "preload.enter" => ws_preload_enter(state, session, command),
+        "preload.enter" => Err("Preload enter requires the typed action boundary".into()),
         "preload.group.set" => ws_preload_group_set(state, session, command),
-        "preload.go" => commit_preload_while_show_stable(state, session),
-        "preload.clear" => ws_preload_clear(state, session, command),
-        "preload.release" => ws_preload_release(state, session, command),
+        "preload.go" => Err("Preload GO requires the typed action boundary".into()),
+        "preload.clear" => Err("Preload clear requires the typed action boundary".into()),
+        "preload.release" => Err("Preload release requires the typed action boundary".into()),
         "programmer.undo" => Ok(serde_json::json!({"changed":state.programmers.undo(session.id)})),
         "programmer.redo" => Ok(serde_json::json!({"changed":state.programmers.redo(session.id)})),
         "programmer.command_line" => ws_programmer_command_line(state, session, command),
@@ -192,7 +192,12 @@ fn dispatch_validated_ws_command(
     let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
     if matches!(
         command.command.as_str(),
-        "programmer.priority" | "preset.apply"
+        "programmer.priority"
+            | "preset.apply"
+            | "preload.enter"
+            | "preload.go"
+            | "preload.clear"
+            | "preload.release"
     ) {
         return dispatch_typed_programming_action(state, session, command, &context, &ports);
     }
@@ -221,18 +226,22 @@ fn dispatch_typed_programming_action(
     let result = match command.command.as_str() {
         "programmer.priority" => ws_programmer_priority(state, session, command, context, ports),
         "preset.apply" => ws_preset_apply(state, session, command, context, ports),
+        "preload.enter" => ws_preload_enter(state, session, command, context, ports),
+        "preload.go" => ws_preload_go(state, session, command, context, ports),
+        "preload.clear" => ws_preload_clear(state, session, command, context, ports),
+        "preload.release" => ws_preload_release(state, session, command, context, ports),
         _ => unreachable!("only typed compatibility actions reach this boundary"),
     };
     match result {
-        Ok(result) => WsProgrammingOutput {
-            response: Ok(result.payload),
-            changes: result
-                .values_changed
-                .then_some("values")
-                .into_iter()
-                .collect(),
-            replayed: result.replayed,
-        },
+        Ok(result) => {
+            let changes = result.changes();
+            let replayed = result.replayed;
+            WsProgrammingOutput {
+                response: Ok(result.payload),
+                changes,
+                replayed,
+            }
+        }
         Err(error) => WsProgrammingOutput::untracked(Err(error)),
     }
 }
@@ -367,8 +376,25 @@ impl WsProgrammingOutput {
 
 pub(super) struct WsTypedProgrammingAction {
     pub(super) payload: serde_json::Value,
+    pub(super) interaction_changed: bool,
     pub(super) values_changed: bool,
+    pub(super) preload_values_changed: bool,
+    pub(super) preload_queue_changed: bool,
     pub(super) replayed: bool,
+}
+
+impl WsTypedProgrammingAction {
+    fn changes(&self) -> Vec<&'static str> {
+        [
+            (self.interaction_changed, "interaction"),
+            (self.values_changed, "values"),
+            (self.preload_values_changed, "preload_values"),
+            (self.preload_queue_changed, "preload_playback_queue"),
+        ]
+        .into_iter()
+        .filter_map(|(changed, name)| changed.then_some(name))
+        .collect()
+    }
 }
 
 fn reconcile_interaction(

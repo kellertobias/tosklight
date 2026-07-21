@@ -18,6 +18,16 @@ pub struct PreloadPlaybackAction {
 }
 
 impl ProgrammerRegistry {
+    /// Reads only whether retained active Preload values exist; no Programmer projection is
+    /// cloned or serialized.
+    pub fn has_active_preload(&self, session: SessionId) -> Option<bool> {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        let states = self.states.read();
+        let state = states.get(&self.key(session))?;
+        Some(!state.preload_active.is_empty() || !state.preload_group_active.is_empty())
+    }
+
     pub fn activate_preload(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();

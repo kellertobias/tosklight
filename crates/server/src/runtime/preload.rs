@@ -3,6 +3,8 @@ use light_engine::{
     PlaybackBatchAction, PlaybackBatchCommand, PlaybackBatchOutcome, PreparedPlaybackBatch,
 };
 
+#[path = "preload/authority.rs"]
+mod authority;
 #[path = "preload/events.rs"]
 mod events;
 #[path = "preload/preparation.rs"]
@@ -126,9 +128,12 @@ pub(super) fn commit_preload_while_show_stable(
     state: &AppState,
     session: &Session,
 ) -> Result<serde_json::Value, String> {
-    let completed = state
-        .playback_service
-        .run_unit_of_work(CommitPreload { state, session });
+    let context = compatibility_context(session);
+    let completed = state.playback_service.run_unit_of_work(CommitPreload {
+        state,
+        session,
+        context,
+    });
     let committed = completed.output?;
     Ok(response::preload_commit_response(
         state,
@@ -138,9 +143,26 @@ pub(super) fn commit_preload_while_show_stable(
     ))
 }
 
+pub(super) fn commit_preload_lifecycle_while_show_stable(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    request: &light_application::ProgrammingPreloadLifecycleRequest,
+) -> Result<light_application::ProgrammingPreloadCommitResult, light_application::ActionError> {
+    let completed = state.playback_service.run_unit_of_work(CommitTypedPreload {
+        state,
+        session,
+        context: context.clone(),
+        request,
+    });
+    let (committed, authority) = completed.output?;
+    typed_commit_result(committed, authority, completed.event_sequences)
+}
+
 struct CommitPreload<'a> {
     state: &'a AppState,
     session: &'a Session,
+    context: light_application::ActionContext,
 }
 
 impl light_application::PlaybackUnitOfWork for CommitPreload<'_> {
@@ -151,7 +173,7 @@ impl light_application::PlaybackUnitOfWork for CommitPreload<'_> {
             .state
             .programmers
             .with_transaction(self.session.id, || {
-                transaction::commit_preload_transaction(self.state, self.session)
+                transaction::commit_preload_transaction(self.state, self.session, self.context)
             });
         match result {
             Ok(mut committed) => {
@@ -161,4 +183,99 @@ impl light_application::PlaybackUnitOfWork for CommitPreload<'_> {
             Err(error) => light_application::PlaybackOperation::new(Err(error)),
         }
     }
+}
+
+struct CommitTypedPreload<'a> {
+    state: &'a AppState,
+    session: &'a Session,
+    context: light_application::ActionContext,
+    request: &'a light_application::ProgrammingPreloadLifecycleRequest,
+}
+
+impl light_application::PlaybackUnitOfWork for CommitTypedPreload<'_> {
+    type Output = Result<
+        (
+            transaction::CommittedPreload,
+            authority::PreloadCommitAuthority,
+        ),
+        light_application::ActionError,
+    >;
+
+    fn execute(self) -> light_application::PlaybackOperation<Self::Output> {
+        let authority = match authority::validate(self.state, self.session, self.request) {
+            Ok(authority) => authority,
+            Err(error) => return light_application::PlaybackOperation::new(Err(error)),
+        };
+        let result = self
+            .state
+            .programmers
+            .with_transaction(self.session.id, || {
+                transaction::commit_preload_transaction(self.state, self.session, self.context)
+            })
+            .map_err(preload_commit_error);
+        match result {
+            Ok(mut committed) => {
+                let events = std::mem::take(&mut committed.events);
+                light_application::PlaybackOperation::with_events(
+                    Ok((committed, authority)),
+                    events,
+                )
+            }
+            Err(error) => light_application::PlaybackOperation::new(Err(error)),
+        }
+    }
+}
+
+fn typed_commit_result(
+    committed: transaction::CommittedPreload,
+    authority: authority::PreloadCommitAuthority,
+    event_sequences: Vec<u64>,
+) -> Result<light_application::ProgrammingPreloadCommitResult, light_application::ActionError> {
+    if committed.runtime_projections.len() != event_sequences.len() {
+        return Err(light_application::ActionError::new(
+            light_application::ActionErrorKind::Internal,
+            "Preload runtime projections did not match their event sequences",
+        ));
+    }
+    let playback_event_sequence_after = event_sequences
+        .last()
+        .copied()
+        .unwrap_or(authority.playback_event_sequence);
+    let runtime_changes = committed
+        .runtime_projections
+        .iter()
+        .cloned()
+        .zip(event_sequences)
+        .map(
+            |(projection, event_sequence)| light_application::ProgrammingPreloadRuntimeChange {
+                projection,
+                event_sequence,
+            },
+        )
+        .collect();
+    Ok(light_application::ProgrammingPreloadCommitResult {
+        show_id: authority.show_id,
+        show_revision: authority.show_revision,
+        playback_event_sequence_before: authority.playback_event_sequence,
+        playback_event_sequence_after,
+        committed_at: committed.committed_at,
+        programmer_fade_millis: committed.programmer_fade_millis,
+        executed_playback_actions: committed.executed.len(),
+        executed: committed.executed_projection,
+        runtime_changes,
+        warnings: committed.warnings,
+    })
+}
+
+fn compatibility_context(session: &Session) -> light_application::ActionContext {
+    light_application::ActionContext::operator(
+        session.desk.id,
+        session.user.id.0,
+        session.id.0,
+        light_application::ActionSource::UserInterface,
+    )
+}
+
+fn preload_commit_error(error: String) -> light_application::ActionError {
+    light_application::ActionError::new(light_application::ActionErrorKind::Conflict, error)
 }

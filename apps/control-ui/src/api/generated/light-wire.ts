@@ -163,6 +163,32 @@ export type ProgrammingPreloadPlaybackQueueChange = { projection: ProgrammingPre
 
 export type ProgrammingPreloadPlaybackQueueSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingPreloadPlaybackQueueProjection, };
 
+export type ProgrammingPreloadLifecycleAction = { "type": "enter", } | { "type": "go", show_id: string, expected_show_revision: number, expected_playback_event_sequence: number, } | { "type": "clear_pending", } | { "type": "release", };
+
+export type ProgrammingPreloadLifecycleRequest = { request_id: string, expected_capture_mode_revision: number, expected_values_revision: number, expected_queue_revision: number, expected_selection_revision: number, action: ProgrammingPreloadLifecycleAction, };
+
+export type ProgrammingPreloadRuntimeOutcome = { projection: PlaybackRuntimeProjection, event_sequence: number, };
+
+export type ProgrammingPreloadCommitOutcome = { show_id: string, show_revision: number, playback_event_sequence_before: number, playback_event_sequence_after: number, committed_at: string, programmer_fade_millis: number, executed_playback_actions: number,
+/**
+ * Ordered actions consumed by this one atomic commit. Runtime changes remain separately
+ * deduplicated by authoritative Playback identity below.
+ */
+executed: Array<ProgrammingPreloadPlaybackQueueItem>, runtime_changes: Array<ProgrammingPreloadRuntimeOutcome>, };
+
+export type ProgrammingPreloadLifecycleState = "changed" | "no_change";
+
+export type ProgrammingPreloadLifecycleOutcome = { request_id: string, correlation_id: string, replayed: boolean, status: ProgrammingPreloadLifecycleState,
+/**
+ * True only while retained active Preload fixture or Group values exist. Armed capture is
+ * represented independently by `capture_mode.blind`.
+ */
+active: boolean, capture_mode: ProgrammingCaptureModeProjection, capture_mode_event_sequence?: number | null, values_revision: number, values_projection?: ProgrammingPreloadValuesProjection | null, values_event_sequence?: number | null, queue_revision: number, queue_projection?: ProgrammingPreloadPlaybackQueueProjection | null, queue_event_sequence?: number | null, interaction_event_sequence?: number | null, selection_revision: number, commit?: ProgrammingPreloadCommitOutcome | null, warning?: string | null, };
+
+export type ProgrammingPreloadLifecycleErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type ProgrammingPreloadLifecycleErrorResponse = { kind: ProgrammingPreloadLifecycleErrorKind, error: string, current_revision?: number | null, current_related_revision?: number | null, retryable: boolean, };
+
 export type PresetRecordingFamily = "mixed" | "intensity" | "color" | "position" | "beam";
 
 export type PresetRecordingAddress = { family: PresetRecordingFamily, number: number, };

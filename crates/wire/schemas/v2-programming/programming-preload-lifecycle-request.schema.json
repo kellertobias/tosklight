@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProgrammingPreloadLifecycleRequest",
+  "type": "object",
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/ProgrammingPreloadLifecycleAction"
+    },
+    "expected_capture_mode_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "expected_queue_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "expected_selection_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "expected_values_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "expected_capture_mode_revision",
+    "expected_values_revision",
+    "expected_queue_revision",
+    "expected_selection_revision",
+    "action"
+  ],
+  "$defs": {
+    "ProgrammingPreloadLifecycleAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "enter"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expected_playback_event_sequence": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "expected_show_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "show_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "go"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "show_id",
+            "expected_show_revision",
+            "expected_playback_event_sequence"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "clear_pending"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "release"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    }
+  }
+}

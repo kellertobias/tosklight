@@ -13,6 +13,8 @@ pub(super) fn preload_commit_response(
         executed,
         warnings,
         events: _,
+        runtime_projections: _,
+        executed_projection: _,
     } = committed;
     let mut payload = serde_json::json!({
         "session_id":session.id,

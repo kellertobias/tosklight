@@ -119,7 +119,10 @@ pub(super) fn ws_programmer_priority(
         .map_err(|error| error.message)?;
     Ok(WsTypedProgrammingAction {
         payload: serde_json::json!({"programmer":state.programmers.get(session.id)}),
+        interaction_changed: false,
         values_changed: false,
+        preload_values_changed: false,
+        preload_queue_changed: false,
         replayed: result.replayed,
     })
 }

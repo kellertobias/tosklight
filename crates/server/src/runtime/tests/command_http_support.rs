@@ -339,6 +339,51 @@ impl CommandHttpScenario {
             .unwrap()
     }
 
+    async fn preload_lifecycle_action(&self, input: serde_json::Value) -> Response {
+        self.preload_lifecycle_action_for(self.session.user.id.0, &self.token, input)
+            .await
+    }
+
+    async fn preload_lifecycle_action_for(
+        &self,
+        user_id: Uuid,
+        token: &str,
+        input: serde_json::Value,
+    ) -> Response {
+        self.app
+            .clone()
+            .oneshot(
+                Request::post(format!(
+                    "/api/v2/users/{user_id}/programmer-preload/actions"
+                ))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(input.to_string()))
+                .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    async fn playback_action_for(
+        &self,
+        token: &str,
+        desk_id: Uuid,
+        input: serde_json::Value,
+    ) -> Response {
+        self.app
+            .clone()
+            .oneshot(
+                Request::post(format!("/api/v2/desks/{desk_id}/playback-actions"))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(input.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
     async fn preset_recording_action(
         &self,
         show_id: &str,
