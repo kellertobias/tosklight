@@ -2,20 +2,19 @@
 
 Estimated progress: **96%**
 
-Estimated Codex ETA: **roughly 45–80 hours of active Codex execution**, plus required reference-
+Estimated Codex ETA: **roughly 35–65 hours of active Codex execution**, plus required reference-
 hardware measurement time, to repository-wide acceptance. The lower percentage and wider ETA are
 an intentional correction after the refreshed public-boundary inventory: the scoped runtime and
-Programmer foundations are mature, but production Preload convergence, residual portable
-mutations, production facade retirement, public-DSL convergence, event gaps, and final
-performance/desktop acceptance remain substantive work rather than cleanup.
+Programmer foundations are mature, but residual portable mutations, production facade retirement,
+public-DSL convergence, event gaps, and final performance/desktop acceptance remain substantive
+work rather than cleanup.
 
 This is the living handoff for [`major-refactoring.md`](major-refactoring.md). Update it after each
 meaningful milestone. A checked item means the implementation is committed on `refactoring` and
 has focused verification; it does not replace the final repository-wide acceptance run.
 
-Last updated: 2026-07-21 after completing the production Programmer-priority and Preset-recall
-authorities, their public test intents, the hosted-file-picker adapter, and the typed Preload
-lifecycle backend.
+Last updated: 2026-07-21 after completing production and public Preload/Output ownership, the
+typed Speed Group backend, and the first 54 public Programmer-values action migrations.
 
 ## Guardrails
 
@@ -499,6 +498,33 @@ lifecycle backend.
   response/event order, repairs exact objects after gaps or conflicts, and rejects stale work after
   authority replacement without a bootstrap fallback. Exact non-Group repair reads one SQLite row;
   equal-revision topology retains object identity and does not rerender unrelated consumers.
+- [x] Completed production Preload lifecycle ownership. The active Preload controls, modal, command
+  paths, and queued Playback handoff use exact capture/values/queue/selection/Show/Playback
+  authority, remain dormant until mounted, reject stale bootstrap state, and reconcile replay,
+  rollback, gaps, either response/event order, and server/session/Show/user replacement. Public
+  Preload helpers now express Enter, pending clear, GO, and release through one strict action each;
+  the remaining two direct clear call sites are intentionally outside the normal-values contract
+  until their acceptance scenarios are classified.
+- [x] Completed the scoped Output runtime client and production composition. System Controls and
+  command-line blackout feedback consume one retained global-master store with exact active-Show,
+  desk, session, and connection authority; loading performs no visualization/bootstrap fallback,
+  optimistic actions reconcile either event/response order, and unrelated server updates stop at a
+  memoized status leaf. The old App blackout state and `setMaster` client/server facade are removed.
+  A production-decoder-backed public helper migrated the final direct `master.set` call while
+  preserving safe-blackout restart and first-frame assertions.
+- [x] Added a revisioned installation-wide manual Speed Group authority for absolute/relative BPM
+  and A-E synchronization. Exact authority/revision expectations, request replay and collision,
+  same-installation multi-desk state, direct-ownership reset, persistence warnings, no-change, and
+  one lossless event per real transition are application-owned. Command-line HTTP and compatibility
+  execution share the syntactic parser and service; authoritative execution emits no v1 payload,
+  while the retained compatibility path emits its prior payload once. Sound observation/config,
+  Learn, pause, double/half, and legacy Playback controls remain a separate runtime-control slice.
+- [x] Added strict public Programmer-values intents and migrated 54 normal fixture/Group set,
+  release, clear, and ordered batch call sites. Each helper captures exact active Show, desk,
+  session, authenticated user, capture-mode revision, and values revision without bootstrap, and
+  rejects active Preload or scope replacement before one action POST. The cue-semantic cohort
+  preserves its configured zero-millisecond Programmer timing and original action cardinality;
+  focused API execution caught and corrected an initial default-timing mismatch.
 - [x] Exposed Selective Show Import through authenticated v2 catalog, preview, and atomic apply
   adapters with checked-in schemas, generated TypeScript, exact source/target revisions, strict
   response validation, and focused server contracts. **Show → Load → Partial Show Load** now uses a
@@ -531,9 +557,9 @@ lifecycle backend.
 
 - [ ] Continue vertical feature-store/event slices and move the remaining production callers away
   from broad `useServer()`, polling, and generic show-object mutation.
-- [ ] Complete the production/public Preload lifecycle owners and the revisioned Output master/
-  blackout authority, then add the remaining command grammar, output-route/user-layout, and
-  residual portable-show actions required by acceptance scenarios.
+- [ ] Complete the manual Speed Group frontend/public owner and the typed whole-Cue delete action,
+  then add standalone Playback `SET`, bare `UPDATE`, Preset transfer, output-route/user-layout,
+  and residual portable-show actions required by acceptance scenarios.
 - [ ] Continue converging the public test DSL, then run the final repository-wide performance,
   unrestricted socket, desktop, migration, and operator-path acceptance suite.
 
@@ -547,10 +573,9 @@ lifecycle backend.
 3. Replace production `useServer()` callers with feature-local stores/hooks. Remove broad global
    React update ownership, DOM/custom-event SET/Store/Update routing, and polling-based refreshes.
 4. Add typed public actions for the compatibility families and direct v1 actions still exercised by
-   acceptance coverage. Priority and Preset recall are complete; production/public Preload and the
-   Output runtime mutation are active. Speed Group, whole-Cue delete, standalone Playback `SET`,
-   bare `UPDATE`, and Preset transfer follow as separate
-   application-owned actions.
+   acceptance coverage. Priority, Preset recall, Preload, Output, and the Speed Group backend are
+   complete. The Speed Group frontend/public owner and whole-Cue delete are active; standalone
+   Playback `SET`, bare `UPDATE`, and Preset transfer follow as separate application-owned actions.
 5. Complete public portable-show mutation seams for output routes, user layouts, standalone
    Playback/Page operations, typed undo, and any remaining Patch/setup callers. Preserve lossless
    extensions, one transaction/event, revision checks, replay, and stored-empty semantics.
@@ -562,14 +587,16 @@ lifecycle backend.
 8. Repair the remaining stale feature-plan links and keep the committed `docs/engineering` handoff
    synchronized as compatibility adapters are retired.
 
-The refreshed public-boundary audit now counts 145 direct v1 `ApiDriver.command()` scenario calls
-and 184 generic show-object mutation call sites. Priority, Preset recall, and the duplicated unknown-
-input path have moved to typed v2 intents; Preload lifecycle is the next 31-call cohort. The retained
-v1 allowlist is API-004's three edit/target/unknown-envelope calls plus CUE-015's six dedicated
-navigation compatibility calls. The remaining generic writes cover 62 Cuelists, 33 Playbacks, 32
-Groups, 19 output routes, 16 Playback Pages, ten patched fixtures, ten Presets, and two user layouts.
-These inventories must reach their explicit ratchets rather than being concealed behind a generic
-helper.
+The refreshed public-boundary audit now counts **59 direct v1 `ApiDriver.command()` scenario calls
+across 17 files**, plus 13 categorized compatibility calls: eight Speed Group commands and five
+whole-Cue deletes. The direct inventory consists of 23 remaining value calls, 25 selection calls,
+two `playback.go` calls, API-004's three retained edit/target/unknown-envelope probes, and CUE-015's
+six dedicated navigation compatibility calls. CROSS-002's two value calls deliberately remain in
+the 23 because that scenario tests an external authenticated command-WebSocket mutation; ordinary
+value setup should continue shrinking around them. The earlier generic show-object inventory has
+not yet gained an exact ratchet and must be refreshed before its next migration cohort rather than
+treated as current by implication. Every inventory must reach an explicit retained boundary rather
+than being concealed behind a generic helper.
 
 ## Performance and acceptance still required
 
@@ -977,6 +1004,22 @@ helper.
   stale preconditions, all captured revision conflicts, portable Show versus Engine divergence,
   targeted cursor acceptance/conflict/gap behavior, exact event cardinality, shared user desks,
   foreign rejection, rollback, and v1 payload/event compatibility.
+- The scoped Output frontend core passes 63 focused transport/store/session/writer/view tests. Its
+  production composition passes 87 focused tests and the complete 1,853-test frontend suite in 257
+  files, plus typecheck, production build, architecture, source-size, and whitespace gates. The
+  public Output intent adds 8 strict decoder/authority cases; the complete intent config passes 41
+  tests, and SHOW-001 restart passes with its safe-blackout and byte-identical first-frame
+  assertions intact.
+- The typed Speed Group backend passes 11 focused and all 371 application tests, 16 focused server
+  cases, 394 full server tests with one intentional ignore, all 74 wire tests, generated contracts,
+  strict Clippy, and formatting. The sandbox-denied CITP localhost case passes separately with
+  loopback access. Compatibility reset/history/payload behavior and exact event filtering pass;
+  the largest new production file is 284 lines.
+- The first two public Programmer-values cohorts pass all 12 helper tests, the 41-test aggregate
+  intent config, six focused cue-semantic API scenarios, focused DMX/Position/Color paths,
+  typecheck, production build, architecture, source-size, generated contracts, the command-boundary
+  scanner and its 11 unit tests, and whitespace validation. Five cue UI runs remain blocked after
+  successful strict setup by the separately tracked absent Playback-card controls.
 
 ## Wrap-up handoff
 
@@ -996,12 +1039,12 @@ helper.
   is restricted to same-user session rows and remains only for startup and the shrinking
   compatibility surfaces tracked above.
 - Patch/setup selection and explicit Cue pending-choice authority are complete. Public Priority,
-  Preset, hosted-picker, session, desktop, and OSC intents are complete; Preload and the residual
-  command families remain.
+  Preset, hosted-picker, session, desktop, OSC, Preload, Output, and the first 54 normal-values
+  intents are complete; selection, residual values, and the remaining command families continue.
 - Preload now prepares one final-state-aware batch, and virtual-exclusion restart authority is
   private, desk-exact, migration-compatible, and absent from public runtime projections.
-- Recommended next slice: finish the active production/public Preload owners and revisioned Output
-  runtime mutation, then close Speed Group, Cue delete, standalone Playback `SET`, bare `UPDATE`,
+- Recommended next slice: finish the active Speed Group frontend/public owner and typed whole-Cue
+  delete action, then close residual values/selection, standalone Playback `SET`, bare `UPDATE`,
   Preset transfer, and the remaining portable-show action gaps. Keep public-DSL convergence,
   repository-wide acceptance, and reference-hardware performance as the closing milestones.
 
