@@ -66,9 +66,10 @@ pub use mvr_import::{
     PreparedActiveMvrImport, resolve_mvr_definition,
 };
 pub use output_runtime::{
-    OutputLevel, OutputRuntimeChange, OutputRuntimeCommand, OutputRuntimeDurability,
-    OutputRuntimeIdentity, OutputRuntimeOutcome, OutputRuntimePorts, OutputRuntimeProjection,
-    OutputRuntimeResult, OutputRuntimeScope, OutputRuntimeService, OutputRuntimeSnapshot,
+    OutputLevel, OutputRuntimeApplication, OutputRuntimeChange, OutputRuntimeCommand,
+    OutputRuntimeDurability, OutputRuntimeExpectation, OutputRuntimeIdentity, OutputRuntimeOutcome,
+    OutputRuntimePorts, OutputRuntimeProjection, OutputRuntimeResult, OutputRuntimeScope,
+    OutputRuntimeService, OutputRuntimeSnapshot,
 };
 pub use playback::{
     AutomaticPlaybackProjection, CueListRuntimeProjection, CueNumber, GrandMasterRuntimeProjection,

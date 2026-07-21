@@ -5,6 +5,7 @@ use crate::v2::cue_recording::*;
 use crate::v2::cue_transfer::*;
 use crate::v2::events::*;
 use crate::v2::group_recording::*;
+use crate::v2::output_runtime::*;
 use crate::v2::patch::*;
 use crate::v2::playback::*;
 use crate::v2::playback_topology::*;
@@ -25,6 +26,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(programming(config));
     declarations.extend(programming_update(config));
     declarations.extend(playback_projection(config));
+    declarations.extend(output_runtime_transport(config));
     declarations.extend(event_payload(config));
     declarations.extend(playback_transport(config));
     declarations.extend(playback_topology(config));
@@ -32,6 +34,17 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(selective_import(config));
     declarations.extend(interaction(config));
     declarations
+}
+
+fn output_runtime_transport(config: &Config) -> Vec<String> {
+    vec![
+        OutputRuntimeActionRequest::decl(config),
+        OutputRuntimeDurability::decl(config),
+        OutputRuntimeActionState::decl(config),
+        OutputRuntimeActionOutcome::decl(config),
+        OutputRuntimeErrorKind::decl(config),
+        OutputRuntimeErrorResponse::decl(config),
+    ]
 }
 
 fn programming_update(config: &Config) -> Vec<String> {

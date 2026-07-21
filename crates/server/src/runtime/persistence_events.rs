@@ -28,15 +28,99 @@ pub(super) fn output_runtime_setting(show_id: light_core::ShowId) -> String {
     format!("output_runtime:{}", show_id.0)
 }
 
+pub(super) fn load_output_runtime_for_show(
+    state: &AppState,
+    show_id: light_core::ShowId,
+) -> Result<PersistedOutputRuntime, ApiError> {
+    let Some(serialized) = state
+        .desk
+        .lock()
+        .setting(&output_runtime_setting(show_id))
+        .map_err(ApiError::store)?
+    else {
+        return Ok(PersistedOutputRuntime::default());
+    };
+    match serde_json::from_str::<PersistedOutputRuntime>(&serialized) {
+        Ok(runtime) if runtime.is_valid() => Ok(runtime),
+        Ok(_) => {
+            tracing::warn!(?show_id, "ignoring invalid persisted output runtime");
+            Ok(PersistedOutputRuntime::default())
+        }
+        Err(error) => {
+            tracing::warn!(?show_id, %error, "ignoring invalid persisted output runtime");
+            Ok(PersistedOutputRuntime::default())
+        }
+    }
+}
+
+pub(super) fn restore_output_runtime_for_show(
+    state: &AppState,
+    show_id: light_core::ShowId,
+    runtime: PersistedOutputRuntime,
+) {
+    debug_assert_eq!(
+        state.active_show.read().as_ref().map(|show| show.id),
+        Some(show_id)
+    );
+    restore_output_group_masters(state, &runtime);
+    state
+        .engine
+        .execute_playback(EnginePlaybackCommand::RestoreDynamicsPausedSince(
+            runtime.dynamics_paused_at,
+        ))
+        .expect("restoring dynamics pause state is infallible");
+    {
+        let mut control = state.output_control.lock();
+        control.options.grand_master = runtime.grand_master;
+        control.options.blackout = runtime.blackout;
+        control.revision = runtime.revision;
+    }
+    state.output_runtime_service.clear_replay();
+}
+
+fn restore_output_group_masters(state: &AppState, runtime: &PersistedOutputRuntime) {
+    if runtime.group_masters.is_empty() {
+        return;
+    }
+    let mut snapshot = (*state.engine.snapshot()).clone();
+    for group in &mut snapshot.groups {
+        if let Some(master) = runtime.group_masters.get(&group.id) {
+            group.master = *master;
+        }
+    }
+    if let Err(error) = state.engine.replace_snapshot(snapshot) {
+        tracing::warn!(%error, "ignoring persisted group output masters");
+    }
+}
+
 pub(super) fn persist_output_runtime(state: &AppState) -> Result<(), ApiError> {
+    #[cfg(test)]
+    {
+        state
+            .output_runtime_persistence_attempts
+            .fetch_add(1, Ordering::Relaxed);
+        if state
+            .output_runtime_persistence_failure
+            .load(Ordering::Relaxed)
+        {
+            return Err(ApiError::unavailable(
+                "injected output runtime persistence failure",
+            ));
+        }
+    }
     let Some(show) = state.active_show.read().clone() else {
         return Ok(());
     };
-    let (grand_master, blackout) = {
+    let (revision, grand_master, blackout) = {
         let control = state.output_control.lock();
-        (control.options.grand_master, control.options.blackout)
+        (
+            control.revision,
+            control.options.grand_master,
+            control.options.blackout,
+        )
     };
     let runtime = PersistedOutputRuntime {
+        revision,
         grand_master,
         blackout,
         dynamics_paused_at: state.engine.playback_dynamics().paused_since,

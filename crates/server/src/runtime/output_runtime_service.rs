@@ -1,9 +1,11 @@
 use super::{ApiError, AppState, Session, emit, persist_output_runtime};
 use light_application::{
-    ActionContext, ActionEnvelope, ActionError, ActionErrorKind, OutputLevel, OutputRuntimeCommand,
-    OutputRuntimeDurability, OutputRuntimeIdentity, OutputRuntimePorts, OutputRuntimeProjection,
-    OutputRuntimeResult, OutputRuntimeScope, OutputRuntimeSnapshot,
+    ActionContext, ActionEnvelope, ActionError, ActionErrorKind, OutputLevel,
+    OutputRuntimeApplication, OutputRuntimeCommand, OutputRuntimeDurability, OutputRuntimeIdentity,
+    OutputRuntimePorts, OutputRuntimeProjection, OutputRuntimeResult, OutputRuntimeScope,
+    OutputRuntimeSnapshot,
 };
+use uuid::Uuid;
 
 pub(super) fn command(
     grand_master: Option<f32>,
@@ -18,17 +20,45 @@ pub(super) fn command(
     Ok(OutputRuntimeCommand::new(grand_master, blackout))
 }
 
+pub(super) fn exact_command(
+    show_id: Uuid,
+    revision: u64,
+    grand_master: Option<f32>,
+    blackout: Option<bool>,
+) -> Result<OutputRuntimeCommand, ApiError> {
+    if grand_master.is_none() && blackout.is_none() {
+        return Err(ApiError::bad_request(
+            "at least one of grand_master or blackout is required",
+        ));
+    }
+    let command = command(grand_master, blackout)?;
+    Ok(OutputRuntimeCommand::exact(
+        show_id,
+        revision,
+        command.grand_master,
+        command.blackout,
+    ))
+}
+
 pub(super) fn execute(
     state: &AppState,
     session: Option<&Session>,
     context: ActionContext,
     command: OutputRuntimeCommand,
 ) -> Result<OutputRuntimeResult, ApiError> {
+    execute_action(state, session, context, command).map_err(action_error)
+}
+
+pub(super) fn execute_action(
+    state: &AppState,
+    session: Option<&Session>,
+    context: ActionContext,
+    command: OutputRuntimeCommand,
+) -> Result<OutputRuntimeResult, ActionError> {
     let ports = ServerOutputRuntimePorts { state, session };
     state
         .output_runtime_service
         .handle(ActionEnvelope { context, command }, &ports)
-        .map_err(action_error)
 }
 
 pub(super) fn execute_while_show_stable(
@@ -90,12 +120,12 @@ impl OutputRuntimePorts for ServerOutputRuntimePorts<'_> {
                 .as_ref()
                 .map(|show| show.id.0)
                 .unwrap_or_default(),
-            show_revision: self.state.engine.snapshot().revision,
         };
         let control = self.state.output_control.lock();
         Ok(OutputRuntimeProjection {
             scope,
             identity,
+            revision: control.revision,
             grand_master: control.options.grand_master,
             blackout: control.options.blackout,
         })
@@ -105,17 +135,25 @@ impl OutputRuntimePorts for ServerOutputRuntimePorts<'_> {
         &self,
         context: &ActionContext,
         command: OutputRuntimeCommand,
-    ) -> Result<OutputRuntimeDurability, ActionError> {
+    ) -> Result<OutputRuntimeApplication, ActionError> {
         {
             let mut control = self.state.output_control.lock();
+            let next_revision = control.revision.checked_add(1).ok_or_else(|| {
+                ActionError::new(ActionErrorKind::Unavailable, "output revision is exhausted")
+            })?;
             if let Some(level) = command.grand_master {
                 control.options.grand_master = level.value();
             }
             if let Some(blackout) = command.blackout {
                 control.options.blackout = blackout;
             }
+            control.revision = next_revision;
         }
         if let Err(error) = persist_output_runtime(self.state) {
+            let warning = format!(
+                "global output runtime persistence is pending: {}",
+                error.message
+            );
             tracing::error!(error=%error.message, "global output runtime persistence is pending");
             emit(
                 self.state,
@@ -125,13 +163,16 @@ impl OutputRuntimePorts for ServerOutputRuntimePorts<'_> {
                     "error": error.message,
                 }),
             );
-            return Ok(OutputRuntimeDurability::PersistencePending);
+            return Ok(OutputRuntimeApplication {
+                durability: OutputRuntimeDurability::PersistencePending,
+                warning: Some(warning),
+            });
         }
-        Ok(OutputRuntimeDurability::Durable)
+        Ok(OutputRuntimeApplication::durable())
     }
 }
 
-fn action_error(error: ActionError) -> ApiError {
+pub(super) fn action_error(error: ActionError) -> ApiError {
     match error.kind {
         ActionErrorKind::Invalid => ApiError::bad_request(error.message),
         ActionErrorKind::Unauthorized => ApiError::unauthorized(error.message),

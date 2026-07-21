@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OutputRuntimeActionRequest",
+  "type": "object",
+  "properties": {
+    "blackout": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "expected_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "expected_show_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "grand_master": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "format": "float"
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "expected_show_id",
+    "expected_revision"
+  ]
+}

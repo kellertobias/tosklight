@@ -1,7 +1,7 @@
 use crate::{ActionContext, ActionError};
 
 use super::{
-    OutputRuntimeCommand, OutputRuntimeDurability, OutputRuntimeIdentity, OutputRuntimeProjection,
+    OutputRuntimeApplication, OutputRuntimeCommand, OutputRuntimeIdentity, OutputRuntimeProjection,
 };
 
 pub trait OutputRuntimePorts: Send + Sync {
@@ -20,5 +20,5 @@ pub trait OutputRuntimePorts: Send + Sync {
         &self,
         context: &ActionContext,
         command: OutputRuntimeCommand,
-    ) -> Result<OutputRuntimeDurability, ActionError>;
+    ) -> Result<OutputRuntimeApplication, ActionError>;
 }

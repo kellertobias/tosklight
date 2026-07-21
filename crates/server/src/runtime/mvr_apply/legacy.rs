@@ -68,6 +68,7 @@ pub(super) async fn apply_legacy_mvr_import(
     std::fs::rename(&temporary, &entry.path).map_err(ApiError::io)?;
     publish_mvr_definitions(state, new_definitions, &mut warnings);
     if open_after {
+        let output_runtime = load_output_runtime_for_show(state, entry.id)?;
         let compiled = load_engine_snapshot(&entry).map_err(ApiError::bad_request)?;
         let context = operator_action_context(&session, light_application::ActionSource::Http);
         activate_snapshot(state, compiled, &context, &Transition::HoldCurrent, None).await?;
@@ -77,6 +78,7 @@ pub(super) async fn apply_legacy_mvr_import(
             .set_active_show(Some(entry.id))
             .map_err(ApiError::store)?;
         *state.active_show.write() = Some(entry.clone());
+        restore_output_runtime_for_show(state, entry.id, output_runtime);
     }
     emit(
         state,

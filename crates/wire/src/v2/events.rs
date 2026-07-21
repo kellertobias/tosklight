@@ -249,26 +249,30 @@ pub enum OutputRuntimeIdentity {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct OutputRuntimeScope {
     pub show_id: Uuid,
-    #[ts(type = "number")]
-    pub show_revision: u64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct OutputRuntimeProjection {
     pub scope: OutputRuntimeScope,
     pub identity: OutputRuntimeIdentity,
+    #[ts(type = "number")]
+    pub revision: u64,
     pub grand_master: f32,
     pub blackout: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct OutputRuntimeChange {
     pub projection: OutputRuntimeProjection,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct OutputRuntimeSnapshot {
     pub cursor: EventSnapshotCursor,
     pub projection: OutputRuntimeProjection,

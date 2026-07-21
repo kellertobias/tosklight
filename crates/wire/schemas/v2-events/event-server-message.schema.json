@@ -936,6 +936,7 @@
           "$ref": "#/$defs/OutputRuntimeProjection"
         }
       },
+      "additionalProperties": false,
       "required": [
         "projection"
       ]
@@ -959,13 +960,20 @@
         "identity": {
           "$ref": "#/$defs/OutputRuntimeIdentity"
         },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
         "scope": {
           "$ref": "#/$defs/OutputRuntimeScope"
         }
       },
+      "additionalProperties": false,
       "required": [
         "scope",
         "identity",
+        "revision",
         "grand_master",
         "blackout"
       ]
@@ -976,16 +984,11 @@
         "show_id": {
           "type": "string",
           "format": "uuid"
-        },
-        "show_revision": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
         }
       },
+      "additionalProperties": false,
       "required": [
-        "show_id",
-        "show_revision"
+        "show_id"
       ]
     },
     "PatchDelta": {

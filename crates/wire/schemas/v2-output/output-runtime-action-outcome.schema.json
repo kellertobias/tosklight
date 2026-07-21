@@ -1,32 +1,77 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "OutputRuntimeSnapshot",
+  "title": "OutputRuntimeActionOutcome",
   "type": "object",
   "properties": {
-    "cursor": {
-      "$ref": "#/$defs/EventSnapshotCursor"
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "durability": {
+      "$ref": "#/$defs/OutputRuntimeDurability"
     },
     "projection": {
       "$ref": "#/$defs/OutputRuntimeProjection"
+    },
+    "replayed": {
+      "type": "boolean"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "warning": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
-  "additionalProperties": false,
-  "required": [
-    "cursor",
-    "projection"
-  ],
-  "$defs": {
-    "EventSnapshotCursor": {
+  "oneOf": [
+    {
       "type": "object",
       "properties": {
-        "sequence": {
+        "event_sequence": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "changed"
         }
       },
       "required": [
-        "sequence"
+        "status",
+        "event_sequence"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "no_change"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    }
+  ],
+  "required": [
+    "request_id",
+    "correlation_id",
+    "projection",
+    "replayed",
+    "durability"
+  ],
+  "unevaluatedProperties": false,
+  "$defs": {
+    "OutputRuntimeDurability": {
+      "type": "string",
+      "enum": [
+        "durable",
+        "persistence_pending"
       ]
     },
     "OutputRuntimeIdentity": {

@@ -20,6 +20,7 @@ pub(super) async fn open_show(
     }
     let _activation = state.activation_lock.lock().await;
     validate_show_file(&entry.path).map_err(ApiError::store)?;
+    let output_runtime = load_output_runtime_for_show(&state, entry.id)?;
     let previous = state.active_show.read().clone();
     if let Some(previous) = &previous {
         state
@@ -46,6 +47,7 @@ pub(super) async fn open_show(
         .map_err(ApiError::store)?;
     *state.active_show.write() = Some(entry.clone());
     *state.active_show_error.write() = None;
+    restore_output_runtime_for_show(&state, entry.id, output_runtime);
     emit(
         &state,
         "show_opened",
@@ -81,6 +83,7 @@ pub(super) async fn open_clean_default_show(
         return Err(ApiError::store(error));
     }
     let _activation = state.activation_lock.lock().await;
+    let output_runtime = load_output_runtime_for_show(&state, entry.id)?;
     let prepared = match prepare_show_for_runtime(&state, &entry) {
         Ok(prepared) => prepared,
         Err(error) => {
@@ -114,6 +117,7 @@ pub(super) async fn open_clean_default_show(
     }
     *state.active_show.write() = Some(entry.clone());
     *state.active_show_error.write() = None;
+    restore_output_runtime_for_show(&state, entry.id, output_runtime);
     emit(
         &state,
         "show_opened",
@@ -144,6 +148,7 @@ pub(super) async fn rollback_show(
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("rollback show"))?;
     let _activation = state.activation_lock.lock().await;
+    let output_runtime = load_output_runtime_for_show(&state, entry.id)?;
     let prepared = prepare_show_for_runtime(&state, &entry)?;
     let current = state.active_show.read().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
@@ -170,6 +175,7 @@ pub(super) async fn rollback_show(
     }
     *state.active_show.write() = Some(entry.clone());
     *state.active_show_error.write() = None;
+    restore_output_runtime_for_show(&state, entry.id, output_runtime);
     emit(
         &state,
         "show_rolled_back",

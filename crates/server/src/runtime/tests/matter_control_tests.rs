@@ -217,6 +217,10 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
             ..PoolPlaybackInput::default()
         },
         PlaybackDispatchContext {
+            action: &light_application::ActionContext::system(
+                Uuid::nil(),
+                light_application::ActionSource::Osc,
+            ),
             session: None,
             desk: None,
             source: "osc",
@@ -396,6 +400,7 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
     assert_eq!(state.engine.snapshot().groups[0].master, 1.0);
     drop(activation);
 
+    let output_cursor = state.application_events.latest_sequence();
     for playback in 1..=5 {
         apply_matter_playback_write(
             &state,
@@ -419,5 +424,24 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
     assert_eq!(configuration.programmer_fade_millis, 10_000);
     assert_eq!(configuration.sequence_master_fade_millis, 30_000);
     assert!((state.output_control.lock().options.grand_master - 0.5).abs() < 0.001);
+    let light_application::EventReplay::Events(output_events) = state.application_events.replay(
+        output_cursor,
+        &light_application::EventFilter::default()
+            .with_object(light_application::EventObject::global_output()),
+    ) else {
+        panic!("Matter output event should be retained");
+    };
+    assert_eq!(output_events.len(), 1);
+    assert_eq!(
+        output_events[0].source,
+        light_application::EventSource::Action(light_application::ActionSource::Matter)
+    );
+    let light_application::ApplicationEvent::Output(
+        light_application::OutputEvent::RuntimeChanged(change),
+    ) = &output_events[0].payload
+    else {
+        panic!("expected output-runtime event");
+    };
+    assert_eq!(change.projection.revision, 1);
     let _ = std::fs::remove_dir_all(data_dir);
 }

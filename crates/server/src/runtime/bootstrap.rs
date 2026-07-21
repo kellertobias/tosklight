@@ -208,6 +208,10 @@ fn build_app_state(
         matter_bridge: Arc::clone(&resources.matter_bridge),
         matter_transport: Some(matter_transport),
         output_control,
+        #[cfg(test)]
+        output_runtime_persistence_attempts: Arc::new(AtomicU64::new(0)),
+        #[cfg(test)]
+        output_runtime_persistence_failure: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         activation_lock: Arc::clone(&resources.activation_lock),
         timecode_router: Arc::clone(&resources.timecode_router),
         active_show: Arc::clone(&resources.active_show),

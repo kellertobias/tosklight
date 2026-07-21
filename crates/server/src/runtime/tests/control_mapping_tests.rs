@@ -114,7 +114,7 @@ fn mapped_global_output_respects_the_osc_desk_alias_lock() {
 }
 
 #[test]
-fn configured_grand_master_playback_remains_a_playback_event() {
+fn configured_grand_master_playback_keeps_playback_and_output_events() {
     let (state, data_dir) = test_state();
     state
         .engine
@@ -134,7 +134,7 @@ fn configured_grand_master_playback_remains_a_playback_event() {
         &state,
         None,
         None,
-        context,
+        context.clone(),
         light_application::PlaybackCommand {
             address: light_application::PlaybackAddress::Pool(7),
             action: light_application::PlaybackAction::Master(
@@ -164,7 +164,48 @@ fn configured_grand_master_playback_remains_a_playback_event() {
     ) else {
         panic!("complete retained history should replay");
     };
-    assert!(output_events.is_empty());
+    assert_eq!(output_events.len(), 1);
+    assert_eq!(
+        output_events[0].source,
+        light_application::EventSource::Action(light_application::ActionSource::Midi)
+    );
+    let light_application::ApplicationEvent::Output(
+        light_application::OutputEvent::RuntimeChanged(change),
+    ) = &output_events[0].payload
+    else {
+        panic!("expected output-runtime event");
+    };
+    assert_eq!(change.projection.revision, 1);
+    assert_eq!(change.projection.grand_master, 0.6);
+
+    playback_service::execute(
+        &state,
+        None,
+        None,
+        context,
+        light_application::PlaybackCommand {
+            address: light_application::PlaybackAddress::Pool(7),
+            action: light_application::PlaybackAction::Blackout { pressed: true },
+            surface: light_application::PlaybackSurface::Physical,
+        },
+    )
+    .unwrap();
+    let light_application::EventReplay::Events(output_events) = state.application_events.replay(
+        0,
+        &light_application::EventFilter::default()
+            .with_object(light_application::EventObject::global_output()),
+    ) else {
+        panic!("complete retained history should replay");
+    };
+    assert_eq!(output_events.len(), 2);
+    let light_application::ApplicationEvent::Output(
+        light_application::OutputEvent::RuntimeChanged(change),
+    ) = &output_events[1].payload
+    else {
+        panic!("expected output-runtime event");
+    };
+    assert_eq!(change.projection.revision, 2);
+    assert!(change.projection.blackout);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

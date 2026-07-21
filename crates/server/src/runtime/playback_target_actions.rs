@@ -11,6 +11,7 @@ use specialized::{apply_specialized_master, apply_specialized_target_action};
 pub(super) struct PlaybackTargetOutcome {
     pub(super) changed: bool,
     pub(super) addressed_event_required: bool,
+    pub(super) persistence_pending: bool,
     pub(super) released_playbacks: Vec<u16>,
     pub(super) persistence: PlaybackPersistencePlan,
 }
@@ -20,6 +21,7 @@ impl PlaybackTargetOutcome {
         Self {
             changed,
             addressed_event_required: false,
+            persistence_pending: false,
             released_playbacks: Vec::new(),
             persistence: PlaybackPersistencePlan::none(),
         }
@@ -29,6 +31,7 @@ impl PlaybackTargetOutcome {
         Self {
             changed,
             addressed_event_required: false,
+            persistence_pending: false,
             released_playbacks: Vec::new(),
             persistence: if changed {
                 PlaybackPersistencePlan::output_runtime()
@@ -38,9 +41,21 @@ impl PlaybackTargetOutcome {
         }
     }
 
+    fn converged_output(result: &light_application::OutputRuntimeResult) -> Self {
+        Self {
+            changed: result.outcome == light_application::OutputRuntimeOutcome::Applied,
+            addressed_event_required: false,
+            persistence_pending: result.durability
+                == light_application::OutputRuntimeDurability::PersistencePending,
+            released_playbacks: Vec::new(),
+            persistence: PlaybackPersistencePlan::none(),
+        }
+    }
+
     pub(super) fn combine(mut self, other: Self) -> Self {
         self.changed |= other.changed;
         self.addressed_event_required |= other.addressed_event_required;
+        self.persistence_pending |= other.persistence_pending;
         self.released_playbacks.extend(other.released_playbacks);
         self.persistence = self.persistence.combine(other.persistence);
         self
@@ -65,6 +80,7 @@ fn execute_pool_with_exclusions(
         changed: effect.changed(),
         addressed_event_required: effect.addressed.changed()
             && may_change_unprojected_runtime(action),
+        persistence_pending: false,
         released_playbacks: transition.released_playbacks,
         persistence: PlaybackPersistencePlan::for_cuelist(effect.aggregate),
     })
@@ -83,6 +99,8 @@ const fn may_change_unprojected_runtime(action: PoolPlaybackAction) -> bool {
 
 pub(super) fn apply_playback_master(
     state: &AppState,
+    context: &light_application::ActionContext,
+    session: Option<&Session>,
     definition: &light_playback::PlaybackDefinition,
     input: &PoolPlaybackInput,
     source: &str,
@@ -118,7 +136,7 @@ pub(super) fn apply_playback_master(
             )
         };
     }
-    apply_specialized_master(state, definition, input, value)
+    apply_specialized_master(state, context, session, definition, input, value)
 }
 
 pub(super) fn apply_direct_playback_action(
@@ -258,6 +276,7 @@ fn apply_cuelist_action(
 
 pub(super) fn apply_playback_target_action(
     state: &AppState,
+    context: &light_application::ActionContext,
     session: Option<&Session>,
     definition: &light_playback::PlaybackDefinition,
     action: Action,
@@ -278,7 +297,7 @@ pub(super) fn apply_playback_target_action(
             activation_origin,
         );
     }
-    apply_specialized_target_action(state, session, definition, action, input, pressed)
+    apply_specialized_target_action(state, context, session, definition, action, input, pressed)
 }
 
 #[cfg(test)]

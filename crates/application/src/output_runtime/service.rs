@@ -12,7 +12,8 @@ use crate::{
 };
 
 use super::{
-    OutputRuntimeCommand, OutputRuntimeIdentity, OutputRuntimeOutcome, OutputRuntimePorts,
+    OutputRuntimeApplication, OutputRuntimeCommand, OutputRuntimeExpectation,
+    OutputRuntimeIdentity, OutputRuntimeOutcome, OutputRuntimePorts, OutputRuntimeProjection,
     OutputRuntimeResult, OutputRuntimeScope, OutputRuntimeSnapshot,
 };
 
@@ -46,26 +47,36 @@ impl OutputRuntimeService {
         let _ordered = self.operation.lock();
         ports.authorize(&envelope.context)?;
         let before = ports.projection(&envelope.context, OutputRuntimeIdentity::GlobalMaster)?;
-        if let Some(result) = self.cached(&envelope, before.scope)? {
+        if let Some(result) = self.cached(&envelope, before)? {
             return Ok(result);
         }
+        validate_expectation(envelope.command.expectation, before)?;
         let desired = envelope.command.desired(before);
         let result = if desired == before {
             unchanged(&envelope.context, before)
         } else {
-            let durability = ports.apply(&envelope.context, envelope.command)?;
+            let next_revision = before.revision.checked_add(1).ok_or_else(|| {
+                ActionError::new(
+                    ActionErrorKind::Internal,
+                    "output runtime revision exhausted",
+                )
+                .at_revision(before.revision)
+            })?;
+            let application = ports.apply(&envelope.context, envelope.command)?;
             let projection =
                 ports.projection(&envelope.context, OutputRuntimeIdentity::GlobalMaster)?;
-            if projection.scope != before.scope {
-                return Err(ActionError::new(
-                    ActionErrorKind::Busy,
-                    "active output runtime changed while the command was applied",
-                ));
-            }
-            changed(&self.events, &envelope.context, durability, projection)
+            validate_applied_projection(before, desired, next_revision, projection)?;
+            changed(&self.events, &envelope.context, application, projection)
         };
         self.remember(&envelope, before.scope, &result);
         Ok(result)
+    }
+
+    /// Active-Show installation replaces the persisted Output authority. Cached request outcomes
+    /// cannot cross that installation, including when the same Show ID is reopened after a prior
+    /// persistence-pending action.
+    pub fn clear_replay(&self) {
+        *self.replay.lock() = ReplayCache::default();
     }
 
     pub fn snapshot(
@@ -87,12 +98,14 @@ impl OutputRuntimeService {
     fn cached(
         &self,
         envelope: &ActionEnvelope<OutputRuntimeCommand>,
-        scope: OutputRuntimeScope,
+        projection: OutputRuntimeProjection,
     ) -> Result<Option<OutputRuntimeResult>, ActionError> {
-        let Some(key) = ReplayKey::from_envelope(envelope, scope) else {
+        let Some(key) = ReplayKey::from_envelope(envelope, projection.scope) else {
             return Ok(None);
         };
-        self.replay.lock().get(&key, envelope.command)
+        self.replay
+            .lock()
+            .get(&key, envelope.command, projection.revision)
     }
 
     fn remember(
@@ -110,6 +123,54 @@ impl OutputRuntimeService {
     }
 }
 
+fn validate_applied_projection(
+    before: OutputRuntimeProjection,
+    mut desired: OutputRuntimeProjection,
+    next_revision: u64,
+    applied: OutputRuntimeProjection,
+) -> Result<(), ActionError> {
+    if applied.scope != before.scope {
+        return Err(ActionError::new(
+            ActionErrorKind::Busy,
+            "active output runtime changed while the command was applied",
+        )
+        .at_revision(applied.revision));
+    }
+    desired.revision = next_revision;
+    if applied != desired {
+        return Err(ActionError::new(
+            ActionErrorKind::Internal,
+            "output runtime adapter returned a non-authoritative projection",
+        )
+        .at_revision(applied.revision));
+    }
+    Ok(())
+}
+
+fn validate_expectation(
+    expectation: OutputRuntimeExpectation,
+    projection: OutputRuntimeProjection,
+) -> Result<(), ActionError> {
+    let OutputRuntimeExpectation::Exact { show_id, revision } = expectation else {
+        return Ok(());
+    };
+    if projection.scope.show_id != show_id {
+        return Err(ActionError::new(
+            ActionErrorKind::Conflict,
+            "active Show changed before the output action",
+        )
+        .at_revision(projection.revision));
+    }
+    if projection.revision != revision {
+        return Err(ActionError::new(
+            ActionErrorKind::Conflict,
+            "output runtime revision conflict",
+        )
+        .at_revision(projection.revision));
+    }
+    Ok(())
+}
+
 fn unchanged(
     context: &ActionContext,
     projection: super::OutputRuntimeProjection,
@@ -118,6 +179,7 @@ fn unchanged(
         context: context.clone(),
         outcome: OutputRuntimeOutcome::NoChange,
         durability: super::OutputRuntimeDurability::Durable,
+        warning: None,
         projection,
         event_sequence: None,
         replayed: false,
@@ -127,7 +189,7 @@ fn unchanged(
 fn changed(
     events: &EventBus,
     context: &ActionContext,
-    durability: super::OutputRuntimeDurability,
+    application: OutputRuntimeApplication,
     projection: super::OutputRuntimeProjection,
 ) -> OutputRuntimeResult {
     let event = events.publish(EventDraft::output_runtime_changed(
@@ -137,7 +199,8 @@ fn changed(
     OutputRuntimeResult {
         context: context.clone(),
         outcome: OutputRuntimeOutcome::Applied,
-        durability,
+        durability: application.durability,
+        warning: application.warning,
         projection,
         event_sequence: Some(event.sequence),
         replayed: false,
@@ -183,6 +246,7 @@ impl ReplayCache {
         &self,
         key: &ReplayKey,
         command: OutputRuntimeCommand,
+        current_revision: u64,
     ) -> Result<Option<OutputRuntimeResult>, ActionError> {
         let Some(entry) = self.entries.get(key) else {
             return Ok(None);
@@ -191,7 +255,8 @@ impl ReplayCache {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,
                 "request_id was already used for a different output operation",
-            ));
+            )
+            .at_revision(current_revision));
         }
         let mut result = entry.result.clone();
         result.replayed = true;

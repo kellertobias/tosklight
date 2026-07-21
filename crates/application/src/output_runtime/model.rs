@@ -22,6 +22,7 @@ impl OutputLevel {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OutputRuntimeCommand {
+    pub expectation: OutputRuntimeExpectation,
     pub grand_master: Option<OutputLevel>,
     pub blackout: Option<bool>,
 }
@@ -29,6 +30,20 @@ pub struct OutputRuntimeCommand {
 impl OutputRuntimeCommand {
     pub const fn new(grand_master: Option<OutputLevel>, blackout: Option<bool>) -> Self {
         Self {
+            expectation: OutputRuntimeExpectation::Current,
+            grand_master,
+            blackout,
+        }
+    }
+
+    pub const fn exact(
+        show_id: Uuid,
+        revision: u64,
+        grand_master: Option<OutputLevel>,
+        blackout: Option<bool>,
+    ) -> Self {
+        Self {
+            expectation: OutputRuntimeExpectation::Exact { show_id, revision },
             grand_master,
             blackout,
         }
@@ -45,6 +60,12 @@ impl OutputRuntimeCommand {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OutputRuntimeExpectation {
+    Current,
+    Exact { show_id: Uuid, revision: u64 },
+}
+
 impl ApplicationCommand for OutputRuntimeCommand {
     type Value = OutputRuntimeResult;
 
@@ -54,13 +75,13 @@ impl ApplicationCommand for OutputRuntimeCommand {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct OutputRuntimeScope {
     pub show_id: Uuid,
-    pub show_revision: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OutputRuntimeProjection {
     pub scope: OutputRuntimeScope,
     pub identity: OutputRuntimeIdentity,
+    pub revision: u64,
     pub grand_master: f32,
     pub blackout: bool,
 }
@@ -82,11 +103,27 @@ pub enum OutputRuntimeDurability {
     PersistencePending,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OutputRuntimeApplication {
+    pub durability: OutputRuntimeDurability,
+    pub warning: Option<String>,
+}
+
+impl OutputRuntimeApplication {
+    pub const fn durable() -> Self {
+        Self {
+            durability: OutputRuntimeDurability::Durable,
+            warning: None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct OutputRuntimeResult {
     pub context: ActionContext,
     pub outcome: OutputRuntimeOutcome,
     pub durability: OutputRuntimeDurability,
+    pub warning: Option<String>,
     pub projection: OutputRuntimeProjection,
     pub event_sequence: Option<u64>,
     pub replayed: bool,

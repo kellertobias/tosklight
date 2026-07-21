@@ -159,11 +159,11 @@ fn global_output_change_keeps_identity_source_and_correlation() {
             projection: OutputRuntimeProjection {
                 scope: OutputRuntimeScope {
                     show_id: Uuid::from_u128(40),
-                    show_revision: 7,
                 },
                 identity: OutputRuntimeIdentity::GlobalMaster,
                 grand_master: 0.6,
                 blackout: true,
+                revision: 7,
             },
         },
     ));
@@ -195,7 +195,7 @@ fn global_output_change_keeps_identity_source_and_correlation() {
         change.projection.identity,
         wire::OutputRuntimeIdentity::GlobalMaster
     );
-    assert_eq!(change.projection.scope.show_revision, 7);
+    assert_eq!(change.projection.revision, 7);
     assert_eq!(change.projection.grand_master, 0.6);
     assert!(change.projection.blackout);
 }

@@ -103,6 +103,7 @@ pub(super) async fn desk_lock_boundary(
     if request.method() == Method::GET
         || request.method() == Method::OPTIONS
         || is_programming_update_route(request.method(), path)
+        || is_output_runtime_action_route(request.method(), path)
         || path == "/api/v1/sessions"
         || path.starts_with("/api/v1/desk-lock")
     {
@@ -121,6 +122,17 @@ pub(super) async fn desk_lock_boundary(
         return ApiError::conflict("desk is locked").into_response();
     }
     next.run(request).await
+}
+
+fn is_output_runtime_action_route(method: &Method, path: &str) -> bool {
+    let parts = path.trim_matches('/').split('/').collect::<Vec<_>>();
+    matches!(
+        (method, parts.as_slice()),
+        (
+            &Method::POST,
+            ["api", "v2", "desks", _, "output-runtime", _]
+        )
+    )
 }
 
 fn is_programming_update_route(method: &Method, path: &str) -> bool {

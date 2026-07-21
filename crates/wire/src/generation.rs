@@ -1,6 +1,7 @@
 //! Deterministic checked-in artifacts derived from the Rust wire DTOs.
 
 mod declarations;
+mod output;
 
 use std::{fs, io, path::Path};
 
@@ -82,6 +83,14 @@ pub struct GeneratedArtifact {
 
 /// Render every checked-in artifact without touching the filesystem.
 pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
+    let mut artifacts = command_and_event_artifacts();
+    artifacts.extend(output::artifacts());
+    artifacts.extend(programming_artifacts());
+    artifacts.extend(playback_and_show_artifacts());
+    artifacts
+}
+
+fn command_and_event_artifacts() -> Vec<GeneratedArtifact> {
     vec![
         GeneratedArtifact {
             path: TYPESCRIPT_PATH.into(),
@@ -106,6 +115,11 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         event_request_schema::<EventClientMessage>("event-client-message"),
         event_response_schema::<EventServerMessage>("event-server-message"),
         event_response_schema::<OutputRuntimeSnapshot>("output-runtime-snapshot"),
+    ]
+}
+
+fn programming_artifacts() -> Vec<GeneratedArtifact> {
+    vec![
         programming_request_schema::<ProgrammingValuesActionRequest>(
             "programming-values-action-request",
         ),
@@ -196,6 +210,11 @@ pub fn generated_artifacts() -> Vec<GeneratedArtifact> {
         programming_response_schema::<ProgrammingUpdateSettingsProjection>(
             "programming-update-settings-projection",
         ),
+    ]
+}
+
+fn playback_and_show_artifacts() -> Vec<GeneratedArtifact> {
+    vec![
         playback_request_schema::<PlaybackActionRequest>("playback-action-request"),
         playback_response_schema::<PlaybackActionOutcome>("playback-action-outcome"),
         playback_response_schema::<PlaybackErrorResponse>("playback-error-response"),

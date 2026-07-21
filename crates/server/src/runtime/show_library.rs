@@ -134,6 +134,7 @@ pub(super) async fn open_show_revision(
         return Err(ApiError::store(error));
     }
     let _activation = state.activation_lock.lock().await;
+    let output_runtime = load_output_runtime_for_show(&state, copy.id)?;
     let prepared = match prepare_show_for_runtime(&state, &copy) {
         Ok(prepared) => prepared,
         Err(error) => {
@@ -169,6 +170,7 @@ pub(super) async fn open_show_revision(
     }
     *state.active_show.write() = Some(copy.clone());
     *state.active_show_error.write() = None;
+    restore_output_runtime_for_show(&state, copy.id, output_runtime);
     emit(
         &state,
         "show_opened",

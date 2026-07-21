@@ -2,6 +2,8 @@ use super::*;
 
 pub(super) fn apply_specialized_master(
     state: &AppState,
+    context: &light_application::ActionContext,
+    session: Option<&Session>,
     definition: &light_playback::PlaybackDefinition,
     input: &PoolPlaybackInput,
     value: f32,
@@ -13,9 +15,9 @@ pub(super) fn apply_specialized_master(
             apply_speed_group_playback_action(state, group, "master", input, definition.fader)
                 .map(PlaybackTargetOutcome::changed)
         }
-        PlaybackTarget::GrandMaster => Ok(PlaybackTargetOutcome::output_runtime(set_grand_master(
-            state, value,
-        ))),
+        PlaybackTarget::GrandMaster => {
+            apply_global_output(state, context, session, Some(value), None)
+        }
         PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => {
             apply_time_master_fader(state, definition, value).map(PlaybackTargetOutcome::changed)
         }
@@ -25,6 +27,7 @@ pub(super) fn apply_specialized_master(
 
 pub(super) fn apply_specialized_target_action(
     state: &AppState,
+    context: &light_application::ActionContext,
     session: Option<&Session>,
     definition: &light_playback::PlaybackDefinition,
     action: Action,
@@ -39,7 +42,9 @@ pub(super) fn apply_specialized_target_action(
             apply_speed_action(state, group, action, input, definition.fader)
                 .map(PlaybackTargetOutcome::changed)
         }
-        PlaybackTarget::GrandMaster => apply_grand_master_action(state, action, pressed),
+        PlaybackTarget::GrandMaster => {
+            apply_grand_master_action(state, context, session, action, pressed)
+        }
         PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => {
             apply_time_master_action(state, definition, action).map(PlaybackTargetOutcome::changed)
         }
@@ -106,30 +111,42 @@ fn apply_speed_action(
 
 fn apply_grand_master_action(
     state: &AppState,
+    context: &light_application::ActionContext,
+    session: Option<&Session>,
     action: Action,
     pressed: bool,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     match action {
-        Action::Blackout => toggle_blackout(state),
+        Action::Blackout => {
+            let blackout = !state.output_control.lock().options.blackout;
+            apply_global_output(state, context, session, None, Some(blackout))
+        }
         Action::Flash => {
             let changed =
                 set_if_changed(&mut state.output_control.lock().grand_master_flash, pressed);
-            return Ok(PlaybackTargetOutcome::changed(changed));
+            Ok(PlaybackTargetOutcome::changed(changed))
         }
-        Action::PauseDynamics => toggle_dynamics(state)?,
-        Action::None => return Ok(PlaybackTargetOutcome::changed(false)),
-        _ => {
-            return Err(ApiError::bad_request(
-                "action is incompatible with a Grand Master playback",
-            ));
+        Action::PauseDynamics => {
+            toggle_dynamics(state)?;
+            Ok(PlaybackTargetOutcome::output_runtime(true))
         }
+        Action::None => Ok(PlaybackTargetOutcome::changed(false)),
+        _ => Err(ApiError::bad_request(
+            "action is incompatible with a Grand Master playback",
+        )),
     }
-    Ok(PlaybackTargetOutcome::output_runtime(true))
 }
 
-fn toggle_blackout(state: &AppState) {
-    let mut output = state.output_control.lock();
-    output.options.blackout = !output.options.blackout;
+fn apply_global_output(
+    state: &AppState,
+    context: &light_application::ActionContext,
+    session: Option<&Session>,
+    grand_master: Option<f32>,
+    blackout: Option<bool>,
+) -> Result<PlaybackTargetOutcome, ApiError> {
+    let command = output_runtime_service::command(grand_master, blackout)?;
+    let result = output_runtime_service::execute(state, session, context.clone(), command)?;
+    Ok(PlaybackTargetOutcome::converged_output(&result))
 }
 
 fn toggle_dynamics(state: &AppState) -> Result<(), ApiError> {
@@ -228,10 +245,6 @@ fn persist_time_master_change(state: &AppState, changed: bool) -> Result<bool, A
     persist_server_configuration(state)?;
     refresh_speed_group_engine(state);
     Ok(true)
-}
-
-fn set_grand_master(state: &AppState, value: f32) -> bool {
-    set_if_changed(&mut state.output_control.lock().options.grand_master, value)
 }
 
 fn set_if_changed<T: PartialEq>(current: &mut T, value: T) -> bool {

@@ -294,6 +294,7 @@ impl ServerPlaybackPorts<'_> {
             action_name,
             &input,
             PlaybackDispatchContext {
+                action: context,
                 session: self.session,
                 desk: self.desk,
                 source: source_name(context.source),

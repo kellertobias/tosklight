@@ -379,6 +379,18 @@ export type PlaybackCueTransition = { playback_number: number | null, cue_list_i
 
 export type PlaybackRuntimeChange = { projection: PlaybackRuntimeProjection, transition: PlaybackCueTransition | null, };
 
+export type OutputRuntimeActionRequest = { request_id: string, expected_show_id: string, expected_revision: number, grand_master?: number | null, blackout?: boolean | null, };
+
+export type OutputRuntimeDurability = "durable" | "persistence_pending";
+
+export type OutputRuntimeActionState = { "status": "changed", event_sequence: number, } | { "status": "no_change", };
+
+export type OutputRuntimeActionOutcome = { request_id: string, correlation_id: string, projection: OutputRuntimeProjection, replayed: boolean, durability: OutputRuntimeDurability, warning?: string | null, } & ({ "status": "changed", event_sequence: number, } | { "status": "no_change", });
+
+export type OutputRuntimeErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type OutputRuntimeErrorResponse = { kind: OutputRuntimeErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
+
 export type OutputProtocol = "art_net" | "sacn";
 
 export type OutputDeliveryMode = "broadcast" | "multicast" | "unicast";
@@ -389,9 +401,9 @@ export type OutputRouteChange = { show_id: string, show_revision: number, route_
 
 export type OutputRuntimeIdentity = "global_master";
 
-export type OutputRuntimeScope = { show_id: string, show_revision: number, };
+export type OutputRuntimeScope = { show_id: string, };
 
-export type OutputRuntimeProjection = { scope: OutputRuntimeScope, identity: OutputRuntimeIdentity, grand_master: number, blackout: boolean, };
+export type OutputRuntimeProjection = { scope: OutputRuntimeScope, identity: OutputRuntimeIdentity, revision: number, grand_master: number, blackout: boolean, };
 
 export type OutputRuntimeChange = { projection: OutputRuntimeProjection, };
 

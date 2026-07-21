@@ -46,6 +46,8 @@ fn test_state_with_programmers(
             matter_bridge: Arc::new(matter::MatterBridgeAdapter::default()),
             matter_transport: None,
             output_control: Arc::new(Mutex::new(OutputControl::default())),
+            output_runtime_persistence_attempts: Arc::new(AtomicU64::new(0)),
+            output_runtime_persistence_failure: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             activation_lock: Arc::new(tokio::sync::Mutex::new(())),
             timecode_router: Arc::new(Mutex::new(TimecodeRouter::default())),
             active_show: Arc::default(),

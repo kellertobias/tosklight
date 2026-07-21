@@ -49,6 +49,10 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
             ..PoolPlaybackInput::default()
         },
         PlaybackDispatchContext {
+            action: &light_application::ActionContext::system(
+                Uuid::nil(),
+                light_application::ActionSource::Osc,
+            ),
             session: None,
             desk: None,
             source: "osc",

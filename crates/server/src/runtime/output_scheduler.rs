@@ -91,6 +91,7 @@ fn create_control(runtime: &PersistedOutputRuntime) -> Arc<Mutex<OutputControl>>
             blackout: runtime.blackout,
             control_loss_progress: None,
         },
+        revision: runtime.revision,
         ..OutputControl::default()
     }))
 }

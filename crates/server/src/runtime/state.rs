@@ -22,6 +22,10 @@ pub(super) struct AppState {
     pub(super) matter_bridge: Arc<matter::MatterBridgeAdapter>,
     pub(super) matter_transport: Option<Arc<matter::MatterTransport>>,
     pub(super) output_control: Arc<Mutex<OutputControl>>,
+    #[cfg(test)]
+    pub(super) output_runtime_persistence_attempts: Arc<AtomicU64>,
+    #[cfg(test)]
+    pub(super) output_runtime_persistence_failure: Arc<std::sync::atomic::AtomicBool>,
     pub(super) activation_lock: Arc<tokio::sync::Mutex<()>>,
     pub(super) timecode_router: Arc<Mutex<TimecodeRouter>>,
     pub(super) active_show: Arc<RwLock<Option<ShowEntry>>>,
@@ -180,6 +184,7 @@ pub(super) struct ControlUiAssets;
 #[derive(Default)]
 pub(super) struct OutputControl {
     pub(super) options: RenderOptions,
+    pub(super) revision: u64,
     pub(super) grand_master_flash: bool,
     pub(super) hold: bool,
     pub(super) last_frames: HashMap<light_core::Universe, light_output::DmxFrame>,
@@ -189,6 +194,8 @@ pub(super) struct OutputControl {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub(super) struct PersistedOutputRuntime {
+    #[serde(default)]
+    pub(super) revision: u64,
     pub(super) grand_master: f32,
     pub(super) blackout: bool,
     pub(super) dynamics_paused_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -198,6 +205,7 @@ pub(super) struct PersistedOutputRuntime {
 impl Default for PersistedOutputRuntime {
     fn default() -> Self {
         Self {
+            revision: 0,
             grand_master: 1.0,
             blackout: false,
             dynamics_paused_at: None,

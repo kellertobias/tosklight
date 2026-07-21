@@ -9,6 +9,7 @@ pub(super) struct PlaybackDispatchOutcome {
 }
 
 pub(super) struct PlaybackDispatchContext<'a> {
+    pub(super) action: &'a light_application::ActionContext,
     pub(super) session: Option<&'a Session>,
     pub(super) desk: Option<&'a ControlDesk>,
     pub(super) source: &'a str,
@@ -56,7 +57,7 @@ pub(super) fn dispatch_playback_action(
     Ok(PlaybackDispatchOutcome {
         changed: outcome.changed,
         addressed_event_required: outcome.addressed_event_required,
-        persistence_pending: !failures.is_empty(),
+        persistence_pending: outcome.persistence_pending || !failures.is_empty(),
     })
 }
 
@@ -95,6 +96,8 @@ pub(super) fn dispatch_playback_action_inner(
     if matches!(action_name, "master" | "fader") {
         return apply_playback_master(
             state,
+            context.action,
+            context.session,
             definition,
             input,
             context.source,
@@ -126,6 +129,7 @@ pub(super) fn dispatch_playback_action_inner(
     let selection_changed = select_playback_target(state, context.desk, definition, action)?;
     let outcome = apply_playback_target_action(
         state,
+        context.action,
         context.session,
         definition,
         action,
