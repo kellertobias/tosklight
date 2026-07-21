@@ -29,7 +29,7 @@ jobs:
             LIGHT_MANUAL_VERSION="${LIGHT_MANUAL_VERSION#v}"
             export LIGHT_MANUAL_VERSION
           fi
-          ./build manual
+          npm run manual
       - name: Attach manuals to the hosted release
         if: startsWith(forgejo.ref, 'refs/tags/v')
         env:
@@ -39,9 +39,9 @@ jobs:
         run: |
           python3 tools/publish_forgejo_manual.py \
             --tag "${{ forgejo.ref_name }}" \
-            --file "$(./build path manual-pdf)" \
+            --file "$(npm run --silent artifact-path -- manual-pdf)" \
             --asset-name "tosklight-manual-${{ forgejo.ref_name }}.pdf"
           python3 tools/publish_forgejo_manual.py \
             --tag "${{ forgejo.ref_name }}" \
-            --file "$(./build path manual-html)" \
+            --file "$(npm run --silent artifact-path -- manual-html)" \
             --asset-name "tosklight-manual-${{ forgejo.ref_name }}-html.zip"

@@ -58,11 +58,11 @@ jobs:
           sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0
 
       - name: Assemble the public site
-        run: ./build pages
+        run: npm run pages:generate
 
       - name: Resolve the assembled site directory
         id: site
-        run: echo "path=$(./build path pages)" >> "$GITHUB_OUTPUT"
+        run: echo "path=$(npm run --silent artifact-path -- pages)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-pages-artifact@v3
         with:

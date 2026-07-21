@@ -53,7 +53,7 @@ jobs:
             server_binary: light-server
             desktop: false
             cross: true
-            # musl has no ALSA, so native-midi is dropped, matching ./build archive.
+            # musl has no ALSA, so native-midi is dropped, matching npm run bundle.
             cargo_flags: --no-default-features
           - label: Windows (x86_64)
             runner: windows-2022

@@ -15,6 +15,7 @@ if (!/^\d+\.\d+\.\d+$/.test(version ?? "")) {
 }
 
 const JSON_MANIFESTS = [
+  "package.json",
   "apps/control-ui/package.json",
   "apps/control-ui/src-tauri/tauri.conf.json",
   "apps/hardware-controls/package.json",
