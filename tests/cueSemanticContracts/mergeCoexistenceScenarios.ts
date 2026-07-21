@@ -1,5 +1,6 @@
 import { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
 import { expect, test } from "../../apps/control-ui/e2e/bench/fixtures";
+import { setProgrammerPriority } from "../../apps/control-ui/e2e/bench/programmerPriority";
 import { fixtureIdsByNumber, loadCanonicalCopy } from "../support/catalog";
 import {
 	CUE_SEMANTIC_CONTRACTS,
@@ -38,8 +39,8 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		const second = new ApiDriver(api.baseUrl);
 		await first.login("Programmer A");
 		await second.login("Programmer B");
-		await first.command("programmer.priority", { priority: 0 });
-		await second.command("programmer.priority", { priority: 0 });
+		await setProgrammerPriority(first, { surface: "api", priority: 0 });
+		await setProgrammerPriority(second, { surface: "api", priority: 0 });
 		await first.command("programmer.set", {
 			fixture_id: fixtures[1],
 			attribute: "intensity",
@@ -53,8 +54,8 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		});
 		expect(slot(await bench.tick(0), 1)).toBe(179);
 
-		await first.command("programmer.priority", { priority: 10 });
-		await second.command("programmer.priority", { priority: 20 });
+		await setProgrammerPriority(first, { surface: "api", priority: 10 });
+		await setProgrammerPriority(second, { surface: "api", priority: 20 });
 		await first.command("programmer.set", {
 			fixture_id: fixtures[1],
 			attribute: "intensity",
@@ -68,8 +69,8 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		expect(slot(await bench.tick(0), 1)).toBe(51);
 
 		const rgb = fixtures[21];
-		await first.command("programmer.priority", { priority: 10 });
-		await second.command("programmer.priority", { priority: 10 });
+		await setProgrammerPriority(first, { surface: "api", priority: 10 });
+		await setProgrammerPriority(second, { surface: "api", priority: 10 });
 		await first.command("programmer.set", {
 			fixture_id: rgb,
 			attribute: "red",
@@ -180,7 +181,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await bench.tick(0);
 		expect(await visualizationLevel(api, bFixture, "blue")).toBe(0.8);
 
-		await api.command("programmer.priority", { priority: 110 });
+		await setProgrammerPriority(api, { surface: "api", priority: 110 });
 		await api.command("programmer.set", {
 			fixture_id: aFixture,
 			attribute: "red",
@@ -190,7 +191,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await api.request("POST", "/api/v1/cuelists/1/go-to", { cue_number: 1 });
 		await bench.tick(0);
 		expect(await visualizationLevel(api, aFixture, "red")).toBe(1);
-		await api.command("programmer.priority", { priority: 90 });
+		await setProgrammerPriority(api, { surface: "api", priority: 90 });
 		await api.request("POST", "/api/v1/cuelists/1/go-to", { cue_number: 1 });
 		await bench.tick(0);
 		expect(await visualizationLevel(api, aFixture, "red")).toBe(0);

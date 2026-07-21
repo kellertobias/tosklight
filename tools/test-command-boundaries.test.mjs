@@ -9,8 +9,9 @@ import {
 } from "./test-command-boundaries.mjs";
 
 const EMPTY_BASELINE = {
-  version: 1,
-  directWebSocketCommands: {},
+  version: 2,
+  directActionCommands: {},
+  directActionFamilies: {},
   compatibilityCommands: {},
   compatibilityFamilies: {},
 };
@@ -26,7 +27,8 @@ test("scanner ignores the centralized sender's own envelope and family declarati
       `,
     },
   ]);
-  assert.deepEqual(scan.directWebSocketCommands, {});
+  assert.deepEqual(scan.directActionCommands, {});
+  assert.deepEqual(scan.directActionFamilies, {});
   assert.deepEqual(scan.compatibilityFamilies, {});
 });
 
@@ -61,7 +63,7 @@ test("a retired legacy helper call fails regardless of the baseline", () => {
   assert.match(failures[0], /executeLegacyCommandLine is retired/u);
 });
 
-test("a new direct textual v1 WebSocket command is rejected", () => {
+test("a new direct literal v1 WebSocket action is rejected", () => {
   const scan = scanTestCommandBoundaries([
     {
       path: "tests/new.spec.ts",
@@ -69,18 +71,38 @@ test("a new direct textual v1 WebSocket command is rejected", () => {
     },
   ]);
   const failures = evaluateTestCommandBoundaries(scan, EMPTY_BASELINE);
-  assert.equal(failures.length, 1);
-  assert.match(failures[0], /new direct v1 WebSocket command-line call: tests\/new\.spec\.ts/u);
+  assert.equal(failures.length, 2);
+  assert.match(failures[0], /new direct v1 WebSocket action call site: tests\/new\.spec\.ts/u);
+  assert.match(failures[1], /new direct v1 WebSocket action family use: programmer\.command_line/u);
 });
 
-test("a generic typed WebSocket command is not a command-line call", () => {
+test("a generic typed WebSocket command is inventoried and rejected", () => {
   const scan = scanTestCommandBoundaries([
     {
       path: "tests/new.spec.ts",
       source: 'await api.command("selection.set", { fixtures: [] });',
     },
   ]);
-  assert.deepEqual(evaluateTestCommandBoundaries(scan, EMPTY_BASELINE), []);
+  assert.deepEqual(scan.directActionCommands, { "tests/new.spec.ts": 1 });
+  assert.deepEqual(scan.directActionFamilies, { "selection.set": 1 });
+  assert.equal(evaluateTestCommandBoundaries(scan, EMPTY_BASELINE).length, 2);
+});
+
+test("scanner counts typed generic syntax and every literal action family", () => {
+  const scan = scanTestCommandBoundaries([
+    {
+      path: "tests/actions.spec.ts",
+      source: `
+        await api.command<Result>("programmer.priority", { priority: 10 });
+        await api.command <Other> ("preset.apply", { family: "Color", number: 1 });
+      `,
+    },
+  ]);
+  assert.deepEqual(scan.directActionCommands, { "tests/actions.spec.ts": 2 });
+  assert.deepEqual(scan.directActionFamilies, {
+    "preset.apply": 1,
+    "programmer.priority": 1,
+  });
 });
 
 test("a grown compatibility call site is rejected while the baseline count passes", () => {
@@ -115,7 +137,35 @@ test("a removed compatibility call site reports a stale baseline entry so the ra
   ]);
 });
 
+test("a removed direct action family reports a stale baseline entry", () => {
+  const failures = evaluateTestCommandBoundaries(scanTestCommandBoundaries([]), {
+    ...EMPTY_BASELINE,
+    directActionFamilies: { "preset.apply": 1 },
+  });
+  assert.deepEqual(failures, [
+    "stale direct v1 WebSocket action family use baseline entry: preset.apply",
+  ]);
+});
+
+test("a partially shrunk direct action count requires an exact baseline update", () => {
+  const scan = scanTestCommandBoundaries([
+    {
+      path: "tests/actions.spec.ts",
+      source: 'await api.command("programmer.set", { fixture_id: "one" });',
+    },
+  ]);
+  const failures = evaluateTestCommandBoundaries(scan, {
+    ...EMPTY_BASELINE,
+    directActionCommands: { "tests/actions.spec.ts": 2 },
+    directActionFamilies: { "programmer.set": 2 },
+  });
+  assert.deepEqual(failures, [
+    "direct v1 WebSocket action call site shrank: tests/actions.spec.ts has 1 (baseline 2); lower or regenerate the baseline",
+    "direct v1 WebSocket action family use shrank: programmer.set has 1 (baseline 2); lower or regenerate the baseline",
+  ]);
+});
+
 test("an unversioned baseline is rejected", () => {
   const failures = evaluateTestCommandBoundaries(scanTestCommandBoundaries([]), {});
-  assert.deepEqual(failures, ["test command boundary baseline version must be 1"]);
+  assert.deepEqual(failures, ["test command boundary baseline version must be 2"]);
 });

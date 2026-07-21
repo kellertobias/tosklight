@@ -190,7 +190,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     title: "invalid input is rejected without programmer or output mutation",
     arrange: async ({ api, bench }, surface) => { await loadCanonicalCopy(api, bench, `osc-004-${surface}`); return {}; },
     api: async ({ api }) => {
-      await expect(api.command("not.a.command", {})).rejects.toThrow("unknown command");
+      await expect(api.executeCommandLine("NOT A COMMAND")).rejects.toThrow("fixture number is invalid");
     },
     ui: async ({ bench, desk, page }) => {
       await desk.open(bench.baseUrl);

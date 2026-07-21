@@ -1,12 +1,13 @@
 // Ratchets the public acceptance-test command boundary.
 //
-// Acceptance scenarios should state operator intent through the v2 command-line HTTP contract,
-// visible software keys, or exact OSC keys and phases. Two shapes are deliberately bounded:
+// Acceptance scenarios should state operator intent through typed v2 HTTP helpers, the v2
+// command-line HTTP contract, visible software keys, or exact OSC keys and phases. Three shapes
+// are deliberately bounded:
 //
 //   1. The raw `executeLegacyCommandLine` helper is gone. It must not come back.
-//   2. Direct textual v1 WebSocket commands (`programmer.command_line`, `programmer.command_target`,
-//      `programmer.execute`) belong to the centralized senders in the bench API driver and to the
-//      the dedicated retained compatibility tests declared in the baseline.
+//   2. Every direct literal v1 WebSocket action is inventoried by file and action family. The
+//      centralized sender is excluded; retained compatibility calls are explicit in the baseline.
+//   3. Command families without a production boundary remain explicit compatibility intents.
 //
 // Command families whose production boundary does not exist yet still route through
 // `executeCompatibilityProgrammerCommand`, which names the missing owner. That surface is allowed
@@ -28,8 +29,8 @@ export const COMPATIBILITY_FAMILIES = Object.freeze([
 export const CENTRALIZED_SENDER = "apps/control-ui/e2e/bench/api.ts";
 
 const LEGACY_HELPER = /\bexecuteLegacyCommandLine\b/gu;
-const DIRECT_WEBSOCKET_COMMAND =
-  /\.command\s*(?:<[^>]*>)?\s*\(\s*["']programmer\.(?:command_line|command_target|execute)["']/gu;
+const DIRECT_ACTION_COMMAND =
+  /\.command\s*(?:<[^>]*>)?\s*\(\s*(["'])([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)\1/gu;
 const COMPATIBILITY_HELPER = /\bexecuteCompatibilityProgrammerCommand\s*\(/gu;
 
 function occurrences(source, expression) {
@@ -38,6 +39,10 @@ function occurrences(source, expression) {
 
 function familyOccurrences(source, family) {
   return occurrences(source, new RegExp(`family:\\s*["']${family}["']`, "gu"));
+}
+
+function directActions(source) {
+  return [...source.matchAll(DIRECT_ACTION_COMMAND)].map((match) => match[2]);
 }
 
 /**
@@ -49,7 +54,8 @@ function familyOccurrences(source, family) {
 export function scanTestCommandBoundaries(files) {
   const scan = {
     legacyHelperCalls: 0,
-    directWebSocketCommands: {},
+    directActionCommands: {},
+    directActionFamilies: {},
     compatibilityCommands: {},
     compatibilityFamilies: {},
   };
@@ -58,8 +64,10 @@ export function scanTestCommandBoundaries(files) {
     // The centralized sender declares the families and owns the raw envelope; only scenario call
     // sites are ratcheted.
     if (name === CENTRALIZED_SENDER) continue;
-    const direct = occurrences(source, DIRECT_WEBSOCKET_COMMAND);
-    if (direct > 0) scan.directWebSocketCommands[name] = direct;
+    const actions = directActions(source);
+    if (actions.length > 0) scan.directActionCommands[name] = actions.length;
+    for (const action of actions)
+      scan.directActionFamilies[action] = (scan.directActionFamilies[action] ?? 0) + 1;
     const compatibility = occurrences(source, COMPATIBILITY_HELPER);
     if (compatibility > 0) scan.compatibilityCommands[name] = compatibility;
     for (const family of COMPATIBILITY_FAMILIES) {
@@ -78,6 +86,10 @@ function compareCounts(current, allowances, label, failures) {
       failures.push(`new ${label}: ${key} has ${count}; route it through a typed intent helper`);
     } else if (count > allowance) {
       failures.push(`${label} grew: ${key} has ${count} (baseline ${allowance})`);
+    } else if (count < allowance) {
+      failures.push(
+        `${label} shrank: ${key} has ${count} (baseline ${allowance}); lower or regenerate the baseline`,
+      );
     }
   }
   for (const key of Object.keys(allowances ?? {})) {
@@ -85,19 +97,25 @@ function compareCounts(current, allowances, label, failures) {
   }
 }
 
-/** Fails on any new legacy helper call, and on any new or grown bounded compatibility surface. */
+/** Fails on legacy calls and any bounded count mismatch until its baseline is lowered exactly. */
 export function evaluateTestCommandBoundaries(scan, baseline) {
   const failures = [];
-  if (baseline?.version !== 1) failures.push("test command boundary baseline version must be 1");
+  if (baseline?.version !== 2) failures.push("test command boundary baseline version must be 2");
   if (scan.legacyHelperCalls > 0)
     failures.push(
       `executeLegacyCommandLine is retired but appears ${scan.legacyHelperCalls} time(s); ` +
         "use executeCommandLine or executeCompatibilityProgrammerCommand",
     );
   compareCounts(
-    scan.directWebSocketCommands,
-    baseline?.directWebSocketCommands,
-    "direct v1 WebSocket command-line call",
+    scan.directActionCommands,
+    baseline?.directActionCommands,
+    "direct v1 WebSocket action call site",
+    failures,
+  );
+  compareCounts(
+    scan.directActionFamilies,
+    baseline?.directActionFamilies,
+    "direct v1 WebSocket action family use",
     failures,
   );
   compareCounts(
@@ -143,8 +161,9 @@ function sortedEntries(entries) {
 
 export function baselineFor(scan) {
   return {
-    version: 1,
-    directWebSocketCommands: sortedEntries(scan.directWebSocketCommands),
+    version: 2,
+    directActionCommands: sortedEntries(scan.directActionCommands),
+    directActionFamilies: sortedEntries(scan.directActionFamilies),
     compatibilityCommands: sortedEntries(scan.compatibilityCommands),
     compatibilityFamilies: sortedEntries(scan.compatibilityFamilies),
   };

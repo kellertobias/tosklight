@@ -1,5 +1,6 @@
 import type { ApiDriver } from "../../../apps/control-ui/e2e/bench/api";
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
+import { recallPreset } from "../../../apps/control-ui/e2e/bench/presetRecall";
 import type { FoundationalCase } from "./case";
 import {
 	command,
@@ -204,7 +205,7 @@ export const supplementalAfter: FoundationalCase[] = [
 		title:
 			"PROG-001 @supplemental › API Preset recall preserves and closes gesture boundaries",
 		run: async ({ api, bench }) => {
-			await loadCompactRig(api, bench, "prog-001-preset-api");
+			const showId = await loadCompactRig(api, bench, "prog-001-preset-api");
 			const fixtures = await fixtureIdsByNumber(api);
 			await gestureFixture(api, fixtures[21]);
 			await gestureFixture(api, fixtures[22]);
@@ -228,7 +229,11 @@ export const supplementalAfter: FoundationalCase[] = [
 				],
 			});
 
-			await api.command("preset.apply", { family: "Intensity", number: 200 });
+			await recallPreset(api, {
+				surface: "api",
+				showId,
+				preset: { objectId: "1.200", family: "Intensity", number: 200 },
+			});
 			const recalled = await programmer(api);
 			expect(recalled.selected).toEqual(before.selected);
 			expect(recalled.selection_expression).toEqual(

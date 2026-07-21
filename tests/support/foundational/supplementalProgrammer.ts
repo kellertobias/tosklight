@@ -1,4 +1,5 @@
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
+import { recallPreset } from "../../../apps/control-ui/e2e/bench/presetRecall";
 import type { FoundationalCase } from "./case";
 import {
 	command,
@@ -19,7 +20,11 @@ export const presetFamilyApi: FoundationalCase = {
 	title:
 		"PROG-001 @supplemental › Preset numbers are local to each family pool",
 	run: async ({ api, bench }) => {
-		await loadCompactRig(api, bench, "prog-001-family-local-preset-numbers");
+		const showId = await loadCompactRig(
+			api,
+			bench,
+			"prog-001-family-local-preset-numbers",
+		);
 		const fixtures = await fixtureIdsByNumber(api);
 		const fixture = fixtures[1];
 
@@ -46,8 +51,16 @@ export const presetFamilyApi: FoundationalCase = {
 		expect(positionOne.body).toMatchObject({ family: "Position", number: 1 });
 
 		await select(api, [fixture]);
-		await api.command("preset.apply", { family: "Color", number: 1 });
-		await api.command("preset.apply", { family: "Position", number: 1 });
+		await recallPreset(api, {
+			surface: "api",
+			showId,
+			preset: { objectId: "2.1", family: "Color", number: 1 },
+		});
+		await recallPreset(api, {
+			surface: "api",
+			showId,
+			preset: { objectId: "3.1", family: "Position", number: 1 },
+		});
 		await expectProgrammer(api, (programmer) => {
 			expect(programmer.values).toEqual(
 				expect.arrayContaining([

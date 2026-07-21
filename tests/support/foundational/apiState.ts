@@ -10,8 +10,8 @@ export async function loadCompactRig(
 	api: ApiDriver,
 	bench: any,
 	name: string,
-): Promise<void> {
-	await loadCanonicalCopy(api, bench, name);
+): Promise<string> {
+	const show = await loadCanonicalCopy(api, bench, name);
 	await api.command("selection.set", { fixtures: [] });
 	await api.command("programmer.clear", {});
 	const group4 = (await objects(api, "group")).find(
@@ -33,6 +33,7 @@ export async function loadCompactRig(
 		},
 		group4?.revision ?? 0,
 	);
+	return show.id;
 }
 
 export async function command(api: ApiDriver, value: string): Promise<void> {
