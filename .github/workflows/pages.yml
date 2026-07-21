@@ -6,14 +6,20 @@ name: Pages
 # The trigger is `release: published`, not the tag push: the page lists the actual release
 # assets, so it must run after the Release workflow has finished uploading them. Building on
 # every push to main would also stamp the page with an unreleased version.
+#
+# Branch pushes build the site and upload it as a workflow artifact for inspection, but
+# do not deploy: deploying from a branch would replace the live site with an unreleased
+# version whose download links point at assets that do not exist.
 on:
   release:
     types: [published]
+  push:
+    branches: [refactoring]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to publish the site for
-        required: true
+        description: Existing release tag to publish the site for. Empty builds the branch.
+        required: false
 
 permissions:
   contents: read
@@ -21,17 +27,19 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  # Scoped by ref so a branch preview never cancels an in-flight release deployment.
+  group: pages-${{ github.event.inputs.tag || github.event.release.tag_name || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # Check out the tagged commit so the manual and landing page carry the released
+      # version. Empty on a branch push, where the checked-out ref is already correct.
       - uses: actions/checkout@v4
         with:
-          # Check out the tagged commit so the manual and landing page carry the released version.
-          ref: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+          ref: ${{ github.event.inputs.tag || github.event.release.tag_name || github.ref }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -60,8 +68,11 @@ jobs:
         with:
           path: ${{ steps.site.outputs.path }}
 
+  # Release-only. A branch build stops after `build`; download its pages artifact from the
+  # run to inspect the assembled site without touching the published one.
   deploy:
     needs: build
+    if: github.event_name == 'release' || startsWith(github.event.inputs.tag, 'v')
     runs-on: ubuntu-latest
     environment:
       name: github-pages

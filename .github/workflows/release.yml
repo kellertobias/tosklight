@@ -1,22 +1,27 @@
 name: Release
 
 # The GitHub mirror does not run the test suite — Forgejo is the authoritative CI and
-# creates the tag only after that suite passes. This workflow reacts to the tag alone.
+# creates the tag only after that suite passes.
+#
+# A v* tag produces a published GitHub release. Branch builds produce the same artifacts
+# as downloadable workflow artifacts but never publish a release, so packaging can be
+# exercised before a tag exists.
 on:
   push:
     tags: ["v*"]
+    branches: [refactoring]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag to build
-        required: true
+        description: Existing tag to build. Leave empty to build the selected branch.
+        required: false
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+  group: release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
@@ -57,6 +62,7 @@ jobs:
             server_binary: light-server.exe
             desktop: true
     steps:
+      # An empty tag input falls back to the ref the run was started from.
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
@@ -156,8 +162,11 @@ jobs:
           path: .artifacts/release/*
           if-no-files-found: error
 
+  # Tag-only. A branch build stops after `build`, leaving its artifacts attached to the
+  # workflow run so packaging can be checked without creating a release.
   publish:
     needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.event.inputs.tag, 'v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
