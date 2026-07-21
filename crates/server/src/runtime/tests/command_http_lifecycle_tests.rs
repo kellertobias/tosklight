@@ -17,6 +17,7 @@ async fn lifecycle_snapshot_is_authenticated_cursor_bound_and_content_safe() {
     let row = &rows[0];
     assert_eq!(row["user_id"], scenario.session.user.id.0.to_string());
     assert_eq!(row["normal_value_count"], 0);
+    assert_eq!(row["preload_active"], false);
     assert_eq!(row["sessions"].as_array().unwrap().len(), 1);
     for forbidden in [
         "values",
@@ -31,7 +32,6 @@ async fn lifecycle_snapshot_is_authenticated_cursor_bound_and_content_safe() {
         "redo",
         "transient_values",
         "preload_group_pending",
-        "preload_active",
         "preload_group_active",
         "preload_playback_pending",
         "preload_capture_programmer",

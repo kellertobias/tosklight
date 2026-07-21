@@ -247,7 +247,7 @@ fn count_changes_publish_after_authoritative_events_while_same_count_and_replay_
             )
         })
         .unwrap();
-    assert_lifecycle_sequences(&events, &[2, 5]);
+    assert_lifecycle_sequences(&events, &[2, 5, 14]);
 }
 
 #[test]

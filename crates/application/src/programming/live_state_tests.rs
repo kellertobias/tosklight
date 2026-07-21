@@ -19,6 +19,8 @@ mod capture_mode;
 mod group_recording;
 #[path = "live_state_tests/lifecycle.rs"]
 mod lifecycle;
+#[path = "live_state_tests/lifecycle_preload_activity.rs"]
+mod lifecycle_preload_activity;
 #[path = "live_state_tests/lifecycle_publication.rs"]
 mod lifecycle_publication;
 #[path = "live_state_tests/preload_lifecycle.rs"]

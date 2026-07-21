@@ -22,6 +22,8 @@ pub struct ProgrammingLifecycleProgrammer {
     pub selected_fixture_count: u64,
     #[ts(type = "number")]
     pub normal_value_count: u64,
+    /// Aggregate activity signal only; active Preload values and identities remain private.
+    pub preload_active: bool,
     pub sessions: Vec<ProgrammingLifecycleSession>,
 }
 
@@ -74,6 +76,7 @@ mod tests {
                 "connected": true,
                 "selected_fixture_count": 1,
                 "normal_value_count": 1,
+                "preload_active": true,
                 "sessions": [{
                     "session_id": Uuid::from_u128(3),
                     "selected": [Uuid::from_u128(4)]
@@ -83,6 +86,28 @@ mod tests {
         });
 
         assert!(serde_json::from_value::<ProgrammingLifecycleProjection>(projection).is_err());
+    }
+
+    #[test]
+    fn lifecycle_programmer_requires_preload_active_and_rejects_extra_details() {
+        let exact = serde_json::json!({
+            "programmer_id": Uuid::from_u128(1),
+            "user_id": Uuid::from_u128(2),
+            "connected": true,
+            "selected_fixture_count": 0,
+            "normal_value_count": 0,
+            "preload_active": false,
+            "sessions": []
+        });
+        assert!(serde_json::from_value::<ProgrammingLifecycleProgrammer>(exact.clone()).is_ok());
+
+        let mut missing = exact.clone();
+        missing.as_object_mut().unwrap().remove("preload_active");
+        assert!(serde_json::from_value::<ProgrammingLifecycleProgrammer>(missing).is_err());
+
+        let mut detailed = exact;
+        detailed["preload_fixture_ids"] = serde_json::json!([Uuid::from_u128(3)]);
+        assert!(serde_json::from_value::<ProgrammingLifecycleProgrammer>(detailed).is_err());
     }
 
     #[test]

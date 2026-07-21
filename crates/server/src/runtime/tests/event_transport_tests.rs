@@ -380,6 +380,7 @@ async fn lifecycle_aggregate_delivers_foreign_safe_rows_through_the_wire_adapter
             connected: true,
             selected_fixture_count: 3,
             normal_value_count: 2,
+            preload_active: true,
             sessions: vec![ProgrammingLifecycleSession {
                 session_id: light_core::SessionId(Uuid::from_u128(30)),
             }],
@@ -407,6 +408,7 @@ async fn lifecycle_aggregate_delivers_foreign_safe_rows_through_the_wire_adapter
     assert_eq!(programmer.user_id, foreign_user.0);
     assert_eq!(programmer.normal_value_count, 2);
     assert_eq!(programmer.selected_fixture_count, 3);
+    assert!(programmer.preload_active);
 }
 
 #[test]

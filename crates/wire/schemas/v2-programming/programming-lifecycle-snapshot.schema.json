@@ -40,6 +40,10 @@
           "format": "uint64",
           "minimum": 0
         },
+        "preload_active": {
+          "description": "Aggregate activity signal only; active Preload values and identities remain private.",
+          "type": "boolean"
+        },
         "programmer_id": {
           "type": "string",
           "format": "uuid"
@@ -67,6 +71,7 @@
         "connected",
         "selected_fixture_count",
         "normal_value_count",
+        "preload_active",
         "sessions"
       ]
     },

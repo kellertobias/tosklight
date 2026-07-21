@@ -59,7 +59,11 @@ export type EventSource = { "kind": "runtime" } | { "kind": "action", source: Ev
 
 export type ProgrammingLifecycleSession = { session_id: string, };
 
-export type ProgrammingLifecycleProgrammer = { programmer_id: string, user_id: string, connected: boolean, selected_fixture_count: number, normal_value_count: number, sessions: Array<ProgrammingLifecycleSession>, };
+export type ProgrammingLifecycleProgrammer = { programmer_id: string, user_id: string, connected: boolean, selected_fixture_count: number, normal_value_count: number,
+/**
+ * Aggregate activity signal only; active Preload values and identities remain private.
+ */
+preload_active: boolean, sessions: Array<ProgrammingLifecycleSession>, };
 
 export type ProgrammingLifecycleProjection = { revision: number, programmers: Array<ProgrammingLifecycleProgrammer>, };
 

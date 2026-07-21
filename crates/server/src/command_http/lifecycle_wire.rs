@@ -54,6 +54,7 @@ fn lifecycle_programmer(
         connected: programmer.connected,
         selected_fixture_count: programmer.selected_fixture_count,
         normal_value_count: programmer.normal_value_count,
+        preload_active: programmer.preload_active,
         sessions: programmer
             .sessions
             .iter()

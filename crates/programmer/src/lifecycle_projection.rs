@@ -20,6 +20,9 @@ pub struct ProgrammerLifecycleSummary {
     pub connected_sessions: Vec<ProgrammerLifecycleSession>,
     pub selected_fixture_count: u64,
     pub normal_value_count: u64,
+    /// Whether retained active Preload fixture or Group values currently contribute to output.
+    /// Pending values, capture mode, and queued Playback actions deliberately do not count.
+    pub preload_active: bool,
 }
 
 impl ProgrammerRegistry {
@@ -108,6 +111,7 @@ fn lifecycle_summary(
         connected_sessions: connected_sessions(key, sessions),
         selected_fixture_count: selected_fixture_count(key, sessions, command_contexts, selections),
         normal_value_count: value_count(state.values.len(), &state.group_values),
+        preload_active: !state.preload_active.is_empty() || !state.preload_group_active.is_empty(),
     }
 }
 
@@ -163,7 +167,10 @@ fn collection_len(len: usize) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{NormalProgrammerValueMutation, NormalProgrammerValueTiming, ProgrammerSnapshot};
+    use crate::{
+        NormalProgrammerValueMutation, NormalProgrammerValueTiming, PreloadPlaybackQueueAction,
+        PreloadPlaybackQueueSurface, ProgrammerSnapshot,
+    };
     use light_core::{AttributeKey, AttributeValue, FixtureId};
     use std::sync::Arc;
     use uuid::Uuid;
@@ -278,6 +285,64 @@ mod tests {
 
         assert_eq!(Arc::strong_count(&snapshot), before);
         assert_eq!(summary.normal_value_count, 0);
+    }
+
+    #[test]
+    fn preload_active_counts_only_retained_active_fixture_or_group_values() {
+        let registry = ProgrammerRegistry::default();
+        let user = UserId(Uuid::from_u128(10));
+        let session = SessionId(Uuid::from_u128(11));
+        registry.start(session, user);
+
+        assert!(!preload_active(&registry, user));
+        assert!(registry.arm_preload(session, true));
+        registry.select(session, [FixtureId(Uuid::from_u128(12))]);
+        assert!(!preload_active(&registry, user));
+
+        registry.set(
+            session,
+            FixtureId(Uuid::from_u128(13)),
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.5),
+        );
+        assert!(!preload_active(&registry, user));
+        assert!(registry.activate_preload(session));
+        assert!(preload_active(&registry, user));
+        assert!(registry.release_preload(session));
+        assert!(!preload_active(&registry, user));
+
+        assert!(registry.queue_preload_playback_action(
+            session,
+            1,
+            None,
+            PreloadPlaybackQueueAction::Go,
+            PreloadPlaybackQueueSurface::Physical,
+        ));
+        assert!(!preload_active(&registry, user));
+        assert_eq!(registry.take_preload_playback_actions(session).len(), 1);
+
+        registry.set(
+            session,
+            FixtureId(Uuid::from_u128(14)),
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.7),
+        );
+        assert!(!preload_active(&registry, user));
+        assert!(registry.set_preload_group(
+            session,
+            "7".into(),
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.8),
+        ));
+        assert!(!preload_active(&registry, user));
+        assert!(registry.activate_preload(session));
+        assert!(preload_active(&registry, user));
+        assert!(registry.release_preload(session));
+        assert!(!preload_active(&registry, user));
+    }
+
+    fn preload_active(registry: &ProgrammerRegistry, user: UserId) -> bool {
+        registry.programmer_lifecycle(user).unwrap().preload_active
     }
 
     fn normal_values() -> Vec<NormalProgrammerValueMutation> {

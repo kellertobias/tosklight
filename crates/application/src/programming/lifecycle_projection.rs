@@ -18,6 +18,8 @@ pub struct ProgrammingLifecycleProgrammer {
     pub connected: bool,
     pub selected_fixture_count: u64,
     pub normal_value_count: u64,
+    /// True only while retained active Preload fixture or Group values contribute to output.
+    pub preload_active: bool,
     pub sessions: Vec<ProgrammingLifecycleSession>,
 }
 
@@ -99,6 +101,7 @@ impl From<ProgrammerLifecycleSummary> for ProgrammingLifecycleProgrammer {
             connected: summary.connected,
             selected_fixture_count: summary.selected_fixture_count,
             normal_value_count: summary.normal_value_count,
+            preload_active: summary.preload_active,
             sessions: summary
                 .connected_sessions
                 .into_iter()
@@ -125,10 +128,18 @@ mod tests {
         let later = UserId(Uuid::from_u128(20));
         let earlier = UserId(Uuid::from_u128(10));
         let disconnected_session = SessionId(Uuid::from_u128(1));
+        let earlier_session = SessionId(Uuid::from_u128(3));
         registry.start(disconnected_session, disconnected);
         registry.start(SessionId(Uuid::from_u128(2)), later);
-        registry.start(SessionId(Uuid::from_u128(3)), earlier);
+        registry.start(earlier_session, earlier);
         registry.disconnect(disconnected_session);
+        registry.set_preload_group(
+            earlier_session,
+            "7".into(),
+            light_core::AttributeKey::intensity(),
+            light_core::AttributeValue::Normalized(0.5),
+        );
+        registry.activate_preload(earlier_session);
 
         let projection = ProgrammingLifecycleProjection::active(&registry, 7);
 
@@ -136,6 +147,8 @@ mod tests {
         assert_eq!(projection.programmers.len(), 2);
         assert_eq!(projection.programmers[0].user_id, earlier);
         assert_eq!(projection.programmers[1].user_id, later);
+        assert!(projection.programmers[0].preload_active);
+        assert!(!projection.programmers[1].preload_active);
         assert!(projection.programmers.iter().all(|row| row.connected));
     }
 
@@ -148,6 +161,7 @@ mod tests {
             connected: true,
             selected_fixture_count: 0,
             normal_value_count: 0,
+            preload_active: false,
             sessions: Vec::new(),
         };
 
