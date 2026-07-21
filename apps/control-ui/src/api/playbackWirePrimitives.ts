@@ -43,6 +43,40 @@ export function integerAt(value: unknown, path: string) {
 	return value as number;
 }
 
+export function boundedPositiveIntegerAt(
+	value: unknown,
+	path: string,
+	maximum: number,
+) {
+	const integer = integerAt(value, path);
+	if (integer < 1 || integer > maximum)
+		throw new WireValidationError(
+			path,
+			`integer between 1 and ${maximum}`,
+			value,
+		);
+	return integer;
+}
+
+export function printableStringAt(
+	value: unknown,
+	path: string,
+	maximumBytes: number,
+) {
+	if (
+		typeof value !== "string" ||
+		!value.trim() ||
+		new TextEncoder().encode(value).length > maximumBytes ||
+		/\p{Cc}/u.test(value)
+	)
+		throw new WireValidationError(
+			path,
+			`1-${maximumBytes} printable bytes`,
+			value,
+		);
+	return value;
+}
+
 export function positiveIntegerAt(value: unknown, path: string) {
 	const integer = integerAt(value, path);
 	if (integer < 1)

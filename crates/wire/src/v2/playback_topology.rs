@@ -80,6 +80,26 @@ pub enum PlaybackTopologyAction {
         #[ts(type = "string | null")]
         expected_playback_object_id: PlaybackTopologyObjectIdentity,
     },
+    CreatePage {
+        #[schemars(range(min = 1, max = 127))]
+        page: u8,
+        #[schemars(range(max = 9007199254740991_u64))]
+        #[ts(type = "number")]
+        expected_page_revision: u64,
+        #[ts(type = "string | null")]
+        expected_page_object_id: PlaybackTopologyObjectIdentity,
+    },
+    RenamePage {
+        #[schemars(range(min = 1, max = 127))]
+        page: u8,
+        #[schemars(length(min = 1, max = 80))]
+        name: String,
+        #[schemars(range(max = 9007199254740991_u64))]
+        #[ts(type = "number")]
+        expected_page_revision: u64,
+        #[ts(type = "string | null")]
+        expected_page_object_id: PlaybackTopologyObjectIdentity,
+    },
     ClearMappedPlayback {
         #[schemars(range(min = 1, max = 127))]
         page: u8,
@@ -215,9 +235,16 @@ pub enum PlaybackTopologyResolution {
         cue_list_id: Uuid,
     },
     PageSlot {
+        #[schemars(range(min = 1, max = 127))]
         page: u8,
+        #[schemars(range(min = 1, max = 127))]
         slot: u8,
+        #[schemars(range(min = 1, max = 1000))]
         playback_number: Option<u16>,
+    },
+    Page {
+        #[schemars(range(min = 1, max = 127))]
+        page: u8,
     },
 }
 

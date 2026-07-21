@@ -41,6 +41,19 @@ export type PlaybackTopologyAction =
 			expectedPageObjectId: string | null;
 			expectedPlaybackRevision: number;
 			expectedPlaybackObjectId: string | null;
+	  }
+	| {
+			type: "create_page";
+			page: number;
+			expectedPageRevision: number;
+			expectedPageObjectId: string | null;
+	  }
+	| {
+			type: "rename_page";
+			page: number;
+			name: string;
+			expectedPageRevision: number;
+			expectedPageObjectId: string;
 	  };
 
 export interface PlaybackTopologyRequest {
@@ -50,6 +63,7 @@ export interface PlaybackTopologyRequest {
 
 export type PlaybackTopologyResolution =
 	| { kind: "cue_list"; cueListId: string }
+	| { kind: "page"; page: number }
 	| {
 			kind: "page_slot";
 			page: number;
@@ -96,6 +110,15 @@ export interface PlaybackTopologyTransport {
 }
 
 export interface PlaybackTopologyActions {
+	createPage(
+		page: number,
+		revisionBasis?: PlaybackPageRevisionBasis,
+	): Promise<PlaybackTopologyOutcome | null>;
+	renamePage(
+		page: number,
+		name: string,
+		revisionBasis?: ExistingPlaybackPageRevisionBasis,
+	): Promise<PlaybackTopologyOutcome | null>;
 	saveCueList(
 		cueListId: string,
 		expectedRevision: number,
@@ -128,6 +151,16 @@ export interface PlaybackTopologyRevisionBasis {
 	expectedPlaybackObjectId: string | null;
 }
 
+export interface PlaybackPageRevisionBasis {
+	expectedPageRevision: number;
+	expectedPageObjectId: string | null;
+}
+
+export interface ExistingPlaybackPageRevisionBasis
+	extends PlaybackPageRevisionBasis {
+	expectedPageObjectId: string;
+}
+
 export interface ExistingPlaybackRevisionBasis
 	extends Omit<PlaybackTopologyRevisionBasis, "expectedPlaybackObjectId"> {
 	expectedPlaybackObjectId: string;
@@ -142,5 +175,11 @@ export interface PlaybackTopologyView {
 	error: Error | null;
 	cueLists: readonly ShowObject<"cue_list">[];
 	playbacks: readonly ShowObject<"playback">[];
+	pages: readonly ShowObject<"playback_page">[];
+}
+
+export interface PlaybackPagesView {
+	ready: boolean;
+	error: Error | null;
 	pages: readonly ShowObject<"playback_page">[];
 }

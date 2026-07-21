@@ -47,6 +47,17 @@ pub enum PlaybackTopologyAction {
         expected_playback_revision: Revision,
         expected_playback_object_id: Option<String>,
     },
+    CreatePage {
+        page: u8,
+        expected_page_revision: Revision,
+        expected_page_object_id: Option<String>,
+    },
+    RenamePage {
+        page: u8,
+        name: String,
+        expected_page_revision: Revision,
+        expected_page_object_id: Option<String>,
+    },
     ClearMappedPlayback {
         page: u8,
         slot: u8,
@@ -66,6 +77,9 @@ pub enum PlaybackTopologyResolution {
         page: u8,
         slot: u8,
         playback_number: Option<u16>,
+    },
+    Page {
+        page: u8,
     },
 }
 

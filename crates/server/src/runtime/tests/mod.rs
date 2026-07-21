@@ -22,6 +22,8 @@ mod event_transport_route_tests;
 mod output_runtime_tests;
 #[path = "playback_topology_map_existing_route_tests.rs"]
 mod playback_topology_map_existing_route_tests;
+#[path = "playback_topology_page_route_tests.rs"]
+mod playback_topology_page_route_tests;
 #[path = "playback_topology_route_support.rs"]
 mod playback_topology_route_support;
 #[path = "playback_topology_route_tests.rs"]

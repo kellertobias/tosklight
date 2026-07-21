@@ -220,6 +220,42 @@ pub(super) fn map_existing_request(
     })
 }
 
+pub(super) fn create_page_request(
+    request_id: &str,
+    page: u8,
+    page_revision: u64,
+    page_object_id: Option<&str>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "request_id": request_id,
+        "action": {
+            "type": "create_page",
+            "page": page,
+            "expected_page_revision": page_revision,
+            "expected_page_object_id": page_object_id
+        }
+    })
+}
+
+pub(super) fn rename_page_request(
+    request_id: &str,
+    page: u8,
+    name: &str,
+    page_revision: u64,
+    page_object_id: Option<&str>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "request_id": request_id,
+        "action": {
+            "type": "rename_page",
+            "page": page,
+            "name": name,
+            "expected_page_revision": page_revision,
+            "expected_page_object_id": page_object_id
+        }
+    })
+}
+
 pub(super) fn save_request(request_id: &str, expected_revision: u64) -> serde_json::Value {
     let cue_list = cue_list(request_id);
     let cue_list_id = cue_list.id.0;
@@ -320,6 +356,12 @@ fn playback_body() -> serde_json::Value {
         "presentation_icon": null,
         "presentation_image": null
     })
+}
+
+pub(super) fn numbered_grand_master_playback_body(number: u16) -> serde_json::Value {
+    let mut body = playback_body();
+    body["number"] = serde_json::json!(number);
+    body
 }
 
 pub(super) fn cue_list_playback_body(

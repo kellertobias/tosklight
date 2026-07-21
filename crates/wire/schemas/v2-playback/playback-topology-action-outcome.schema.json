@@ -170,8 +170,8 @@
             "page": {
               "type": "integer",
               "format": "uint8",
-              "maximum": 255,
-              "minimum": 0
+              "maximum": 127,
+              "minimum": 1
             },
             "playback_number": {
               "type": [
@@ -179,14 +179,14 @@
                 "null"
               ],
               "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
+              "maximum": 1000,
+              "minimum": 1
             },
             "slot": {
               "type": "integer",
               "format": "uint8",
-              "maximum": 255,
-              "minimum": 0
+              "maximum": 127,
+              "minimum": 1
             }
           },
           "additionalProperties": false,
@@ -195,6 +195,26 @@
             "page",
             "slot",
             "playback_number"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "page"
+            },
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 127,
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "page"
           ]
         }
       ]

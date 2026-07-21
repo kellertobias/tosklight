@@ -19,6 +19,11 @@ export function validatePlaybackTopologyObjects(
 ) {
 	if (action.type === "save_cue_list")
 		return validateSavedCueList(action, objects, status);
+	if (action.type === "create_page" || action.type === "rename_page") {
+		if (resolution.kind !== "page")
+			return invalid("Playback Page resolution", resolution);
+		return validatePageAction(action, objects, status);
+	}
 	if (resolution.kind !== "page_slot")
 		return invalid("page-slot resolution", resolution);
 	if (action.type === "configure_slot")
@@ -36,6 +41,55 @@ export function validatePlaybackTopologyObjects(
 			status,
 		);
 	validateClearedSlot(action, resolution.playbackNumber, objects, status);
+}
+
+function validatePageAction(
+	action: Extract<
+		PlaybackTopologyAction,
+		{ type: "create_page" | "rename_page" }
+	>,
+	objects: PlaybackTopologyObject[],
+	status: "changed" | "no_change",
+) {
+	if (objects.length !== 1)
+		return invalid("only the authoritative requested Playback Page", objects);
+	const page = matchingPage(objects, action.page);
+	if (!page)
+		return invalid("the authoritative requested Playback Page", objects);
+	validateStorageId(
+		page.objectId,
+		action.expectedPageObjectId,
+		String(action.page),
+		"Playback Page",
+	);
+	validateExactRevision(
+		page.objectRevision,
+		action.expectedPageRevision,
+		status,
+		"Playback Page",
+	);
+	const body = page.body as PlaybackPage;
+	if (action.type === "rename_page" && body.name !== action.name)
+		invalid("the requested Playback Page name", body.name);
+	if (action.type === "create_page") validateCreatedPage(action, body, status);
+}
+
+function validateCreatedPage(
+	action: Extract<PlaybackTopologyAction, { type: "create_page" }>,
+	body: PlaybackPage,
+	status: "changed" | "no_change",
+) {
+	if (status === "changed") {
+		if (
+			action.expectedPageObjectId !== null ||
+			body.name !== `Page ${action.page}` ||
+			Object.keys(body.slots).length > 0
+		)
+			invalid("the newly created empty Playback Page", body);
+		return;
+	}
+	if (action.expectedPageObjectId === null)
+		invalid("an existing unchanged Playback Page", body);
 }
 
 function validateSavedCueList(

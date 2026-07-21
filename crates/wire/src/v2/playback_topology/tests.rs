@@ -24,6 +24,8 @@ fn all_semantic_actions_have_strict_readable_discriminants() {
                 "expected_playback_revision":6,"expected_playback_object_id":null}
         }),
         map_existing_request(),
+        create_page_request(),
+        rename_page_request(),
     ];
     for action in actions {
         serde_json::from_value::<PlaybackTopologyActionRequest>(action).unwrap();
@@ -58,6 +60,16 @@ fn identity_and_nested_unknown_fields_are_rejected() {
         missing["action"].as_object_mut().unwrap().remove(field);
         assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(missing).is_err());
     }
+    for mut request in [create_page_request(), rename_page_request()] {
+        request["action"]
+            .as_object_mut()
+            .unwrap()
+            .remove("expected_page_object_id");
+        assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(request).is_err());
+    }
+    let mut page = rename_page_request();
+    page["action"]["future"] = json!(true);
+    assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(page).is_err());
     let missing_save_identity = json!({
         "request_id":"save",
         "action":{"type":"save_cue_list","cue_list_id":Uuid::nil(),
@@ -117,6 +129,17 @@ fn map_existing_request() -> Value {
         "page":2,"slot":4,"playback_number":12,
         "expected_page_revision":5,"expected_page_object_id":"legacy-page-two",
         "expected_playback_revision":6,"expected_playback_object_id":"legacy-twelve"}})
+}
+
+fn create_page_request() -> Value {
+    json!({"request_id":"create-page","action":{"type":"create_page","page":3,
+        "expected_page_revision":0,"expected_page_object_id":null}})
+}
+
+fn rename_page_request() -> Value {
+    json!({"request_id":"rename-page","action":{"type":"rename_page","page":3,
+        "name":"Act One","expected_page_revision":4,
+        "expected_page_object_id":"legacy-page-three"}})
 }
 
 fn playback_json() -> Value {

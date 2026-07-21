@@ -55,6 +55,10 @@ interface PoolPlaybackInput {
 	surface?: "physical" | "virtual";
 }
 
+interface PlaybackPageSelectionOptions {
+	existingOnly?: boolean;
+}
+
 export class PlaybackApiClient {
 	constructor(private readonly transport: LiveClientTransport) {}
 
@@ -211,7 +215,15 @@ export class PlaybackApiClient {
 		});
 	}
 
-	setPlaybackPage(deskId: string, page: number) {
+	setPlaybackPage(
+		deskId: string,
+		page: number,
+		options: PlaybackPageSelectionOptions = {},
+	) {
+		const body =
+			options.existingOnly == null
+				? { page }
+				: { page, existing_only: options.existingOnly };
 		return this.transport.request<{
 			desk_id: string;
 			page: number;
@@ -220,7 +232,7 @@ export class PlaybackApiClient {
 		}>(`/api/v1/control-desks/${deskId}/page`, {
 			method: "PUT",
 			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ page }),
+			body: JSON.stringify(body),
 		});
 	}
 

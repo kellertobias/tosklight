@@ -51,6 +51,39 @@ function outcome() {
 	};
 }
 
+function createPageRequest(): PlaybackTopologyRequest {
+	return {
+		requestId: REQUEST_ID,
+		action: {
+			type: "create_page",
+			page: 2,
+			expectedPageRevision: 0,
+			expectedPageObjectId: null,
+		},
+	};
+}
+
+function createPageOutcome() {
+	return {
+		request_id: REQUEST_ID,
+		correlation_id: "33333333-3333-4333-8333-333333333333",
+		show_revision: 8,
+		resolution: { kind: "page", page: 2 },
+		status: "changed",
+		objects: [
+			{
+				state: "present",
+				kind: "playback_page",
+				object_id: "2",
+				object_revision: 1,
+				body: { number: 2, name: "Page 2", slots: {} },
+			},
+		],
+		event_sequence: 19,
+		replayed: false,
+	};
+}
+
 function response(value: unknown, status: number, etag?: string) {
 	return new Response(JSON.stringify(value), {
 		status,
@@ -129,6 +162,35 @@ describe("Playback topology v2 HTTP adapter", () => {
 			currentRelatedRevision: 6,
 			retryable: false,
 		});
+	});
+
+	it("sends Page creation through the same single revisioned action route", async () => {
+		const fetchMock = vi.fn(
+			async (_input: RequestInfo | URL, _init?: RequestInit) =>
+				response(createPageOutcome(), 200, '"8"'),
+		);
+		const transport = new HttpPlaybackTopologyTransport({
+			baseUrl: "http://desk.local",
+			sessionToken: "session-token",
+			fetch: fetchMock as typeof fetch,
+		});
+
+		await expect(
+			transport.apply(SHOW_ID, 7, createPageRequest()),
+		).resolves.toMatchObject({ resolution: { kind: "page", page: 2 } });
+
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(String(url)).toContain("/playback-topology/actions");
+		expect(JSON.parse(String(init?.body))).toEqual({
+			request_id: REQUEST_ID,
+			action: {
+				type: "create_page",
+				page: 2,
+				expected_page_revision: 0,
+				expected_page_object_id: null,
+			},
+		});
+		expect(fetchMock).toHaveBeenCalledOnce();
 	});
 
 	it("rejects missing or mismatched authoritative ETags", async () => {

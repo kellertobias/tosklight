@@ -78,4 +78,41 @@ describe("PlaybackApiClient v2 action boundary", () => {
 			message: expect.stringContaining(`request ID ${REQUEST_ID}`),
 		});
 	});
+
+	it("requires an existing Page for scoped desk selection", async () => {
+		const { client, request } = clientReturning({
+			desk_id: DESK_ID,
+			page: 2,
+			event_sequence: 14,
+			page_creation_event_sequence: null,
+		});
+
+		await client.setPlaybackPage(DESK_ID, 2, { existingOnly: true });
+
+		expect(request).toHaveBeenCalledWith(
+			`/api/v1/control-desks/${DESK_ID}/page`,
+			expect.objectContaining({
+				method: "PUT",
+				body: JSON.stringify({ page: 2, existing_only: true }),
+			}),
+		);
+	});
+
+	it("omits strict Page selection for compatibility callers", async () => {
+		const { client, request } = clientReturning({
+			desk_id: DESK_ID,
+			page: 2,
+			event_sequence: 14,
+			page_creation_event_sequence: 13,
+		});
+
+		await client.setPlaybackPage(DESK_ID, 2);
+
+		expect(request).toHaveBeenCalledWith(
+			`/api/v1/control-desks/${DESK_ID}/page`,
+			expect.objectContaining({
+				body: JSON.stringify({ page: 2 }),
+			}),
+		);
+	});
 });

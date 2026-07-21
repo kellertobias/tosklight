@@ -84,6 +84,29 @@ function mapExistingRequest(
 	};
 }
 
+function pageRequest(
+	type: "create_page" | "rename_page",
+): PlaybackTopologyRequest {
+	return {
+		requestId: REQUEST_ID,
+		action:
+			type === "create_page"
+				? {
+						type,
+						page: 5,
+						expectedPageRevision: 0,
+						expectedPageObjectId: null,
+					}
+				: {
+						type,
+						page: 4,
+						name: "Act One",
+						expectedPageRevision: 7,
+						expectedPageObjectId: "legacy-page-four",
+					},
+	};
+}
+
 function cueList(): CueList {
 	return {
 		id: CUE_LIST_ID,
@@ -204,6 +227,53 @@ describe("Playback topology v2 wire", () => {
 		});
 	});
 
+	it("encodes exact Page create and rename actions", () => {
+		expect(encodePlaybackTopologyRequest(pageRequest("create_page"))).toEqual({
+			request_id: REQUEST_ID,
+			action: {
+				type: "create_page",
+				page: 5,
+				expected_page_revision: 0,
+				expected_page_object_id: null,
+			},
+		});
+		expect(encodePlaybackTopologyRequest(pageRequest("rename_page"))).toEqual({
+			request_id: REQUEST_ID,
+			action: {
+				type: "rename_page",
+				page: 4,
+				name: "Act One",
+				expected_page_revision: 7,
+				expected_page_object_id: "legacy-page-four",
+			},
+		});
+		const legacyIdentity = "legacy/".repeat(40);
+		const legacyRename = pageRequest("rename_page");
+		if (legacyRename.action.type !== "rename_page")
+			throw new Error("rename request fixture");
+		expect(
+			encodePlaybackTopologyRequest({
+				...legacyRename,
+				action: {
+					...legacyRename.action,
+					expectedPageObjectId: legacyIdentity,
+				},
+			}).action,
+		).toMatchObject({ expected_page_object_id: legacyIdentity });
+
+		for (const action of [
+			{ ...pageRequest("rename_page").action, name: " Act One" },
+			{ ...pageRequest("rename_page").action, name: "x".repeat(81) },
+			{
+				...pageRequest("create_page").action,
+				expectedPageRevision: 1,
+			},
+		])
+			expect(() =>
+				encodePlaybackTopologyRequest({ requestId: REQUEST_ID, action }),
+			).toThrow("$.action");
+	});
+
 	it("keeps decoded target extensions out of the strict action DTO", () => {
 		const configure = request();
 		if (configure.action.type !== "configure_slot")
@@ -299,6 +369,122 @@ describe("Playback topology v2 wire", () => {
 				11,
 			),
 		).toThrow("the requested Playback");
+	});
+
+	it("decodes one authoritative Page for create, no-change, and rename", () => {
+		const created = {
+			state: "present",
+			kind: "playback_page",
+			object_id: "5",
+			object_revision: 1,
+			body: { number: 5, name: "Page 5", slots: {}, future_page: true },
+		};
+		const create = decodePlaybackTopologyOutcome(
+			{
+				request_id: REQUEST_ID,
+				correlation_id: CORRELATION_ID,
+				show_revision: 12,
+				resolution: { kind: "page", page: 5 },
+				status: "changed",
+				objects: [created],
+				event_sequence: 41,
+				replayed: false,
+			},
+			pageRequest("create_page"),
+			11,
+		);
+		expect(create).toMatchObject({
+			status: "changed",
+			resolution: { kind: "page", page: 5 },
+			objects: [{ objectId: "5", body: { future_page: true } }],
+		});
+
+		const existingCreate: PlaybackTopologyRequest = {
+			requestId: REQUEST_ID,
+			action: {
+				type: "create_page",
+				page: 4,
+				expectedPageRevision: 7,
+				expectedPageObjectId: "legacy-page-four",
+			},
+		};
+		expect(
+			decodePlaybackTopologyOutcome(
+				{
+					request_id: REQUEST_ID,
+					correlation_id: CORRELATION_ID,
+					show_revision: 11,
+					resolution: { kind: "page", page: 4 },
+					status: "no_change",
+					objects: [{ ...pageObject({ 2: 7 }), object_revision: 7 }],
+					replayed: true,
+				},
+				existingCreate,
+				11,
+			),
+		).toMatchObject({ status: "no_change", replayed: true });
+
+		expect(
+			decodePlaybackTopologyOutcome(
+				{
+					request_id: REQUEST_ID,
+					correlation_id: CORRELATION_ID,
+					show_revision: 12,
+					resolution: { kind: "page", page: 4 },
+					status: "changed",
+					objects: [
+						{
+							...pageObject({ 2: 7 }),
+							body: {
+								...pageObject({ 2: 7 }).body,
+								name: "Act One",
+							},
+						},
+					],
+					event_sequence: 41,
+					replayed: false,
+				},
+				pageRequest("rename_page"),
+				11,
+			),
+		).toMatchObject({ status: "changed" });
+	});
+
+	it("rejects malformed Page action authority and outcomes", () => {
+		const rename = pageRequest("rename_page");
+		for (const value of [
+			{
+				request_id: REQUEST_ID,
+				correlation_id: CORRELATION_ID,
+				show_revision: 12,
+				resolution: { kind: "page", page: 5 },
+				status: "changed",
+				objects: [pageObject()],
+				event_sequence: 41,
+				replayed: false,
+			},
+			{
+				request_id: REQUEST_ID,
+				correlation_id: CORRELATION_ID,
+				show_revision: 12,
+				resolution: { kind: "page", page: 4 },
+				status: "changed",
+				objects: [pageObject(), playbackObject()],
+				event_sequence: 41,
+				replayed: false,
+			},
+			{
+				request_id: REQUEST_ID,
+				correlation_id: CORRELATION_ID,
+				show_revision: 12,
+				resolution: { kind: "page", page: 4 },
+				status: "changed",
+				objects: [pageObject()],
+				event_sequence: 41,
+				replayed: false,
+			},
+		])
+			expect(() => decodePlaybackTopologyOutcome(value, rename, 11)).toThrow();
 	});
 
 	it("validates an existing-Playback no-change and exact identity pairs", () => {

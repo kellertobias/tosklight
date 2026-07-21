@@ -163,6 +163,8 @@ pub(super) async fn pool_playback_state(
 #[derive(Deserialize)]
 pub(super) struct DeskPageInput {
     pub(super) page: u8,
+    #[serde(default)]
+    pub(super) existing_only: bool,
 }
 #[derive(Deserialize)]
 pub(super) struct ControlDeskInput {
@@ -234,15 +236,23 @@ pub(super) async fn update_desk_page(
         .clone()
         .ok_or_else(|| ApiError::bad_request("no show is open"))?;
     let context = operator_action_context(&session, light_application::ActionSource::Http);
-    let completed = state
-        .playback_service
-        .run_unit_of_work(playback_service::ChangePage {
-            state: &state,
-            show: &show,
-            context,
-            desk_id: id,
-            page: input.page,
-        });
+    let completed = if input.existing_only {
+        state
+            .playback_service
+            .run_unit_of_work(playback_service::ChangePage::existing(
+                &state, show.id, context, id, input.page,
+            ))
+    } else {
+        state
+            .playback_service
+            .run_unit_of_work(playback_service::ChangePage {
+                state: &state,
+                show: &show,
+                context,
+                desk_id: id,
+                page: input.page,
+            })
+    };
     let availability = completed.output?;
     if !availability.available() {
         return Err(ApiError::bad_request("playback page does not exist"));

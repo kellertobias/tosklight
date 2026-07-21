@@ -190,6 +190,26 @@ pub(super) fn fingerprint(
             hasher.update(expected_playback_revision.to_le_bytes());
             hash_json(&mut hasher, expected_playback_object_id)?;
         }
+        PlaybackTopologyAction::CreatePage {
+            page,
+            expected_page_revision,
+            expected_page_object_id,
+        } => {
+            hasher.update([4, *page]);
+            hasher.update(expected_page_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_page_object_id)?;
+        }
+        PlaybackTopologyAction::RenamePage {
+            page,
+            name,
+            expected_page_revision,
+            expected_page_object_id,
+        } => {
+            hasher.update([5, *page]);
+            hash_json(&mut hasher, name)?;
+            hasher.update(expected_page_revision.to_le_bytes());
+            hash_json(&mut hasher, expected_page_object_id)?;
+        }
     }
     Ok(hasher.finalize().into())
 }

@@ -3,15 +3,17 @@ use super::{
     change::{PreparedTopology, changed_configure, changed_present, no_change},
     map_existing::map_existing_playback,
     page::configured_page,
+    page_actions::{create_page, rename_page},
     stored::{
-        Stored, conflict, cue_list_object_id, find_cue_list, find_page, find_playback, invalid,
+        Stored, cue_list_object_id, find_cue_list, find_page, find_playback, invalid,
         next_playback_number, next_revision, not_found, page_object_id, pages, playback_object_id,
         same_typed, stored_projection, validate_identity, validate_revision,
     },
+    validation::{validate_page_slot, validate_show},
 };
 use crate::active_show::PreparedActiveShowTransaction;
 use crate::{ActionError, ActiveShowObjectKind, lossless_json};
-use light_playback::{CueList, MAX_PAGE_SLOTS, MAX_PLAYBACK_PAGES, PlaybackDefinition};
+use light_playback::{CueList, PlaybackDefinition};
 use light_show::PortableShowDocument;
 use serde_json::Value;
 
@@ -74,6 +76,30 @@ pub(super) fn prepare(
                 expected_page_object_id.as_deref(),
                 expected_playback_object_id.as_deref(),
             ),
+        ),
+        PlaybackTopologyAction::CreatePage {
+            page,
+            expected_page_revision,
+            expected_page_object_id,
+        } => create_page(
+            document,
+            command,
+            *page,
+            *expected_page_revision,
+            expected_page_object_id.as_deref(),
+        ),
+        PlaybackTopologyAction::RenamePage {
+            page,
+            name,
+            expected_page_revision,
+            expected_page_object_id,
+        } => rename_page(
+            document,
+            command,
+            *page,
+            name,
+            *expected_page_revision,
+            expected_page_object_id.as_deref(),
         ),
         PlaybackTopologyAction::ClearMappedPlayback {
             page,
@@ -157,7 +183,7 @@ fn configure_slot(
     expected_ids: (Option<&str>, Option<&str>),
     requested: &PlaybackDefinition,
 ) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
-    validate_address(address)?;
+    validate_page_slot(address)?;
     let (page_number, slot) = address;
     let page = find_page(document, page_number)?;
     validate_identity(
@@ -248,7 +274,7 @@ fn clear_mapped_playback(
     expected: (u64, u64),
     expected_ids: (Option<&str>, Option<&str>),
 ) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
-    validate_address(address)?;
+    validate_page_slot(address)?;
     let (page_number, slot) = address;
     let page = find_page(document, page_number)?;
     validate_identity(
@@ -364,28 +390,4 @@ fn typed_body<T: serde::Serialize>(
         }
         None => serde_json::to_value(desired).map_err(invalid),
     }
-}
-
-fn validate_show(
-    document: &PortableShowDocument,
-    command: &PlaybackTopologyCommand,
-    expected_revision: u64,
-) -> Result<(), ActionError> {
-    if document.id() != command.show_id {
-        return Err(not_found("requested show is not active"));
-    }
-    if document.revision().value() == expected_revision {
-        return Ok(());
-    }
-    Err(conflict("stale active-show revision").at_revision(document.revision().value()))
-}
-
-fn validate_address((page, slot): (u8, u8)) -> Result<(), ActionError> {
-    if !(1..=MAX_PLAYBACK_PAGES).contains(&page) {
-        return Err(invalid("page number must be within 1-127"));
-    }
-    if !(1..=MAX_PAGE_SLOTS).contains(&slot) {
-        return Err(invalid("page slot must be within 1-127"));
-    }
-    Ok(())
 }

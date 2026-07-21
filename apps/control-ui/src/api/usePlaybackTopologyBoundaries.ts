@@ -48,10 +48,18 @@ export function usePlaybackTopologyBoundaries(state: ServerState) {
 		) => playbackClientRef.current.playbackRuntimeAction(show, desk, request),
 		[],
 	);
+	const applyPlaybackDeskPage = useCallback(
+		(desk: string, page: number) =>
+			playbackClientRef.current.setPlaybackPage(desk, page, {
+				existingOnly: true,
+			}),
+		[],
+	);
 	return {
 		playbackTopologyTransport,
 		virtualPlaybackZonesTransport,
 		virtualPlaybackZonesAuthority,
 		applyPlaybackRuntimeAction,
+		applyPlaybackDeskPage,
 	};
 }

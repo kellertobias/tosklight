@@ -415,11 +415,11 @@ export type PlaybackTopologyAction = { "type": "save_cue_list", cue_list_id: str
 /**
  * Extensible portable body; adapters strictly decode its known Cuelist fields.
  */
-body: unknown, } | { "type": "configure_slot", page: number, slot: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, playback: PlaybackTopologyPlaybackDefinition, } | { "type": "map_existing_playback", page: number, slot: number, playback_number: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, } | { "type": "clear_mapped_playback", page: number, slot: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, };
+body: unknown, } | { "type": "configure_slot", page: number, slot: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, playback: PlaybackTopologyPlaybackDefinition, } | { "type": "map_existing_playback", page: number, slot: number, playback_number: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, } | { "type": "create_page", page: number, expected_page_revision: number, expected_page_object_id: string | null, } | { "type": "rename_page", page: number, name: string, expected_page_revision: number, expected_page_object_id: string | null, } | { "type": "clear_mapped_playback", page: number, slot: number, expected_page_revision: number, expected_page_object_id: string | null, expected_playback_revision: number, expected_playback_object_id: string | null, };
 
 export type PlaybackTopologyActionRequest = { request_id: string, action: PlaybackTopologyAction, };
 
-export type PlaybackTopologyResolution = { "kind": "cue_list", cue_list_id: string, } | { "kind": "page_slot", page: number, slot: number, playback_number: number | null, };
+export type PlaybackTopologyResolution = { "kind": "cue_list", cue_list_id: string, } | { "kind": "page_slot", page: number, slot: number, playback_number: number | null, } | { "kind": "page", page: number, };
 
 export type PlaybackTopologyObjectProjection = { "state": "present", kind: ShowObjectKind, object_id: string, object_revision: number, body: unknown, } | { "state": "deleted", kind: ShowObjectKind, object_id: string, object_revision: number, };
 

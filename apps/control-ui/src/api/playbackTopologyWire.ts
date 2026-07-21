@@ -8,11 +8,17 @@ import type {
 import type { ShowObjectKind } from "../features/showObjects/contracts";
 import { validatePlaybackTopologyObjects } from "./playbackTopologyOutcomeValidation";
 import {
+	decodePlaybackPageResolution,
+	encodePlaybackPageAction,
+} from "./playbackTopologyPageWire";
+import {
 	arrayAt,
 	booleanAt,
+	boundedPositiveIntegerAt,
 	enumAt,
 	exactRecordAt,
 	integerAt,
+	printableStringAt,
 	recordAt,
 	stringAt,
 } from "./playbackWirePrimitives";
@@ -48,7 +54,7 @@ export interface PlaybackTopologyErrorResponse {
 export function encodePlaybackTopologyRequest(
 	request: PlaybackTopologyRequest,
 ) {
-	printableAt(request.requestId, "$.requestId", 128);
+	printableStringAt(request.requestId, "$.requestId", 128);
 	return {
 		request_id: request.requestId,
 		action: encodeAction(request.action),
@@ -127,10 +133,12 @@ function encodeAction(action: PlaybackTopologyAction) {
 			expected_object_id: action.expectedObjectId,
 			body: action.body,
 		};
+	if (action.type === "create_page" || action.type === "rename_page")
+		return encodePlaybackPageAction(action);
 	const shared = {
 		type: action.type,
-		page: boundedPositiveInteger(action.page, "$.action.page", 127),
-		slot: boundedPositiveInteger(action.slot, "$.action.slot", 127),
+		page: boundedPositiveIntegerAt(action.page, "$.action.page", 127),
+		slot: boundedPositiveIntegerAt(action.slot, "$.action.slot", 127),
 		expected_page_revision: revisionAt(
 			action.expectedPageRevision,
 			"$.action.expectedPageRevision",
@@ -148,7 +156,7 @@ function encodeAction(action: PlaybackTopologyAction) {
 		validateExistingPlaybackAuthority(action);
 		return {
 			...shared,
-			playback_number: boundedPositiveInteger(
+			playback_number: boundedPositiveIntegerAt(
 				action.playbackNumber,
 				"$.action.playbackNumber",
 				1000,
@@ -169,7 +177,7 @@ function validateExistingPlaybackAuthority(
 			action.expectedPageRevision,
 		);
 	if (!pageIsAbsent)
-		printableAt(
+		printableStringAt(
 			action.expectedPageObjectId,
 			"$.action.expectedPageObjectId",
 			128,
@@ -180,7 +188,7 @@ function validateExistingPlaybackAuthority(
 			"an existing Playback revision",
 			action.expectedPlaybackRevision,
 		);
-	printableAt(
+	printableStringAt(
 		action.expectedPlaybackObjectId,
 		"$.action.expectedPlaybackObjectId",
 		128,
@@ -217,7 +225,7 @@ function encodeTarget(target: PlaybackDefinition["target"]) {
 	if (target.type === "cue_list")
 		return {
 			type: target.type,
-			cue_list_id: printableAt(
+			cue_list_id: printableStringAt(
 				target.cue_list_id,
 				"$.action.playback.target.cue_list_id",
 				128,
@@ -226,7 +234,7 @@ function encodeTarget(target: PlaybackDefinition["target"]) {
 	if (target.type === "group")
 		return {
 			type: target.type,
-			group_id: printableAt(
+			group_id: printableStringAt(
 				target.group_id,
 				"$.action.playback.target.group_id",
 				128,
@@ -235,7 +243,11 @@ function encodeTarget(target: PlaybackDefinition["target"]) {
 	if (target.type === "speed_group")
 		return {
 			type: target.type,
-			group: printableAt(target.group, "$.action.playback.target.group", 16),
+			group: printableStringAt(
+				target.group,
+				"$.action.playback.target.group",
+				16,
+			),
 		};
 	return { type: target.type };
 }
@@ -247,6 +259,7 @@ function decodeResolution(
 	const resolution = recordAt(value, "$.resolution");
 	const kind = enumAt(resolution.kind, "$.resolution.kind", [
 		"cue_list",
+		"page",
 		"page_slot",
 	]);
 	if (kind === "cue_list") {
@@ -259,18 +272,23 @@ function decodeResolution(
 			invalid("$.resolution", "the requested Cuelist", resolution);
 		return { kind, cueListId };
 	}
+	if (kind === "page") {
+		if (action.type !== "create_page" && action.type !== "rename_page")
+			invalid("$.resolution", "the requested Playback Page", resolution);
+		return decodePlaybackPageResolution(resolution, action);
+	}
 	exactRecordAt(resolution, "$.resolution", [
 		"kind",
 		"page",
 		"slot",
 		"playback_number",
 	]);
-	const page = boundedPositiveInteger(
+	const page = boundedPositiveIntegerAt(
 		resolution.page,
 		"$.resolution.page",
 		127,
 	);
-	const slot = boundedPositiveInteger(
+	const slot = boundedPositiveIntegerAt(
 		resolution.slot,
 		"$.resolution.slot",
 		127,
@@ -278,13 +296,15 @@ function decodeResolution(
 	const playbackNumber =
 		resolution.playback_number == null
 			? null
-			: boundedPositiveInteger(
+			: boundedPositiveIntegerAt(
 					resolution.playback_number,
 					"$.resolution.playback_number",
 					1000,
 				);
 	if (
 		action.type === "save_cue_list" ||
+		action.type === "create_page" ||
+		action.type === "rename_page" ||
 		action.page !== page ||
 		action.slot !== slot
 	)
@@ -358,26 +378,8 @@ function revisionAt(value: unknown, path: string) {
 	return integerAt(value, path);
 }
 
-function boundedPositiveInteger(value: unknown, path: string, maximum: number) {
-	const integer = integerAt(value, path);
-	if (integer < 1 || integer > maximum)
-		invalid(path, `integer between 1 and ${maximum}`, value);
-	return integer;
-}
-
 function plainStringAt(value: unknown, path: string) {
 	if (typeof value !== "string") invalid(path, "string", value);
-	return value;
-}
-
-function printableAt(value: unknown, path: string, maximumBytes: number) {
-	if (
-		typeof value !== "string" ||
-		!value.trim() ||
-		new TextEncoder().encode(value).length > maximumBytes ||
-		/\p{Cc}/u.test(value)
-	)
-		invalid(path, `1-${maximumBytes} printable bytes`, value);
 	return value;
 }
 

@@ -71,6 +71,32 @@ pub(super) fn application_command(
             )?,
             expected_playback_object_id: expected_playback_object_id.into_option(),
         },
+        wire::PlaybackTopologyAction::CreatePage {
+            page,
+            expected_page_revision,
+            expected_page_object_id,
+        } => application::PlaybackTopologyAction::CreatePage {
+            page,
+            expected_page_revision: input_revision(
+                expected_page_revision,
+                "expected_page_revision",
+            )?,
+            expected_page_object_id: expected_page_object_id.into_option(),
+        },
+        wire::PlaybackTopologyAction::RenamePage {
+            page,
+            name,
+            expected_page_revision,
+            expected_page_object_id,
+        } => application::PlaybackTopologyAction::RenamePage {
+            page,
+            name,
+            expected_page_revision: input_revision(
+                expected_page_revision,
+                "expected_page_revision",
+            )?,
+            expected_page_object_id: expected_page_object_id.into_option(),
+        },
         wire::PlaybackTopologyAction::ClearMappedPlayback {
             page,
             slot,
@@ -261,6 +287,9 @@ fn wire_resolution(
             slot,
             playback_number,
         },
+        application::PlaybackTopologyResolution::Page { page } => {
+            wire::PlaybackTopologyResolution::Page { page }
+        }
     }
 }
 
