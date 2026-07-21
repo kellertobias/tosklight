@@ -816,6 +816,364 @@ async fn v2_snapshot_returns_only_requested_runtime_and_a_pre_read_cursor() {
 }
 
 #[tokio::test]
+async fn v2_group_runtime_actions_resolve_assigned_and_direct_authority() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_group_runtime_test_state(&state);
+
+    let cursor = state.application_events.latest_sequence();
+    let assigned_request = group_action_request(
+        "assigned-group-master",
+        "front",
+        serde_json::json!({"type":"master","value":0.5}),
+    );
+    let assigned = post_action(&app, Some(&token), desk_id, assigned_request.clone()).await;
+    assert_eq!(assigned.status(), StatusCode::OK);
+    let assigned = json(assigned).await;
+    assert_eq!(
+        assigned["requested"],
+        serde_json::json!({"kind":"group","group_id":"front"})
+    );
+    assert_eq!(
+        assigned["resolved"],
+        serde_json::json!({"kind":"group","group_id":"front","playback_number":2})
+    );
+    assert_eq!(assigned["projection"]["requested"], assigned["requested"]);
+    assert_eq!(assigned["projection"]["playback_number"], 2);
+    assert_eq!(assigned["projection"]["target"], "group");
+    assert_eq!(assigned["projection"]["master"], 0.5);
+    assert_eq!(assigned["outcome"]["status"], "applied");
+    let by_group = playback_events_for_object(
+        &state,
+        cursor,
+        light_application::EventObject::group("front"),
+    );
+    let by_playback =
+        playback_events_for_object(&state, cursor, light_application::EventObject::playback(2));
+    assert_eq!(by_group.len(), 1);
+    assert_eq!(by_group[0].sequence, by_playback[0].sequence);
+    assert_eq!(assigned["event_sequence"], by_group[0].sequence);
+
+    let replay_cursor = state.application_events.latest_sequence();
+    let replay = json(post_action(&app, Some(&token), desk_id, assigned_request).await).await;
+    assert_eq!(replay["replayed"], true);
+    assert_eq!(replay["event_sequence"], assigned["event_sequence"]);
+    assert_eq!(state.application_events.latest_sequence(), replay_cursor);
+
+    let no_change = json(
+        post_action(
+            &app,
+            Some(&token),
+            desk_id,
+            group_action_request(
+                "assigned-group-no-change",
+                "front",
+                serde_json::json!({"type":"master","value":0.5}),
+            ),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(no_change["outcome"]["status"], "no_change");
+    assert!(no_change["event_sequence"].is_null());
+    assert_eq!(state.application_events.latest_sequence(), replay_cursor);
+
+    assert_group_flash_phase(&app, &state, &token, desk_id, "front", true, 1.0).await;
+    assert_group_flash_phase(&app, &state, &token, desk_id, "front", false, 0.0).await;
+
+    let show_id = state.active_show.read().as_ref().unwrap().id;
+    let output_key = output_runtime_setting(show_id);
+    state
+        .desk
+        .lock()
+        .set_setting(&output_key, "output-sentinel")
+        .unwrap();
+    let direct = json(
+        post_action(
+            &app,
+            Some(&token),
+            desk_id,
+            group_action_request(
+                "direct-group-master",
+                "side",
+                serde_json::json!({"type":"master","value":0.4}),
+            ),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(
+        direct["resolved"],
+        serde_json::json!({"kind":"group","group_id":"side","playback_number":null})
+    );
+    assert_eq!(
+        direct["projection"]["playback_number"],
+        serde_json::Value::Null
+    );
+    assert_eq!(direct["projection"]["master"], 0.4);
+    assert_ne!(setting_value(&state, &output_key), "output-sentinel");
+    state
+        .desk
+        .lock()
+        .set_setting(&output_key, "flash-sentinel")
+        .unwrap();
+    assert_group_flash_phase(&app, &state, &token, desk_id, "side", true, 1.0).await;
+    assert_eq!(setting_value(&state, &output_key), "flash-sentinel");
+    assert_group_flash_phase(&app, &state, &token, desk_id, "side", false, 0.0).await;
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn v2_group_snapshot_is_exact_and_rejects_foreign_or_invalid_identity() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_group_runtime_test_state(&state);
+
+    let snapshot = post_playback_snapshot(
+        &app,
+        Some(&token),
+        desk_id,
+        serde_json::json!({"identities":[{"kind":"group","group_id":"front"}]}),
+    )
+    .await;
+    assert_eq!(snapshot.status(), StatusCode::OK);
+    let snapshot = json(snapshot).await;
+    assert_eq!(snapshot["projections"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        snapshot["projections"][0]["requested"],
+        serde_json::json!({"kind":"group","group_id":"front"})
+    );
+    assert_eq!(snapshot["projections"][0]["playback_number"], 2);
+    assert_eq!(snapshot["projections"][0]["master"], 0.75);
+    assert_eq!(snapshot["projections"][0]["flash_level"], 0.0);
+    assert!(!snapshot.to_string().contains("side"));
+    assert!(!snapshot.to_string().contains("cue_list"));
+
+    let denied = post_playback_snapshot(
+        &app,
+        Some(&token),
+        Uuid::new_v4(),
+        serde_json::json!({"identities":[{"kind":"group","group_id":"front"}]}),
+    )
+    .await;
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+
+    for group_id in [String::new(), "front\n".into(), "x".repeat(257)] {
+        let rejected = post_playback_snapshot(
+            &app,
+            Some(&token),
+            desk_id,
+            serde_json::json!({"identities":[{"kind":"group","group_id":group_id}]}),
+        )
+        .await;
+        assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(json(rejected).await["kind"], "invalid");
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn v2_group_actions_reject_forged_unsupported_missing_and_wrong_assignments() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_group_runtime_test_state(&state);
+    let cursor = state.application_events.latest_sequence();
+
+    for request in [
+        serde_json::json!({
+            "request_id":"forged-group-assignment",
+            "address":{"kind":"group","group_id":"front","playback_number":2},
+            "action":{"type":"master","value":0.5},
+            "surface":"virtual"
+        }),
+        group_action_request(
+            "unsupported-group-action",
+            "front",
+            serde_json::json!({"type":"go","pressed":true}),
+        ),
+        group_action_request(
+            "missing-group",
+            "missing",
+            serde_json::json!({"type":"flash","pressed":true}),
+        ),
+    ] {
+        let rejected = post_action(&app, Some(&token), desk_id, request).await;
+        assert!(
+            matches!(
+                rejected.status(),
+                StatusCode::BAD_REQUEST | StatusCode::NOT_FOUND
+            ),
+            "unexpected status {}",
+            rejected.status()
+        );
+    }
+
+    set_group_playback_assignment(&state, "side", Some(9));
+    let missing_assignment = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        group_action_request(
+            "missing-group-playback",
+            "side",
+            serde_json::json!({"type":"master","value":0.4}),
+        ),
+    )
+    .await;
+    assert_eq!(missing_assignment.status(), StatusCode::CONFLICT);
+
+    set_group_playback_assignment(&state, "side", Some(1));
+    let wrong_assignment = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        group_action_request(
+            "wrong-group-playback",
+            "side",
+            serde_json::json!({"type":"flash","pressed":true}),
+        ),
+    )
+    .await;
+    assert_eq!(wrong_assignment.status(), StatusCode::CONFLICT);
+    assert_eq!(state.application_events.latest_sequence(), cursor);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn playback_originated_group_change_uses_the_same_group_event_route() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+    let cursor = state.application_events.latest_sequence();
+
+    let response = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        action_request(
+            "playback-originated-group-master",
+            2,
+            serde_json::json!({"type":"master","value":0.4}),
+        ),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let by_group = playback_events_for_object(
+        &state,
+        cursor,
+        light_application::EventObject::group("front"),
+    );
+    let by_playback =
+        playback_events_for_object(&state, cursor, light_application::EventObject::playback(2));
+    assert_eq!(by_group.len(), 1);
+    assert_eq!(by_group[0].sequence, by_playback[0].sequence);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn v2_group_runtime_preserves_peer_desk_scope_and_rejects_stale_show() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (first_token, _) = login(&app, "Operator").await;
+    let first_desk = session_desk_id(&state, &first_token);
+    let second_desk = state
+        .desk
+        .lock()
+        .add_desk("Group runtime wing", "group-runtime-wing")
+        .unwrap();
+    let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
+    open_playback_test_show(&app, &first_token).await;
+    install_group_runtime_test_state(&state);
+    let cursor = state.application_events.latest_sequence();
+
+    let foreign_desk = post_action(
+        &app,
+        Some(&first_token),
+        second_desk.id,
+        group_action_request(
+            "foreign-desk-group-master",
+            "side",
+            serde_json::json!({"type":"master","value":0.3}),
+        ),
+    )
+    .await;
+    assert_eq!(foreign_desk.status(), StatusCode::FORBIDDEN);
+
+    let stale_show = post_scoped_action(
+        &app,
+        Some(&second_token),
+        Uuid::new_v4(),
+        second_desk.id,
+        group_action_request(
+            "stale-show-group-master",
+            "side",
+            serde_json::json!({"type":"master","value":0.3}),
+        ),
+    )
+    .await;
+    assert_eq!(stale_show.status(), StatusCode::CONFLICT);
+    assert_eq!(state.application_events.latest_sequence(), cursor);
+
+    let accepted = post_action(
+        &app,
+        Some(&second_token),
+        second_desk.id,
+        group_action_request(
+            "peer-desk-group-master",
+            "side",
+            serde_json::json!({"type":"master","value":0.3}),
+        ),
+    )
+    .await;
+    assert_eq!(accepted.status(), StatusCode::OK);
+    let accepted = json(accepted).await;
+    assert_eq!(accepted["projection"]["master"], 0.3);
+
+    let first_filter = light_application::EventFilter::for_desk(first_desk)
+        .with_object(light_application::EventObject::group("side"));
+    let second_filter = light_application::EventFilter::for_desk(second_desk.id)
+        .with_object(light_application::EventObject::group("side"));
+    let light_application::EventReplay::Events(first_events) =
+        state.application_events.replay(cursor, &first_filter)
+    else {
+        panic!("Playback events should remain replayable")
+    };
+    let light_application::EventReplay::Events(second_events) =
+        state.application_events.replay(cursor, &second_filter)
+    else {
+        panic!("Playback events should remain replayable")
+    };
+    assert_eq!(first_events.len(), 1);
+    assert_eq!(second_events.len(), 1);
+    assert_eq!(first_events[0].sequence, second_events[0].sequence);
+
+    for (token, desk_id) in [(&first_token, first_desk), (&second_token, second_desk.id)] {
+        let snapshot = post_playback_snapshot(
+            &app,
+            Some(token),
+            desk_id,
+            serde_json::json!({"identities":[{"kind":"group","group_id":"side"}]}),
+        )
+        .await;
+        assert_eq!(snapshot.status(), StatusCode::OK);
+        assert_eq!(json(snapshot).await["projections"][0]["master"], 0.3);
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_snapshot_allows_a_desk_only_request() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
@@ -1506,6 +1864,19 @@ fn action_request(
     })
 }
 
+fn group_action_request(
+    request_id: &str,
+    group_id: &str,
+    action: serde_json::Value,
+) -> serde_json::Value {
+    serde_json::json!({
+        "request_id": request_id,
+        "address": {"kind":"group","group_id":group_id},
+        "action": action,
+        "surface": "virtual"
+    })
+}
+
 async fn post_action(
     app: &Router,
     token: Option<&str>,
@@ -1534,6 +1905,23 @@ async fn post_scoped_action(
         "/api/v2/shows/{show_id}/desks/{desk_id}/playback-actions"
     ))
     .header(header::CONTENT_TYPE, "application/json");
+    if let Some(token) = token {
+        builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
+    }
+    app.clone()
+        .oneshot(builder.body(Body::from(request.to_string())).unwrap())
+        .await
+        .unwrap()
+}
+
+async fn post_playback_snapshot(
+    app: &Router,
+    token: Option<&str>,
+    desk_id: Uuid,
+    request: serde_json::Value,
+) -> Response {
+    let mut builder = Request::post(format!("/api/v2/desks/{desk_id}/playback-runtime/snapshot"))
+        .header(header::CONTENT_TYPE, "application/json");
     if let Some(token) = token {
         builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }
@@ -1746,6 +2134,35 @@ fn install_playback_test_state(state: &AppState) -> light_core::FixtureId {
     fixture
 }
 
+fn install_group_runtime_test_state(state: &AppState) {
+    install_playback_test_state(state);
+    let mut snapshot = (*state.engine.snapshot()).clone();
+    snapshot
+        .groups
+        .iter_mut()
+        .find(|group| group.id == "front")
+        .unwrap()
+        .playback_fader = Some(2);
+    snapshot.groups.push(light_programmer::GroupDefinition {
+        id: "side".into(),
+        name: "Side".into(),
+        master: 0.6,
+        ..light_programmer::GroupDefinition::default()
+    });
+    state.engine.replace_snapshot(snapshot).unwrap();
+}
+
+fn set_group_playback_assignment(state: &AppState, group_id: &str, playback: Option<u8>) {
+    let mut snapshot = (*state.engine.snapshot()).clone();
+    snapshot
+        .groups
+        .iter_mut()
+        .find(|group| group.id == group_id)
+        .unwrap()
+        .playback_fader = playback;
+    state.engine.replace_snapshot(snapshot).unwrap();
+}
+
 fn install_virtual_exclusion_test_state(state: &AppState) {
     let cue_list = playback_test_cue_list();
     let cue_list_id = cue_list.id;
@@ -1911,6 +2328,54 @@ fn playback_runtime_events(
         panic!("Playback events should remain replayable")
     };
     events
+}
+
+fn playback_events_for_object(
+    state: &AppState,
+    after: u64,
+    object: light_application::EventObject,
+) -> Vec<Arc<light_application::EventEnvelope>> {
+    let filter = light_application::EventFilter::default().with_object(object);
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(after, &filter)
+    else {
+        panic!("Playback events should remain replayable")
+    };
+    events
+}
+
+async fn assert_group_flash_phase(
+    app: &Router,
+    state: &AppState,
+    token: &str,
+    desk_id: Uuid,
+    group_id: &str,
+    pressed: bool,
+    expected_level: f64,
+) {
+    let cursor = state.application_events.latest_sequence();
+    let response = post_action(
+        app,
+        Some(token),
+        desk_id,
+        group_action_request(
+            &format!("{group_id}-flash-{pressed}"),
+            group_id,
+            serde_json::json!({"type":"flash","pressed":pressed}),
+        ),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = json(response).await;
+    assert_eq!(response["outcome"]["status"], "applied");
+    assert_eq!(response["projection"]["flash_level"], expected_level);
+    let events = playback_events_for_object(
+        state,
+        cursor,
+        light_application::EventObject::group(group_id),
+    );
+    assert_eq!(events.len(), 1);
+    assert_eq!(response["event_sequence"], events[0].sequence);
 }
 
 fn playback_event_state(event: &light_application::EventEnvelope) -> (u16, bool) {

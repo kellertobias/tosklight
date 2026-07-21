@@ -56,7 +56,7 @@ pub(super) fn read_projections(
     let projections = playback_service::read_runtime_projections(state, context, identities)
         .map_err(|error| error.message)?;
     validate_projections(identities, &projections)?;
-    Ok(identities.iter().copied().zip(projections).collect())
+    Ok(identities.iter().cloned().zip(projections).collect())
 }
 
 fn pending_actions(

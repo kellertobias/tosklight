@@ -14,6 +14,7 @@ import {
 	enumAt,
 	integerAt,
 	nullable,
+	opaqueStringAt,
 	positiveIntegerAt,
 	recordAt,
 	stringAt,
@@ -63,24 +64,36 @@ function assertRuntimeRoute(
 	routes: Array<{ capability: string; id: string }>,
 	projection: ReturnType<typeof decodePlaybackProjection>,
 ) {
+	if (projection.target === "group") {
+		assertPlaybackRoute(routes, `group:${projection.group_id}`);
+		if (projection.playback_number != null)
+			assertPlaybackRoute(routes, `playback:${projection.playback_number}`);
+		return;
+	}
 	const expected =
 		projection.playback_number == null
 			? projection.target === "cue_list"
 				? `cuelist:${projection.cue_list_id}`
 				: projection.requested.kind === "cue_list"
 					? `cuelist:${projection.requested.cue_list_id}`
-					: `playback:${projection.requested.playback_number}`
+					: projection.requested.kind === "playback"
+						? `playback:${projection.requested.playback_number}`
+						: `group:${projection.requested.group_id}`
 			: `playback:${projection.playback_number}`;
-	if (
-		!routes.some(
-			(route) => route.capability === "playback" && route.id === expected,
-		)
-	)
-		throw new WireValidationError(
-			"$.event.object",
-			`Playback route ${expected}`,
-			routes,
-		);
+	assertPlaybackRoute(routes, expected);
+}
+
+function assertPlaybackRoute(
+	routes: Array<{ capability: string; id: string }>,
+	expected: string,
+) {
+	if (routes.some((route) => route.capability === "playback" && route.id === expected))
+		return;
+	throw new WireValidationError(
+		"$.event.object",
+		`Playback route ${expected}`,
+		routes,
+	);
 }
 
 function decodeEvent(
@@ -252,6 +265,7 @@ function decodeRequestedAddress(value: unknown, path: string): PlaybackAddress {
 	const address = recordAt(value, path);
 	const kind = enumAt(address.kind, `${path}.kind`, [
 		"cue_list",
+		"group",
 		"playback",
 		"current_page",
 		"explicit_page",
@@ -260,6 +274,11 @@ function decodeRequestedAddress(value: unknown, path: string): PlaybackAddress {
 		return {
 			kind,
 			cue_list_id: stringAt(address.cue_list_id, `${path}.cue_list_id`),
+		};
+	if (kind === "group")
+		return {
+			kind,
+			group_id: opaqueStringAt(address.group_id, `${path}.group_id`, 256),
 		};
 	if (kind === "playback")
 		return {
@@ -286,11 +305,25 @@ function decodeResolvedAddress(
 	path: string,
 ): ResolvedPlaybackAddress {
 	const address = recordAt(value, path);
-	const kind = enumAt(address.kind, `${path}.kind`, ["cue_list", "playback"]);
+	const kind = enumAt(address.kind, `${path}.kind`, [
+		"cue_list",
+		"group",
+		"playback",
+	]);
 	if (kind === "cue_list")
 		return {
 			kind,
 			cue_list_id: stringAt(address.cue_list_id, `${path}.cue_list_id`),
+		};
+	if (kind === "group")
+		return {
+			kind,
+			group_id: opaqueStringAt(address.group_id, `${path}.group_id`, 256),
+			playback_number: nullable(
+				address.playback_number,
+				`${path}.playback_number`,
+				positiveIntegerAt,
+			),
 		};
 	return {
 		kind,

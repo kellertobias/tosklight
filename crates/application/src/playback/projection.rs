@@ -3,14 +3,16 @@ use light_core::CueListId;
 use std::collections::HashSet;
 use uuid::Uuid;
 
+use super::PlaybackGroupId;
 use crate::{ActionError, ActionErrorKind};
 
 pub const MAX_PLAYBACK_SNAPSHOT_IDENTITIES: usize = 256;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum PlaybackRuntimeIdentity {
     Playback(u16),
     CueList(CueListId),
+    Group(PlaybackGroupId),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -66,6 +68,13 @@ impl PlaybackRuntimeProjection {
                 runtime: Some(runtime),
                 ..
             } => Some(runtime),
+            _ => None,
+        }
+    }
+
+    pub fn group_id(&self) -> Option<&str> {
+        match &self.target {
+            PlaybackTargetProjection::Group { group_id, .. } => Some(group_id),
             _ => None,
         }
     }
@@ -203,7 +212,7 @@ pub(super) fn validate_snapshot_identities(
             ),
         ));
     }
-    if identities.iter().copied().collect::<HashSet<_>>().len() != identities.len() {
+    if identities.iter().cloned().collect::<HashSet<_>>().len() != identities.len() {
         return Err(ActionError::new(
             ActionErrorKind::Invalid,
             "playback runtime identities must be unique",

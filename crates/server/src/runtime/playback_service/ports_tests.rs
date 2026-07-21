@@ -1,3 +1,4 @@
+use super::super::semantics::{may_activate_playback, may_trigger_auto_off};
 use super::*;
 use light_application::PlaybackLevel;
 

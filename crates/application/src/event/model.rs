@@ -89,6 +89,10 @@ impl EventObject {
         Self::new(EventCapability::Playback, format!("cuelist:{cue_list_id}"))
     }
 
+    pub fn group(group_id: &str) -> Self {
+        Self::new(EventCapability::Playback, format!("group:{group_id}"))
+    }
+
     pub fn playback_view(desk_id: Uuid) -> Self {
         Self::new(EventCapability::Desk, format!("playback-view:{desk_id}"))
     }
@@ -296,10 +300,14 @@ fn playback_routes(change: &PlaybackRuntimeChange) -> (Option<EventObject>, Vec<
     if let Some(cue_list_id) = change.projection.cue_list_id() {
         routes.push(EventObject::cue_list(cue_list_id.0));
     }
+    if let Some(group_id) = change.projection.group_id() {
+        routes.push(EventObject::group(group_id));
+    }
     if routes.is_empty() {
-        routes.push(match change.projection.requested {
-            PlaybackRuntimeIdentity::Playback(number) => EventObject::playback(number),
+        routes.push(match &change.projection.requested {
+            PlaybackRuntimeIdentity::Playback(number) => EventObject::playback(*number),
             PlaybackRuntimeIdentity::CueList(id) => EventObject::cue_list(id.0),
+            PlaybackRuntimeIdentity::Group(id) => EventObject::group(id.as_str()),
         });
     }
     let object = Some(routes.remove(0));

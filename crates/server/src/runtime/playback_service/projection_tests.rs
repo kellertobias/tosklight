@@ -25,7 +25,7 @@ fn direct_cuelist_action_projection_is_not_replaced_by_assigned_playbacks() {
 
     let direct = cue_list_projection(
         scope,
-        requested,
+        requested.clone(),
         None,
         cue_list_id,
         direct_cue_list_runtime(&runtime, cue_list_id),

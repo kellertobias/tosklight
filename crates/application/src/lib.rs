@@ -72,10 +72,11 @@ pub use output_runtime::{
 };
 pub use playback::{
     AutomaticPlaybackProjection, CueListRuntimeProjection, CueNumber, GrandMasterRuntimeProjection,
-    ManualXFadeDirection, PendingPlaybackAction, PlaybackAction, PlaybackAddress, PlaybackCommand,
-    PlaybackCueReference, PlaybackCueTransition, PlaybackDeskProjection, PlaybackDurability,
-    PlaybackExecution, PlaybackLevel, PlaybackOperation, PlaybackOperationResult, PlaybackOutcome,
-    PlaybackPorts, PlaybackResult, PlaybackRuntimeChange, PlaybackRuntimeIdentity,
+    MAX_PLAYBACK_GROUP_ID_BYTES, ManualXFadeDirection, PendingPlaybackAction, PlaybackAction,
+    PlaybackAddress, PlaybackCommand, PlaybackCueReference, PlaybackCueTransition,
+    PlaybackDeskProjection, PlaybackDurability, PlaybackExecution, PlaybackGroupId,
+    PlaybackGroupIdError, PlaybackLevel, PlaybackOperation, PlaybackOperationResult,
+    PlaybackOutcome, PlaybackPorts, PlaybackResult, PlaybackRuntimeChange, PlaybackRuntimeIdentity,
     PlaybackRuntimeProjection, PlaybackRuntimeSnapshot, PlaybackService, PlaybackShowScope,
     PlaybackSurface, PlaybackTargetProjection, PlaybackTransitionCause, PlaybackUnitOfWork,
     ResolvedPlaybackAddress, SoundLossReason, SoundStatus, SpeedGroupRuntimeProjection,

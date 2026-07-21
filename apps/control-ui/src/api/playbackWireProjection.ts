@@ -14,6 +14,7 @@ import {
 	integerAt,
 	nullable,
 	numberAt,
+	opaqueStringAt,
 	positiveIntegerAt,
 	recordAt,
 	stringAt,
@@ -25,19 +26,28 @@ export function decodePlaybackIdentity(
 	path: string,
 ): PlaybackRuntimeIdentity {
 	const identity = recordAt(value, path);
-	const kind = enumAt(identity.kind, `${path}.kind`, ["playback", "cue_list"]);
-	return kind === "playback"
-		? {
+	const kind = enumAt(identity.kind, `${path}.kind`, [
+		"playback",
+		"cue_list",
+		"group",
+	]);
+	if (kind === "playback")
+		return {
 				kind,
 				playback_number: positiveIntegerAt(
 					identity.playback_number,
 					`${path}.playback_number`,
 				),
-			}
-		: {
+			};
+	if (kind === "cue_list")
+		return {
 				kind,
 				cue_list_id: stringAt(identity.cue_list_id, `${path}.cue_list_id`),
 			};
+	return {
+		kind,
+		group_id: opaqueStringAt(identity.group_id, `${path}.group_id`, 256),
+	};
 }
 
 function decodeScope(value: unknown, path: string) {
@@ -243,7 +253,11 @@ function decodeTarget(
 	if (target === "group") {
 		return {
 			target,
-			group_id: stringAt(projection.group_id, `${path}.group_id`),
+			group_id: opaqueStringAt(
+				projection.group_id,
+				`${path}.group_id`,
+				256,
+			),
 			master: numberAt(projection.master, `${path}.master`),
 			flash_level: numberAt(projection.flash_level, `${path}.flash_level`),
 		};

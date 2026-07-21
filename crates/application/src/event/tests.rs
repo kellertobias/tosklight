@@ -7,8 +7,8 @@ use uuid::Uuid;
 use super::*;
 use crate::{
     ActionContext, ActionSource, ActiveShowObjectChange, ActiveShowObjectKind,
-    ActiveShowObjectsChange, PlaybackCueReference, PlaybackCueTransition, PlaybackRuntimeChange,
-    PlaybackRuntimeIdentity, PlaybackRuntimeProjection, PlaybackShowScope,
+    ActiveShowObjectsChange, PlaybackCueReference, PlaybackCueTransition, PlaybackGroupId,
+    PlaybackRuntimeChange, PlaybackRuntimeIdentity, PlaybackRuntimeProjection, PlaybackShowScope,
     PlaybackTargetProjection, PlaybackTransitionCause, SelectiveShowImportChange,
     SelectiveShowObjectChange,
 };
@@ -79,6 +79,47 @@ fn filters_by_desk_capability_class_and_object() {
 
     assert_eq!(next_event(&subscription), expected);
     assert!(subscription.try_next().is_none());
+}
+
+#[test]
+fn mapped_group_change_routes_one_event_to_group_and_playback() {
+    let bus = EventBus::new(4);
+    let group_id = PlaybackGroupId::new("front").unwrap();
+    let by_group = bus.subscribe(
+        EventFilter::default().with_object(EventObject::group(group_id.as_str())),
+        SubscriptionOptions::default(),
+    );
+    let by_playback = bus.subscribe(
+        EventFilter::default().with_object(EventObject::playback(2)),
+        SubscriptionOptions::default(),
+    );
+    let expected = bus.publish(EventDraft::playback_runtime_changed(
+        Some(Uuid::from_u128(1)),
+        PlaybackRuntimeChange {
+            projection: PlaybackRuntimeProjection {
+                scope: PlaybackShowScope {
+                    show_id: Uuid::nil(),
+                    show_revision: 3,
+                },
+                requested: PlaybackRuntimeIdentity::Group(group_id.clone()),
+                playback_number: Some(2),
+                target: PlaybackTargetProjection::Group {
+                    group_id: group_id.as_str().to_owned(),
+                    master: 0.5,
+                    flash_level: 0.0,
+                },
+            },
+            transition: None,
+        },
+        EventSource::Action(ActionSource::Http),
+        Some(Uuid::from_u128(9)),
+    ));
+
+    assert_eq!(next_event(&by_group), expected);
+    assert_eq!(next_event(&by_playback), expected);
+    assert_eq!(bus.latest_sequence(), 1);
+    assert_eq!(expected.object, Some(EventObject::playback(2)));
+    assert_eq!(expected.related_objects, vec![EventObject::group("front")]);
 }
 
 #[test]

@@ -26,20 +26,38 @@ pub struct PlaybackActionRequest {
     pub surface: PlaybackSurface,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PlaybackAddress {
-    CueList { cue_list_id: Uuid },
-    Playback { playback_number: u16 },
-    CurrentPage { slot: u8 },
-    ExplicitPage { page: u8, slot: u8 },
+    CueList {
+        cue_list_id: Uuid,
+    },
+    Group {
+        #[schemars(length(min = 1, max = 256))]
+        group_id: String,
+    },
+    Playback {
+        playback_number: u16,
+    },
+    CurrentPage {
+        slot: u8,
+    },
+    ExplicitPage {
+        page: u8,
+        slot: u8,
+    },
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ResolvedPlaybackAddress {
     CueList {
         cue_list_id: Uuid,
+    },
+    Group {
+        #[schemars(length(min = 1, max = 256))]
+        group_id: String,
+        playback_number: Option<u16>,
     },
     Playback {
         playback_number: u16,
@@ -216,5 +234,30 @@ mod tests {
         let json = serde_json::to_value(schema).expect("serialize schema");
         assert!(json["properties"]["identities"].get("minItems").is_none());
         assert_eq!(json["properties"]["identities"]["maxItems"], 256);
+    }
+
+    #[test]
+    fn group_address_is_strict_and_opaque() {
+        let request: PlaybackActionRequest = serde_json::from_value(serde_json::json!({
+            "request_id": "group-master",
+            "address": {"kind": "group", "group_id": " Front · 1 "},
+            "action": {"type": "master", "value": 0.5},
+            "surface": "virtual",
+        }))
+        .expect("decode Group action");
+        assert_eq!(
+            request.address,
+            PlaybackAddress::Group {
+                group_id: " Front · 1 ".into()
+            }
+        );
+
+        let forged = serde_json::json!({
+            "request_id": "forged-assignment",
+            "address": {"kind": "group", "group_id": "front", "playback_number": 2},
+            "action": {"type": "flash", "pressed": true},
+            "surface": "virtual",
+        });
+        assert!(serde_json::from_value::<PlaybackActionRequest>(forged).is_err());
     }
 }

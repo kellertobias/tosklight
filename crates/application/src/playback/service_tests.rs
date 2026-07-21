@@ -10,6 +10,8 @@ use uuid::Uuid;
 
 #[path = "service_tests/event_effects.rs"]
 mod event_effects;
+#[path = "service_tests/group.rs"]
+mod group;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ObservedAction {
@@ -73,7 +75,7 @@ impl PlaybackPorts for FakePorts {
         _context: &crate::ActionContext,
         identity: PlaybackRuntimeIdentity,
     ) -> Result<PlaybackRuntimeProjection, ActionError> {
-        self.projection_reads.lock().push(identity);
+        self.projection_reads.lock().push(identity.clone());
         Ok(missing_projection(identity))
     }
 
@@ -587,7 +589,7 @@ fn narrow_snapshot_captures_cursor_before_reads_and_replays_a_racing_change() {
         snapshot
             .projections
             .iter()
-            .map(|projection| projection.requested)
+            .map(|projection| projection.requested.clone())
             .collect::<Vec<_>>(),
         identities
     );
@@ -736,6 +738,20 @@ fn envelope(
     address: PlaybackAddress,
     request_id: Option<&str>,
 ) -> ActionEnvelope<PlaybackCommand> {
+    envelope_with_action(
+        source,
+        address,
+        PlaybackAction::Go { pressed: true },
+        request_id,
+    )
+}
+
+fn envelope_with_action(
+    source: ActionSource,
+    address: PlaybackAddress,
+    action: PlaybackAction,
+    request_id: Option<&str>,
+) -> ActionEnvelope<PlaybackCommand> {
     let mut context = crate::ActionContext::operator(
         Uuid::from_u128(1),
         Uuid::from_u128(2),
@@ -747,20 +763,21 @@ fn envelope(
         context,
         command: PlaybackCommand {
             address,
-            action: PlaybackAction::Go { pressed: true },
+            action,
             surface: PlaybackSurface::Physical,
         },
     }
 }
 
 fn missing_projection(identity: PlaybackRuntimeIdentity) -> PlaybackRuntimeProjection {
+    let playback_number = match &identity {
+        PlaybackRuntimeIdentity::Playback(number) => Some(*number),
+        PlaybackRuntimeIdentity::CueList(_) | PlaybackRuntimeIdentity::Group(_) => None,
+    };
     PlaybackRuntimeProjection {
         scope: test_scope(),
         requested: identity,
-        playback_number: match identity {
-            PlaybackRuntimeIdentity::Playback(number) => Some(number),
-            PlaybackRuntimeIdentity::CueList(_) => None,
-        },
+        playback_number,
         target: PlaybackTargetProjection::Missing,
     }
 }
@@ -854,7 +871,7 @@ impl RelatedRuntimePorts {
                     .iter()
                     .find(|projection| projection.requested == *identity)
                     .cloned()
-                    .unwrap_or_else(|| missing_projection(*identity))
+                    .unwrap_or_else(|| missing_projection(identity.clone()))
             })
             .collect()
     }
@@ -1072,7 +1089,7 @@ impl PlaybackPorts for SnapshotPorts {
     ) -> Result<Vec<PlaybackRuntimeProjection>, ActionError> {
         self.requests.lock().push(identities.to_vec());
         self.events.publish(runtime_event(99));
-        Ok(identities.iter().copied().map(missing_projection).collect())
+        Ok(identities.iter().cloned().map(missing_projection).collect())
     }
 
     fn desk_projection(

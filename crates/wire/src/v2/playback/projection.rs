@@ -5,11 +5,19 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PlaybackRuntimeIdentity {
-    Playback { playback_number: u16 },
-    CueList { cue_list_id: Uuid },
+    Playback {
+        playback_number: u16,
+    },
+    CueList {
+        cue_list_id: Uuid,
+    },
+    Group {
+        #[schemars(length(min = 1, max = 256))]
+        group_id: String,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

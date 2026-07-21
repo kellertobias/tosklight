@@ -61,17 +61,23 @@ impl PlaybackService {
         envelope: &ActionEnvelope<PlaybackCommand>,
         ports: &dyn PlaybackPorts,
     ) -> Result<PlaybackResult, ActionError> {
-        let resolved = resolve(envelope.command.address, &envelope.context, ports)?;
-        let identity = runtime_identity(resolved);
-        let before = ports.projection(&envelope.context, identity)?;
-        let related =
-            RelatedTransitionSet::capture(envelope, resolved, identity, before.scope, ports)?;
+        validate_address_action(&envelope.command.address, envelope.command.action)?;
+        let resolved = resolve(&envelope.command.address, &envelope.context, ports)?;
+        let identity = runtime_identity(&resolved);
+        let before = ports.projection(&envelope.context, identity.clone())?;
+        let related = RelatedTransitionSet::capture(
+            envelope,
+            resolved.clone(),
+            identity.clone(),
+            before.scope,
+            ports,
+        )?;
         let before_desk = ports.desk_projection(&envelope.context)?;
         let configured_cause =
-            ports.transition_cause(&envelope.context, resolved, envelope.command.action)?;
+            ports.transition_cause(&envelope.context, resolved.clone(), envelope.command.action)?;
         let execution = ports.execute(
             &envelope.context,
-            resolved,
+            resolved.clone(),
             envelope.command.action,
             envelope.command.surface,
         )?;
@@ -121,7 +127,7 @@ impl PlaybackService {
         };
         Ok(PlaybackResult {
             context: envelope.context.clone(),
-            requested: envelope.command.address,
+            requested: envelope.command.address.clone(),
             resolved,
             outcome,
             durability,
@@ -195,14 +201,17 @@ impl PlaybackService {
         };
         self.replay
             .lock()
-            .insert(key, envelope.command, result.clone());
+            .insert(key, envelope.command.clone(), result.clone());
     }
 }
 
-fn runtime_identity(address: ResolvedPlaybackAddress) -> PlaybackRuntimeIdentity {
+fn runtime_identity(address: &ResolvedPlaybackAddress) -> PlaybackRuntimeIdentity {
     match address {
-        ResolvedPlaybackAddress::CueList(id) => PlaybackRuntimeIdentity::CueList(id),
-        ResolvedPlaybackAddress::Pool { number, .. } => PlaybackRuntimeIdentity::Playback(number),
+        ResolvedPlaybackAddress::CueList(id) => PlaybackRuntimeIdentity::CueList(*id),
+        ResolvedPlaybackAddress::Group { group_id, .. } => {
+            PlaybackRuntimeIdentity::Group(group_id.clone())
+        }
+        ResolvedPlaybackAddress::Pool { number, .. } => PlaybackRuntimeIdentity::Playback(*number),
     }
 }
 
@@ -211,7 +220,7 @@ fn validate_snapshot_projections(
     projections: &[PlaybackRuntimeProjection],
     scope: super::PlaybackShowScope,
 ) -> Result<(), ActionError> {
-    let requested = identities.iter().copied().collect::<HashSet<_>>();
+    let requested = identities.iter().cloned().collect::<HashSet<_>>();
     if projections
         .iter()
         .any(|projection| !requested.contains(&projection.requested))
@@ -223,7 +232,7 @@ fn validate_snapshot_projections(
     }
     let projected = projections
         .iter()
-        .map(|projection| projection.requested)
+        .map(|projection| projection.requested.clone())
         .collect::<HashSet<_>>();
     if requested != projected {
         return Err(ActionError::new(
@@ -244,19 +253,41 @@ fn validate_snapshot_projections(
 }
 
 fn resolve(
-    address: PlaybackAddress,
+    address: &PlaybackAddress,
     context: &crate::ActionContext,
     ports: &dyn PlaybackPorts,
 ) -> Result<ResolvedPlaybackAddress, ActionError> {
     match address {
-        PlaybackAddress::CueList(id) => Ok(ResolvedPlaybackAddress::CueList(id)),
-        PlaybackAddress::Pool(number) => Ok(pool(number, None, None)),
+        PlaybackAddress::CueList(id) => Ok(ResolvedPlaybackAddress::CueList(*id)),
+        PlaybackAddress::Group(group_id) => Ok(ResolvedPlaybackAddress::Group {
+            group_id: group_id.clone(),
+            playback_number: ports.group_playback(context, group_id.clone())?,
+        }),
+        PlaybackAddress::Pool(number) => Ok(pool(*number, None, None)),
         PlaybackAddress::CurrentPage { slot } => {
             let page = ports.current_page(context)?;
-            resolve_page(page, slot, ports)
+            resolve_page(page, *slot, ports)
         }
-        PlaybackAddress::ExplicitPage { page, slot } => resolve_page(page, slot, ports),
+        PlaybackAddress::ExplicitPage { page, slot } => resolve_page(*page, *slot, ports),
     }
+}
+
+fn validate_address_action(
+    address: &PlaybackAddress,
+    action: super::PlaybackAction,
+) -> Result<(), ActionError> {
+    if matches!(address, PlaybackAddress::Group(_))
+        && !matches!(
+            action,
+            super::PlaybackAction::Master(_) | super::PlaybackAction::Flash { .. }
+        )
+    {
+        return Err(ActionError::new(
+            ActionErrorKind::Invalid,
+            "Group runtime accepts only master and flash actions",
+        ));
+    }
+    Ok(())
 }
 
 fn resolve_page(
@@ -281,6 +312,7 @@ pub(super) fn outcome(execution: &PlaybackExecution) -> PlaybackOutcome {
             ..
         } => PlaybackOutcome::Captured(*action),
         PlaybackExecution::ActiveList { changed: false, .. }
+        | PlaybackExecution::Target { changed: false }
         | PlaybackExecution::Pool { changed: false, .. }
         | PlaybackExecution::Released(false) => PlaybackOutcome::NoChange,
         _ => PlaybackOutcome::Applied,

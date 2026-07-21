@@ -276,9 +276,29 @@
               "const": "cue_list"
             }
           },
+          "additionalProperties": false,
           "required": [
             "kind",
             "cue_list_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            "kind": {
+              "type": "string",
+              "const": "group"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "group_id"
           ]
         },
         {
@@ -295,6 +315,7 @@
               "minimum": 0
             }
           },
+          "additionalProperties": false,
           "required": [
             "kind",
             "playback_number"
@@ -314,6 +335,7 @@
               "minimum": 0
             }
           },
+          "additionalProperties": false,
           "required": [
             "kind",
             "slot"
@@ -339,6 +361,7 @@
               "minimum": 0
             }
           },
+          "additionalProperties": false,
           "required": [
             "kind",
             "page",
@@ -481,6 +504,7 @@
               "minimum": 0
             }
           },
+          "additionalProperties": false,
           "required": [
             "kind",
             "playback_number"
@@ -498,9 +522,29 @@
               "const": "cue_list"
             }
           },
+          "additionalProperties": false,
           "required": [
             "kind",
             "cue_list_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            "kind": {
+              "type": "string",
+              "const": "group"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "group_id"
           ]
         }
       ]
@@ -702,9 +746,39 @@
               "const": "cue_list"
             }
           },
+          "additionalProperties": false,
           "required": [
             "kind",
             "cue_list_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            "kind": {
+              "type": "string",
+              "const": "group"
+            },
+            "playback_number": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "group_id",
+            "playback_number"
           ]
         },
         {
@@ -739,6 +813,7 @@
               "minimum": 0
             }
           },
+          "additionalProperties": false,
           "required": [
             "kind",
             "playback_number",

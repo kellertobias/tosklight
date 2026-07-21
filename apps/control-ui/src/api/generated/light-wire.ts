@@ -281,9 +281,9 @@ export type ProgrammingUpdateSettingsProjection = { desk_id: string, settings: P
 
 export type PlaybackSurface = "virtual" | "physical";
 
-export type PlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "playback", playback_number: number, } | { "kind": "current_page", slot: number, } | { "kind": "explicit_page", page: number, slot: number, };
+export type PlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, } | { "kind": "playback", playback_number: number, } | { "kind": "current_page", slot: number, } | { "kind": "explicit_page", page: number, slot: number, };
 
-export type ResolvedPlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "playback", playback_number: number, page: number | null, slot: number | null, };
+export type ResolvedPlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, playback_number: number | null, } | { "kind": "playback", playback_number: number, page: number | null, slot: number | null, };
 
 export type PlaybackAction = { "type": "go", pressed: boolean, } | { "type": "back", pressed: boolean, } | { "type": "pause", pressed: boolean, } | { "type": "release" } | { "type": "on", pressed: boolean, } | { "type": "off", pressed: boolean, } | { "type": "toggle", pressed: boolean, } | { "type": "fast_forward", pressed: boolean, } | { "type": "fast_rewind", pressed: boolean, } | { "type": "flash", pressed: boolean, } | { "type": "temp", pressed: boolean, } | { "type": "swap", pressed: boolean, } | { "type": "select", pressed: boolean, } | { "type": "select_contents", pressed: boolean, } | { "type": "select_dereferenced", pressed: boolean, } | { "type": "learn", pressed: boolean, } | { "type": "double", pressed: boolean, } | { "type": "half", pressed: boolean, } | { "type": "blackout", pressed: boolean, } | { "type": "pause_dynamics", pressed: boolean, } | { "type": "none", pressed: boolean, } | { "type": "master", value: number, } | { "type": "go_to", cue_number: number, } | { "type": "load", cue_number: number, } | { "type": "crossfade", enabled: boolean, } | { "type": "temporary", enabled: boolean, pressed: boolean, } | { "type": "configured_button", number: number, pressed: boolean, };
 
@@ -293,7 +293,7 @@ export type PlaybackOutcome = { "status": "applied" } | { "status": "no_change" 
 
 export type PlaybackDurability = "durable" | "persistence_pending";
 
-export type PlaybackRuntimeIdentity = { "kind": "playback", playback_number: number, } | { "kind": "cue_list", cue_list_id: string, };
+export type PlaybackRuntimeIdentity = { "kind": "playback", playback_number: number, } | { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, };
 
 export type PlaybackShowScope = { show_id: string, show_revision: number, };
 

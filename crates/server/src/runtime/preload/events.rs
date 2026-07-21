@@ -62,7 +62,7 @@ fn ordered_transitions(
     transitions.sort_by_key(|(identity, before, after)| {
         (
             !playback_was_released(before, after),
-            identity_sort_key(*identity),
+            identity_sort_key(identity.clone()),
         )
     });
     Ok(transitions)
@@ -75,7 +75,7 @@ fn change_event(
     projection: PlaybackProjection,
     actions: &[StagedPreloadPlaybackAction],
 ) -> Option<light_application::EventDraft> {
-    let cause = final_event_cause(actions, identity);
+    let cause = final_event_cause(actions, identity.clone());
     let action = if playback_was_released(&before, &projection) {
         light_application::PlaybackAction::Off { pressed: true }
     } else {
@@ -179,7 +179,7 @@ fn final_released_numbers(
         .filter(|(_, before, after)| playback_was_released(before, after))
         .filter_map(|(identity, _, _)| match identity {
             PlaybackIdentity::Playback(number) => Some(*number),
-            PlaybackIdentity::CueList(_) => None,
+            PlaybackIdentity::CueList(_) | PlaybackIdentity::Group(_) => None,
         })
 }
 
@@ -206,6 +206,7 @@ fn identity_sort_key(identity: PlaybackIdentity) -> (u8, u128) {
     match identity {
         PlaybackIdentity::Playback(number) => (0, u128::from(number)),
         PlaybackIdentity::CueList(id) => (1, id.0.as_u128()),
+        PlaybackIdentity::Group(_) => (2, 0),
     }
 }
 

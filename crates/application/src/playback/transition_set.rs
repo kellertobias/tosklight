@@ -26,7 +26,7 @@ impl RelatedTransitionSet {
             envelope.command.action,
             envelope.command.surface,
         )?;
-        identities.retain(|identity| *identity != primary);
+        identities.retain(|identity| identity != &primary);
         identities.sort_by(compare_identity);
         identities.dedup();
         super::projection::validate_snapshot_identities(&identities)?;
@@ -67,7 +67,7 @@ fn exact_projections(
     let projections = ports.projections(context, identities)?;
     let mapped = projections
         .into_iter()
-        .map(|projection| (projection.requested, projection))
+        .map(|projection| (projection.requested.clone(), projection))
         .collect::<HashMap<_, _>>();
     if mapped.len() == identities.len()
         && identities
@@ -118,5 +118,10 @@ fn compare_identity(left: &PlaybackRuntimeIdentity, right: &PlaybackRuntimeIdent
         (PlaybackRuntimeIdentity::CueList(left), PlaybackRuntimeIdentity::CueList(right)) => {
             left.0.as_bytes().cmp(right.0.as_bytes())
         }
+        (PlaybackRuntimeIdentity::Group(left), PlaybackRuntimeIdentity::Group(right)) => {
+            left.as_str().cmp(right.as_str())
+        }
+        (PlaybackRuntimeIdentity::Group(_), _) => Ordering::Greater,
+        (_, PlaybackRuntimeIdentity::Group(_)) => Ordering::Less,
     }
 }

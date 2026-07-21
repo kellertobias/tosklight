@@ -348,7 +348,7 @@ pub(super) fn handle_playback_osc(
         && command_http::intercept_armed_cue_playback(
             state,
             session,
-            playback_address,
+            playback_address.clone(),
             action == "master" || pressed,
         )
     {

@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) struct CommandPlaybackAddress {
     pub(super) playback: u16,
     pub(super) cue: Option<f64>,

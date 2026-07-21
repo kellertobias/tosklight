@@ -1,5 +1,5 @@
 use super::{
-    PlaybackAction, PlaybackDeskProjection, PlaybackDurability, PlaybackExecution,
+    PlaybackAction, PlaybackDeskProjection, PlaybackDurability, PlaybackExecution, PlaybackGroupId,
     PlaybackRuntimeIdentity, PlaybackRuntimeProjection, PlaybackSurface, PlaybackTransitionCause,
     ResolvedPlaybackAddress,
 };
@@ -15,6 +15,15 @@ pub trait PlaybackPorts: Send + Sync {
     fn current_page(&self, context: &ActionContext) -> Result<u8, ActionError>;
 
     fn playback_at(&self, page: u8, slot: u8) -> Result<Option<u16>, ActionError>;
+
+    /// Resolves a Group's optional assigned Playback and rejects forged or stale assignments.
+    fn group_playback(
+        &self,
+        _context: &ActionContext,
+        _group_id: PlaybackGroupId,
+    ) -> Result<Option<u16>, ActionError> {
+        Ok(None)
+    }
 
     fn execute(
         &self,
@@ -75,7 +84,7 @@ pub trait PlaybackPorts: Send + Sync {
     ) -> Result<Vec<PlaybackRuntimeProjection>, ActionError> {
         identities
             .iter()
-            .copied()
+            .cloned()
             .map(|identity| self.projection(context, identity))
             .collect()
     }

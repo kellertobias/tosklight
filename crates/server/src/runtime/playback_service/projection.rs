@@ -9,7 +9,7 @@ use light_core::CueListId;
 use light_engine::EngineSnapshot;
 use light_playback::{PlaybackRuntimeStatus, PlaybackTarget};
 
-use super::{ServerPlaybackPorts, invalid};
+use super::{ServerPlaybackPorts, invalid, resolve_group_playback};
 
 #[path = "projection/targets.rs"]
 mod targets;
@@ -73,6 +73,10 @@ pub(super) fn projection(
             cue_list_id,
             direct_cue_list_runtime(&runtime, cue_list_id),
         )),
+        PlaybackRuntimeIdentity::Group(ref group_id) => {
+            let group_id = group_id.clone();
+            project_group(ports, &snapshot, scope, identity, group_id)
+        }
     }
 }
 
@@ -86,7 +90,14 @@ pub(super) fn projections(
     let runtime = ports.state.engine.playback_runtime_status();
     let mut result = Vec::with_capacity(identities.len());
     for identity in identities {
-        project_identity(ports, &snapshot, &runtime, scope, *identity, &mut result)?;
+        project_identity(
+            ports,
+            &snapshot,
+            &runtime,
+            scope,
+            identity.clone(),
+            &mut result,
+        )?;
     }
     Ok(result)
 }
@@ -147,8 +158,28 @@ fn project_identity(
         PlaybackRuntimeIdentity::CueList(cue_list_id) => {
             project_cue_list(scope, snapshot, runtime, identity, cue_list_id, result);
         }
+        PlaybackRuntimeIdentity::Group(ref group_id) => {
+            let group_id = group_id.clone();
+            result.push(project_group(ports, snapshot, scope, identity, group_id)?);
+        }
     }
     Ok(())
+}
+
+fn project_group(
+    ports: &ServerPlaybackPorts<'_>,
+    snapshot: &EngineSnapshot,
+    scope: PlaybackShowScope,
+    requested: PlaybackRuntimeIdentity,
+    group_id: light_application::PlaybackGroupId,
+) -> Result<PlaybackRuntimeProjection, ActionError> {
+    let playback_number = resolve_group_playback(snapshot, group_id.as_str())?;
+    Ok(PlaybackRuntimeProjection {
+        scope,
+        requested,
+        playback_number,
+        target: group_projection(ports, snapshot, group_id.as_str())?,
+    })
 }
 
 fn project_cue_list(
@@ -165,7 +196,7 @@ fn project_cue_list(
     }) {
         result.push(cue_list_projection(
             scope,
-            requested,
+            requested.clone(),
             Some(definition.number),
             cue_list_id,
             runtime

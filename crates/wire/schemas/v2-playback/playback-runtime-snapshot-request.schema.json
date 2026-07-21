@@ -33,6 +33,7 @@
               "minimum": 0
             }
           },
+          "additionalProperties": false,
           "required": [
             "kind",
             "playback_number"
@@ -50,9 +51,29 @@
               "const": "cue_list"
             }
           },
+          "additionalProperties": false,
           "required": [
             "kind",
             "cue_list_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            "kind": {
+              "type": "string",
+              "const": "group"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "group_id"
           ]
         }
       ]

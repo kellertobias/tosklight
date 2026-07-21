@@ -19,6 +19,9 @@ pub(in crate::runtime) fn cue_list_http_payload(
         PlaybackExecution::Pool { .. } => {
             Err(ApiError::internal("cue-list action returned a pool result"))
         }
+        PlaybackExecution::Target { .. } => Err(ApiError::internal(
+            "cue-list action returned a target result",
+        )),
     }
 }
 
@@ -92,6 +95,9 @@ pub(in crate::runtime) fn websocket_payload(
         PlaybackExecution::ActiveList { .. } => Ok(serde_json::json!({"paused":true})),
         PlaybackExecution::Released(released) => Ok(serde_json::json!({"released":released})),
         PlaybackExecution::Pool { .. } => Err("cue-list action returned a pool result".to_owned()),
+        PlaybackExecution::Target { .. } => {
+            Err("cue-list action returned a target result".to_owned())
+        }
     }
 }
 

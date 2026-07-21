@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 mod command;
 mod event;
+mod group_id;
 mod operation;
 mod ports;
 mod projection;
@@ -21,6 +22,7 @@ pub use event::{
     PlaybackCueTransition, PlaybackRuntimeChange, PlaybackTransitionCause,
     committed_playback_effect_event, committed_playback_event,
 };
+pub use group_id::{MAX_PLAYBACK_GROUP_ID_BYTES, PlaybackGroupId, PlaybackGroupIdError};
 pub use operation::{PlaybackOperation, PlaybackOperationResult, PlaybackUnitOfWork};
 pub use ports::PlaybackPorts;
 pub use projection::{

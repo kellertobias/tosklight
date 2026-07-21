@@ -4,6 +4,8 @@ import {
 	DESK_ID,
 	cueProjection,
 	deskProjection,
+	GROUP_ID,
+	groupProjection,
 } from "../../features/playbackRuntime/testFixtures";
 import { PlaybackApiClient } from "./playback";
 import type { LiveClientTransport } from "./transport";
@@ -52,6 +54,30 @@ function clientReturning(value: unknown) {
 }
 
 describe("PlaybackApiClient v2 action boundary", () => {
+	it("posts and strictly decodes an exact Group runtime snapshot", async () => {
+		const identity = { kind: "group", group_id: GROUP_ID } as const;
+		const { client, request } = clientReturning({
+			cursor: { sequence: 11 },
+			desk: deskProjection(),
+			projections: [groupProjection()],
+		});
+
+		await expect(
+			client.playbackRuntimeSnapshot(DESK_ID, [identity]),
+		).resolves.toMatchObject({
+			projections: [
+				{ requested: identity, target: "group", group_id: GROUP_ID },
+			],
+		});
+		expect(request).toHaveBeenCalledWith(
+			`/api/v2/desks/${DESK_ID}/playback-runtime/snapshot`,
+			expect.objectContaining({
+				method: "POST",
+				body: JSON.stringify({ identities: [identity] }),
+			}),
+		);
+	});
+
 	it("returns a decoded outcome for the submitted request", async () => {
 		const { client, request } = clientReturning(actionOutcome());
 

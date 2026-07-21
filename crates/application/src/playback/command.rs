@@ -1,19 +1,24 @@
-use super::{PlaybackDeskProjection, PlaybackRuntimeProjection};
+use super::{PlaybackDeskProjection, PlaybackGroupId, PlaybackRuntimeProjection};
 use crate::{ActionContext, ApplicationCommand, CommandFamily};
 use light_core::CueListId;
 use light_playback::ActivePlayback;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum PlaybackAddress {
     CueList(CueListId),
+    Group(PlaybackGroupId),
     Pool(u16),
     CurrentPage { slot: u8 },
     ExplicitPage { page: u8, slot: u8 },
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum ResolvedPlaybackAddress {
     CueList(CueListId),
+    Group {
+        group_id: PlaybackGroupId,
+        playback_number: Option<u16>,
+    },
     Pool {
         number: u16,
         page: Option<u8>,
@@ -22,10 +27,13 @@ pub enum ResolvedPlaybackAddress {
 }
 
 impl ResolvedPlaybackAddress {
-    pub const fn playback_number(self) -> Option<u16> {
+    pub const fn playback_number(&self) -> Option<u16> {
         match self {
             Self::CueList(_) => None,
-            Self::Pool { number, .. } => Some(number),
+            Self::Group {
+                playback_number, ..
+            } => *playback_number,
+            Self::Pool { number, .. } => Some(*number),
         }
     }
 }
@@ -126,7 +134,7 @@ pub enum PlaybackSurface {
     Matter,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct PlaybackCommand {
     pub address: PlaybackAddress,
     pub action: PlaybackAction,
@@ -158,6 +166,9 @@ pub enum PlaybackExecution {
         changed: bool,
     },
     Released(bool),
+    Target {
+        changed: bool,
+    },
     Pool {
         changed: bool,
         pending: Option<PendingPlaybackAction>,

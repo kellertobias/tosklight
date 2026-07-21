@@ -59,6 +59,12 @@ fn target(
         PlaybackAddress::CueList(cue_list_id) => {
             ProgrammingCueRecordTarget::CueList { cue_list_id }
         }
+        PlaybackAddress::Group(_) => {
+            return Err(ActionError::new(
+                ActionErrorKind::Invalid,
+                "Group runtime cannot be a cue record target",
+            ));
+        }
     })
 }
 

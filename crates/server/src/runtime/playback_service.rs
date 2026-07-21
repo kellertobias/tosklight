@@ -1,15 +1,15 @@
 use super::{
     ApiError, AppState, ControlDesk, PlaybackDispatchContext, PoolPlaybackInput,
     ProgrammingLockPolicy, Session, cuelist_for_page_playback, dispatch_playback_action, emit,
-    intercept_update_playback_target, persist_active_playbacks, persist_programmer,
-    predicted_preload_temp_state, preload_capture_action_with_temp_state, programming_context,
-    run_programming_interaction,
+    intercept_update_playback_target, persist_active_playbacks, persist_output_runtime,
+    persist_programmer, predicted_preload_temp_state, preload_capture_action_with_temp_state,
+    programming_context, run_programming_interaction, set_group_playback_master,
 };
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource,
     PendingPlaybackAction, PlaybackAction, PlaybackAddress, PlaybackCommand, PlaybackDurability,
-    PlaybackExecution, PlaybackPorts, PlaybackResult, PlaybackRuntimeIdentity, PlaybackSurface,
-    ResolvedPlaybackAddress,
+    PlaybackExecution, PlaybackGroupId, PlaybackPorts, PlaybackResult, PlaybackRuntimeIdentity,
+    PlaybackSurface, ResolvedPlaybackAddress,
 };
 use light_engine::{CueListPlaybackAction, EnginePlaybackCommand, EnginePlaybackOutcome};
 
@@ -19,6 +19,8 @@ mod capture;
 mod conversion;
 #[path = "playback_service/desk.rs"]
 mod desk;
+#[path = "playback_service/group.rs"]
+mod group;
 #[path = "playback_service/ports.rs"]
 mod ports;
 #[path = "playback_service/projection.rs"]
@@ -41,7 +43,7 @@ use conversion::{
 };
 use support::{
     action_error, api_action_error, capture_enabled, captures_preload, invalid, operator_context,
-    playback_definition,
+    playback_definition, resolve_group_playback,
 };
 
 pub(super) fn http_action(

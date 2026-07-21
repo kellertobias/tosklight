@@ -77,6 +77,25 @@ export function printableStringAt(
 	return value;
 }
 
+export function opaqueStringAt(
+	value: unknown,
+	path: string,
+	maximumBytes: number,
+) {
+	if (
+		typeof value !== "string" ||
+		value.length === 0 ||
+		new TextEncoder().encode(value).length > maximumBytes ||
+		/\p{Cc}/u.test(value)
+	)
+		throw new WireValidationError(
+			path,
+			`1-${maximumBytes} opaque UTF-8 bytes without control characters`,
+			value,
+		);
+	return value;
+}
+
 export function positiveIntegerAt(value: unknown, path: string) {
 	const integer = integerAt(value, path);
 	if (integer < 1)

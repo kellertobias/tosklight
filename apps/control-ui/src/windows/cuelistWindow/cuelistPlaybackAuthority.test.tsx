@@ -249,11 +249,13 @@ class PlaybackAuthority {
 		this.snapshotRequests.push([...identities]);
 		if (this.pending) return new Promise<PlaybackSnapshot>(() => undefined);
 		const projections = identities
-			.map((identity) =>
-				identity.kind === "cue_list"
-					? this.cuelistProjection(identity.cue_list_id)
-					: this.playbackProjection(identity.playback_number),
-			)
+			.map((identity) => {
+				if (identity.kind === "cue_list")
+					return this.cuelistProjection(identity.cue_list_id);
+				if (identity.kind === "playback")
+					return this.playbackProjection(identity.playback_number);
+				return null;
+			})
 			.filter((projection): projection is PlaybackProjection => !!projection);
 		return Promise.resolve({
 			cursor: { sequence: this.sequence },

@@ -192,10 +192,10 @@ impl PlaybackPorts for FakeBackend {
                 show_id: Uuid::nil(),
                 show_revision: 0,
             },
-            requested: identity,
+            requested: identity.clone(),
             playback_number: match identity {
                 PlaybackRuntimeIdentity::Playback(number) => Some(number),
-                PlaybackRuntimeIdentity::CueList(_) => None,
+                PlaybackRuntimeIdentity::CueList(_) | PlaybackRuntimeIdentity::Group(_) => None,
             },
             target: PlaybackTargetProjection::Missing,
         })

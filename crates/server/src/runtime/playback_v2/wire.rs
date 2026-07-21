@@ -47,6 +47,11 @@ pub(in crate::runtime) fn application_identities(
             wire::PlaybackRuntimeIdentity::CueList { .. } => {
                 Err("cue_list_id must not be nil".into())
             }
+            wire::PlaybackRuntimeIdentity::Group { group_id } => {
+                application::PlaybackGroupId::new(&group_id)
+                    .map(application::PlaybackRuntimeIdentity::Group)
+                    .map_err(|error| error.to_string())
+            }
         })
         .collect()
 }
@@ -59,6 +64,9 @@ fn application_address(
             application::PlaybackAddress::CueList(light_core::CueListId(cue_list_id)),
         ),
         wire::PlaybackAddress::CueList { .. } => Err("cue_list_id must not be nil".into()),
+        wire::PlaybackAddress::Group { group_id } => application::PlaybackGroupId::new(&group_id)
+            .map(application::PlaybackAddress::Group)
+            .map_err(|error| error.to_string()),
         wire::PlaybackAddress::Playback { playback_number }
             if (1..=light_playback::MAX_PLAYBACKS).contains(&playback_number) =>
         {
@@ -194,7 +202,7 @@ pub(in crate::runtime) fn runtime_projection(
 ) -> wire::PlaybackRuntimeProjection {
     wire::PlaybackRuntimeProjection {
         scope: show_scope(projection.scope),
-        requested: wire_identity(projection.requested),
+        requested: wire_identity(projection.requested.clone()),
         playback_number: projection.playback_number,
         target: target_projection(&projection.target),
     }
@@ -259,6 +267,11 @@ fn wire_identity(identity: application::PlaybackRuntimeIdentity) -> wire::Playba
                 cue_list_id: cue_list_id.0,
             }
         }
+        application::PlaybackRuntimeIdentity::Group(group_id) => {
+            wire::PlaybackRuntimeIdentity::Group {
+                group_id: group_id.as_str().to_owned(),
+            }
+        }
     }
 }
 
@@ -266,6 +279,9 @@ fn requested_address(address: application::PlaybackAddress) -> wire::PlaybackAdd
     match address {
         application::PlaybackAddress::CueList(cue_list_id) => wire::PlaybackAddress::CueList {
             cue_list_id: cue_list_id.0,
+        },
+        application::PlaybackAddress::Group(group_id) => wire::PlaybackAddress::Group {
+            group_id: group_id.as_str().to_owned(),
         },
         application::PlaybackAddress::Pool(playback_number) => {
             wire::PlaybackAddress::Playback { playback_number }
@@ -288,6 +304,13 @@ fn resolved_address(
                 cue_list_id: cue_list_id.0,
             }
         }
+        application::ResolvedPlaybackAddress::Group {
+            group_id,
+            playback_number,
+        } => wire::ResolvedPlaybackAddress::Group {
+            group_id: group_id.as_str().to_owned(),
+            playback_number,
+        },
         application::ResolvedPlaybackAddress::Pool { number, page, slot } => {
             wire::ResolvedPlaybackAddress::Playback {
                 playback_number: number,

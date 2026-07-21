@@ -8,6 +8,7 @@ import type {
 export const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 export const DESK_ID = "22222222-2222-4222-8222-222222222222";
 export const CUE_LIST_ID = "33333333-3333-4333-8333-333333333333";
+export const GROUP_ID = "front wash";
 
 export function cueProjection(
 	playbackNumber = 1,
@@ -58,16 +59,35 @@ export function deskProjection(activePage = 1): PlaybackDesk {
 	};
 }
 
+export function groupProjection(
+	groupId = GROUP_ID,
+	master = 1,
+	playbackNumber: number | null = null,
+): PlaybackProjection {
+	return {
+		scope: { show_id: SHOW_ID, show_revision: 4 },
+		requested: { kind: "group", group_id: groupId },
+		playback_number: playbackNumber,
+		target: "group",
+		group_id: groupId,
+		master,
+		flash_level: 0,
+	};
+}
+
 export function playbackSnapshot(
 	identities: readonly PlaybackIdentity[],
 	cursor = 10,
 	projections = identities.map((identity) =>
 		identity.kind === "playback"
 			? cueProjection(identity.playback_number)
-			: {
+			: identity.kind === "cue_list"
+				? {
 					...cueProjection(1),
 					requested: identity,
-				},
+					playback_number: null,
+				}
+				: groupProjection(identity.group_id),
 	),
 ): PlaybackSnapshot {
 	return {

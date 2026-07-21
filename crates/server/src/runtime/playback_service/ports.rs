@@ -98,6 +98,14 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
         ))
     }
 
+    fn group_playback(
+        &self,
+        _context: &ActionContext,
+        group_id: PlaybackGroupId,
+    ) -> Result<Option<u16>, ActionError> {
+        resolve_group_playback(&self.state.engine.snapshot(), group_id.as_str())
+    }
+
     fn execute(
         &self,
         context: &ActionContext,
@@ -107,6 +115,10 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
     ) -> Result<PlaybackExecution, ActionError> {
         match address {
             ResolvedPlaybackAddress::CueList(id) => self.execute_cue_list(context, id, action),
+            ResolvedPlaybackAddress::Group {
+                group_id,
+                playback_number,
+            } => group::execute(self, context, group_id, playback_number, action, surface),
             ResolvedPlaybackAddress::Pool { .. } => {
                 self.execute_pool(context, address, action, surface)
             }
@@ -156,13 +168,13 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
             return Ok(Vec::new());
         }
         let mut related = BTreeSet::new();
-        if may_activate_playback(action) {
+        if semantics::may_activate_playback(action) {
             related.extend(super::super::virtual_playback_peer_numbers(
                 self.exclusion_context(address).0,
                 number,
             ));
         }
-        if may_trigger_auto_off(action, &definition) {
+        if semantics::may_trigger_auto_off(action, &definition) {
             related.extend(self.state.engine.enabled_auto_off_playbacks());
         }
         related.remove(&number);
@@ -194,72 +206,6 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
     ) -> Result<Option<light_application::PlaybackDeskProjection>, ActionError> {
         projection::desk_projection(self, context)
     }
-}
-
-fn may_activate_playback(action: PlaybackAction) -> bool {
-    match action {
-        PlaybackAction::Go { pressed }
-        | PlaybackAction::Back { pressed }
-        | PlaybackAction::On { pressed }
-        | PlaybackAction::Toggle { pressed }
-        | PlaybackAction::FastForward { pressed }
-        | PlaybackAction::FastRewind { pressed }
-        | PlaybackAction::Temp { pressed } => pressed,
-        // Flash/Swap release can promote temporary state into an enabled Playback, and a
-        // configured button can resolve to either action. Capturing candidates on both phases is
-        // intentionally conservative; the application boundary publishes only actual deltas.
-        PlaybackAction::Flash { .. }
-        | PlaybackAction::Swap { .. }
-        | PlaybackAction::ConfiguredButton { .. }
-        // A zero fader value still activates an inactive manual-XFade Playback.
-        | PlaybackAction::Master(_) => true,
-        PlaybackAction::GoTo(_) => true,
-        PlaybackAction::Crossfade { enabled } | PlaybackAction::Temporary { enabled, .. } => {
-            enabled
-        }
-        _ => false,
-    }
-}
-
-fn may_trigger_auto_off(
-    action: PlaybackAction,
-    definition: &light_playback::PlaybackDefinition,
-) -> bool {
-    match action {
-        PlaybackAction::Go { pressed }
-        | PlaybackAction::Pause { pressed }
-        | PlaybackAction::On { pressed }
-        | PlaybackAction::Toggle { pressed }
-        | PlaybackAction::FastForward { pressed } => pressed,
-        PlaybackAction::ConfiguredButton { number, pressed } => {
-            pressed && configured_button_triggers_auto_off(definition, number)
-        }
-        PlaybackAction::Master(_) => definition.fader == light_playback::PlaybackFaderMode::Master,
-        PlaybackAction::GoTo(_) => true,
-        _ => false,
-    }
-}
-
-fn configured_button_triggers_auto_off(
-    definition: &light_playback::PlaybackDefinition,
-    number: u8,
-) -> bool {
-    use light_playback::PlaybackButtonAction as Button;
-    let Some(index) = number.checked_sub(1) else {
-        return false;
-    };
-    if number > definition.button_count {
-        return false;
-    }
-    definition
-        .buttons
-        .get(usize::from(index))
-        .is_some_and(|action| {
-            matches!(
-                action,
-                Button::On | Button::Toggle | Button::Go | Button::Pause | Button::FastForward
-            )
-        })
 }
 
 impl ServerPlaybackPorts<'_> {
@@ -305,7 +251,7 @@ impl ServerPlaybackPorts<'_> {
         Ok(execution)
     }
 
-    fn execute_pool(
+    pub(super) fn execute_pool(
         &self,
         context: &ActionContext,
         address: ResolvedPlaybackAddress,

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	CUE_LIST_ID,
 	DESK_ID,
+	GROUP_ID,
 	runtimeEvent,
 } from "../features/playbackRuntime/testFixtures";
 import type { PlaybackProtocolError } from "../features/playbackRuntime/transport";
@@ -64,6 +65,7 @@ describe("WebSocketPlaybackEventTransport", () => {
 				identities: [
 					{ kind: "playback", playback_number: 2 },
 					{ kind: "cue_list", cue_list_id: CUE_LIST_ID },
+					{ kind: "group", group_id: GROUP_ID },
 				],
 				desk: true,
 			},
@@ -80,6 +82,7 @@ describe("WebSocketPlaybackEventTransport", () => {
 				objects: [
 					{ capability: "playback", id: "playback:2" },
 					{ capability: "playback", id: `cuelist:${CUE_LIST_ID}` },
+					{ capability: "playback", id: `group:${GROUP_ID}` },
 					{ capability: "desk", id: `playback-view:${DESK_ID}` },
 				],
 			},

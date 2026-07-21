@@ -4,8 +4,13 @@ import {
 	cueProjection,
 	DESK_ID,
 	deskProjection,
+	GROUP_ID,
+	groupProjection,
 } from "../features/playbackRuntime/testFixtures";
-import { decodePlaybackOutcome } from "./playbackWire";
+import {
+	decodePlaybackEventMessage,
+	decodePlaybackOutcome,
+} from "./playbackWire";
 
 function validOutcome() {
 	return {
@@ -37,6 +42,10 @@ describe("Playback wire validation", () => {
 				{ kind: "cue_list", cue_list_id: CUE_LIST_ID },
 			],
 			[
+				{ kind: "group", group_id: GROUP_ID },
+				{ kind: "group", group_id: GROUP_ID, playback_number: null },
+			],
+			[
 				{ kind: "playback", playback_number: 1 },
 				{ kind: "playback", playback_number: 1, page: null, slot: null },
 			],
@@ -60,6 +69,65 @@ describe("Playback wire validation", () => {
 			expect("untrusted_extra" in decoded).toBe(false);
 		}
 	});
+
+	it("decodes an assigned Group outcome without accepting a forged request mapping", () => {
+		const projection = groupProjection(GROUP_ID, 0.6, 12);
+		const decoded = decodePlaybackOutcome({
+			...validOutcome(),
+			requested: { kind: "group", group_id: GROUP_ID },
+			resolved: {
+				kind: "group",
+				group_id: GROUP_ID,
+				playback_number: 12,
+			},
+			projection,
+		});
+
+		expect(decoded.requested).toEqual({ kind: "group", group_id: GROUP_ID });
+		expect(decoded.resolved).toEqual({
+			kind: "group",
+			group_id: GROUP_ID,
+			playback_number: 12,
+		});
+		expect(decoded.projection).toEqual(projection);
+	});
+
+	it("requires both exact Group and mapped Playback routes for assigned events", () => {
+		const projection = groupProjection(GROUP_ID, 0.4, 12);
+		const event = (relatedObjects: Array<{ capability: string; id: string }>) => ({
+			type: "event",
+			event: {
+				sequence: 13,
+				object: { capability: "playback", id: `group:${GROUP_ID}` },
+				related_objects: relatedObjects,
+				payload: {
+					type: "playback_runtime_changed",
+					change: { projection, transition: null },
+				},
+			},
+		});
+
+		expect(
+			decodePlaybackEventMessage(
+				event([{ capability: "playback", id: "playback:12" }]),
+			),
+		).toMatchObject({ type: "event", payload: { projection } });
+		expect(() => decodePlaybackEventMessage(event([]))).toThrow(
+			/Playback route playback:12/,
+		);
+	});
+
+	it.each(["", "front\n", "x".repeat(257)])(
+		"rejects malformed opaque Group ID %j",
+		(groupId) => {
+			expect(() =>
+				decodePlaybackOutcome({
+					...validOutcome(),
+					requested: { kind: "group", group_id: groupId },
+				}),
+			).toThrow(/group_id/);
+		},
+	);
 
 	it("decodes related authoritative projections and their exact event sequences", () => {
 		const first = cueProjection(2, 3);
