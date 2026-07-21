@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SpeedGroupActionRequest",
+  "type": "object",
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/SpeedGroupAction"
+    },
+    "expected_authority_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "expected_revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "request_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "expected_authority_id",
+    "expected_revision",
+    "action"
+  ],
+  "$defs": {
+    "SpeedGroupAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "bpm": {
+              "type": "number",
+              "format": "double"
+            },
+            "group": {
+              "$ref": "#/$defs/SpeedGroupId"
+            },
+            "type": {
+              "type": "string",
+              "const": "set_bpm"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "group",
+            "bpm"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "delta_bpm": {
+              "type": "number",
+              "format": "double"
+            },
+            "group": {
+              "$ref": "#/$defs/SpeedGroupId"
+            },
+            "type": {
+              "type": "string",
+              "const": "adjust_bpm"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "group",
+            "delta_bpm"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/SpeedGroupId"
+            },
+            "target": {
+              "$ref": "#/$defs/SpeedGroupId"
+            },
+            "type": {
+              "type": "string",
+              "const": "synchronize"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "source",
+            "target"
+          ]
+        }
+      ]
+    },
+    "SpeedGroupId": {
+      "type": "string",
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ]
+    }
+  }
+}

@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SpeedGroupActionOutcome",
+  "type": "object",
+  "properties": {
+    "applied_at_millis": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "authority_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "durability": {
+      "$ref": "#/$defs/SpeedGroupDurability"
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SpeedGroupProjection"
+      }
+    },
+    "replayed": {
+      "type": "boolean"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "warning": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "event_sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "const": "changed"
+        }
+      },
+      "required": [
+        "status",
+        "event_sequence"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "no_change"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    }
+  ],
+  "required": [
+    "request_id",
+    "correlation_id",
+    "authority_id",
+    "revision",
+    "applied_at_millis",
+    "groups",
+    "replayed",
+    "durability"
+  ],
+  "unevaluatedProperties": false,
+  "$defs": {
+    "SpeedGroupDurability": {
+      "type": "string",
+      "enum": [
+        "durable",
+        "persistence_pending"
+      ]
+    },
+    "SpeedGroupId": {
+      "type": "string",
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ]
+    },
+    "SpeedGroupProjection": {
+      "type": "object",
+      "properties": {
+        "group": {
+          "$ref": "#/$defs/SpeedGroupId"
+        },
+        "manual_bpm": {
+          "type": "number",
+          "format": "double"
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "phase_origin_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "speed_master_scale": {
+          "type": "number",
+          "format": "double"
+        },
+        "synchronized_with": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpeedGroupId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "group",
+        "manual_bpm",
+        "paused",
+        "speed_master_scale",
+        "phase_origin_millis"
+      ]
+    }
+  }
+}

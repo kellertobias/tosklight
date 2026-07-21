@@ -65,6 +65,9 @@ use crate::v2::selective_import::{
     SelectiveImportApplyRequest, SelectiveImportCatalog, SelectiveImportErrorResponse,
     SelectiveImportOutcome, SelectiveImportPreview, SelectiveImportSelection,
 };
+use crate::v2::speed_group::{
+    SpeedGroupActionOutcome, SpeedGroupActionRequest, SpeedGroupErrorResponse, SpeedGroupSnapshot,
+};
 
 const TYPESCRIPT_PATH: &str = "apps/control-ui/src/api/generated/light-wire.ts";
 const SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-command-line";
@@ -115,6 +118,10 @@ fn command_and_event_artifacts() -> Vec<GeneratedArtifact> {
         event_request_schema::<EventClientMessage>("event-client-message"),
         event_response_schema::<EventServerMessage>("event-server-message"),
         event_response_schema::<OutputRuntimeSnapshot>("output-runtime-snapshot"),
+        event_response_schema::<SpeedGroupSnapshot>("speed-group-snapshot"),
+        playback_request_schema::<SpeedGroupActionRequest>("speed-group-action-request"),
+        playback_response_schema::<SpeedGroupActionOutcome>("speed-group-action-outcome"),
+        playback_response_schema::<SpeedGroupErrorResponse>("speed-group-error-response"),
     ]
 }
 

@@ -8,7 +8,7 @@ use super::{
 use axum::Router;
 use light_application::{
     ActiveShowService, EventBus, OutputRuntimeService, PlaybackService, PlaybackTopologyService,
-    ProgrammingService, SelectiveShowImportService, ShowPatchService,
+    ProgrammingService, SelectiveShowImportService, ShowPatchService, SpeedGroupService,
 };
 use light_control::TimecodeRouter;
 use light_media::MediaCache;
@@ -199,6 +199,7 @@ fn build_app_state(
         programming,
         playback_service: resources.playback_service.clone(),
         output_runtime_service: OutputRuntimeService::new(application_events.clone()),
+        speed_group_service: SpeedGroupService::new(application_events.clone()),
         engine: startup.engine,
         highlight,
         patch_preview_highlights: Arc::default(),
@@ -212,6 +213,10 @@ fn build_app_state(
         output_runtime_persistence_attempts: Arc::new(AtomicU64::new(0)),
         #[cfg(test)]
         output_runtime_persistence_failure: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        #[cfg(test)]
+        speed_group_persistence_attempts: Arc::new(AtomicU64::new(0)),
+        #[cfg(test)]
+        speed_group_persistence_failure: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         activation_lock: Arc::clone(&resources.activation_lock),
         timecode_router: Arc::clone(&resources.timecode_router),
         active_show: Arc::clone(&resources.active_show),

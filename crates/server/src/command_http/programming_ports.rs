@@ -39,6 +39,10 @@ impl<'a> ServerProgrammingPorts<'a> {
         self.session
     }
 
+    pub(super) const fn source(&self) -> &'static str {
+        self.source
+    }
+
     pub(crate) fn record_typed_command(
         &self,
         programmers: &ProgrammerRegistry,
@@ -51,6 +55,7 @@ impl<'a> ServerProgrammingPorts<'a> {
             .or_else(|| self.record_cue_command(programmers, context, command))
             .or_else(|| self.transfer_cue_command(programmers, context, command))
             .or_else(|| self.navigate_cue_command(programmers, context, command, policy))
+            .or_else(|| self.speed_group_command(programmers, context, command, policy))
     }
 
     fn record_group_command(

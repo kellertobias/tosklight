@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SpeedGroupSnapshot",
+  "type": "object",
+  "properties": {
+    "cursor": {
+      "$ref": "#/$defs/EventSnapshotCursor"
+    },
+    "projection": {
+      "$ref": "#/$defs/SpeedGroupAuthorityProjection"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "cursor",
+    "projection"
+  ],
+  "$defs": {
+    "EventSnapshotCursor": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sequence"
+      ]
+    },
+    "SpeedGroupAuthorityProjection": {
+      "type": "object",
+      "properties": {
+        "authority_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SpeedGroupProjection"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "authority_id",
+        "revision",
+        "groups"
+      ]
+    },
+    "SpeedGroupId": {
+      "type": "string",
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ]
+    },
+    "SpeedGroupProjection": {
+      "type": "object",
+      "properties": {
+        "group": {
+          "$ref": "#/$defs/SpeedGroupId"
+        },
+        "manual_bpm": {
+          "type": "number",
+          "format": "double"
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "phase_origin_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "speed_master_scale": {
+          "type": "number",
+          "format": "double"
+        },
+        "synchronized_with": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpeedGroupId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "group",
+        "manual_bpm",
+        "paused",
+        "speed_master_scale",
+        "phase_origin_millis"
+      ]
+    }
+  }
+}

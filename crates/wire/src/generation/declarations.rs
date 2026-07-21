@@ -19,6 +19,7 @@ use crate::v2::programmer_priority::*;
 use crate::v2::programming::*;
 use crate::v2::programming_update::*;
 use crate::v2::selective_import::*;
+use crate::v2::speed_group::*;
 
 pub(super) fn all(config: &Config) -> Vec<String> {
     let mut declarations = command_line(config);
@@ -27,6 +28,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(programming_update(config));
     declarations.extend(playback_projection(config));
     declarations.extend(output_runtime_transport(config));
+    declarations.extend(speed_group_transport(config));
     declarations.extend(event_payload(config));
     declarations.extend(playback_transport(config));
     declarations.extend(playback_topology(config));
@@ -34,6 +36,23 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(selective_import(config));
     declarations.extend(interaction(config));
     declarations
+}
+
+fn speed_group_transport(config: &Config) -> Vec<String> {
+    vec![
+        SpeedGroupId::decl(config),
+        SpeedGroupProjection::decl(config),
+        SpeedGroupAuthorityProjection::decl(config),
+        SpeedGroupSnapshot::decl(config),
+        SpeedGroupAction::decl(config),
+        SpeedGroupActionRequest::decl(config),
+        SpeedGroupDurability::decl(config),
+        SpeedGroupActionState::decl(config),
+        SpeedGroupActionOutcome::decl(config),
+        SpeedGroupChange::decl(config),
+        SpeedGroupErrorKind::decl(config),
+        SpeedGroupErrorResponse::decl(config),
+    ]
 }
 
 fn output_runtime_transport(config: &Config) -> Vec<String> {

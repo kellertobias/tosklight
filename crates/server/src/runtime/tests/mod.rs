@@ -38,6 +38,8 @@ mod programming_update_route_tests;
 mod selective_import_route_tests;
 #[path = "show_patch_route_tests.rs"]
 mod show_patch_route_tests;
+#[path = "speed_group_v2_tests.rs"]
+mod speed_group_v2_tests;
 #[path = "virtual_playback_zones_route_tests.rs"]
 mod virtual_playback_zones_route_tests;
 

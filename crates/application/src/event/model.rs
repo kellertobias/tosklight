@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::{
     ActionContext, ActionSource, ActiveShowObjectKind, ActiveShowObjectsChange, OutputRouteChange,
-    OutputRuntimeChange, PatchChange, SelectiveShowImportChange,
+    OutputRuntimeChange, PatchChange, SelectiveShowImportChange, SpeedGroupChange,
     playback::{PlaybackDeskProjection, PlaybackRuntimeChange, PlaybackRuntimeIdentity},
     programming::{
         ProgrammingCaptureModeChange, ProgrammingInteractionChange, ProgrammingLifecycleChange,
@@ -100,6 +100,10 @@ impl EventObject {
     pub fn global_output() -> Self {
         Self::new(EventCapability::Output, "runtime:global-master")
     }
+
+    pub fn speed_groups() -> Self {
+        Self::new(EventCapability::Playback, "speed-groups:manual")
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -113,6 +117,7 @@ pub enum DeliveryPolicy {
 #[derive(Clone, Debug, PartialEq)]
 pub enum PlaybackEvent {
     RuntimeChanged(PlaybackRuntimeChange),
+    SpeedGroupsChanged(SpeedGroupChange),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -222,6 +227,19 @@ impl EventDraft {
             correlation_id: Some(context.correlation_id),
             delivery: DeliveryPolicy::Replaceable,
             payload: ApplicationEvent::Output(OutputEvent::RuntimeChanged(change)),
+        }
+    }
+
+    pub fn speed_groups_changed(context: &ActionContext, change: SpeedGroupChange) -> Self {
+        Self {
+            desk_id: None,
+            class: EventClass::Projection,
+            object: Some(EventObject::speed_groups()),
+            related_objects: Vec::new(),
+            source: EventSource::Action(context.source),
+            correlation_id: Some(context.correlation_id),
+            delivery: DeliveryPolicy::Lossless,
+            payload: ApplicationEvent::Playback(PlaybackEvent::SpeedGroupsChanged(change)),
         }
     }
 

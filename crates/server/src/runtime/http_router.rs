@@ -8,6 +8,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(help::router::<AppState>())
         .merge(event_transport::router())
         .merge(output_runtime_v2::router())
+        .merge(speed_group_v2::router())
         .merge(playback_v2::router())
         .merge(playback_topology_http::router())
         .merge(virtual_playback_zones_http::router())

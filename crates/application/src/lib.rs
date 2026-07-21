@@ -19,6 +19,7 @@ pub mod scheduling;
 pub mod selective_import;
 pub mod show_compiler;
 pub mod show_patch;
+pub mod speed_group;
 pub mod timeline;
 
 pub use action::{
@@ -162,6 +163,13 @@ pub use show_patch::{
     PatchChange, PatchFixtureCandidate, PatchFixtureProjection, PatchFixturesCommand,
     PatchFixturesResult, PatchModeProjection, PatchProfileRevisionProjection, PatchSnapshot,
     ShowPatchPorts, ShowPatchService,
+};
+pub use speed_group::{
+    SPEED_GROUP_COUNT, SpeedBpm, SpeedBpmDelta, SpeedGroupAction, SpeedGroupApplication,
+    SpeedGroupAuthorityProjection, SpeedGroupChange, SpeedGroupCommand, SpeedGroupDurability,
+    SpeedGroupExpectation, SpeedGroupId, SpeedGroupOutcome, SpeedGroupPortState, SpeedGroupPorts,
+    SpeedGroupProjection, SpeedGroupResolvedAction, SpeedGroupResult, SpeedGroupService,
+    SpeedGroupSnapshot,
 };
 pub use timeline::{
     TimelineError, TimelineErrorKind, TimelineExecution, TimelineExecutionRequest, TimelineHost,

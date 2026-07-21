@@ -89,6 +89,12 @@ mod selection_environment;
 mod selection_routes;
 #[path = "command_http/selection_wire.rs"]
 mod selection_wire;
+#[path = "command_http/speed_group_action.rs"]
+mod speed_group_action;
+#[path = "command_http/speed_group_command.rs"]
+mod speed_group_command;
+#[path = "command_http/speed_group_programming_ports.rs"]
+mod speed_group_programming_ports;
 #[path = "command_http/state_event.rs"]
 mod state_event;
 #[path = "command_http/values_environment.rs"]
@@ -113,6 +119,7 @@ pub(super) use preload_values_wire::change as preload_values_change;
 pub(super) use programmer_priority_wire::change as priority_change;
 pub(crate) use programming_ports::ServerProgrammingPorts;
 pub(super) use routes::router;
+pub(super) use speed_group_action::execute_compatibility as execute_compatibility_speed_group;
 pub(super) use values_wire::{capture_mode_change, values_change};
 pub(super) use wire::wire_choice;
 

@@ -8,6 +8,7 @@ use super::{
     programmer_lifecycle::ProgrammingLifecycleChange,
     programmer_priority::ProgrammerPriorityChange,
     programming::{ProgrammingCaptureModeChange, ProgrammingValuesChange},
+    speed_group::SpeedGroupChange,
 };
 
 use schemars::JsonSchema;
@@ -187,6 +188,9 @@ pub enum EventPayload {
     },
     OutputRuntimeChanged {
         change: OutputRuntimeChange,
+    },
+    SpeedGroupsChanged {
+        change: SpeedGroupChange,
     },
     ShowPatchChanged {
         delta: super::patch::PatchDelta,

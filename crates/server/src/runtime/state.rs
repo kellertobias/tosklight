@@ -12,6 +12,7 @@ pub(super) struct AppState {
     pub(super) programming: ProgrammingService,
     pub(super) playback_service: PlaybackService,
     pub(super) output_runtime_service: OutputRuntimeService,
+    pub(super) speed_group_service: SpeedGroupService,
     pub(super) engine: Arc<Engine>,
     pub(super) highlight: Arc<HighlightRegistry>,
     pub(super) patch_preview_highlights:
@@ -26,6 +27,10 @@ pub(super) struct AppState {
     pub(super) output_runtime_persistence_attempts: Arc<AtomicU64>,
     #[cfg(test)]
     pub(super) output_runtime_persistence_failure: Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(test)]
+    pub(super) speed_group_persistence_attempts: Arc<AtomicU64>,
+    #[cfg(test)]
+    pub(super) speed_group_persistence_failure: Arc<std::sync::atomic::AtomicBool>,
     pub(super) activation_lock: Arc<tokio::sync::Mutex<()>>,
     pub(super) timecode_router: Arc<Mutex<TimecodeRouter>>,
     pub(super) active_show: Arc<RwLock<Option<ShowEntry>>>,

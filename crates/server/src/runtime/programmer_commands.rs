@@ -33,7 +33,7 @@ pub(super) fn execute_programmer_command_from(
             &tokens[1..],
             programmer_value_timing(state, timing),
         ),
-        "SPD" => execute_speed_group_command(state, &tokens),
+        "SPD" => execute_speed_group_operation(state, session, context, command_line),
         command if show_command(command) => {
             execute_show_command(state, session, &tokens, timing, context)
         }

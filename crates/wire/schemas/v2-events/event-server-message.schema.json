@@ -644,6 +644,22 @@
         {
           "type": "object",
           "properties": {
+            "change": {
+              "$ref": "#/$defs/SpeedGroupChange"
+            },
+            "type": {
+              "type": "string",
+              "const": "speed_groups_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "delta": {
               "$ref": "#/$defs/PatchDelta"
             },
@@ -3268,6 +3284,90 @@
             "reason"
           ]
         }
+      ]
+    },
+    "SpeedGroupChange": {
+      "type": "object",
+      "properties": {
+        "applied_at_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "authority_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SpeedGroupProjection"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "authority_id",
+        "revision",
+        "applied_at_millis",
+        "groups"
+      ]
+    },
+    "SpeedGroupId": {
+      "type": "string",
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ]
+    },
+    "SpeedGroupProjection": {
+      "type": "object",
+      "properties": {
+        "group": {
+          "$ref": "#/$defs/SpeedGroupId"
+        },
+        "manual_bpm": {
+          "type": "number",
+          "format": "double"
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "phase_origin_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "speed_master_scale": {
+          "type": "number",
+          "format": "double"
+        },
+        "synchronized_with": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpeedGroupId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "group",
+        "manual_bpm",
+        "paused",
+        "speed_master_scale",
+        "phase_origin_millis"
       ]
     },
     "SpeedGroupRuntimeProjection": {

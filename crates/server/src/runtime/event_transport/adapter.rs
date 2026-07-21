@@ -217,6 +217,11 @@ fn wire_payload(
         )) => wire::EventPayload::PlaybackRuntimeChanged {
             change: super::super::playback_v2::runtime_change(change),
         },
+        application::ApplicationEvent::Playback(
+            application::PlaybackEvent::SpeedGroupsChanged(change),
+        ) => wire::EventPayload::SpeedGroupsChanged {
+            change: super::super::speed_group_v2::wire_change(change),
+        },
         application::ApplicationEvent::Desk(application::DeskEvent::PlaybackViewChanged(
             projection,
         )) => wire::EventPayload::PlaybackViewChanged {

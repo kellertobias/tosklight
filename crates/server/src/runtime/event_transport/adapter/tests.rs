@@ -5,6 +5,7 @@ use light_application::{
     OutputRuntimeProjection, OutputRuntimeScope, PatchChange, ProgrammingCaptureModeChange,
     ProgrammingCaptureModeProjection, ProgrammingInteractionChange, ProgrammingValuesChange,
     ProgrammingValuesProjection, SelectiveShowImportChange, SelectiveShowObjectChange,
+    SpeedGroupChange, SpeedGroupId, SpeedGroupProjection,
 };
 use light_core::{AttributeKey, AttributeValue, ShowId, UserId};
 use light_show::PortableShowObjectKey;
@@ -198,6 +199,58 @@ fn global_output_change_keeps_identity_source_and_correlation() {
     assert_eq!(change.projection.revision, 7);
     assert_eq!(change.projection.grand_master, 0.6);
     assert!(change.projection.blackout);
+}
+
+#[test]
+fn speed_group_change_keeps_exact_object_order_timestamp_and_correlation() {
+    let bus = EventBus::new(4);
+    let context = context(ActionSource::Keyboard);
+    let event = bus.publish(EventDraft::speed_groups_changed(
+        &context,
+        SpeedGroupChange {
+            authority_id: Uuid::from_u128(40),
+            revision: 7,
+            applied_at_millis: 123,
+            groups: vec![SpeedGroupProjection {
+                group: SpeedGroupId::new(2).unwrap(),
+                manual_bpm: 128.5,
+                paused: false,
+                speed_master_scale: 1.0,
+                synchronized_with: Some(SpeedGroupId::new(1).unwrap()),
+                phase_origin_millis: 99,
+            }],
+        },
+    ));
+
+    let Some(wire::EventServerMessage::Event { event }) =
+        wire_delivery(application::SubscriptionDelivery::Event(event))
+    else {
+        panic!("expected a Speed Group delivery");
+    };
+    assert_eq!(event.desk_id, None);
+    assert_eq!(
+        event.object,
+        Some(wire::EventObject {
+            capability: wire::EventCapability::Playback,
+            id: "speed-groups:manual".into(),
+        })
+    );
+    assert_eq!(event.correlation_id, Some(context.correlation_id));
+    assert_eq!(event.delivery, wire::EventDeliveryPolicy::Lossless);
+    let wire::EventPayload::SpeedGroupsChanged { change } = event.payload else {
+        panic!("expected a Speed Group event");
+    };
+    assert_eq!(change.authority_id, Uuid::from_u128(40));
+    assert_eq!(change.revision, 7);
+    assert_eq!(change.applied_at_millis, 123);
+    assert_eq!(
+        change.groups[0].group,
+        light_wire::v2::speed_group::SpeedGroupId::B
+    );
+    assert_eq!(
+        change.groups[0].synchronized_with,
+        Some(light_wire::v2::speed_group::SpeedGroupId::A)
+    );
 }
 
 #[test]

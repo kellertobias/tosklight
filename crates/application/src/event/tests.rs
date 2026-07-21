@@ -10,7 +10,7 @@ use crate::{
     ActiveShowObjectsChange, PlaybackCueReference, PlaybackCueTransition, PlaybackGroupId,
     PlaybackRuntimeChange, PlaybackRuntimeIdentity, PlaybackRuntimeProjection, PlaybackShowScope,
     PlaybackTargetProjection, PlaybackTransitionCause, SelectiveShowImportChange,
-    SelectiveShowObjectChange,
+    SelectiveShowObjectChange, SpeedGroupChange, SpeedGroupId, SpeedGroupProjection,
 };
 
 fn transition_draft(desk_id: Uuid, playback_number: u16, delivery: DeliveryPolicy) -> EventDraft {
@@ -134,6 +134,44 @@ fn installation_global_events_reach_desk_filters() {
     let expected = bus.publish(draft);
 
     assert_eq!(next_event(&subscription), expected);
+}
+
+#[test]
+fn speed_group_change_routes_only_to_the_exact_playback_object() {
+    let bus = EventBus::new(4);
+    let exact = bus.subscribe(
+        EventFilter::default()
+            .with_capability(EventCapability::Playback)
+            .with_object(EventObject::speed_groups()),
+        SubscriptionOptions::default(),
+    );
+    let unrelated = bus.subscribe(
+        EventFilter::default().with_object(EventObject::playback(1)),
+        SubscriptionOptions::default(),
+    );
+    let context = ActionContext::system(Uuid::from_u128(1), ActionSource::Http);
+    let expected = bus.publish(EventDraft::speed_groups_changed(
+        &context,
+        SpeedGroupChange {
+            authority_id: Uuid::from_u128(2),
+            revision: 1,
+            applied_at_millis: 100,
+            groups: vec![SpeedGroupProjection {
+                group: SpeedGroupId::new(1).unwrap(),
+                manual_bpm: 120.0,
+                paused: false,
+                speed_master_scale: 1.0,
+                synchronized_with: None,
+                phase_origin_millis: 100,
+            }],
+        },
+    ));
+
+    assert_eq!(next_event(&exact), expected);
+    assert!(unrelated.try_next().is_none());
+    assert_eq!(expected.object, Some(EventObject::speed_groups()));
+    assert_eq!(expected.desk_id, None);
+    assert_eq!(expected.delivery, DeliveryPolicy::Lossless);
 }
 
 #[test]

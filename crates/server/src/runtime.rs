@@ -45,7 +45,7 @@ use bytes::Bytes;
 use light_application::{
     ActiveShowService, EventBus, OutputRuntimeService, PlaybackAction, PlaybackAddress,
     PlaybackExecution, PlaybackService, PlaybackTopologyService, ProgrammingService,
-    SelectiveShowImportService, ShowPatchService,
+    SelectiveShowImportService, ShowPatchService, SpeedGroupService,
 };
 use light_control::speed::{
     SoundObservation, SoundToLightConfig, SpeedGroupController, SpeedSnapshot,
@@ -171,6 +171,8 @@ mod show_open;
 mod show_patch_adapter;
 mod show_patch_http;
 mod show_patch_wire;
+mod speed_group_service;
+mod speed_group_v2;
 mod speed_groups;
 mod state;
 mod store_api;

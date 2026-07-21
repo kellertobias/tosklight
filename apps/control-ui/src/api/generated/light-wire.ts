@@ -395,6 +395,30 @@ export type OutputRuntimeErrorKind = "invalid" | "unauthorized" | "forbidden" | 
 
 export type OutputRuntimeErrorResponse = { kind: OutputRuntimeErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
 
+export type SpeedGroupId = "A" | "B" | "C" | "D" | "E";
+
+export type SpeedGroupProjection = { group: SpeedGroupId, manual_bpm: number, paused: boolean, speed_master_scale: number, synchronized_with?: SpeedGroupId | null, phase_origin_millis: number, };
+
+export type SpeedGroupAuthorityProjection = { authority_id: string, revision: number, groups: Array<SpeedGroupProjection>, };
+
+export type SpeedGroupSnapshot = { cursor: EventSnapshotCursor, projection: SpeedGroupAuthorityProjection, };
+
+export type SpeedGroupAction = { "type": "set_bpm", group: SpeedGroupId, bpm: number, } | { "type": "adjust_bpm", group: SpeedGroupId, delta_bpm: number, } | { "type": "synchronize", source: SpeedGroupId, target: SpeedGroupId, };
+
+export type SpeedGroupActionRequest = { request_id: string, expected_authority_id: string, expected_revision: number, action: SpeedGroupAction, };
+
+export type SpeedGroupDurability = "durable" | "persistence_pending";
+
+export type SpeedGroupActionState = { "status": "changed", event_sequence: number, } | { "status": "no_change", };
+
+export type SpeedGroupActionOutcome = { request_id: string, correlation_id: string, authority_id: string, revision: number, applied_at_millis: number, groups: Array<SpeedGroupProjection>, replayed: boolean, durability: SpeedGroupDurability, warning?: string | null, } & ({ "status": "changed", event_sequence: number, } | { "status": "no_change", });
+
+export type SpeedGroupChange = { authority_id: string, revision: number, applied_at_millis: number, groups: Array<SpeedGroupProjection>, };
+
+export type SpeedGroupErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
+
+export type SpeedGroupErrorResponse = { kind: SpeedGroupErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
+
 export type OutputProtocol = "art_net" | "sacn";
 
 export type OutputDeliveryMode = "broadcast" | "multicast" | "unicast";
@@ -427,7 +451,7 @@ export type ManagedAssetReference = { asset_id: string, revision: number, };
 
 export type SelectiveImportChange = { show_id: string, show_revision: number, objects: Array<SelectiveImportObjectChange>, profile_revisions: Array<FixtureProfileIdentity>, managed_assets: Array<ManagedAssetReference>, };
 
-export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programmer_priority_changed", change: ProgrammerPriorityChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_preload_playback_queue_changed", change: ProgrammingPreloadPlaybackQueueChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
+export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programmer_priority_changed", change: ProgrammerPriorityChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_preload_playback_queue_changed", change: ProgrammingPreloadPlaybackQueueChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "speed_groups_changed", change: SpeedGroupChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 

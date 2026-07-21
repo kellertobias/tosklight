@@ -19,3 +19,4 @@ include!("command_http_cue_recording_tests.rs");
 include!("command_http_cue_transfer_tests.rs");
 include!("command_http_cue_navigation_tests.rs");
 include!("command_http_cue_convergence_tests.rs");
+include!("command_http_speed_group_tests.rs");
