@@ -1,4 +1,5 @@
 import type { KeyboardEvent } from "react";
+import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
 import { useServer } from "../../../api/ServerContext";
 import type {
 	ControlActionKind,
@@ -29,7 +30,7 @@ function inferredControlSemantic(name: string): ControlActionSemantic {
 }
 
 export function compatibleSpecialDialogActions(
-	fixtures: PatchedFixture[],
+	fixtures: readonly PatchedFixture[],
 	semantic: ControlActionSemantic,
 	selectedFixtureIds: readonly string[] = [],
 ): CompatibleFixtureControlAction[] {
@@ -68,6 +69,7 @@ export function ControlDialog({
 	selectedFixtureIds: readonly string[];
 }) {
 	const server = useServer();
+	const selectedFixtures = useSelectedPatchedFixtures(selectedFixtureIds);
 
 	const fixtureControlActions = (
 		semantic: ControlActionSemantic,
@@ -75,7 +77,7 @@ export function ControlDialog({
 	) => {
 		if (!selectedFixtureIds.length && !allWhenEmpty) return [];
 		return compatibleSpecialDialogActions(
-			server.patch?.fixtures ?? [],
+			selectedFixtures,
 			semantic,
 			selectedFixtureIds,
 		);

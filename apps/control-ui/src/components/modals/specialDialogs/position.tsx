@@ -1,4 +1,5 @@
 import { type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
 import { useServer } from "../../../api/ServerContext";
 import {
 	normalizedFixtureMutations,
@@ -50,10 +51,16 @@ export function usePositionDialog(
 	const trackball = useRef<HTMLDivElement>(null);
 	const joystick = useRef({ x: 0, y: 0 });
 	const fixturePositions = useRef(new Map<string, LampPosition>());
+	const selectedFixtures = useSelectedPatchedFixtures(
+		selectedFixtureIds,
+		active,
+	);
+	// Read inside the visualization effect without making fixtures an effect dependency.
+	const fixturesRef = useRef(selectedFixtures);
+	fixturesRef.current = selectedFixtures;
 	const homeAssignments = useMemo(
-		() =>
-			returnHomeAssignments(selectedFixtureIds, server.patch?.fixtures ?? []),
-		[server.patch, selectedFixtureIds],
+		() => returnHomeAssignments(selectedFixtureIds, selectedFixtures),
+		[selectedFixtures, selectedFixtureIds],
 	);
 
 	const updateAverages = (positions: Map<string, LampPosition>) => {
@@ -96,7 +103,7 @@ export function usePositionDialog(
 				if (cancelled) return;
 				const origins = resolveLampPositions(
 					selectedFixtureIds,
-					server.patch?.fixtures ?? [],
+					fixturesRef.current,
 					snapshot,
 				);
 				fixturePositions.current = origins;

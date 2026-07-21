@@ -67,7 +67,7 @@ export function fixtureDmxPatchBindings(fixture: PatchedFixture): DmxPatchBindin
   return [...primary, ...multipatches];
 }
 
-export function fixtureChannelAt(fixtures: PatchedFixture[], universe: number, address: number): DmxFixtureChannel | null {
+export function fixtureChannelAt(fixtures: readonly PatchedFixture[], universe: number, address: number): DmxFixtureChannel | null {
   for (const fixture of fixtures) {
     const patch = fixtureDmxPatchBindings(fixture).find((item) => item.universe === universe && address >= item.address && address < item.address + item.footprint);
     if (!patch) continue;

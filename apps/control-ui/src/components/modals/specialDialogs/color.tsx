@@ -1,4 +1,5 @@
 import { type PointerEvent, useRef, useState } from "react";
+import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
 import { useServer } from "../../../api/ServerContext";
 import {
 	normalizedFixtureMutations,
@@ -51,6 +52,7 @@ export function useColorDialog(
 		pointerId: number;
 		start: PickerColor;
 	} | null>(null);
+	const selectedFixtures = useSelectedPatchedFixtures(selectedFixtureIds);
 
 	const applyColors = async (
 		colors: PickerColor[],
@@ -58,7 +60,7 @@ export function useColorDialog(
 	) => {
 		const assignments = colorProgrammerAssignments(
 			selectedFixtureIds,
-			server.patch?.fixtures ?? [],
+			selectedFixtures,
 			colors,
 		);
 		const mutations = normalizedFixtureMutations(

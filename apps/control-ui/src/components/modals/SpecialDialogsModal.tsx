@@ -6,6 +6,7 @@ import {
 	programmerValuesMutationKey,
 	useProgrammerValuesMutationQueue,
 } from "../../features/programmerValues/useProgrammerValuesMutationQueue";
+import { useSelectedPatchedFixtures } from "../../features/patch/PatchState";
 import { useApp } from "../../state/AppContext";
 import { Button, ModalPortal } from "../common";
 import {
@@ -46,13 +47,14 @@ export function SpecialDialogsModal() {
 		state.shiftArmed,
 		valueWrites,
 	);
+	const selectedFixtures = useSelectedPatchedFixtures(
+		selectedFixtureIds,
+		state.specialDialogsOpen,
+	);
 	const available = useMemo(
 		() =>
-			availableSpecialDialogAttributes(
-				server.patch?.fixtures ?? [],
-				selectedFixtureIds,
-			),
-		[server.patch, selectedFixtureIds],
+			availableSpecialDialogAttributes(selectedFixtures, selectedFixtureIds),
+		[selectedFixtures, selectedFixtureIds],
 	);
 
 	const close = () =>

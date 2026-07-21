@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { HighlightAction, HighlightFixtureSummary, HighlightState, PatchedFixture } from "../../api/types";
 import { useServer } from "../../api/ServerContext";
+import { usePatchView } from "../../features/patch/PatchContext";
+import { usePatchFixturesById } from "../../features/patch/PatchState";
 import { Button } from "../common";
 
-function fixtureDetails(fixture: HighlightFixtureSummary | null, patch: PatchedFixture[]) {
+function fixtureDetails(fixture: HighlightFixtureSummary | null, patch: readonly PatchedFixture[]) {
   if (!fixture) return null;
   const patched = patch.find((candidate) => candidate.fixture_id === fixture.fixture_id);
   const number = fixture.number ?? fixture.fixture_number ?? patched?.fixture_number;
@@ -13,7 +15,7 @@ function fixtureDetails(fixture: HighlightFixtureSummary | null, patch: PatchedF
   return name ? `${identity} · ${name}` : identity;
 }
 
-export function highlightStatusLabel(state: HighlightState | null, patch: PatchedFixture[] = []) {
+export function highlightStatusLabel(state: HighlightState | null, patch: readonly PatchedFixture[] = []) {
   if (!state) return "Unavailable";
   const total = state.remembered.length;
   if (state.mode !== "step") return total ? `ALL · ${total} selected` : "ALL · Empty selection";
@@ -24,7 +26,7 @@ export function highlightStatusLabel(state: HighlightState | null, patch: Patche
   return fixture ? `${position} · ${fixture}` : position;
 }
 
-function highlightAnnouncement(state: HighlightState | null, patch: PatchedFixture[]) {
+function highlightAnnouncement(state: HighlightState | null, patch: readonly PatchedFixture[]) {
   if (!state) return "Highlight state unavailable.";
   const status = `Highlight ${state.active ? "on" : "off"}. ${highlightStatusLabel(state, patch)}.`;
   const safety = state.capture_only || (state.active && !state.output_enabled)
@@ -48,12 +50,22 @@ export function HighlightErrorAlert({ message, onDismiss }: { message: string | 
   </div>, document.body);
 }
 
+/** Reads only the fixtures Highlight actually names, and only while they exist. */
+function useHighlightPatchedFixtures(state: HighlightState | null) {
+  const fixtureIds = (state?.remembered ?? [])
+    .map((fixture) => fixture.fixture_id)
+    .concat(state?.active_fixture ? [state.active_fixture.fixture_id] : []);
+  const enabled = fixtureIds.length > 0;
+  usePatchView(enabled);
+  return usePatchFixturesById(fixtureIds, enabled);
+}
+
 export function HighlightControls() {
   const server = useServer();
   const state = server.highlight;
   const [pending, setPending] = useState<HighlightAction | null>(null);
   const pendingRef = useRef(false);
-  const patch = server.patch?.fixtures ?? [];
+  const patch = useHighlightPatchedFixtures(state);
   const ownedByOther = Boolean(
     state?.owner_user_id
     && server.session?.user.id

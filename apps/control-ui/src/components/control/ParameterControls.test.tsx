@@ -5,6 +5,7 @@ import type {
 	ProgrammerFixtureValue,
 	ProgrammerGroupValue,
 } from "../../features/programmerValues/contracts";
+import { selectFixturesForSelection } from "../../features/patch/selectors";
 import { ParameterControls } from "./ParameterControls";
 
 const state = {
@@ -52,13 +53,36 @@ const preloadValuesActions = vi.hoisted(() => ({
 const visualization = vi.hoisted(() => ({
 	snapshot: null as VisualizationSnapshot | null,
 }));
+const patchFixtures = vi.hoisted(() => ({
+	current: [] as Array<Record<string, unknown>>,
+}));
+vi.mock("../../features/patch/PatchState", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	useSelectedPatchedFixtures: (
+		selectedFixtureIds: readonly string[],
+		enabled = true,
+	) =>
+		enabled
+			? selectFixturesForSelection(
+					{ fixtures: patchFixtures.current } as never,
+					new Set(selectedFixtureIds),
+				)
+			: [],
+}));
 const legacyProgrammerValuesAccess = vi.fn();
 const legacyPlaybackAccess = vi.fn();
 const server = {
 	selectedFixtures: [] as string[],
 	selectedGroupId: null as string | null,
 	groups: [] as Array<Record<string, unknown>>,
-	patch: { fixtures: [] as Array<Record<string, unknown>> },
+	patch: {
+		get fixtures() {
+			return patchFixtures.current;
+		},
+		set fixtures(value: Array<Record<string, unknown>>) {
+			patchFixtures.current = value;
+		},
+	},
 	bootstrap: { hardware_connected: false } as {
 		hardware_connected: boolean;
 		readonly active_programmers: unknown[];

@@ -2,7 +2,22 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PatchedFixture } from "../../../api/types";
 import type { ProgrammerValuesMutationQueueController } from "../../../features/programmerValues/useProgrammerValuesMutationQueue";
+import { selectFixturesForSelection } from "../../../features/patch/selectors";
 import { usePositionDialog } from "./position";
+
+vi.mock("../../../features/patch/PatchState", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	useSelectedPatchedFixtures: (
+		selectedFixtureIds: readonly string[],
+		enabled = true,
+	) =>
+		enabled
+			? selectFixturesForSelection(
+					{ fixtures: server.patch.fixtures } as never,
+					new Set(selectedFixtureIds),
+				)
+			: [],
+}));
 
 const server = vi.hoisted(() => ({
 	configuration: { programmer_fade_millis: 750 },

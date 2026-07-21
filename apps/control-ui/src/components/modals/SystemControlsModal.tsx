@@ -7,6 +7,7 @@ import {
 import { useProgrammerLifecycleView } from "../../features/programmerLifecycle/ProgrammerLifecycleView";
 import { useProgrammerPreloadLifecycleView } from "../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
+import { useSelectedPatchedFixtures } from "../../features/patch/PatchState";
 import { useApp } from "../../state/AppContext";
 import { Button, ModalPortal } from "../common";
 import { compatibleSpecialDialogActions } from "./SpecialDialogsModal";
@@ -36,14 +37,18 @@ function useSystemControlsModel() {
 		? Math.round(output.projection.grandMaster * 100)
 		: null;
 	const blackout = output.projection?.blackout ?? false;
+	const selectedFixtures = useSelectedPatchedFixtures(
+		selectedFixtureIds,
+		state.systemControlsOpen,
+	);
 	const lampActions = useMemo(
 		() =>
 			compatibleSpecialDialogActions(
-				server.patch?.fixtures ?? [],
+				selectedFixtures,
 				"lamp_on",
 				selectedFixtureIds,
 			),
-		[server.patch, selectedFixtureIds],
+		[selectedFixtures, selectedFixtureIds],
 	);
 	const programmers = lifecycle?.programmers ?? EMPTY_PROGRAMMERS;
 	const triggerLamps = async (phase: "click" | "press" | "release") => {

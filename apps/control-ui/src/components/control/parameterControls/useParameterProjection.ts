@@ -3,6 +3,7 @@ import { useServer } from "../../../api/ServerContext";
 import type { VisualizationSnapshot } from "../../../api/types";
 import { capturesProgrammerWrites } from "../../../features/programmerCaptureMode/contracts";
 import { useProgrammerCaptureModeView } from "../../../features/programmerCaptureMode/ProgrammerCaptureModeView";
+import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
 import { selectedGroupId } from "../../../features/programmingInteraction/contracts";
 import { useProgrammingSelectionView } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { useVisualizationRuntimeSnapshot } from "../../../features/visualizationRuntime/VisualizationRuntimeView";
@@ -37,24 +38,18 @@ function useSupportedAttributes(
 	groupId: string | null,
 	active: boolean,
 ) {
-	const server = useServer();
 	const group = useSelectedPortableGroup(groupId, active);
+	const fixtures = useSelectedPatchedFixtures(selectedFixtureIds, active);
 	return useMemo(() => {
 		const result = new Set<string>();
-		const selected = new Set(selectedFixtureIds);
-		for (const fixture of server.patch?.fixtures ?? []) {
-			const fixtureSelected =
-				selected.has(fixture.fixture_id) ||
-				fixture.logical_heads.some((head) => selected.has(head.fixture_id));
-			if (!fixtureSelected) continue;
+		for (const fixture of fixtures)
 			for (const head of fixture.definition.heads ?? [])
 				for (const parameter of head.parameters)
 					result.add(parameter.attribute);
-		}
 		for (const attribute of selectedGroupSupportedAttributes(groupId, group))
 			result.add(attribute);
 		return result;
-	}, [server.patch, selectedFixtureIds, groupId, group]);
+	}, [fixtures, groupId, group]);
 }
 
 function useResolvedValues(
@@ -117,10 +112,13 @@ export function useParameterProjection(family: ParameterFamily, active = true) {
 		active,
 	);
 	const values = useResolvedValues(visualization, selectedFixtureIds);
+	const selectedFixtures = useSelectedPatchedFixtures(
+		selectedFixtureIds,
+		active,
+	);
 	const directChoices = useMemo(
-		() =>
-			directProgrammerChoices(server.patch?.fixtures ?? [], selectedFixtureIds),
-		[server.patch, selectedFixtureIds],
+		() => directProgrammerChoices(selectedFixtures, selectedFixtureIds),
+		[selectedFixtures, selectedFixtureIds],
 	);
 	const attributes = parameterFamilies[family].filter((attribute) =>
 		supported.has(attribute),

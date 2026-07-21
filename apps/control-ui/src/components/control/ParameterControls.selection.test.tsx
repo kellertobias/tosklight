@@ -19,7 +19,22 @@ import {
 	SHOW_ID,
 	selectionChange,
 } from "../../features/programmingInteraction/testFixtures";
+import { selectFixturesForSelection } from "../../features/patch/selectors";
 import { ParameterControls } from "./ParameterControls";
+
+vi.mock("../../features/patch/PatchState", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	useSelectedPatchedFixtures: (
+		selectedFixtureIds: readonly string[],
+		enabled = true,
+	) =>
+		enabled
+			? selectFixturesForSelection(
+					{ fixtures: mocks.server.patch.fixtures } as never,
+					new Set(selectedFixtureIds),
+				)
+			: [],
+}));
 
 const mocks = vi.hoisted(() => {
 	const legacySelectionAccess = vi.fn();

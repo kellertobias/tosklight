@@ -220,7 +220,7 @@ function collectControlActions(
 }
 
 export function directProgrammerChoices(
-	fixtures: PatchedFixture[],
+	fixtures: readonly PatchedFixture[],
 	selectedFixtures: readonly string[],
 ) {
 	const selected = new Set(selectedFixtures);
