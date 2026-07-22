@@ -51,6 +51,13 @@ const mocks = vi.hoisted(() => {
 vi.mock("../../api/ServerContext", () => ({
 	useServer: () => mocks.server,
 }));
+vi.mock(
+	"../../features/visualizationRuntime/VisualizationRuntimeView",
+	async (importOriginal) => ({
+		...(await importOriginal<Record<string, unknown>>()),
+		useVisualizationRuntimeRead: () => mocks.server.readVisualization,
+	}),
+);
 vi.mock("../../platform/desktop", () => ({
 	useDesktopBridge: () => ({ available: mocks.desktopAvailable }),
 }));

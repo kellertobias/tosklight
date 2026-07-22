@@ -58,6 +58,13 @@ const server = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock(
+	"../../../features/visualizationRuntime/VisualizationRuntimeView",
+	async (importOriginal) => ({
+		...(await importOriginal<Record<string, unknown>>()),
+		useVisualizationRuntimeRead: () => server.readVisualization,
+	}),
+);
 
 const writes = {
 	canWrite: true,

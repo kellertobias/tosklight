@@ -1,7 +1,7 @@
 import { type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
 import { useProgrammerFadeMillis } from "../../../features/configuration/ConfigurationState";
-import { useServer } from "../../../api/ServerContext";
+import { useVisualizationRuntimeRead } from "../../../features/visualizationRuntime/VisualizationRuntimeView";
 import {
 	normalizedFixtureMutations,
 	programmerValuesMutationKey,
@@ -45,7 +45,7 @@ export function usePositionDialog(
 	selectedFixtureIds: readonly string[],
 	valueWrites: ProgrammerValuesMutationQueueController,
 ): PositionDialogController {
-	const server = useServer();
+	const readVisualization = useVisualizationRuntimeRead();
 	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
 	const selectedFixtureKey = selectedFixtureIds.join("\u0000");
 	const [pan, setPan] = useState(0.5);
@@ -99,8 +99,7 @@ export function usePositionDialog(
 	useEffect(() => {
 		if (!active) return;
 		let cancelled = false;
-		void server
-			.readVisualization()
+		void readVisualization()
 			.then((snapshot) => {
 				if (cancelled) return;
 				const origins = resolveLampPositions(
@@ -115,7 +114,7 @@ export function usePositionDialog(
 		return () => {
 			cancelled = true;
 		};
-	}, [active, selectedFixtureKey]);
+	}, [active, readVisualization, selectedFixtureKey]);
 
 	useEffect(() => {
 		if (!active || !valueWrites.canWrite) return;

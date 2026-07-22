@@ -10,6 +10,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
+import type { VisualizationSnapshot } from "../../api/types";
 import type {
 	VisualizationRuntimeLane,
 	VisualizationRuntimeScope,
@@ -112,6 +113,24 @@ export function useVisualizationRuntimeSnapshot(
 
 export function useVisualizationRuntimeStore() {
 	return useContext(StoreContext) ?? fallbackStore;
+}
+
+/**
+ * Stable one-shot read through the scoped visualization transport, for consumers that
+ * derive from a single authoritative snapshot (thumbnails, dialog seeding) instead of
+ * observing a polling lane. Rejects while no runtime session is available.
+ */
+export function useVisualizationRuntimeRead(
+	lane: VisualizationRuntimeLane = "normal",
+) {
+	const session = useContext(SessionContext);
+	return useCallback((): Promise<VisualizationSnapshot> => {
+		if (!session)
+			return Promise.reject(
+				new Error("The visualization runtime view is unavailable"),
+			);
+		return session.read(lane);
+	}, [lane, session]);
 }
 
 function useVisualizationRuntimeActivation(

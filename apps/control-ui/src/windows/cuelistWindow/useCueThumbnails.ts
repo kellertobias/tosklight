@@ -4,7 +4,7 @@ import {
 	useStagePositions,
 	useStagePositions3d,
 } from "../../features/stageLayout/StageLayoutState";
-import { useServer } from "../../api/ServerContext";
+import { useVisualizationRuntimeRead } from "../../features/visualizationRuntime/VisualizationRuntimeView";
 import type {
 	AttributeValue,
 	Cue,
@@ -28,7 +28,6 @@ const GROUP_KINDS = ["group"] as const;
 const NO_SUBSCRIPTION = () => () => undefined;
 
 function useStageFixtures(enabled: boolean) {
-	const server = useServer();
 	const fixtures = usePatchedFixturesView(enabled);
 	const stagePositions = useStagePositions();
 	const stagePositions3d = useStagePositions3d();
@@ -116,7 +115,7 @@ function useGroupAuthorityGeneration(enabled: boolean) {
 }
 
 export function useCueThumbnails(cues: Cue[], active: boolean) {
-	const server = useServer();
+	const readVisualization = useVisualizationRuntimeRead();
 	const groups = usePortableGroups(active);
 	const groupsReady = useShowObjectCollectionsReady(GROUP_KINDS, active);
 	const authorityGeneration = useGroupAuthorityGeneration(active);
@@ -134,8 +133,7 @@ export function useCueThumbnails(cues: Cue[], active: boolean) {
 		)
 			return;
 		let cancelled = false;
-		void server
-			.readVisualization()
+		void readVisualization()
 			.then((live) => {
 				if (cancelled) return;
 				let state: VisualizationSnapshot = { ...live, values: [] };
@@ -166,7 +164,7 @@ export function useCueThumbnails(cues: Cue[], active: boolean) {
 		cues,
 		groups,
 		groupsReady,
-		server.readVisualization,
+		readVisualization,
 		stageFixtures,
 		tauri,
 	]);

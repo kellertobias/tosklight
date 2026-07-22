@@ -1,3 +1,4 @@
+import type { VisualizationSnapshot } from "../../api/types";
 import type {
 	VisualizationRuntimeLane,
 	VisualizationRuntimeScope,
@@ -63,6 +64,19 @@ export class VisualizationRuntimeSession {
 			active = false;
 			this.release(lane, claimId);
 		};
+	}
+
+	/**
+	 * One-shot authoritative read through the scoped transport without claiming a
+	 * polling lane. The caller consumes the returned snapshot directly; the shared
+	 * lane projections are not touched.
+	 */
+	read(lane: VisualizationRuntimeLane): Promise<VisualizationSnapshot> {
+		if (this.stopped || !this.store.matchesScope(this.scope))
+			return Promise.reject(
+				new Error("The visualization runtime view is unavailable"),
+			);
+		return this.transport.loadSnapshot(this.scope, lane);
 	}
 
 	stop() {
