@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { ConfigurationStore } from "../configuration/store";
 import { DeskLockStore } from "../deskLock/store";
+import { DeskSnapshotStore } from "../deskSnapshot/store";
 import { ShellStatusStore } from "../shellStatus/store";
 import { OutputRuntimeStore } from "../outputRuntime/store";
 import { PlaybackRuntimeStore } from "../playbackRuntime/store";
@@ -24,6 +25,7 @@ export function useServerFeatureStores() {
 	return {
 		configurationStore: useRef(new ConfigurationStore()).current,
 		deskLockStore: useRef(new DeskLockStore()).current,
+		deskSnapshotStore: useRef(new DeskSnapshotStore()).current,
 		shellStatusStore: useRef(new ShellStatusStore()).current,
 		stageLayoutStore: useRef(new StageLayoutStore()).current,
 		outputRuntimeStore: outputRuntimeStore.current,

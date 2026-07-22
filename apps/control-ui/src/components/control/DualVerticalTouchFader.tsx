@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { useServer } from "../../api/ServerContext";
+import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useApp } from "../../state/AppContext";
 import { Button } from "../common";
 import { ModalNumberInput } from "../input/ModalInputControls";
@@ -9,9 +9,9 @@ import { VerticalTouchFader } from "./VerticalTouchFader";
 export type DualEncoderValue = { label: string; value: number; maximum: number; display: string; inputOffset?: number; onChange: (value: number) => void };
 
 export function DualVerticalTouchFader({ encoder, primary, secondary }: { encoder: string; primary: DualEncoderValue; secondary: DualEncoderValue }) {
-  const server = useServer();
+  const hardwareConnected = useHardwareConnected();
   const { state } = useApp();
-  const hardware = Boolean(server.bootstrap?.hardware_connected || state.midiProfile);
+  const hardware = Boolean(hardwareConnected || state.midiProfile);
   const [editing, setEditing] = useState<"primary" | "secondary" | null>(null);
   const [inputValue, setInputValue] = useState("");
   const selected = editing === "secondary" ? secondary : primary;

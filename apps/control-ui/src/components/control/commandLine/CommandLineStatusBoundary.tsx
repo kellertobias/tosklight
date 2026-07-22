@@ -1,16 +1,20 @@
 import { useConnectionStatus } from "../../../features/shellStatus/ShellStatusState";
-import { useServer } from "../../../api/ServerContext";
+import {
+	useActiveTimecode,
+	useFrameRateHz,
+} from "../../../features/deskSnapshot/DeskSnapshotState";
 import { CommandLineStatus } from "./CommandLineStatus";
 
 /** Keeps broad connection/bootstrap updates at the status leaf. */
 export function CommandLineStatusBoundary({ onOpen }: { onOpen: () => void }) {
-	const server = useServer();
 	const connectionStatus = useConnectionStatus();
+	const frameRateHz = useFrameRateHz();
+	const timecode = useActiveTimecode();
 	return (
 		<CommandLineStatus
 			status={connectionStatus}
-			frequency={server.bootstrap?.frame_rate_hz ?? "—"}
-			timecode={server.bootstrap?.active_timecode ?? null}
+			frequency={frameRateHz ?? "—"}
+			timecode={timecode}
 			onOpen={onOpen}
 		/>
 	);

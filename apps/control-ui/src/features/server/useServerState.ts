@@ -92,6 +92,10 @@ export function useServerState() {
 	useEffect(() => {
 		shellStatusStore.install(status, error);
 	}, [status, error, shellStatusStore]);
+	const deskSnapshotStore = featureStores.deskSnapshotStore;
+	useEffect(() => {
+		deskSnapshotStore.install(bootstrap, session);
+	}, [bootstrap, session, deskSnapshotStore]);
 	const stageLayoutStore = featureStores.stageLayoutStore;
 	useEffect(() => {
 		stageLayoutStore.install(stageLayout);

@@ -1,11 +1,13 @@
 import { useMemo } from "react";
-import type { useServer } from "../../api/ServerContext";
 import type { PatchedFixture, StoredGroup, VersionedObject } from "../../api/types";
 import { groups as fallbackGroups } from "../../data/mockData";
+import {
+	useActiveShowId,
+	useBootstrapReady,
+} from "../../features/deskSnapshot/DeskSnapshotState";
 import { usePatchedFixturesView } from "../../features/patch/PatchState";
 import { useGroupRuntimeAuthority } from "../../features/groupRuntime/groupRuntimeAuthority";
 
-export type GroupsServer = ReturnType<typeof useServer>;
 export type Group = VersionedObject<StoredGroup>;
 
 export interface FixtureMetadata {
@@ -82,13 +84,14 @@ function fixtureMetadata(
 	return { capabilities, fixtureNames, knownFixtureIds };
 }
 
-export function useGroupPoolModel(server: GroupsServer, active = true) {
-	const hasShow = Boolean(server.bootstrap?.active_show);
+export function useGroupPoolModel(active = true) {
+	const bootstrapReady = useBootstrapReady();
+	const hasShow = useActiveShowId() !== null;
 	const authority = useGroupRuntimeAuthority(active && hasShow);
 	const groups = useMemo(() => {
-		if (!server.bootstrap) return fallbackGroupPool();
+		if (!bootstrapReady) return fallbackGroupPool();
 		return hasShow ? authority.groups : [];
-	}, [authority.groups, hasShow, server.bootstrap]);
+	}, [authority.groups, hasShow, bootstrapReady]);
 	const cards = useMemo(() => groupCards(groups), [groups]);
 	const fixtures = usePatchedFixturesView(active);
 	const metadata = useMemo(() => fixtureMetadata(fixtures), [fixtures]);

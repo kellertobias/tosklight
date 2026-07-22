@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useServer } from "../api/ServerContext";
+import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
 import {
 	type CommandLineSurface,
 	useCommandLineSurface,
@@ -52,7 +52,7 @@ function GroupPoolHeader({ command }: { command: CommandLineSurface }) {
 }
 
 export function GroupsWindow({ active = true, compact }: WindowProps) {
-	const server = useServer();
+	const groupScope = useActiveShowId();
 	const groupRecording = useGroupRecording();
 	const command = useCommandLineSurface({
 		selection: true,
@@ -60,7 +60,7 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 		observeCommand: false,
 	});
 	const { dispatch } = useApp();
-	const model = useGroupPoolModel(server, active);
+	const model = useGroupPoolModel(active);
 	const [contextGroup, setContextGroup] = useState<string | null>(null);
 	const [recordGroup, setRecordGroup] = useState<GroupRecordingTarget | null>(
 		null,
@@ -70,7 +70,6 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 	const propertiesTarget = model.groups.find(
 		(group) => group.id === propertiesGroup,
 	);
-	const groupScope = server.bootstrap?.active_show?.id ?? null;
 
 	useEffect(() => {
 		setContextGroup(null);

@@ -1,4 +1,7 @@
-import { useServer } from "../api/ServerContext";
+import {
+	useActiveShowId,
+	useBootstrapReady,
+} from "../features/deskSnapshot/DeskSnapshotState";
 import type { CueList, PatchedFixture, VisualizationSnapshot } from "../api/types";
 import { fixtures } from "../data/mockData";
 import {
@@ -234,8 +237,9 @@ export function useFixtureSheetRows({
 	includedHeads: FixtureSheetIncludedHeads;
 	active?: boolean;
 }) {
-	const server = useServer();
-	const observesGroupRuntime = active && Boolean(server.bootstrap?.active_show);
+	const bootstrapReady = useBootstrapReady();
+	const activeShowId = useActiveShowId();
+	const observesGroupRuntime = active && activeShowId !== null;
 	const groupAuthority = useGroupRuntimeAuthority(observesGroupRuntime);
 	const patchedFixtures = usePatchedFixturesView(active);
 	const observesActiveValues =
@@ -243,7 +247,7 @@ export function useFixtureSheetRows({
 	const activeValueTargets = useProgrammerValueTargets(observesActiveValues);
 	const activeValuesLoading =
 		observesActiveValues && activeValueTargets === null;
-	if (!server.bootstrap) {
+	if (!bootstrapReady) {
 		return {
 			rows: demoFixtureSheetRows(),
 			activeValuesLoading: false,

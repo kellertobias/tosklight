@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { usePatchedFixturesView } from "../../features/patch/PatchState";
-import { useServer } from "../../api/ServerContext";
+import { useBootstrapReady } from "../../features/deskSnapshot/DeskSnapshotState";
 import type { PatchedFixture, VisualizationSnapshot } from "../../api/types";
 import { fixtures as visualFixtures } from "../../data/mockData";
 import { useVisualizationRuntimeSnapshot } from "../../features/visualizationRuntime/VisualizationRuntimeView";
@@ -146,14 +146,14 @@ export function useStageVisualization(
 	selectedFixtureIds: ReadonlySet<string>,
 	patchedFixtures?: readonly PatchedFixture[],
 ) {
-	const server = useServer();
+	const bootstrapReady = useBootstrapReady();
 	const visualization = useVisualizationSnapshot(followPreload, active);
 	const stageFixtures = usePatchedFixtures(patchedFixtures);
 	const patchPreviewFixtures = useMemo(
 		() => patchPreviewFixtureIds(stageFixtures, selectedFixtureIds),
 		[selectedFixtureIds, stageFixtures],
 	);
-	const fixtures = server.bootstrap
+	const fixtures = bootstrapReady
 		? stageFixtures.map((fixture, index) =>
 				fixturePresentation(
 					fixture,

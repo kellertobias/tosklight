@@ -2,7 +2,8 @@ import { useConnectionStatus } from "./features/shellStatus/ShellStatusState";
 import { AppProvider } from "./state/AppContext";
 import { AppShell } from "./components/shell/AppShell";
 import { QuitConfirmOverlay } from "./components/modals/QuitConfirmOverlay";
-import { ServerProvider, useServer } from "./api/ServerContext";
+import { ServerProvider } from "./api/ServerContext";
+import { useBootstrapSnapshot } from "./features/deskSnapshot/DeskSnapshotState";
 import { useEffect } from "react";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
 import { FileManagerPickerHost } from "./windows/FileManagerPickerHost";
@@ -10,18 +11,14 @@ import { useDesktopBridge } from "./platform/desktop";
 import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 
 function DesktopReady() {
-	const server = useServer();
+	const bootstrapReady = useBootstrapSnapshot() !== null;
 	const connectionStatus = useConnectionStatus();
 	const desktop = useDesktopBridge();
 	useEffect(() => {
-		if (
-			connectionStatus !== "connected" ||
-			!server.bootstrap ||
-			!desktop.available
-		)
+		if (connectionStatus !== "connected" || !bootstrapReady || !desktop.available)
 			return;
 		void desktop.frontendReady();
-	}, [connectionStatus, server.bootstrap, desktop]);
+	}, [connectionStatus, bootstrapReady, desktop]);
 	return null;
 }
 

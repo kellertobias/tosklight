@@ -143,6 +143,12 @@ const server = {
 };
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
+	useBootstrapReady: () => server.bootstrap !== null,
+	useFrameRateHz: () => server.bootstrap?.frame_rate_hz ?? null,
+	useActiveTimecode: () => server.bootstrap?.active_timecode ?? null,
+	useHardwareConnected: () => server.bootstrap?.hardware_connected ?? false,
+}));
 // This harness exercises the software keypad, not the Playback key authority,
 // which owns its own hydration and is covered by useCommandLineShortcuts.test.
 vi.mock("./commandLine/playbackShortcutAuthority", () => ({

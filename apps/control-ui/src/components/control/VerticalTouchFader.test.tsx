@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TouchValueButton, VerticalTouchFader } from "./VerticalTouchFader";
 
 let hardwareConnected = false;
-vi.mock("../../api/ServerContext", () => ({ useServer: () => ({ bootstrap: { hardware_connected: hardwareConnected } }) }));
+vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({ useHardwareConnected: () => hardwareConnected }));
 vi.mock("../../state/AppContext", () => ({ useApp: () => ({ state: { midiProfile: null } }) }));
 
 afterEach(() => {

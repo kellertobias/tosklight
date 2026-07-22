@@ -88,6 +88,10 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("../api/ServerContext", () => ({ useServer: () => mocks.server }));
+vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
+	useBootstrapReady: () => mocks.server.bootstrap !== null,
+	useActiveShowId: () => mocks.server.bootstrap?.active_show?.id ?? null,
+}));
 vi.mock("../features/groupRuntime/groupRuntimeAuthority", () => ({
 	useGroupRuntimeAuthority: () => ({
 		ready: mocks.ready,

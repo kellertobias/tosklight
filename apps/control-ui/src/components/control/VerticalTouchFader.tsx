@@ -6,7 +6,7 @@ import {
 	useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useServer } from "../../api/ServerContext";
+import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useApp } from "../../state/AppContext";
 import { Button, type ButtonProps, Input } from "../common";
 import { ModalNumberInput } from "../input/ModalInputControls";
@@ -198,14 +198,12 @@ function FaderActions({ actions }: { actions: VerticalTouchFaderAction[] }) {
 }
 
 export function VerticalTouchFader(props: VerticalTouchFaderProps) {
-	const server = useServer();
+	const hardwareConnected = useHardwareConnected();
 	const { state } = useApp();
 	return (
 		<VerticalTouchFaderSurface
 			{...props}
-			hardware={Boolean(
-				server.bootstrap?.hardware_connected || state.midiProfile,
-			)}
+			hardware={Boolean(hardwareConnected || state.midiProfile)}
 		/>
 	);
 }

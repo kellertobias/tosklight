@@ -6,7 +6,7 @@ import {
   useStagePositions,
   useStagePositions3d,
 } from "../../features/stageLayout/StageLayoutState";
-import { useServer } from "../../api/ServerContext";
+import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotState";
 import { VerticalTouchFader } from "./VerticalTouchFader";
 import { DualVerticalTouchFader } from "./DualVerticalTouchFader";
 import type { StagePosition3d } from "../../api/ServerContext";
@@ -22,9 +22,9 @@ const fields: Array<{ key: keyof StagePosition3d; label: string; scale: number; 
 
 export function StageCommandControls() {
   const { state, dispatch } = useApp();
-  const server = useServer();
+  const hardwareAttached = useHardwareConnected();
   const selection = useStageSelection();
-  const hardwareConnected = Boolean(server.bootstrap?.hardware_connected || state.midiProfile);
+  const hardwareConnected = Boolean(hardwareAttached || state.midiProfile);
   const selected = selection.fixtureIds;
   const patchedFixtures = usePatchedFixturesView();
   const stagePositions = useStagePositions();

@@ -2,7 +2,7 @@ import { Clock } from "./Clock";
 import { useApp } from "../../state/AppContext";
 import { useRef } from "react";
 import type { BuiltInWindow } from "../../types";
-import { useServer } from "../../api/ServerContext";
+import { useActiveShow } from "../../features/deskSnapshot/DeskSnapshotState";
 import appIcon from "../../../src-tauri/icons/icon.svg";
 import { DeskSettingsModal } from "../modals/DeskSettingsModal";
 import { Button } from "../common";
@@ -16,12 +16,11 @@ export const builtIns: Array<[BuiltInWindow, string, string]> = [
 
 export function LeftDock() {
   const { state, dispatch } = useApp();
-  const server = useServer();
+  const activeShow = useActiveShow();
   const longPress = useRef<number | null>(null);
   const held = useRef(false);
   const suppressUntil = useRef(0);
   const showIndicator = useShowIndicator();
-  const activeShow = server.bootstrap?.active_show;
   const showIdentity = activeShow?.revision_copy ? `Revision Copy · ${activeShow.name}` : activeShow?.name ?? "Show";
   const identityDetail = activeShow?.revision_copy
     ? `${showIdentity}. Source: ${activeShow.revision_copy.show_name}, Revision ${activeShow.revision_copy.revision} · ${activeShow.revision_copy.revision_name}. Created ${new Date(activeShow.revision_copy.copied_at).toLocaleString()}. ${showIndicator.detail}`

@@ -161,6 +161,10 @@ const state = {
 const dispatch = vi.fn();
 
 vi.mock("../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
+	useBootstrapReady: () => true,
+	useActiveShowId: () => null,
+}));
 vi.mock("../features/programmingInteraction/ProgrammingInteractionView", () => ({
 	useProgrammingSelectionView: () => ({ selected: [] }),
 	useProgrammingSelectionActions: () => ({ gesture: vi.fn() }),

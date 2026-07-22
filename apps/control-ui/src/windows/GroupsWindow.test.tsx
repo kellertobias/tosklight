@@ -62,18 +62,9 @@ const mocks = vi.hoisted(() => ({
 	],
 }));
 
-vi.mock("../api/ServerContext", () => ({
-	useServer: () => ({
-		get playbacks() {
-			throw new Error("Groups Window must not read broad playbacks");
-		},
-		bootstrap: { active_show: { id: "show" } },
-		groups: mocks.groups,
-		patch: { fixtures: [], revision: 0 },
-		selectedFixtures: [],
-		selectedGroupId: null,
-		refresh: mocks.refresh,
-	}),
+vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
+	useBootstrapReady: () => true,
+	useActiveShowId: () => "show",
 }));
 vi.mock("../features/groupManagement/GroupManagementProvider", () => ({
 	useGroupManagement: () => ({ manage: mocks.manageGroup }),
