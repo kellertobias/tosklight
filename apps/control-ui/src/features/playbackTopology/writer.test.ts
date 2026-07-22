@@ -509,7 +509,10 @@ describe("PlaybackTopologyWriter", () => {
 		});
 	});
 
-	it("drops a queued Page action after authority replacement", async () => {
+	it("retains a queued Page action across a same-show authority replacement", async () => {
+		// An authority re-hydration of the same show must not silently drop an
+		// enqueued operator save; only the in-flight action's stale install is
+		// discarded while the queued action applies against the fresh authority.
 		const pending = deferred<PlaybackTopologyOutcome>();
 		let firstRequest!: PlaybackTopologyRequest;
 		const apply = vi.fn(async (_show, _revision, request) => {
@@ -537,9 +540,31 @@ describe("PlaybackTopologyWriter", () => {
 		);
 		pending.resolve(changed(firstRequest, [present(numberedPage(5))]));
 
+		const [firstOutcome, secondOutcome] = await Promise.all([first, second]);
+		expect(firstOutcome).toBeNull();
+		expect(secondOutcome).toMatchObject({ status: "changed" });
+		expect(apply).toHaveBeenCalledTimes(2);
+		// The applied action clears the surfaced error; no failure is reported.
+		expect(onError.mock.calls.every(([error]) => error === null)).toBe(true);
+	});
+
+	it("drops a queued Page action once the store leaves the writer's show", async () => {
+		const pending = deferred<PlaybackTopologyOutcome>();
+		let firstRequest!: PlaybackTopologyRequest;
+		const apply = vi.fn(async (_show, _revision, request) => {
+			firstRequest = request;
+			return pending.promise;
+		});
+		const { store, writer, onError } = setup(apply);
+		const first = writer.createPage(5);
+		const second = writer.createPage(6);
+		await vi.waitFor(() => expect(apply).toHaveBeenCalledOnce());
+
+		store.reset("00000000-0000-4000-8000-00000000dead", "session-b");
+		pending.resolve(changed(firstRequest, [present(numberedPage(5))]));
+
 		await expect(Promise.all([first, second])).resolves.toEqual([null, null]);
 		expect(apply).toHaveBeenCalledOnce();
-		expect(store.getSnapshot().playbackPages).toEqual([replacementPage]);
 		expect(onError).not.toHaveBeenCalled();
 	});
 

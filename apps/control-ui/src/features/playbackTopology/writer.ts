@@ -1,7 +1,10 @@
 import type { CueList, PlaybackDefinition } from "../../api/types";
 import type { ShowObject, ShowObjectKind } from "../showObjects/contracts";
 import type { ShowObjectsStore } from "../showObjects/store";
-import { repairPlaybackTopologyConflict } from "./conflictRepair";
+import {
+	playbackTopologyTransportFailure,
+	repairPlaybackTopologyConflict,
+} from "./conflictRepair";
 import type {
 	ExistingPlaybackPageRevisionBasis,
 	ExistingPlaybackRevisionBasis,
@@ -296,7 +299,11 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		};
 	}
 
-	private async apply(action: PlaybackTopologyAction, generation: number) {
+	private async apply(
+		action: PlaybackTopologyAction,
+		generation: number,
+		retried = false,
+	): Promise<PlaybackTopologyOutcome | null> {
 		if (!this.lifecycle.isCurrent(generation)) return null;
 		const snapshot = this.options.store.getSnapshot();
 		if (snapshot.showRevision == null)
@@ -323,9 +330,49 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 				generation,
 			);
 			if (!this.lifecycle.isCurrent(generation)) return null;
+			// An unrelated write may bump the Show revision between this writer's snapshot
+			// and its send. When the repaired authority shows the targeted objects still at
+			// their expected revisions, only the Show revision was stale: retry once with
+			// the fresh revision instead of dropping the operator's save.
+			if (
+				!retried &&
+				playbackTopologyTransportFailure(error)?.status === 409 &&
+				this.expectationsStillCurrent(action)
+			) {
+				return this.apply(action, generation, true);
+			}
 			this.options.onError?.(error);
 			return null;
 		}
+	}
+
+	private expectationsStillCurrent(action: PlaybackTopologyAction) {
+		const snapshot = this.options.store.getSnapshot();
+		if (action.type === "save_cue_list") {
+			const current = snapshot.cueLists.find(
+				(object) => object.body.id === action.cueListId,
+			);
+			return (
+				(current?.id ?? null) === action.expectedObjectId &&
+				(current?.revision ?? 0) === action.expectedRevision
+			);
+		}
+		const page = snapshot.playbackPages.find(
+			(object) => object.body.number === action.page,
+		);
+		const pageCurrent =
+			(page?.id ?? null) === action.expectedPageObjectId &&
+			(page?.revision ?? 0) === action.expectedPageRevision;
+		if (action.type === "create_page" || action.type === "rename_page")
+			return pageCurrent;
+		const playback = snapshot.playbacks.find(
+			(object) => object.id === action.expectedPlaybackObjectId,
+		);
+		return (
+			pageCurrent &&
+			(playback?.id ?? null) === action.expectedPlaybackObjectId &&
+			(playback?.revision ?? 0) === action.expectedPlaybackRevision
+		);
 	}
 
 	private install(outcome: PlaybackTopologyOutcome) {

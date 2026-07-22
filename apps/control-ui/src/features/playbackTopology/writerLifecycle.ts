@@ -21,11 +21,16 @@ export class PlaybackTopologyWriterLifecycle {
 	) {}
 
 	enqueue(operation: QueuedOperation) {
-		const generation = this.store.getSnapshot().authorityGeneration;
-		const run = () =>
-			this.isCurrent(generation)
-				? operation(generation)
-				: Promise.resolve(null);
+		// The generation is resolved when the operation actually runs: an authority
+		// re-hydration of the same show between enqueue and run must not silently drop
+		// an operator save. Only a store that no longer holds this writer's show (or a
+		// stopped writer) refuses the write.
+		const run = () => {
+			const generation = this.runnableGeneration();
+			return generation === null
+				? Promise.resolve(null)
+				: operation(generation);
+		};
 		const result = this.tail.then(run, run);
 		this.tail = result.then(
 			() => undefined,
@@ -43,6 +48,14 @@ export class PlaybackTopologyWriterLifecycle {
 			!this.stopped &&
 			this.store.getSnapshot().authorityGeneration === generation
 		);
+	}
+
+	private runnableGeneration(): number | null {
+		if (this.stopped) return null;
+		const snapshot = this.store.getSnapshot();
+		return snapshot.showId === this.showId
+			? snapshot.authorityGeneration
+			: null;
 	}
 
 	async send(
