@@ -36,16 +36,6 @@ export function registerShow001PairedScenario(): void {
 		id: "SHOW-001",
 		title:
 			"operator programming and a named revision produce the durable restart state",
-		// UI-only gap (the @api contract passes, so the engine/persistence is correct):
-		// the fader-bank "assign cuelist to a playback slot" flow silently no-ops because
-		// the just-recorded cue_list playback is not present in the fader bank's frontend
-		// topology view at assign time (assignPlayback returns early when its source
-		// playback is not found), so page 1 slot 1 never maps. This is a scoped
-		// playback-topology store hydration issue on the UI side. Unskip once the fader
-		// bank reliably sees a freshly recorded playback before assignment.
-		skip: {
-			ui: "Fader-bank cuelist->slot assignment no-ops: recorded playback missing from the UI topology view",
-		},
 		arrange: async ({ api, bench }, surface) => {
 			const copy = await loadCanonicalCopy(api, bench, `show-001-${surface}`);
 			await setProgrammerFade(api, 0, 3_000);
