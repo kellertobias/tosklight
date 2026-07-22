@@ -155,3 +155,21 @@ Still failing, with owners:
 Recommended next slice: (1) A-fix Part 2 (clears the 4 Patch regressions); (2) cluster-B
 programmer-registration fix (unblocks GO-contaminated A/C specs — likely a large secondary win);
 then re-run and re-triage D with live traces.
+
+## Second pass — A-fix Part 2 landed (2026-07-22)
+
+Full suite after `41c11b2`: **179 passed / 83 failed / 2 skipped** (+10/−10 vs the pre-work 169/93,
+no regressions). The **four introduced Patch regressions are cleared**: POSITION-HOME-001 @ui,
+HIGHLIGHT-003 @ui, ENCODER-DISPLAY-001 @supplemental-ui, and PROG-002 (@api/@ui-encoder/@supplemental).
+Fix: `PatchProfileRevisionProjection.profile_snapshot` now carries the server-resolved parameterized
+profile per referenced revision (server->client only; the patch request boundary is unchanged), and
+the client builds full definitions from it via the existing `fixtureDefinitionFromProfileMode`.
+
+The one PROG-002 @ui variant still red — "relative values spread across the live ordered Group" — is a
+**cluster-D** selection timeout (`selectFixtureRows` at `tests/support/foundational/ui.ts:139`), not the
+Patch-definition regression. The A-fix (Part 1 + Part 2) is complete.
+
+Remaining 83 failures are clusters B (GO 404), D (~44 @ui interaction timeouts), E (~9 layout), F
+(CUE-011/012, SOUND-001, COLOR-RANGE-001, DIM-001, SHOW-004, API-001) — unchanged by this pass except
+where A/C was the blocker. Recommended next: cluster B (GO/programmer-registration), which unblocks the
+A/C-fixed specs that still fail only because their setup calls GO.

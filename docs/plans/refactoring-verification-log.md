@@ -466,3 +466,34 @@ Orchestration note: three of five worktree subagents were cut off `main` instead
 (harness nondeterminism), invalidating their runs; re-launches used an explicit
 `git reset --hard 6c2e131` STEP 0. The parallel subagents then terminated early on the shared
 session usage limit, so fixes 4/5/6/7 did not produce verified patches this pass.
+
+## E2E remediation, A-fix Part 2 (2026-07-22)
+
+`41c11b2` — the four introduced Patch-reader regressions cleared. The v2 patch
+snapshot/delta now carries a server-resolved parameterized `profile_snapshot`
+per referenced revision (`PatchProfileRevisionProjection.profile_snapshot`,
+server->client only; the patch request boundary still excludes definitions).
+The scoped Patch store's `projectionToPatchedFixture` builds a complete
+definition from it via the existing `fixtureDefinitionFromProfileMode` as an
+authoritative tier before the parameter-less `syntheticDefinition`, so
+programmer-surface readers (`returnHomeAssignments`/`parameterDefault`,
+`useSupportedAttributes`, `directProgrammerChoices`, the hardware encoder
+display) again see full head parameters, channels, and control actions even when
+the live library lacks the exact patched revision.
+
+Verified: `tools/test.sh e2e --grep "POSITION-HOME-001|HIGHLIGHT-003|ENCODER-DISPLAY-001|PROG-002"`
+→ 11 passed / 1 failed, where all four regression variants (POSITION-HOME-001
+@api+@ui, HIGHLIGHT-003 @api+@ui, ENCODER-DISPLAY-001 @supplemental-ui, PROG-002
+@api/@ui-encoder/@supplemental) pass; the one residual failure — PROG-002 @ui
+"relative values spread across the live ordered Group" — is a cluster-D
+selection timeout (`selectFixtureRows` at `tests/support/foundational/ui.ts:139`),
+a distinct pre-existing root cause that only shares the PROG-002 id. Frontend
+unit suite 1975/1975; light-wire 386 + light-application 79 tests green; wire
+contracts regenerated via the documented `generate-contracts` example; arch,
+source-size, command-boundary ratchets, typecheck, and `git diff --check` clean.
+
+Design note: this deliberately relaxes the "definitions never cross the patch
+boundary" rule for the server->client direction only (restoring what
+`/api/v1/patch` provided), because the programmer surface genuinely needs
+per-revision parameters the deduplicated `referenced_modes` could not supply.
+The client->server request boundary is unchanged and still rejects definitions.
