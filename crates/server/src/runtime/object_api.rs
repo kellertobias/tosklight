@@ -15,7 +15,7 @@ pub(super) async fn list_objects(
         .show(light_core::ShowId(id))
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
-    let store = ShowStore::open(entry.path).map_err(ApiError::store)?;
+    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
     let (show_revision, mut objects) = store
         .objects_with_portable_revision(&kind)
         .map_err(ApiError::store)?;
@@ -24,6 +24,9 @@ pub(super) async fn list_objects(
     }
     if kind == "preset" {
         materialize_preset_addresses(&mut objects)?;
+    }
+    if kind == "patched_fixture" {
+        materialize_patched_fixture_definitions(&entry, &mut objects)?;
     }
     Ok((
         [(header::ETAG, format!("\"{}\"", show_revision.value()))],
@@ -43,13 +46,16 @@ pub(super) async fn get_object(
         .show(light_core::ShowId(id))
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
-    let store = ShowStore::open(entry.path).map_err(ApiError::store)?;
+    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
     let (show_revision, object) = exact_object_snapshot(&store, &kind, &object_id)?;
-    let Some(object) = object else {
+    let Some(mut object) = object else {
         let mut response = ApiError::not_found("show object").into_response();
         insert_show_revision_header(&mut response, show_revision.value())?;
         return Ok(response);
     };
+    if kind == "patched_fixture" {
+        materialize_patched_fixture_definitions(&entry, std::slice::from_mut(&mut object))?;
+    }
     Ok((
         [
             (header::ETAG, format!("\"{}\"", object.revision)),
@@ -142,6 +148,43 @@ pub(super) fn materialize_preset_addresses(
     for object in objects {
         let (_, preset) = decode_preset_object(object).map_err(ApiError::bad_request)?;
         object.body = serialize_preset_preserving_extensions(&object.body, &preset)
+            .map_err(|error| ApiError::internal(error.to_string()))?;
+    }
+    Ok(())
+}
+
+/// Re-hydrates the resolved fixture definition into `patched_fixture` read bodies.
+///
+/// Schema-v2 shows persist each fixture as a portable profile *reference* record without an inline
+/// `definition`, deduplicating the profile snapshot at show level. Object-API consumers (Patch and
+/// programmer surfaces) read `body.definition.heads[].parameters` directly, so the read projection
+/// must reconstruct the complete definition the compiled runtime already resolves. This restores the
+/// server-resolved read shape those consumers relied on before the portable-patch reader migration.
+pub(super) fn materialize_patched_fixture_definitions(
+    entry: &ShowEntry,
+    objects: &mut [light_show::VersionedObject],
+) -> Result<(), ApiError> {
+    // Legacy inline records already carry their definition; only reference records need hydration.
+    if objects
+        .iter()
+        .all(|object| object.body.get("definition").is_some())
+    {
+        return Ok(());
+    }
+    let snapshot = load_engine_snapshot(entry).map_err(ApiError::internal)?;
+    let mut resolved: HashMap<String, light_fixture::PatchedFixture> = snapshot
+        .fixtures
+        .into_iter()
+        .map(|fixture| (fixture.fixture_id.0.to_string(), fixture))
+        .collect();
+    for object in objects {
+        if object.body.get("definition").is_some() {
+            continue;
+        }
+        let Some(fixture) = resolved.remove(&object.id) else {
+            continue;
+        };
+        object.body = serde_json::to_value(&fixture)
             .map_err(|error| ApiError::internal(error.to_string()))?;
     }
     Ok(())
