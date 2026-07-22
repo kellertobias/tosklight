@@ -1,112 +1,69 @@
-# Playback-runtime desk-scope refactor
+# Playback page-change fix (postmortem)
 
-Status: design + in-progress implementation (branch `refactoring`).
-Owner note: this fixes the dominant remaining `@ui` acceptance gap — on-screen playback
-**page changes (and cue/topology operations) silently abort when they overlap a benign
-connection/session refresh**, e.g. right after attaching OSC hardware. Engine is correct
-throughout (`@api`/`@osc` contracts pass); the defect is entirely in the frontend
-playback-runtime scope lifecycle.
+Status: **fixed** (branch `refactoring`). This file first proposed a large "desk-scope refactor";
+that was based on a wrong root-cause hypothesis. The actual bug was a one-line binding defect. This
+postmortem records both so the analysis trail is not lost.
 
 ## Symptom
 
-`OSC-001 @ui` (and the same class: `OSC-006 @ui`, `CUE-011/012 @ui`, `SHOW-000 @ui`,
-`PLAYBACK-SELECT-001 @supplemental-ui`, and assorted `@ui` timeouts). The operator opens the
-Playback pages menu and selects "Page 2"; the desk page stays 1. Depending on timing the modal
-either silently closes (fast fail) or hangs at "Selecting Playback page…".
+On-screen playback **page changes silently did nothing** (`OSC-001 @ui`, `OSC-006 @ui`/`@osc`, and
+page-change steps in other `@ui` cases): the operator opens the Playback pages menu, clicks "Page 2",
+and the desk page stays 1. `@api`/`@osc` contracts passed, so the engine was correct. Server
+instrumentation proved the `PUT /control-desks/{id}/page` never reached the server.
 
-Server instrumentation proved the `PUT /api/v1/control-desks/{id}/page` **never reaches the
-server** — the request is aborted in the frontend before it is issued.
+## Actual root cause — unbound method (`this` lost)
 
-## Root cause — a four-point cascade from one benign authority change
+`PlaybackPageMenu.select()` (and `add()`, and `usePlaybackPageControl`) obtain the action by
+**extracting the method reference**:
 
-The frontend `authorityKey` is
-`[serverUrl, connectionGeneration, session_id, client_id, user_id].join("|")`. It **conflates two
-different things**:
+```ts
+const setActivePage = runtimeActions?.setActivePage; // runtimeActions is the writer instance
+await setActivePage(number);                          // called unbound -> `this` is undefined
+```
 
-- **Desk identity** — `showId` + `deskId`: *which* desk/show this runtime controls.
-- **Authority token** — `connectionGeneration` (bumps on every (re)connect via
-  `bootstrapConnection`), `session_id`, `client_id`, `user_id`: *how* we are currently connected.
+`PlaybackRuntimeActionWriter` methods are ordinary class methods and the `ActionsContext` provides
+the **raw writer instance**, so the extracted reference lost its `this`. Inside, `setActivePage`
+immediately hit `this.setActivePageNow` / `this.options` on `undefined` and threw, the surrounding
+`catch` then threw again on `this.rejectSetup`, and the promise rejected before any request was
+issued — a completely silent on-screen failure. (The topology actions did **not** have this bug: that
+provider hands out a plain object whose methods are `writer.method.bind(writer)`.)
 
-The playback runtime is **desk-scoped** (a desk's pages/playbacks are shared across sessions and
-survive reconnects). But it currently rebuilds itself on **any** `authorityKey` change, including a
-same-desk reconnect/session-token refresh. When such a refresh lands while a Page menu is open, this
-cascade aborts the in-flight operation:
+Pinned with browser-console instrumentation forwarded through `page.on("console")`: `select()` logged
+`ready=true` but `setActivePageNow` never logged its (synchronous) entry — proving `this` was gone.
 
-1. **Store reset** — `PlaybackRuntimeStore.reset(showId, deskId, authorityKey)`
-   (`features/playbackRuntime/store.ts:42`) only early-returns when show **and** desk **and**
-   `authorityKey` are all unchanged. A same-desk key change therefore does a *full* reset: clears
-   `deskState` (→ `beginOptimisticPage` returns null), bumps `scope` (→ `isCurrent(scope)` false),
-   and sets status `loading`.
-2. **Writer/session recreation** — `PlaybackRuntimeViewProvider`
-   (`features/playbackRuntime/PlaybackRuntimeView.tsx:76,92`) memoizes `session` and `actions` with
-   `authorityKey` in the deps, so both are rebuilt on the key change even though the writer only
-   needs `showId`/`deskId` + a live client ref (`applyDeskPage`/`applyAction` are stable
-   `useCallback`s over `playbackClientRef.current`).
-3. **Readiness flips** — the modal's `ready` gate (`PlaybackPageMenu`) requires
-   `runtimeStatus === "ready"` && `playbackDesk !== null`; the reset in (1) makes both briefly false,
-   so the in-flight `select()` bails (`token == null`) and never issues the PUT.
-4. **Page menu authority close** — `useOpenedPageMenuAuthority`
-   (`components/control/playbackPageMenuLifecycle.ts:4`) closes the menu when either writer it opened
-   against (`createPage` from `usePlaybackTopologyActions`, `setActivePage` from
-   `usePlaybackRuntimeActions`) is replaced. (2) replaces `setActivePage`; the **PlaybackTopology
-   provider** replaces `createPage` the same way. So the menu closes mid-selection.
+## Fix
 
-Two individually-correct targeted patches (store.reset early-return on same-desk; drop `authorityKey`
-from the `actions` memo) were each verified **safe** (cross-desk isolation `OSC-003 @ui` still passes)
-but **insufficient alone** — the cascade still fires through the remaining points. Hence a coordinated
-change.
+Bind the public action methods in the writer constructor so any extracted reference keeps `this`:
 
-## The refactor: split desk-identity from authority-token
+```ts
+// PlaybackRuntimeActionWriter constructor
+this.setActivePage = this.setActivePage.bind(this);
+this.poolPlaybackAction = this.poolPlaybackAction.bind(this);
+this.releaseCueListSource = this.releaseCueListSource.bind(this);
+this.setGroupMaster = this.setGroupMaster.bind(this);
+this.setGroupFlash = this.setGroupFlash.bind(this);
+```
 
-Make every playback-desk-scoped provider treat **`showId` + `deskId`** as the identity that gates
-reset/recreation, and treat an **authority-token change on the same desk** as a non-disruptive
-refresh (the transports/writers already read the current client via a ref).
+This fixes every extraction site at once (there were several) rather than patching each call, and
+matches the topology provider's already-bound pattern. Files: only
+`apps/control-ui/src/features/playbackRuntime/actionWriter.ts`.
 
-Concretely:
+Verified: `OSC-001 @ui`, `OSC-006 @ui`+`@osc`, `PLAYBACK-SELECT-001` green; isolation `OSC-003`
+(cross-desk) still green.
 
-1. **`PlaybackRuntimeStore.reset`** — when `showId`/`deskId` are unchanged, adopt the new
-   `authorityKey` in place (no `scope++`, no `deskState.reset()`, no `status: loading`). Full reset
-   only on a real show/desk change. The authoritative snapshot re-hydrates over the same identity.
-2. **`PlaybackRuntimeViewProvider`** — key the `session` and `actions` memos, and the `store.reset`
-   layout-effect, on `showId`/`deskId` (drop `authorityKey`). The writers apply to a desk via a live
-   client ref, so a reconnect/session-token change must not replace them. (Keep `authorityKey` passed
-   into `store.reset` as the value to adopt, but not as a recreation trigger.)
-3. **PlaybackTopology provider** (`api/usePlaybackTopologyBoundaries.ts` +
-   `features/playbackTopology/PlaybackTopologyProvider.tsx`) — the same treatment for `createPage`
-   and the topology writer/transport, so `createPage`'s identity is stable across a same-desk
-   authority refresh. This is what stops point (4) once (2) is done.
-4. **`useOpenedPageMenuAuthority`** — no change needed once (2)+(3) make the writer refs stable across
-   benign refreshes; the guard still correctly closes the menu when the **desk identity** actually
-   changes (writers are then genuinely replaced).
+## The wrong hypothesis (recorded so it isn't re-attempted)
 
-Guiding invariant: *the playback runtime resets and rebinds on show/desk identity changes only;
-connection/session-token changes are transparent refreshes handled by re-hydration over the same
-identity.*
+Before finding the binding bug I hypothesised a "benign authorityKey change (reconnect/session-token
+refresh on the same desk) resets the scoped store / recreates the writers / closes the Page menu"
+cascade, and implemented a coordinated refactor across `store.reset`, `PlaybackRuntimeView` memos, and
+the topology/zones transports (live-token getters). Every piece was internally correct and isolation
+stayed green, but it **did not fix the test** — because the real fault was upstream (the method never
+ran). That refactor was fully reverted. If a genuine same-desk-reconnect issue ever surfaces, the
+live-token / desk-scoped-reset ideas are a reasonable starting point, but they are **not** needed for
+this bug.
 
-## Non-goals / careful bits
+## Note for the remaining skipped `@ui` cases
 
-- Do **not** weaken cross-desk isolation: a different `deskId` (or `showId`) must still fully reset
-  and bump `scope`. The isolation tests (`OSC-003`, cross-desk `CROSS-*`, desk-lock `MANUAL-019`,
-  `PLAYBACK-SELECT-001`) are the guardrail.
-- Do **not** change server behavior; the engine is correct.
-- The `scope`/`isCurrent` mechanism still exists and still drops actions across a *real* authority
-  (desk/show) change — we only stop bumping it on same-desk token refreshes.
-
-## Verification plan (gate every step)
-
-1. `OSC-001 @ui` must go green (the canonical repro).
-2. Isolation guardrail must stay green: `OSC-003`, `PLAYBACK-SELECT-001`, and any `CROSS-*` /
-   desk-lock `MANUAL-019` cases.
-3. Unskip and re-check the same-class `@ui` cases the fix should also clear: `OSC-006`, `CUE-011/012`,
-   `SHOW-000/SHOW-001` fader/topology paths, `PRELOAD-004`.
-4. Full `tools/test.sh e2e`, run in isolation for any newly-suspect case (the bench worker is flaky).
-5. `npm run test:unit` for the playback-runtime store/view unit tests.
-6. Revert on any regression; land only with a clean full-suite delta.
-
-## Files
-
-- `apps/control-ui/src/features/playbackRuntime/store.ts` (`reset`)
-- `apps/control-ui/src/features/playbackRuntime/PlaybackRuntimeView.tsx` (`session`/`actions`/reset effect)
-- `apps/control-ui/src/api/usePlaybackTopologyBoundaries.ts` + `features/playbackTopology/PlaybackTopologyProvider.tsx` (topology writer / `createPage`)
-- `apps/control-ui/src/components/control/playbackPageMenuLifecycle.ts` (verify no change needed)
-- Tests to unskip as they pass: `04-osc-*`, `06-cuelist-*`, `06-preload-*`, `00-generate-show-files`, `28-hardware-connected-playback-selection`.
+CUE-011/012 (cuelist settings/renumber), SHOW-001 (fader-bank assignment), etc. go through the
+**topology** actions (already bound), so they are a *different* problem and are not fixed by this
+change — re-investigate each on its own rather than assuming the page-change root cause.

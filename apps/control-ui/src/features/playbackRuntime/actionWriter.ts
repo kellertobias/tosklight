@@ -78,7 +78,17 @@ interface PlaybackRuntimeActionWriterOptions {
 export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 	private stopped = false;
 
-	constructor(private readonly options: PlaybackRuntimeActionWriterOptions) {}
+	constructor(private readonly options: PlaybackRuntimeActionWriterOptions) {
+		// Bind the public action methods so consumers can hold a reference to one
+		// (`const f = actions.setActivePage; await f(n)`) without losing `this`. The Playback
+		// pages menu extracts setActivePage exactly that way; unbound, `this` was undefined and
+		// the page change threw before issuing its request, silently failing on-screen.
+		this.setActivePage = this.setActivePage.bind(this);
+		this.poolPlaybackAction = this.poolPlaybackAction.bind(this);
+		this.releaseCueListSource = this.releaseCueListSource.bind(this);
+		this.setGroupMaster = this.setGroupMaster.bind(this);
+		this.setGroupFlash = this.setGroupFlash.bind(this);
+	}
 
 	stop() {
 		this.stopped = true;
