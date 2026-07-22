@@ -64,6 +64,37 @@ fn execute_with_lock_policy(
         .handle(ActionEnvelope { context, command }, &ports)
 }
 
+/// Publishes an authority revision for Speed Group runtime changes applied by the v1 surfaces
+/// (tap tempo, double, half, pause) so event-driven v2 views observe them.
+pub(super) fn record_external_change(state: &AppState, session: &Session, affected: &[usize]) {
+    let changed = affected
+        .iter()
+        .filter_map(|index| SpeedGroupId::new((index + 1) as u8))
+        .collect::<Vec<_>>();
+    if changed.is_empty() {
+        return;
+    }
+    let ports = ServerSpeedGroupPorts {
+        state,
+        session: Some(session),
+        require_unlocked: false,
+    };
+    let context = ActionContext::operator(
+        session.desk.id,
+        session.user.id.0,
+        session.id.0,
+        light_application::ActionSource::Http,
+    );
+    if let Err(error) = state.speed_group_service.record_external_change(
+        &context,
+        &ports,
+        &changed,
+        application_millis(state),
+    ) {
+        tracing::warn!(error=%error.message, "Speed Group external change event was not published");
+    }
+}
+
 pub(super) fn snapshot(
     state: &AppState,
     session: &Session,

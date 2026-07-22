@@ -83,11 +83,6 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
   pairedScenario<{ starting: number[]; completed: boolean }>({
     id: "CMD-002",
     title: "Speed Group commands address, synchronize, display, and manually unlink all five groups",
-    // UI-only gap (the @api contract passes, so the engine's Speed Group addressing/sync/unlink is
-    // correct): the on-screen Speed Group control (.speed-group-stack "Speed group A, N BPM" button)
-    // is not rendered, so the UI cannot drive the display/unlink steps. Unskip once the Speed Group
-    // stack renders its per-group controls.
-    skip: { ui: "Speed Group stack control (Speed group A, N BPM) not rendered on screen" },
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `cmd-002-speed-groups-${surface}`, "default-stage");
       return { starting: await speedConfiguration(api), completed: false };

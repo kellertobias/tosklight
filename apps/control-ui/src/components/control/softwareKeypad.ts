@@ -215,7 +215,8 @@ export function editTargetedCommandWithSoftwareKey(
 		!/\bAT\b[\s\S]*$/i.test(command);
 	const shortPrefixAwaitingNumber =
 		/^\d$/.test(token) && /(?:^|\s)[FG]$/i.test(command);
-	const digitAfterWord = /^\d$/.test(token) && /[A-EH-Z]$/i.test(command);
+	const digitAfterWord =
+		/^\d$/.test(token) && /(?:[A-EH-Z]|[+-])\s*$/i.test(command);
 	const nextToken =
 		/^\d$/.test(token) && selectionContinuation
 			? `${shortTarget(target)}${token}`

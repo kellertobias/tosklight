@@ -300,7 +300,9 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
                 .trim_end()
                 .chars()
                 .next_back()
-                .is_some_and(|character| character.is_ascii_alphabetic()) =>
+                .is_some_and(|character| {
+                    character.is_ascii_alphabetic() || matches!(character, '+' | '-')
+                }) =>
         {
             format!(" {digit}")
         }

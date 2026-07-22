@@ -75,6 +75,33 @@ impl SpeedGroupService {
         Ok(result)
     }
 
+    /// Advances the authority for a Speed Group change applied outside the revisioned action
+    /// path (tap tempo, double, half, pause) and publishes its change event, so event-driven
+    /// views observe the mutation without polling.
+    pub fn record_external_change(
+        &self,
+        context: &ActionContext,
+        ports: &dyn SpeedGroupPorts,
+        changed: &[super::SpeedGroupId],
+        applied_at_millis: u64,
+    ) -> Result<u64, ActionError> {
+        let mut authority = self.authority.lock();
+        ports.authorize(context)?;
+        let state = validated_state(ports.state(context)?)?;
+        let revision = authority.next_revision()?;
+        authority.revision = revision;
+        let change = SpeedGroupChange {
+            authority_id: authority.id,
+            revision,
+            applied_at_millis,
+            groups: select_groups(&state.groups, changed),
+        };
+        let event = self
+            .events
+            .publish(EventDraft::speed_groups_changed(context, change));
+        Ok(event.sequence)
+    }
+
     pub fn snapshot(
         &self,
         context: &ActionContext,

@@ -310,5 +310,6 @@ pub(super) async fn speed_group_action(
         "speed_group_action",
         serde_json::json!({"group":speed_group_name(index),"desk_id":session.desk.id,"action":input.action,"snapshot":snapshots[index]}),
     );
+    super::speed_group_service::record_external_change(&state, &session, &affected);
     Ok(Json(speed_group_response(&state, index, snapshots)))
 }
