@@ -50,11 +50,6 @@ pub enum ProgrammerSelectionExpression {
         group_id: String,
         rule: ProgrammerSelectionRule,
     },
-    FrozenGroup {
-        group_id: String,
-        #[ts(type = "number")]
-        source_revision: u64,
-    },
     PlaybackContents {
         items: Vec<ProgrammerSelectionReference>,
     },

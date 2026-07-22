@@ -54,11 +54,15 @@ export function groupSelectionPrediction(
 	fixtures: readonly string[],
 	frozen: boolean,
 	rule: SelectionRule,
-	showRevision: number,
 ): SelectionReducer {
 	const selected = applySelectionRule(unique(fixtures), rule);
+	// A frozen (dereferenced) activation stores the members as individual
+	// fixtures with no reference back to the source Group.
 	const expression: SelectionExpression = frozen
-		? { type: "frozen_group", groupId, sourceRevision: showRevision }
+		? {
+				type: "sources",
+				items: selected.map((fixtureId) => ({ type: "fixture", fixtureId })),
+			}
 		: { type: "live_group", groupId, rule };
 	return (current) => ({
 		...current,

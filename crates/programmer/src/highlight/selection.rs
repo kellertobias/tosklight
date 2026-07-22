@@ -31,9 +31,9 @@ fn resolve_expression(
             .unwrap_or_default(),
         SelectionExpression::PlaybackContents { items }
         | SelectionExpression::Sources { items } => resolve_selection_references(items, groups),
-        // A frozen selection and an explicitly static selection retain the exact resolved order
-        // present when stepping began.
-        SelectionExpression::Static | SelectionExpression::FrozenGroup { .. } => snapshot.to_vec(),
+        // An explicitly static selection retains the exact resolved order present when stepping
+        // began.
+        SelectionExpression::Static => snapshot.to_vec(),
     }
 }
 

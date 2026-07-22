@@ -652,7 +652,7 @@ fn selection_gestures_and_rules_preserve_ordered_group_semantics() {
 }
 
 #[test]
-fn live_and_frozen_group_selection_use_the_compiled_show_revision() {
+fn live_group_selection_stays_referenced_and_frozen_selection_dereferences() {
     let harness = Harness::new(ActionSource::Http);
     let session = SessionId(harness.context.session_id.unwrap());
     let fixtures = vec![FixtureId::new(), FixtureId::new(), FixtureId::new()];
@@ -694,9 +694,13 @@ fn live_and_frozen_group_selection_use_the_compiled_show_revision() {
     assert_eq!(frozen.selection.as_ref().unwrap().selected, fixtures);
     assert_eq!(
         frozen.selection.unwrap().expression,
-        Some(light_programmer::SelectionExpression::FrozenGroup {
-            group_id: "7".into(),
-            source_revision: 42,
+        Some(light_programmer::SelectionExpression::Sources {
+            items: fixtures
+                .iter()
+                .map(|fixture_id| light_programmer::SelectionReference::Fixture {
+                    fixture_id: *fixture_id,
+                })
+                .collect(),
         })
     );
 }

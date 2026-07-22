@@ -51,7 +51,6 @@ export interface ProgrammingGroupSelectionIntent {
 	resolvedFixtures: readonly string[];
 	mode: "live" | "frozen";
 	rule: SelectionRule;
-	showRevision: number;
 }
 
 export interface ProgrammingSelectionWriterOptions {
@@ -111,19 +110,11 @@ export class ProgrammingSelectionWriter {
 		resolvedFixtures,
 		mode,
 		rule,
-		showRevision,
 	}: ProgrammingGroupSelectionIntent) {
 		const frozen = mode === "frozen";
 		return this.enqueue(
 			{ type: "select_group", groupId, frozen, rule },
-			() =>
-				groupSelectionPrediction(
-					groupId,
-					resolvedFixtures,
-					frozen,
-					rule,
-					showRevision,
-				),
+			() => groupSelectionPrediction(groupId, resolvedFixtures, frozen, rule),
 		);
 	}
 

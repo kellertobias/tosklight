@@ -173,10 +173,7 @@ fn session_group_programmer_remains_live_across_membership_changes() {
     programmers.select_expression(
         frozen_session,
         vec![],
-        light_programmer::SelectionExpression::FrozenGroup {
-            group_id: "template".into(),
-            source_revision: 0,
-        },
+        light_programmer::SelectionExpression::Sources { items: vec![] },
     );
     programmers.set_group(
         session,

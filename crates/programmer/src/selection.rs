@@ -30,10 +30,6 @@ pub enum SelectionExpression {
         group_id: String,
         rule: SelectionRule,
     },
-    FrozenGroup {
-        group_id: String,
-        source_revision: u64,
-    },
     PlaybackContents {
         items: Vec<SelectionReference>,
     },

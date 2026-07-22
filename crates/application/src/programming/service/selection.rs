@@ -207,9 +207,15 @@ fn group_selection(
     let fixtures = resolve_group(group_id, &environment.groups).map_err(invalid)?;
     let selected = apply_selection_rule(&fixtures, rule);
     let expression = if frozen {
-        SelectionExpression::FrozenGroup {
-            group_id: group_id.to_owned(),
-            source_revision: environment.show_revision,
+        // DEGRP dereferences the group's current members to individual fixtures with no
+        // reference back to the source group.
+        SelectionExpression::Sources {
+            items: selected
+                .iter()
+                .map(|fixture_id| SelectionReference::Fixture {
+                    fixture_id: *fixture_id,
+                })
+                .collect(),
         }
     } else {
         SelectionExpression::LiveGroup {

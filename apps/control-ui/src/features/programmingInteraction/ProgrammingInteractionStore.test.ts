@@ -158,9 +158,8 @@ describe("ProgrammingInteractionStore authority", () => {
 		expect(
 			selectedGroupId(
 				selection(1, [FIXTURE_1], {
-					type: "frozen_group",
-					groupId: "8",
-					sourceRevision: 2,
+					type: "sources",
+					items: [{ type: "fixture", fixtureId: FIXTURE_1 }],
 				}),
 			),
 		).toBeNull();

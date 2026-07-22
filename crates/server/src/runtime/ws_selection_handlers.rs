@@ -126,9 +126,14 @@ pub(super) fn ws_group_select(
     rule.validate()?;
     fixtures = light_programmer::apply_selection_rule(&fixtures, &rule);
     let expression = if input.frozen {
-        light_programmer::SelectionExpression::FrozenGroup {
-            group_id: input.group_id,
-            source_revision: snapshot.revision,
+        // Frozen selection dereferences to individual fixtures with no group reference.
+        light_programmer::SelectionExpression::Sources {
+            items: fixtures
+                .iter()
+                .map(|fixture_id| light_programmer::SelectionReference::Fixture {
+                    fixture_id: *fixture_id,
+                })
+                .collect(),
         }
     } else {
         light_programmer::SelectionExpression::LiveGroup {

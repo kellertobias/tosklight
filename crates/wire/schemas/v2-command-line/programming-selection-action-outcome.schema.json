@@ -83,28 +83,6 @@
         {
           "type": "object",
           "properties": {
-            "group_id": {
-              "type": "string"
-            },
-            "source_revision": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0
-            },
-            "type": {
-              "type": "string",
-              "const": "frozen_group"
-            }
-          },
-          "required": [
-            "type",
-            "group_id",
-            "source_revision"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
             "items": {
               "type": "array",
               "items": {

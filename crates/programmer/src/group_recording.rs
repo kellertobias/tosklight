@@ -1,9 +1,7 @@
 use crate::{
-    DerivedGroup, FrozenGroup, GroupDefinition, ProgrammerRegistry, ProgrammerSelection,
-    SelectionExpression, SelectionReference, SelectionRule, merge_ordered_group_membership,
-    resolve_group,
+    DerivedGroup, GroupDefinition, ProgrammerRegistry, ProgrammerSelection, SelectionExpression,
+    SelectionReference, SelectionRule, merge_ordered_group_membership, resolve_group,
 };
-use chrono::{DateTime, Utc};
 use light_core::{FixtureId, SessionId};
 use std::collections::{HashMap, HashSet};
 
@@ -25,11 +23,6 @@ enum GroupRecordingRelationship {
         source_group_id: String,
         rule: SelectionRule,
     },
-    Frozen {
-        source_group_id: String,
-        source_revision: u64,
-        captured_at: DateTime<Utc>,
-    },
 }
 
 impl GroupRecordingCapture {
@@ -39,9 +32,8 @@ impl GroupRecordingCapture {
 
     /// Overwrite while retaining a valid single-source Group relationship.
     ///
-    /// A self-reference, missing source, or transitive live cycle is materialized. Frozen
-    /// selections keep their concrete membership plus provenance and therefore do not depend on
-    /// their source after recording.
+    /// A self-reference, missing source, or transitive live cycle is materialized. Dereferenced
+    /// selections are already concrete ordered fixtures and record without any source reference.
     pub fn overwrite(
         &self,
         group_id: &str,
@@ -89,10 +81,10 @@ impl GroupRecordingCapture {
         Ok(group)
     }
 
-    fn from_selection(selection: ProgrammerSelection, captured_at: DateTime<Utc>) -> Self {
+    fn from_selection(selection: ProgrammerSelection) -> Self {
         Self {
             fixtures: ordered_unique(selection.selected),
-            relationship: relationship(selection.expression, captured_at),
+            relationship: relationship(selection.expression),
         }
     }
 
@@ -103,25 +95,13 @@ impl GroupRecordingCapture {
     ) {
         match &self.relationship {
             GroupRecordingRelationship::Materialized => {}
-            GroupRecordingRelationship::Frozen {
-                source_group_id,
-                source_revision,
-                captured_at,
-            } if source_group_id != &group.id => {
-                group.frozen_from = Some(FrozenGroup {
-                    source_group_id: source_group_id.clone(),
-                    source_revision: *source_revision,
-                    captured_at: *captured_at,
-                });
-            }
             GroupRecordingRelationship::Live {
                 source_group_id,
                 rule,
             } if source_group_id != &group.id => {
                 preserve_live_relationship(group, source_group_id, rule, groups);
             }
-            GroupRecordingRelationship::Frozen { .. } | GroupRecordingRelationship::Live { .. } => {
-            }
+            GroupRecordingRelationship::Live { .. } => {}
         }
     }
 }
@@ -135,7 +115,7 @@ impl ProgrammerRegistry {
         session: SessionId,
     ) -> Option<GroupRecordingCapture> {
         self.selection(session)
-            .map(|selection| GroupRecordingCapture::from_selection(selection, self.clock.now()))
+            .map(GroupRecordingCapture::from_selection)
     }
 
     /// Close a recording gesture when the caller already owns the Programming interaction.
@@ -184,10 +164,7 @@ fn ordered_unique(fixtures: Vec<FixtureId>) -> Vec<FixtureId> {
         .collect()
 }
 
-fn relationship(
-    expression: Option<SelectionExpression>,
-    captured_at: DateTime<Utc>,
-) -> GroupRecordingRelationship {
+fn relationship(expression: Option<SelectionExpression>) -> GroupRecordingRelationship {
     match expression {
         Some(SelectionExpression::LiveGroup { group_id, rule }) => {
             GroupRecordingRelationship::Live {
@@ -195,14 +172,6 @@ fn relationship(
                 rule,
             }
         }
-        Some(SelectionExpression::FrozenGroup {
-            group_id,
-            source_revision,
-        }) => GroupRecordingRelationship::Frozen {
-            source_group_id: group_id,
-            source_revision,
-            captured_at,
-        },
         Some(SelectionExpression::Sources { items }) => single_live_source(items),
         _ => GroupRecordingRelationship::Materialized,
     }

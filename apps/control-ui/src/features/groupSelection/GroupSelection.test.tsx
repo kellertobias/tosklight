@@ -265,9 +265,11 @@ describe("scoped Group activation", () => {
 			expectedRevision: 1,
 		});
 		expect(context.programming.getSnapshot().selection?.expression).toEqual({
-			type: "frozen_group",
-			groupId: "1",
-			sourceRevision: SHOW_REVISION,
+			type: "sources",
+			items: ORDERED_MEMBERS.map((fixtureId) => ({
+				type: "fixture",
+				fixtureId,
+			})),
 		});
 		expect(context.programming.getSnapshot().selection?.selected).toEqual(
 			ORDERED_MEMBERS,

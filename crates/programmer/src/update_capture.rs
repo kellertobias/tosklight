@@ -199,12 +199,8 @@ fn collect_expression_groups(expression: Option<&SelectionExpression>, ids: &mut
             ids.insert(group_id.clone());
         }
         Some(SelectionExpression::Sources { items }) => collect_reference_groups(items, ids),
-        Some(
-            SelectionExpression::Static
-            | SelectionExpression::FrozenGroup { .. }
-            | SelectionExpression::PlaybackContents { .. },
-        )
-        | None => {}
+        Some(SelectionExpression::Static | SelectionExpression::PlaybackContents { .. }) | None => {
+        }
     }
 }
 

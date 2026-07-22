@@ -40,16 +40,6 @@ fn group_from_programmer(
                         rule,
                     });
                 }
-                Some(light_programmer::SelectionExpression::FrozenGroup {
-                    group_id,
-                    source_revision,
-                }) if group_id != id => {
-                    group.frozen_from = Some(light_programmer::FrozenGroup {
-                        source_group_id: group_id,
-                        source_revision,
-                        captured_at: chrono::Utc::now(),
-                    });
-                }
                 _ => {}
             }
         }

@@ -65,10 +65,6 @@ fn expression(value: &SelectionExpression) -> wire::ProgrammerSelectionExpressio
     match value {
         SelectionExpression::Static => wire::ProgrammerSelectionExpression::Static,
         SelectionExpression::LiveGroup { group_id, rule } => live_group(group_id, rule),
-        SelectionExpression::FrozenGroup {
-            group_id,
-            source_revision,
-        } => frozen_group(group_id, *source_revision),
         SelectionExpression::PlaybackContents { items } => playback_contents(items),
         SelectionExpression::Sources { items } => selection_sources(items),
     }
@@ -78,13 +74,6 @@ fn live_group(group_id: &str, rule: &SelectionRule) -> wire::ProgrammerSelection
     wire::ProgrammerSelectionExpression::LiveGroup {
         group_id: group_id.to_owned(),
         rule: selection_rule(rule),
-    }
-}
-
-fn frozen_group(group_id: &str, source_revision: u64) -> wire::ProgrammerSelectionExpression {
-    wire::ProgrammerSelectionExpression::FrozenGroup {
-        group_id: group_id.to_owned(),
-        source_revision,
     }
 }
 

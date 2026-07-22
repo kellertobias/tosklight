@@ -217,9 +217,15 @@ pub(super) fn execute_group_programmer_command(
     let rule = parse_subset_rule(&tokens[id_index + 1..at_index])?;
     let fixtures = light_programmer::apply_selection_rule(&base, &rule);
     let expression = if frozen {
-        light_programmer::SelectionExpression::FrozenGroup {
-            group_id: group_id.clone(),
-            source_revision: snapshot.revision,
+        // DEGRP (GROUP GROUP) dereferences to individual fixtures with no group reference,
+        // identical to the double-click dereference gesture.
+        light_programmer::SelectionExpression::Sources {
+            items: fixtures
+                .iter()
+                .map(|fixture_id| light_programmer::SelectionReference::Fixture {
+                    fixture_id: *fixture_id,
+                })
+                .collect(),
         }
     } else {
         light_programmer::SelectionExpression::LiveGroup {

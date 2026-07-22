@@ -126,24 +126,26 @@ fn live_and_single_gesture_sources_retain_relationships_and_div_rule() {
 }
 
 #[test]
-fn frozen_relationship_captures_source_revision_and_action_time() {
+fn dereferenced_selection_records_concrete_fixtures_without_source_reference() {
     let scenario = CaptureScenario::new();
     scenario.registry.select_expression(
         scenario.session,
         scenario.fixtures[..2].to_vec(),
-        SelectionExpression::FrozenGroup {
-            group_id: "source".into(),
-            source_revision: 42,
+        SelectionExpression::Sources {
+            items: scenario.fixtures[..2]
+                .iter()
+                .map(|fixture_id| SelectionReference::Fixture {
+                    fixture_id: *fixture_id,
+                })
+                .collect(),
         },
     );
 
     let recorded = scenario
         .capture()
         .overwrite("frozen", None, &HashMap::new());
-    let frozen = recorded.frozen_from.unwrap();
-    assert_eq!(frozen.source_group_id, "source");
-    assert_eq!(frozen.source_revision, 42);
-    assert_eq!(frozen.captured_at.to_rfc3339(), "2026-07-20T09:30:00+00:00");
+    assert!(recorded.frozen_from.is_none());
+    assert!(recorded.derived_from.is_none());
     assert_eq!(recorded.fixtures, scenario.fixtures[..2]);
 }
 

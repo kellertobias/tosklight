@@ -76,9 +76,13 @@ export const frozenGroupApi: FoundationalCase = {
 		const fixtures = await fixtureIdsByNumber(api);
 
 		await command(api, "GROUP GROUP 1");
+		// DEGRP dereferences to individual fixtures with no reference back to the source Group.
+		await expectProgrammer(api, (programmer) => {
+			expect(programmer.selection_expression?.type).toBe("sources");
+		});
 		await command(api, "RECORD GROUP 5");
 		await expectGroup(api, "5", (group) => {
-			expect(group.body.frozen_from).toMatchObject({ source_group_id: "1" });
+			expect(group.body.frozen_from).toBeNull();
 			expect(group.body.derived_from).toBeNull();
 		});
 		await expectGroupNumbers(api, "5", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
@@ -197,12 +201,12 @@ export const frozenGroupUi: FoundationalCase = {
 		await groupCard(page, 1).dblclick();
 		await expectProgrammer(api, (state) => {
 			expect(state.selected).toHaveLength(12);
-			expect(state.selection_expression?.type).toBe("frozen_group");
+			expect(state.selection_expression?.type).toBe("sources");
 		});
 		await pressCommand(page, "RECORD GROUP 5", "RECORD GROUP 5");
-		await expect(
-			(await object<any>(api, "group", "5")).body.frozen_from,
-		).toMatchObject({ source_group_id: "1" });
+		// A group recorded from a dereferenced selection stores the individual
+		// fixtures with no reference back to the source group.
+		expect((await object<any>(api, "group", "5")).body.frozen_from).toBeNull();
 
 		const reordered = [12, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11];
 		await selectFixtureRows(api, page, reordered);
@@ -221,7 +225,7 @@ export const frozenGroupUi: FoundationalCase = {
 		await expectFixtureUnpatched(api, fixtures[3]);
 
 		await openGroups(page);
-		await expect(groupCard(page, 5)).toHaveClass(/frozen/);
+		await expect(groupCard(page, 5)).not.toHaveClass(/frozen/);
 		await expect(groupCard(page, 5)).not.toContainText("missing");
 		await groupCard(page, 5).click();
 		await setDimmerByTouch(page, 50);

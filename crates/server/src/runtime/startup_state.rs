@@ -163,13 +163,61 @@ fn application_clock(manual_clock: Option<&Arc<ManualClock>>) -> SharedClock {
 }
 
 fn restore_programmer(programmers: &ProgrammerRegistry, session: light_show::PersistedSession) {
-    match serde_json::from_str::<light_programmer::ProgrammerState>(&session.programmer_json) {
+    let parsed = serde_json::from_str::<serde_json::Value>(&session.programmer_json)
+        .map(|mut value| {
+            migrate_frozen_group_selection(&mut value);
+            value
+        })
+        .and_then(serde_json::from_value::<light_programmer::ProgrammerState>);
+    match parsed {
         Ok(mut programmer) => {
             programmer.connected = false;
             programmers.restore(programmer);
         }
         Err(error) => {
             tracing::warn!(session_id=%session.id.0, %error, "ignoring invalid persisted programmer")
+        }
+    }
+}
+
+/// Programmers persisted before the DEGRP rework may carry the removed `frozen_group` selection
+/// expression (including inside undo/redo snapshots). Dereference it to the concrete fixtures the
+/// selection already resolved to, matching current DEGRP semantics.
+fn migrate_frozen_group_selection(value: &mut serde_json::Value) {
+    let Some(object) = value.as_object_mut() else {
+        return;
+    };
+    let frozen = object
+        .get("selection_expression")
+        .and_then(|expression| expression.get("type"))
+        .and_then(serde_json::Value::as_str)
+        == Some("frozen_group");
+    if frozen {
+        let items = object
+            .get("selected")
+            .and_then(serde_json::Value::as_array)
+            .map(|selected| {
+                selected
+                    .iter()
+                    .map(|fixture_id| {
+                        serde_json::json!({"type": "fixture", "fixture_id": fixture_id})
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        object.insert(
+            "selection_expression".into(),
+            serde_json::json!({"type": "sources", "items": items}),
+        );
+    }
+    for history in ["undo", "redo"] {
+        if let Some(snapshots) = object
+            .get_mut(history)
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for snapshot in snapshots {
+                migrate_frozen_group_selection(snapshot);
+            }
         }
     }
 }

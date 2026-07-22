@@ -1,6 +1,6 @@
 use super::*;
 use crate::EventSource;
-use light_programmer::{GroupDefinition, SelectionExpression, SelectionRule};
+use light_programmer::{GroupDefinition, SelectionExpression, SelectionReference, SelectionRule};
 use std::collections::HashMap;
 
 #[test]
@@ -131,9 +131,8 @@ fn shared_selection_refresh_keeps_frozen_and_unchanged_desks_quiet() {
     registry.select_expression(
         frozen_session,
         vec![first],
-        SelectionExpression::FrozenGroup {
-            group_id: "front".into(),
-            source_revision: 1,
+        SelectionExpression::Sources {
+            items: vec![SelectionReference::Fixture { fixture_id: first }],
         },
     );
     let events = EventBus::new(8);

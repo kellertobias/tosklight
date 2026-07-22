@@ -103,20 +103,12 @@ describe("selection predictions", () => {
 
 	it("projects live and frozen Group ownership explicitly", () => {
 		const fixtures = [FIXTURE_1, FIXTURE_2, FIXTURE_3, FIXTURE_4];
-		const live = groupSelectionPrediction(
-			"12",
-			fixtures,
-			false,
-			{ type: "even" },
-			41,
-		)(selection());
-		const frozen = groupSelectionPrediction(
-			"12",
-			fixtures,
-			true,
-			{ type: "odd" },
-			41,
-		)(selection());
+		const live = groupSelectionPrediction("12", fixtures, false, {
+			type: "even",
+		})(selection());
+		const frozen = groupSelectionPrediction("12", fixtures, true, {
+			type: "odd",
+		})(selection());
 
 		expect(live).toMatchObject({
 			selected: [FIXTURE_2, FIXTURE_4],
@@ -130,9 +122,11 @@ describe("selection predictions", () => {
 		expect(frozen).toMatchObject({
 			selected: [FIXTURE_1, FIXTURE_3],
 			expression: {
-				type: "frozen_group",
-				groupId: "12",
-				sourceRevision: 41,
+				type: "sources",
+				items: [
+					{ type: "fixture", fixtureId: FIXTURE_1 },
+					{ type: "fixture", fixtureId: FIXTURE_3 },
+				],
 			},
 		});
 	});

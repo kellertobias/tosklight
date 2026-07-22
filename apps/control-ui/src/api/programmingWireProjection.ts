@@ -139,7 +139,6 @@ function decodeSelectionExpression(
 	const type = enumAt(expression.type, `${path}.type`, [
 		"static",
 		"live_group",
-		"frozen_group",
 		"playback_contents",
 		"sources",
 	]);
@@ -149,15 +148,6 @@ function decodeSelectionExpression(
 			type,
 			groupId: stringAt(expression.group_id, `${path}.group_id`),
 			rule: decodeSelectionRule(expression.rule, `${path}.rule`),
-		};
-	if (type === "frozen_group")
-		return {
-			type,
-			groupId: stringAt(expression.group_id, `${path}.group_id`),
-			sourceRevision: integerAt(
-				expression.source_revision,
-				`${path}.source_revision`,
-			),
 		};
 	return {
 		type,

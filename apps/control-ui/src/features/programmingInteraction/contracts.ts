@@ -36,7 +36,6 @@ export type SelectionReference =
 export type SelectionExpression =
 	| { type: "static" }
 	| { type: "live_group"; groupId: string; rule: SelectionRule }
-	| { type: "frozen_group"; groupId: string; sourceRevision: number }
 	| {
 			type: "playback_contents" | "sources";
 			items: readonly SelectionReference[];

@@ -80,8 +80,10 @@ export function registerFrozenAndEmptyGroupPairedScenarios() {
 			await setDimmerByTouch(page, 50);
 		},
 		assert: async ({ api, bench }, state) => {
+			// A group recorded from a dereferenced (DEGRP) selection stores the
+			// individual fixtures with no reference back to the source group.
 			await expectGroup(api, "5", (group) => {
-				expect(group.body.frozen_from).toMatchObject({ source_group_id: "1" });
+				expect(group.body.frozen_from).toBeNull();
 				expect(group.body.derived_from).toBeNull();
 			});
 			await expectGroupNumbers(

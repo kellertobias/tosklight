@@ -62,9 +62,14 @@ impl ProgrammingService {
         self.programmers.select_expression(
             session_id,
             selection.fixtures.clone(),
-            light_programmer::SelectionExpression::FrozenGroup {
-                group_id: selection.source_group_id.clone(),
-                source_revision: selection.source_revision,
+            light_programmer::SelectionExpression::Sources {
+                items: selection
+                    .fixtures
+                    .iter()
+                    .map(|fixture_id| light_programmer::SelectionReference::Fixture {
+                        fixture_id: *fixture_id,
+                    })
+                    .collect(),
             },
         );
         let change = ProgrammingInteractionChange::from_components(

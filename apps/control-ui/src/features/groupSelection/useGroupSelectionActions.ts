@@ -24,7 +24,6 @@ export interface GroupSelectionActions {
 
 interface CapturedGroupAuthority {
 	actions: ProgrammingSelectionActions;
-	showRevision: number | null;
 }
 
 /**
@@ -40,7 +39,7 @@ function captureGroupAuthority(
 	if (!actions) return null;
 	const snapshot = store.getSnapshot();
 	if (!snapshot.showId || !snapshot.readyCollections.has("group")) return null;
-	return { actions, showRevision: snapshot.showRevision };
+	return { actions };
 }
 
 /** The one scoped Group activation contract shared by the Group Pool and Group Strip. */
@@ -61,13 +60,12 @@ export function useGroupSelectionActions(active = true): GroupSelectionActions {
 	const selectFrozen = useCallback(
 		(group: GroupObject): GroupSelectionWrite => {
 			const authority = captureGroupAuthority(actions, store);
-			if (!authority || authority.showRevision == null) return null;
+			if (!authority) return null;
 			return authority.actions.selectGroup({
 				groupId: group.id,
 				resolvedFixtures: group.body.fixtures,
 				mode: "frozen",
 				rule: WHOLE_GROUP_RULE,
-				showRevision: authority.showRevision,
 			});
 		},
 		[actions, store],
