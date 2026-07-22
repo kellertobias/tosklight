@@ -417,3 +417,52 @@ The current snapshot stays in the progress document.
   boundary ratchet, and its 11 scanner tests. The source-size ratchet reports zero files above
   1,200 lines and zero functions above 150 lines; design-goal debt remains at 138 production files
   above 400 lines and 5,833 functions above 20 lines.
+
+## E2E remediation, first pass (2026-07-22)
+
+Two backend fixes landed and were verified on `refactoring` (base `6c2e131`):
+
+- **`6206b1e` — patched_fixture definition re-hydration (clusters A + C, + FIXTURE-001).**
+  `crates/server/src/runtime/object_api.rs` now reconstructs the full resolved `FixtureDefinition`
+  (heads + parameters) from the compiled runtime snapshot for `patched_fixture` list/get reads, so
+  `GET /objects/patched_fixture` again exposes `body.definition.heads[].parameters` and a
+  round-tripped `PUT` deserializes. Verified: the definition `TypeError … reading 'heads'` and the
+  `PUT` 400 "missing field `definition`" are gone from `tests/00-generate-show-files.spec.ts` and
+  `tests/07-move-in-black.spec.ts` (their only residual failure is the unrelated cluster-B GO 404).
+  Clean, GO-free confirmation: `tools/test.sh e2e --grep "FIXTURE-001"` → all variants pass,
+  including the three `@restart` schema-v1 migration specs that were blocked because their helper
+  `legacyDimmerDefinition` reads `body.definition.heads[0].parameters`. `cargo check -p light-server
+  --no-default-features` clean.
+- **`b361a73` — default-family preset storage key (cluster G HIGHLIGHT-001).** Authored by a
+  worktree subagent, reviewed and applied. New presets persist under the bare operator pool address
+  (`197`) instead of `PresetAddress::storage_key()` (`0.197`) for the Mixed/"All" family, matching
+  operator addressing and legacy shows. Verified: `tools/test.sh e2e --grep "HIGHLIGHT-001"` → @api
+  and @ui pass (combined FIXTURE-001+HIGHLIGHT-001 run: 7 passed / 0 failed). Regression test added
+  in `crates/server/src/runtime/tests/preset_api_tests.rs`.
+
+Corrected diagnosis facts discovered this pass (the original diagnosis predates purged traces and
+some attributions were imprecise):
+
+- **Cluster B (GO 404) is not `clear_command_line`.** The real 404 origin is `Snapshot::read` →
+  `unknown_programmer()` (`crates/application/src/programming/service/support.rs:78`,
+  `NotFound "programmer command line does not exist"`), reached from
+  `run_external_interaction` (`external.rs:35`) before the operation runs. A fresh session that
+  calls `POST /cuelists/{n}/go` has no registered programmer at all, so the GO programming
+  interaction fails. Making `clear_command_line` tolerant of an absent command line does **not**
+  fix it (that runs later and is never reached). The real fix must let the GO/playback interaction
+  proceed for a session without a pre-registered programmer — a programming-service change with
+  broad semantics, not a one-liner. Cluster B contaminates other specs' setup (MIB-001, SHOW-000
+  call GO during arrange), so its blast radius exceeds the 2 originally attributed.
+- **fix6 / API-001 direction was wrong in the diagnosis.** The acceptance contract wants the error
+  to contain `"revision conflict"` (`tests/04-osc-api-and-cross-surface.spec.ts:386,890`), not
+  `"stale group N revision"`. `grep "stale group"` finds nothing in production code, so the
+  subagent report claiming the code already emits "stale group 3 revision" came from a wrong-base
+  (main) worktree and is void. API-001's true failure cause on `6c2e131` is unverified and needs a
+  fresh traced repro before any change.
+- **fix4 / SHOW-004** was reproduced at the correct base: 3 of 6 variants fail (group-defaults,
+  virtual-dimmer-metadata, cue-defaults); no fix produced yet.
+
+Orchestration note: three of five worktree subagents were cut off `main` instead of `refactoring`
+(harness nondeterminism), invalidating their runs; re-launches used an explicit
+`git reset --hard 6c2e131` STEP 0. The parallel subagents then terminated early on the shared
+session usage limit, so fixes 4/5/6/7 did not produce verified patches this pass.

@@ -35,6 +35,16 @@ the failures split cleanly:
 - **Full suite at HEAD (`47a9466`): 169 passed, 93 failed, 26 skipped, 0 flaky.**
 - Diff of failing spec titles: **0 fixed, exactly 5 introduced** by the 28 commits since `47030ed`.
 
+**First remediation pass (2026-07-22), HEAD now `b361a73`: 175 passed, 87 failed** (262-test
+executed population unchanged; skipped accounting differs). +6/−6 vs pre-work, no regressions,
+one better than the `47030ed` baseline. Landed: `6206b1e` (re-hydrate `patched_fixture.definition`
+on the object read — clears clusters A+C and FIXTURE-001; the A/C error class is fully eliminated)
+and `b361a73` (default-family preset storage key — clears HIGHLIGHT-001). Remaining and next slice
+are enumerated in [`e2e-failure-diagnosis.md`](e2e-failure-diagnosis.md) → "Post-fix status". The
+4 introduced Patch regressions still need **A-fix Part 2** (v2 patch `profile_revisions` must carry
+full parameterized modes); cluster B's GO 404 is `Snapshot::read → unknown_programmer`, not
+`clear_command_line`.
+
 **88 failures are pre-existing** — the prior agent's cuelist/topology/visualization migration was
 committed with a broken e2e suite that was never run. Signature: `@api` variants pass, `@ui`
 variants fail. A full clustered diagnosis with a prioritized, independence-annotated remediation

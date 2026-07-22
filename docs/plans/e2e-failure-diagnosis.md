@@ -115,3 +115,43 @@ yet:** 2 (needs a traced repro to decompose) and 3 (shares code with 2). Biggest
 Cluster-D per-scenario hang-points are inferred from `@api`/`@ui` parity + source reading, not
 observed frames — the run's Playwright traces/screenshots were deleted by a concurrent build. Confirm
 D with one traced repro per family before implementing.
+
+## Post-fix status — first remediation pass (2026-07-22)
+
+Full suite at `refactoring` HEAD after two landed backend fixes
+(`6206b1e`, `b361a73`): **175 passed / 87 failed / 2 skipped** (identical 262-test
+executed population as the runs above; the skipped delta is ignored help/visual specs).
+Movement vs. the pre-work HEAD (169/93): **+6 passed, −6 failed, no regressions** — now
+one better than the `47030ed` pre-refactor baseline (174/88).
+
+Cleared this pass:
+- **Cluster A + C (patched_fixture.definition)** — `6206b1e` re-hydrates the resolved
+  definition on the object read path. The error class is **fully eliminated**: 0 residual
+  `reading 'heads'` / `missing field definition` signatures across the whole run. Specs that
+  were *only* A/C now pass; specs that also call GO in setup (SHOW-000, MIB-001, DMX-006/008)
+  stay red on the unrelated cluster-B GO 404.
+- **Cluster G** — HIGHLIGHT-001 (@api + @ui) via `b361a73`; FIXTURE-001 (@api, @ui, and the
+  three @restart schema-v1 migration specs) via `6206b1e`. All green.
+
+Still failing, with owners:
+- **The 4 introduced Patch regressions** — POSITION-HOME-001 @ui, PROG-002 @ui (×2),
+  HIGHLIGHT-003 @ui, ENCODER-DISPLAY-001 @supplemental-ui. Need **A-fix Part 2**: the v2 patch
+  snapshot `profile_revisions` must carry full parameterized modes (heads[].parameters +
+  channels + control_actions) so the scoped Patch store's `syntheticDefinition`/`resolveDefinition`
+  has parameters. Client map done (see verification log); wire + client change not yet made.
+- **Cluster B (GO 404, 6 occurrences)** — real origin is `Snapshot::read → unknown_programmer`
+  (`application/src/programming/service/support.rs:78`) reached from `run_external_interaction`
+  before the op; a fresh session has no registered programmer. Fix is a programming-service
+  change (let GO proceed without a pre-registered programmer), not `clear_command_line`.
+- **SHOW-004 @restart (×3)** — group-defaults / virtual-dimmer-metadata / cue-defaults; reproduced
+  at correct base, no fix yet.
+- **API-001 @api/@ui** — contract wants error containing `"revision conflict"`; true failure
+  cause on this base is unverified (the earlier "stale group N" report was a wrong-base artifact).
+  Needs a fresh traced repro.
+- **Cluster D (~44 @ui timeouts)** and **cluster E (~9 layout)** and **F remainder (CUE-011/012,
+  SOUND-001, COLOR-RANGE-001, DIM-001)** — unchanged; D still needs a live traced repro before
+  decomposition.
+
+Recommended next slice: (1) A-fix Part 2 (clears the 4 Patch regressions); (2) cluster-B
+programmer-registration fix (unblocks GO-contaminated A/C specs — likely a large secondary win);
+then re-run and re-triage D with live traces.
