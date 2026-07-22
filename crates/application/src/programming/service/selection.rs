@@ -88,7 +88,17 @@ impl SelectionOperation<'_> {
         source: &SelectionGestureSource,
         remove: bool,
     ) -> Result<ProgrammingOutcome, ActionError> {
-        let environment = self.environment(gesture_query(source))?;
+        let mut environment = self.environment(gesture_query(source))?;
+        // Re-resolving the accumulated gesture replays every stored reference, so the
+        // environment must also cover the live Groups referenced by the open gesture —
+        // not only the source of this one gesture.
+        let open_groups = self.open_gesture_group_ids();
+        if !open_groups.is_empty() {
+            let groups = self
+                .environment(ProgrammingSelectionQuery::Groups(open_groups))?
+                .groups;
+            environment.groups.extend(groups);
+        }
         let references = gesture_references(source, remove, &environment)?;
         if !self.service.programmers.apply_selection_gesture(
             self.session,
@@ -182,6 +192,31 @@ impl SelectionOperation<'_> {
         query: ProgrammingSelectionQuery,
     ) -> Result<ProgrammingSelectionEnvironment, ActionError> {
         self.ports.selection_environment(self.context, &query)
+    }
+
+    /// Group ids referenced by the currently open selection gesture, in first-use order.
+    fn open_gesture_group_ids(&self) -> Vec<String> {
+        let Some(selection) = self.service.programmers.selection(self.session) else {
+            return Vec::new();
+        };
+        if !selection.gesture_open {
+            return Vec::new();
+        }
+        let Some(SelectionExpression::Sources { items }) = selection.expression else {
+            return Vec::new();
+        };
+        let mut seen = HashSet::new();
+        items
+            .into_iter()
+            .filter_map(|item| match item {
+                SelectionReference::LiveGroup { group_id }
+                | SelectionReference::RemoveLiveGroup { group_id } => Some(group_id),
+                SelectionReference::Fixture { .. } | SelectionReference::RemoveFixture { .. } => {
+                    None
+                }
+            })
+            .filter(|group_id| seen.insert(group_id.clone()))
+            .collect()
     }
 
     fn accept(

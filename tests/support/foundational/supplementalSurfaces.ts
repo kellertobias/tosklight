@@ -106,6 +106,11 @@ export const supplementalSurfaceFactories = [
 				await stageFixture(page, fixtures[22]).click();
 				await expectSelectedNumbers(api, [21, 22]);
 				await openBuiltIn(page, "Presets");
+				// Preset 1.199 lives in the Intensity family pool; the window opens on Mixed.
+				await page
+					.getByRole("main")
+					.getByRole("button", { name: "Intensity", exact: true })
+					.click();
 				await page
 					.locator(".preset-card")
 					.filter({ hasText: "Selection Intensity" })

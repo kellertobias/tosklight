@@ -274,9 +274,7 @@ export function fixtureDefinitionFromProfileMode(
 			index,
 			name: head.name,
 			shared: head.master_shared,
-			parameters: mode.channels
-				.filter((channel) => channel.head_id === head.id)
-				.map((channel) => channelDefinition(channel, primary)),
+			parameters: headParameters(mode, head.id, primary),
 		})),
 		color_calibration:
 			additive?.system.type === "additive"
@@ -310,6 +308,48 @@ export function fixtureDefinitionFromProfileMode(
 		// fixtureProfileFromDefinition deep-clones before an editor can mutate the profile.
 		profile_snapshot: profile,
 	};
+}
+
+/**
+ * A head whose channels react to virtual intensity but that has no physical intensity channel
+ * (e.g. an RGB head whose intensity is derived) exposes the abstract virtual-dimmer intensity
+ * parameter the operator controls, matching the server's resolved definition projection.
+ */
+function headParameters(
+	mode: FixtureMode,
+	headId: string,
+	primary: Map<string, number>,
+): FixtureDefinition["heads"][number]["parameters"] {
+	const channels = mode.channels.filter(
+		(channel) => channel.head_id === headId,
+	);
+	const parameters = channels.map((channel) =>
+		channelDefinition(channel, primary),
+	);
+	const reactsToVirtual = channels.some(
+		(channel) => channel.reacts_to_virtual_intensity,
+	);
+	const hasIntensity = parameters.some(
+		(parameter) => parameter.attribute === "intensity",
+	);
+	if (reactsToVirtual && !hasIntensity) {
+		parameters.unshift({
+			attribute: "intensity",
+			components: [],
+			default: 1,
+			virtual_dimmer: true,
+			metadata: {
+				physical_min: 0,
+				physical_max: 1,
+				unit: null,
+				invert: false,
+				wrap: false,
+				curve: "linear",
+			},
+			capabilities: [],
+		});
+	}
+	return parameters;
 }
 
 function channelDefinition(

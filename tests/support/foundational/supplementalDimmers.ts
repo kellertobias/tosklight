@@ -142,9 +142,11 @@ export const dimmerApiBoundaries: FoundationalCase = {
 			});
 			const before = JSON.stringify(await objects(api, "group"));
 			await select(api, []);
+			// The typed Programming boundary reports Group subjects capitalized; the
+			// rejection wording is otherwise unchanged.
 			const error = await commandError(api, operation);
-			expect(error).toContain("derived group 6 depends on it");
-			if (rejection) expect(error).toContain(rejection);
+			expect(error.toLowerCase()).toContain("derived group 6 depends on it");
+			if (rejection) expect(error.toLowerCase()).toContain(rejection);
 			else rejection = "cannot delete group 3";
 			expect(JSON.stringify(await objects(api, "group"))).toBe(before);
 			expect((await object(api, "group", "3")).revision).toBe(group3.revision);
