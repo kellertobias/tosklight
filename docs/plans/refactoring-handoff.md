@@ -122,8 +122,24 @@ Gate each with the size/architecture ratchets (`node tools/check-source-size.mjs
   implemented behavior correct + documented skips.
 - **D2 — default selection mode at desk start: Fixture.** A bare number selects a Fixture; Group
   requires the GROUP key; toggle with GRP+ENTER. Align PROG-001/DIM-001 expectations to this.
-- **D3 — virtual-dimmer-metadata / 16-bit fixture output (DMX-006/008, SHOW-004): pending — the
-  maintainer will decide after reviewing context (being prepared).** Keep these skipped until then.
+- **D3 — virtual-dimmer-metadata / 16-bit fixture output (DMX-006/008, SHOW-004): derive-only.**
+  Model: a virtual-dimmer head has no physical dimmer channel; its colour channels are marked
+  `reacts_to_virtual_intensity` (persisted in the profile snapshot — this is how we know it has a
+  virtual dimmer and how it scales DMX). Outside the fixture the operator has an independent
+  `intensity` and `color`; at DMX output the fixture multiplies intensity × colour onto the reacting
+  channels (one-way — neither value derives from the other). **This value flow already exists in
+  `crates/engine/src/profile_projection.rs` and MUST be preserved unchanged.**
+  The schema fix is only about the persisted definition *shape*: the synthesized `intensity`
+  parameter (`abstract_virtual_dimmer_intensity()`, `definition_projection.rs`) must be **re-derived
+  from the channels at load/resolve, never treated as authoritative in the stored snapshot**. So:
+  (1) a legacy show whose baked `heads[].parameters[].metadata/capabilities` are absent must
+  self-heal by re-derivation with **no byte-mutating migration** (SHOW-004 idempotent/byte-stable);
+  (2) the schema-v2 snapshot identity check (`crates/fixture/src/definition.rs:43`) must compare the
+  **raw profile identity**, not the derived shape (unblocks DMX-006's `installSixteenBitMatrix`);
+  (3) do not persist the synthesized parameter as authoritative. Then unskip DMX-006/008 + SHOW-004
+  virtual-dimmer-metadata. Read `docs/acceptance-criteria.md` and test old-show load; keep the
+  `.agents/skills/build-light-fixtures` contract in mind. Add/keep an engine test asserting the
+  intensity×colour multiply and its one-way independence so the schema change can't regress it.
 - **D4 — OSC-005 command-line trailing space: no trailing space (`"G7 +"`).** Command-line spaces are
   cosmetic only. Change the engine's command-line formatting to not append a trailing space (search
   `crates/programmer/src/command_line.rs` `format!("{command} {next_token} ")`), update the
