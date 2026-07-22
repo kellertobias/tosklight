@@ -164,7 +164,7 @@ export function editTargetedCommandWithSoftwareKey(
 	}
 	if (key === "TIME" && /(?:^|\s)TIME\s*$/i.test(command)) {
 		return {
-			command: command.replace(/TIME\s*$/i, "DELAY "),
+			command: command.replace(/TIME\s*$/i, "DELAY"),
 			execute: false,
 			pristine: false,
 		};
@@ -224,10 +224,14 @@ export function editTargetedCommandWithSoftwareKey(
 				: digitAfterWord
 					? ` ${token}`
 					: token;
+	const digitContinuation =
+		/^\d$/.test(token) && selectionContinuation && command.trim() !== "+";
 	return {
-		command: `${command}${spaced ? ` ${nextToken} ` : nextToken}`
+		// Command-line spaces are cosmetic separators only; the text never carries a
+		// trailing space.
+		command: `${command}${digitContinuation || spaced ? ` ${nextToken}` : nextToken}`
 			.replace(/\s+/g, " ")
-			.trimStart(),
+			.trim(),
 		execute: false,
 		pristine: false,
 	};

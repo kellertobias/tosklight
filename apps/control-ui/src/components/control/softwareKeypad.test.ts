@@ -59,8 +59,8 @@ describe("software keypad", () => {
   });
 
   it("shows a double TIME press as DELAY", () => {
-    expect(editCommandWithSoftwareKey("1 AT 100 TIME ", "TIME")).toEqual({ command: "1 AT 100 DELAY ", execute: false });
-    expect(editCommandWithSoftwareKey("1 AT 100 ", "-")).toEqual({ command: "1 AT 100 - ", execute: false });
+    expect(editCommandWithSoftwareKey("1 AT 100 TIME ", "TIME")).toEqual({ command: "1 AT 100 DELAY", execute: false });
+    expect(editCommandWithSoftwareKey("1 AT 100 ", "-")).toEqual({ command: "1 AT 100 -", execute: false });
   });
 
   it("displays Speed Group decimal BPM values with the documented comma", () => {
@@ -123,7 +123,7 @@ describe("software keypad", () => {
   });
 
   it("keeps GROUP as the storage target after RECORD plus", () => {
-    expect(editTargetedCommandWithSoftwareKey("RECORD + ", "GRP", "GROUP", false)).toEqual({ command: "RECORD + GROUP ", execute: false, pristine: false });
+    expect(editTargetedCommandWithSoftwareKey("RECORD + ", "GRP", "GROUP", false)).toEqual({ command: "RECORD + GROUP", execute: false, pristine: false });
   });
 
   it("uses GRP as the opposite one-term prefix in Group mode and preserves Fixture-mode dereference", () => {

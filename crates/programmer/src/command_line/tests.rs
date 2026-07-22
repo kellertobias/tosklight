@@ -39,7 +39,7 @@ fn edits_documented_shortcuts_and_timing_tokens() {
     );
     assert_eq!(
         press("1 AT 100 TIME ", CommandTarget::Fixture, false, "TIME").text,
-        "1 AT 100 DELAY "
+        "1 AT 100 DELAY"
     );
     assert_eq!(
         press("SPD GRP 2 AT 127", CommandTarget::Fixture, false, ".").text,
@@ -72,7 +72,7 @@ fn keeps_target_scoping_and_group_dereference_rules() {
     );
     assert_eq!(
         press("RECORD + ", CommandTarget::Group, false, "GRP").text,
-        "RECORD + GROUP "
+        "RECORD + GROUP"
     );
     assert_eq!(
         press("RECORD GROUP", CommandTarget::Fixture, false, "7").text,

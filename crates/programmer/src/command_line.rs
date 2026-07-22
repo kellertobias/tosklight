@@ -254,10 +254,7 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
         return edit;
     }
     if key == CommandKey::Time && last_word_is_any(command, &["TIME"]) {
-        return edited(
-            format!("{} ", replace_last_word(command, "DELAY")),
-            state.target,
-        );
+        return edited(replace_last_word(command, "DELAY"), state.target);
     }
 
     let token = command_token(key);
@@ -313,7 +310,7 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
         if matches!(key, CommandKey::Digit(_)) && selection_continuation && command.trim() != "+" {
             format!("{} {next_token}", command.trim_end())
         } else if spaced {
-            format!("{command} {next_token} ")
+            format!("{command} {next_token}")
         } else {
             format!("{command}{next_token}")
         };

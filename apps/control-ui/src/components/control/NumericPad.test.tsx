@@ -315,7 +315,7 @@ describe("NumericPad Clear and SET routing", () => {
 			type: "SET_PRESET_SET_ARMED",
 			value: true,
 		});
-		expect(commandActions.replace).toHaveBeenCalledWith("COPY SET ");
+		expect(commandActions.replace).toHaveBeenCalledWith("COPY SET");
 	});
 });
 

@@ -51,7 +51,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     );
     assert_eq!(
         state.programmers.get(session.id).unwrap().command_line,
-        "COPY SET "
+        "COPY SET"
     );
     state
         .programmers
@@ -101,7 +101,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     );
     assert_eq!(
         state.programmers.get(session.id).unwrap().command_line,
-        "TIME - "
+        "TIME -"
     );
     handle_programmer_osc(
         &state,
@@ -119,7 +119,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     assert!(!state.osc_subscribers.lock()["test"].shifted);
     assert_eq!(
         state.programmers.get(session.id).unwrap().command_line,
-        "TIME - "
+        "TIME -"
     );
     handle_programmer_osc(
         &state,
@@ -136,7 +136,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     assert!(!state.osc_subscribers.lock()["test"].shifted);
     assert_eq!(
         state.programmers.get(session.id).unwrap().command_line,
-        "TIME - "
+        "TIME -"
     );
     let events = state.audit_events.lock();
     let shifted_clear = events.back().unwrap();

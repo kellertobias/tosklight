@@ -88,11 +88,8 @@ pub fn remove_command_token(value: &str) -> String {
     trimmed[..start].trim_end().to_owned()
 }
 
+/// Command-line spaces are cosmetic separators only; the projected text never carries a
+/// trailing space.
 pub(super) fn collapse_whitespace(value: &str) -> String {
-    let trailing = value.chars().next_back().is_some_and(char::is_whitespace);
-    let mut collapsed = value.split_whitespace().collect::<Vec<_>>().join(" ");
-    if trailing && !collapsed.is_empty() {
-        collapsed.push(' ');
-    }
-    collapsed
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
