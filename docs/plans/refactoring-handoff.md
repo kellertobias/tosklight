@@ -23,9 +23,43 @@ here; their detail is in git history.
   `tests/support/plannedDemoState.ts`, `apps/control-ui/src/windows/builtInStageModels.ts`,
   `apps/control-ui/src/windows/stage3dScene.test.ts`, the `assets/**`, `package*.json`, `.gitignore`.
 
-## Current state (2026-07-22)
+## Current state (2026-07-22, evening — P1–P4 executed)
 
-- Baseline (pre-refactor) 174 passed / 88 failed → session start 231 → **258 passed** now.
+- Baseline (pre-refactor) 174 passed / 88 failed → **266 passed / 20 skipped** now. The only
+  failing test is the user-dirty `product-demo` whole-app run.
+- **P1 (DEGRP) is done**: `SelectionExpression::FrozenGroup` is removed; keypad `GROUP GROUP`,
+  WS `group.select frozen`, HTTP frozen select-group, and the frozen-group refresh all dereference
+  to `Sources` of individual fixtures, identical to the double-click gesture. Persisted programmers
+  carrying the legacy `frozen_group` expression (including undo/redo snapshots) migrate on restore.
+  GROUP-004 asserts the dereferenced model on every surface.
+- **P2 is done**: two root causes fixed — the HTTP selection-gesture environment now also covers
+  the groups referenced by the open gesture (they previously resolved against an empty map and
+  silently dropped), and the UI profile-mode definition conversion restores the abstract
+  virtual-dimmer intensity parameter like the server projection (RGB LED selections assign
+  Enc 1 · Dimmer again). PROG-001 and DIM-001 are green on all surfaces.
+- **D4 is done**: the command line no longer carries a trailing space (engine + software keypad);
+  digits typed after a bare `+`/`-` insert their own separator. OSC-005 @osc is unskipped.
+- **P3 is done**: CMD-002 @ui unskipped (the v1 tap/double/half/pause route now publishes v2
+  speed-group change events via `SpeedGroupService::record_external_change`); the playback-topology
+  writer no longer drops queued saves on a same-show authority re-hydration and retries once after
+  a 409 whose repaired object expectations still hold — this fixed CUE-012 @ui and SHOW-001 @ui
+  (both unskipped) and PLAYBACK-SELECT-001 @ui. Remaining skipped-with-reason residues, each
+  re-verified after the fixes: CUE-011 @ui/@supplemental-ui (window-header revision lag after a
+  retried save + one silent extra cue_list revision), PRELOAD-004 @ui/@supplemental-ui (preload
+  lifecycle view stale after PRELOAD GO), PBK-005 @supplemental-ui (held-Swap request never
+  issued), SHOW-005 @ui (revision-copy identity label), PLAYBACK-SELECT-001 @supplemental-ui
+  (hardware fader-bank stability), plus the D1 feature gaps (MANUAL-019, SOUND-001,
+  COLOR-RANGE-001). The D3 fixture-schema work (derive-only; DMX-006/008, SHOW-004) is decided
+  below and remains the next implementation chunk.
+- **P4 is done**: typed Group management (GroupPropertiesDialog/GroupContextMenu) and the scoped
+  Patch reads were already migrated; the last broad `useServer().readVisualization` readers
+  (`useCueThumbnails`, the Position special dialog) now use the scoped
+  `useVisualizationRuntimeRead`. All ratchets (`check-architecture`, `check-source-size`,
+  `test-command-boundaries`) pass.
+
+### Historical state (session start)
+
+- Baseline (pre-refactor) 174 passed / 88 failed → session start 231 → 258 passed.
 - The facade-removal / authority-scoping refactor introduced **no net new regressions**; the 5 it
   did introduce (Patch reader migration) were fixed. Every remaining failure passes on its
   `@api`/engine surface unless noted.

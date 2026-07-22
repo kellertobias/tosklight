@@ -351,3 +351,58 @@ fn create_speed_groups(configuration: &DeskConfiguration) -> Arc<Mutex<[SpeedGro
         .expect("validated Speed Group configuration")
     })))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::migrate_frozen_group_selection;
+
+    /// Restart recovery of a durable programmer persisted before the DEGRP rework: the removed
+    /// `frozen_group` selection expression (top level and inside undo/redo snapshots) must map to
+    /// the dereferenced `sources` form instead of dropping the whole programmer.
+    #[test]
+    fn legacy_frozen_group_programmer_snapshots_restore_as_dereferenced_sources() {
+        let fixture_a = uuid::Uuid::new_v4();
+        let fixture_b = uuid::Uuid::new_v4();
+        let mut value = serde_json::json!({
+            "id": uuid::Uuid::new_v4(),
+            "session_id": uuid::Uuid::new_v4(),
+            "user_id": uuid::Uuid::new_v4(),
+            "priority": 0,
+            "selected": [fixture_a, fixture_b],
+            "selection_expression": {"type": "frozen_group", "group_id": "7", "source_revision": 4},
+            "values": [],
+            "connected": true,
+            "last_activity": "2026-07-20T09:30:00Z",
+            "undo": [{
+                "selected": [fixture_a],
+                "selection_expression": {"type": "frozen_group", "group_id": "7", "source_revision": 3},
+            }],
+        });
+        migrate_frozen_group_selection(&mut value);
+        let programmer: light_programmer::ProgrammerState =
+            serde_json::from_value(value).expect("legacy frozen_group programmer deserializes");
+        let expected = |fixtures: &[uuid::Uuid]| light_programmer::SelectionExpression::Sources {
+            items: fixtures
+                .iter()
+                .map(|id| light_programmer::SelectionReference::Fixture {
+                    fixture_id: light_core::FixtureId(*id),
+                })
+                .collect(),
+        };
+        assert_eq!(
+            programmer.selection_expression,
+            Some(expected(&[fixture_a, fixture_b]))
+        );
+        assert_eq!(
+            programmer.undo[0].selection_expression,
+            Some(expected(&[fixture_a]))
+        );
+        assert_eq!(
+            programmer.selected,
+            vec![
+                light_core::FixtureId(fixture_a),
+                light_core::FixtureId(fixture_b)
+            ]
+        );
+    }
+}
