@@ -335,3 +335,78 @@ async fn preset_object_api_uses_family_scoped_numbers() {
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[tokio::test]
+async fn store_endpoint_persists_default_family_preset_under_its_bare_address() {
+    // Regression (HIGHLIGHT-001): storing a default-family ("Mixed"/"All") Preset through the
+    // bare pool address `197` must persist and read back under object id `197`, matching legacy
+    // shows and the operator's addressing rather than the internal canonical `0.197`.
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let created = create_show(&app, &token, "Bare preset address").await;
+    let show_id = created["id"].as_str().unwrap();
+    let fixture = light_core::FixtureId::new();
+    let fixture_key = fixture.0.to_string();
+
+    let stored = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v1/shows/{show_id}/presets/197/store"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::IF_MATCH, "0")
+                .body(Body::from(
+                    serde_json::json!({
+                        "mode": "overwrite",
+                        "preset": {
+                            "name": "Highlight isolation",
+                            "family": "Mixed",
+                            "values": {
+                                (fixture_key.clone()): {
+                                    "pan": {"kind": "normalized", "value": 0.41}
+                                }
+                            },
+                            "group_values": {},
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stored.status(), StatusCode::OK);
+
+    let listed = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/shows/{show_id}/objects/preset"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(listed.status(), StatusCode::OK);
+    let listed = json(listed).await;
+    let objects = listed.as_array().unwrap();
+    assert_eq!(objects.len(), 1);
+    assert_eq!(objects[0]["id"], "197");
+    assert_eq!(objects[0]["body"]["family"], "Mixed");
+    assert!(objects[0]["body"]["values"][&fixture_key]["pan"].is_object());
+
+    let fetched = app
+        .oneshot(
+            Request::get(format!("/api/v1/shows/{show_id}/objects/preset/197"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(fetched.status(), StatusCode::OK);
+    assert_eq!(json(fetched).await["id"], "197");
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}

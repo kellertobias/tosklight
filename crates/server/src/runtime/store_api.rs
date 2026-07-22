@@ -132,10 +132,15 @@ pub(super) async fn store_preset(
                 || decode_preset_object(object)
                     .is_ok_and(|(stored_address, _)| stored_address == address)
         });
+    // A new Preset is persisted under the operator-supplied pool address exactly as written. The
+    // default (Mixed/"All") family carries no dotted type prefix, so a bare address such as `197`
+    // is stored under object id `197`, matching legacy shows and the operator's addressing rather
+    // than the internal canonical `0.197`. Typed families spell their address identically to
+    // `storage_key`, so this only affects the Mixed case. An existing object keeps its own key.
     let persisted_key = existing
         .as_ref()
         .map(|object| object.id.clone())
-        .unwrap_or(storage_key);
+        .unwrap_or_else(|| preset_id.clone());
     let stored_preset = existing
         .as_ref()
         .map(decode_preset_object)
