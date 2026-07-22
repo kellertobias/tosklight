@@ -66,12 +66,17 @@ Confirmed root causes (for the unskip work later):
   resolves and the modal hangs at "Selecting Playback page…", so the request is blocked frontend
   side after a hardware-connect scope regeneration. Fixing this without weakening the scope
   isolation that many passing tests depend on is dedicated frontend work.
-- **Latent server hazard (not tied to any failing test; do NOT change without a repro)** —
-  `run_active_show_lifecycle` in `playback_topology_adapter.rs` and `selective_import_adapter.rs`
-  uses `blocking_lock_owned()` on the tokio `activation_lock` (absent on `main`), unlike the safe
-  `try_lock_owned()` + `within_interaction` guard in `programming_update_adapter.rs`. `@api` passes
-  through the topology path so it does not deadlock in normal operation, but it is a blocking-lock-
-  on-async anti-pattern that could contribute to worker-crash flakiness under contention.
+- **`blocking_lock_owned()` is correct here (investigated, not a bug)** — `run_active_show_lifecycle`
+  in `playback_topology_adapter.rs`/`selective_import_adapter.rs` uses `blocking_lock_owned()` on the
+  tokio `activation_lock` (absent on `main`), but the topology/selective-import actions run inside
+  `tokio::task::spawn_blocking` (see `playback_topology_http.rs` `run_action`), so the blocking lock
+  is taken on a blocking-pool thread, not an async runtime worker — it does not starve the runtime.
+- **Bench flakiness** — full runs are non-deterministic: a worker occasionally crashes ("N did not
+  run") and `@ui`/`@supplemental-ui` cases time out at 90s waiting for a UI state that the frontend
+  scope-guard hang never produces (same root cause as the page change above). This surfaces a
+  different failing subset each run, including otherwise-stable foundational `@ui` cases; re-run any
+  suspected failure in isolation before treating it as real, and expect the shared frontend
+  scope-guard to be behind most `@ui` timeouts.
 
 Acceptance-criteria checkpoint (`docs/acceptance-criteria.md`): this session changed **no persisted
 schema** (CSS + test-only edits), so backward-compatibility criteria are unaffected; the one
