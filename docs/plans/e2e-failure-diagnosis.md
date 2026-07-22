@@ -243,3 +243,36 @@ bug fix:
 Recommendation: the highest-value safe remaining work is the **patched_fixture load-migration** and a
 **per-family cluster-D traced-repro pass** with `npm run open` for visual verification. The MANUAL-019
 contradictions and the recovery-browser feature need product/design direction before implementation.
+
+## Fifth pass — cluster-D shared fixes; deep-per-test root causes pinned (2026-07-22)
+
+Full suite `074d083`: **231 passed / 35 failed** (from pre-work 169/93). Two shared cluster-D causes
+were found by traced repro and fixed this pass:
+- **`61f7007` (biggest lever, ~35 tests):** the v2 playback runtime projection fataled the entire
+  Group- and playback-shared runtime store when any Group carried a stale/missing assigned-Playback
+  reference ("Group references a missing assigned Playback"), freezing every dependent @ui surface at
+  "Group runtime loading…". `project_group` now degrades a stale assignment to no-assignment.
+- **`3761417`:** the Virtual Playbacks pane gated runtime activation on a readiness that itself required
+  the runtime already active (deadlock → "Loading Virtual Playbacks…"); it now activates for the page's
+  playbacks unconditionally.
+
+The remaining 35 are diverse and each was traced; none share a further cause:
+- **CUE-012 / CUE-011 @ui (cuelist-settings save) — ROOT CAUSE PINNED:** the topology writer
+  (`features/playbackTopology/writer.ts` `apply`, `writerLifecycle.ts`) drops an enqueued
+  `save_cue_list` when `authorityGeneration` changes between enqueue and dispatch
+  (`if (!this.lifecycle.isCurrent(generation)) return null`). In CUE-012 the legacyOff/legacyTracking
+  shortcut Saves never reach the backend `save_cue_list` at all (confirmed by backend instrumentation:
+  only one save fires), so `wrap_mode` stays absent and the poll for "off"/"tracking" times out. The
+  generation invalidation is load-bearing (it drops stale saves after an authority change), so the fix
+  must determine why the generation bumps during these saves (spurious reactivation vs. legitimate) and
+  not simply disable the guard.
+- **PROG-001 @supplemental-ui:** drag/mixed-source selection produces 3 wrong fixtures (selection logic).
+- **CONTRADICTIONS (do NOT "fix" by breaking correct code):** MANUAL-019 #62 wants "Create", the manual
+  (`docs/help/05-Pane-Reference/03-utility-and-diagnostics.md`) + 16-file-manager say "New"; OSC-005
+  wants command line "G7 +", `softwareKeypad.test.ts` + the keypad canonically use "G7 + " (trailing
+  space = awaiting operand).
+- **Missing feature:** MANUAL-019 #65 recovery file browser.
+- **Fixture-schema decision:** DMX-006/008, virtual-dimmer-metadata (re-snapshot/nested migration).
+- **Other deep per-test @ui:** SOUND-001 (speed-group sound config), TIME-001/002 (touch fader), TEXT-015
+  (split editor), CMD-002 (speed-group render), SHOW-001/OSC-001 (value assertions). **Flaky:** SHOW-005,
+  CUE-011 @supplemental-ui, PRELOAD-002.
