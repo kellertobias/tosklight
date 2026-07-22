@@ -173,3 +173,41 @@ Remaining 83 failures are clusters B (GO 404), D (~44 @ui interaction timeouts),
 (CUE-011/012, SOUND-001, COLOR-RANGE-001, DIM-001, SHOW-004, API-001) — unchanged by this pass except
 where A/C was the blocker. Recommended next: cluster B (GO/programmer-registration), which unblocks the
 A/C-fixed specs that still fail only because their setup calls GO.
+
+## Third pass — cluster B fixed; precise remaining root causes (2026-07-22)
+
+Full suite after `3c4516a`: **185 passed / 83 -> 77 failed** (+6, no regressions; failing-set diff
+cleared MIB-001 @api/@ui/@wire x2, CUE-012 @api, TIME-003 @wire).
+
+**Cluster B (FIXED, `3c4516a`).** The v1 playback compatibility routes (`/cuelists/{n}/{action}`,
+`/playbacks/{id}/{action}`) run through `run_programming_interaction` -> `Snapshot::read`, which
+hard-required a live Programmer. An authenticated desk session loses its Programmer authority when a
+short-lived command/OSC transport is released (`disconnect_orphaned_osc_session`), so a subsequent GO/
+release 404'd. Confirmed by a forced-backtrace file sink: origin was `support.rs Snapshot::read ->
+unknown_programmer` via `capture_external_interaction`. Fix: `Snapshot::read` returns an empty snapshot
+when the session has no Programmer; the invariant test was retitled to the tolerant contract.
+
+Precise root causes for the remaining clusters (investigated this pass, NOT yet fixed):
+
+- **SHOW-004 @restart group-defaults / cue-defaults (2)** — DESIGN CONTRADICTION. The load-time
+  `migrate_group`/`migrate_cue_list` (`show_compiler/migrations/objects.rs`) do not persist the
+  schema's explicit defaults for legacy objects that predate a field, so the file never changes
+  (`migratedHash == legacyHash`). `migrate_playback`/`migrate_route` already selectively fill their
+  defaults. Making group/cue do the same clears both e2e cases, BUT breaks the deliberate invariant
+  test `active_show::tests::object_undo_commits_pending_migrations_in_the_same_compiled_candidate`
+  (line 603) which asserts a raw minimal group generates NO pending migration. Fixing SHOW-004 requires
+  a selective per-field fill in migrate_group/migrate_cue_list PLUS updating that undo test to seed a
+  fully-defaulted group. Needs a decision: normalize-on-load (like playback/route) vs the lossless
+  raw-preservation the undo test encodes. Deferred rather than rushed.
+- **SHOW-004 virtual-dimmer-metadata (1) + DMX-006/008 @api (2)** — FIXTURE-SCHEMA. `migrate()` has no
+  `patched_fixture` arm, so a fixture whose `definition.heads[].parameters[].metadata`/`capabilities`
+  were stripped never re-fills them on load (and Part 1's read re-hydration is skipped when a definition
+  is already present). Separately, DMX-006/008 derive a NEW inline definition (new `definition.id`) while
+  keeping a stale `profile_snapshot`; the schema-v2 write check `schema-v2 fixture snapshot identity is
+  inconsistent` (`fixture/src/definition.rs:51`) rejects it. Both need a fixture-schema decision
+  (re-snapshot on write / fill nested parameter defaults) — use the build-light-fixtures skill.
+- **Cluster D @ui interaction timeouts (~40)** — NOT a single shared store-hydration fix. Confirmed via
+  PBK-001 @ui accessibility snapshot: the app loads fully but the expected Playback-representation
+  fader bank is not in the expected window/desktop/mode (a preset pool renders instead). Each family
+  (playback/cue navigation vs command-line/selection) needs its own per-interaction investigation; there
+  is no evidence of one shared breakage.
