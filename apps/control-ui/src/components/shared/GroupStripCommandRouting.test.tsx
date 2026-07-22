@@ -33,6 +33,10 @@ const mocks = vi.hoisted(() => ({
 	],
 }));
 
+vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
+	useBootstrapReady: () => true,
+	useActiveShowId: () => "show",
+}));
 vi.mock("../../api/ServerContext", () => ({
 	useServer: () => ({
 		bootstrap: { active_show: { id: "show" } },

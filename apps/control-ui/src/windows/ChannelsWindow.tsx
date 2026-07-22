@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePatchedFixturesView } from "../features/patch/PatchState";
 import { useProgrammerFadeMillis } from "../features/configuration/ConfigurationState";
-import { useServer } from "../api/ServerContext";
 import type { PatchedFixture, VisualizationSnapshot } from "../api/types";
 import { Button } from "../components/common";
 import { VerticalTouchFader } from "../components/control/VerticalTouchFader";
@@ -30,7 +29,6 @@ interface Channel {
 }
 
 export function ChannelsWindow({ active = true, compact }: WindowProps) {
-	const server = useServer();
 	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
 	const selection = useProgrammingSelectionView(active);
 	const selectionActions = useProgrammingSelectionActions(active);

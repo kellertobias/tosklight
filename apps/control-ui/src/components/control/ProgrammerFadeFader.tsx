@@ -1,10 +1,8 @@
 import { useProgrammerFadeMillis } from "../../features/configuration/ConfigurationState";
 import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
-import { useServer } from "../../api/ServerContext";
 import { TouchValueButton, VerticalTouchFader } from "./VerticalTouchFader";
 
 export function ProgrammerFadeFader({ compact = false }: { compact?: boolean }) {
-  const server = useServer();
   const configurationActions = useConfigurationActions();
   const value = (useProgrammerFadeMillis() ?? 3_000) / 1_000;
   const onChange = (next: number) => void configurationActions?.setControlTiming({ programmer_fade_millis: Math.round(next * 1_000) });

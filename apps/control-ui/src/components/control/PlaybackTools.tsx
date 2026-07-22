@@ -2,7 +2,6 @@ import { type CSSProperties, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSequenceMasterFadeMillis } from "../../features/configuration/ConfigurationState";
 import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
-import { useServer } from "../../api/ServerContext";
 import type { SpeedGroupId } from "../../api/types";
 import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import { useApp } from "../../state/AppContext";
@@ -27,7 +26,6 @@ import {
 
 export function PlaybackTools() {
 	const { state, dispatch } = useApp();
-	const server = useServer();
 	const configurationActions = useConfigurationActions();
 	const sequenceMasterFadeMillis = useSequenceMasterFadeMillis();
 	const command = useCommandLineSurface({ observeCommand: false });

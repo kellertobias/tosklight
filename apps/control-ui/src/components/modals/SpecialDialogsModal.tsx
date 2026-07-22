@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { useProgrammerFadeMillis } from "../../features/configuration/ConfigurationState";
-import { useServer } from "../../api/ServerContext";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import {
 	normalizedFixtureMutations,
@@ -30,7 +29,6 @@ const EMPTY_FIXTURE_IDS: readonly string[] = [];
 
 export function SpecialDialogsModal() {
 	const { state, dispatch } = useApp();
-	const server = useServer();
 	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
 	const [beamPage, setBeamPage] = useState(0);
 	const [dynamicSpeed, setDynamicSpeed] = useState(30);

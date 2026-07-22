@@ -45,6 +45,10 @@ const mocks = vi.hoisted(() => ({
 	state: { storeArmed: false, updateArmed: false },
 }));
 
+vi.mock("../deskSnapshot/DeskSnapshotState", () => ({
+	useBootstrapReady: () => true,
+	useActiveShowId: () => SHOW_ID,
+}));
 vi.mock("../../api/ServerContext", () => ({
 	useServer: () => ({
 		bootstrap: { active_show: { id: SHOW_ID } },

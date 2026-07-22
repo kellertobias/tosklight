@@ -1,6 +1,5 @@
 import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { useEffect, useState } from "react";
-import { useServer } from "../../api/ServerContext";
 import {
 	Button,
 	FormField,
@@ -15,7 +14,6 @@ import { useDeskLock } from "../../features/deskLock/DeskLockState";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
 
 export function DeskLockSettingsModal({ onClose }: { onClose: () => void }) {
-	const server = useServer();
 	const deskLock = useDeskLock();
 	const deskLockActions = useDeskLockActions();
 	const [message, setMessage] = useState(deskLock?.message ?? "Desk locked");

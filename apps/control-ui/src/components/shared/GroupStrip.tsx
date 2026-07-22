@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { useServer } from "../../api/ServerContext";
+import { useBootstrapReady } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useCommandLineSurface } from "../control/commandLine/useCommandLineSurface";
 import { requestUpdateTarget } from "../control/updateWorkflow";
 import { groups } from "../../data/mockData";
@@ -91,7 +91,7 @@ function GroupShortcut({
 
 export function GroupStrip({ active = true }: { active?: boolean }) {
 	useShowObjectView("group", active);
-	const server = useServer();
+	const bootstrapReady = useBootstrapReady();
 	const groupRecording = useGroupRecording();
 	const commandLine = useCommandLineSurface({
 		selection: true,
@@ -105,7 +105,7 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 	const [recordTarget, setRecordTarget] = useState<GroupRecordingTarget | null>(
 		null,
 	);
-	const stored: readonly ShortcutGroup[] = server.bootstrap
+	const stored: readonly ShortcutGroup[] = bootstrapReady
 		? storedGroups
 		: groups.map((group) => ({
 				id: String(group.id),

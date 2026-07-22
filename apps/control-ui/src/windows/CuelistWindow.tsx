@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useSpeedGroupsBpm } from "../features/configuration/ConfigurationState";
-import { useServer } from "../api/ServerContext";
 import { usePlaybackDeskView } from "../features/playbackRuntime/PlaybackRuntimeView";
 import { useCueListTopologyWriter } from "../features/playbackTopology/useCueListTopologyWriter";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
@@ -25,7 +24,6 @@ export function CuelistWindow({
 	cueListSource = "fixed",
 	fixedCueListNumber,
 }: WindowProps) {
-	const server = useServer();
 	const saveCueList = useCueListTopologyWriter();
 	const { state, dispatch } = useApp();
 	const pool = useCuelistPool();

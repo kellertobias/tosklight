@@ -1,7 +1,6 @@
 import { type PointerEvent, useRef, useState } from "react";
 import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
 import { useProgrammerFadeMillis } from "../../../features/configuration/ConfigurationState";
-import { useServer } from "../../../api/ServerContext";
 import {
 	normalizedFixtureMutations,
 	programmerValuesMutationKey,
@@ -42,7 +41,6 @@ export function useColorDialog(
 	shiftArmed: boolean,
 	valueWrites: ProgrammerValuesMutationQueueController,
 ): ColorDialogController {
-	const server = useServer();
 	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
 	const [hue, setHue] = useState(0.52);
 	const [saturation, setSaturation] = useState(0.8);

@@ -5,13 +5,11 @@ import {
 	useStagePositions,
 	useStagePositions3d,
 } from "../../features/stageLayout/StageLayoutState";
-import { useServer } from "../../api/ServerContext";
 import type { StageLayoutModel } from "./types";
 
 type Position2d = { x: number; y: number; rotation: number };
 
 export function useStageLayout(): StageLayoutModel {
-	const server = useServer();
 	const [positions, setPositions] = useState<Record<string, Position2d>>({});
 	const [positions3d, setPositions3d] = useState<
 		Record<string, StagePosition3d>
