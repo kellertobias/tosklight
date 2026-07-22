@@ -394,3 +394,65 @@ fn inverted_intensity_masters_and_blackout_move_to_physical_off() {
         255
     );
 }
+
+/// D3 (derive-only) guardrail: a virtual-dimmer head has no physical dimmer channel; the
+/// operator's independent intensity multiplies onto the `reacts_to_virtual_intensity` colour
+/// channels at DMX output only. Neither stored value derives from the other — changing intensity
+/// must not rewrite the colour value, and the derived definition exposes the abstract intensity
+/// parameter re-derived from the channels.
+#[test]
+fn virtual_dimmer_intensity_multiplies_reacting_channels_one_way() {
+    let (fixture, fixture_id) = schema_v2_fixture(&[
+        ("color.red", false, true, false, false, false),
+        ("color.green", false, true, false, false, false),
+    ]);
+    let intensity = fixture
+        .definition
+        .heads
+        .iter()
+        .flat_map(|head| &head.parameters)
+        .find(|parameter| parameter.attribute.is_intensity())
+        .expect("the derived definition re-derives the abstract virtual-dimmer intensity");
+    assert!(intensity.virtual_dimmer);
+    assert!(intensity.components.is_empty());
+
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey("color.red".into()),
+        AttributeValue::Normalized(0.8),
+    );
+    programmers.set(
+        session,
+        fixture_id,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.5),
+    );
+    let observed = programmers.clone();
+    let engine = Engine::new(programmers);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture],
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    let rendered = engine.render(RenderOptions::default()).unwrap();
+    assert_eq!(
+        rendered.universes[&1][0],
+        (0.8f32 * 0.5 * 255.0).round() as u8
+    );
+    assert_eq!(rendered.universes[&1][1], 0);
+
+    // One-way: the multiply happens at output; the stored colour value stays untouched.
+    let stored = observed.get(session).unwrap();
+    let red = stored
+        .values
+        .iter()
+        .find(|value| value.attribute.0 == "color.red")
+        .unwrap();
+    assert_eq!(red.value, AttributeValue::Normalized(0.8));
+}

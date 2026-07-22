@@ -257,11 +257,11 @@ export function registerCorruptActiveShowRecoveryTests(): void {
 
 export function registerLegacyMigrationTests(): void {
 	for (const migration of SHOW_004_CASES) {
-		// The virtual-dimmer-metadata case asserts a legacy-field normalization that depends
-		// on the not-yet-finalized virtual-dimmer-metadata fixture-schema contract (pre-existing
-		// failure that predates the refactoring). Skip only that case; the other migrations run.
-		const runner = migration === "virtual-dimmer-metadata" ? test.skip : test;
-		runner(`SHOW-004 @restart › supplemental ${migration} legacy fields normalize once and stay byte/revision stable`, async ({
+		// D3 (derive-only): the virtual-dimmer intensity parameter's metadata/capabilities are
+		// re-derived at load, never written back — this case must leave the show file
+		// byte-identical. Every other case normalizes the legacy fields with one write.
+		const byteStable = migration === "virtual-dimmer-metadata";
+		test(`SHOW-004 @restart › supplemental ${migration} legacy fields ${byteStable ? "self-heal by re-derivation and stay byte-stable" : "normalize once and stay byte/revision stable"}`, async ({
 			api,
 			bench,
 		}) => {
@@ -284,7 +284,8 @@ export function registerLegacyMigrationTests(): void {
 			assertMigrationSnapshot(migration, migrated);
 			await bench.stopServerGracefully(api.session!.token);
 			const migratedHash = await fileHash(prepared.entry.path);
-			expect(migratedHash).not.toBe(legacyHash);
+			if (byteStable) expect(migratedHash).toBe(legacyHash);
+			else expect(migratedHash).not.toBe(legacyHash);
 
 			await bench.startServer();
 			await api.login();

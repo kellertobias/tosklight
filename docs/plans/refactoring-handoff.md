@@ -49,8 +49,19 @@ here; their detail is in git history.
   lifecycle view stale after PRELOAD GO), PBK-005 @supplemental-ui (held-Swap request never
   issued), SHOW-005 @ui (revision-copy identity label), PLAYBACK-SELECT-001 @supplemental-ui
   (hardware fader-bank stability), plus the D1 feature gaps (MANUAL-019, SOUND-001,
-  COLOR-RANGE-001). The D3 fixture-schema work (derive-only; DMX-006/008, SHOW-004) is decided
-  below and remains the next implementation chunk.
+  COLOR-RANGE-001).
+- **D3 (derive-only) is implemented**: the schema-v2 snapshot identity check compares the raw
+  profile identity (definition-level id/revision are derived shape), SHOW-004
+  virtual-dimmer-metadata is unskipped and green (legacy fixtures self-heal by re-derivation,
+  byte-stable — the serde defaults already produce the abstract virtual-dimmer metadata), and an
+  engine guardrail test pins the intensity×colour one-way multiply
+  (`virtual_dimmer_intensity_multiplies_reacting_channels_one_way`). DMX-006 stays
+  skipped-with-reason: its installer now patches cleanly, but the scenario still mutates the
+  *derived* heads (16-bit component layouts, byte order, parameter defaults), which the schema-v2
+  engine deliberately ignores in favour of the raw profile snapshot — it needs re-authoring
+  against profile channels, including deciding how the profile schema expresses LSB-first
+  component order (it currently cannot). DMX-008 stays skipped on its independent, unimplemented
+  minimum-universe-size padding/defaults output contract.
 - **P4 is done**: typed Group management (GroupPropertiesDialog/GroupContextMenu) and the scoped
   Patch reads were already migrated; the last broad `useServer().readVisualization` readers
   (`useCueThumbnails`, the Position special dialog) now use the scoped

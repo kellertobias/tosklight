@@ -40,9 +40,11 @@ impl FixtureDefinition {
             profile
                 .validate()
                 .map_err(|error| FixtureError::Invalid(error.to_string()))?;
+            // D3 (derive-only): the raw profile snapshot is the authoritative identity. The
+            // definition-level id/revision belong to the derived shape and may legitimately
+            // diverge (e.g. a show-local variant derived from the same profile), so only the
+            // profile reference and mode must be consistent.
             if self.profile_id != Some(profile.id)
-                || self.id != profile.id
-                || self.revision != profile.revision
                 || self
                     .mode_id
                     .is_none_or(|mode_id| profile.mode(mode_id).is_none())

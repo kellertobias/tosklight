@@ -288,15 +288,17 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
   pairedScenario<SixteenBitState>({
     id: "DMX-006",
     title: "16-bit metadata and virtual heads encode deterministic component bytes",
-    // Pre-existing failure (predates the refactoring): the deterministic component-byte
-    // encoding for 16-bit metadata and synthesized virtual-dimmer heads depends on the
-    // virtual-dimmer-metadata fixture-schema contract that is not finalized yet. Both
-    // surfaces need it — the arrange (installSixteenBitMatrix) already fails server-side
-    // with "schema-v2 fixture snapshot identity is inconsistent". Skip until the schema
-    // decision lands. See also DMX-008 and SHOW-004 virtual-dimmer-metadata.
+    // D3 (derive-only) landed the schema side: the snapshot identity check now compares the raw
+    // profile identity, so installSixteenBitMatrix's derived-definition variants patch cleanly,
+    // and value writes encode through the profile projection. What remains is a test re-authoring:
+    // this scenario still mutates the DERIVED heads (2-component 16-bit layouts, byte order,
+    // parameter defaults), which the schema-v2 engine deliberately ignores in favour of the raw
+    // profile snapshot. The 16-bit matrix must be expressed in the profile channels themselves
+    // (resolution u16 + secondary slots, invert, default_raw) — including deciding how the
+    // profile schema expresses LSB-first component order, which it currently cannot.
     skip: {
-      api: "Pending virtual-dimmer-metadata / 16-bit fixture-schema output contract",
-      ui: "Pending virtual-dimmer-metadata / 16-bit fixture-schema output contract",
+      api: "Scenario mutates derived heads; needs re-authoring against the raw profile snapshot (incl. LSB-first expression)",
+      ui: "Scenario mutates derived heads; needs re-authoring against the raw profile snapshot (incl. LSB-first expression)",
     },
     arrange: async ({ api, bench }, surface) => {
       const show = await loadCanonicalCopy(api, bench, `dmx-006-${surface}`, "default-stage");
@@ -740,6 +742,9 @@ async function installSixteenBitMatrix(api: any, bench: any): Promise<SixteenBit
       multipatch: [],
       universe: logicalUniverse,
       address,
+      // The cloned source body carries its own split patch; the copy must address the
+      // 16-bit matrix universe, not the source's slot.
+      split_patches: [{ split: 1, universe: logicalUniverse, address }],
     });
     installed.push({ id, fixtureNumber, address, byteOrder, invert, defaultValue });
   }
