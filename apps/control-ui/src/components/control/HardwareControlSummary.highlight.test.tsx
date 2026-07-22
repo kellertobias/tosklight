@@ -18,6 +18,14 @@ const state = { playbackPage: 0 };
 const dispatch = vi.fn();
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../../features/highlight/HighlightState", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	useHighlightErrorMessage: () => server.highlightError,
+	useHighlightActions: () => ({
+		highlightAction: vi.fn(),
+		dismissHighlightError: server.dismissHighlightError,
+	}),
+}));
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
 }));

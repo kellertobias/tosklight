@@ -96,6 +96,10 @@ export function useServerState() {
 	useEffect(() => {
 		deskSnapshotStore.install(bootstrap, session);
 	}, [bootstrap, session, deskSnapshotStore]);
+	const highlightStore = featureStores.highlightStore;
+	useEffect(() => {
+		highlightStore.install(highlight.highlight, highlight.highlightError);
+	}, [highlight.highlight, highlight.highlightError, highlightStore]);
 	const stageLayoutStore = featureStores.stageLayoutStore;
 	useEffect(() => {
 		stageLayoutStore.install(stageLayout);

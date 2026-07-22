@@ -6,7 +6,10 @@ import {
 	useSpeedGroupsBpm,
 } from "../../features/configuration/ConfigurationState";
 import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
-import { useServer } from "../../api/ServerContext";
+import {
+	useHighlightActions,
+	useHighlightErrorMessage,
+} from "../../features/highlight/HighlightState";
 import {
 	usePlaybackDeskView,
 	usePlaybackRuntimeActions,
@@ -25,7 +28,8 @@ import {
 } from "./PlaybackPageDialogs";
 
 export function HardwareControlSummary() {
-	const server = useServer();
+	const highlightError = useHighlightErrorMessage();
+	const highlightActions = useHighlightActions();
 	const configurationActions = useConfigurationActions();
 	const { state, dispatch } = useApp();
 	const [pagesOpen, setPagesOpen] = useState(false);
@@ -126,8 +130,8 @@ export function HardwareControlSummary() {
 				))}
 			</div>
 			<HighlightErrorAlert
-				message={server.highlightError}
-				onDismiss={server.dismissHighlightError}
+				message={highlightError}
+				onDismiss={() => highlightActions?.dismissHighlightError()}
 			/>
 			{timeInput &&
 				createPortal(

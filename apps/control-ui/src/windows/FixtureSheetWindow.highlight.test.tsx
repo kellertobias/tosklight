@@ -154,6 +154,10 @@ const state = {
 const dispatch = vi.fn();
 
 vi.mock("../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../features/highlight/HighlightState", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	useHighlightSnapshot: () => server.highlight,
+}));
 vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
 	useBootstrapReady: () => true,
 	useActiveShowId: () => null,

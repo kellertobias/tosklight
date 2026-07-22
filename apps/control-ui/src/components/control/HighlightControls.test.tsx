@@ -39,6 +39,18 @@ const server = {
 };
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../../features/highlight/HighlightState", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	useHighlightSnapshot: () => server.highlight,
+	useHighlightErrorMessage: () => server.highlightError,
+	useHighlightActions: () => ({
+		highlightAction: server.highlightAction,
+		dismissHighlightError: server.dismissHighlightError,
+	}),
+}));
+vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
+	useSessionSnapshot: () => server.session,
+}));
 
 afterEach(() => {
 	cleanup();

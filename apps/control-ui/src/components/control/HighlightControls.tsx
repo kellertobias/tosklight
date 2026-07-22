@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { HighlightAction, HighlightFixtureSummary, HighlightState, PatchedFixture } from "../../api/types";
-import { useServer } from "../../api/ServerContext";
+import { useSessionSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
+import {
+  useHighlightActions,
+  useHighlightErrorMessage,
+  useHighlightSnapshot,
+} from "../../features/highlight/HighlightState";
 import { usePatchView } from "../../features/patch/PatchContext";
 import { usePatchFixturesById } from "../../features/patch/PatchState";
 import { Button } from "../common";
@@ -61,15 +66,17 @@ function useHighlightPatchedFixtures(state: HighlightState | null) {
 }
 
 export function HighlightControls() {
-  const server = useServer();
-  const state = server.highlight;
+  const state = useHighlightSnapshot();
+  const highlightError = useHighlightErrorMessage();
+  const highlightActions = useHighlightActions();
+  const session = useSessionSnapshot();
   const [pending, setPending] = useState<HighlightAction | null>(null);
   const pendingRef = useRef(false);
   const patch = useHighlightPatchedFixtures(state);
   const ownedByOther = Boolean(
     state?.owner_user_id
-    && server.session?.user.id
-    && state.owner_user_id !== server.session.user.id,
+    && session?.user.id
+    && state.owner_user_id !== session.user.id,
   );
   const ownerLabel = state?.owner_user_name?.trim() || "another operator";
   const outputSuppressed = Boolean(state?.capture_only || (state?.active && !state.output_enabled));
@@ -83,16 +90,16 @@ export function HighlightControls() {
   }, [ownedByOther, state]);
 
   const invoke = useCallback(async (action: HighlightAction) => {
-    if (!allowed(action)) return;
+    if (!allowed(action) || !highlightActions) return;
     pendingRef.current = true;
     setPending(action);
     try {
-      await server.highlightAction(action);
+      await highlightActions.highlightAction(action);
     } finally {
       pendingRef.current = false;
       setPending(null);
     }
-  }, [allowed, server]);
+  }, [allowed, highlightActions]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -169,7 +176,7 @@ export function HighlightControls() {
         disabled={!allowed("all")}
         onClick={() => void invoke("all")}
       >ALL</Button>
-      <HighlightErrorAlert message={server.highlightError} onDismiss={server.dismissHighlightError}/>
+      <HighlightErrorAlert message={highlightError} onDismiss={() => highlightActions?.dismissHighlightError()}/>
     </section>
   );
 }

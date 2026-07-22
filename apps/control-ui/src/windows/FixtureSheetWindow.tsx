@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useServer } from "../api/ServerContext";
+import { useHighlightSnapshot } from "../features/highlight/HighlightState";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { SourceLegend } from "../components/shared/SourceLegend";
 import { WindowHeader } from "../components/window-kit";
@@ -29,7 +29,7 @@ export function FixtureSheetWindow({
 	compact,
 	showGroupShortcuts,
 }: WindowProps) {
-	const server = useServer();
+	const highlight = useHighlightSnapshot();
 	const selection = useProgrammingSelectionView(active);
 	const selectionActions = useProgrammingSelectionActions(active);
 	const preload = useProgrammerPreloadLifecycleView(active);
@@ -66,8 +66,8 @@ export function FixtureSheetWindow({
 			active,
 		});
 	const presentStep = useMemo(
-		() => createFixtureStepPresenter(server.highlight),
-		[server.highlight],
+		() => createFixtureStepPresenter(highlight),
+		[highlight],
 	);
 	const columns = useMemo(
 		() =>

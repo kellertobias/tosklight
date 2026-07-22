@@ -1,4 +1,13 @@
-import { createContext, type PropsWithChildren, useContext } from "react";
+import {
+	createContext,
+	type PropsWithChildren,
+	useContext,
+	useMemo,
+} from "react";
+import {
+	HighlightActionsProvider,
+	HighlightStateProvider,
+} from "../features/highlight/HighlightState";
 import { FilesProvider } from "../features/files/FilesContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
@@ -98,8 +107,17 @@ export function ServerProvider({
 		refreshCompatibilityState: refresh,
 		reportError: state.setError,
 	};
+	const highlightActions = useMemo(
+		() => ({
+			highlightAction: value.highlightAction,
+			dismissHighlightError: value.dismissHighlightError,
+		}),
+		[value.highlightAction, value.dismissHighlightError],
+	);
 	return (
 		<ServerContext.Provider value={value}>
+			<HighlightStateProvider store={state.highlightStore}>
+			<HighlightActionsProvider actions={highlightActions}>
 			<ServerDeskBoundaries state={state}>
 			<ServerVisualizationRuntimeBoundary state={state}>
 				<ShowObjectsViewProvider
@@ -168,6 +186,8 @@ export function ServerProvider({
 				</ShowObjectsViewProvider>
 			</ServerVisualizationRuntimeBoundary>
 			</ServerDeskBoundaries>
+			</HighlightActionsProvider>
+			</HighlightStateProvider>
 		</ServerContext.Provider>
 	);
 }
