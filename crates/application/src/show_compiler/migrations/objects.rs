@@ -57,6 +57,26 @@ fn migrate_cue_list(object: PortableShowCandidateObject<'_>) -> Result<Value, Ac
             Value::String(cue_list.cues[index].id.to_string()),
         );
     }
+    // Persist the schema's explicit Cuelist-settings defaults for legacy Cuelists that predate a
+    // field. Only absent keys are filled, so the migration is a one-time byte rewrite that stays
+    // idempotent and preserves existing values and unknown extensions.
+    let canonical = serde_json::to_value(&cue_list).map_err(|error| invalid_object(object, error))?;
+    let canonical = canonical_object(&canonical, object)?;
+    let body = required_object_mut(&mut migrated, object)?;
+    for field in [
+        "intensity_priority_mode",
+        "wrap_mode",
+        "restart_mode",
+        "force_cue_timing",
+        "disable_cue_timing",
+        "speed_multiplier",
+    ] {
+        if !body.contains_key(field)
+            && let Some(value) = canonical.get(field)
+        {
+            body.insert(field.into(), value.clone());
+        }
+    }
     Ok(migrated)
 }
 
@@ -82,11 +102,33 @@ fn missing_cue_ids(object: PortableShowCandidateObject<'_>) -> Vec<usize> {
 fn migrate_group(object: PortableShowCandidateObject<'_>) -> Result<Value, ActionError> {
     let mut group = serde_json::from_value::<GroupDefinition>(object.body().clone())
         .map_err(|error| invalid_object(object, error))?;
-    let before = serde_json::to_value(&group).map_err(|error| invalid_object(object, error))?;
     group.id = object.key().id().to_owned();
-    let after = serde_json::to_value(group).map_err(|error| invalid_object(object, error))?;
+    let canonical = serde_json::to_value(group).map_err(|error| invalid_object(object, error))?;
     let mut migrated = object.body().clone();
-    lossless_json::apply_delta(&mut migrated, &before, &after);
+    let body = required_object_mut(&mut migrated, object)?;
+    let canonical = canonical_object(&canonical, object)?;
+    if let Some(id) = canonical.get("id") {
+        body.insert("id".into(), id.clone());
+    }
+    // Persist the schema's explicit defaults for legacy Groups that predate a field, matching the
+    // playback and route migrations. Only absent keys are filled, so the first load after an upgrade
+    // rewrites the object once and every later load leaves it byte-identical, while existing values
+    // and unknown extension fields are preserved.
+    for field in [
+        "color",
+        "icon",
+        "derived_from",
+        "frozen_from",
+        "programming",
+        "master",
+        "playback_fader",
+    ] {
+        if !body.contains_key(field)
+            && let Some(value) = canonical.get(field)
+        {
+            body.insert(field.into(), value.clone());
+        }
+    }
     Ok(migrated)
 }
 

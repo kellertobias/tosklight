@@ -564,12 +564,28 @@ fn object_undo_commits_exact_history_through_one_prepared_boundary() {
 #[test]
 fn object_undo_commits_pending_migrations_in_the_same_compiled_candidate() {
     let rig = TestRig::new();
-    let original = json!({
+    // Groups normalize their schema defaults on load (matching playbacks and routes), so a
+    // legacy-complete Group carries the explicit defaults and generates no pending migration; only
+    // the mismatched-id Group "8" below still needs one.
+    let defaults = json!({
+        "color":null,
+        "icon":null,
+        "derived_from":null,
+        "frozen_from":null,
+        "programming":{},
+        "master":1,
+        "playback_fader":null
+    });
+    let mut original = json!({
         "id":"7",
         "name":"Original",
         "fixtures":[],
         "future_extension":{"kept":true}
     });
+    original
+        .as_object_mut()
+        .unwrap()
+        .extend(defaults.as_object().unwrap().clone());
     rig.seed_object("group", "7", original.clone());
     rig.write_object(
         "group",
