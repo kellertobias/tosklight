@@ -26,10 +26,10 @@ export function FixtureLibraryToolbar({
 	const [searchTarget, setSearchTarget] = useState<HTMLElement | null>(null);
 	const [actionsTarget, setActionsTarget] = useState<HTMLElement | null>(null);
 	useEffect(() => {
-		setSearchTarget(
-			document.getElementById("setup-section-search") ??
-				document.getElementById("setup-section-actions"),
-		);
+		// The Fixture Library title bar exposes one actions surface that carries both the shared
+		// search and the neighbouring Import/Create actions (MANUAL-019), so the search portals into
+		// the actions target rather than a separate search slot.
+		setSearchTarget(document.getElementById("setup-section-actions"));
 		setActionsTarget(document.getElementById("setup-section-actions"));
 	}, []);
 

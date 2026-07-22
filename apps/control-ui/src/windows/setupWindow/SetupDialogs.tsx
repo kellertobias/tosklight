@@ -19,9 +19,6 @@ function FixtureLibraryDialog({ onClose }: { onClose: () => void }) {
 			>
 				<ModalTitleBar
 					title="Fixture Library"
-					search={
-						<div id="setup-section-search" className="setup-section-search" />
-					}
 					actions={
 						<div id="setup-section-actions" className="setup-section-actions" />
 					}

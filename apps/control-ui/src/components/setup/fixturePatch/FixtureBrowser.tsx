@@ -13,6 +13,7 @@ export function FixtureBrowser() {
 		<div className="stacked-modal-layer">
 			<section className="nested-modal fixture-browser-modal">
 				<ModalTitleBar
+					className="fixture-browser-header"
 					title="Add fixture"
 					search={<FixtureBrowserSearch />}
 					closeLabel="Close Add fixture"

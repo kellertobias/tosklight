@@ -24,6 +24,7 @@
 .fixture-library-column-scroll .ui-window-scroller>.ui-button small{display:block;color:var(--muted)}
 .fixture-library-columns>section:not(.fixture-library-detail) .fixture-library-column-scroll .ui-window-scroller>.ui-button{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px}
 .fixture-library-columns>section:not(.fixture-library-detail) .fixture-library-column-scroll .ui-window-scroller>.ui-button>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fixture-library-columns>section:not(.fixture-library-detail) .fixture-library-column-scroll .ui-window-scroller>.ui-button>small{text-align:right}
 .fixture-profile-editor-modal>.ui-modal-titlebar,.fixture-mode-editor-modal>.ui-modal-titlebar{margin:0;border-radius:11px 11px 0 0}
 .ui-modal-title-heading{min-width:0;max-width:min(360px,32vw);align-self:stretch;display:grid;align-content:center;flex:none;box-sizing:border-box;margin:0;padding:0 16px;overflow:hidden;color:var(--text);font-size:18px;line-height:1.2;text-overflow:ellipsis;white-space:nowrap}
 .ui-modal-title-tabs{border-left:1px solid var(--line2)}
