@@ -35,18 +35,22 @@ the failures split cleanly:
 - **Full suite at HEAD (`47a9466`): 169 passed, 93 failed, 26 skipped, 0 flaky.**
 - Diff of failing spec titles: **0 fixed, exactly 5 introduced** by the 28 commits since `47030ed`.
 
-**Latest (2026-07-22), HEAD `4007d0b`: 189 passed, 73 failed** (from pre-work 169/93; +20/-20,
-no regressions). Nine commits cleared: A+C definition re-hydration & FIXTURE-001 (`6206b1e`),
-HIGHLIGHT-001 (`b361a73`), the 4 introduced Patch regressions (`41c11b2`), cluster-B GO/programmer
-decoupling (`3c4516a`, MIB-001/CUE-012/TIME-003), SHOW-004 group/cue-defaults normalization
-(`b0f0d6d`, +CUE-011 supplemental), and the API-001 revision-conflict string (`4007d0b`). Remaining
-73 by cluster: **cluster D** ~40 @ui interaction timeouts (per-interaction UI navigation, NOT one
-shared fix — confirmed via a11y snapshot); **fixture-definition-projection** ~5 (SHOW-000 @api/@ui,
-virtual-dimmer-metadata, DMX-006/008 — the read/re-hydrated definition lacks the synthetic
-virtual-dimmer intensity parameter the engine applies as a channel scale, and DMX derives a custom
-inline definition the schema-v2 write rejects); **cluster F** (CUE-011 flaky renumber-extra-revision,
-CUE-012, SOUND-001, COLOR-RANGE-001, MERGE, DIM-001); **cluster E** ~9 layout; plus OSC-005/006,
-MANUAL-019, TIME, TEXT, UPDATE. See e2e-failure-diagnosis.md "third pass" for precise root causes.
+**Latest (2026-07-22), HEAD `1a348fd`: 192 passed, 70 failed** (from pre-work 169/93; +23/-23,
+no regressions across the whole pass). Eleven commits cleared: A+C definition re-hydration &
+FIXTURE-001 (`6206b1e`), HIGHLIGHT-001 (`b361a73`), the 4 introduced Patch regressions (`41c11b2`),
+cluster-B GO/programmer decoupling (`3c4516a`, MIB-001/CUE-012/TIME-003), SHOW-004 group/cue-defaults
+normalization (`b0f0d6d`), the API-001 revision-conflict string (`4007d0b`), and the abstract
+virtual-dimmer intensity synthesis (`1a348fd`, SHOW-000 @api/@supplemental). Remaining 70 by cluster:
+**cluster D** ~40 @ui interaction timeouts (per-interaction UI navigation, NOT one shared fix —
+confirmed via a11y snapshot showing the app loads but the expected view/mode is not active);
+**fixture-schema** ~5 (virtual-dimmer-metadata @restart needs a patched_fixture load-migration arm so
+the persisted bytes change; DMX-006/008 derive a custom inline definition whose stale profile_snapshot
+the schema-v2 write rejects — both need a fixture-schema decision, use the build-light-fixtures skill);
+**cluster F** (CUE-011 flaky renumber-extra-revision, CUE-012, SOUND-001, COLOR-RANGE-001, MERGE,
+DIM-001); **cluster E** ~9 layout (MANUAL-019 x5 title-bar search element, OSC-005 command-line
+trailing space); plus OSC-006, TIME, TEXT, UPDATE. See e2e-failure-diagnosis.md for precise root
+causes. Recommended next: cluster E (MANUAL-019 shared title-bar-search element, likely +5) and the
+patched_fixture load-migration; cluster D needs a per-family frontend investigation.
 
 **Superseded earlier pass, HEAD was `41c11b2`: 179 passed, 83 failed** (262-test executed
 population unchanged). +10/−10 vs pre-work (169/93), no regressions. Landed four commits:
