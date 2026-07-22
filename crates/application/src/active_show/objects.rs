@@ -81,7 +81,7 @@ fn validate_object_revision(
         Err(ActionError::new(
             ActionErrorKind::Conflict,
             format!(
-                "stale {} {} revision",
+                "stale {} {} revision conflict",
                 mutation.kind.as_str(),
                 mutation.object_id
             ),
