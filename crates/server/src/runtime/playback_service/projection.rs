@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use light_application::{
-    ActionContext, ActionError, AutomaticPlaybackProjection, PlaybackDeskProjection,
-    PlaybackRuntimeIdentity, PlaybackRuntimeProjection, PlaybackShowScope,
+    ActionContext, ActionError, ActionErrorKind, AutomaticPlaybackProjection,
+    PlaybackDeskProjection, PlaybackRuntimeIdentity, PlaybackRuntimeProjection, PlaybackShowScope,
     PlaybackTargetProjection,
 };
 use light_core::CueListId;
@@ -173,7 +173,14 @@ fn project_group(
     requested: PlaybackRuntimeIdentity,
     group_id: light_application::PlaybackGroupId,
 ) -> Result<PlaybackRuntimeProjection, ActionError> {
-    let playback_number = resolve_group_playback(snapshot, group_id.as_str())?;
+    // A stale or forged Group->Playback assignment must not fail the whole runtime snapshot: the
+    // Group stays visible and simply projects with no assigned Playback until the operator
+    // reassigns it. Operator actions still reject the stale assignment through the action port.
+    let playback_number = match resolve_group_playback(snapshot, group_id.as_str()) {
+        Ok(number) => number,
+        Err(error) if error.kind == ActionErrorKind::Conflict => None,
+        Err(error) => return Err(error),
+    };
     Ok(PlaybackRuntimeProjection {
         scope,
         requested,
