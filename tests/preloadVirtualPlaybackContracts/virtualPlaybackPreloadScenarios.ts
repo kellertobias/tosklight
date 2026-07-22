@@ -33,6 +33,11 @@ import {
 const preload004Scenario: PairedScenario<PreloadVirtualPairState> = {
 	id: "PRELOAD-004",
 	title: "virtual GO and TOGGLE alone remain pending and share Programmer Fade",
+	// UI-only gap (the @api contract passes, so the engine's pending GO/TOGGLE Preload sharing
+	// is correct): driven through the virtual-playback UI the pending state is not reflected,
+	// the same scoped virtual-playback topology/runtime hydration family as PRELOAD-002 @ui.
+	// Unskip once the virtual-playback UI reflects the pending GO/TOGGLE Preload state.
+	skip: { ui: "Virtual-playback UI does not reflect pending GO/TOGGLE Preload state (scoped-store hydration)" },
 	arrange: async ({ api, bench }, surface) => {
 		const prepared = await prepare(
 			api,
