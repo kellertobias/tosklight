@@ -424,6 +424,9 @@
           "format": "uint64",
           "minimum": 0
         },
+        "profile_snapshot": {
+          "description": "Server-resolved parameterized profile snapshot for this revision. Patch programmer-surface\nconsumers build head parameters, channels, and control actions from it client-side without\nthe fixture catalog. Carried server->client only; the patch *request* boundary still\nexcludes fixture definitions. Absent (null) on older payloads, so clients must tolerate it."
+        },
         "referenced_modes": {
           "description": "Only modes referenced by fixtures in the containing snapshot or delta, never the catalog.",
           "type": "array",

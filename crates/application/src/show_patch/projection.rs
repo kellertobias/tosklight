@@ -96,6 +96,7 @@ pub(super) fn profile_projection(
                     .map(|mode| mode.projection().clone())
             })
             .collect::<Result<_, _>>()?,
+        profile_snapshot: profile.clone(),
     })
 }
 

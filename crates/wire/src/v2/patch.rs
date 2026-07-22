@@ -215,7 +215,7 @@ pub struct PatchHighlightOverrideProjection {
 }
 
 /// Deduplicated, Patch-only metadata for one immutable profile revision.
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PatchProfileRevisionProjection {
     pub profile_id: Uuid,
     #[ts(type = "number")]
@@ -228,6 +228,13 @@ pub struct PatchProfileRevisionProjection {
     /// Only modes referenced by fixtures in the containing snapshot or delta, never the catalog.
     #[schemars(length(min = 1))]
     pub referenced_modes: Vec<PatchModeProjection>,
+    /// Server-resolved parameterized profile snapshot for this revision. Patch programmer-surface
+    /// consumers build head parameters, channels, and control actions from it client-side without
+    /// the fixture catalog. Carried server->client only; the patch *request* boundary still
+    /// excludes fixture definitions. Absent (null) on older payloads, so clients must tolerate it.
+    #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+    #[ts(type = "unknown")]
+    pub profile_snapshot: serde_json::Value,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

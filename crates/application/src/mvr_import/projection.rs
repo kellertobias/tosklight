@@ -40,6 +40,7 @@ pub(super) fn project_fixture(mut fixture: PatchedFixture) -> Result<PlannedFixt
             name: mode.name.clone(),
             splits: mode.splits.clone(),
         }],
+        profile_snapshot: stored.profile().clone(),
     };
     Ok(PlannedFixture {
         profile,

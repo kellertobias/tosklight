@@ -20,6 +20,7 @@ import {
 	validatePatchSnapshot,
 } from "./patchWireValidation";
 import { WireValidationError } from "./wireValidation";
+import type { FixtureProfile } from "./types";
 
 export function decodePatchSnapshot(value: unknown): FeaturePatchSnapshot {
 	const snapshot = validatePatchSnapshot(value);
@@ -163,5 +164,7 @@ function mapProfileRevision(
 			name: mode.name,
 			splits: mode.splits.map((split) => ({ ...split })),
 		})),
+		profileSnapshot:
+			(profile.profile_snapshot as FixtureProfile | undefined) ?? null,
 	};
 }

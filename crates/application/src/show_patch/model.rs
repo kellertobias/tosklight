@@ -50,7 +50,7 @@ pub struct PatchModeProjection {
 }
 
 /// Deduplicated metadata for one immutable profile revision referenced by a patch projection.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PatchProfileRevisionProjection {
     pub profile_id: FixtureId,
     pub profile_revision: Revision,
@@ -60,6 +60,9 @@ pub struct PatchProfileRevisionProjection {
     pub fixture_type: String,
     pub patch_policy: PatchPolicy,
     pub referenced_modes: Vec<PatchModeProjection>,
+    /// Server-resolved parameterized profile snapshot for this revision, carried to patch
+    /// consumers so they can build head parameters, channels, and control actions client-side.
+    pub profile_snapshot: serde_json::Value,
 }
 
 /// One committed semantic patch change. The event envelope owns its monotonic sequence.

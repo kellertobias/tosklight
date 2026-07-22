@@ -624,7 +624,14 @@ export type PatchProfileRevisionProjection = { profile_id: string, profile_revis
 /**
  * Only modes referenced by fixtures in the containing snapshot or delta, never the catalog.
  */
-referenced_modes: Array<PatchModeProjection>, };
+referenced_modes: Array<PatchModeProjection>,
+/**
+ * Server-resolved parameterized profile snapshot for this revision. Patch programmer-surface
+ * consumers build head parameters, channels, and control actions from it client-side without
+ * the fixture catalog. Carried server->client only; the patch *request* boundary still
+ * excludes fixture definitions. Absent (null) on older payloads, so clients must tolerate it.
+ */
+profile_snapshot?: unknown, };
 
 export type PatchDelta = { show_id: string, show_revision: number, patch_revision: number,
 /**

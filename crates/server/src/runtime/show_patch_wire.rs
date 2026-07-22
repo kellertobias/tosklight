@@ -296,5 +296,6 @@ fn wire_profile(
                     .collect(),
             })
             .collect(),
+        profile_snapshot: profile.profile_snapshot.clone(),
     }
 }

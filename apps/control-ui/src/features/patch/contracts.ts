@@ -1,4 +1,6 @@
 /** Feature-owned Patch models. Serialized wire DTOs are mapped at the API boundary. */
+import type { FixtureProfile } from "../../api/types";
+
 export interface PatchSplitAssignment {
 	split: number;
 	universe: number | null;
@@ -81,6 +83,12 @@ export interface PatchProfileRevision {
 	fixtureType: string;
 	patchPolicy: "dmx" | "visual_only";
 	referencedModes: readonly PatchModeProjection[];
+	/**
+	 * Server-resolved parameterized profile snapshot for this exact revision. Programmer-surface
+	 * consumers build head parameters, channels, and control actions from it when the live library
+	 * lacks the patched revision. Absent (null) on older payloads.
+	 */
+	profileSnapshot: FixtureProfile | null;
 }
 
 export interface PatchChange {

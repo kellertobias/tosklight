@@ -9,6 +9,7 @@ import type {
 	PatchFixtureWrite,
 	PatchProfileRevision,
 } from "./contracts";
+import { fixtureDefinitionFromProfileMode } from "../../components/setup/fixtureProfileModel";
 
 export interface PatchFixtureCandidate {
 	input: PatchFixtureWrite;
@@ -155,6 +156,29 @@ export function patchedFixtureCandidate(
 	};
 }
 
+/**
+ * Builds a complete definition from the exact-revision profile snapshot carried in the patch
+ * projection. This is the authoritative fallback when the live fixture library does not hold the
+ * revision a fixture was patched at, so programmer-surface readers still see full head parameters,
+ * channels, and control actions instead of the parameter-less synthetic definition.
+ */
+function definitionFromSnapshot(
+	profile: PatchProfileRevision,
+	modeId: string,
+): FixtureDefinition | null {
+	const snapshot = profile.profileSnapshot;
+	if (!snapshot) return null;
+	const mode =
+		snapshot.modes.find((candidate) => candidate.id === modeId) ??
+		snapshot.modes[0];
+	if (!mode) return null;
+	try {
+		return fixtureDefinitionFromProfileMode(snapshot, mode);
+	} catch {
+		return null;
+	}
+}
+
 export function projectionToPatchedFixture(
 	projection: PatchFixtureProjection,
 	profile: PatchProfileRevision,
@@ -170,6 +194,7 @@ export function projectionToPatchedFixture(
 		(matchingDefinition(fallback?.definition, projection)
 			? fallback?.definition
 			: null) ??
+		definitionFromSnapshot(profile, projection.modeId) ??
 		syntheticDefinition(profile, projection.modeId);
 	const primary =
 		projection.splitPatches.find((split) => split.split === 1) ??

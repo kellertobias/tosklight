@@ -68,6 +68,7 @@ function profileProjection(): PatchProfileRevision {
 				splits: [{ split: 1, footprint: 16 }],
 			},
 		],
+		profileSnapshot: null,
 	};
 }
 

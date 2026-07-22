@@ -182,5 +182,6 @@ fn profile_projection() -> PatchProfileRevisionProjection {
                 footprint: 8,
             }],
         }],
+        profile_snapshot: serde_json::Value::Null,
     }
 }
