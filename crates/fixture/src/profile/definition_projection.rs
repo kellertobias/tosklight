@@ -6,6 +6,7 @@ use crate::{
     ByteOrder, ChannelComponent, ColorCalibration, EmitterCalibration, FixtureDefinition,
     FixturePhysicalProperties, LogicalHead, Parameter, ParameterMetadata,
 };
+use light_core::AttributeKey;
 use std::collections::{BTreeMap, HashMap};
 use uuid::Uuid;
 
@@ -117,18 +118,51 @@ fn logical_heads(mode: &FixtureMode, primary_slots: &HashMap<Uuid, u16>) -> Vec<
     mode.heads
         .iter()
         .enumerate()
-        .map(|(index, head)| LogicalHead {
-            index: index as u16,
-            name: head.name.clone(),
-            shared: head.master_shared,
-            parameters: mode
+        .map(|(index, head)| {
+            let mut parameters = mode
                 .channels
                 .iter()
                 .filter(|channel| channel.head_id == head.id)
                 .map(|channel| parameter(channel, primary_slots))
-                .collect(),
+                .collect::<Vec<_>>();
+            // A head whose channels react to virtual intensity but that has no physical intensity
+            // channel (e.g. an RGB head whose intensity is derived) needs the abstract
+            // virtual-dimmer intensity parameter the operator controls. This reverses the
+            // legacy->profile migration, which drops that abstract intensity and instead marks the
+            // colour channels reacts_to_virtual_intensity; the resolved definition restores it so
+            // programmer surfaces expose the derived intensity.
+            let reacts_to_virtual = mode
+                .channels
+                .iter()
+                .any(|channel| channel.head_id == head.id && channel.reacts_to_virtual_intensity);
+            let has_intensity = parameters
+                .iter()
+                .any(|parameter| parameter.attribute.is_intensity());
+            if reacts_to_virtual && !has_intensity {
+                parameters.insert(0, abstract_virtual_dimmer_intensity());
+            }
+            LogicalHead {
+                index: index as u16,
+                name: head.name.clone(),
+                shared: head.master_shared,
+                parameters,
+            }
         })
         .collect()
+}
+
+/// The operator-facing virtual dimmer for heads whose intensity is derived rather than a physical
+/// DMX channel. It carries no DMX components; the engine applies it as a scale on the head's
+/// virtual-intensity-reacting channels.
+fn abstract_virtual_dimmer_intensity() -> Parameter {
+    Parameter {
+        attribute: AttributeKey("intensity".into()),
+        components: Vec::new(),
+        default: 1.0,
+        virtual_dimmer: true,
+        metadata: ParameterMetadata::default(),
+        capabilities: Vec::new(),
+    }
 }
 
 fn parameter(channel: &FixtureChannel, primary_slots: &HashMap<Uuid, u16>) -> Parameter {
