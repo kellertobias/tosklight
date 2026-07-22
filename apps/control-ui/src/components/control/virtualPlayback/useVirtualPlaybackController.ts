@@ -67,9 +67,12 @@ export function useVirtualPlaybackController(
 		() => mappedPlaybackNumbers(page?.slots, rows * columns),
 		[columns, page, rows],
 	);
-	const runtimes = usePlaybackProjectionMap(
-		authorityReady ? playbackNumbers : [],
-	);
+	// Activate the runtime for the current page's playbacks as soon as the topology and page are
+	// known (playbackNumbers is empty until then). Gating this on authorityReady deadlocked the
+	// pane: authorityReady needs the runtime "ready", but the runtime only becomes ready once it is
+	// activated for these identities, so a Virtual Playbacks pane opened on its own stayed stuck at
+	// "Loading Virtual Playbacks…".
+	const runtimes = usePlaybackProjectionMap(playbackNumbers);
 	const zones = useVirtualPlaybackSurfaceZones({
 		surfaceId,
 		active,
