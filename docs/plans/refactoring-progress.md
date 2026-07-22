@@ -35,7 +35,20 @@ the failures split cleanly:
 - **Full suite at HEAD (`47a9466`): 169 passed, 93 failed, 26 skipped, 0 flaky.**
 - Diff of failing spec titles: **0 fixed, exactly 5 introduced** by the 28 commits since `47030ed`.
 
-**Latest (2026-07-22), HEAD `1a348fd`: 192 passed, 70 failed** (from pre-work 169/93; +23/-23,
+**Latest (2026-07-22), HEAD `61f7007`: 230 passed, 36 failed** (from pre-work 169/93). The biggest
+lever was the shared cluster-D root cause: the v2 playback runtime projection fataled the entire
+(Group- and playback-shared) runtime store when any Group carried a stale/missing assigned-Playback
+reference, freezing every dependent @ui surface at "Group runtime loading…". `project_group` now
+degrades a stale assignment to no-assignment for the display projection (`61f7007`), clearing ~35 @ui
+timeouts at once (CUE-*, PBK-*, MERGE-*, PRELOAD-001, PLAYBACK-SELECT-001, GROUP-003/4/5, PROG-002/003,
+DIM-001, UPDATE-001/002, CROSS-002). Pinned with a traced repro (per the diagnosis's cluster-D guidance).
+Remaining 36 are diverse per-surface/per-assertion items (no further single shared cause): MANUAL-019
+x4 (blocked on manual-vs-review decisions / a missing recovery-browser feature), DMX-006/008 +
+virtual-dimmer-metadata (fixture-schema decision), OSC-005/006, TIME-001/002, and assorted @ui/@supplemental-ui
+(CUE-012, SOUND-001, COLOR-RANGE-001, CMD-002, TEXT-015, PBK @supplemental-ui hardware variants). SHOW-005
+@ui and CUE-011 @supplemental-ui are flaky. See e2e-failure-diagnosis.md for per-item root causes.
+
+**Superseded, HEAD `1a348fd`: 192 passed, 70 failed** (from pre-work 169/93; +23/-23,
 no regressions across the whole pass). Eleven commits cleared: A+C definition re-hydration &
 FIXTURE-001 (`6206b1e`), HIGHLIGHT-001 (`b361a73`), the 4 introduced Patch regressions (`41c11b2`),
 cluster-B GO/programmer decoupling (`3c4516a`, MIB-001/CUE-012/TIME-003), SHOW-004 group/cue-defaults
