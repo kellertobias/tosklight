@@ -104,7 +104,7 @@ test.describe("docs/testing/00-generate-show-files.md", () => {
       const properties = page.getByRole("dialog", { name: "Group properties" });
       await properties.getByLabel("Group name").fill("Copy Center Spot");
       await properties.getByRole("button", { name: /#718596/ }).click();
-      await page.getByRole("button", { name: "Use color #1bd6ec" }).click();
+      await page.getByRole("option", { name: "Use color #1bd6ec" }).click();
       await properties.getByRole("button", { name: /Choose icon/ }).click();
       await page.getByRole("button", { name: "Use ★" }).click();
       await properties.getByRole("button", { name: "Save group" }).click();
@@ -223,15 +223,15 @@ test.describe("docs/testing/00-generate-show-files.md", () => {
     await expect(properties).toBeVisible();
     await properties.getByLabel("Group name").fill("Copy Center Spot");
     await properties.getByRole("button", { name: /#718596/ }).click();
-    await page.getByRole("button", { name: "Use color #1bd6ec" }).click();
+    await page.getByRole("option", { name: "Use color #1bd6ec" }).click();
     await properties.getByRole("button", { name: /Choose icon/ }).click();
     await page.getByRole("button", { name: "Use ★" }).click();
     await properties.getByRole("button", { name: "Save group" }).click();
     await expect(properties).toBeHidden();
     const editedTile = groupTile(page, "Copy Center Spot");
     await expect(editedTile).toBeVisible();
-    await expect(editedTile.getByLabel("Color #1bd6ec")).toBeVisible();
-    await expect(editedTile.getByLabel("Icon ★")).toBeVisible();
+    await expect(editedTile.getByTitle("Color #1bd6ec")).toBeVisible();
+    await expect(editedTile.getByTitle("Icon ★")).toBeVisible();
 
     await desk.recordStep("VERIFY ALTERNATE GESTURE", "Press SET and tap Group 4; the same modal must reopen with the saved name, color, and icon.");
     await page.getByRole("button", { name: "SET", exact: true }).click();
