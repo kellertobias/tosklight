@@ -211,3 +211,35 @@ Precise root causes for the remaining clusters (investigated this pass, NOT yet 
   fader bank is not in the expected window/desktop/mode (a preset pool renders instead). Each family
   (playback/cue navigation vs command-line/selection) needs its own per-interaction investigation; there
   is no evidence of one shared breakage.
+
+## Fourth pass — cluster E/D now blocked on decisions, not bug fixes (2026-07-22)
+
+Full suite `b449acd`: **193 passed / 69 failed** (SHOW-005 @ui is flaky — oscillates pass/fail across
+identical runs, unrelated to any change). Cleared this pass: MANUAL-019 @ui "fixture browsers share
+title-bar search" (`b449acd` — search relocated to the title bar + nested library detail right-aligned)
+and, earlier, the seven backend clusters (169/93 -> 193/69 over the session, zero real regressions).
+
+The remaining failures are now dominated by items that need a **decision or feature work**, not a safe
+bug fix:
+
+- **MANUAL-019 #62 (File Manager "Create")** — CONTRADICTS THE MANUAL. The test wants a button named
+  "Create"; the manual (`docs/help/05-Pane-Reference/03-utility-and-diagnostics.md:7`) and
+  `tests/16-file-manager.spec.ts` + `FileManagerWindow.test.tsx` all say **"New"**. The implementation
+  is correct per the source-of-truth manual. Renaming to satisfy MANUAL-019 would regress 16-file-manager
+  and the unit tests. Needs a manual-vs-review reconciliation (which spec is authoritative); do NOT change
+  correct code to pass a test that disagrees with docs/help.
+- **MANUAL-019 #65 (Shows & recovery breadcrumb)** — LARGE MISSING FEATURE. `ShowRecoveryFileManager`
+  is two launcher buttons; the test expects a full recovery file browser (breadcrumb/list/load-safely).
+  This is new UI, not a correction.
+- **MANUAL-019 #63/#64 (Cues pane cue-editor Title; Help/DMX/Stage)** — per-surface layout / a 30s
+  interaction timeout (cluster-D-adjacent). Each needs its own frontend investigation with a running desk.
+- **OSC-005** — command-line input shows a trailing space ("G7 + " vs "G7 +"); `command_line.rs:316`
+  appends a trailing space after an operator token. Fixing it risks other command-line tests that rely on
+  the space signalling "awaiting operand" — verify the whole command-line suite before changing.
+- **Cluster D (~40)** — per-interaction UI navigation; no shared fix (confirmed by a11y snapshots).
+- **Fixture-schema (~4)** — virtual-dimmer-metadata @restart needs a patched_fixture load-migration arm
+  (nested, order-preserving default-fill); DMX-006/008 need a re-snapshot-on-write decision.
+
+Recommendation: the highest-value safe remaining work is the **patched_fixture load-migration** and a
+**per-family cluster-D traced-repro pass** with `npm run open` for visual verification. The MANUAL-019
+contradictions and the recovery-browser feature need product/design direction before implementation.
