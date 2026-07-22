@@ -1,7 +1,10 @@
-# ToskLight refactoring — handoff & remaining work
+# ToskLight refactoring — execution record (DONE)
+
+> **Archived 2026-07-23.** This plan was executed to completion (P1–P4, D1–D4). The follow-up
+> work now lives in [`../refactoring-remaining.md`](../refactoring-remaining.md).
 
 Single source of truth for finishing the refactoring on branch `refactoring`. The architectural
-intent lives in [`major-refactoring.md`](./major-refactoring.md); this file is the current state,
+intent lives in [`../major-refactoring.md`](../major-refactoring.md); this file is the current state,
 the remaining chunks, and the decisions needed to finish independently. Older trackers
 (`refactoring-progress.md`, `refactoring-verification-log.md`, `e2e-failure-diagnosis.md`, the root
 `REFACTORING-HANDOFF.md`, `PLAYBACK-RUNTIME-DESK-SCOPE-REFACTOR.md`) are superseded and folded in
