@@ -154,6 +154,15 @@ export async function expectEncoderTarget(
 	page: Page,
 	percent: number,
 ): Promise<void> {
+	const hardwareEncoder = page.getByRole("button", {
+		name: /^Encoder 1: Dimmer,/,
+	});
+	if ((await hardwareEncoder.count()) > 0) {
+		await expect(
+			page.getByRole("button", { name: `Encoder 1: Dimmer, ${percent}%` }),
+		).toBeVisible();
+		return;
+	}
 	const encoder = page.locator(".vertical-touch-fader-stack").filter({
 		hasText: "Enc 1 · Dimmer",
 	});
@@ -167,8 +176,13 @@ export async function expectFixtureSheetDimmer(
 	fixtureNumber: number,
 	percent: number,
 ): Promise<void> {
+	// Target the Dimmer cell by its unique vertical meter rather than a fixed column
+	// index: the fixture sheet's leading columns (ID, Icon, Name/type, and the setup-only
+	// Patch column) vary by context, so an nth() index is fragile.
 	await expect(
-		fixtureRow(page, fixtureNumber).getByRole("cell").nth(2),
+		fixtureRow(page, fixtureNumber)
+			.getByRole("cell")
+			.filter({ has: page.locator(".vertical-meter") }),
 	).toContainText(`${percent}%`);
 }
 
@@ -322,11 +336,23 @@ export async function setDimmerByTouch(
 	page: Page,
 	value: number,
 ): Promise<void> {
-	const encoder = page
+	// A software-only desk renders the first Dimmer encoder as a VerticalTouchFader with
+	// a "Set value" button; a desk with OSC hardware attached renders it as a
+	// HardwareEncoderDisplay button instead. Both open an equivalent number-entry dialog,
+	// so drive whichever surface the desk currently shows.
+	const softwareSet = page
 		.locator(".vertical-touch-fader-stack")
-		.filter({ hasText: "Enc 1 · Dimmer" });
-	await encoder.getByRole("button", { name: "Set value" }).click();
-	const dialog = page.getByRole("dialog", { name: "Enc 1 · Dimmer value" });
+		.filter({ hasText: "Enc 1 · Dimmer" })
+		.getByRole("button", { name: "Set value" });
+	const hardwareEncoder = page.getByRole("button", {
+		name: /^Encoder 1: Dimmer,/,
+	});
+	await expect(softwareSet.or(hardwareEncoder).first()).toBeVisible();
+	const hardware = (await hardwareEncoder.count()) > 0;
+	await (hardware ? hardwareEncoder : softwareSet).click();
+	const dialog = page.getByRole("dialog", {
+		name: hardware ? "Encoder 1 value" : "Enc 1 · Dimmer value",
+	});
 	await expect(dialog).toBeVisible();
 	await page.keyboard.type(String(value));
 	await page.keyboard.press("Enter");
