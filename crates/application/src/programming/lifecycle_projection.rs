@@ -18,7 +18,8 @@ pub struct ProgrammingLifecycleProgrammer {
     pub connected: bool,
     pub selected_fixture_count: u64,
     pub normal_value_count: u64,
-    /// True only while retained active Preload fixture or Group values contribute to output.
+    /// True while retained active Preload fixture or Group values contribute to output, or while
+    /// a Preload GO has committed queued Playback activations that have not been released yet.
     pub preload_active: bool,
     pub sessions: Vec<ProgrammingLifecycleSession>,
 }

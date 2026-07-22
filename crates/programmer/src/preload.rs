@@ -25,7 +25,11 @@ impl ProgrammerRegistry {
         let _mutation_guard = mutation_gate.lock();
         let states = self.states.read();
         let state = states.get(&self.key(session))?;
-        Some(!state.preload_active.is_empty() || !state.preload_group_active.is_empty())
+        Some(
+            !state.preload_active.is_empty()
+                || !state.preload_group_active.is_empty()
+                || state.preload_playback_active,
+        )
     }
 
     pub fn activate_preload(&self, session: SessionId) -> bool {
@@ -65,6 +69,11 @@ impl ProgrammerRegistry {
                     .entry(group)
                     .or_default()
                     .extend(attributes);
+            }
+            // Committed queued Playback activations keep the Preload scene releasable via
+            // hold-to-release even when no attribute values were retained.
+            if !state.preload_playback_pending.is_empty() {
+                state.preload_playback_active = true;
             }
             // GO publishes the prepared values, then returns input to the live
             // programmer. Entering preload again starts the next blind edit.
@@ -193,7 +202,8 @@ impl ProgrammerRegistry {
             || !state.preload_active.is_empty()
             || !state.preload_group_pending.is_empty()
             || !state.preload_group_active.is_empty()
-            || !state.preload_playback_pending.is_empty();
+            || !state.preload_playback_pending.is_empty()
+            || state.preload_playback_active;
         if !changed {
             return false;
         }
@@ -203,6 +213,7 @@ impl ProgrammerRegistry {
         state.preload_group_pending.clear();
         state.preload_group_active.clear();
         state.preload_playback_pending.clear();
+        state.preload_playback_active = false;
         state.blind = false;
         state.last_activity = self.clock.now();
         let user_id = state.user_id;

@@ -261,11 +261,7 @@ export function registerPbk005LifecycleScenario(): void {
 }
 
 export function registerPbk005FeedbackScenario(): void {
-	// UI-only gap (the @api, @ui, and @supplemental contracts pass, so the engine's Swap/Temp
-	// lifetimes are correct): the on-screen held-Swap / toggled-Temp interaction never issues the
-	// expected playback action request (page.waitForRequest times out), so the detailed lifetime
-	// feedback is not exercised through this UI path. Unskip once the interaction issues the request.
-	test.skip("PBK-005 @supplemental-ui › held Swap and toggled Temp show detailed lifetime feedback", async ({
+	test("PBK-005 @supplemental-ui › held Swap and toggled Temp show detailed lifetime feedback", async ({
 		api,
 		bench,
 		desk,
@@ -340,15 +336,20 @@ export function registerPbk005FeedbackScenario(): void {
 			name: "TEMP",
 			exact: true,
 		});
+		// The card issues its actions through the v2 desk playback-actions route; the
+		// legacy per-cuelist v1 endpoint is no longer on the interaction path.
 		const [tempRequest] = await Promise.all([
-			page.waitForRequest((request) =>
-				request.url().endsWith("/api/v1/cuelists/55/button"),
+			page.waitForRequest(
+				(request) =>
+					request.url().includes("/playback-actions") &&
+					request.method() === "POST" &&
+					request.postDataJSON()?.address?.playback_number === 55,
 			),
 			temp.click(),
 		]);
 		expect(tempRequest.postDataJSON()).toMatchObject({
-			button: 2,
-			pressed: true,
+			address: { kind: "playback", playback_number: 55 },
+			action: { type: "configured_button", number: 2, pressed: true },
 			surface: "physical",
 		});
 		await expect

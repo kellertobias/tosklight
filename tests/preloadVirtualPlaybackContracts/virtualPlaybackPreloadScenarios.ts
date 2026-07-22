@@ -33,12 +33,6 @@ import {
 const preload004Scenario: PairedScenario<PreloadVirtualPairState> = {
 	id: "PRELOAD-004",
 	title: "virtual GO and TOGGLE alone remain pending and share Programmer Fade",
-	// UI-only residue (the @api contract passes; the topology-writer fixes cured the earlier
-	// pending-state gaps): after PRELOAD GO applies the queued actions, the command bar's
-	// preload lifecycle view goes stale — the hold-to-release gesture finds no active scene
-	// and the label does not return to "PRELOAD". Needs a dedicated look at the preload
-	// lifecycle store after a GO issued from the same desk.
-	skip: { ui: "Preload lifecycle view goes stale after PRELOAD GO; hold-to-release cannot fire" },
 	arrange: async ({ api, bench }, surface) => {
 		const prepared = await prepare(
 			api,

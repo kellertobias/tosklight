@@ -64,6 +64,10 @@ pub struct ProgrammerState {
     pub preload_group_active: GroupProgrammerValues,
     #[serde(default)]
     pub preload_playback_pending: Vec<PreloadPlaybackAction>,
+    /// True while a Preload GO has committed queued Playback activations that hold-to-release has
+    /// not released yet. Outside undo history: the activations themselves are not undoable.
+    #[serde(default)]
+    pub preload_playback_active: bool,
     pub connected: bool,
     pub last_activity: DateTime<Utc>,
     #[serde(default)]

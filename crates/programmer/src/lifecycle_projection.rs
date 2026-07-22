@@ -111,7 +111,9 @@ fn lifecycle_summary(
         connected_sessions: connected_sessions(key, sessions),
         selected_fixture_count: selected_fixture_count(key, sessions, command_contexts, selections),
         normal_value_count: value_count(state.values.len(), &state.group_values),
-        preload_active: !state.preload_active.is_empty() || !state.preload_group_active.is_empty(),
+        preload_active: !state.preload_active.is_empty()
+            || !state.preload_group_active.is_empty()
+            || state.preload_playback_active,
     }
 }
 

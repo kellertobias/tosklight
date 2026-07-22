@@ -93,6 +93,7 @@ impl ProgrammerRegistry {
             preload_group_pending: HashMap::new(),
             preload_group_active: HashMap::new(),
             preload_playback_pending: vec![],
+            preload_playback_active: false,
             connected: true,
             last_activity: self.clock.now(),
             command_line: String::new(),
