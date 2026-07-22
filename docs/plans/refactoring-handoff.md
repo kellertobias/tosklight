@@ -69,12 +69,19 @@ DEGRP is implemented two ways. Keypad `GROUP GROUP <id>`
 Per the model, the **keypad path is wrong**.
 1. Make keypad DEGRP dereference to `Sources` (individual `Fixture` refs) — identical to the
    double-click gesture; the two must match.
-2. Remove `SelectionExpression::FrozenGroup` and its handling (`selection.rs`, `group_recording.rs`,
-   `update_capture.rs`, `highlight/selection.rs`) once nothing produces it. **First** check whether
-   `selection_expression` is persisted in show files: if yes, add a load-migration
-   (`frozen_group` → dereferenced `sources`) and test old-show load; if it is live-only programmer
-   state, remove cleanly. Do **not** touch the unrelated `groups::FrozenGroup` struct (`frozen_from`
-   on recorded groups — a legitimate referenced/derived-group concept).
+2. Stop producing `SelectionExpression::FrozenGroup` (nothing should after step 1), then retire it.
+   **Persistence check result:** `selection_expression` is NOT in the show file, but it IS
+   serialized in the **durable programmer** snapshot for restart recovery — `ProgrammerState` and
+   `ProgrammerSnapshot` derive `Serialize/Deserialize` over `selection_expression`
+   (`crates/programmer/src/state.rs:26,49`) — and it is in the `crates/wire` interaction schema. So
+   a hard enum-variant removal would break deserialization of a persisted programmer that holds a
+   `frozen_group`, and change the wire contract. Retire it **tolerantly**: on deserialize, map a
+   legacy `frozen_group` selection to the dereferenced `sources` form (custom `Deserialize` or a
+   post-load normalize), keep the wire regenerated (`cargo run -p light-wire --example
+   generate-contracts`), and test restart recovery of an old programmer snapshot. Only then delete
+   the variant's producers/handling (`selection.rs`, `group_recording.rs`, `update_capture.rs`,
+   `highlight/selection.rs`). Do **not** touch the unrelated `groups::FrozenGroup` struct
+   (`frozen_from` on recorded groups — a legitimate referenced/derived-group concept).
 3. Fix GROUP-004 @supplemental (`tests/support/foundational/supplementalGroups.ts`): expect
    `selection_expression.type == "sources"` after DEGRP and **no** `frozen_from` on the recorded
    group. Keep `docs/help/30-Programmer/01-command-line.md` consistent (it already says dereference
