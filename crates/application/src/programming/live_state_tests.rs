@@ -369,7 +369,12 @@ fn external_interaction_requires_an_operator_session_before_running_adapter_work
 }
 
 #[test]
-fn external_interaction_rejects_an_unknown_session_before_running_adapter_work() {
+fn external_interaction_tolerates_a_session_without_a_live_programmer() {
+    // An authenticated operator session whose Programmer authority was released (for example by a
+    // short-lived command/OSC transport) while the desk session itself remains open must still run
+    // playback and other external interactions. The wrapped operation runs and, with no Programmer
+    // state to reconcile, no spurious Programmer change is published. Playback GO/release over the
+    // compatibility routes depends on this tolerance.
     let setup = LiveSetup::new(8);
     let context = ActionContext::operator(
         setup.context.desk_id,
@@ -379,15 +384,17 @@ fn external_interaction_rejects_an_unknown_session_before_running_adapter_work()
     );
     let ran = AtomicBool::new(false);
 
-    let error = setup
+    let result = setup
         .service
         .run_external_interaction(&context, &setup.ports, || {
             ran.store(true, Ordering::Relaxed)
-        })
-        .unwrap_err();
+        });
 
-    assert_eq!(error.kind, crate::ActionErrorKind::NotFound);
-    assert!(!ran.load(Ordering::Relaxed));
+    assert!(
+        result.is_ok(),
+        "external interaction should run without a live programmer"
+    );
+    assert!(ran.load(Ordering::Relaxed));
     assert_eq!(setup.events.latest_sequence(), 0);
 }
 

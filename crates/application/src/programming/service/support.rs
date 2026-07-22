@@ -105,6 +105,7 @@ pub(super) fn selection_replace_error(error: SelectionReplaceError) -> ActionErr
     }
 }
 
+#[derive(Default)]
 pub(super) struct Snapshot {
     pub(super) command_line: CommandLineState,
     pub(super) selection_revision: u64,
@@ -121,9 +122,16 @@ impl Snapshot {
         session: SessionId,
         user_id: UserId,
     ) -> Result<Self, ActionError> {
-        let version = programmers
-            .interaction_version(session)
-            .ok_or_else(unknown_programmer)?;
+        // An authenticated session without a live Programmer has no Programmer state to reconcile.
+        // This happens when a playback GO/release runs over the compatibility routes before any
+        // Programmer interaction, or after the session's Programmer authority was released by a
+        // short-lived command/OSC transport while the desk session itself remains open. Playback
+        // and other external interactions must not depend on a live Programmer command line, so
+        // report an empty snapshot instead of rejecting; the wrapped operation still validates and
+        // executes itself, and no spurious Programmer change is published.
+        let Some(version) = programmers.interaction_version(session) else {
+            return Ok(Self::default());
+        };
         if programmers.user_id(session) != Some(user_id) {
             return Err(ActionError::new(
                 ActionErrorKind::Forbidden,
@@ -136,13 +144,13 @@ impl Snapshot {
             capture_mode: version.capture_mode,
             values_generation: programmers
                 .normal_values_generation(session)
-                .ok_or_else(unknown_programmer)?,
+                .unwrap_or_default(),
             preload_values_generation: programmers
                 .preload_values_generation(session)
-                .ok_or_else(unknown_programmer)?,
+                .unwrap_or_default(),
             preload_playback_queue_generation: programmers
                 .preload_playback_queue_generation(session)
-                .ok_or_else(unknown_programmer)?,
+                .unwrap_or_default(),
         })
     }
 
