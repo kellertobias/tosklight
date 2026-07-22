@@ -107,8 +107,13 @@ snapshot. To finish:
 the client; fast-changing runtime values should be *sampled server-side and pushed* to the
 desk instead of request/response loading. Scope:
 
-- The server samples the playback section at **~10 Hz** and pushes only the **changing**
-  values: fade progress (how far into a fade), the playback's dimmer/master value, the
+- The server samples the playback section on **every Nth completed render frame, with N
+  chosen as the divider of the configured output rate nearest ~10 Hz** (44 Hz → N=4 ≈ 11 Hz;
+  40 Hz → 10 Hz; 100 Hz → 10 Hz; 120 Hz → 10 Hz). Deriving the tick from the frame counter —
+  not a wall-clock timer — keeps samples frame-coherent, avoids beating against the output
+  clock, adds no timer wakeups, and keeps the telemetry rate stable across output-rate
+  configurations. It pushes only the **changing** values: fade progress (how far into a
+  fade), the playback's dimmer/master value, the
   current cue step, and button pressed state (so the UI can light the button). Static
   topology (names, slot layout, configuration) stays on the existing snapshot + revisioned
   event path — the telemetry lane carries only volatile runtime samples and must not touch
