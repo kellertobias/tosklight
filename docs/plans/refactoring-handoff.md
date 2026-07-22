@@ -114,11 +114,18 @@ Finish the ownership migrations that are still on the broad facade:
 Gate each with the size/architecture ratchets (`node tools/check-source-size.mjs`,
 `check-architecture.mjs`, `test-command-boundaries.mjs`) and the full suite.
 
-## DECISIONS (fill in before P3; P1 is already decided above)
+## DECISIONS
 
-- **D1 — scope of "done":** For genuinely-unimplemented reworked-UI features (recovery browser,
-  Outputs route editor, DMX monitor rework, Stage scenery, cue-properties responsive layout, Speed
-  Group/PRELOAD controls, sound-to-light UI, color-range drag): _[ANSWER]_.
-- **D2 — default selection mode at desk start:** _[ANSWER: Group | Fixture]_.
-- **D3 — virtual-dimmer-metadata / 16-bit fixture output (DMX-006/008, SHOW-004):** _[ANSWER]_.
-- **D4 — OSC-005 command-line trailing space after `G7 +`:** _[ANSWER: "G7 + " | "G7 +"]_.
+- **D1 — scope of "done": Fix bugs, leave genuine features skipped.** Re-investigate every skip and
+  fix anything that is actually a bug (many are — see the OSC-001 lesson). Do **not** build new
+  features; genuinely-unimplemented reworked-UI features stay skipped-with-reason. "Done" = all
+  implemented behavior correct + documented skips.
+- **D2 — default selection mode at desk start: Fixture.** A bare number selects a Fixture; Group
+  requires the GROUP key; toggle with GRP+ENTER. Align PROG-001/DIM-001 expectations to this.
+- **D3 — virtual-dimmer-metadata / 16-bit fixture output (DMX-006/008, SHOW-004): pending — the
+  maintainer will decide after reviewing context (being prepared).** Keep these skipped until then.
+- **D4 — OSC-005 command-line trailing space: no trailing space (`"G7 +"`).** Command-line spaces are
+  cosmetic only. Change the engine's command-line formatting to not append a trailing space (search
+  `crates/programmer/src/command_line.rs` `format!("{command} {next_token} ")`), update the
+  `softwareKeypad` unit test and `docs/help/30-Programmer/01-command-line.md` to match, and unskip
+  OSC-005 @osc. Verify no other command-line assertion depends on the trailing space.
