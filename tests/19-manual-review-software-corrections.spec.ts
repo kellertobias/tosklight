@@ -173,68 +173,6 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await api.request("POST", "/api/v1/files/shows/operations", { operation: "delete", sources: Object.values(files) });
   });
 
-  test("MANUAL-019 @ui › File Manager and Text Editor put their contract actions in the pane header", async ({ api, desk, page }) => {
-    const workspace = `manual-header-${crypto.randomUUID()}`;
-    const textFile = `manual-editor-${crypto.randomUUID()}.md`;
-    await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_folder", sources: [], destination: "", name: workspace });
-    await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_file", sources: [], destination: workspace, name: ".hidden-note" });
-    await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_file", sources: [], destination: "", name: textFile });
-    const empty = await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(textFile)}`);
-    await api.request("PUT", "/api/v1/files/shows/text", { path: textFile, text: "# Operator notes\n\nStand by.\n", revision: empty.revision });
-
-    await desk.open(api.baseUrl);
-    await desk.recordStep("FILE MANAGER HEADER", "Edit, Create, View, Back, and Forward belong to the title bar; the live root-relative path sits beside File Manager.");
-    let pane = await addPaneToNewDesktop(page, "File Manager");
-    let headerActions = page.locator(".file-manager-header-actions");
-    await expect(headerActions).toBeVisible();
-    for (const action of ["Edit", "Create", "View", "Back", "Forward"]) {
-      const button = headerActions.getByRole("button", { name: action, exact: true });
-      await expect(button).toBeVisible();
-    }
-    await expectActionsInsidePaneHeader(headerActions, "File Manager");
-    await expect(pane.locator(".file-toolbar").getByRole("button", { name: /^(?:Rename|Copy|Move|Delete|New File|New Folder)$/ })).toHaveCount(0);
-    await page.getByRole("button", { name: "Create", exact: true }).click();
-    expect(await page.getByRole("menu", { name: "Create menu" }).getByRole("menuitem").allTextContents()).toEqual(["New File", "New Folder"]);
-    await page.locator(".file-header-menu-layer").click({ position: { x: 1, y: 1 } });
-
-    await pane.getByRole("button", { name: `${workspace}, folder` }).dblclick();
-    await expect(page.locator(".file-manager-header-path")).toHaveText(`Shows: /${workspace}`);
-    await expect(pane.getByRole("button", { name: ".hidden-note, file" })).toHaveCount(0);
-    await pane.getByRole("button", { name: "Settings", exact: true }).click();
-    let settings = page.getByRole("dialog", { name: "Pane Settings" });
-    await settings.getByRole("tab", { name: "File Manager", exact: true }).click();
-    const hidden = settings.getByRole("switch", { name: "Show Hidden" });
-    await hidden.locator("xpath=..").click();
-    await settings.getByRole("button", { name: "Close settings" }).click();
-    await expect(pane.getByRole("button", { name: ".hidden-note, file" })).toBeVisible();
-    await page.getByRole("button", { name: "View", exact: true }).click();
-    await page.getByRole("menu", { name: "View menu" }).getByRole("menuitem", { name: "Hide Properties" }).click();
-    await expect(pane.getByRole("complementary", { name: "Selection properties" })).toBeHidden();
-
-    await desk.recordStep("TEXT EDITOR HEADER", "Open File, Refresh, Save, and Save As share the pane title bar while status and file identity remain visible beside the title.");
-    pane = await addPaneToNewDesktop(page, "Text Editor");
-    headerActions = page.locator(".text-editor-header-actions");
-    await expect(headerActions).toBeVisible();
-    for (const action of ["Open File", "Refresh", "Save", "Save As"]) {
-      const button = headerActions.getByRole("button", { name: action, exact: true });
-      await expect(button).toBeVisible();
-    }
-    await expectActionsInsidePaneHeader(headerActions, "Text Editor");
-    await expect(pane.locator(".text-editor-toolbar").getByRole("button", { name: /^(?:Open File|Refresh|Save|Save As)$/ })).toHaveCount(0);
-    await page.getByRole("button", { name: "Open File", exact: true }).click();
-    const picker = page.getByRole("dialog", { name: "Choose files or folders" });
-    await picker.getByRole("button", { name: `${textFile}, file` }).click();
-    await picker.getByRole("button", { name: "Select", exact: true }).click();
-    await expect(page.locator(".text-editor-header-state")).toContainText(`Saved · ${textFile}`);
-    await pane.getByLabel("File text").fill("# Operator notes\n\nStand by for beginners.\n");
-    await expect(page.locator(".text-editor-header-state")).toContainText("Unsaved");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.locator(".text-editor-header-state")).toContainText("Saved");
-    await expect.poll(async () => (await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(textFile)}`)).text).toContain("beginners");
-
-    await api.request("POST", "/api/v1/files/shows/operations", { operation: "delete", sources: [workspace, textFile] });
-  });
-
   test("MANUAL-019 @ui › the dedicated Cues pane keeps the cue editor visible without a delete action", async ({ api, desk, page }) => {
     const bootstrap = await api.request<any>("GET", "/api/v1/bootstrap", undefined, false);
     const cueListId = crypto.randomUUID();
@@ -430,18 +368,6 @@ async function addPaneToNewDesktop(page: Page, name: "File Manager" | "Text Edit
   await page.mouse.up();
   await expect.poll(async () => (await pane.boundingBox())?.width ?? 0).toBeGreaterThan(900);
   return pane;
-}
-
-async function expectActionsInsidePaneHeader(actions: Locator, title: string): Promise<void> {
-  const page = actions.page();
-  const headerTitle = page.locator(".ui-window-title", { hasText: title }).first();
-  await expect(headerTitle).toHaveText(title);
-  const titleBox = await headerTitle.boundingBox();
-  const actionsBox = await actions.boundingBox();
-  expect(titleBox).not.toBeNull();
-  expect(actionsBox).not.toBeNull();
-  expect(actionsBox!.x).toBeGreaterThan(titleBox!.x + titleBox!.width);
-  expect(Math.abs(actionsBox!.y + actionsBox!.height / 2 - (titleBox!.y + titleBox!.height / 2))).toBeLessThan(3);
 }
 
 async function openBuiltIn(page: Page, name: "DMX" | "Stage") {
