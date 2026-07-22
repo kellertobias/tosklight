@@ -60,7 +60,8 @@ fn migrate_cue_list(object: PortableShowCandidateObject<'_>) -> Result<Value, Ac
     // Persist the schema's explicit Cuelist-settings defaults for legacy Cuelists that predate a
     // field. Only absent keys are filled, so the migration is a one-time byte rewrite that stays
     // idempotent and preserves existing values and unknown extensions.
-    let canonical = serde_json::to_value(&cue_list).map_err(|error| invalid_object(object, error))?;
+    let canonical =
+        serde_json::to_value(&cue_list).map_err(|error| invalid_object(object, error))?;
     let canonical = canonical_object(&canonical, object)?;
     let body = required_object_mut(&mut migrated, object)?;
     for field in [
