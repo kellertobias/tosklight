@@ -35,7 +35,16 @@ the failures split cleanly:
 - **Full suite at HEAD (`47a9466`): 169 passed, 93 failed, 26 skipped, 0 flaky.**
 - Diff of failing spec titles: **0 fixed, exactly 5 introduced** by the 28 commits since `47030ed`.
 
-**Latest (2026-07-22), HEAD `61f7007`: 230 passed, 36 failed** (from pre-work 169/93). The biggest
+**Latest (2026-07-22), HEAD `3761417`: 231 passed, 35 failed** (from pre-work 169/93, +62/-58).
+`3761417` also fixed a Virtual Playbacks activation deadlock (the pane gated runtime activation on a
+readiness that required the runtime already active), clearing PBK-001 @supplemental-ui. The remaining
+35 are diverse independent items with no further single shared cause: MANUAL-019 x4 (decisions/feature),
+DMX-006/008 + virtual-dimmer-metadata (fixture-schema decision), OSC-005/006, TIME-001/002 (touch
+fader), and assorted @ui/@supplemental-ui value/render assertions (CUE-012, SOUND-001, SHOW-001,
+OSC-001, CMD-002, TEXT-015, PBK-005/PROG-001/PLAYBACK-SELECT-001 hardware variants). SHOW-005 @ui,
+CUE-011 @supplemental-ui, PRELOAD-002 @ui are flaky/environment-sensitive.
+
+**Superseded, HEAD `61f7007`: 230 passed, 36 failed** (from pre-work 169/93). The biggest
 lever was the shared cluster-D root cause: the v2 playback runtime projection fataled the entire
 (Group- and playback-shared) runtime store when any Group carried a stale/missing assigned-Playback
 reference, freezing every dependent @ui surface at "Group runtime loading…". `project_group` now
