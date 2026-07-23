@@ -285,7 +285,9 @@ fn launch_server(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::e
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr))
         .spawn()?;
-    let deadline = Instant::now() + Duration::from_secs(8);
+    // Desk data with restored programmers and a compiled active show needs well over the
+    // former 8s on a debug build; the child-exit check above still fails fast on crashes.
+    let deadline = Instant::now() + Duration::from_secs(60);
     while Instant::now() < deadline {
         if server_is_running(address) {
             return Ok(Some(child));

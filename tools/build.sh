@@ -178,8 +178,10 @@ wait_for_endpoint() {
 }
 
 wait_for_launchd_server() {
+  # Matches dev.sh's 60s readiness window; a debug-build server on grown desk data
+  # needs well over the former 10s before it binds.
   local attempts=0 details pid command
-  while (( attempts < 100 )); do
+  while (( attempts < 600 )); do
     details="$(launchctl print "gui/$(id -u)/$DEV_SERVER_LABEL" 2>/dev/null || true)"
     pid="$(sed -n 's/^[[:space:]]*pid = \([0-9][0-9]*\)$/\1/p' <<<"$details" | head -1)"
     if [[ -n "$pid" ]]; then
