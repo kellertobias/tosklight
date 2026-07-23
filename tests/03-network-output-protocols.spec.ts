@@ -39,11 +39,18 @@ interface PatchConflictState {
   rejected: boolean;
 }
 
+/**
+ * The schema has no byte-order concept: a channel is the attribute's coarse (most
+ * significant) byte and explicit `secondary_slots` are its fine bytes. `layout`
+ * describes the resulting wire placement — "coarse_first" puts the coarse byte at the
+ * patched address, "fine_first" reserves the patched address for the fine byte so the
+ * coarse slot derives to the next one.
+ */
 interface SixteenBitFixture {
   id: string;
   fixtureNumber: number;
   address: number;
-  byteOrder: "msb_first" | "lsb_first";
+  layout: "coarse_first" | "fine_first";
   invert: boolean;
   defaultValue: number;
 }
@@ -288,18 +295,6 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
   pairedScenario<SixteenBitState>({
     id: "DMX-006",
     title: "16-bit metadata and virtual heads encode deterministic component bytes",
-    // D3 (derive-only) landed the schema side: the snapshot identity check now compares the raw
-    // profile identity, so installSixteenBitMatrix's derived-definition variants patch cleanly,
-    // and value writes encode through the profile projection. What remains is a test re-authoring:
-    // this scenario still mutates the DERIVED heads (2-component 16-bit layouts, byte order,
-    // parameter defaults), which the schema-v2 engine deliberately ignores in favour of the raw
-    // profile snapshot. The 16-bit matrix must be expressed in the profile channels themselves
-    // (resolution u16 + secondary slots, invert, default_raw) — including deciding how the
-    // profile schema expresses LSB-first component order, which it currently cannot.
-    skip: {
-      api: "Scenario mutates derived heads; needs re-authoring against the raw profile snapshot (incl. LSB-first expression)",
-      ui: "Scenario mutates derived heads; needs re-authoring against the raw profile snapshot (incl. LSB-first expression)",
-    },
     arrange: async ({ api, bench }, surface) => {
       const show = await loadCanonicalCopy(api, bench, `dmx-006-${surface}`, "default-stage");
       return { ...(await installSixteenBitMatrix(api, bench)), showId: show.id };
@@ -320,7 +315,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
         state.logicalUniverse,
         state.destinationUniverse,
         state.fixtures.defaulted.address,
-        orderedBytes(defaultEncoded, "msb_first"),
+        orderedBytes(defaultEncoded, "coarse_first"),
         0,
       );
 
@@ -344,7 +339,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
             state.logicalUniverse,
             state.destinationUniverse,
             fixture.address,
-            orderedBytes(encoded, fixture.byteOrder),
+            orderedBytes(encoded, fixture.layout),
             3_000,
           );
         }
@@ -356,7 +351,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
         state.logicalUniverse,
         state.destinationUniverse,
         state.fixtures.defaulted.address,
-        orderedBytes(encodeSixteenBit(0.75, false), "msb_first"),
+        orderedBytes(encodeSixteenBit(0.75, false), "coarse_first"),
         3_000,
       );
       await releaseProgrammerFixtureValue(api, {
@@ -370,7 +365,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
         state.logicalUniverse,
         state.destinationUniverse,
         state.fixtures.defaulted.address,
-        orderedBytes(defaultEncoded, "msb_first"),
+        orderedBytes(defaultEncoded, "coarse_first"),
         3_000,
       );
 
@@ -704,7 +699,6 @@ async function installPatchConflict(api: ApiDriver): Promise<PatchConflictState>
 }
 
 async function installSixteenBitMatrix(api: any, bench: any): Promise<SixteenBitState> {
-  const source = (await objects<any>(api, "patched_fixture")).find((entry) => entry.body.fixture_number === 1)!;
   const logicalUniverse = 10;
   const destinationUniverse = 210;
   const sunstripDestinationUniverse = 203;
@@ -712,41 +706,29 @@ async function installSixteenBitMatrix(api: any, bench: any): Promise<SixteenBit
   await putObject(api, "route", "dmx-006-sunstrip-route", route("art_net", 3, sunstripDestinationUniverse, bench.artnet.port, true));
 
   const installed: SixteenBitFixture[] = [];
-  for (const [key, fixtureNumber, address, byteOrder, invert, defaultValue] of [
-    ["msb", 900, 1, "msb_first", false, 0],
-    ["lsb", 901, 5, "lsb_first", false, 0],
-    ["inverted", 902, 9, "msb_first", true, 0],
-    ["defaulted", 903, 13, "msb_first", false, 0.25],
+  for (const [key, fixtureNumber, address, layout, invert, defaultValue] of [
+    ["msb", 900, 1, "coarse_first", false, 0],
+    ["lsb", 901, 5, "fine_first", false, 0],
+    ["inverted", 902, 9, "coarse_first", true, 0],
+    ["defaulted", 903, 13, "coarse_first", false, 0.25],
   ] as const) {
-    const definition = structuredClone(source.body.definition);
-    definition.id = crypto.randomUUID();
-    definition.name = `DMX-006 ${key}`;
-    definition.model = `DMX-006 ${key}`;
-    definition.mode = "16-bit";
-    definition.footprint = 2;
-    const parameter = definition.heads[0].parameters.find((candidate: any) => candidate.attribute === "intensity") ?? definition.heads[0].parameters[0];
-    parameter.components = [
-      { offset: 0, byte_order: byteOrder },
-      { offset: 1, byte_order: byteOrder },
-    ];
-    parameter.default = defaultValue;
-    parameter.metadata = { ...(parameter.metadata ?? {}), invert };
     const id = crypto.randomUUID();
-    await putObject(api, "patched_fixture", `dmx-006-${key}`, {
-      ...source.body,
-      fixture_id: id,
-      fixture_number: fixtureNumber,
-      name: `DMX-006 ${key}`,
-      definition,
-      logical_heads: [],
-      multipatch: [],
-      universe: logicalUniverse,
-      address,
-      // The cloned source body carries its own split patch; the copy must address the
-      // 16-bit matrix universe, not the source's slot.
-      split_patches: [{ split: 1, universe: logicalUniverse, address }],
-    });
-    installed.push({ id, fixtureNumber, address, byteOrder, invert, defaultValue });
+    await putObject(
+      api,
+      "patched_fixture",
+      `dmx-006-${key}`,
+      sixteenBitPatchedFixture({
+        fixtureId: id,
+        fixtureNumber,
+        name: `DMX-006 ${key}`,
+        universe: logicalUniverse,
+        address,
+        layout,
+        invert,
+        defaultRaw: encodeSixteenBit(defaultValue, false),
+      }),
+    );
+    installed.push({ id, fixtureNumber, address, layout, invert, defaultValue });
   }
   return {
     fixtures: {
@@ -758,6 +740,114 @@ async function installSixteenBitMatrix(api: any, bench: any): Promise<SixteenBit
     logicalUniverse,
     destinationUniverse,
     sunstripDestinationUniverse,
+  };
+}
+
+/**
+ * A complete schema-v2 patched fixture: one u16 intensity channel on a 2-slot split.
+ * The raw profile snapshot is the engine's authoritative source; the derived
+ * definition fields mirror the profile's byte-stable projection. "fine_first"
+ * reserves slot 1 as the channel's explicit secondary (fine) slot, so the coarse
+ * slot derives to 2 — there is no byte-order flag in the schema.
+ */
+function sixteenBitPatchedFixture(options: {
+  fixtureId: string;
+  fixtureNumber: number;
+  name: string;
+  universe: number;
+  address: number;
+  layout: "coarse_first" | "fine_first";
+  invert: boolean;
+  defaultRaw: number;
+}) {
+  const profileId = crypto.randomUUID();
+  const modeId = crypto.randomUUID();
+  const headId = crypto.randomUUID();
+  const fineSlot = options.layout === "fine_first" ? 1 : 2;
+  const coarseOffset = options.layout === "fine_first" ? 1 : 0;
+  const profile = {
+    schema_version: 2,
+    id: profileId,
+    revision: 1,
+    manufacturer: "ToskLight Test",
+    name: options.name,
+    short_name: options.name,
+    fixture_type: "dimmer",
+    modes: [
+      {
+        id: modeId,
+        name: "16-bit",
+        splits: [{ number: 1, footprint: 2 }],
+        heads: [{ id: headId, name: "Main", master_shared: true }],
+        channels: [
+          {
+            id: crypto.randomUUID(),
+            head_id: headId,
+            split: 1,
+            attribute: "intensity",
+            resolution: "u16",
+            secondary_slots: [fineSlot],
+            default_raw: options.defaultRaw,
+            highlight_raw: 65_535,
+            invert: options.invert,
+          },
+        ],
+      },
+    ],
+  };
+  return {
+    fixture_id: options.fixtureId,
+    fixture_number: options.fixtureNumber,
+    name: options.name,
+    universe: options.universe,
+    address: options.address,
+    split_patches: [{ split: 1, universe: options.universe, address: options.address }],
+    logical_heads: [],
+    multipatch: [],
+    definition: {
+      schema_version: 2,
+      id: profileId,
+      revision: 1,
+      manufacturer: "ToskLight Test",
+      device_type: "dimmer",
+      name: options.name,
+      model: options.name,
+      mode: "16-bit",
+      footprint: 2,
+      heads: [
+        {
+          index: 0,
+          name: "Main",
+          shared: true,
+          parameters: [
+            {
+              attribute: "intensity",
+              components: [
+                { offset: coarseOffset, byte_order: "msb_first" },
+                { offset: fineSlot - 1, byte_order: "msb_first" },
+              ],
+              default: options.defaultRaw / 65_535,
+              virtual_dimmer: false,
+              metadata: {
+                physical_min: 0,
+                physical_max: 1,
+                unit: null,
+                invert: options.invert,
+                wrap: false,
+                curve: "linear",
+              },
+              capabilities: [],
+            },
+          ],
+        },
+      ],
+      color_calibration: null,
+      hazardous: false,
+      safe_values: {},
+      profile_id: profileId,
+      mode_id: modeId,
+      profile_snapshot: profile,
+    },
   };
 }
 
@@ -831,22 +921,28 @@ async function expectSunstripVirtualDimmers(
   const wire = (await bench.artnet.nextAfter(mark, "artnet", destinationUniverse)).slots;
   const start = sunstrip.body.address - 1;
   for (let index = 0; index < 10; index += 1) {
-    const expected = Math.round(Math.fround(Math.fround((index + 1) / 10) * 255));
+    // Mirrors the schema-v2 engine: the colour channel quantizes to raw first, then the
+    // virtual-dimmer intensity scale (an f32 widened to f64) multiplies the raw value once
+    // (crates/fixture/src/profile/resolution.rs scale_channel_raw).
+    const expected = Math.round(255 * Math.fround((index + 1) / 10));
     expect(logical.slice(start + index * 3, start + index * 3 + 3)).toEqual([expected, 0, 0]);
     expect(Array.from(wire.slice(start + index * 3, start + index * 3 + 3))).toEqual([expected, 0, 0]);
   }
 }
 
+// Mirrors the engine's normalized→raw path: the f64 value is narrowed to f32, scaled by
+// the resolution maximum in f32 arithmetic, rounded, and only then inverted around the
+// maximum (crates/fixture/src/profile/resolution.rs normalized_raw + scale_channel_raw).
 function encodeSixteenBit(value: number, invert: boolean): number {
-  let normalized = Math.fround(Math.max(0, Math.min(1, value)));
-  if (invert) normalized = Math.fround(1 - normalized);
-  return Math.round(Math.fround(normalized * 65_535));
+  const normalized = Math.fround(Math.max(0, Math.min(1, value)));
+  const raw = Math.round(Math.fround(normalized * 65_535));
+  return invert ? 65_535 - raw : raw;
 }
 
-function orderedBytes(encoded: number, order: "msb_first" | "lsb_first"): number[] {
+function orderedBytes(encoded: number, layout: "coarse_first" | "fine_first"): number[] {
   const coarse = (encoded >> 8) & 0xff;
   const fine = encoded & 0xff;
-  return order === "msb_first" ? [coarse, fine] : [fine, coarse];
+  return layout === "coarse_first" ? [coarse, fine] : [fine, coarse];
 }
 
 function unwrapNormalized(entry: any): number | null {

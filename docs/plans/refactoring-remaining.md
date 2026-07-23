@@ -84,7 +84,19 @@ Four of the five scenarios are fixed and unskipped; one narrowed residue remains
   its close on operation-scope currency, staying open after a successful page change and
   intercepting later clicks (a successful change now always closes). Unskipped and green.
 
-## 3 — DMX-006 re-authoring + a schema decision
+## 3 — DMX-006 re-authoring + a schema decision (RESOLVED 2026-07-23)
+
+**Done.** `installSixteenBitMatrix` now authors complete schema-v2 profile snapshots (u16
+resolution, secondary slots for both byte layouts, `invert`, `default_raw`); validation
+accepts a secondary slot numerically below the coarse slot (fine-first layouts derive the
+coarse slot around the reserved fine slot, as designed). The sunstrip virtual-dimmer
+expectation was updated to the schema-v2 engine's committed math (colour quantizes to raw
+first, then the virtual-intensity scale multiplies once in f64 — a 1-LSB difference vs the
+legacy scale-then-quantize path at f32 half-way points, already pinned by the engine
+guardrail). DMX-006 @api and @ui are unskipped and green. DMX-008 remains a separate,
+genuinely unimplemented output feature (unchanged below).
+
+### Original notes
 
 The D3 (derive-only) schema work landed: identity checks compare the raw profile, SHOW-004
 virtual-dimmer-metadata is green, and an engine guardrail pins the intensity×colour one-way
