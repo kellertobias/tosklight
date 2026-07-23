@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useServer } from "../../api/ServerContext";
+import { useFixtureLibrary } from "../../features/fixtureLibrary/FixtureLibraryContext";
 import { FixtureLibraryBrowser } from "./fixtureLibrary/browser";
 import {
 	FixtureLibraryEditor,
@@ -25,22 +25,22 @@ export {
 export { importGdtf, importGdtfData } from "./fixtureLibrary/gdtf";
 
 export function FixtureLibrarySetup() {
-	const server = useServer();
+	const server = useFixtureLibrary();
 	const [selectedFamilyKey, setSelectedFamilyKey] = useState("");
 	const [selectedModeKey, setSelectedModeKey] = useState("");
 	const [query, setQuery] = useState("");
 	const [typeFilter, setTypeFilter] = useState("");
 	const [manufacturer, setManufacturer] = useState("");
 	const model = useFixtureLibraryModel({
-		fixtureProfiles: server.fixtureProfiles,
-		legacyDefinitions: server.fixtureLibrary,
+		fixtureProfiles: server?.fixtureProfiles ?? [],
+		legacyDefinitions: server?.fixtureLibrary ?? [],
 		manufacturer,
 		query,
 		selectedFamilyKey,
 		selectedModeKey,
 		typeFilter,
 	});
-	const editor = useFixtureLibraryEditor(server.fixtureProfiles);
+	const editor = useFixtureLibraryEditor(server?.fixtureProfiles ?? []);
 	const transfers = useFixtureLibraryTransfers({
 		selectedMode: model.selectedMode,
 		setSelectedFamilyKey,

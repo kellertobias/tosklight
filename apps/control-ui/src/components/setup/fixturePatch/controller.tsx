@@ -8,7 +8,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { useServer } from "../../../api/ServerContext";
+import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import type { PatchedFixture } from "../../../api/types";
 import { usePatch, usePatchView } from "../../../features/patch/PatchContext";
 import { useApp } from "../../../state/AppContext";
@@ -172,11 +172,11 @@ function usePatchUiState() {
 }
 
 function usePatchDerivedState(
-	server: ReturnType<typeof useServer>,
+	server: ReturnType<typeof useFixtureLibrary>,
 	patch: ReturnType<typeof usePatch>,
 	ui: ReturnType<typeof usePatchUiState>,
 ) {
-	const layers = [...server.patchLayers]
+	const layers = [...(server?.patchLayers ?? [])]
 		.sort((a, b) => a.body.order - b.body.order)
 		.map((item) => item.body);
 	const all = [...patch.fixtures];
@@ -189,8 +189,8 @@ function usePatchDerivedState(
 		.sort(compareFixtureIds);
 	const availableDefinitions = useMemo(
 		() =>
-			mergeFixtureDefinitions(server.fixtureProfiles, server.fixtureLibrary),
-		[server.fixtureProfiles, server.fixtureLibrary],
+			mergeFixtureDefinitions(server?.fixtureProfiles ?? [], server?.fixtureLibrary ?? []),
+		[server?.fixtureProfiles, server?.fixtureLibrary],
 	);
 	const selected =
 		all.find((fixture) => fixture.fixture_id === ui.selectedFixture) ?? null;
@@ -287,7 +287,7 @@ function filterDefinitions(
 }
 
 function useFixturePatchController(props: FixturePatchSetupProps) {
-	const server = useServer();
+	const server = useFixtureLibrary();
 	const patch = usePatch();
 	usePatchView(props.active ?? true);
 	const selection = usePatchSelection(props.active ?? true);

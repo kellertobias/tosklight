@@ -1,8 +1,8 @@
-import { useServer } from "../../../api/ServerContext";
+import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 
 export function FixtureLibraryWarnings() {
-	const server = useServer();
-	if (!server.fixtureProfileWarnings.length) return null;
+	const server = useFixtureLibrary();
+	if (!server?.fixtureProfileWarnings.length) return null;
 	return (
 		<section
 			className="fixture-migration-warnings"

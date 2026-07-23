@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useServer } from "../../../api/ServerContext";
+import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import type { FixtureDefinition } from "../../../api/types";
 import { ModalTitleBar } from "../../common";
 import { RootConfinedFilePickerButton } from "../../files/RootConfinedFilePickerButton";
@@ -19,7 +19,7 @@ export function useFixtureLibraryTransfers({
 	setSelectedFamilyKey,
 	setSelectedModeKey,
 }: FixtureLibraryTransfersOptions) {
-	const server = useServer();
+	const server = useFixtureLibrary();
 	const [busy, setBusy] = useState(false);
 	const [modal, setModal] = useState<FixtureImportModal>(null);
 
@@ -48,11 +48,11 @@ export function useFixtureLibraryTransfers({
 			const imported = await importGdtfData(source, file.name);
 			const profile = fixtureProfileFromDefinitions(imported);
 			const saved = imported.length
-				? await server.saveFixtureProfile(profile, 0)
+				? ((await server?.saveFixtureProfile(profile, 0)) ?? null)
 				: null;
 			if (
 				saved &&
-				(await server.saveFixtureProfileSourceGdtf(
+				(await server?.saveFixtureProfileSourceGdtf(
 					saved.id,
 					saved.revision,
 					source,
@@ -69,10 +69,10 @@ export function useFixtureLibraryTransfers({
 		if (!file) return;
 		setBusy(true);
 		try {
-			const imported = await server.importFixturePackage(
+			const imported = await server?.importFixturePackage(
 				new Uint8Array(await file.arrayBuffer()),
 			);
-			selectImportedProfile(imported);
+			if (imported) selectImportedProfile(imported);
 		} finally {
 			setBusy(false);
 		}
@@ -81,7 +81,8 @@ export function useFixtureLibraryTransfers({
 	const exportSelectedPackage = async () => {
 		if (!selectedMode) return;
 		const id = selectedMode.profile_id ?? selectedMode.id;
-		const blob = await server.exportFixturePackage(id, selectedMode.revision);
+		const blob = await server?.exportFixturePackage(id, selectedMode.revision);
+		if (!blob) return;
 		const url = URL.createObjectURL(blob);
 		const anchor = document.createElement("a");
 		anchor.href = url;

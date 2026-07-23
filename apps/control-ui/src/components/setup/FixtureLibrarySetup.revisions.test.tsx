@@ -17,6 +17,13 @@ const server = vi.hoisted(() => ({
 }));
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock(
+	"../../features/fixtureLibrary/FixtureLibraryContext",
+	async (importOriginal) => ({
+		...(await importOriginal<object>()),
+		useFixtureLibrary: () => server,
+	}),
+);
 vi.mock("../files/RootConfinedFilePickerButton", () => ({
   RootConfinedFilePickerButton: ({ label }: { label: string }) => <span>{label}</span>,
 }));

@@ -23,7 +23,7 @@ export async function createLayer(
 	if (!name) return;
 	const id = crypto.randomUUID();
 	if (
-		await controller.server.savePatchLayer({
+		await controller.server?.savePatchLayer({
 			id,
 			name,
 			order: controller.data.layers.length,

@@ -4,7 +4,11 @@ import {
 	browserDeskBoundaryToken,
 	HttpPatchTransport,
 } from "../../api/PatchTransport";
-import { useServer } from "../../api/ServerContext";
+import {
+	useActiveShowId,
+	useSessionSnapshot,
+} from "../deskSnapshot/DeskSnapshotState";
+import { useFixtureLibrary } from "../fixtureLibrary/FixtureLibraryContext";
 import { mergeFixtureDefinitions } from "../../components/setup/fixtureProfileModel";
 import {
 	PatchViewProvider,
@@ -21,8 +25,10 @@ export function PatchFeatureBoundary({ children }: PropsWithChildren) {
 }
 
 function PatchFeatureProvider({ children }: PropsWithChildren) {
-	const server = useServer();
-	const sessionToken = server.session?.token ?? null;
+	const library = useFixtureLibrary();
+const session = useSessionSnapshot();
+const activeShowId = useActiveShowId();
+	const sessionToken = session?.token ?? null;
 	const baseUrl = configuredServerUrl();
 	const deskBoundaryToken = browserDeskBoundaryToken();
 	const transport = useMemo(
@@ -38,12 +44,15 @@ function PatchFeatureProvider({ children }: PropsWithChildren) {
 	);
 	const definitions = useMemo(
 		() =>
-			mergeFixtureDefinitions(server.fixtureProfiles, server.fixtureLibrary),
-		[server.fixtureLibrary, server.fixtureProfiles],
+			mergeFixtureDefinitions(
+				library?.fixtureProfiles ?? [],
+				library?.fixtureLibrary ?? [],
+			),
+		[library?.fixtureLibrary, library?.fixtureProfiles],
 	);
 	return (
 		<PatchViewProvider
-			showId={server.bootstrap?.active_show?.id ?? null}
+			showId={activeShowId}
 			initialFixtures={EMPTY_FIXTURES}
 			definitions={definitions}
 			transport={transport}

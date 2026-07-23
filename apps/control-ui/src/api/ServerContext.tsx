@@ -11,6 +11,7 @@ import {
 import { ProgrammerActionsProvider } from "../features/programmerActions/ProgrammerActionsContext";
 import { ShellStatusActionsProvider } from "../features/shellStatus/ShellStatusActionsProvider";
 import { DmxDiagnosticsProvider } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
+import { FixtureLibraryProvider } from "../features/fixtureLibrary/FixtureLibraryContext";
 import { MediaServersProvider } from "../features/mediaServers/MediaServersContext";
 import { SoundToLightProvider } from "../features/soundToLight/SoundToLightContext";
 import { FilesProvider } from "../features/files/FilesContext";
@@ -150,6 +151,36 @@ export function ServerProvider({
 		}),
 		[value.readDmx, value.setDmxOverride, value.outputRoutes],
 	);
+	const fixtureLibraryState = useMemo(
+		() => ({
+			fixtureLibrary: value.fixtureLibrary,
+			fixtureProfiles: value.fixtureProfiles,
+			fixtureProfileWarnings: value.fixtureProfileWarnings,
+			patchLayers: value.patchLayers,
+			unresolvedMvrFixtures: value.unresolvedMvrFixtures,
+			savePatchLayer: value.savePatchLayer,
+			saveFixtureProfile: value.saveFixtureProfile,
+			deleteFixtureProfile: value.deleteFixtureProfile,
+			fixtureProfileRevisions: value.fixtureProfileRevisions,
+			saveFixtureProfileSourceGdtf: value.saveFixtureProfileSourceGdtf,
+			importFixturePackage: value.importFixturePackage,
+			exportFixturePackage: value.exportFixturePackage,
+		}),
+		[
+			value.fixtureLibrary,
+			value.fixtureProfiles,
+			value.fixtureProfileWarnings,
+			value.patchLayers,
+			value.unresolvedMvrFixtures,
+			value.savePatchLayer,
+			value.saveFixtureProfile,
+			value.deleteFixtureProfile,
+			value.fixtureProfileRevisions,
+			value.saveFixtureProfileSourceGdtf,
+			value.importFixturePackage,
+			value.exportFixturePackage,
+		],
+	);
 	const mediaServersState = useMemo(
 		() => ({
 			mediaServers: value.mediaServers,
@@ -195,6 +226,7 @@ export function ServerProvider({
 			<ProgrammerActionsProvider actions={programmerActions}>
 			<ShellStatusActionsProvider actions={shellStatusActions}>
 			<DmxDiagnosticsProvider diagnostics={dmxDiagnostics}>
+			<FixtureLibraryProvider library={fixtureLibraryState}>
 			<MediaServersProvider media={mediaServersState}>
 			<SoundToLightProvider actions={soundToLightActions}>
 			<ServerDeskBoundaries state={state}>
@@ -267,6 +299,7 @@ export function ServerProvider({
 			</ServerDeskBoundaries>
 			</SoundToLightProvider>
 			</MediaServersProvider>
+			</FixtureLibraryProvider>
 			</DmxDiagnosticsProvider>
 			</ShellStatusActionsProvider>
 			</ProgrammerActionsProvider>

@@ -54,6 +54,13 @@ const patchFeature = {
 };
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock(
+	"../../features/fixtureLibrary/FixtureLibraryContext",
+	async (importOriginal) => ({
+		...(await importOriginal<object>()),
+		useFixtureLibrary: () => server,
+	}),
+);
 vi.mock("../../features/patch/PatchFeatureBoundary", () => ({
 	PatchFeatureBoundary: ({ children }: { children: ReactNode }) => children,
 }));

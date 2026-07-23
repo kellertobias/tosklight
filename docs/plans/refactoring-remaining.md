@@ -48,14 +48,15 @@ in suggested order. Each chunk lands independently.
 - `features/mediaServers` (media fixtures/previews/refresh + Matter status:
   MediaServerSetup, MatterBridgeSettings, DeskSettingsModal path) and
   `features/soundToLight` (speed-group sound calls: useSoundCapture, useSoundToLight).
+- `features/fixtureLibrary` (profiles/definitions/warnings/patch layers/unresolved MVR +
+  profile save/delete/revisions/GDTF/package/patch-layer calls) and migration of
+  FixtureLibrarySetup, the fixtureLibrary editor/revisions/transfers/warnings panes,
+  fixturePatch controller, and PatchFeatureBoundary (attribute registry via
+  `useAttributeRegistry`).
 
-**Remaining consumers (~9 files)**, grouped by the scoped owner they need next:
-fixture library + patch
-(FixtureLibrarySetup, fixtureLibrary/{editor,revisions,transfers,warnings},
-fixturePatch/controller, PatchFeatureBoundary; PatchWindow is migrated —
-`setPatchPreviewHighlight` now lives on the scoped Highlight actions), show lifecycle (QuickSetupModal — the largest, ~19
-actions — ShowRecoveryModal, setupWindow/controller, ConnectionState,
-LayoutPersistence).
+**Remaining consumers (5 files, show lifecycle only):** QuickSetupModal — the largest,
+~19 actions — ShowRecoveryModal, setupWindow/controller, ConnectionState, and
+LayoutPersistence.
 Only after every caller is migrated: delete `useServer()` and remove unused v1
 routes per the decided policy below.
 

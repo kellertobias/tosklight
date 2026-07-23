@@ -5,6 +5,10 @@ export function selectBootstrap(snapshot: DeskSnapshot) {
 	return snapshot.bootstrap;
 }
 
+export function selectAttributeRegistry(snapshot: DeskSnapshot) {
+	return snapshot.bootstrap?.attribute_registry ?? null;
+}
+
 export function selectBootstrapReady(snapshot: DeskSnapshot) {
 	return snapshot.bootstrap !== null;
 }

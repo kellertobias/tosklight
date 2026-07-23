@@ -17,6 +17,7 @@ import {
 	selectActiveShow,
 	selectActiveShowId,
 	selectActiveTimecode,
+	selectAttributeRegistry,
 	selectBootstrap,
 	selectBootstrapReady,
 	selectFrameRateHz,
@@ -71,6 +72,11 @@ export function useActiveTimecode(): string | null {
 /** Output health counters, or null while the bootstrap is unknown. */
 export function useOutputHealth(): OutputHealth | null {
 	return useDeskSnapshotSelector(selectOutputHealth, Object.is);
+}
+
+/** The desk attribute registry, or null while the bootstrap is unknown. */
+export function useAttributeRegistry() {
+	return useDeskSnapshotSelector(selectAttributeRegistry, Object.is);
 }
 
 /** Whether the desk bootstrap has been loaded for this connection. */

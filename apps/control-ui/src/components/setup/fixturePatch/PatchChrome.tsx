@@ -15,7 +15,7 @@ export function PatchHeader() {
 				primary: `${data.all.length} fixtures · ${data.layers.length} layers`,
 				secondary:
 					controller.patch.error ??
-					(server.unresolvedMvrFixtures.length
+					(server?.unresolvedMvrFixtures.length
 						? `${server.unresolvedMvrFixtures.length} unresolved MVR fixtures excluded from output`
 						: undefined),
 			}}

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useServer } from "../../../api/ServerContext";
+import { useAttributeRegistry } from "../../../features/deskSnapshot/DeskSnapshotState";
+import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import type { FixtureDefinition, FixtureProfile } from "../../../api/types";
 import { FixtureProfileEditor } from "../FixtureProfileEditor";
 import {
@@ -55,14 +56,20 @@ export function FixtureLibraryEditor({
 	manufacturers,
 	onClose,
 }: FixtureLibraryEditorProps) {
-	const server = useServer();
+	const library = useFixtureLibrary();
+const attributeRegistry = useAttributeRegistry();
 	return (
 		<FixtureProfileEditor
 			initialProfile={editor.draft}
 			expectedRevision={editor.expectedRevision}
 			manufacturers={manufacturers}
-			attributeRegistry={server.bootstrap?.attribute_registry ?? []}
-			onSave={server.saveFixtureProfile}
+			attributeRegistry={attributeRegistry ?? []}
+			onSave={
+				library?.saveFixtureProfile ??
+				(async () => {
+					throw new Error("The fixture library is unavailable");
+				})
+			}
 			onClose={onClose}
 		/>
 	);

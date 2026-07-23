@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useServer } from "../../../api/ServerContext";
+import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import type { FixtureDefinition, FixtureProfile } from "../../../api/types";
 import { Button } from "../../common";
 
@@ -12,7 +12,7 @@ export function useFixtureRevisionHistory({
 	selectedMode,
 	onEditRevision,
 }: FixtureRevisionHistoryOptions) {
-	const server = useServer();
+	const server = useFixtureLibrary();
 	const [history, setHistory] = useState<FixtureProfile[] | null>(null);
 	const [error, setError] = useState("");
 
@@ -21,9 +21,9 @@ export function useFixtureRevisionHistory({
 		setError("");
 		try {
 			setHistory(
-				await server.fixtureProfileRevisions(
+				(await server?.fixtureProfileRevisions(
 					selectedMode.profile_id ?? selectedMode.id,
-				),
+				)) ?? [],
 			);
 		} catch (reason) {
 			setHistory([]);
@@ -39,10 +39,9 @@ export function useFixtureRevisionHistory({
 		) {
 			return;
 		}
-		await server.deleteFixtureProfile(profile.id, profile.revision);
-		const remaining = await server
-			.fixtureProfileRevisions(profile.id)
-			.catch(() => []);
+		await server?.deleteFixtureProfile(profile.id, profile.revision);
+		const remaining =
+			(await server?.fixtureProfileRevisions(profile.id).catch(() => [])) ?? [];
 		setHistory(remaining);
 		if (!remaining.length) setHistory(null);
 	};
