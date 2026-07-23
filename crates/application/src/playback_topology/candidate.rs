@@ -370,14 +370,16 @@ fn cue_list_body(
     requested: &CueList,
     raw_body: &Value,
 ) -> Result<Value, ActionError> {
-    lossless_json::merge_typed_request(
+    let mut merged = lossless_json::merge_typed_request(
         stored.map(|value| &value.raw_body),
         stored.map(|value| &value.typed),
         raw_body,
         requested,
         requested,
     )
-    .map_err(invalid)
+    .map_err(invalid)?;
+    lossless_json::strip_zero_u64_echo(&mut merged, "chaser_xfade_millis");
+    Ok(merged)
 }
 
 fn typed_body<T: serde::Serialize>(

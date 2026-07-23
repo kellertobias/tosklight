@@ -153,8 +153,16 @@ fn normalize_cue_list(
         normalized.id = light_core::CueListId(id);
     }
     normalized.validate().map_err(invalid)?;
-    lossless_json::merge_typed_request(existing, stored.as_ref(), request, &requested, &normalized)
-        .map_err(invalid)
+    let mut merged = lossless_json::merge_typed_request(
+        existing,
+        stored.as_ref(),
+        request,
+        &requested,
+        &normalized,
+    )
+    .map_err(invalid)?;
+    lossless_json::strip_zero_u64_echo(&mut merged, "chaser_xfade_millis");
+    Ok(merged)
 }
 
 fn normalize_group(

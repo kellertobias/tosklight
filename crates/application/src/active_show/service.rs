@@ -89,6 +89,7 @@ impl ActiveShowService {
                 context: envelope.context.clone(),
                 show_revision: committed.show_revision,
                 changes: committed.changes,
+                migration_changes: committed.migration_changes,
                 event_sequence: committed.event_sequence,
             })
         })
@@ -116,6 +117,7 @@ impl ActiveShowService {
                 context: envelope.context.clone(),
                 show_revision: committed.show_revision,
                 change: single_change(committed.changes),
+                migration_changes: committed.migration_changes,
                 event_sequence: committed.event_sequence,
             })
         })
@@ -132,10 +134,18 @@ impl ActiveShowService {
     ) -> Result<CommittedObjectChanges, ActionError> {
         let runtime = ports.prepare_runtime(prepared.snapshot)?;
         unit.backup(&backup_identity(context, show_id, operation))?;
-        let show_revision = unit.commit(prepared.transaction)?.revision();
+        let commit = unit.commit(prepared.transaction)?;
+        let show_revision = commit.revision();
+        let migration_changes = migration_changes(&commit, &prepared.changes);
         ports.install_runtime(context, runtime);
         ports.reconcile_object_changes(&prepared.changes);
-        Ok(self.publish_object_changes(context, show_id, show_revision, prepared.changes))
+        Ok(self.publish_object_changes(
+            context,
+            show_id,
+            show_revision,
+            prepared.changes,
+            migration_changes,
+        ))
     }
 
     fn publish_object_changes(
@@ -144,18 +154,22 @@ impl ActiveShowService {
         show_id: ShowId,
         show_revision: PortableShowRevision,
         changes: Vec<super::ActiveShowObjectChange>,
+        migration_changes: Vec<super::ActiveShowObjectChange>,
     ) -> CommittedObjectChanges {
+        let mut published = changes.clone();
+        published.extend(migration_changes.iter().cloned());
         let event = self.events.publish(EventDraft::active_show_objects_changed(
             context,
             ActiveShowObjectsChange {
                 show_id,
                 show_revision,
-                changes: changes.clone(),
+                changes: published,
             },
         ));
         CommittedObjectChanges {
             show_revision,
             changes,
+            migration_changes,
             event_sequence: event.sequence,
         }
     }
@@ -304,6 +318,7 @@ pub(crate) struct CompletedActiveShowTransaction<T> {
 struct CommittedObjectChanges {
     show_revision: PortableShowRevision,
     changes: Vec<super::ActiveShowObjectChange>,
+    migration_changes: Vec<super::ActiveShowObjectChange>,
     event_sequence: u64,
 }
 
@@ -320,6 +335,35 @@ fn prepare_requested_undo<P: ActiveShowPorts>(
         command.expected_object_revision,
     )?;
     prepare_object_undo(unit.document(), command, undo)
+}
+
+/// Object writes committed by staged compatibility migrations rather than the request itself.
+/// Reporting them keeps every persisted revision bump observable instead of silent.
+fn migration_changes(
+    commit: &PortableShowCommit,
+    requested: &[super::ActiveShowObjectChange],
+) -> Vec<super::ActiveShowObjectChange> {
+    commit
+        .written_objects()
+        .iter()
+        .filter_map(|object| {
+            let kind = super::ActiveShowObjectKind::from_storage_kind(object.key().kind())?;
+            let object_id = object.key().id();
+            if requested
+                .iter()
+                .any(|change| change.kind == kind && change.object_id == object_id)
+            {
+                return None;
+            }
+            Some(super::ActiveShowObjectChange {
+                kind,
+                object_id: object_id.to_string(),
+                object_revision: object.revision(),
+                body: Some(object.body().clone()),
+                deleted: false,
+            })
+        })
+        .collect()
 }
 
 fn single_change(mut changes: Vec<super::ActiveShowObjectChange>) -> super::ActiveShowObjectChange {

@@ -626,6 +626,120 @@ fn object_undo_commits_pending_migrations_in_the_same_compiled_candidate() {
 }
 
 #[test]
+fn cue_list_mutation_drops_the_stored_zero_chaser_xfade_echo() {
+    let rig = TestRig::new();
+    let cue_list_id = light_core::CueListId(Uuid::from_u128(0x801));
+    let storage_id = cue_list_id.0.to_string();
+    let mut legacy = cue_list_body(cue_list_id, "Legacy");
+    legacy
+        .as_object_mut()
+        .unwrap()
+        .insert("chaser_xfade_millis".into(), json!(0));
+    rig.seed_object("cue_list", &storage_id, legacy);
+
+    let result = rig
+        .service
+        .mutate_objects(
+            rig.object_action(vec![ActiveShowObjectMutation {
+                kind: ActiveShowObjectKind::CueList,
+                object_id: storage_id.clone(),
+                expected_object_revision: 1,
+                mutation: ActiveShowObjectMutationKind::Put {
+                    body: cue_list_body(cue_list_id, "Edited"),
+                },
+            }]),
+            &rig.ports,
+        )
+        .unwrap();
+
+    assert_eq!(result.changes.len(), 1);
+    let body = rig.object_body("cue_list", &storage_id);
+    // The canonical model treats a zero chaser_xfade_millis as absent, so the merge must not
+    // re-persist the stored raw echo; otherwise the next migration pass silently rewrites it.
+    assert!(
+        !body
+            .as_object()
+            .unwrap()
+            .contains_key("chaser_xfade_millis"),
+        "merged cue_list body must not echo the skip-serialized zero"
+    );
+    let merged = result.changes[0].body.as_ref().unwrap();
+    assert!(
+        !merged
+            .as_object()
+            .unwrap()
+            .contains_key("chaser_xfade_millis")
+    );
+}
+
+#[test]
+fn committed_migration_write_backs_are_published_as_object_changes() {
+    let rig = TestRig::new();
+    let cue_list_id = light_core::CueListId(Uuid::from_u128(0x901));
+    let storage_id = cue_list_id.0.to_string();
+    let mut legacy = cue_list_body(cue_list_id, "Legacy");
+    legacy
+        .as_object_mut()
+        .unwrap()
+        .insert("chaser_xfade_millis".into(), json!(0));
+    rig.seed_object("cue_list", &storage_id, legacy);
+
+    let result = rig
+        .service
+        .mutate_objects(
+            rig.object_action(vec![ActiveShowObjectMutation {
+                kind: ActiveShowObjectKind::Group,
+                object_id: "9".into(),
+                expected_object_revision: 0,
+                mutation: ActiveShowObjectMutationKind::Put {
+                    body: json!({"id":"9","name":"Unrelated","fixtures":[]}),
+                },
+            }]),
+            &rig.ports,
+        )
+        .unwrap();
+
+    // The requested change set stays exactly the request.
+    assert_eq!(result.changes.len(), 1);
+    assert_eq!(result.changes[0].kind, ActiveShowObjectKind::Group);
+    // The cue_list migration rode along in the same commit and bumped the object revision.
+    let document = rig.document();
+    let migrated = document.object("cue_list", &storage_id).unwrap();
+    assert_eq!(migrated.revision(), 2);
+    assert!(
+        !migrated
+            .body()
+            .as_object()
+            .unwrap()
+            .contains_key("chaser_xfade_millis")
+    );
+    // The migration write-back is reported alongside the requested change.
+    assert_eq!(result.migration_changes.len(), 1);
+    assert_eq!(
+        result.migration_changes[0].kind,
+        ActiveShowObjectKind::CueList
+    );
+    assert_eq!(result.migration_changes[0].object_id, storage_id);
+    assert_eq!(result.migration_changes[0].object_revision, 2);
+    // And the one published event carries both changes so no revision bump stays silent.
+    let EventReplay::Events(events) = rig.service.events().replay(0, &EventFilter::default())
+    else {
+        panic!("expected retained object-change event")
+    };
+    assert_eq!(events.len(), 1);
+    let ApplicationEvent::Show(ShowEvent::ObjectsChanged(change)) = &events[0].payload else {
+        panic!("expected an ObjectsChanged event")
+    };
+    assert_eq!(change.changes.len(), 2);
+    assert!(
+        change
+            .changes
+            .iter()
+            .any(|entry| entry.kind == ActiveShowObjectKind::CueList && entry.object_revision == 2)
+    );
+}
+
+#[test]
 fn object_undo_accepts_cue_list_and_preset_families() {
     let cue_list = TestRig::new();
     let cue_list_id = light_core::CueListId(Uuid::from_u128(0x701));

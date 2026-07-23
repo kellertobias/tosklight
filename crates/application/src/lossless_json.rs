@@ -53,6 +53,19 @@ pub fn merge_typed_request<T: Serialize>(
     Ok(merged)
 }
 
+/// Removes a stored echo of a field whose canonical serialization skips the zero value.
+///
+/// The typed model treats the zero as absent, so a raw `key: 0` surviving the merge is not an
+/// extension but a stale echo: the next compatibility-migration pass would strip it and silently
+/// bump the object revision. Dropping it here keeps merged bodies byte-stable across migrations.
+pub(crate) fn strip_zero_u64_echo(body: &mut Value, key: &str) {
+    if let Value::Object(map) = body
+        && map.get(key).and_then(Value::as_u64) == Some(0)
+    {
+        map.remove(key);
+    }
+}
+
 /// Applies only fields changed by a typed migration. Raw fields unknown to this build survive.
 pub(crate) fn apply_delta(stored: &mut Value, before: &Value, after: &Value) {
     if before == after {

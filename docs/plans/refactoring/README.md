@@ -40,9 +40,9 @@ keep the ordering, note the split in the parent's Result.
 - Last recorded full-suite result (2026-07-23, after the skipped-test/DMX-006/telemetry
   fixes landed): **274 passed / 13 skipped**; the only failing test is the user-dirty
   `product-demo` run.
-- Current tree has 6 `test.skip` sites: CUE-011 @supplemental-ui + its @ui skip entry
-  (chunk 02), 3× MANUAL-019 @ui and PRELOAD-004 @supplemental-ui (deferred §5 features,
-  out of scope here), and the conditional desktop-smoke gate.
+- Current tree has 4 `test.skip` sites (chunk 02 unskipped both CUE-011 entries):
+  3× MANUAL-019 @ui and PRELOAD-004 @supplemental-ui (deferred §5 features, out of scope
+  here), and the conditional desktop-smoke gate.
 - **Before claiming the first chunk, run `npm run test:e2e` once and record the fresh
   numbers here** — that run is the binding baseline for "no net new regressions".
 

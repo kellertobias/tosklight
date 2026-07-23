@@ -87,6 +87,9 @@ pub struct MutateActiveShowObjectsResult {
     pub context: ActionContext,
     pub show_revision: PortableShowRevision,
     pub changes: Vec<ActiveShowObjectChange>,
+    /// Compatibility-migration write-backs committed alongside the requested changes. Reported so
+    /// adapters can publish their revision bumps instead of leaving them silent.
+    pub migration_changes: Vec<ActiveShowObjectChange>,
     pub event_sequence: u64,
 }
 
@@ -110,6 +113,9 @@ pub struct UndoActiveShowObjectResult {
     pub context: ActionContext,
     pub show_revision: PortableShowRevision,
     pub change: ActiveShowObjectChange,
+    /// Compatibility-migration write-backs committed alongside the undone object. Reported so
+    /// adapters can publish their revision bumps instead of leaving them silent.
+    pub migration_changes: Vec<ActiveShowObjectChange>,
     pub event_sequence: u64,
 }
 

@@ -11,16 +11,6 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
   pairedScenario<{ completed: boolean }>({
     id: "CUE-011",
     title: "Cue edits and atomic renumber preserve runtime identity, output, and persisted bytes",
-    // UI-only residue, narrowed 2026-07-23: trace inspection shows the first three cue saves
-    // (title/fade/delay) apply via /playback-topology/actions with clean 200s (no 409 retry is
-    // involved), but during the trigger-choice step the server object revision advances with NO
-    // corresponding client request captured and NO show_object_changed event, so the header can
-    // never learn the new revision. The topology response bodies also echo a legacy
-    // chaser_xfade_millis:0 that the request never sent (lossless_json merge of the stored raw
-    // body), pointing at a server-side cue_list body-normalization write that bumps the revision
-    // without publishing. Needs a dedicated server-side investigation of that silent write; the
-    // client-side watermark install guard was already fixed and unit-covered.
-    skip: { ui: "Server bumps a cue_list revision without a request or show_object_changed during the trigger-choice step" },
     arrange: () => ({ completed: false }),
     api: async ({ api, bench }, state) => {
       const show = await loadCanonicalCopy(api, bench, "cue-011-api", "compact-rig");
@@ -180,10 +170,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     assert: async (_context, state) => expect(state.completed).toBe(true),
   });
 
-  // Same server-side silent-revision residue as the CUE-011 paired skip: one extra cue_list
-  // revision appears with an unchanged body and no show_object_changed event during the
-  // Settings/Renumber flow, breaking the one-revision expectation.
-  test.skip("CUE-011 @supplemental-ui › Renumber is one revision, preserves stable Cue/runtime identity, and rejects every invalid path", async ({ api, bench, desk, page }) => {
+  test("CUE-011 @supplemental-ui › Renumber is one revision, preserves stable Cue/runtime identity, and rejects every invalid path", async ({ api, bench, desk, page }) => {
     await loadCanonicalCopy(api, bench, "cue-011-renumber", "compact-rig");
     const installed = await installCuelist(api, { name: "Renumber Sequence", numbers: [1, 1.5, 2, 7] });
     const oneCue = await installCuelist(api, { name: "One Cue Sequence", numbers: [1], playback: 2 });

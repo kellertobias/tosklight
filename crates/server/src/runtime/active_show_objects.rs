@@ -103,10 +103,35 @@ fn run_active_show_object_action_with_ports(
     action: light_application::ActionEnvelope<light_application::MutateActiveShowObjectsCommand>,
     ports: &ServerActiveShowPorts,
 ) -> Result<light_application::MutateActiveShowObjectsResult, ApiError> {
-    state
+    let show_id = action.command.show_id;
+    let result = state
         .active_show_service
         .mutate_objects(action, ports)
-        .map_err(active_show_object_api_error)
+        .map_err(active_show_object_api_error)?;
+    emit_migration_object_changes(state, show_id, &result.migration_changes);
+    Ok(result)
+}
+
+/// Publishes the legacy per-object event for compatibility-migration write-backs that rode along
+/// a committed mutation, so their revision bumps never stay silent for connected clients.
+pub(super) fn emit_migration_object_changes(
+    state: &AppState,
+    show_id: light_core::ShowId,
+    changes: &[light_application::ActiveShowObjectChange],
+) {
+    for change in changes {
+        emit(
+            state,
+            "show_object_changed",
+            serde_json::json!({
+                "show_id": show_id,
+                "kind": change.kind.as_str(),
+                "id": change.object_id,
+                "revision": change.object_revision,
+                "source": "migration",
+            }),
+        );
+    }
 }
 
 pub(super) async fn run_active_show_object_action_async(
@@ -150,13 +175,15 @@ pub(super) async fn run_active_show_object_undo_async(
     let worker_state = state.clone();
     let result = tokio::task::spawn_blocking(move || {
         let ports = ServerActiveShowPorts::show_objects(worker_state.clone());
-        (
-            worker_state
-                .active_show_service
-                .undo_object(action, &ports)
-                .map_err(active_show_object_api_error),
-            activation,
-        )
+        let show_id = action.command.show_id;
+        let undone = worker_state
+            .active_show_service
+            .undo_object(action, &ports)
+            .map_err(active_show_object_api_error)
+            .inspect(|result| {
+                emit_migration_object_changes(&worker_state, show_id, &result.migration_changes);
+            });
+        (undone, activation)
     })
     .await
     .map_err(|error| ApiError::internal(format!("active-show service task failed: {error}")))?;

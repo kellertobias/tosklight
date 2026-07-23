@@ -65,3 +65,33 @@ CUE-011 was flaky-adjacent historically — re-run in isolation before trusting 
 
 None — but if half 2 turns out to require touching every migration call site, record the
 scope increase in the result note rather than silently expanding.
+
+## Result
+
+- **Half 1 (echo strip):** `lossless_json::strip_zero_u64_echo` removes a merged
+  `chaser_xfade_millis: 0` echo; applied in both cue_list merge paths —
+  `normalize_cue_list` (`active_show/objects.rs`) and `cue_list_body`
+  (`playback_topology/candidate.rs`). The canonical model treats the zero as absent, so
+  merged bodies stay byte-stable across migration passes and topology saves stop
+  re-persisting the legacy key.
+- **Half 2 (observable write-backs):** `commit_object_changes` now collects migration
+  write-backs from `PortableShowCommit::written_objects()` (dedup against requested
+  changes), publishes them inside the one `active_show_objects_changed` event, and
+  returns them as a new `migration_changes` field on `MutateActiveShowObjectsResult`
+  and `UndoActiveShowObjectResult`. The server funnel
+  (`runtime/active_show_objects.rs::emit_migration_object_changes`) emits legacy
+  `show_object_changed` (with `"source":"migration"`) per write-back for both the
+  mutation and undo paths — central, so every server call site is covered.
+- Regression tests: `cue_list_mutation_drops_the_stored_zero_chaser_xfade_echo`
+  (verified to fail without the fix) and
+  `committed_migration_write_backs_are_published_as_object_changes` in
+  `active_show/tests.rs`.
+- Both CUE-011 tests unskipped; the focused spec run passes 7/7.
+- Suite numbers: application 389 passed; server 408 passed; full e2e
+  **276 passed / 11 skipped / 1 failed** (the pre-existing user-dirty product-demo run)
+  vs baseline 274/13/1 — two skips converted to passes, no net new regressions.
+- Surprises / scope notes: migration write-backs riding along **route** mutations (and
+  route-kind migrations themselves) remain unpublished — `mutate_output_route` discards
+  the commit's written objects and `from_storage_kind` has no route variant. Filed as
+  `pending/02c-route-mutation-migration-observability.md` instead of expanding here.
+  Show-open migration commits stay event-less by design (full client re-bootstrap).
