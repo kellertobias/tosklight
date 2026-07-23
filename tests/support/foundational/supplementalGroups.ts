@@ -75,7 +75,7 @@ export const frozenGroupApi: FoundationalCase = {
 		await loadCompactRig(api, bench, "group-004-api");
 		const fixtures = await fixtureIdsByNumber(api);
 
-		await command(api, "GROUP GROUP 1");
+		await command(api, "DEGRP 1");
 		// DEGRP dereferences to individual fixtures with no reference back to the source Group.
 		await expectProgrammer(api, (programmer) => {
 			expect(programmer.selection_expression?.type).toBe("sources");

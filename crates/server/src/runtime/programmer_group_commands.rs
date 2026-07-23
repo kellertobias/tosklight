@@ -117,7 +117,7 @@ fn apply_group_value(
     let relative = value.len() == 2 && matches!(value[0].as_str(), "+" | "-");
     if relative && !frozen {
         return Err(
-            "relative group values require GROUP GROUP so each fixture keeps its own offset".into(),
+            "relative group values require DEGRP so each fixture keeps its own offset".into(),
         );
     }
     if relative && value[1] == "FULL" {

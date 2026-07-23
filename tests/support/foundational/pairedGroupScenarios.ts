@@ -45,7 +45,7 @@ export function registerFrozenAndEmptyGroupPairedScenarios() {
 			};
 		},
 		api: async ({ api }, state) => {
-			await command(api, "GROUP GROUP 1");
+			await command(api, "DEGRP 1");
 			await storeGroup({
 				via: "programmer",
 				surface: { via: "command-line", api },

@@ -72,7 +72,7 @@ pub(super) fn apply_current_selection_value(
     {
         if relative {
             return Err(
-                "relative group values require GROUP GROUP so each fixture keeps its own offset"
+                "relative group values require DEGRP so each fixture keeps its own offset"
                     .into(),
             );
         }

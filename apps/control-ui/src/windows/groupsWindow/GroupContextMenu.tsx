@@ -85,7 +85,7 @@ export function GroupContextMenu({
 			<Button onClick={() => runAndClose(`GROUP ${group.id}`)}>
 				Select live group
 			</Button>
-			<Button onClick={() => runAndClose(`GROUP GROUP ${group.id}`)}>
+			<Button onClick={() => runAndClose(`DEGRP ${group.id}`)}>
 				Select frozen group
 			</Button>
 			{group.body.frozen_from && (
