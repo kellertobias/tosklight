@@ -561,28 +561,15 @@ describe("ParameterControls hardware encoders", () => {
 			fireEvent.click(screen.getByRole("button", { name: key }));
 		}
 
+		// The server resolves the fan-out: one ordered-selection mutation carries the points.
 		expect(normalValuesActions.batch).toHaveBeenCalledWith({
 			requestId: expect.any(String),
 			mutations: [
 				{
-					action: "set_fixture",
-					fixtureId: "fixture-3",
+					action: "set_selection",
+					fixtureIds: ["fixture-3", "fixture-1", "fixture-2"],
 					attribute: "intensity",
-					value: { kind: "normalized", value: 0 },
-					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
-				},
-				{
-					action: "set_fixture",
-					fixtureId: "fixture-1",
-					attribute: "intensity",
-					value: { kind: "normalized", value: 0.25 },
-					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
-				},
-				{
-					action: "set_fixture",
-					fixtureId: "fixture-2",
-					attribute: "intensity",
-					value: { kind: "normalized", value: 0.5 },
+					value: { kind: "spread", value: [0, 0.5] },
 					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 				},
 			],

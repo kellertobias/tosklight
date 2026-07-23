@@ -1,5 +1,7 @@
 import {
+	type Dispatch,
 	type RefObject,
+	type SetStateAction,
 	useCallback,
 	useEffect,
 	useRef,
@@ -130,45 +132,18 @@ export function useSoundCapture({
 			return;
 		}
 		for (const group of speedGroupIds) {
-			const saved = states[group]?.configuration;
-			const preview = previews[group];
-			const configuration = preview ?? saved;
-			const deviceId = deviceIds[group] ?? "";
-			const shouldCapture = Boolean(
-				configuration && deviceId && (saved?.enabled || preview),
-			);
-			const running = analyzers.current.get(group);
-			if (!shouldCapture || !configuration) {
-				if (running) {
-					running.analyzer.stop();
-					analyzers.current.delete(group);
-				}
-				setCaptures((current) => ({
-					...current,
-					[group]: deviceId
-						? inactiveCaptureStatus
-						: {
-								...inactiveCaptureStatus,
-								message: saved?.enabled
-									? "Sound-to-Light is enabled, but this browser has no desk-local input assignment."
-									: inactiveCaptureStatus.message,
-							},
-				}));
-				continue;
-			}
-			if (running?.deviceId === deviceId) {
-				running.analyzer.updateConfiguration(configuration);
-				continue;
-			}
-			running?.analyzer.stop();
-			const analyzer = new SoundToLightAudioAnalyzer(
-				configuration,
-				(observation) => {
+			reconcileGroupCapture(group, {
+				saved: states[group]?.configuration,
+				preview: previews[group],
+				deviceId: deviceIds[group] ?? "",
+				analyzers: analyzers.current,
+				setCaptures,
+				observe: (observation) => {
 					if (shouldPublishSoundObservation(statesRef.current[group])) {
 						postObservation(group, observation);
 					}
 				},
-				(status) => {
+				status: (status) => {
 					if (!mounted.current) return;
 					setCaptures((current) => ({ ...current, [group]: status }));
 					if (status.phase === "capturing") {
@@ -177,9 +152,7 @@ export function useSoundCapture({
 					}
 					if (status.phase === "permission_denied") setPermission("denied");
 				},
-			);
-			analyzers.current.set(group, { deviceId, analyzer });
-			void analyzer.start(deviceId);
+			});
 		}
 	}, [
 		deviceIds,
@@ -193,4 +166,57 @@ export function useSoundCapture({
 	]);
 
 	return captures;
+}
+
+interface GroupCaptureContext {
+	saved: SoundToLightConfig | undefined;
+	preview: SoundToLightConfig | undefined;
+	deviceId: string;
+	analyzers: Map<
+		SpeedGroupId,
+		{ deviceId: string; analyzer: SoundToLightAudioAnalyzer }
+	>;
+	setCaptures: Dispatch<SetStateAction<SoundGroupMap<SoundCaptureStatus>>>;
+	observe: (observation: SoundObservation) => void;
+	status: (status: SoundCaptureStatus) => void;
+}
+
+/// Starts, retunes, or stops one Speed Group's audio analyzer to match its configuration.
+function reconcileGroupCapture(group: SpeedGroupId, context: GroupCaptureContext) {
+	const { saved, preview, deviceId, analyzers, setCaptures } = context;
+	const configuration = preview ?? saved;
+	const shouldCapture = Boolean(
+		configuration && deviceId && (saved?.enabled || preview),
+	);
+	const running = analyzers.get(group);
+	if (!shouldCapture || !configuration) {
+		if (running) {
+			running.analyzer.stop();
+			analyzers.delete(group);
+		}
+		setCaptures((current) => ({
+			...current,
+			[group]: deviceId
+				? inactiveCaptureStatus
+				: {
+						...inactiveCaptureStatus,
+						message: saved?.enabled
+							? "Sound-to-Light is enabled, but this browser has no desk-local input assignment."
+							: inactiveCaptureStatus.message,
+					},
+		}));
+		return;
+	}
+	if (running?.deviceId === deviceId) {
+		running.analyzer.updateConfiguration(configuration);
+		return;
+	}
+	running?.analyzer.stop();
+	const analyzer = new SoundToLightAudioAnalyzer(
+		configuration,
+		context.observe,
+		context.status,
+	);
+	analyzers.set(group, { deviceId, analyzer });
+	void analyzer.start(deviceId);
 }

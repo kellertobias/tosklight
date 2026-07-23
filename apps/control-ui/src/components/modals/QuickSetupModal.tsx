@@ -177,6 +177,44 @@ function stackedModal(content: ReactNode, closeLayer: () => void) {
 	);
 }
 
+
+/** State and workflow for the MVR import/export flows, kept outside QuickSetupModal for size. */
+function useMvrController(
+  lifecycle: ReturnType<typeof useShowLifecycle>,
+  bootstrap: ReturnType<typeof useBootstrapSnapshot>,
+  closeSaveAs: () => void,
+) {
+  const [mvrMode, setMvrMode] = useState<"new" | "merge" | "export" | null>(null);
+  const [mvrTarget, setMvrTarget] = useState<ShowEntry | null>(null);
+  const [mvrPreview, setMvrPreview] = useState<MvrImportPreview | null>(null);
+  const [mvrExportPreview, setMvrExportPreview] = useState<MvrExportPreview | null>(null);
+  const [mvrName, setMvrName] = useState("");
+  const [mvrBusy, setMvrBusy] = useState(false);
+  const [mvrResolutions, setMvrResolutions] = useState<Record<string, { action: string; universe?: number; address?: number }>>({});
+  async function inspectMvr(file: File) {
+    setMvrBusy(true);
+    try { const preview = await lifecycle?.previewMvr(file, mvrMode === "merge" ? mvrTarget?.id : undefined); if (!preview) return; setMvrPreview(preview); setMvrName(file.name.replace(/\.mvr$/i, "")); const conflicted = new Set(preview.address_conflicts.map((message) => preview.fixtures.find((fixture) => message.startsWith(fixture.name))?.uuid).filter(Boolean)); setMvrResolutions(Object.fromEntries([...conflicted].map((uuid) => [uuid!, { action: "import_unpatched" }]))); }
+    finally { setMvrBusy(false); }
+  }
+  async function applyMvr() {
+    if (!mvrPreview) return; setMvrBusy(true);
+    try { await lifecycle?.applyMvr(mvrPreview.token, mvrMode === "new" ? { new_show: { name: mvrName.trim(), open_after_import: true }, resolutions: mvrResolutions } : { existing_show_id: mvrTarget!.id, resolutions: mvrResolutions }); setMvrMode(null); setMvrPreview(null); }
+    finally { setMvrBusy(false); }
+  }
+  async function inspectExport(show: ShowEntry) { setMvrTarget(show); setMvrBusy(true); try { setMvrExportPreview((await lifecycle?.previewMvrExport(show.id)) ?? null); } finally { setMvrBusy(false); } }
+  function openMvrImport(closeSource: () => void) { closeSource(); setMvrMode("new"); setMvrTarget(null); setMvrPreview(null); }
+  function openMvrExport() {
+    closeSaveAs(); setMvrMode("export"); setMvrExportPreview(null);
+    const active = bootstrap?.active_show;
+    if (active) void inspectExport(active); else setMvrTarget(null);
+  }
+  return {
+    mvrMode, setMvrMode, mvrTarget, setMvrTarget, mvrPreview, setMvrPreview, mvrExportPreview,
+    mvrName, setMvrName, mvrBusy, mvrResolutions, setMvrResolutions,
+    inspectMvr, applyMvr, inspectExport, openMvrImport, openMvrExport,
+  };
+}
+
 export function QuickSetupModal() {
   const { state, dispatch } = useApp();
   const lifecycle = useShowLifecycle();
@@ -202,13 +240,11 @@ export function QuickSetupModal() {
   const [changeUserOpen, setChangeUserOpen] = useState(false);
   const [newUserName, setNewUserName] = useState("");
   const [destination, setDestination] = useState<"local" | "flash">("local");
-  const [mvrMode, setMvrMode] = useState<"new" | "merge" | "export" | null>(null);
-  const [mvrTarget, setMvrTarget] = useState<ShowEntry | null>(null);
-  const [mvrPreview, setMvrPreview] = useState<MvrImportPreview | null>(null);
-  const [mvrExportPreview, setMvrExportPreview] = useState<MvrExportPreview | null>(null);
-  const [mvrName, setMvrName] = useState("");
-  const [mvrBusy, setMvrBusy] = useState(false);
-  const [mvrResolutions, setMvrResolutions] = useState<Record<string, { action: string; universe?: number; address?: number }>>({});
+  const {
+    mvrMode, setMvrMode, mvrTarget, setMvrTarget, mvrPreview, setMvrPreview, mvrExportPreview,
+    mvrName, setMvrName, mvrBusy, mvrResolutions, setMvrResolutions,
+    inspectMvr, applyMvr, inspectExport, openMvrImport, openMvrExport,
+  } = useMvrController(lifecycle, bootstrap, () => setSaveAsOpen(false));
   const flashDriveConnected = false;
   const showIndicator = useShowIndicator();
   const activeShow = bootstrap?.active_show;
@@ -277,16 +313,6 @@ export function QuickSetupModal() {
       setOverwriteBusy(false);
     }
   }
-  async function inspectMvr(file: File) {
-    setMvrBusy(true);
-    try { const preview = await lifecycle?.previewMvr(file, mvrMode === "merge" ? mvrTarget?.id : undefined); if (!preview) return; setMvrPreview(preview); setMvrName(file.name.replace(/\.mvr$/i, "")); const conflicted = new Set(preview.address_conflicts.map((message) => preview.fixtures.find((fixture) => message.startsWith(fixture.name))?.uuid).filter(Boolean)); setMvrResolutions(Object.fromEntries([...conflicted].map((uuid) => [uuid!, { action: "import_unpatched" }]))); }
-    finally { setMvrBusy(false); }
-  }
-  async function applyMvr() {
-    if (!mvrPreview) return; setMvrBusy(true);
-    try { await lifecycle?.applyMvr(mvrPreview.token, mvrMode === "new" ? { new_show: { name: mvrName.trim(), open_after_import: true }, resolutions: mvrResolutions } : { existing_show_id: mvrTarget!.id, resolutions: mvrResolutions }); setMvrMode(null); setMvrPreview(null); }
-    finally { setMvrBusy(false); }
-  }
   async function shutDownDesk() {
     if (!await lifecycle?.shutdownServer()) return;
     if (desktop.available) await desktop.exitApplication();
@@ -294,13 +320,6 @@ export function QuickSetupModal() {
   async function lockDesk() {
     close();
     await deskLockActions?.lockDesk();
-  }
-  async function inspectExport(show: ShowEntry) { setMvrTarget(show); setMvrBusy(true); try { setMvrExportPreview((await lifecycle?.previewMvrExport(show.id)) ?? null); } finally { setMvrBusy(false); } }
-  function openMvrImport(closeSource: () => void) { closeSource(); setMvrMode("new"); setMvrTarget(null); setMvrPreview(null); }
-  function openMvrExport() {
-    setSaveAsOpen(false); setMvrMode("export"); setMvrExportPreview(null);
-    const active = bootstrap?.active_show;
-    if (active) void inspectExport(active); else setMvrTarget(null);
   }
   return <div className="modal-backdrop" onPointerDown={(event) => { if (event.currentTarget === event.target) close(); }}><section className="modal-card show-modal" role="dialog" aria-modal="true" aria-label="Show">
     <ModalTitleBar title="Show" closeLabel="Close Show" onClose={close} actions={<>

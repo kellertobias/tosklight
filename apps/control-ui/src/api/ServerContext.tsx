@@ -49,28 +49,13 @@ export {
 	deskLayoutScopeKey,
 } from "../features/server/contracts";
 
-export function ServerProvider({
-	children,
-	sessionRole = "primary",
-}: PropsWithChildren<{ sessionRole?: SessionRole }>) {
-	const state = useServerState();
-	useServerPolling(state);
-	const loadShowObjects = useShowObjects(state);
-	const refresh = useServerRefresh(state, loadShowObjects);
-	const sessionHandoff = useSessionHandoff();
-	useServerConnection(state, loadShowObjects, sessionRole, sessionHandoff);
-	const commandLine = useCommandLineController(state);
-	const fileAccess = useFileAccess(state);
-	const boundaries = useServerFeatureBoundaries(state);
-	const model = {
-		...state,
-		sessionRole,
-		...commandLine,
-		...fileAccess,
-		loadShowObjects,
-		refresh,
-	};
-	const value = composeServerContextValue(model);
+
+/** Data-shaped provider sources, extracted from ServerProvider for size. */
+function useProviderDataSources(
+	state: ReturnType<typeof useServerState>,
+	value: ReturnType<typeof composeServerContextValue>,
+	refresh: ReturnType<typeof useServerRefresh>,
+) {
 	const fileSource = {
 		status: state.status,
 		fileRoots: value.fileRoots,
@@ -100,59 +85,6 @@ export function ServerProvider({
 		selectControlDesk: value.selectControlDesk,
 		removeClient: value.removeClient,
 	};
-	const selectiveImportSource = {
-		catalog: state.client.selectiveImportCatalog,
-		preview: state.client.previewSelectiveImport,
-		apply: state.client.applySelectiveImport,
-		refreshCompatibilityState: refresh,
-		reportError: state.setError,
-	};
-	const highlightActions = useMemo(
-		() => ({
-			highlightAction: value.highlightAction,
-			dismissHighlightError: value.dismissHighlightError,
-			setPatchPreviewHighlight: value.setPatchPreviewHighlight,
-		}),
-		[
-			value.highlightAction,
-			value.dismissHighlightError,
-			value.setPatchPreviewHighlight,
-		],
-	);
-	const programmerActions = useMemo(
-		() => ({
-			undoProgrammer: value.undoProgrammer,
-			clearProgrammer: value.clearProgrammer,
-			controlFixtureAction: value.controlFixtureAction,
-			generateFixturePresets: value.generateFixturePresets,
-			alignSelection: value.alignSelection,
-			storePreload: value.storePreload,
-		}),
-		[
-			value.undoProgrammer,
-			value.clearProgrammer,
-			value.controlFixtureAction,
-			value.generateFixturePresets,
-			value.alignSelection,
-			value.storePreload,
-		],
-	);
-	const dmxDiagnostics = useMemo(
-		() => ({
-			readDmx: value.readDmx,
-			setDmxOverride: value.setDmxOverride,
-			outputRoutes: value.outputRoutes,
-			saveOutputRoute: value.saveOutputRoute,
-			deleteOutputRoute: value.deleteOutputRoute,
-		}),
-		[
-			value.readDmx,
-			value.setDmxOverride,
-			value.outputRoutes,
-			value.saveOutputRoute,
-			value.deleteOutputRoute,
-		],
-	);
 	const showLifecycle = useMemo(
 		() => ({
 			shows: value.shows,
@@ -259,6 +191,60 @@ export function ServerProvider({
 			value.matter,
 		],
 	);
+	return {
+		fileSource, screenSource, showLifecycle,
+		deskConnection, fixtureLibraryState, mediaServersState,
+	};
+}
+
+/** Action-shaped provider sources, extracted from ServerProvider for size. */
+function useProviderActionSources(value: ReturnType<typeof composeServerContextValue>) {
+	const highlightActions = useMemo(
+		() => ({
+			highlightAction: value.highlightAction,
+			dismissHighlightError: value.dismissHighlightError,
+			setPatchPreviewHighlight: value.setPatchPreviewHighlight,
+		}),
+		[
+			value.highlightAction,
+			value.dismissHighlightError,
+			value.setPatchPreviewHighlight,
+		],
+	);
+	const programmerActions = useMemo(
+		() => ({
+			undoProgrammer: value.undoProgrammer,
+			clearProgrammer: value.clearProgrammer,
+			controlFixtureAction: value.controlFixtureAction,
+			generateFixturePresets: value.generateFixturePresets,
+			alignSelection: value.alignSelection,
+			storePreload: value.storePreload,
+		}),
+		[
+			value.undoProgrammer,
+			value.clearProgrammer,
+			value.controlFixtureAction,
+			value.generateFixturePresets,
+			value.alignSelection,
+			value.storePreload,
+		],
+	);
+	const dmxDiagnostics = useMemo(
+		() => ({
+			readDmx: value.readDmx,
+			setDmxOverride: value.setDmxOverride,
+			outputRoutes: value.outputRoutes,
+			saveOutputRoute: value.saveOutputRoute,
+			deleteOutputRoute: value.deleteOutputRoute,
+		}),
+		[
+			value.readDmx,
+			value.setDmxOverride,
+			value.outputRoutes,
+			value.saveOutputRoute,
+			value.deleteOutputRoute,
+		],
+	);
 	const soundToLightActions = useMemo(
 		() => ({
 			speedGroup: value.speedGroup,
@@ -281,6 +267,44 @@ export function ServerProvider({
 		}),
 		[value.dismissError, value.simulateError, value.readServerLogs],
 	);
+	return { highlightActions, programmerActions, dmxDiagnostics, soundToLightActions, shellStatusActions };
+}
+
+export function ServerProvider({
+	children,
+	sessionRole = "primary",
+}: PropsWithChildren<{ sessionRole?: SessionRole }>) {
+	const state = useServerState();
+	useServerPolling(state);
+	const loadShowObjects = useShowObjects(state);
+	const refresh = useServerRefresh(state, loadShowObjects);
+	const sessionHandoff = useSessionHandoff();
+	useServerConnection(state, loadShowObjects, sessionRole, sessionHandoff);
+	const commandLine = useCommandLineController(state);
+	const fileAccess = useFileAccess(state);
+	const boundaries = useServerFeatureBoundaries(state);
+	const model = {
+		...state,
+		sessionRole,
+		...commandLine,
+		...fileAccess,
+		loadShowObjects,
+		refresh,
+	};
+	const value = composeServerContextValue(model);
+	const {
+		fileSource, screenSource, showLifecycle,
+		deskConnection, fixtureLibraryState, mediaServersState,
+	} = useProviderDataSources(state, value, refresh);
+	const selectiveImportSource = {
+		catalog: state.client.selectiveImportCatalog,
+		preview: state.client.previewSelectiveImport,
+		apply: state.client.applySelectiveImport,
+		refreshCompatibilityState: refresh,
+		reportError: state.setError,
+	};
+	const { highlightActions, programmerActions, dmxDiagnostics, soundToLightActions, shellStatusActions } =
+		useProviderActionSources(value);
 	return (
 		<HighlightStateProvider store={state.highlightStore}>
 			<HighlightActionsProvider actions={highlightActions}>
