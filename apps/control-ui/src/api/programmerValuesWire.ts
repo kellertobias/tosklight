@@ -227,6 +227,14 @@ function encodeAction(
 function encodeMutation(
 	mutation: ProgrammerValuesMutation,
 ): WireProgrammingValueMutation {
+	if (mutation.action === "set_selection")
+		return {
+			type: mutation.action,
+			fixture_ids: [...mutation.fixtureIds],
+			attribute: mutation.attribute,
+			value: mutation.value,
+			timing: encodeTiming(mutation.timing),
+		};
 	if (mutation.action === "set_fixture")
 		return {
 			type: mutation.action,

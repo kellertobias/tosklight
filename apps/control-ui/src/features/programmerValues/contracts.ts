@@ -57,6 +57,13 @@ export interface ProgrammerValuesScope {
 
 export type ProgrammerValuesMutation =
 	| {
+			action: "set_selection";
+			fixtureIds: readonly string[];
+			attribute: string;
+			value: AttributeValue;
+			timing: ProgrammerValueTiming;
+	  }
+	| {
 			action: "set_fixture";
 			fixtureId: string;
 			attribute: string;

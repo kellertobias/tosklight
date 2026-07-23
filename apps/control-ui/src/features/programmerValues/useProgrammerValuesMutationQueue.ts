@@ -103,6 +103,8 @@ export function programmerValuesMutationKey(
 				mutation.action === "release_fixture"
 			)
 				return `fixture:${mutation.fixtureId}:${mutation.attribute}`;
+			if (mutation.action === "set_selection")
+				return `selection:${mutation.fixtureIds.join(",")}:${mutation.attribute}`;
 			return `group:${mutation.groupId}:${mutation.attribute}`;
 		})
 		.join("\u0000");

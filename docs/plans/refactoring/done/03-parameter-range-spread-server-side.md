@@ -72,3 +72,36 @@ the spread lands identically (compare against `AT 0 THRU 50` on the command line
 None. Chunk 03b (deterministic multi-point resolver, adopted from Next/50) follows
 directly on this chunk — keep the server-side routing generic over N control points so
 03b only has to swap the resolver math, not the plumbing.
+
+## Result
+
+- **Shared fan-out vocabulary landed:** new `SetSelection` variant (ordered
+  `fixture_ids` + typed operation payload + timing) on both the v2 wire mutation and
+  action enums (`crates/wire/src/v2/programming.rs`), documented as the contract 04/05
+  reuse. `deny_unknown_fields` removed from both touched enums per the standing rule.
+  Contracts regenerated (`generate-contracts`).
+- **Server-side resolution:** the wire decode (`values_wire.rs::application_mutations`)
+  expands `SetSelection` into per-fixture `SetFixture` mutations in the request's
+  selection order — `Spread` control points interpolate via the shared math, any other
+  value applies uniformly — so validation, replay fingerprints, and execution see plain
+  per-fixture mutations unchanged.
+- **One resolver, one home:** `spread_position` moved from
+  `runtime/cue_speed_commands.rs` into `light_core::attributes` (re-exported for the
+  command-line/group/fixture paths), giving 03b a single place to swap the resolver
+  math.
+- **Client:** the non-group branch of `setParameterRangeMutations` now sends one
+  `set_selection` mutation with the ordered selection and spread points, mirroring the
+  group branch; `spreadValue` and `setParameterMutationsForFixtures` deleted. The
+  optimistic prediction deliberately leaves `set_selection` to the authoritative server
+  outcome instead of duplicating interpolation. Mutation keys cover the new action.
+- **Pin test:** `set_selection_resolves_the_spread_server_side_in_selection_order`
+  (server, API level) proves 3 fixtures in deliberately non-sorted order resolve to
+  0 / 0.25 / 0.5 for points `[0, 0.5]` — identical to the old client math and the
+  command line's `AT 0 THRU 50`. Client unit test updated to the new single-mutation
+  shape.
+- Suite numbers: light-core 1 + light-server 412 passed (fresh test included);
+  `test:unit` clean (pre-existing size-ratchet exit only); `test:e2e-api` 85 passed /
+  1 skipped; full e2e **276 passed / 11 skipped / 1 failed** (pre-existing user-dirty
+  product-demo) — no net new regressions.
+- Note: the interactive `npm run open` comparison was not run in this session; the
+  API-level pin test covers the value equivalence the manual check targets.

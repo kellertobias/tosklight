@@ -59,6 +59,10 @@ function applyMutation(
 	programmerOrder: number,
 ) {
 	switch (mutation.action) {
+		// The server resolves the per-fixture fan-out; the optimistic projection waits for the
+		// authoritative outcome instead of duplicating the interpolation client-side.
+		case "set_selection":
+			return unchanged;
 		case "set_fixture": {
 			const key = fixtureKey(mutation);
 			if (sameFixtureWrite(fixtures.get(key), mutation)) return unchanged;

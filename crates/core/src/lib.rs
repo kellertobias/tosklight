@@ -6,7 +6,7 @@ mod clock;
 
 pub use attributes::{
     ATTRIBUTE_REGISTRY, AttributeClass, AttributeDescriptor, AttributeKey, AttributeValue,
-    AttributeValueType, MergeMode, TimedValue, Xyz, attribute_descriptor,
+    AttributeValueType, MergeMode, TimedValue, Xyz, attribute_descriptor, spread_position,
 };
 pub use clock::{ApplicationClock, EngineClock, ManualClock, SharedClock, SystemClock};
 

@@ -61,13 +61,17 @@ export function setParameterRangeMutations(
 			kind: "spread",
 			value: points,
 		});
-	return setParameterMutationsForFixtures(
-		projection,
-		attribute,
-		projection.selectedFixtureIds.map((_, index) =>
-			spreadValue(points, index, projection.selectedFixtureIds.length),
-		),
-	);
+	if (projection.selectedFixtureIds.length === 0) return [];
+	// The server resolves the per-fixture interpolation across the ordered selection.
+	return [
+		{
+			action: "set_selection",
+			fixtureIds: projection.selectedFixtureIds,
+			attribute,
+			value: { kind: "spread", value: points },
+			timing: parameterValueTiming(projection.programmerFadeMillis),
+		},
+	] satisfies ProgrammerValuesMutation[];
 }
 
 export function releaseParameterMutations(
@@ -140,41 +144,13 @@ export function parameterMutationKey(
 				return `group:${mutation.groupId}:${mutation.attribute}`;
 			if (mutation.action === "set_fixture")
 				return `fixture:${mutation.fixtureId}:${mutation.attribute}`;
+			if (mutation.action === "set_selection")
+				return `selection:${mutation.fixtureIds.join(",")}:${mutation.attribute}`;
 			return mutation.action;
 		})
 		.join("\u0000");
 }
 
-function setParameterMutationsForFixtures(
-	projection: ParameterProjection,
-	attribute: string,
-	values: readonly number[],
-) {
-	const timing = parameterValueTiming(
-		projection.programmerFadeMillis,
-	);
-	return projection.selectedFixtureIds.map(
-		(fixtureId, index): ProgrammerValuesMutation => ({
-			action: "set_fixture",
-			fixtureId,
-			attribute,
-			value: { kind: "normalized", value: values[index] ?? 0 },
-			timing,
-		}),
-	);
-}
-
 function normalizePercentage(value: number) {
 	return Math.max(0, Math.min(100, value)) / 100;
-}
-
-function spreadValue(points: readonly number[], index: number, count: number) {
-	if (points.length === 1 || count <= 1) return points[0] ?? 0;
-	const position = (index * (points.length - 1)) / (count - 1);
-	const left = Math.floor(position);
-	const right = Math.ceil(position);
-	return (
-		(points[left] ?? 0) +
-		((points[right] ?? 0) - (points[left] ?? 0)) * (position - left)
-	);
 }

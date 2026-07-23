@@ -67,15 +67,15 @@ describe("parameter value mutation builders", () => {
 				timing: { fade: true, fadeMillis: 1_250, delayMillis: null },
 			},
 		]);
-		expect(
-			setParameterRangeMutations(projection(), "pan", [0, 50]).map(
-				(mutation) =>
-					mutation.action === "set_fixture" ? mutation.value : null,
-			),
-		).toEqual([
-			{ kind: "normalized", value: 0 },
-			{ kind: "normalized", value: 0.25 },
-			{ kind: "normalized", value: 0.5 },
+		// The non-group branch sends the ordered selection and lets the server interpolate.
+		expect(setParameterRangeMutations(projection(), "pan", [0, 50])).toEqual([
+			{
+				action: "set_selection",
+				fixtureIds: ["fixture-3", "fixture-1", "fixture-2"],
+				attribute: "pan",
+				value: { kind: "spread", value: [0, 0.5] },
+				timing: { fade: true, fadeMillis: 1_250, delayMillis: null },
+			},
 		]);
 	});
 

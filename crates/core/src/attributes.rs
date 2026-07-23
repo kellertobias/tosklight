@@ -284,6 +284,20 @@ pub enum AttributeValue {
     RawDmxExact(u32),
 }
 
+/// Resolves the value at `index` of an ordered `count`-strong selection from the given control
+/// points: single-point spreads apply uniformly, multi-point spreads interpolate linearly across
+/// the selection order. Shared by every server-side fan-out path (command line, groups, ordered
+/// selections) so all surfaces distribute identically.
+pub fn spread_position(points: &[f32], index: usize, count: usize) -> f32 {
+    if points.len() == 1 || count <= 1 {
+        return points[0];
+    }
+    let position = index as f32 * (points.len() - 1) as f32 / (count - 1) as f32;
+    let left = position.floor() as usize;
+    let right = position.ceil() as usize;
+    points[left] + (points[right] - points[left]) * (position - left as f32)
+}
+
 impl AttributeValue {
     pub fn normalized(&self) -> Option<f32> {
         match self {

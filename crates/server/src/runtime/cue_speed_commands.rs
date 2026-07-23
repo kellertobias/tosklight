@@ -27,15 +27,7 @@ pub(super) fn parse_spread_points(tokens: &[String]) -> Result<Vec<f32>, String>
     Ok(points)
 }
 
-pub(super) fn spread_position(points: &[f32], index: usize, count: usize) -> f32 {
-    if points.len() == 1 || count <= 1 {
-        return points[0];
-    }
-    let position = index as f32 * (points.len() - 1) as f32 / (count - 1) as f32;
-    let left = position.floor() as usize;
-    let right = position.ceil() as usize;
-    points[left] + (points[right] - points[left]) * (position - left as f32)
-}
+pub(super) use light_core::spread_position;
 
 pub(super) fn parse_command_cue_number(tokens: &[String]) -> Result<f64, String> {
     if tokens.is_empty() {

@@ -6,6 +6,19 @@ pub(super) fn values_command(
     action: wire::ProgrammingValuesAction,
 ) -> application::ProgrammingValuesCommand {
     match action {
+        wire::ProgrammingValuesAction::SetSelection {
+            fixture_ids,
+            attribute,
+            value,
+            timing,
+        } => application::ProgrammingValuesCommand::Batch {
+            mutations: application_mutations(wire::ProgrammingValueMutation::SetSelection {
+                fixture_ids,
+                attribute,
+                value,
+                timing,
+            }),
+        },
         wire::ProgrammingValuesAction::SetFixture {
             fixture_id,
             attribute,
@@ -44,7 +57,10 @@ pub(super) fn values_command(
         },
         wire::ProgrammingValuesAction::Batch { mutations } => {
             application::ProgrammingValuesCommand::Batch {
-                mutations: mutations.into_iter().map(application_mutation).collect(),
+                mutations: mutations
+                    .into_iter()
+                    .flat_map(application_mutations)
+                    .collect(),
             }
         }
         wire::ProgrammingValuesAction::Clear => application::ProgrammingValuesCommand::Clear,
@@ -144,10 +160,52 @@ pub(super) fn values_projection(
     }
 }
 
+/// Expands one wire mutation into application mutations. `SetSelection` resolves its fan-out
+/// server-side here, so validation, replay identity, and execution all see plain per-fixture
+/// mutations in the ordered-selection order.
+fn application_mutations(
+    mutation: wire::ProgrammingValueMutation,
+) -> Vec<application::ProgrammingValueMutation> {
+    if let wire::ProgrammingValueMutation::SetSelection {
+        fixture_ids,
+        attribute,
+        value,
+        timing,
+    } = mutation
+    {
+        let count = fixture_ids.len();
+        let value = application_value(value);
+        return fixture_ids
+            .into_iter()
+            .enumerate()
+            .map(|(index, fixture_id)| {
+                let resolved = match &value {
+                    AttributeValue::Spread(points) if !points.is_empty() => {
+                        AttributeValue::Normalized(light_core::spread_position(
+                            points, index, count,
+                        ))
+                    }
+                    other => other.clone(),
+                };
+                application::ProgrammingValueMutation::SetFixture {
+                    fixture_id: FixtureId(fixture_id),
+                    attribute: AttributeKey(attribute.clone()),
+                    value: resolved,
+                    timing: application_timing(timing),
+                }
+            })
+            .collect();
+    }
+    vec![application_mutation(mutation)]
+}
+
 fn application_mutation(
     mutation: wire::ProgrammingValueMutation,
 ) -> application::ProgrammingValueMutation {
     match mutation {
+        wire::ProgrammingValueMutation::SetSelection { .. } => {
+            unreachable!("SetSelection is expanded by application_mutations")
+        }
         wire::ProgrammingValueMutation::SetFixture {
             fixture_id,
             attribute,

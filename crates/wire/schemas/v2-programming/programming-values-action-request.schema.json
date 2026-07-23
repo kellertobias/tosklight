@@ -166,6 +166,42 @@
     "ProgrammingValueMutation": {
       "oneOf": [
         {
+          "description": "Server-side fan-out over an explicitly ordered selection: `Spread` control points\ninterpolate across the given fixture order; any other value applies uniformly. This is the\nshared fan-out vocabulary (ordered selection + typed operation payload) also used by the\ncolor and position fan-out families.",
+          "type": "object",
+          "properties": {
+            "attribute": {
+              "type": "string"
+            },
+            "fixture_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 10000
+            },
+            "timing": {
+              "$ref": "#/$defs/ProgrammingValueTiming",
+              "default": {
+                "fade": false
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "set_selection"
+            },
+            "value": {
+              "$ref": "#/$defs/ProgrammingAttributeValue"
+            }
+          },
+          "required": [
+            "type",
+            "fixture_ids",
+            "attribute",
+            "value"
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "attribute": {
@@ -189,7 +225,6 @@
               "$ref": "#/$defs/ProgrammingAttributeValue"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "fixture_id",
@@ -212,7 +247,6 @@
               "const": "release_fixture"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "fixture_id",
@@ -242,7 +276,6 @@
               "$ref": "#/$defs/ProgrammingAttributeValue"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group_id",
@@ -264,7 +297,6 @@
               "const": "release_group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group_id",
@@ -302,6 +334,42 @@
     "ProgrammingValuesAction": {
       "oneOf": [
         {
+          "description": "Server-side fan-out over an explicitly ordered selection (see\n`ProgrammingValueMutation::SetSelection`).",
+          "type": "object",
+          "properties": {
+            "attribute": {
+              "type": "string"
+            },
+            "fixture_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 10000
+            },
+            "timing": {
+              "$ref": "#/$defs/ProgrammingValueTiming",
+              "default": {
+                "fade": false
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "set_selection"
+            },
+            "value": {
+              "$ref": "#/$defs/ProgrammingAttributeValue"
+            }
+          },
+          "required": [
+            "type",
+            "fixture_ids",
+            "attribute",
+            "value"
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "attribute": {
@@ -325,7 +393,6 @@
               "$ref": "#/$defs/ProgrammingAttributeValue"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "fixture_id",
@@ -348,7 +415,6 @@
               "const": "release_fixture"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "fixture_id",
@@ -378,7 +444,6 @@
               "$ref": "#/$defs/ProgrammingAttributeValue"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group_id",
@@ -400,7 +465,6 @@
               "const": "release_group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group_id",
@@ -422,7 +486,6 @@
               "const": "batch"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "mutations"
@@ -436,7 +499,6 @@
               "const": "clear"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]

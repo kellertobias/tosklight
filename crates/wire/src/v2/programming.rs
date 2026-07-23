@@ -116,8 +116,18 @@ pub struct ProgrammingValuesActionRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingValuesAction {
+    /// Server-side fan-out over an explicitly ordered selection (see
+    /// `ProgrammingValueMutation::SetSelection`).
+    SetSelection {
+        #[schemars(length(max = 10_000))]
+        fixture_ids: Vec<Uuid>,
+        attribute: String,
+        value: ProgrammingAttributeValue,
+        #[serde(default)]
+        timing: ProgrammingValueTiming,
+    },
     SetFixture {
         fixture_id: Uuid,
         attribute: String,
@@ -148,8 +158,20 @@ pub enum ProgrammingValuesAction {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingValueMutation {
+    /// Server-side fan-out over an explicitly ordered selection: `Spread` control points
+    /// interpolate across the given fixture order; any other value applies uniformly. This is the
+    /// shared fan-out vocabulary (ordered selection + typed operation payload) also used by the
+    /// color and position fan-out families.
+    SetSelection {
+        #[schemars(length(max = 10_000))]
+        fixture_ids: Vec<Uuid>,
+        attribute: String,
+        value: ProgrammingAttributeValue,
+        #[serde(default)]
+        timing: ProgrammingValueTiming,
+    },
     SetFixture {
         fixture_id: Uuid,
         attribute: String,

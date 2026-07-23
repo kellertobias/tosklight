@@ -625,3 +625,60 @@ fn assert_only_values_events(scenario: &CommandHttpScenario, expected: usize) {
         )
     )));
 }
+
+#[tokio::test]
+async fn set_selection_resolves_the_spread_server_side_in_selection_order() {
+    let scenario = CommandHttpScenario::new().await;
+    let (template, _, _) = schema_v2_direct_fixture();
+    let mut fixtures = Vec::new();
+    let mut ids = Vec::new();
+    for number in 0..3_u32 {
+        let mut fixture = template.clone();
+        fixture.fixture_id = light_core::FixtureId::new();
+        fixture.fixture_number = Some(number + 1);
+        fixture.address = Some(1 + number as u16 * 8);
+        ids.push(fixture.fixture_id);
+        fixtures.push(fixture);
+    }
+    scenario
+        .state
+        .engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures,
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+
+    // Deliberately not id-sorted: the interpolation must follow the request's selection order,
+    // matching the command line's `AT 0 THRU 50` distribution.
+    let ordered = [ids[2], ids[0], ids[1]];
+    let action = serde_json::json!({
+        "request_id": "selection-spread",
+        "expected_revision": 0,
+        "expected_capture_mode_revision": 0,
+        "action": {"type": "batch", "mutations": [{
+            "type": "set_selection",
+            "fixture_ids": [ordered[0].0, ordered[1].0, ordered[2].0],
+            "attribute": "intensity",
+            "value": {"kind": "spread", "value": [0.0, 0.5]},
+            "timing": {"fade": false}
+        }]}
+    });
+    let response = scenario.values_action(action).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let programmer = scenario.state.programmers.get(scenario.session.id).unwrap();
+    let value_of = |fixture: light_core::FixtureId| {
+        programmer
+            .values
+            .iter()
+            .find(|value| value.fixture_id == fixture)
+            .and_then(|value| value.value.normalized())
+            .unwrap()
+    };
+    assert_eq!(value_of(ordered[0]), 0.0);
+    assert_eq!(value_of(ordered[1]), 0.25);
+    assert_eq!(value_of(ordered[2]), 0.5);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
