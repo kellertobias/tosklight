@@ -9,6 +9,7 @@ import {
 	HighlightStateProvider,
 } from "../features/highlight/HighlightState";
 import { ProgrammerActionsProvider } from "../features/programmerActions/ProgrammerActionsContext";
+import { ShellStatusActionsProvider } from "../features/shellStatus/ShellStatusActionsProvider";
 import { FilesProvider } from "../features/files/FilesContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
@@ -138,11 +139,20 @@ export function ServerProvider({
 			value.storePreload,
 		],
 	);
+	const shellStatusActions = useMemo(
+		() => ({
+			dismissError: value.dismissError,
+			simulateError: value.simulateError,
+			readServerLogs: value.readServerLogs,
+		}),
+		[value.dismissError, value.simulateError, value.readServerLogs],
+	);
 	return (
 		<ServerContext.Provider value={value}>
 			<HighlightStateProvider store={state.highlightStore}>
 			<HighlightActionsProvider actions={highlightActions}>
 			<ProgrammerActionsProvider actions={programmerActions}>
+			<ShellStatusActionsProvider actions={shellStatusActions}>
 			<ServerDeskBoundaries state={state}>
 			<ServerVisualizationRuntimeBoundary state={state}>
 				<ShowObjectsViewProvider
@@ -211,6 +221,7 @@ export function ServerProvider({
 				</ShowObjectsViewProvider>
 			</ServerVisualizationRuntimeBoundary>
 			</ServerDeskBoundaries>
+			</ShellStatusActionsProvider>
 			</ProgrammerActionsProvider>
 			</HighlightActionsProvider>
 			</HighlightStateProvider>

@@ -7,7 +7,8 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { useServer } from "../../api/ServerContext";
+import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotState";
+import { useShellStatusActions } from "../../features/shellStatus/ShellStatusActionsProvider";
 import { useApp } from "../../state/AppContext";
 import { CommandInput } from "./commandLine/CommandInput";
 import { CommandLineHistoryPanel } from "./commandLine/CommandLineHistoryPanel";
@@ -39,7 +40,7 @@ function queuedPlaybackLabel(action: string, playbackNumber: number) {
 }
 
 function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
-	const server = useServer();
+	const shellStatus = useShellStatusActions();
 	const serverError = useServerError();
 	const [commandError, setCommandError] = useState<string | null>(null);
 	const [persistentError, setPersistentError] = useState<string | null>(null);
@@ -64,12 +65,12 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	}, [setCompleted]);
 	const acknowledgeCommand = () => {
 		setCommandError(null);
-		server.dismissError();
+		shellStatus?.dismissError();
 	};
 	const acknowledgePersistent = () => {
 		setPersistentError(null);
 		setErrorOpen(false);
-		server.dismissError();
+		shellStatus?.dismissError();
 	};
 	return {
 		commandError,
@@ -110,14 +111,14 @@ function useHistoryDismissal(
 
 export function CommandLineBar() {
 	const { state, dispatch } = useApp();
-	const server = useServer();
+	const hardwareAttached = useHardwareConnected();
 	const serverError = useServerError();
 	const command = useCommandLineSurface({ selection: true });
 	const programmerActivity = useProgrammerValuesActivity();
 	const preloadPlaybackQueue = useProgrammerPreloadPlaybackQueueView();
 	const preload = useProgrammerPreloadLifecycleView();
 	const hardware =
-		Boolean(server.bootstrap?.hardware_connected) || Boolean(state.midiProfile);
+		hardwareAttached || Boolean(state.midiProfile);
 	const [completed, setCompleted] = useState(false);
 	const editGeneration = useRef(0);
 	const errors = useCommandErrors(setCompleted);

@@ -40,11 +40,11 @@ in suggested order. Each chunk lands independently.
   control actions, preset generation, align, storePreload) and migration of the numeric
   pad, SystemControlsModal, specialDialogs/control, PreloadStoreModal, PresetsWindow,
   and the parameter-controls projection/controller/tabs.
+- `features/shellStatus` actions context (`dismissError`/`simulateError`/`readServerLogs`)
+  and migration of CommandLineBar and DebugModal (output health via `useOutputHealth`).
 
-**Remaining consumers (~18 files)**, grouped by the scoped owner they need next:
-one-shot/diagnostic actions (DebugModal: `readServerLogs`/`simulateError`/output-health —
-health now readable via `useOutputHealth`), command line (`CommandLineBar: dismissError`;
-CommandLineHistoryPanel: `commandHistory`), fixture library + patch
+**Remaining consumers (~16 files)**, grouped by the scoped owner they need next:
+command line (CommandLineHistoryPanel: `commandHistory`), fixture library + patch
 (FixtureLibrarySetup, fixtureLibrary/{editor,revisions,transfers,warnings},
 fixturePatch/controller, PatchFeatureBoundary; PatchWindow is migrated —
 `setPatchPreviewHighlight` now lives on the scoped Highlight actions), show lifecycle (QuickSetupModal — the largest, ~19
