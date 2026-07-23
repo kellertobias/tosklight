@@ -1,5 +1,16 @@
 # 16 — Show-object writes become intent updates; retire whole-object PUT
 
+## What "show objects" are
+
+Every typed record in the `.show` file's `objects` table (`kind`, `id`, `body_json`,
+`revision` — `crates/show/src/portable/migration.rs:78`). The kinds observed in use:
+`cue_list`, `group`, `preset`, `playback`, `playback_page` (the enum in
+`crates/application/src/active_show/model.rs:9-15`), plus storage-only kinds written via
+the generic route: `patch_layer`, `stage_layout`, `user_layout` (per-user desktop
+layout), `route` (output route). "Show-object writes" = the generic
+`PUT /api/v1/shows/{id}/objects/{kind}/{object_id}` sending the **whole JSON body**; this
+chunk replaces those with typed partial intents.
+
 ## Context (api-rules §3 violation + v1 retirement, verified 2026-07-23)
 
 The generic object surface is the biggest remaining v1 block
