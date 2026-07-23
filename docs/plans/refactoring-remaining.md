@@ -246,10 +246,15 @@ Skipped-with-reason, engine/`@api` green; these are feature builds:
 
 ## 6 — Housekeeping candidates (verify before starting; likely small)
 
-- Pre-existing failures unrelated to the refactoring, failing identically at the branch base:
-  `active_object_undo_is_lossless_atomic_contextual_and_failure_safe` (server unit; PUT
-  returns 409 where 200 is expected) and one `VirtualPlaybacksWindow` vitest ("does not render
-  a seeded desk before scoped runtime authority is ready"). Diagnose or record as accepted.
+- ~~Pre-existing failures~~ **RESOLVED 2026-07-23** — both were stale tests, not bugs:
+  `active_object_undo…` seeded legacy-shaped groups directly into the show file *before*
+  opening it, so the deliberate normalize-once-on-open pass (covered by SHOW-004) bumped
+  their revisions past the test's hard-coded If-Match values; the test now seeds after
+  open and writes the already-normalized group shape. The `VirtualPlaybacksWindow` vitest
+  asserted no runtime subscription while authority loads, contradicting the component's
+  documented design (the subscription *is* the activation mechanism; gating it deadlocked
+  the pane) — only rendering waits for authority. Both unit suites are now fully green
+  (vitest 1981/1981, cargo 0 failures).
 - `major-refactoring.md` §8 lists "move giant inline server tests into feature-local unit
   tests" — `crates/server/src/runtime/tests/` still holds ~80 modules; migrate opportunistically
   when touching a feature, not as a big-bang.

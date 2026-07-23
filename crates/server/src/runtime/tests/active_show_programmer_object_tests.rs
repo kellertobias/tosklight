@@ -254,6 +254,10 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
         "fixtures":"not-an-array",
         "future_extension":{"preserved":true}
     });
+    // Seed the objects after the show opens: opening normalizes legacy group defaults once
+    // (a deliberate revision bump covered by SHOW-004), which would invalidate the exact
+    // revision expectations this Undo scenario asserts.
+    open_show_for_test(&app, &token, show_id).await;
     let store = ShowStore::open(&entry.path).unwrap();
     store.put_object("group", "7", &original, 0).unwrap();
     store
@@ -269,11 +273,23 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
         .put_object(
             "group",
             "9",
-            &serde_json::json!({"id":"9","name":"Current","fixtures":[]}),
+            // Already in the normalized group shape, so the active document's
+            // normalize-once pass leaves revision 2 untouched.
+            &serde_json::json!({
+                "color": null,
+                "derived_from": null,
+                "fixtures": [],
+                "frozen_from": null,
+                "icon": null,
+                "id": "9",
+                "master": 1.0,
+                "name": "Current",
+                "playback_fader": null,
+                "programming": {}
+            }),
             1,
         )
         .unwrap();
-    open_show_for_test(&app, &token, show_id).await;
 
     let before_put_sequence = state.application_events.latest_sequence();
     let changed = put_active_object(

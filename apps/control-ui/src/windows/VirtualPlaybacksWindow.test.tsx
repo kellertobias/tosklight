@@ -340,7 +340,10 @@ describe("VirtualPlaybacksWindow", () => {
 			"Loading Virtual Playbacks…",
 		);
 		expect(screen.queryByText("Front Wash")).not.toBeInTheDocument();
-		expect(mocks.runtimeSelections.at(-1)).toEqual([]);
+		// The runtime subscription for the mapped playbacks stays active while loading:
+		// it is the activation mechanism itself (gating it on authorityReady deadlocked
+		// the pane, see useVirtualPlaybackController). Only rendering waits for authority.
+		expect(mocks.runtimeSelections.at(-1)).toEqual([7]);
 		expect(mocks.zoneCapability.loadSurface).not.toHaveBeenCalled();
 	});
 
