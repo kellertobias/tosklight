@@ -4,6 +4,10 @@
 
 **Specification only.** This minor feature defines deterministic multi-point spread behavior and the coverage required to prove it. It does not implement runtime behavior, executable tests, or operator-help changes.
 
+**Adopted into the refactoring queue (2026-07-23):** implemented as chunk
+[`docs/plans/refactoring/pending/03b-deterministic-multi-point-spread-resolver.md`](../refactoring/pending/03b-deterministic-multi-point-spread-resolver.md),
+sequenced with the server-side spread consolidation. This file remains the normative spec.
+
 ## Goal
 
 Make every scalar value spread use one predictable rule across the authoritative ordered selection. A two-point spread keeps its established meaning: the first selected item receives the first value, the last selected item receives the last value, and intervening items are equally interpolated.

@@ -58,4 +58,6 @@ the spread lands identically (compare against `AT 0 THRU 50` on the command line
 
 ## Decisions
 
-None.
+None. Chunk 03b (deterministic multi-point resolver, adopted from Next/50) follows
+directly on this chunk — keep the server-side routing generic over N control points so
+03b only has to swap the resolver math, not the plumbing.

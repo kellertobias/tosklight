@@ -46,4 +46,12 @@ no dropped/duplicated steps.
 
 ## Decisions
 
-None. Sequence after 09 (pattern) and 03 (spread shape) to avoid double-touching the wire.
+None blocking. Sequence after 09 (pattern), 09b (direct encoder type removed — less
+surface to migrate) and 03/03b (spread shape) to avoid double-touching the wire.
+
+Heads-up, not a gate: `docs/plans/Next/65-programmer-relative-encoders-and-fade-time-scope.md`
+would make encoder movement a **relative** programmer operation. If the maintainer intends
+to build 65, it is cheaper to shape the WS value frames to carry relative deltas now than
+to rework the contract later — ask for that direction call when claiming this chunk (65
+itself stays feature work and is not part of the queue; it contains its own undecided
+command-line-fade question).

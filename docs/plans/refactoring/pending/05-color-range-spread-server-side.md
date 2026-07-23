@@ -48,4 +48,6 @@ the visual gradient across fixtures matches pre-change behavior.
 ## Decisions
 
 None. Depends on chunk 03 landing first if it reuses the extended spread mutation shape
-(sequence 03 → 05); otherwise independent.
+(sequence 03 → 03b → 05); if the color interpolation ends up storing
+`AttributeValue::Spread`, its ordered resolution must use 03b's shared anchor rule
+(Next/50 requirement).

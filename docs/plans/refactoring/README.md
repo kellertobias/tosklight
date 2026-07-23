@@ -71,7 +71,11 @@ Fresh baseline (fill in): `____ passed / ____ skipped / ____ failed on <date>`
 
 ## Chunk order rationale
 
-01–02 quick wins and the deferred CUE-011 bug; 03–06 server-owned show logic (§7);
+01–02 quick wins and the deferred CUE-011 bug; 03–06 server-owned show logic (§7),
+with 03b adopting `Next/50` (deterministic multi-point spread rule — cheapest while the
+spread paths are being consolidated anyway) and 09b adopting the one refactoring-shaped
+item of `Next/64` (remove the direct programmer encoder type before migrating encoder
+paths to WS);
 07–08 small api-rules compliance enablers; 09–11 desk live control onto the WebSocket;
 12 route de-scoping; 13–21 the v1 retirement tail (events first, then data surfaces,
 biggest one — 16 objects — in the middle); 22 capstone facade deletion; 23 housekeeping.
