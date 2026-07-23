@@ -76,6 +76,7 @@ include!("show_rename_tests.rs");
 include!("show_revision_tests.rs");
 include!("show_overwrite_tests.rs");
 include!("show_rest_tests.rs");
+include!("active_show_document_cache_tests.rs");
 include!("operational_flow_support.rs");
 include!("operational_flow_tests.rs");
 include!("malformed_show_tests.rs");

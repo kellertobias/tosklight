@@ -35,6 +35,12 @@ pub(super) struct AppState {
     pub(super) activation_lock: Arc<tokio::sync::Mutex<()>>,
     pub(super) timecode_router: Arc<Mutex<TimecodeRouter>>,
     pub(super) active_show: Arc<RwLock<Option<ShowEntry>>>,
+    /// In-memory copy of the active show document reused across mutations. Validated against the
+    /// store's O(1) portable revision at every unit-of-work begin, so out-of-band writers that
+    /// commit portable transactions are detected and trigger a reload. Cleared explicitly where
+    /// the active show file is replaced without a portable-revision bump (open, rename,
+    /// overwrite, revision open, rollback).
+    pub(super) active_show_document: Arc<Mutex<Option<light_show::PortableShowDocument>>>,
     pub(super) active_show_error: Arc<RwLock<Option<String>>>,
     pub(super) events: broadcast::Sender<Event>,
     pub(super) application_events: EventBus,

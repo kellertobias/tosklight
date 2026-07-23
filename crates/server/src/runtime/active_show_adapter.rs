@@ -12,6 +12,8 @@ use light_show::{
     PortableShowCommit, PortableShowDocument, PortableShowObjectUndo, PortableShowTransaction,
     ShowStore, StoreError,
 };
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 #[cfg(test)]
 #[derive(Default)]
@@ -147,9 +149,19 @@ pub(super) enum ActiveShowBackupKind {
     ShowObjects,
 }
 
+/// Drops the cached in-memory document. Required wherever the active show file is replaced or
+/// re-identified in place, because such changes do not always bump the portable revision the
+/// cache is validated against.
+pub(crate) fn invalidate_active_show_document(state: &AppState) {
+    *state.active_show_document.lock() = None;
+}
+
 pub(crate) struct ServerActiveShowUnitOfWork {
     store: ShowStore,
-    document: PortableShowDocument,
+    /// Present for the whole unit; taken only when the unit is dropped (returned to the shared
+    /// cache) or discarded after a commit conflict revealed the disk moved underneath it.
+    document: Option<PortableShowDocument>,
+    cache: Arc<Mutex<Option<PortableShowDocument>>>,
     backup: ShowMutationBackupPlan,
 }
 
@@ -169,10 +181,7 @@ impl ServerActiveShowUnitOfWork {
             ));
         }
         let store = ShowStore::open(&entry.path).map_err(|error| store_error(error, None))?;
-        let document = store.portable_document().map_err(|error| {
-            let revision = store.portable_revision().ok().map(|value| value.value());
-            store_error(error, revision)
-        })?;
+        let document = Self::current_document(state, &store, show_id)?;
         if document.id() != show_id {
             return Err(ActionError::new(
                 ActionErrorKind::Internal,
@@ -191,8 +200,29 @@ impl ServerActiveShowUnitOfWork {
         };
         Ok(Self {
             store,
-            document,
+            document: Some(document),
+            cache: Arc::clone(&state.active_show_document),
             backup,
+        })
+    }
+
+    /// Reuses the cached in-memory document when it still matches the store's O(1) portable
+    /// revision; any out-of-band portable commit invalidates it and forces a full reload.
+    fn current_document(
+        state: &AppState,
+        store: &ShowStore,
+        show_id: ShowId,
+    ) -> Result<PortableShowDocument, ActionError> {
+        let cached = state.active_show_document.lock().take();
+        if let Some(document) = cached
+            && document.id() == show_id
+            && store.portable_revision().ok() == Some(document.revision())
+        {
+            return Ok(document);
+        }
+        store.portable_document().map_err(|error| {
+            let revision = store.portable_revision().ok().map(|value| value.value());
+            store_error(error, revision)
         })
     }
 
@@ -210,32 +240,56 @@ impl ServerActiveShowUnitOfWork {
 
 impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
     fn document(&self) -> &PortableShowDocument {
-        &self.document
+        self.document
+            .as_ref()
+            .expect("active-show unit of work retains its document until drop")
     }
 
     fn backup(&mut self, identity: &BackupIdentity) -> Result<(), ActionError> {
-        if identity.show_id != self.document.id() {
+        let revision = self.document().revision().value();
+        if identity.show_id != self.document().id() {
             return Err(ActionError::new(
                 ActionErrorKind::Invalid,
                 "mutation backup identity does not match the active show",
             )
-            .at_revision(self.document.revision().value()));
+            .at_revision(revision));
         }
-        self.backup.create_mutation(
-            &self.store,
-            identity,
-            Some(self.document.revision().value()),
-        )
+        self.backup
+            .create_mutation(&self.store, identity, Some(revision))
     }
 
     fn commit(
         &mut self,
         transaction: PortableShowTransaction,
     ) -> Result<PortableShowCommit, ActionError> {
-        let revision = self.document.revision().value();
-        self.store
-            .apply_portable_transaction(transaction)
-            .map_err(|error| store_error(error, Some(revision)))
+        let revision = self.document().revision().value();
+        match self.store.apply_portable_transaction(transaction) {
+            Ok(commit) => {
+                if let Some(document) = self.document.as_mut() {
+                    document.apply_commit(&commit);
+                    debug_assert_eq!(document.revision(), commit.revision());
+                }
+                Ok(commit)
+            }
+            Err(error) => {
+                // A commit failure that reached the store means the file may have moved out from
+                // under this unit (out-of-band writer); drop the document so the next unit of
+                // work reloads instead of reusing a stale copy.
+                self.document = None;
+                Err(store_error(error, Some(revision)))
+            }
+        }
+    }
+}
+
+impl Drop for ServerActiveShowUnitOfWork {
+    fn drop(&mut self) {
+        // The retained document always reflects the last committed on-disk state (mutations touch
+        // it only via `apply_commit` after a successful store commit), so it is safe to hand back
+        // for the next unit of work regardless of whether this unit committed.
+        if let Some(document) = self.document.take() {
+            *self.cache.lock() = Some(document);
+        }
     }
 }
 

@@ -81,3 +81,42 @@ Sequence: after 02 (CUE-011 — its regression tests are exactly the guard this 
 must keep green). Before 16 (object intent updates then build on the write-behind path
 instead of being reworked twice). This chunk is large; split `02b-a` (in-memory document)
 / `02b-b` (flusher + backups) at execution time if needed.
+
+## Result
+
+**Split at execution time** (as the chunk itself anticipated): this execution delivered
+**02b-a — the in-memory active-show document**; the flusher, flush boundaries, per-flush
+backups, crash tests, and the operator-facing `autosave_interval` setting moved to
+`pending/02b-b-write-behind-flusher.md` with the full remaining scope and two cautions
+discovered here (write-behind undo history lives in SQLite today; ~25 direct `ShowStore`
+writers rely on 02b-a's write-through for cache self-healing).
+
+What landed (02b-a):
+- `PortableShowDocument::apply_commit` (light_show): applies a `PortableShowCommit`
+  (written/deleted objects, profile revisions, revision + patch revision, and the
+  revision-mirror metadata keys) to the in-memory projection; unit-tested to be
+  byte-identical with a full reload.
+- `AppState::active_show_document`: shared cache of the loaded document.
+  `ServerActiveShowUnitOfWork::begin` takes it, validates it against the store's O(1)
+  `portable_revision`, and reloads only when stale; commit applies the transaction to
+  SQLite (write-through, per-mutation durability unchanged) and then to the in-memory
+  document; the document returns to the cache on unit drop, and is discarded after a
+  commit conflict (disk moved underneath).
+- Out-of-band writers that commit portable transactions are self-healing via the
+  revision check; paths that replace or re-identify the file without a bump call the new
+  `invalidate_active_show_document` (show open ×3, rename, revision-copy open, MVR
+  legacy apply).
+- Regression test `active_show_document_cache_reuses_and_detects_out_of_band_writes`
+  covers warm-cache reuse, out-of-band detection, and cache/store equality.
+
+Effect: the per-mutation full-document SQLite load + parse is gone from the hot path
+(one O(1) revision read remains); mutation-time client-observable behavior is unchanged
+(CUE-011 guard tests stay green). Disk writes still happen per mutation until 02b-b.
+
+Suite numbers: light-show 56, light-application 389, light-server 409 all passed;
+`test:e2e-api` 85 passed / 1 skipped; full e2e **276 passed / 11 skipped / 1 failed**
+(the pre-existing user-dirty product-demo run) — no net new regressions.
+
+Surprises: the revision-mirror metadata keys (`light.portable_show_revision`,
+`light.patch_revision`) live inside the document's metadata map and must be updated by
+`apply_commit` or document equality breaks — caught by the round-trip unit test.

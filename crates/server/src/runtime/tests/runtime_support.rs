@@ -58,6 +58,7 @@ fn test_state_with_programmers(
             activation_lock: Arc::new(tokio::sync::Mutex::new(())),
             timecode_router: Arc::new(Mutex::new(TimecodeRouter::default())),
             active_show: Arc::default(),
+            active_show_document: Arc::default(),
             active_show_error: Arc::default(),
             events,
             application_events: application_events.clone(),

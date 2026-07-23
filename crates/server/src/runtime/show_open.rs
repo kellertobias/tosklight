@@ -45,6 +45,7 @@ pub(super) async fn open_show(
         .lock()
         .set_active_show(Some(entry.id))
         .map_err(ApiError::store)?;
+    invalidate_active_show_document(&state);
     *state.active_show.write() = Some(entry.clone());
     *state.active_show_error.write() = None;
     restore_output_runtime_for_show(&state, entry.id, output_runtime);
@@ -115,6 +116,7 @@ pub(super) async fn open_clean_default_show(
             .set_setting("previous_active_show_id", &previous.id.0.to_string())
             .map_err(ApiError::store)?;
     }
+    invalidate_active_show_document(&state);
     *state.active_show.write() = Some(entry.clone());
     *state.active_show_error.write() = None;
     restore_output_runtime_for_show(&state, entry.id, output_runtime);
@@ -173,6 +175,7 @@ pub(super) async fn rollback_show(
             .set_setting("previous_active_show_id", &current.id.0.to_string())
             .map_err(ApiError::store)?;
     }
+    invalidate_active_show_document(&state);
     *state.active_show.write() = Some(entry.clone());
     *state.active_show_error.write() = None;
     restore_output_runtime_for_show(&state, entry.id, output_runtime);

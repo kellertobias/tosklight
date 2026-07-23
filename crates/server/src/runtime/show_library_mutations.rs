@@ -65,6 +65,7 @@ pub(super) async fn rename_show(
                 return Err(ApiError::store(error));
             }
         };
+    invalidate_active_show_document(&state);
     *state.active_show.write() = Some(renamed.clone());
     if let Err(error) = std::fs::remove_file(&current.path)
         && error.kind() != std::io::ErrorKind::NotFound

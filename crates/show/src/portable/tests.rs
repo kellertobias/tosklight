@@ -319,3 +319,25 @@ fn backup_keeps_unknown_portable_data() {
     let _ = fs::remove_file(source);
     let _ = fs::remove_file(backup);
 }
+
+#[test]
+fn apply_commit_matches_a_full_document_reload() {
+    let (path, show) = create("apply-commit");
+    seed_unknown_objects(&show);
+    let mut document = show.portable_document().unwrap();
+    let mut transaction = document.transaction();
+    transaction.put(
+        "group",
+        "1",
+        json!({"name":"Renamed","future":{"kept":true}}),
+    );
+    transaction.put("cue_list", "9", json!({"name":"Fresh"}));
+    transaction.delete("future_macro", "alpha");
+    let commit = show.apply_portable_transaction(transaction).unwrap();
+
+    document.apply_commit(&commit);
+
+    assert_eq!(document, show.portable_document().unwrap());
+    drop(show);
+    let _ = fs::remove_file(path);
+}

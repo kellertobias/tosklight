@@ -228,6 +228,7 @@ fn build_app_state(
         activation_lock: Arc::clone(&resources.activation_lock),
         timecode_router: Arc::clone(&resources.timecode_router),
         active_show: Arc::clone(&resources.active_show),
+        active_show_document: Arc::default(),
         active_show_error: Arc::new(RwLock::new(startup.active_show_error)),
         events: startup.events,
         application_events: application_events.clone(),

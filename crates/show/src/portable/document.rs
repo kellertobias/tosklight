@@ -286,6 +286,43 @@ impl PortableShowDocument {
         self.objects
             .binary_search_by(|object| compare_key(object.key.kind(), object.key.id(), kind, id))
     }
+
+    /// Applies one committed portable transaction to this in-memory projection so it matches the
+    /// backing store without a full document reload.
+    pub fn apply_commit(&mut self, commit: &super::transaction::PortableShowCommit) {
+        for object in commit.written_objects() {
+            match self.object_index(object.key().kind(), object.key().id()) {
+                Ok(index) => self.objects[index] = object.clone(),
+                Err(index) => self.objects.insert(index, object.clone()),
+            }
+        }
+        for key in commit.deleted_objects() {
+            if let Ok(index) = self.object_index(key.kind(), key.id()) {
+                self.objects.remove(index);
+            }
+        }
+        for revision in commit.fixture_profile_revisions() {
+            match self
+                .fixture_profile_revisions
+                .binary_search_by(|profile| profile.id().cmp(revision.id()))
+            {
+                Ok(index) => self.fixture_profile_revisions[index] = revision.clone(),
+                Err(index) => self
+                    .fixture_profile_revisions
+                    .insert(index, revision.clone()),
+            }
+        }
+        self.revision = commit.revision();
+        self.patch_revision = commit.patch_revision();
+        self.metadata.insert(
+            super::store::REVISION_METADATA_KEY.into(),
+            self.revision.value().to_string(),
+        );
+        self.metadata.insert(
+            super::store::PATCH_REVISION_METADATA_KEY.into(),
+            self.patch_revision.value().to_string(),
+        );
+    }
 }
 
 fn sort_document_content(

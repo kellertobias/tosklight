@@ -77,6 +77,7 @@ pub(super) async fn apply_legacy_mvr_import(
             .lock()
             .set_active_show(Some(entry.id))
             .map_err(ApiError::store)?;
+        invalidate_active_show_document(state);
         *state.active_show.write() = Some(entry.clone());
         restore_output_runtime_for_show(state, entry.id, output_runtime);
     }
