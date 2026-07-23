@@ -6,7 +6,7 @@
 
 - `GET /api/v1/bootstrap` (`http_router.rs:38`) — also bench + tests.
 - `POST /api/v1/sessions` (`:123`), `DELETE /api/v1/sessions/{id}` (`:124`) — also bench + tests.
-- `GET /api/v1/readiness` (`:35`) — bench + `desktop-smoke.mjs` (keep; ops surface).
+- `GET /api/v1/readiness` (`:35`) — bench + `desktop-smoke.mjs` (moves to v2, see below).
 - `GET /api/v1/patch` (`:39`) — client `fixtures.ts` (the patch snapshot; v2 patch surface
   exists at `show_patch_http.rs`).
 - `GET /api/v1/diagnostics` (`:37`) — root tests only.
@@ -25,9 +25,13 @@ Consumers upstream: `features/server/connectionBootstrap.ts`, `useServerState.ts
 3. Move the patch snapshot read (`fixtures.ts` → `/api/v1/patch`) onto the v2 patch
    snapshot; migrate its readers.
 4. Delete `GET /api/v1/bootstrap`, `POST/DELETE /api/v1/sessions*`, `GET /api/v1/patch`.
-   Keep `/api/v1/readiness` (ops/diagnostics; also referenced by AGENTS.md) and decide
-   `/api/v1/diagnostics` disposition with the tests that use it (03, 07, cueSemanticContracts)
-   — migrate them or re-register diagnostics unversioned.
+   **DECIDED (maintainer, 2026-07-23): readiness and diagnostics move to v2 too** —
+   re-register as `GET /api/v2/readiness` and `GET /api/v2/diagnostics`, delete the v1
+   forms, and migrate every caller in the same chunk: bench (`lightBench.ts`),
+   `desktop-smoke.mjs`, the tests using diagnostics (03-network-output-protocols,
+   07-move-in-black, cueSemanticContracts), **and the AGENTS.md verification section**
+   (`curl …/api/v1/readiness` and the health/readiness timing guidance) plus any other
+   docs quoting the v1 paths (grep `docs/` for `/api/v1/readiness|health|diagnostics`).
 5. Startup/recovery paths touch persisted data — re-read `docs/acceptance-criteria.md`
    first; test malformed/legacy active-show recovery after the bootstrap change.
 
@@ -49,6 +53,5 @@ npm run test:desktop-smoke  # desktop boot path uses readiness + bootstrap
 
 ## Decisions
 
-**DECISION NEEDED (small):** where `/api/v1/readiness` and `/api/v1/diagnostics` live
-long-term (keep v1 as an ops exception, move to `/api/v2`, or unversioned `/readiness`).
-Cheap either way, but it changes AGENTS.md and desktop-smoke — get the maintainer's pick.
+Decided (2026-07-23): readiness and diagnostics move to `/api/v2` with the rest. No open
+decisions remain in this chunk.
