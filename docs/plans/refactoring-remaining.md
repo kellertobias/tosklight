@@ -63,6 +63,30 @@ ShowRecoveryModal, ConnectionState, LayoutPersistence, and the setup-window
 controller/General/Outputs/Network sections. `ServerProvider` still composes the internal
 value that feeds the scoped providers; the compatibility read surface is gone.
 
+**API direction (maintainer, 2026-07-23):**
+
+1. **Intentional APIs, two shapes.** Reads load whole-object state (snapshots). Writes express
+   intent: pressing GO must not rewrite the playback object, a patch edit is one change
+   applied immediately. Intent does not always mean action-verb unions — a typed
+   partial-update route (e.g. `patched-fixture/{id}/update` whose body carries only the
+   fields to change) is an equally valid intent style.
+2. **No show-scoped routes.** The desk always operates on the one loaded show; cross-show
+   work is only the library (listing shows, loading objects into the show). The show guard
+   becomes an **optional header**: if the desk sends it, the server checks it; absent (the
+   automation case) → no check. Never a URL segment.
+3. **Strict but tolerant typing.** Validate every body against the typed contract and return
+   a clear 4xx on mismatch — never crash. Additional/unknown properties are **accepted** and
+   **logged** server-side, not rejected.
+4. **Transport split.** Simple REST command endpoints (e.g. press GO on a playback) stay for
+   external integrators — fire-and-forget, no request-identity machinery needed there. The
+   desk's own UI should move its actions onto the already-open WebSocket
+   (request_id-correlated action frames) where retry/replay dedup lives and per-request
+   handshake overhead disappears.
+5. **Virtual playback exclusion zones are show-level.** The storage already is
+   (`read_virtual_playback_exclusion_store` keys by show only); the desk segment in the
+   current route is an authentication artifact and must not suggest desk scoping — drop it
+   whenever the route is next touched.
+
 **DECIDED (maintainer, 2026-07-23): REST and WebSocket are not customer-facing for now.**
 The Protocols help chapter and all operator documentation describe OSC only; the HTTP/WS
 API is an internal application transport until explicitly re-published. This supersedes
