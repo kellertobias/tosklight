@@ -25,6 +25,34 @@ Rework the software encoder surface so it behaves as a bank of encoders instead 
 
 The result should feel like operating desk encoders on a touch screen, not like moving intensity faders.
 
+## Decided touch interaction model (maintainer, 2026-07-23)
+
+Encoders never write an absolute value from a gesture position. (An absolute-looking
+readout is allowed only when every selected fixture shares the same value — display, not
+semantics.) The touch encoder card becomes a vertical zone stack with the step labels
+rendered directly on the card, top to bottom:
+
+```
++10
+ +1
+Set Value        ← small grey text, center
+ −1
+−10
+```
+
+- **Tap and release** on a step zone applies that discrete relative step (+10, +1, −1,
+  −10 in the attribute's display unit).
+- **Tap and release in the center** opens the set-value modal. The separate set-value /
+  direct-input button is removed — the center label *is* the affordance.
+- **Touch, hold, and drag** is a continuous relative change with **rate proportional to
+  displacement**: slightly above the start point adds slowly; further up adds faster;
+  further still, faster again — symmetric downward. The finger position controls the
+  *speed* of change (joystick/rate control), never a target value. Releasing stops the
+  change.
+
+Step sizes per attribute family, the exact rate curve/tiers, and undo grouping stay open
+(decisions 2–5 below).
+
 ## Operator model
 
 Each software encoder card represents one editable parameter or paired encoder function. The card shows the parameter name, current value or mixed-value summary, and any target context the operator needs to trust the adjustment.
@@ -96,7 +124,8 @@ Future implementation must cover at least:
 
 Before implementation, settle:
 
-1. Primary touch gesture: horizontal drag, circular drag, step buttons, wheel/scroll, or another control.
+1. ~~Primary touch gesture~~ **Decided 2026-07-23** — vertical rate-drag plus tap zones
+   (+10/+1/Set Value/−1/−10); see "Decided touch interaction model" above.
 2. Coarse and fine step sizes per attribute family.
 3. Whether mixed selections preserve offsets for all scalar attributes or only selected families.
 4. Wrapping behavior for pan, rotation, indexed wheels, and bounded scalar parameters.

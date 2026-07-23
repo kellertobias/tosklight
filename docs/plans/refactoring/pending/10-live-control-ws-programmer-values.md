@@ -49,9 +49,19 @@ no dropped/duplicated steps.
 None blocking. Sequence after 09 (pattern), 09b (direct encoder type removed — less
 surface to migrate) and 03/03b (spread shape) to avoid double-touching the wire.
 
-Heads-up, not a gate: `docs/plans/Next/65-programmer-relative-encoders-and-fade-time-scope.md`
-would make encoder movement a **relative** programmer operation. If the maintainer intends
-to build 65, it is cheaper to shape the WS value frames to carry relative deltas now than
-to rework the contract later — ask for that direction call when claiming this chunk (65
-itself stays feature work and is not part of the queue; it contains its own undecided
-command-line-fade question).
+**Direction confirmed (maintainer, 2026-07-23): encoders are relative.** The decided
+touch model lives in `docs/plans/Later/54-software-encoder-relative-controls.md`
+("Decided touch interaction model"): discrete ±1/±10 step taps, center tap opens the
+set-value modal, and hold-drag is a **rate-based** continuous change (displacement
+controls speed, not position). Shape the WS value frames for this from the start:
+
+- a **relative step** op (attribute, signed delta) for the tap zones and hardware
+  encoder ticks;
+- absolute set stays for the modal/command paths;
+- for hold-drag, prefer streaming small relative-step frames at the current rate over a
+  server-side start/stop-rate op — decide against the implementation, but do not ship a
+  frame shape that only carries absolute values.
+
+The encoder *UI* rework itself stays feature work (Later/54 / Next/65 — 65 also still
+has its undecided command-line-fade question); this chunk only ensures the transport
+contract doesn't have to be reworked when it lands.
