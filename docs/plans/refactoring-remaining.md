@@ -287,6 +287,27 @@ Skipped-with-reason, engine/`@api` green; these are feature builds:
 - On-screen Speed Group per-group stack controls beyond the current BPM buttons, and PRELOAD
   controls on virtual-playback cells.
 
+## 7 — Server-owned show logic (maintainer, 2026-07-23)
+
+**Principle (binding, codified in [`docs/engineering/api-rules.md`](../engineering/api-rules.md) §4):**
+the server computes everything that changes fixture state, playback state, or show data.
+The UI keeps only UI logic — interaction behavior (e.g. a Shift-modified press meaning
+something else) and display concerns. Any UI code that computes per-fixture show values is
+refactoring debt to move server-side.
+
+**Known violations (move as chunks, each with the usual full-suite gate):**
+
+- `apps/control-ui/src/components/control/parameterControls/parameterValueMutations.ts` —
+  typed encoder ranges are spread over the ordered selection client-side (`spreadValue`
+  computes each fixture's value); the server should receive the range + selection and
+  spread it (the command line already does this server-side for `AT 0 THRU 50`).
+- `apps/control-ui/src/components/control/StageCommandControls.tsx` — multi-fixture stage
+  position moves compute per-fixture deltas in the UI and save the whole stage layout;
+  should be one server request carrying the selection and the delta/spread.
+- Sweep for further sites while migrating: any client code iterating the selection to
+  compute per-fixture values before a write (grep for selection loops feeding
+  value-mutation or layout-save calls).
+
 ## 6 — Housekeeping candidates (verify before starting; likely small)
 
 - ~~Pre-existing failures~~ **RESOLVED 2026-07-23** — both were stale tests, not bugs:

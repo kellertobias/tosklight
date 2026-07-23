@@ -52,13 +52,19 @@ polled.
   the first execution instead of executing again. This machinery belongs to *edits*; live
   control gets its safety from the WebSocket rule above.
 
-## 4 — Multi-target logic lives on the server
+## 4 — Show logic lives on the server
 
-Spread and fan-out semantics are server-side. Editing a value across a selection (patch
-addresses, a `-100 THRU 100` spread, group-wide changes) is **one request** carrying the
-selection/group members and the spread parameters; the server computes the per-fixture
-results. The UI never precomputes per-fixture values — the UI must not have opinions about
-how the server resolves things.
+**Anything that changes fixture state, playback state, or show data is computed by the
+server.** The UI owns only UI logic: interaction behavior (a Shift-modified press meaning
+something else, gestures, focus), and everything display-related (layout, formatting,
+which pane shows what). The UI must not have opinions about how the server resolves show
+state.
+
+In particular, spread and fan-out semantics are server-side: editing a value across a
+selection (patch addresses, a `-100 THRU 100` spread, group-wide changes, multi-fixture
+stage-position moves) is **one request** carrying the selection/group members and the
+spread parameters; the server computes the per-fixture results. The UI never precomputes
+per-fixture values.
 
 ## 5 — Typing
 
