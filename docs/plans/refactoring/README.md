@@ -53,9 +53,11 @@ Fresh baseline: `274 passed / 13 skipped / 1 failed on 2026-07-23` — the singl
 the known `product-demo` run. Updated 2026-07-23 (after chunks 02/02b/02c/03/03b): the two
 CUE-011 skips became passes and `product-demo` is now deliberately skipped (see the skip-site
 note above), so the binding expectation is **0 failed** with TIME-002/FIXTURE-002/GROUP-005
-re-run in isolation before treating a failure as real. After chunk 03b-b the clean
-full-suite result is **278 passed / 12 skipped / 0 failed** (two new PROG-002
-encoder-modal cases; one PRELOAD-006 in-suite flake observed once, green in isolation).
+re-run in isolation before treating a failure as real. After chunk 03b-c the clean
+full-suite result is **281 passed / 12 skipped / 0 failed** (chunk 03b-b added two
+hardware encoder-modal PROG-002 cases, 03b-c three software-modal twins; PRELOAD-006
+and the tests/31 `hardware_connected` OSC-subscribe poll have each flaked once
+in-suite, both green in isolation).
 
 ## Standing rules (apply to every chunk)
 

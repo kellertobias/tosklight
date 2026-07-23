@@ -94,7 +94,7 @@ function EncoderSurface({
 		<VerticalTouchFader
 			label={`Enc ${index + 1} · ${label}`}
 			value={value * 100}
-			display={formatNormalizedValue(value)}
+			display={discrete ?? display}
 			accentColor={attributeColor(attribute)}
 			mode={controller.dynamicsMode ? "Dynamics" : undefined}
 			directInput
@@ -113,6 +113,11 @@ function EncoderSurface({
 					: []
 			}
 			onChange={(next) => void controller.applyParameter(attribute, next / 100)}
+			onChangeRange={
+				discrete || !controller.canWriteValues
+					? undefined
+					: (points) => void controller.applyParameterRange(attribute, points)
+			}
 		/>
 	);
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "../common";
-import { ModalNumberInput } from "../input/ModalInputControls";
+import { ModalNumberInput, submitEncoderValue } from "../input/ModalInputControls";
 
 export type HardwareEncoderTarget = {
   label: string;
@@ -33,16 +33,7 @@ export function HardwareEncoderDisplay({
     setEditing(true);
   };
   const submit = () => {
-    const points = inputValue.split(/\s+THRU\s+/i).map((part) => Number(part.trim()));
-    if (points.length > 1) {
-      if (!onEditRange || points.some((value) => !Number.isFinite(value))) return;
-      onEditRange(points);
-      setEditing(false);
-      return;
-    }
-    const value = Number(inputValue);
-    if (Number.isFinite(value)) onEdit?.(value);
-    setEditing(false);
+    if (submitEncoderValue(inputValue, onEdit, onEditRange)) setEditing(false);
   };
   if (!target) return <section className="hardware-encoder-display unassigned" aria-label={`Encoder ${slot} unassigned`}>
     <header><b>Unassigned</b><small>Enc {slot}</small></header>

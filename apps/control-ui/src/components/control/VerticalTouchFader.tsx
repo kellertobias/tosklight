@@ -9,7 +9,10 @@ import { createPortal } from "react-dom";
 import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useApp } from "../../state/AppContext";
 import { Button, type ButtonProps, Input } from "../common";
-import { ModalNumberInput } from "../input/ModalInputControls";
+import {
+	ModalNumberInput,
+	submitEncoderValue,
+} from "../input/ModalInputControls";
 
 export interface VerticalTouchFaderAction
 	extends Omit<ButtonProps, "children"> {
@@ -29,6 +32,8 @@ export interface VerticalTouchFaderProps {
 	directInputOffset?: number;
 	actions?: VerticalTouchFaderAction[];
 	onChange?: (value: number) => void;
+	/** THRU spread submission from the value dialog; parity with the hardware encoder modal. */
+	onChangeRange?: (points: number[]) => void;
 }
 
 export interface VerticalTouchFaderSurfaceProps
@@ -41,6 +46,7 @@ interface SetValueDialogProps {
 	value: string;
 	maximum: number;
 	offset: number;
+	allowThrough?: boolean;
 	onChange(value: string): void;
 	onFaderChange(value: number): void;
 	onSubmit(): void;
@@ -52,6 +58,7 @@ function SetValueDialog({
 	value,
 	maximum,
 	offset,
+	allowThrough = false,
 	onChange,
 	onFaderChange,
 	onSubmit,
@@ -99,6 +106,7 @@ function SetValueDialog({
 						onEnter={onSubmit}
 						onEscape={onClose}
 						replaceOnFirstInput
+						allowThrough={allowThrough}
 					/>
 				</div>
 			</section>
@@ -150,6 +158,7 @@ function useDirectInput(
 	disabled: boolean,
 	directInput: boolean,
 	onChange?: (value: number) => void,
+	onChangeRange?: (points: number[]) => void,
 ) {
 	const [open, setOpen] = useState(false);
 	const [value, setValue] = useState("");
@@ -165,10 +174,12 @@ function useDirectInput(
 		onChange?.(next);
 	};
 	const submit = () => {
-		const entered = Number(value);
-		const next = Math.max(0, Math.min(maximum, entered + offset));
-		if (Number.isFinite(entered)) apply(next);
-		setOpen(false);
+		const handled = submitEncoderValue(
+			value,
+			(entered) => apply(Math.max(0, Math.min(maximum, entered + offset))),
+			onChangeRange,
+		);
+		if (handled) setOpen(false);
 	};
 	return {
 		open,
@@ -221,6 +232,7 @@ export function VerticalTouchFaderSurface({
 	directInputOffset = 0,
 	actions = [],
 	onChange,
+	onChangeRange,
 	hardware,
 }: VerticalTouchFaderSurfaceProps) {
 	const fader = useFaderInteraction(value, onChange);
@@ -232,6 +244,7 @@ export function VerticalTouchFaderSurface({
 		disabled,
 		directInput,
 		onChange,
+		onChangeRange,
 	);
 	const fraction = Math.max(
 		0,
@@ -299,6 +312,7 @@ export function VerticalTouchFaderSurface({
 					value={input.value}
 					maximum={maximum}
 					offset={directInputOffset}
+					allowThrough={Boolean(onChangeRange)}
 					onChange={input.setValue}
 					onFaderChange={input.apply}
 					onSubmit={input.submit}

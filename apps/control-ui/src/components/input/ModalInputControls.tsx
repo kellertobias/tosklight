@@ -29,6 +29,27 @@ function useModalInput(onKey: (key: string) => void) {
   return root;
 }
 
+/**
+ * The one THRU-aware submit path for encoder value modals: every layout's dialog
+ * must resolve the same expression to the same single-value or range submission.
+ * Returns whether the dialog should close (an incomplete range keeps it open).
+ */
+export function submitEncoderValue(
+  input: string,
+  onValue: ((value: number) => void) | undefined,
+  onRange: ((points: number[]) => void) | undefined,
+): boolean {
+  const points = input.split(/\s+THRU\s+/i).map((part) => Number(part.trim()));
+  if (points.length > 1) {
+    if (!onRange || points.some((value) => !Number.isFinite(value))) return false;
+    onRange(points);
+    return true;
+  }
+  const value = Number(input);
+  if (Number.isFinite(value)) onValue?.(value);
+  return true;
+}
+
 export function ModalNumberInput({ value, onChange, onEnter, onEscape, replaceOnFirstInput = false, allowDecimal = true, allowThrough = false }: { value: string; onChange: (value: string) => void; onEnter: () => void; onEscape: () => void; replaceOnFirstInput?: boolean; allowDecimal?: boolean; allowThrough?: boolean }) {
   const replace = useRef(replaceOnFirstInput);
   const press = (key: string) => {
