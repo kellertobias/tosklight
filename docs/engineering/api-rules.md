@@ -83,10 +83,20 @@ per-fixture values.
 - The show guard is an **optional request header**: when the desk sends it, the server
   verifies the loaded show and rejects a mismatch (the show-switch race); when absent —
   the automation case — no check happens.
-- A desk id appears in a route only when the data is genuinely per-desk. Virtual-playback
-  exclusion zones are **show-level** (the storage already keys by show); the desk segment
-  in the current route is an authentication artifact and is dropped whenever that route is
-  next touched.
+- **No desk segment in a route unless the desk is the operand** (maintainer,
+  2026-07-23). A desk id belongs in the path only when the request *edits or reads that
+  desk object itself* (desk configuration, its page assignment) — there the desk is the
+  operand, like a show id in a library route.
+- Where an operation merely *depends on* a desk — current-page playback actions, the
+  shared command line, anything resolved against "the desk I'm working on" — the desk is
+  **context, not operand**: it travels in an **optional request header**. Absent header →
+  the server uses the **main/controlling desk** (deterministic default; in practice
+  there is usually exactly one desk). On the desk's own WebSocket, the session already
+  carries the desk — frames need no header. This is deliberately symmetric with the show
+  guard header above.
+- Virtual-playback exclusion zones are **show-level** (the storage already keys by
+  show); the desk segment in the current route is an authentication artifact and is
+  dropped whenever that route is next touched.
 
 ## 7 — Undo and concurrency (maintainer, 2026-07-23)
 

@@ -26,17 +26,29 @@ Legitimate (show id as **operand**, keep): `runtime/selective_import_http.rs:27,
 become the loaded show + optional header like the rest. All routers assemble in
 `runtime/http_router.rs:8-26`.
 
-Desk-id segments: keep only where genuinely per-desk (playback actions target a desk's
-control surface — likely legit; cue deletion's desk segment — verify what it scopes; drop
-if it's only authentication, per the exclusion-zone precedent).
+**Desk-id segments — DECIDED (maintainer, 2026-07-23, recorded in api-rules §6):** a
+desk id stays in the path only where the desk is the **operand** (editing/reading the
+desk object itself, e.g. `PUT /control-desks/{id}`). Everywhere the desk is merely
+*context* — current-page playback actions (`…/desks/{desk_id}/playback-actions`), cue
+deletion (`…/desks/{desk_id}/shows/{show_id}/cues/delete`), command-line and
+programming-selection routes (`/api/v2/desks/{desk_id}/command-line`,
+`…/programming-selection/actions`) — the segment is **removed** and replaced by an
+optional desk-context header; absent header → the main/controlling desk (deterministic
+default; usually there is exactly one desk). WS frames need no header — the session
+carries the desk.
 
 ## Work
 
-1. Define the header once (e.g. `X-Tosk-Show`) with a shared axum extractor: present →
-   compare against the loaded show, mismatch → 409/412-style clear error; absent → no check.
-   Document it in `docs/engineering/api-rules.md` §6.
-2. Re-register each route without the `{show_id}` segment; handlers take the loaded show
-   from state. One route family per commit inside the chunk; client transports
+1. Define **both context headers** once with shared axum extractors and document them in
+   `docs/engineering/api-rules.md` §6:
+   - show guard (e.g. `X-Tosk-Show`): present → compare against the loaded show,
+     mismatch → clear 409/412-style error; absent → no check;
+   - desk context (e.g. `X-Tosk-Desk`): present → resolve that desk, unknown desk →
+     clear 4xx; absent → the main/controlling desk (define the deterministic default:
+     the single existing desk, else the designated main desk).
+2. Re-register each route without the `{show_id}` segment **and without desk-context
+   segments** (playback-actions, cues/delete, command-line, programming-selection);
+   handlers take the loaded show from state and the desk from the header/default. One route family per commit inside the chunk; client transports
    (`PlaybackTopologyTransport`, `ProgrammerValuesTransport` URL builders,
    `client/programming.ts`, `PresetRecallTransport`, patch/show-patch transports), bench
    helpers (`apps/control-ui/e2e/bench`), and root tests migrate in the same commit.
@@ -47,9 +59,11 @@ if it's only authentication, per the exclusion-zone precedent).
 
 ## Definition of done
 
-- No v2 route carries `{show_id}` as scope; selective-import keeps only the source-show
-  operand; the header extractor is tested (match, mismatch, absent).
-- Desk UI sends the guard header on all edits.
+- No v2 route carries `{show_id}` as scope and no v2 route carries a desk segment where
+  the desk is context; selective-import keeps only the source-show operand; both header
+  extractors are tested (match, mismatch/unknown, absent → default).
+- Desk UI sends the show-guard header on all edits and the desk header where it targets
+  a specific desk.
 
 ## Verification
 
@@ -62,6 +76,5 @@ npm run test:e2e   # full suite gate
 
 ## Decisions
 
-**DECISION NEEDED (small):** confirm the desk-id segment disposition for
-`playback-actions` (keep: per-desk surface?) and `cues/delete` (drop?). Propose in the
-result note if the maintainer hasn't answered by execution time — do not guess silently.
+Decided (see the desk-segment paragraph above and api-rules §6). No open decisions
+remain in this chunk.
