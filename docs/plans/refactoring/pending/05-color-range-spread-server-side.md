@@ -23,18 +23,28 @@ does not build new UI.
    sends the ordered selection + the two endpoint colors, and the server interpolates and
    resolves per-fixture color-channel values (scalar resolution via 03b's shared rule
    where `AttributeValue::Spread` is stored).
-2. The color→channel resolution in `colorProgrammerAssignments` (which fixture has RGB vs
+2. **Wraparound and multi-revolution hue interpolation (maintainer 2026-07-23):** the
+   interpolation must run smoothly through a hue-aware color space and support going the
+   long way around the wheel and even **multiple full revolutions** across the selection
+   (e.g. red → red via one or more complete rainbow cycles). Concretely: the wire payload
+   carries winding information from the gesture (signed hue travel / revolution count),
+   not just two endpoint colors — two endpoints alone cannot express direction or turns.
+   The gesture layer derives the winding from the drag (display/interaction concern, stays
+   client-side per §4); the server interpolates hue with wraparound. Pin with a test:
+   3 fixtures, red → red with one revolution → hues at 0°, 120°, 240°.
+3. The color→channel resolution in `colorProgrammerAssignments` (which fixture has RGB vs
    CMY heads) is show logic — move it server-side with the interpolation. The UI keeps only
-   the gesture (start/end picker positions) and display.
-3. Delete `interpolatePickerRange` client-side once unused; keep any purely visual gradient
+   the gesture (start/end picker positions + winding) and display.
+4. Delete `interpolatePickerRange` client-side once unused; keep any purely visual gradient
    preview if one exists (display logic may stay).
 
 ## Definition of done
 
-- Shift-drag color range sends one request (selection + endpoints); no per-fixture color
-  computed client-side before the write.
-- Server test: 3-fixture ordered selection, endpoints red→blue, assert per-fixture
-  interpolated channel values incl. a CMY fixture in the middle.
+- Shift-drag color range sends one request (selection + endpoints + winding); no
+  per-fixture color computed client-side before the write.
+- Server tests: 3-fixture ordered selection, endpoints red→blue, assert per-fixture
+  interpolated channel values incl. a CMY fixture in the middle; plus the wraparound case
+  (red→red, one revolution → 0°/120°/240°).
 
 ## Verification
 
