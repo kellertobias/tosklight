@@ -89,23 +89,26 @@ export function movingLightTiltRadians(normalizedTilt: number) {
   return THREE.MathUtils.degToRad((normalizedTilt - .5) * MOVING_LIGHT_TILT_RANGE_DEGREES);
 }
 
-function movingBase(square: boolean) {
-  return square
-    ? mesh(new THREE.BoxGeometry(.5, .16, .42))
-    : mesh(new THREE.CylinderGeometry(.27, .29, .16, 24));
+function movingBase() {
+  const base = mesh(new THREE.BoxGeometry(.46, .16, .46));
+  base.name = "fixed-square-base";
+  return base;
 }
 
 function movingFixture(kind: "wash-led" | "profile" | "wash-classic", color: THREE.Color, intensity: number, pan: number, tilt: number): BuiltInFixtureModel {
   const object = new THREE.Group();
-  const base = movingBase(kind !== "wash-led");
+  const base = movingBase();
   object.add(base);
   const panGroup = new THREE.Group();
+  panGroup.name = "centered-rotating-yoke";
   panGroup.rotation.y = pan;
   object.add(panGroup);
   const yoke = boxFrame(.48, .48, .075, .055);
+  yoke.name = "moving-yoke";
   yoke.position.y = -.31;
   panGroup.add(yoke);
   const tiltGroup = new THREE.Group();
+  tiltGroup.name = "tilting-head";
   tiltGroup.position.y = -.48;
   // The head pivots on the axle joining the left and right yoke arms (local X),
   // not through the plane of either arm.
@@ -114,21 +117,24 @@ function movingFixture(kind: "wash-led" | "profile" | "wash-classic", color: THR
   let head: THREE.Mesh;
   if (kind === "wash-led") {
     head = mesh(new THREE.CylinderGeometry(.21, .21, .3, 24));
-    head.rotation.z = Math.PI / 2;
   } else {
     head = mesh(new THREE.SphereGeometry(.25, 24, 16));
     head.scale.set(kind === "profile" ? .82 : .96, 1.18, .82);
   }
+  head.name = "moving-head-body";
   tiltGroup.add(head);
   // The luminous source is a filled central disc. The surrounding lens/barrel is
   // intentionally not emissive, avoiding the false illuminated-ring appearance.
   const apertureRadius = kind === "profile" ? .075 : .095;
   const aperture = lightSource(new THREE.CircleGeometry(apertureRadius, 32), color, intensity);
+  aperture.name = "light-emitting-surface";
+  aperture.userData.fixturePart = "moving-front-lens";
   aperture.rotation.x = -Math.PI / 2;
   aperture.position.y = kind === "wash-led" ? -.218 : -.305;
   tiltGroup.add(aperture);
   const beamMount = new THREE.Group();
-  beamMount.position.y = aperture.position.y - .01;
+  beamMount.name = "moving-beam-mount";
+  beamMount.position.copy(aperture.position);
   tiltGroup.add(beamMount);
   return { object, beamMount };
 }
@@ -192,6 +198,9 @@ function staticFixture(kind: "par" | "profile-static" | "fresnel" | "strobe" | "
   object.add(hanger);
   const body = new THREE.Group();
   body.position.y = -.42;
+  // Static fixture geometry is authored with its lens on +X. Rotate the whole
+  // lantern so the physical front follows Stage's canonical local -Y beam axis.
+  body.rotation.z = -Math.PI / 2;
   object.add(body);
   let aperture: THREE.Mesh | null = null;
   if (kind === "par") {
@@ -273,7 +282,7 @@ function staticFixture(kind: "par" | "profile-static" | "fresnel" | "strobe" | "
   }
   if (aperture) body.add(aperture);
   const beamMount = new THREE.Group();
-  beamMount.rotation.z = -Math.PI / 2;
+  beamMount.rotation.z = Math.PI / 2;
   beamMount.position.set(kind === "profile-static" ? .75 : kind === "fresnel" ? .45 : kind === "strobe" ? .49 : kind === "sunstrip" ? .1 : .33, 0, 0);
   body.add(beamMount);
   return { object, beamMount };

@@ -681,6 +681,41 @@ describe("built-in fixture family mapping and motion", () => {
 		expect(tiltGroup.rotation.x).toBeCloseTo(THREE.MathUtils.degToRad(80));
 		expect(tiltGroup.rotation.z).toBeCloseTo(0);
 	});
+
+	it("keeps a square base fixed while the centered yoke pans and the head tilts", () => {
+		const neutral = createBuiltInFixtureModel(
+			fixture("moving wash", "A7 LED Wash"),
+			new THREE.Color("white"),
+			1,
+			0,
+			0,
+		);
+		const moved = createBuiltInFixtureModel(
+			fixture("moving wash", "A7 LED Wash"),
+			new THREE.Color("white"),
+			1,
+			0.8,
+			movingLightTiltRadians(0.75),
+		);
+		const base = moved.object.getObjectByName("fixed-square-base") as THREE.Mesh;
+		const yoke = moved.object.getObjectByName("centered-rotating-yoke")!;
+		const head = moved.object.getObjectByName("moving-head-body")!;
+		const lens = moved.object.getObjectByName("light-emitting-surface")!;
+		expect(lens.userData.fixturePart).toBe("moving-front-lens");
+		const size = new THREE.Box3().setFromObject(base).getSize(new THREE.Vector3());
+		expect(base.geometry).toBeInstanceOf(THREE.BoxGeometry);
+		expect(size.x).toBeCloseTo(size.z);
+		expect(base.parent).toBe(moved.object);
+		expect(yoke.parent).toBe(moved.object);
+		expect(base.rotation.y).toBeCloseTo(
+			neutral.object.getObjectByName("fixed-square-base")!.rotation.y,
+		);
+		expect(yoke.rotation.y).toBeCloseTo(0.8);
+		expect(head.parent?.name).toBe("tilting-head");
+		expect(lens.parent?.name).toBe("tilting-head");
+		expect(moved.beamMount.parent?.name).toBe("tilting-head");
+		expect(moved.beamMount.position).toEqual(lens.position);
+	});
 });
 
 describe("built-in emitting surfaces and scene construction", () => {
@@ -874,7 +909,7 @@ describe("built-in wash and conventional housings", () => {
 		const profileSize = new THREE.Box3()
 			.setFromObject(profile.object)
 			.getSize(new THREE.Vector3());
-		expect(profileSize.x / profileSize.z).toBeGreaterThan(1.5);
+		expect(profileSize.y / profileSize.z).toBeGreaterThan(1.5);
 
 		const fresnel = createBuiltInFixtureModel(
 			fixture("dimmer fresnel", "Dimmer Fresnel"),
