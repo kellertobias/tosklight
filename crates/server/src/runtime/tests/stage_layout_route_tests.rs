@@ -290,3 +290,102 @@ async fn move_selection_validates_requests_and_tolerates_unknown_fields() {
     assert_eq!(unknown_only["changed"], false);
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[tokio::test]
+async fn move_selection_defaults_patched_fixtures_without_any_stored_position() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let seeded_path = data_dir.join("seeded-default.show");
+    default_show::initialise(&seeded_path).unwrap();
+    let upload = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/shows")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "name": "Seeded stage",
+                        "data_base64": STANDARD.encode(std::fs::read(&seeded_path).unwrap()),
+                        "overwrite": false,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(upload.status(), StatusCode::CREATED);
+    let show_id = json(upload).await["id"].as_str().unwrap().to_owned();
+    open_show(&app, &token, &show_id).await;
+
+    let fixtures = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/shows/{show_id}/objects/patched_fixture"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let fixtures = json(fixtures).await;
+    let patched: Vec<Uuid> = fixtures
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|object| Uuid::parse_str(object["id"].as_str().unwrap()).unwrap())
+        .collect();
+    assert!(patched.len() >= 2, "the seeded default show is patched");
+
+    let current = read_stage_layout(&app, &token, &show_id).await;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::put(format!("/api/v1/shows/{show_id}/objects/stage_layout/main"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(
+                    header::IF_MATCH,
+                    current["revision"].as_u64().unwrap().to_string(),
+                )
+                .body(Body::from(
+                    serde_json::json!({"version": 2, "positions": {}, "positions3d": {}})
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Selection order [second, first] — each defaults to its authoritative patch-order grid
+    // slot (the position every stage surface already displays) before the delta applies.
+    let outcome = json(
+        post_stage_layout_action(
+            &app,
+            &token,
+            &move_request("default-grid", &[patched[1], patched[0]], "x", 2.0),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(outcome["changed"], true);
+    assert_eq!(
+        outcome["moved_fixture_ids"],
+        serde_json::json!([patched[1], patched[0]])
+    );
+    let layout = read_stage_layout(&app, &token, &show_id).await;
+    let positions3d = &layout["body"]["positions3d"];
+    assert_eq!(positions3d[patched[0].to_string()]["x"], -3.25);
+    assert_eq!(positions3d[patched[1].to_string()]["x"], -1.75);
+    assert_eq!(positions3d[patched[0].to_string()]["y"], 1.0);
+    assert_eq!(positions3d[patched[1].to_string()]["z"], 5.0);
+    assert_eq!(
+        positions3d.as_object().unwrap().len(),
+        2,
+        "only the selected fixtures gain persisted entries"
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}

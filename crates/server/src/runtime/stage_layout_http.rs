@@ -61,12 +61,19 @@ async fn stage_layout_action(
             0,
         ),
     };
+    let patched_order: HashMap<Uuid, usize> = store
+        .objects("patched_fixture")
+        .map_err(|error| StageLayoutHttpError::api(ApiError::store(error)))?
+        .iter()
+        .enumerate()
+        .filter_map(|(index, object)| Uuid::parse_str(&object.id).ok().map(|id| (id, index)))
+        .collect();
     let StageLayoutAction::MoveSelection {
         fixture_ids,
         axis,
         delta,
     } = &request.action;
-    let moved = apply_selection_move(&mut body, fixture_ids, *axis, *delta)?;
+    let moved = apply_selection_move(&mut body, fixture_ids, *axis, *delta, &patched_order)?;
     let outcome = if moved.is_empty() {
         StageLayoutActionOutcome {
             request_id: request.request_id.clone(),
@@ -146,12 +153,15 @@ fn validate_request(request: &StageLayoutActionRequest) -> Result<(), StageLayou
 
 /// Applies one uniform axis delta across the ordered selection, mutating only the touched
 /// `positions3d` entries of the raw layout body so every other stored field survives verbatim.
-/// A selected fixture without a stored 3D or legacy 2D position is skipped, never defaulted.
+/// A selected fixture resolves its base position exactly like the stage views do: the stored 3D
+/// entry, else the migrated legacy 2D entry, else — for patched fixtures — the default grid slot
+/// for its authoritative patch index. Selected ids outside the patch are skipped.
 fn apply_selection_move(
     body: &mut serde_json::Value,
     fixture_ids: &[Uuid],
     axis: StagePositionAxis,
     delta: f64,
+    patched_order: &HashMap<Uuid, usize>,
 ) -> Result<Vec<Uuid>, StageLayoutHttpError> {
     let layout = body
         .as_object_mut()
@@ -196,6 +206,12 @@ fn apply_selection_move(
             migrated[axis_key(axis)] = json_number(base + delta)?;
             positions3d.insert(fixture_id.to_string(), migrated);
             moved.push(*fixture_id);
+        } else if let Some(index) = patched_order.get(fixture_id) {
+            let mut defaulted = default_stage_position(*index);
+            let base = defaulted[axis_key(axis)].as_f64().unwrap_or(0.0);
+            defaulted[axis_key(axis)] = json_number(base + delta)?;
+            positions3d.insert(fixture_id.to_string(), defaulted);
+            moved.push(*fixture_id);
         }
     }
     Ok(moved)
@@ -217,6 +233,20 @@ fn position_map(
         .iter()
         .filter_map(|(key, value)| Uuid::parse_str(key).ok().map(|id| (id, value.clone())))
         .collect())
+}
+
+/// Mirror of the stage views' `defaultStagePosition` grid formula
+/// (`apps/control-ui/src/windows/stage3dScene/positions.ts`); `index` is the fixture's slot in
+/// the authoritative Patch order (object-id ascending — the order every patch surface renders).
+fn default_stage_position(index: usize) -> serde_json::Value {
+    serde_json::json!({
+        "x": -5.25 + ((index % 8) as f64) * 1.5,
+        "y": 1.0 + ((index / 8) as f64) * 1.6,
+        "z": 5.0,
+        "rotationX": 0.0,
+        "rotationY": 0.0,
+        "rotationZ": 0.0,
+    })
 }
 
 /// Mirror of the stage views' `migrateStagePosition` percent-to-meter formula

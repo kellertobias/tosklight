@@ -23,7 +23,7 @@
       "description": "One stage-layout intent, using the shared fan-out vocabulary: an explicitly ordered\nselection plus a typed operation payload (see `ProgrammingValueMutation::SetSelection`).",
       "oneOf": [
         {
-          "description": "Applies one uniform axis delta to every selected fixture that has a resolvable stage\nposition. Fixtures without a stored 2D or 3D position are skipped, never defaulted.",
+          "description": "Applies one uniform axis delta to every selected fixture. The server resolves each base\nposition exactly like the stage views: the stored 3D entry, else the migrated legacy 2D\nentry, else the patch-order default grid slot; selected ids outside the patch are skipped.",
           "type": "object",
           "properties": {
             "axis": {

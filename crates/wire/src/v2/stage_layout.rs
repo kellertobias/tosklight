@@ -23,8 +23,9 @@ pub struct StageLayoutActionRequest {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StageLayoutAction {
-    /// Applies one uniform axis delta to every selected fixture that has a resolvable stage
-    /// position. Fixtures without a stored 2D or 3D position are skipped, never defaulted.
+    /// Applies one uniform axis delta to every selected fixture. The server resolves each base
+    /// position exactly like the stage views: the stored 3D entry, else the migrated legacy 2D
+    /// entry, else the patch-order default grid slot; selected ids outside the patch are skipped.
     MoveSelection {
         #[schemars(length(min = 1, max = 10_000))]
         fixture_ids: Vec<Uuid>,
