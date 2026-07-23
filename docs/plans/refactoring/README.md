@@ -71,7 +71,9 @@ Fresh baseline (fill in): `____ passed / ____ skipped / ____ failed on <date>`
 
 ## Chunk order rationale
 
-01–02 quick wins and the deferred CUE-011 bug; 03–06 server-owned show logic (§7),
+01–02 quick wins and the deferred CUE-011 bug, with 02b re-architecting persistence to
+write-behind autosave (api-rules §8) on top of 02's event/revision guarantees;
+03–06 server-owned show logic (§7),
 with 03b adopting `Next/50` (deterministic multi-point spread rule — cheapest while the
 spread paths are being consolidated anyway) and 09b adopting the one refactoring-shaped
 item of `Next/64` (remove the direct programmer encoder type before migrating encoder

@@ -87,3 +87,32 @@ per-fixture values.
   exclusion zones are **show-level** (the storage already keys by show); the desk segment
   in the current route is an authentication artifact and is dropped whenever that route is
   next touched.
+
+## 7 — Undo and concurrency (maintainer, 2026-07-23)
+
+- **Undo is a programmer action, scoped to a desk.** It undoes that desk's programmer
+  changes. The only way an undo affects show-global data is when the undone step was a
+  recording (e.g. a cue or preset stored from that desk's programmer) — then the undo
+  removes what that recording created. There is no generic show-wide undo surface.
+- **Concurrent users are last-write-wins by design.** Two users writing the same object
+  (e.g. the same preset) is either intentional or operationally harmless; the desk does
+  not arbitrate between users. Object/show revision guards (`If-Match`, revision checks)
+  exist to protect a client from acting on **stale state it didn't know changed** — they
+  are not inter-user locks, and a revision conflict must never permanently block a
+  deliberate operator action; the surface re-reads and reapplies.
+- **Concurrent additions must not collide.** Operations that create new entries (two
+  users storing a cue on the same cuelist) are server-assigned: the server picks the next
+  cue number/slot at execution time, so both stores succeed as two new cues. Intent-shaped
+  writes (rule 3) make this natural — the client never sends "the whole new cuelist".
+
+## 8 — Persistence cadence (maintainer, 2026-07-23)
+
+- The active show is authoritative **in memory** on the server; the `.show` file is
+  flushed on a configurable autosave interval (default 30 s, desk configuration), not on
+  every mutation. Losing the last interval on power loss is accepted (WAL +
+  `synchronous=NORMAL` never guaranteed hard durability per-commit anyway).
+- Flush immediately at hard boundaries regardless of interval: show switch/close, named
+  revision save, upload/overwrite, shutdown, and after an idle gap. Automatic backups are
+  taken per flush, not per mutation.
+- Events, revisions, replay windows, and undo operate at **mutation time** in memory —
+  persistence cadence must not change any client-observable ordering.

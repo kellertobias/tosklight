@@ -30,16 +30,28 @@ mutation path (`crates/application/src/active_show/objects.rs`) — land 02 firs
 1. Design `POST /api/v2/objects/{kind}/{id}/update` (loaded show implied; optional show
    guard header from chunk 12): typed partial body per kind, request id + replay window
    (reuse `ReplayCache`), returns the new revision + emits `show_object_changed`.
-   Also `…/delete` and the undo intent. Reads: v2 snapshot routes for list/get (align with
+   Also `…/delete`. Reads: v2 snapshot routes for list/get (align with
    `ShowObjectSnapshotTransport`'s needs; it already consumes v2 events for invalidation).
-2. Convert writers one at a time (window settings, desk settings, layouts, output routes,
+2. Apply api-rules **§7 (undo and concurrency)** to this surface:
+   - **Undo is a desk-scoped programmer action**, not a generic object operation. The
+     generic `POST …/objects/{kind}/{object_id}/undo` route does not survive as a public
+     v2 route; the `object_history` mechanism may remain as the *internal* backing for a
+     desk's programmer undo of a recording (undoing a stored cue/preset from the desk
+     that recorded it). Route the desk's undo through the programmer undo action.
+   - **Revision conflicts are stale-client protection, not user locks** (last-write-wins
+     between users is by design). On a 409/conflict the client re-reads and reapplies the
+     intent instead of surfacing a blocking error for deliberate operator actions.
+   - **Creating writes are server-assigned**: storing a cue never sends a cue number the
+     client computed from a stale list — the server assigns the next number/slot, so two
+     desks storing onto the same cuelist yield two cues.
+3. Convert writers one at a time (window settings, desk settings, layouts, output routes,
    preload store) — each becomes a typed partial update; delete each `putObject` call as
    it migrates. The `deskSnapshot`/`showObjects` scoped stores keep their revision
    bookkeeping (`installAuthoritativeObjects` semantics unchanged).
-3. Migrate bench/tests (they seed objects — give the bench a v2 seeding path).
-4. Delete the v1 object routes when callers reach zero; `presets/store` moves to the v2
+4. Migrate bench/tests (they seed objects — give the bench a v2 seeding path).
+5. Delete the v1 object routes when callers reach zero; `presets/store` moves to the v2
    recording surface (`preset_recording_routes.rs`) or a test-support route.
-5. Persisted-data caution: this touches every stored object kind — re-read
+6. Persisted-data caution: this touches every stored object kind — re-read
    `docs/acceptance-criteria.md`; old-show compatibility must stay (normalization-on-open
    behavior is pinned by SHOW-004).
 
@@ -47,7 +59,9 @@ mutation path (`crates/application/src/active_show/objects.rs`) — land 02 firs
 
 - No desk-UI whole-object PUT remains; every stored-config edit is a typed partial intent
   with request identity; v1 object routes deleted; bench/tests migrated.
-- Undo still works per object (active_object_undo unit suite green).
+- Undo reaches the api-rules §7 shape: desk-scoped programmer undo (with recording
+  rollback), no public generic object-undo route; the `active_object_undo` unit suite is
+  updated to the new shape and green.
 
 ## Verification
 
