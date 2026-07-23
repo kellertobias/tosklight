@@ -11,6 +11,8 @@ import {
 import { ProgrammerActionsProvider } from "../features/programmerActions/ProgrammerActionsContext";
 import { ShellStatusActionsProvider } from "../features/shellStatus/ShellStatusActionsProvider";
 import { DmxDiagnosticsProvider } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
+import { MediaServersProvider } from "../features/mediaServers/MediaServersContext";
+import { SoundToLightProvider } from "../features/soundToLight/SoundToLightContext";
 import { FilesProvider } from "../features/files/FilesContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
@@ -148,6 +150,36 @@ export function ServerProvider({
 		}),
 		[value.readDmx, value.setDmxOverride, value.outputRoutes],
 	);
+	const mediaServersState = useMemo(
+		() => ({
+			mediaServers: value.mediaServers,
+			mediaPreviewUrls: value.mediaPreviewUrls,
+			refreshMediaPreview: value.refreshMediaPreview,
+			refreshMediaThumbnails: value.refreshMediaThumbnails,
+			matter: value.matter,
+		}),
+		[
+			value.mediaServers,
+			value.mediaPreviewUrls,
+			value.refreshMediaPreview,
+			value.refreshMediaThumbnails,
+			value.matter,
+		],
+	);
+	const soundToLightActions = useMemo(
+		() => ({
+			speedGroup: value.speedGroup,
+			updateSpeedGroup: value.updateSpeedGroup,
+			observeSpeedGroup: value.observeSpeedGroup,
+			speedGroupAction: value.speedGroupAction,
+		}),
+		[
+			value.speedGroup,
+			value.updateSpeedGroup,
+			value.observeSpeedGroup,
+			value.speedGroupAction,
+		],
+	);
 	const shellStatusActions = useMemo(
 		() => ({
 			dismissError: value.dismissError,
@@ -163,6 +195,8 @@ export function ServerProvider({
 			<ProgrammerActionsProvider actions={programmerActions}>
 			<ShellStatusActionsProvider actions={shellStatusActions}>
 			<DmxDiagnosticsProvider diagnostics={dmxDiagnostics}>
+			<MediaServersProvider media={mediaServersState}>
+			<SoundToLightProvider actions={soundToLightActions}>
 			<ServerDeskBoundaries state={state}>
 			<ServerVisualizationRuntimeBoundary state={state}>
 				<ShowObjectsViewProvider
@@ -231,6 +265,8 @@ export function ServerProvider({
 				</ShowObjectsViewProvider>
 			</ServerVisualizationRuntimeBoundary>
 			</ServerDeskBoundaries>
+			</SoundToLightProvider>
+			</MediaServersProvider>
 			</DmxDiagnosticsProvider>
 			</ShellStatusActionsProvider>
 			</ProgrammerActionsProvider>

@@ -5,7 +5,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { useServer } from "../../api/ServerContext";
+import { useSoundToLightActions } from "../../features/soundToLight/SoundToLightContext";
 import type {
 	SoundObservation,
 	SoundToLightConfig,
@@ -53,9 +53,9 @@ export function useSoundCapture({
 	setPermission,
 	refreshInputs,
 }: SoundCaptureOptions) {
-	const server = useServer();
-	const serverRef = useRef(server);
-	serverRef.current = server;
+	const soundActions = useSoundToLightActions();
+	const serverRef = useRef(soundActions);
+	serverRef.current = soundActions;
 	const statesRef = useRef(states);
 	statesRef.current = states;
 	const [captures, setCaptures] = useState<SoundGroupMap<SoundCaptureStatus>>(
@@ -96,7 +96,9 @@ export function useSoundCapture({
 					while (latestObservations.current[group] && mounted.current) {
 						const next = latestObservations.current[group];
 						delete latestObservations.current[group];
-						acceptState(await serverRef.current.observeSpeedGroup(group, next));
+						const sound = serverRef.current;
+						if (!sound) break;
+						acceptState(await sound.observeSpeedGroup(group, next));
 					}
 					setError(null);
 				} catch (reason) {

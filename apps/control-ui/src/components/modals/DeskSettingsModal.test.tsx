@@ -19,6 +19,16 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => mocks.server }));
+vi.mock("../../features/mediaServers/MediaServersContext", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	useMediaServers: () => ({
+		mediaServers: [],
+		mediaPreviewUrls: {},
+		refreshMediaPreview: vi.fn(),
+		refreshMediaThumbnails: vi.fn(),
+		matter: mocks.server.matter,
+	}),
+}));
 vi.mock("../../features/configuration/ConfigurationActionsProvider", () => ({
   useConfigurationActions: () => ({
     saveConfiguration: mocks.saveConfiguration,

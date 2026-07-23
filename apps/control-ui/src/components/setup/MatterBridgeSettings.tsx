@@ -1,5 +1,5 @@
 import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
-import { useServer } from "../../api/ServerContext";
+import { useMediaServers } from "../../features/mediaServers/MediaServersContext";
 import {
   useDeskConfiguration,
   useMatterEnabled,
@@ -7,8 +7,7 @@ import {
 import { Button, SwitchField } from "../common";
 
 export function MatterBridgeSettings() {
-  const server = useServer();
-  const matter = server.matter;
+  const matter = useMediaServers()?.matter ?? null;
   const configuration = useDeskConfiguration();
   const configurationActions = useConfigurationActions();
   const enabled = useMatterEnabled();

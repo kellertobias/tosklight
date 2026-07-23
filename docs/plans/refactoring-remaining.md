@@ -45,15 +45,17 @@ in suggested order. Each chunk lands independently.
 - `features/commandHistory` scoped store (CommandLineHistoryPanel) and
   `features/dmxDiagnostics` (`readDmx`/`setDmxOverride`/`outputRoutes`: DmxWindow,
   ProductDemoApp).
+- `features/mediaServers` (media fixtures/previews/refresh + Matter status:
+  MediaServerSetup, MatterBridgeSettings, DeskSettingsModal path) and
+  `features/soundToLight` (speed-group sound calls: useSoundCapture, useSoundToLight).
 
-**Remaining consumers (~13 files)**, grouped by the scoped owner they need next:
+**Remaining consumers (~9 files)**, grouped by the scoped owner they need next:
 fixture library + patch
 (FixtureLibrarySetup, fixtureLibrary/{editor,revisions,transfers,warnings},
 fixturePatch/controller, PatchFeatureBoundary; PatchWindow is migrated —
 `setPatchPreviewHighlight` now lives on the scoped Highlight actions), show lifecycle (QuickSetupModal — the largest, ~19
 actions — ShowRecoveryModal, setupWindow/controller, ConnectionState,
-LayoutPersistence), and media/sound (MediaServerSetup, MatterBridgeSettings,
-useSoundCapture, useSoundToLight).
+LayoutPersistence).
 Only after every caller is migrated: delete `useServer()` and remove unused v1
 routes per the decided policy below.
 

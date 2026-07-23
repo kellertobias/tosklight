@@ -6,7 +6,11 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { useServer } from "../../api/ServerContext";
+import { useSessionSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
+import {
+	type SoundToLightActions,
+	useSoundToLightActions,
+} from "../../features/soundToLight/SoundToLightContext";
 import type {
 	SoundToLightConfig,
 	SpeedGroupActionInput,
@@ -55,11 +59,12 @@ export interface SoundToLightController {
 }
 
 export function useSoundToLight(enabled = true): SoundToLightController {
-	const server = useServer();
-	const serverRef = useRef(server);
-	serverRef.current = server;
-	const deskId = server.session?.desk.id ?? null;
-	const sessionId = server.session?.session_id ?? null;
+	const soundActions = useSoundToLightActions();
+	const session = useSessionSnapshot();
+	const serverRef = useRef(soundActions);
+	serverRef.current = soundActions;
+	const deskId = session?.desk.id ?? null;
+	const sessionId = session?.session_id ?? null;
 	const [previews, setPreviews] = useState<SoundGroupMap<SoundToLightConfig>>(
 		{},
 	);
@@ -122,7 +127,7 @@ export function useSoundToLight(enabled = true): SoundToLightController {
 		async (group: SpeedGroupId, configuration: SoundToLightConfig) => {
 			try {
 				const state = acceptState(
-					await serverRef.current.updateSpeedGroup(group, configuration),
+					await requireSound(serverRef.current).updateSpeedGroup(group, configuration),
 				);
 				setError(null);
 				return state;
@@ -140,7 +145,7 @@ export function useSoundToLight(enabled = true): SoundToLightController {
 		async (group: SpeedGroupId, input: SpeedGroupActionInput) => {
 			try {
 				const state = acceptState(
-					await serverRef.current.speedGroupAction(group, input),
+					await requireSound(serverRef.current).speedGroupAction(group, input),
 				);
 				setError(null);
 				return state;
@@ -170,10 +175,16 @@ export function useSoundToLight(enabled = true): SoundToLightController {
 	};
 }
 
+function requireSound(actions: SoundToLightActions | null): SoundToLightActions {
+	if (!actions)
+		throw new Error("Sound-to-Light actions are unavailable outside a desk boundary");
+	return actions;
+}
+
 function useSoundGroupStates(
 	enabled: boolean,
 	sessionId: string | null,
-	server: { current: ReturnType<typeof useServer> },
+	server: { current: SoundToLightActions | null },
 ) {
 	const [states, setStates] = useState<SoundGroupMap<SpeedGroupSoundState>>({});
 	const [loading, setLoading] = useState(false);
@@ -191,7 +202,7 @@ function useSoundGroupStates(
 		let cancelled = false;
 		setLoading(true);
 		void Promise.all(
-			speedGroupIds.map((group) => server.current.speedGroup(group)),
+			speedGroupIds.map((group) => requireSound(server.current).speedGroup(group)),
 		)
 			.then((loaded) => {
 				if (cancelled) return;

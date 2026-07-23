@@ -29,6 +29,19 @@ const server = vi.hoisted(() => ({
 }));
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../../features/soundToLight/SoundToLightContext", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	useSoundToLightActions: () => ({
+		speedGroup: server.speedGroup,
+		updateSpeedGroup: server.updateSpeedGroup,
+		observeSpeedGroup: server.observeSpeedGroup,
+		speedGroupAction: server.speedGroupAction,
+	}),
+}));
+vi.mock("../../features/deskSnapshot/DeskSnapshotState", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	useSessionSnapshot: () => server.session,
+}));
 vi.mock("./useSoundDeviceSelection", () => ({
 	useSoundDeviceSelection: () => deviceSelection,
 }));

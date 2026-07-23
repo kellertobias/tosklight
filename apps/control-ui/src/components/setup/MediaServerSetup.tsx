@@ -5,7 +5,10 @@ import {
 	useMemo,
 	useState,
 } from "react";
-import { useServer } from "../../api/ServerContext";
+import {
+	type MediaServersState,
+	useMediaServers,
+} from "../../features/mediaServers/MediaServersContext";
 import type { MediaServerFixture, PatchedFixture } from "../../api/types";
 import { usePatch, usePatchView } from "../../features/patch/PatchContext";
 import { Button, FormLayout, NumberField, TextField } from "../common";
@@ -13,7 +16,7 @@ import { Button, FormLayout, NumberField, TextField } from "../common";
 type Draft = { ip: string; port: number };
 
 export function MediaServerSetup({ active = true }: { active?: boolean }) {
-	const server = useServer();
+	const server = useMediaServers();
 	const patch = usePatch();
 	usePatchView(active);
 	const [drafts, setDrafts] = useState<Record<string, Draft>>({});
@@ -29,10 +32,10 @@ export function MediaServerSetup({ active = true }: { active?: boolean }) {
 	useEffect(() => {
 		if (!live.size || !active) return;
 		const timer = window.setInterval(() => {
-			for (const fixtureId of live) void server.refreshMediaPreview(fixtureId);
+			for (const fixtureId of live) void server?.refreshMediaPreview(fixtureId);
 		}, 1_000);
 		return () => window.clearInterval(timer);
-	}, [active, live, server.refreshMediaPreview]);
+	}, [active, live, server]);
 	if (!active || patch.status !== "ready")
 		return <p>Patch authority loading…</p>;
 	if (!mediaFixtures.length)
@@ -48,9 +51,9 @@ export function MediaServerSetup({ active = true }: { active?: boolean }) {
 				<MediaServerController
 					key={fixture.fixture_id}
 					fixture={fixture}
-					status={matchingStatus(server.mediaServers, fixture)}
+					status={matchingStatus(server?.mediaServers ?? [], fixture)}
 					draft={drafts[fixture.fixture_id] ?? fixtureDraft(fixture)}
-					preview={server.mediaPreviewUrls[fixture.fixture_id]}
+					preview={server?.mediaPreviewUrls[fixture.fixture_id]}
 					busy={busy === fixture.fixture_id}
 					live={live.has(fixture.fixture_id)}
 					setDraft={(draft) =>
@@ -251,7 +254,7 @@ function mediaStatusText(
 }
 
 async function toggleLivePreview(
-	server: ReturnType<typeof useServer>,
+	server: MediaServersState | null,
 	fixtureId: string,
 	live: ReadonlySet<string>,
 	setLive: Dispatch<SetStateAction<Set<string>>>,
@@ -267,7 +270,7 @@ async function toggleLivePreview(
 	}
 	setBusy(fixtureId);
 	try {
-		if (await server.refreshMediaPreview(fixtureId))
+		if (await server?.refreshMediaPreview(fixtureId))
 			setLive((current) => new Set(current).add(fixtureId));
 	} finally {
 		setBusy(null);
@@ -275,13 +278,13 @@ async function toggleLivePreview(
 }
 
 async function refreshThumbnails(
-	server: ReturnType<typeof useServer>,
+	server: MediaServersState | null,
 	fixtureId: string,
 	setBusy: Dispatch<SetStateAction<string | null>>,
 ): Promise<void> {
 	setBusy(fixtureId);
 	try {
-		await server.refreshMediaThumbnails(
+		await server?.refreshMediaThumbnails(
 			fixtureId,
 			Array.from({ length: 16 }, (_, index) => index),
 		);
