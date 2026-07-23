@@ -32,7 +32,12 @@ power loss loses at most the last interval of programming.
    default 30 s, minimum bound); flush writes one transaction with all accumulated
    changes. Immediate flush on: show switch/open/close, named-revision save
    (`show_library.rs:57` `backup_to` must see a flushed file), upload/overwrite,
-   shutdown, and idle (no mutation for a few seconds).
+   **deliberate application quit** (the shutdown route AND the desktop app's quit path —
+   verify the Tauri window-close path reaches the server shutdown flush, not just
+   `POST /shutdown`), **leaving the Show Patch** (maintainer 2026-07-23: patch work must
+   never sit unflushed — the client signals patch-surface exit, e.g. a lightweight flush
+   intent posted when the patch window/setup section closes, or the server flushes on the
+   last patch mutation's settle), and idle (no mutation for a few seconds).
 3. Move automatic backups from per-mutation to per-flush: `ShowMutationBackupPlan` runs
    before a flush that contains changes, not before every commit. Retention unchanged.
 4. Recovery semantics: `docs/acceptance-criteria.md` first; SHOW-005 recovery-backup
@@ -49,6 +54,8 @@ power loss loses at most the last interval of programming.
   per flush; configurable interval with 30 s default; kill-test green; SHOW-005-family
   scenarios updated and green; no change in any event/revision ordering observable by
   clients (unit-covered).
+- Dedicated coverage for the two maintainer-named boundaries: quitting the app (desktop
+  path included) and leaving the Show Patch each provably flush pending changes.
 
 ## Verification
 

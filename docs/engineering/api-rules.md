@@ -112,7 +112,8 @@ per-fixture values.
   every mutation. Losing the last interval on power loss is accepted (WAL +
   `synchronous=NORMAL` never guaranteed hard durability per-commit anyway).
 - Flush immediately at hard boundaries regardless of interval: show switch/close, named
-  revision save, upload/overwrite, shutdown, and after an idle gap. Automatic backups are
-  taken per flush, not per mutation.
+  revision save, upload/overwrite, **deliberate application quit**, **leaving the Show
+  Patch** (patch edits are too costly to lose an interval of), and after an idle gap.
+  Automatic backups are taken per flush, not per mutation.
 - Events, revisions, replay windows, and undo operate at **mutation time** in memory —
   persistence cadence must not change any client-observable ordering.
