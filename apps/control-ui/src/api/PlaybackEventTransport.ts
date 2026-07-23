@@ -107,12 +107,15 @@ function subscription(
 		type: "subscribe",
 		filter: {
 			capabilities: scope.desk ? ["playback", "desk"] : ["playback"],
-			classes: ["transition", "projection"],
+			classes: ["transition", "projection", "telemetry"],
 			objects: [
 				...scope.identities.map((identity) => ({
 					capability: "playback" as const,
 					id: identityKey(identity),
 				})),
+				// The sampled-telemetry lane: volatile ~10 Hz delta ticks for every playback,
+				// retained desk-lifetime in the runtime store.
+				{ capability: "playback" as const, id: "telemetry" },
 				...(scope.desk
 					? [{ capability: "desk" as const, id: `playback-view:${deskId}` }]
 					: []),

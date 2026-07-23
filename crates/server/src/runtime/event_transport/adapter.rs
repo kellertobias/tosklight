@@ -217,6 +217,11 @@ fn wire_payload(
         )) => wire::EventPayload::PlaybackRuntimeChanged {
             change: super::super::playback_v2::runtime_change(change),
         },
+        application::ApplicationEvent::Playback(application::PlaybackEvent::TelemetrySampled(
+            tick,
+        )) => wire::EventPayload::PlaybackTelemetrySampled {
+            tick: super::super::playback_v2::telemetry_tick(tick),
+        },
         application::ApplicationEvent::Playback(
             application::PlaybackEvent::SpeedGroupsChanged(change),
         ) => wire::EventPayload::SpeedGroupsChanged {

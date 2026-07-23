@@ -20,7 +20,41 @@ in suggested order. Each chunk lands independently.
   stale show-revision `If-Match`, or a v1 mutation path that never publishes its v2 event —
   those three patterns explained almost every "unimplemented feature" skip so far.
 
-## 1 — Facade retirement (the main remaining architecture work)
+## 1 — Facade retirement (IN PROGRESS 2026-07-23 — four chunks landed, inventory below)
+
+**Progress.** Landed consumer-by-consumer chunks:
+
+- `features/deskSnapshot` (scoped bootstrap/session store + `useActiveShow`,
+  `useActiveShowId`, `useBootstrapReady`, `useHardwareConnected`, `useFrameRateHz`,
+  `useActiveTimecode`, `useOutputHealth`, `useBootstrapSnapshot`, `useSessionSnapshot`)
+  and migration of all read-only bootstrap/session consumers (App, LeftDock, control panes,
+  faders, StageCommandControls, CommandLineStatusBoundary, fixtureSheetProjection,
+  useStageVisualization, GroupsWindow/useGroupPoolModel, GroupStrip).
+- Eight dead `useServer()` calls removed (ChannelsWindow, CuelistWindow, useStageLayout,
+  DeskLockSettingsModal, SpecialDialogsModal, specialDialogs/color, ProgrammerFadeFader,
+  PlaybackTools).
+- `features/highlight` (scoped Highlight store + actions context) and migration of
+  HighlightControls, HardwareControlSummary, and the Fixture Sheet step presenter.
+
+**Remaining consumers (~26 files)**, grouped by the scoped owner they need next:
+one-shot/diagnostic actions (DebugModal: `readServerLogs`/`simulateError`/output-health —
+health now readable via `useOutputHealth`), programming actions
+(`useNumericPadController: undoProgrammer`; `useParameterProjection` and its
+controller: `controlFixtureAction`/`generateFixturePresets`/`alignSelection`;
+SystemControlsModal; specialDialogs/control; PreloadStoreModal + PresetsWindow:
+`storePreload`), command line (`CommandLineBar: dismissError`;
+CommandLineHistoryPanel: `commandHistory`), fixture library + patch
+(FixtureLibrarySetup, fixtureLibrary/{editor,revisions,transfers,warnings},
+fixturePatch/controller, PatchFeatureBoundary, PatchWindow:
+`setPatchPreviewHighlight`), show lifecycle (QuickSetupModal — the largest, ~19
+actions — ShowRecoveryModal, setupWindow/controller, ConnectionState,
+LayoutPersistence), media/sound (MediaServerSetup, MatterBridgeSettings,
+useSoundCapture, useSoundToLight), windows (DmxWindow: `readDmx`/`setDmxOverride`/
+`outputRoutes`; ProductDemoApp: `readDmx`), and FixtureSheetWindow (migrated).
+Only after every caller is migrated: delete `useServer()` and remove unused v1
+routes per the decided policy below.
+
+### Plan
 
 `useServer()` was retained as the sanctioned migration facade
 (`major-refactoring.md` §"Remove compatibility facades") and still has **~53 non-test
@@ -123,7 +157,31 @@ snapshot. To finish:
    (idle zeros to `minimum_slots`, patched-default inclusion, disable-without-delete) is a
    genuinely unimplemented engine/output feature, not a schema issue.
 
-## 4 — Playback runtime telemetry: sampled push at ~10 Hz + client-retained store
+## 4 — Playback runtime telemetry: sampled push at ~10 Hz + client-retained store (BUILT 2026-07-23)
+
+**Done.** Server: `PlaybackTelemetrySampler` (crates/server/src/runtime/playback_telemetry.rs)
+counts completed render frames in both the real output scheduler and the test bench, and on
+every Nth frame (`telemetry_frame_divider`, the divisor of the configured rate nearest 10 Hz;
+44→4, 40/100/120→10 Hz, unit-tested) samples `Engine::playback_telemetry_at` — a read of
+already-published playback runtime state (fade progress from activated_at ÷ cue completion,
+master, current cue, flash/temporary/swap/enabled) computed in crates/playback
+(`telemetry_samples_at`). Delta detection (`PlaybackTelemetryDeltas`) drops unchanged
+playbacks; no change → no message. Ticks publish as `EventClass::Telemetry` /
+`DeliveryPolicy::Replaceable` drafts on the v2 events bus through the render unit-of-work
+(never touching the timing-critical render path itself), routed via the shared
+`playback:telemetry` object. Wire types live in crates/wire v2 playback with regenerated
+contracts. Client: the playback events subscription adds the telemetry class+object; decoded
+ticks land in a desk-lifetime `telemetry` map on the PlaybackRuntimeStore (retained across
+window mounts, no snapshot fetch — unit-covered), exposed via `usePlaybackTelemetry` /
+`usePlaybackTelemetryMap`. Paced acceptance: `tests/29-playback-telemetry.spec.ts` activates
+two playbacks with 4 s fades, drives one simulated second of 44 Hz frames, and asserts ≈11
+sampled WS ticks with monotonically rising mid-fade progress, zero snapshot polling after
+hydration, and full silence once the fades settle.
+
+Consuming the retained store from concrete playback surfaces (lighting buttons, fade bars)
+remains ordinary feature work on top of `usePlaybackTelemetry`.
+
+### Original requirement
 
 **Requirement (maintainer, 2026-07-23).** Fetching playback data currently takes too long on
 the client; fast-changing runtime values should be *sampled server-side and pushed* to the

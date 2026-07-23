@@ -80,10 +80,11 @@ pub use playback::{
     PlaybackGroupIdError, PlaybackLevel, PlaybackOperation, PlaybackOperationResult,
     PlaybackOutcome, PlaybackPorts, PlaybackResult, PlaybackRuntimeChange, PlaybackRuntimeIdentity,
     PlaybackRuntimeProjection, PlaybackRuntimeSnapshot, PlaybackService, PlaybackShowScope,
-    PlaybackSurface, PlaybackTargetProjection, PlaybackTransitionCause, PlaybackUnitOfWork,
-    ResolvedPlaybackAddress, SoundLossReason, SoundStatus, SpeedGroupRuntimeProjection,
-    SpeedSource, automatic_playback_events, committed_playback_effect_event,
-    committed_playback_event, publish_automatic_playback_events,
+    PlaybackSurface, PlaybackTargetProjection, PlaybackTelemetryDeltas, PlaybackTelemetryTick,
+    PlaybackTransitionCause, PlaybackUnitOfWork, ResolvedPlaybackAddress, SoundLossReason,
+    SoundStatus, SpeedGroupRuntimeProjection, SpeedSource, automatic_playback_events,
+    committed_playback_effect_event, committed_playback_event, publish_automatic_playback_events,
+    telemetry_frame_divider,
 };
 pub use playback_topology::{
     PlaybackTopologyAction, PlaybackTopologyCommand, PlaybackTopologyObjectProjection,

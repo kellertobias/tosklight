@@ -17,6 +17,7 @@ mod http_router;
 mod matter;
 mod output_scheduler;
 mod playback_service;
+mod playback_telemetry;
 mod playback_v2;
 mod programming_update_adapter;
 mod programming_update_http;

@@ -1,6 +1,9 @@
 //! Network-output scheduling and safe shutdown for the server runtime.
 
-use super::{OutputControl, PersistedOutputRuntime, playback_service};
+use super::{
+    OutputControl, PersistedOutputRuntime, playback_service,
+    playback_telemetry::PlaybackTelemetrySampler,
+};
 use light_application::{
     PlaybackOperation, PlaybackService, PlaybackShowScope, PlaybackUnitOfWork,
     automatic_playback_events,
@@ -35,6 +38,7 @@ pub(super) struct Config {
     pub playback_service: PlaybackService,
     pub active_show: Arc<RwLock<Option<ShowEntry>>>,
     pub activation_lock: Arc<tokio::sync::Mutex<()>>,
+    pub telemetry: Arc<PlaybackTelemetrySampler>,
     pub test_bench: bool,
 }
 
@@ -62,6 +66,7 @@ struct Runtime {
     pub(super) playback_service: PlaybackService,
     pub(super) active_show: Arc<RwLock<Option<ShowEntry>>>,
     pub(super) activation_lock: Arc<tokio::sync::Mutex<()>>,
+    pub(super) telemetry: Arc<PlaybackTelemetrySampler>,
     pub(super) cancellation: CancellationToken,
 }
 
@@ -146,6 +151,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             &runtime.active_show,
             &runtime.playback_service,
             options,
+            Some(&runtime.telemetry),
         )
         .map_err(io::Error::other)?
     };
@@ -166,12 +172,14 @@ pub(super) fn render_with_playback_events(
     active_show: &RwLock<Option<ShowEntry>>,
     service: &PlaybackService,
     options: RenderOptions,
+    telemetry: Option<&PlaybackTelemetrySampler>,
 ) -> Result<RenderResult, EngineError> {
     service
         .run_unit_of_work(AutomaticRender {
             engine,
             active_show,
             options,
+            telemetry,
         })
         .output
 }
@@ -180,6 +188,7 @@ struct AutomaticRender<'a> {
     engine: &'a Engine,
     active_show: &'a RwLock<Option<ShowEntry>>,
     options: RenderOptions,
+    telemetry: Option<&'a PlaybackTelemetrySampler>,
 }
 
 impl PlaybackUnitOfWork for AutomaticRender<'_> {
@@ -191,15 +200,13 @@ impl PlaybackUnitOfWork for AutomaticRender<'_> {
             Err(error) => return PlaybackOperation::new(Err(error)),
         };
         let transitions = std::mem::take(&mut rendered.automatic_playback_transitions);
-        let events = self
-            .active_show
-            .read()
-            .as_ref()
-            .map(|show| {
+        let show_id = self.active_show.read().as_ref().map(|show| show.id.0);
+        let mut events = show_id
+            .map(|show_id| {
                 playback_service::automatic_projection_changes(
                     self.engine,
                     PlaybackShowScope {
-                        show_id: show.id.0,
+                        show_id,
                         show_revision: rendered.revision,
                     },
                     transitions,
@@ -207,6 +214,16 @@ impl PlaybackUnitOfWork for AutomaticRender<'_> {
             })
             .map(automatic_playback_events)
             .unwrap_or_default();
+        if let Some((telemetry, show_id)) = self.telemetry.zip(show_id)
+            && let Some(draft) = telemetry.completed_frame(
+                self.engine,
+                show_id,
+                rendered.revision,
+                self.engine.application_time(),
+            )
+        {
+            events.push(draft);
+        }
         PlaybackOperation::with_events(Ok(rendered), events)
     }
 }
@@ -326,6 +343,7 @@ impl SharedResources {
             playback_service: config.playback_service.clone(),
             active_show: Arc::clone(&config.active_show),
             activation_lock: Arc::clone(&config.activation_lock),
+            telemetry: Arc::clone(&config.telemetry),
             cancellation: config.cancellation.clone(),
         }
     }

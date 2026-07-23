@@ -182,6 +182,18 @@ impl Engine {
         self.generation.load().playback().read().runtime_status()
     }
 
+    /// Volatile per-Playback telemetry rows derived from already-published runtime state.
+    pub fn playback_telemetry_at(
+        &self,
+        at: DateTime<Utc>,
+    ) -> Vec<light_playback::PlaybackTelemetrySample> {
+        self.generation
+            .load()
+            .playback()
+            .read()
+            .telemetry_samples_at(at)
+    }
+
     pub fn playback_contributions_at(&self, at: DateTime<Utc>) -> Vec<PlaybackContribution> {
         self.generation
             .load()

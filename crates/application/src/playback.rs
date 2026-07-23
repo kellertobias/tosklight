@@ -11,6 +11,7 @@ mod operation;
 mod ports;
 mod projection;
 mod service;
+mod telemetry;
 mod transition_set;
 
 pub use command::{
@@ -33,6 +34,7 @@ pub use projection::{
     SpeedSource,
 };
 pub use service::PlaybackService;
+pub use telemetry::{PlaybackTelemetryDeltas, PlaybackTelemetryTick, telemetry_frame_divider};
 
 #[cfg(test)]
 #[path = "playback/service_tests.rs"]

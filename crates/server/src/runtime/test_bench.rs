@@ -64,6 +64,7 @@ pub(super) async fn advance_test_clock(
             &state.active_show,
             &state.playback_service,
             state.output_control.lock().render_options(),
+            Some(&state.playback_telemetry),
         )
         .map_err(|error| ApiError::internal(error.to_string()))?
     };

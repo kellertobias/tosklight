@@ -4,6 +4,8 @@ import type {
 	PlaybackRuntimeIdentity,
 	PlaybackRuntimeProjection,
 	PlaybackRuntimeSnapshot,
+	PlaybackTelemetrySample,
+	PlaybackTelemetryTick,
 } from "../../api/types";
 
 export type PlaybackIdentity = PlaybackRuntimeIdentity;
@@ -11,6 +13,8 @@ export type PlaybackProjection = PlaybackRuntimeProjection;
 export type PlaybackDesk = PlaybackDeskProjection;
 export type PlaybackSnapshot = PlaybackRuntimeSnapshot;
 export type PlaybackOutcome = PlaybackActionOutcome;
+export type PlaybackTelemetry = PlaybackTelemetrySample;
+export type PlaybackTelemetryDelta = PlaybackTelemetryTick;
 
 export type PlaybackRuntimeEventMessage =
 	| { type: "ready"; cursor: number }
@@ -19,7 +23,8 @@ export type PlaybackRuntimeEventMessage =
 			sequence: number;
 			payload:
 				| { type: "runtime"; projection: PlaybackProjection }
-				| { type: "desk"; projection: PlaybackDesk };
+				| { type: "desk"; projection: PlaybackDesk }
+				| { type: "telemetry"; tick: PlaybackTelemetryTick };
 	  }
 	| {
 			type: "gap";

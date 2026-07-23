@@ -14,6 +14,7 @@ import {
 	enumAt,
 	integerAt,
 	nullable,
+	numberAt,
 	opaqueStringAt,
 	positiveIntegerAt,
 	recordAt,
@@ -117,6 +118,17 @@ function decodeEvent(
 			payload: { type: "runtime", projection },
 		};
 	}
+	if (type === "playback_telemetry_sampled") {
+		const tick = decodeTelemetryTick(
+			recordAt(payload.tick, "$.event.payload.tick"),
+			"$.event.payload.tick",
+		);
+		return {
+			type: "event",
+			sequence,
+			payload: { type: "telemetry", tick },
+		};
+	}
 	if (type === "playback_view_changed") {
 		const projection = decodePlaybackDesk(
 			payload.projection,
@@ -132,6 +144,69 @@ function decodeEvent(
 		return { type: "event", sequence, payload: { type: "desk", projection } };
 	}
 	return null;
+}
+
+function decodeTelemetryTick(
+	tick: Record<string, unknown>,
+	path: string,
+): import("../features/playbackRuntime/contracts").PlaybackTelemetryDelta {
+	const scope = recordAt(tick.scope, `${path}.scope`);
+	return {
+		scope: {
+			show_id: opaqueStringAt(scope.show_id, `${path}.scope.show_id`, 64),
+			show_revision: integerAt(
+				scope.show_revision,
+				`${path}.scope.show_revision`,
+			),
+		},
+		frame: integerAt(tick.frame, `${path}.frame`),
+		sample_rate_hz: numberAt(tick.sample_rate_hz, `${path}.sample_rate_hz`),
+		samples: arrayAt(tick.samples, `${path}.samples`).map((entry, index) =>
+			decodeTelemetrySample(
+				recordAt(entry, `${path}.samples[${index}]`),
+				`${path}.samples[${index}]`,
+			),
+		),
+		released: arrayAt(tick.released, `${path}.released`).map((entry, index) =>
+			integerAt(entry, `${path}.released[${index}]`),
+		),
+	};
+}
+
+function decodeTelemetrySample(
+	sample: Record<string, unknown>,
+	path: string,
+): import("../features/playbackRuntime/contracts").PlaybackTelemetry {
+	return {
+		playback_number: positiveIntegerAt(
+			sample.playback_number,
+			`${path}.playback_number`,
+		),
+		enabled: booleanAt(sample.enabled, `${path}.enabled`),
+		master: numberAt(sample.master, `${path}.master`),
+		current_cue: nullable(
+			sample.current_cue,
+			`${path}.current_cue`,
+			(value, cuePath) => {
+				const cue = recordAt(value, cuePath);
+				return {
+					id: opaqueStringAt(cue.id, `${cuePath}.id`, 64),
+					number: numberAt(cue.number, `${cuePath}.number`),
+				};
+			},
+		),
+		fade_progress: nullable(
+			sample.fade_progress,
+			`${path}.fade_progress`,
+			numberAt,
+		),
+		flash: booleanAt(sample.flash, `${path}.flash`),
+		temporary_active: booleanAt(
+			sample.temporary_active,
+			`${path}.temporary_active`,
+		),
+		swap_active: booleanAt(sample.swap_active, `${path}.swap_active`),
+	};
 }
 
 export function decodePlaybackEventMessage(

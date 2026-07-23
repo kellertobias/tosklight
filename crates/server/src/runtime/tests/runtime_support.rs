@@ -25,6 +25,7 @@ fn test_state_with_programmers(
         application_events.clone(),
         Arc::clone(&highlight),
     );
+    let output_rate = Arc::new(AtomicU16::new(44));
     (
         AppState {
             desk: Arc::new(Mutex::new(desk)),
@@ -42,7 +43,10 @@ fn test_state_with_programmers(
             highlight,
             patch_preview_highlights: Arc::default(),
             output_health: Arc::new(std::sync::Mutex::new(OutputHealth::default())),
-            output_rate: Arc::new(AtomicU16::new(44)),
+            output_rate: Arc::clone(&output_rate),
+            playback_telemetry: Arc::new(
+                super::playback_telemetry::PlaybackTelemetrySampler::new(output_rate),
+            ),
             configuration: Arc::new(RwLock::new(DeskConfiguration::default())),
             matter_bridge: Arc::new(matter::MatterBridgeAdapter::default()),
             matter_transport: None,

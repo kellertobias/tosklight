@@ -85,6 +85,11 @@ impl EventObject {
         Self::new(EventCapability::Playback, format!("playback:{number}"))
     }
 
+    /// The one shared route for sampled playback telemetry ticks.
+    pub fn playback_telemetry() -> Self {
+        Self::new(EventCapability::Playback, "telemetry")
+    }
+
     pub fn cue_list(cue_list_id: Uuid) -> Self {
         Self::new(EventCapability::Playback, format!("cuelist:{cue_list_id}"))
     }
@@ -118,6 +123,7 @@ pub enum DeliveryPolicy {
 pub enum PlaybackEvent {
     RuntimeChanged(PlaybackRuntimeChange),
     SpeedGroupsChanged(SpeedGroupChange),
+    TelemetrySampled(crate::PlaybackTelemetryTick),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -173,6 +179,20 @@ pub struct EventDraft {
 }
 
 impl EventDraft {
+    /// Volatile sampled playback telemetry: replaceable, telemetry-class, one shared route.
+    pub fn playback_telemetry_sampled(tick: crate::PlaybackTelemetryTick) -> Self {
+        Self {
+            desk_id: None,
+            class: EventClass::Telemetry,
+            object: Some(EventObject::playback_telemetry()),
+            related_objects: Vec::new(),
+            source: EventSource::Runtime,
+            correlation_id: None,
+            delivery: DeliveryPolicy::Replaceable,
+            payload: ApplicationEvent::Playback(PlaybackEvent::TelemetrySampled(tick)),
+        }
+    }
+
     pub fn playback_runtime_changed(
         desk_id: Option<Uuid>,
         change: PlaybackRuntimeChange,

@@ -199,6 +199,38 @@ export function usePlaybackRuntime(playbackNumber: number | null | undefined) {
 	return legacyPlaybackRuntime(usePlaybackProjection(playbackNumber));
 }
 
+/**
+ * The retained ~10 Hz sampled telemetry row for one Playback, or null before its first sample.
+ *
+ * Reads the desk-lifetime store only: a freshly-mounted window renders the retained samples
+ * immediately and keeps applying pushed delta ticks — no snapshot fetch and no polling.
+ */
+export function usePlaybackTelemetry(
+	playbackNumber: number | null | undefined,
+	enabled = true,
+) {
+	return usePlaybackSelector(
+		useCallback(
+			(state: PlaybackRuntimeState) =>
+				playbackNumber == null
+					? null
+					: (state.telemetry.get(playbackNumber) ?? null),
+			[playbackNumber],
+		),
+		Object.is,
+		enabled,
+	);
+}
+
+/** The complete retained telemetry map, keyed by playback number. */
+export function usePlaybackTelemetryMap(enabled = true) {
+	return usePlaybackSelector(
+		useCallback((state: PlaybackRuntimeState) => state.telemetry, []),
+		Object.is,
+		enabled,
+	);
+}
+
 export function useCueListRuntime(
 	cueListId: string | null | undefined,
 	playbackNumber?: number | null,

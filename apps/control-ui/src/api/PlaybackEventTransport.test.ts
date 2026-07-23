@@ -78,11 +78,12 @@ describe("WebSocketPlaybackEventTransport", () => {
 			type: "subscribe",
 			filter: {
 				capabilities: ["playback", "desk"],
-				classes: ["transition", "projection"],
+				classes: ["transition", "projection", "telemetry"],
 				objects: [
 					{ capability: "playback", id: "playback:2" },
 					{ capability: "playback", id: `cuelist:${CUE_LIST_ID}` },
 					{ capability: "playback", id: `group:${GROUP_ID}` },
+					{ capability: "playback", id: "telemetry" },
 					{ capability: "desk", id: `playback-view:${DESK_ID}` },
 				],
 			},

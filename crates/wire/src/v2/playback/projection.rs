@@ -186,6 +186,37 @@ pub struct PlaybackRuntimeChange {
     pub transition: Option<PlaybackCueTransition>,
 }
 
+/// One sampled volatile runtime row for a numbered Playback. Static topology stays on the
+/// snapshot + revisioned event path; a telemetry tick carries only playbacks whose sampled
+/// values changed since the previous tick.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackTelemetrySample {
+    pub playback_number: u16,
+    pub enabled: bool,
+    pub master: f32,
+    pub current_cue: Option<PlaybackCueReference>,
+    /// 0..=1 progress into the current Cue transition, or null while no Cuelist is active.
+    pub fade_progress: Option<f32>,
+    pub flash: bool,
+    pub temporary_active: bool,
+    pub swap_active: bool,
+}
+
+/// A sampled telemetry tick taken on a render-frame divider nearest ~10 Hz.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackTelemetryTick {
+    pub scope: PlaybackShowScope,
+    /// Completed render frame this tick was sampled on.
+    #[ts(type = "number")]
+    pub frame: u64,
+    /// The telemetry sample rate implied by the configured output rate and its divider.
+    pub sample_rate_hz: f32,
+    /// Only the playbacks whose sampled values changed since the previous tick.
+    pub samples: Vec<PlaybackTelemetrySample>,
+    /// Playback numbers that stopped reporting since the previous tick (released/offline).
+    pub released: Vec<u16>,
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PlaybackCueTransition {
     pub playback_number: Option<u16>,

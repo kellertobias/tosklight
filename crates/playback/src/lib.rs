@@ -29,6 +29,7 @@ pub use cue_transfer::{CueTransferMode, transferred_cue};
 pub use engine::PlaybackEngine;
 pub use model::{cue::*, playback::*, runtime::*};
 pub use phaser::*;
+pub use runtime::PlaybackTelemetrySample;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use light_core::{

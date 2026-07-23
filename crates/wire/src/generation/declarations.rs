@@ -290,6 +290,8 @@ fn playback_projection(config: &Config) -> Vec<String> {
         PlaybackTransitionCause::decl(config),
         PlaybackCueTransition::decl(config),
         PlaybackRuntimeChange::decl(config),
+        PlaybackTelemetrySample::decl(config),
+        PlaybackTelemetryTick::decl(config),
     ]
 }
 

@@ -177,6 +177,11 @@ export class PlaybackRuntimeSession {
 			void this.repair(generation);
 			return;
 		}
+		if (message.payload.type === "telemetry") {
+			const tick = message.payload.tick;
+			if (tick.scope.show_id === this.showId) this.store.applyTelemetry(tick);
+			return;
+		}
 		if (message.payload.type === "runtime") {
 			const projection = message.payload.projection;
 			if (

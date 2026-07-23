@@ -4,6 +4,7 @@ import type {
 	PlaybackOutcome,
 	PlaybackProjection,
 	PlaybackSnapshot,
+	PlaybackTelemetryDelta,
 } from "./contracts";
 import { identityKey, projectionKeys } from "./contracts";
 import { PlaybackDeskState } from "./deskState";
@@ -112,6 +113,18 @@ export class PlaybackRuntimeStore {
 			status: "ready",
 			error: null,
 		});
+	}
+
+	/// Applies a sampled telemetry delta tick to the desk-lifetime telemetry map.
+	applyTelemetry(tick: PlaybackTelemetryDelta) {
+		if (this.state.showId !== tick.scope.show_id) return false;
+		if (tick.samples.length === 0 && tick.released.length === 0) return false;
+		const telemetry = new Map(this.state.telemetry);
+		for (const sample of tick.samples)
+			telemetry.set(sample.playback_number, sample);
+		for (const number of tick.released) telemetry.delete(number);
+		this.publish({ telemetry });
+		return true;
 	}
 
 	applyProjection(projection: PlaybackProjection, sequence: number) {
@@ -388,6 +401,7 @@ function emptyState(): PlaybackRuntimeState {
 		eventSequence: null,
 		desk: null,
 		projections: new Map(),
+		telemetry: new Map(),
 		pendingKeys: new Set(),
 		status: "idle",
 		error: null,

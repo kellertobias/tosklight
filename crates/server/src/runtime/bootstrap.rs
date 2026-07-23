@@ -2,8 +2,9 @@
 
 use super::{
     AppState, HighlightRegistry, matter, normalize_restored_virtual_playback_exclusions,
-    output_scheduler, refresh_matter_bridge, refresh_speed_group_engine, router,
-    spawn_control_inputs, spawn_matter_bridge_sync, startup_options, startup_state::StartupState,
+    output_scheduler, playback_telemetry, refresh_matter_bridge, refresh_speed_group_engine,
+    router, spawn_control_inputs, spawn_matter_bridge_sync, startup_options,
+    startup_state::StartupState,
 };
 use axum::Router;
 use light_application::{
@@ -57,6 +58,7 @@ fn process_options() -> anyhow::Result<Option<startup_options::StartupOptions>> 
 struct RuntimeResources {
     pub(super) output_health: Arc<std::sync::Mutex<OutputHealth>>,
     pub(super) output_rate: Arc<AtomicU16>,
+    pub(super) playback_telemetry: Arc<playback_telemetry::PlaybackTelemetrySampler>,
     pub(super) timecode_router: Arc<Mutex<TimecodeRouter>>,
     pub(super) matter_bridge: Arc<matter::MatterBridgeAdapter>,
     pub(super) cancellation: CancellationToken,
@@ -77,6 +79,9 @@ impl RuntimeResources {
             .lock()
             .configure(configuration.timecode_sources.clone());
         let output_rate = Arc::new(AtomicU16::new(configuration.frame_rate_hz));
+        let playback_telemetry = Arc::new(playback_telemetry::PlaybackTelemetrySampler::new(
+            Arc::clone(&output_rate),
+        ));
         let matter_bridge = Arc::new(matter::MatterBridgeAdapter::default());
         let cancellation = CancellationToken::new();
         let events = EventBus::default();
@@ -94,12 +99,14 @@ impl RuntimeResources {
             playback_service: playback_service.clone(),
             active_show: Arc::clone(&active_show),
             activation_lock: Arc::clone(&activation_lock),
+            telemetry: Arc::clone(&playback_telemetry),
             test_bench: startup.persistent.test_bench,
         })
         .await?;
         Ok(Self {
             output_health,
             output_rate,
+            playback_telemetry,
             timecode_router,
             matter_bridge,
             cancellation,
@@ -205,6 +212,7 @@ fn build_app_state(
         patch_preview_highlights: Arc::default(),
         output_health: Arc::clone(&resources.output_health),
         output_rate: Arc::clone(&resources.output_rate),
+        playback_telemetry: Arc::clone(&resources.playback_telemetry),
         configuration: Arc::new(RwLock::new(startup.persistent.configuration)),
         matter_bridge: Arc::clone(&resources.matter_bridge),
         matter_transport: Some(matter_transport),

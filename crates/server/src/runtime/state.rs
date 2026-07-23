@@ -19,6 +19,7 @@ pub(super) struct AppState {
         Arc<Mutex<HashMap<SessionId, HashSet<light_core::FixtureId>>>>,
     pub(super) output_health: Arc<std::sync::Mutex<OutputHealth>>,
     pub(super) output_rate: Arc<AtomicU16>,
+    pub(super) playback_telemetry: Arc<playback_telemetry::PlaybackTelemetrySampler>,
     pub(super) configuration: Arc<RwLock<DeskConfiguration>>,
     pub(super) matter_bridge: Arc<matter::MatterBridgeAdapter>,
     pub(super) matter_transport: Option<Arc<matter::MatterTransport>>,

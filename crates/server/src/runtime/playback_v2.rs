@@ -2,7 +2,7 @@
 
 mod wire;
 
-pub(super) use wire::{desk_projection, runtime_change, runtime_projection};
+pub(super) use wire::{desk_projection, runtime_change, runtime_projection, telemetry_tick};
 
 use super::{
     AppState, ProgrammingLockPolicy, Session, authenticate, playback_service,

@@ -2,7 +2,7 @@
 
 use super::{
     command_line::ProgrammingInteractionChange,
-    playback::{PlaybackDeskProjection, PlaybackRuntimeChange},
+    playback::{PlaybackDeskProjection, PlaybackRuntimeChange, PlaybackTelemetryTick},
     preload_playback_queue::ProgrammingPreloadPlaybackQueueChange,
     preload_values::ProgrammingPreloadValuesChange,
     programmer_lifecycle::ProgrammingLifecycleChange,
@@ -185,6 +185,9 @@ pub enum EventPayload {
     },
     PlaybackViewChanged {
         projection: PlaybackDeskProjection,
+    },
+    PlaybackTelemetrySampled {
+        tick: PlaybackTelemetryTick,
     },
     OutputRuntimeChanged {
         change: OutputRuntimeChange,

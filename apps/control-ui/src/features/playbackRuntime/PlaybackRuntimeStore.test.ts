@@ -57,7 +57,64 @@ function enabledProjection(playbackNumber: number, enabled: boolean) {
 	};
 }
 
+function telemetrySample(playbackNumber: number, fadeProgress: number) {
+	return {
+		playback_number: playbackNumber,
+		enabled: true,
+		master: 1,
+		current_cue: null,
+		fade_progress: fadeProgress,
+		flash: false,
+		temporary_active: false,
+		swap_active: false,
+	};
+}
+
 describe("PlaybackRuntimeStore", () => {
+	it("retains sampled telemetry deltas per playback and drops released numbers", () => {
+		const store = new PlaybackRuntimeStore();
+		store.reset(SHOW_ID, DESK_ID);
+		const scope = { show_id: SHOW_ID, show_revision: 3 };
+		expect(
+			store.applyTelemetry({
+				scope,
+				frame: 4,
+				sample_rate_hz: 11,
+				samples: [telemetrySample(1, 0.25), telemetrySample(2, 0.5)],
+				released: [],
+			}),
+		).toBe(true);
+		expect(
+			store.applyTelemetry({
+				scope,
+				frame: 8,
+				sample_rate_hz: 11,
+				samples: [telemetrySample(1, 0.5)],
+				released: [2],
+			}),
+		).toBe(true);
+		// The delta tick only carried playback 1; playback 2's retained row is gone and 1
+		// advanced — exactly what a freshly-mounted window reads without a snapshot fetch.
+		const telemetry = store.getSnapshot().telemetry;
+		expect(telemetry.get(1)?.fade_progress).toBe(0.5);
+		expect(telemetry.has(2)).toBe(false);
+	});
+
+	it("ignores telemetry ticks from another show scope", () => {
+		const store = new PlaybackRuntimeStore();
+		store.reset(SHOW_ID, DESK_ID);
+		expect(
+			store.applyTelemetry({
+				scope: { show_id: "99999999-9999-4999-8999-999999999999", show_revision: 1 },
+				frame: 4,
+				sample_rate_hz: 11,
+				samples: [telemetrySample(1, 0.25)],
+				released: [],
+			}),
+		).toBe(false);
+		expect(store.getSnapshot().telemetry.size).toBe(0);
+	});
+
 	it("does not let an older repair snapshot overwrite a newer event", () => {
 		const store = new PlaybackRuntimeStore();
 		const identity = playbackIdentity(1);

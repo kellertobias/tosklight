@@ -415,6 +415,30 @@ export type PlaybackCueTransition = { playback_number: number | null, cue_list_i
 
 export type PlaybackRuntimeChange = { projection: PlaybackRuntimeProjection, transition: PlaybackCueTransition | null, };
 
+export type PlaybackTelemetrySample = { playback_number: number, enabled: boolean, master: number, current_cue: PlaybackCueReference | null,
+/**
+ * 0..=1 progress into the current Cue transition, or null while no Cuelist is active.
+ */
+fade_progress: number | null, flash: boolean, temporary_active: boolean, swap_active: boolean, };
+
+export type PlaybackTelemetryTick = { scope: PlaybackShowScope,
+/**
+ * Completed render frame this tick was sampled on.
+ */
+frame: number,
+/**
+ * The telemetry sample rate implied by the configured output rate and its divider.
+ */
+sample_rate_hz: number,
+/**
+ * Only the playbacks whose sampled values changed since the previous tick.
+ */
+samples: Array<PlaybackTelemetrySample>,
+/**
+ * Playback numbers that stopped reporting since the previous tick (released/offline).
+ */
+released: Array<number>, };
+
 export type OutputRuntimeActionRequest = { request_id: string, expected_show_id: string, expected_revision: number, grand_master?: number | null, blackout?: boolean | null, };
 
 export type OutputRuntimeDurability = "durable" | "persistence_pending";
@@ -483,7 +507,7 @@ export type ManagedAssetReference = { asset_id: string, revision: number, };
 
 export type SelectiveImportChange = { show_id: string, show_revision: number, objects: Array<SelectiveImportObjectChange>, profile_revisions: Array<FixtureProfileIdentity>, managed_assets: Array<ManagedAssetReference>, };
 
-export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programmer_priority_changed", change: ProgrammerPriorityChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_preload_playback_queue_changed", change: ProgrammingPreloadPlaybackQueueChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "speed_groups_changed", change: SpeedGroupChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
+export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programmer_priority_changed", change: ProgrammerPriorityChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_preload_playback_queue_changed", change: ProgrammingPreloadPlaybackQueueChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "playback_telemetry_sampled", tick: PlaybackTelemetryTick, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "speed_groups_changed", change: SpeedGroupChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, };
 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 

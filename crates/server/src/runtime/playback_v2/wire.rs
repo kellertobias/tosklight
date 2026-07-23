@@ -188,6 +188,36 @@ pub(in crate::runtime) fn runtime_snapshot(
     }
 }
 
+pub(in crate::runtime) fn telemetry_tick(
+    tick: &application::PlaybackTelemetryTick,
+) -> wire::PlaybackTelemetryTick {
+    wire::PlaybackTelemetryTick {
+        scope: show_scope(tick.scope),
+        frame: tick.frame,
+        sample_rate_hz: tick.sample_rate_hz,
+        samples: tick.samples.iter().map(telemetry_sample).collect(),
+        released: tick.released.clone(),
+    }
+}
+
+fn telemetry_sample(
+    sample: &light_playback::PlaybackTelemetrySample,
+) -> wire::PlaybackTelemetrySample {
+    wire::PlaybackTelemetrySample {
+        playback_number: sample.playback_number,
+        enabled: sample.enabled,
+        master: sample.master,
+        current_cue: sample
+            .current_cue_id
+            .zip(sample.current_cue_number)
+            .map(|(id, number)| wire::PlaybackCueReference { id, number }),
+        fade_progress: sample.fade_progress,
+        flash: sample.flash,
+        temporary_active: sample.temporary_active,
+        swap_active: sample.swap_active,
+    }
+}
+
 pub(in crate::runtime) fn runtime_change(
     change: &application::PlaybackRuntimeChange,
 ) -> wire::PlaybackRuntimeChange {
