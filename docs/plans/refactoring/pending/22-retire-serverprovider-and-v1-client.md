@@ -21,8 +21,10 @@ modules. Do not start it while any `api/client/*` module still carries a live v1
 ## Work
 
 1. Verify preconditions: `rg -F '/api/v1' apps/control-ui/src apps/control-ui/e2e tests`
-   returns only deliberate exceptions (readiness/diagnostics per chunk 14's decision,
-   files/help if chunk 21 chose exemption).
+   returns **nothing** — chunks 14 and 21 were both decided as full v2 moves
+   (2026-07-23), so no exceptions exist. The only tolerated remnant is the test-gated
+   `with_test_routes` block; rename those paths to `/api/v2/test/*` here if the bench
+   has migrated, so the final grep is clean.
 2. Dissolve `ServerProvider`: each composed feature provider mounts directly in
    `App`/`ScreenApp`/`ProductDemoApp` (or a thin `DeskProviders` component that is pure
    composition, no logic). Delete `composeServerContextValue` and the `features/server/*`
@@ -31,9 +33,8 @@ modules. Do not start it while any `api/client/*` module still carries a live v1
 3. Delete `LightApiClient` + emptied `api/client/*` modules (`transport.ts`/`runtime.ts`
    survive only if the v2 transports still extend them — prefer moving what's needed into
    the v2 transport layer and deleting the rest).
-4. Final server sweep: delete any v1 route registration still standing outside the
-   documented exceptions; delete `with_test_routes` v1 test paths only if bench has
-   migrated (they may stay — they're test-gated).
+4. Final server sweep: delete every remaining v1 route registration (no documented
+   exceptions exist); move the `with_test_routes` test paths to v2 naming alongside.
 5. Gate with `node tools/check-architecture.mjs`, `node tools/check-source-size.mjs`
    (ServerProvider's 323-line violation must disappear, not be waived), and
    `node tools/test-command-boundaries.mjs`.
@@ -41,7 +42,8 @@ modules. Do not start it while any `api/client/*` module still carries a live v1
 ## Definition of done
 
 - `ServerContext.tsx` and `LightApiClient.ts` deleted (or reduced to pure v2 composition
-  with no v1 vocabulary); `rg '/api/v1' crates/server` shows only the named exceptions.
+  with no v1 vocabulary); `rg '/api/v1'` across the whole repo (crates/, apps/, tests/,
+  docs/ minus historical plan files) returns nothing.
 - Architecture/source-size/command-boundary checks clean; full suite green.
 
 ## Verification
@@ -58,5 +60,5 @@ npm run open   # real desk boot; curl -fsS http://127.0.0.1:5000/api/v1/readines
 
 ## Decisions
 
-None new — but this chunk consumes the decisions from 14 (readiness/diagnostics home) and
-21 (files/help). It cannot be claimed before those are resolved and 13–20 are done.
+None — 14 and 21 are decided (full v2 moves). This chunk cannot be claimed before
+13–21 are done.

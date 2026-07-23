@@ -1,4 +1,4 @@
-# 21 — Files + help routes: decide their home, then migrate or exempt
+# 21 — Files + help routes: move to v2
 
 ## Context (verified 2026-07-23)
 
@@ -16,25 +16,25 @@ Neither touches show state; both are read-heavy content/file surfaces. Mechanica
 re-versioning to `/api/v2` is possible but low-value; the api-rules mostly bite on the
 write paths (files notes/text PUT, operations POST → request identity; input-context).
 
-## DECISION NEEDED (maintainer)
+## DECIDED (maintainer, 2026-07-23)
 
-1. **Move both to v2** for a uniform surface (then delete the v1 registrations), or
-2. **Exempt them** as internal content/file transports: record a dated exemption in
-   `docs/engineering/api-rules.md` (they keep `/api/v1` until touched for other reasons),
-   which lets chunk 22 declare "v1 retired" with a named exception list.
+**Move everything to v2.** No exemptions — after this chunk (with 14 also decided as
+v2), no served route outside the test-gated `with_test_routes` block carries `/api/v1`.
 
-## Work (after decision)
+## Work
 
-- Option 1: re-register under v2; migrate `files.ts`, `help.ts`, `helpMarkdown.ts`;
-  file-write endpoints (notes/text/operations) gain request ids per §3; delete v1.
-- Option 2: add the exemption paragraph; bring only the write endpoints into §3 compliance
-  in place (request identity on operations/notes/text) since "touching" them here anyway
-  is cheap — or explicitly defer that too, noted in the exemption.
+1. Re-register both groups under `/api/v2/…`; migrate `files.ts`, `help.ts`, and
+   `windows/helpMarkdown.ts` (asset URLs) in the same chunk.
+2. File-write endpoints (`notes`/`text` PUT, `operations` POST, `input-context`
+   POST/DELETE) gain request identity per api-rules §3 while being touched.
+3. Delete the v1 registrations; grep for stragglers (`rg -F '/api/v1/files'`,
+   `rg -F '/api/v1/help'` across apps/, tests/, docs/) — note the FileManagerWindow unit
+   test references the content route, and help asset paths feed the manual pipeline.
 
 ## Definition of done
 
-- The decision is recorded; the chosen option implemented; FileManagerWindow and the help
-  window (topics + inline assets/screenshots) verified working.
+- Files + help served only under v2; v1 forms deleted; FileManagerWindow and the help
+  window (topics + inline assets/screenshots) verified working; `npm run manual` builds.
 
 ## Verification
 
@@ -46,4 +46,4 @@ npm run manual     # help asset paths feed the manual pipeline — confirm it st
 
 ## Decisions
 
-**DECISION NEEDED** — option 1 or 2 above before starting.
+Decided (2026-07-23): everything moves to v2. No open decisions remain in this chunk.
