@@ -1,5 +1,6 @@
 import { ServerProvider } from "./api/ServerContext";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
+import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 import { AppProvider } from "./state/AppContext";
 import { StageWindow } from "./windows/StageWindow";
 
@@ -12,17 +13,19 @@ export function StageViewApp() {
 	return (
 		<ServerProvider sessionRole="secondary">
 			<AppProvider>
-				<div className="stage-view-shell">
-					<StageWindow
-						compact
-						stageView="3d"
-						showGroupShortcuts={false}
-						followPreload={false}
-						showSelection
-						showFloorGrid
-						showBeamGuides
-					/>
-				</div>
+				<PatchFeatureBoundary>
+					<div className="stage-view-shell">
+						<StageWindow
+							compact
+							stageView="3d"
+							showGroupShortcuts={false}
+							followPreload={false}
+							showSelection
+							showFloorGrid
+							showBeamGuides
+						/>
+					</div>
+				</PatchFeatureBoundary>
 			</AppProvider>
 			<DeskLockOverlay />
 		</ServerProvider>
