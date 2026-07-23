@@ -155,7 +155,8 @@ async fn active_route_put_and_delete_share_the_prepared_application_boundary() {
                 .is_some_and(|name| name.contains("-output-route-"))
         })
         .count();
-    assert_eq!(route_backups, 2);
+    // Put and delete share one interval-gated recovery checkpoint.
+    assert_eq!(route_backups, 1);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

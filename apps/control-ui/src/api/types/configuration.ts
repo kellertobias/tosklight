@@ -13,6 +13,7 @@ export interface DeskConfiguration {
 	}>;
 	osc_timecode: { address: string; rate: string } | null;
 	backup_retention: number;
+	autosave_interval_seconds: number;
 	speed_groups_bpm: [number, number, number, number, number];
 	programmer_fade_millis: number;
 	sequence_master_fade_millis: number;

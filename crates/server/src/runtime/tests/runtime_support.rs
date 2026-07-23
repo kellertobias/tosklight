@@ -59,6 +59,7 @@ fn test_state_with_programmers(
             timecode_router: Arc::new(Mutex::new(TimecodeRouter::default())),
             active_show: Arc::default(),
             active_show_document: Arc::default(),
+            active_show_backup_checkpoint: Arc::default(),
             active_show_error: Arc::default(),
             events,
             application_events: application_events.clone(),

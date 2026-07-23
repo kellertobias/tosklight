@@ -41,6 +41,9 @@ pub(super) struct AppState {
     /// the active show file is replaced without a portable-revision bump (open, rename,
     /// overwrite, revision open, rollback).
     pub(super) active_show_document: Arc<Mutex<Option<light_show::PortableShowDocument>>>,
+    /// Show id and application-millis timestamp of the last automatic recovery checkpoint.
+    /// Mutation backups are gated to at most one per configured autosave interval (api-rules §8).
+    pub(super) active_show_backup_checkpoint: Arc<Mutex<Option<(light_core::ShowId, u64)>>>,
     pub(super) active_show_error: Arc<RwLock<Option<String>>>,
     pub(super) events: broadcast::Sender<Event>,
     pub(super) application_events: EventBus,

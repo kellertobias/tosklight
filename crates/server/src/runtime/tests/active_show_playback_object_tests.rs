@@ -230,7 +230,8 @@ impl PlaybackObjectScenario {
     }
 
     fn assert_one_success(&self, before: &PlaybackBoundary, changed_objects: usize) {
-        assert_eq!(backup_count(&self.data_dir), before.backup_count + 1);
+        // One interval-gated recovery checkpoint per scenario (see api-rules §8).
+        assert_eq!(backup_count(&self.data_dir), before.backup_count.max(1));
         assert_eq!(
             self.state.application_events.latest_sequence(),
             before.event_sequence + 1

@@ -54,6 +54,19 @@ export function OutputsSection({
 						})
 					}
 				/>
+				<NumberField
+					label="Autosave interval"
+					min="5"
+					max="3600"
+					value={draft.autosave_interval_seconds}
+					onChange={(event) =>
+						controller.editDraft({
+							...draft,
+							autosave_interval_seconds: Number(event.target.value),
+						})
+					}
+					description="5–3600 s between recovery checkpoints"
+				/>
 			</FormLayout>
 			<OutputRoutesSetup
 				routes={dmx?.outputRoutes ?? []}

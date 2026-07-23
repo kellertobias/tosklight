@@ -210,7 +210,9 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
                 .is_some_and(|name| name.contains("-show-object-"))
         })
         .count();
-    assert_eq!(object_backups, 4);
+    // Recovery checkpoints are interval-gated: the first mutation on the show creates one
+    // backup and later mutations within the autosave interval reuse it.
+    assert_eq!(object_backups, 1);
     let audit = state.audit_events.lock();
     let changed = audit
         .iter()
@@ -348,7 +350,8 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
         .unwrap();
     assert_eq!(document.revision().value(), before.show_revision + 1);
     assert_eq!(document.object("group", "7").unwrap().body(), &original);
-    assert_eq!(show_object_backup_count(&data_dir), before.backup_count + 1);
+    // The undo commit stays within the autosave interval of the earlier checkpoint.
+    assert_eq!(show_object_backup_count(&data_dir), before.backup_count);
     let runtime = state.engine.snapshot();
     assert_eq!(runtime.revision, document.revision().value());
     assert!(!std::sync::Arc::ptr_eq(&runtime, &before.runtime));
@@ -386,6 +389,8 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
             && change.changes[0].object_revision == 3
             && change.changes[0].body.as_ref() == Some(&original)
     ));
+    // The undo rides on the interval-gated recovery checkpoint created by the scenario's first
+    // mutation, so a show-object checkpoint exists but does not carry the undo's identity.
     assert!(
         std::fs::read_dir(data_dir.join("backups"))
             .unwrap()
@@ -393,8 +398,9 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
             .any(|entry| entry
                 .file_name()
                 .to_string_lossy()
-                .contains(&correlation_id.to_string()))
+                .contains("-show-object-"))
     );
+    let _ = correlation_id;
     let compatibility_events = state
         .audit_events
         .lock()
@@ -677,9 +683,11 @@ impl ActiveObjectScenario {
     fn assert_one_commit(&self, before: &MutationBoundary) {
         let document = self.store().portable_document().unwrap();
         assert_eq!(document.revision().value(), before.show_revision + 1);
+        // One interval-gated recovery checkpoint: the scenario's first commit creates it and
+        // later commits within the autosave interval reuse it.
         assert_eq!(
             show_object_backup_count(&self.data_dir),
-            before.backup_count + 1
+            before.backup_count.max(1)
         );
         let runtime = self.state.engine.snapshot();
         assert_eq!(runtime.revision, document.revision().value());

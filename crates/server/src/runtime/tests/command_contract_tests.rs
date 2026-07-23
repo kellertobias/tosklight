@@ -276,7 +276,8 @@ fn new_cuelist_and_playback_record_is_one_active_show_batch() {
     assert!(after.object("playback", "25").is_some());
     assert_eq!(
         command_show_object_backup_count(&scenario.data_dir),
-        before_backups + 1
+        // One interval-gated recovery checkpoint per show (api-rules §8).
+        before_backups.max(1)
     );
     assert_eq!(
         scenario.state.application_events.latest_sequence(),
@@ -346,7 +347,8 @@ fn set_cuelist_page_assignment_is_one_lossless_active_show_batch() {
     assert_eq!(page.body()["future_layout"]["columns"], 10);
     assert_eq!(
         command_show_object_backup_count(&scenario.data_dir),
-        before_backups + 1
+        // One interval-gated recovery checkpoint per show (api-rules §8).
+        before_backups.max(1)
     );
     assert_eq!(
         scenario.state.application_events.latest_sequence(),

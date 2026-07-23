@@ -1,5 +1,9 @@
 use super::*;
 
+pub(super) fn default_autosave_interval_seconds() -> u64 {
+    30
+}
+
 pub(super) fn default_speed_groups() -> [f64; 5] {
     [120.0, 90.0, 60.0, 30.0, 15.0]
 }
@@ -32,6 +36,9 @@ pub(super) struct DeskConfiguration {
     pub(super) timecode_sources: Vec<TimecodeSourceConfig>,
     pub(super) osc_timecode: Option<OscTimecodeConfig>,
     pub(super) backup_retention: usize,
+    /// Seconds between automatic recovery checkpoints of the active show (api-rules §8).
+    #[serde(default = "default_autosave_interval_seconds")]
+    pub(super) autosave_interval_seconds: u64,
     #[serde(
         default = "default_speed_groups",
         deserialize_with = "deserialize_speed_groups"
@@ -95,6 +102,7 @@ impl Default for DeskConfiguration {
             ],
             osc_timecode: None,
             backup_retention: 20,
+            autosave_interval_seconds: default_autosave_interval_seconds(),
             speed_groups_bpm: default_speed_groups(),
             speed_group_sound_to_light: default_sound_to_light(),
             programmer_fade_millis: 3_000,
@@ -117,6 +125,11 @@ impl DeskConfiguration {
         }
         if self.backup_retention == 0 || self.backup_retention > 1_000 {
             return Err(ApiError::bad_request("backup_retention must be 1-1000"));
+        }
+        if !(5..=3_600).contains(&self.autosave_interval_seconds) {
+            return Err(ApiError::bad_request(
+                "autosave_interval_seconds must be 5-3600",
+            ));
         }
         if self
             .speed_groups_bpm

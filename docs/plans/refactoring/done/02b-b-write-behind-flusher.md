@@ -65,3 +65,44 @@ npm run open       # real desk: program, kill the process, restart, inspect
 ## Decisions
 
 All decided (api-rules §8; operator-facing setting 2026-07-23). None open.
+
+## Result
+
+**Split again, deliberately.** Investigation showed the per-mutation hot-path disk cost
+is dominated by the full-file recovery backup (`ShowMutationBackupPlan::create_mutation`
+copies the whole `.show` and scans the backups directory on every commit); the SQLite
+portable transaction itself is small, and deferring it requires first funneling every
+active-show disk reader and direct writer (inventory recorded in the new
+`pending/02b-c-deferred-show-commits.md`). This execution therefore landed the
+flusher's operator-facing core with backups interval-gated, keeping the SQLite commit
+write-through so every existing read/write site stays trivially consistent:
+
+- `autosave_interval_seconds` desk configuration (default 30, validated 5–3600,
+  serde-defaulted so existing desks load), shown in **Desk Setup > Outputs** beside
+  Backup retention, documented in the help chapter.
+- Recovery checkpoints: `ServerActiveShowUnitOfWork::backup` now consults
+  `AppState::active_show_backup_checkpoint` — the first mutation on a show takes the
+  full-file backup, later mutations skip the copy until the configured interval elapses
+  (application-clock based, so the ManualClock drives it in tests). Migration and
+  overwrite/auth backups stay unconditional.
+- New tests: `recovery_checkpoints_follow_the_autosave_interval` (3 rapid mutations →
+  one checkpoint; advance clock 30 s → second checkpoint) and
+  `autosave_interval_is_validated_operator_configuration` (bounds + persistence).
+- Deliberate expectation updates (per-mutation → per-interval granularity) in
+  active_show_programmer/playback/route object tests and command_contract_tests; the
+  SHOW-005 revision-copy comment now says "interval-gated autosave checkpoints".
+  Overwrite recovery backups (SHOW-005's assertion target) are unchanged.
+
+Suite numbers: light-server 411 passed; `test:e2e-api` 85 passed / 1 skipped; full e2e
+**276 passed / 11 skipped / 1 failed** (pre-existing user-dirty product-demo) — no net
+new regressions.
+
+Surprises / follow-ups:
+- `npm run test:help-screenshots` fails at HEAD (before these changes) in its capture
+  flow (`.load-show-modal` close times out) — pre-existing, same family as the
+  user-dirty product-demo failure. The **Desk Setup > Outputs** screenshot is therefore
+  one field stale until the capture spec is fixed and the refresh rerun; noted here
+  instead of committing a partial screenshot set.
+- Remaining §8 scope (defer the SQLite commit, flush boundaries incl. desktop quit and
+  Show Patch exit, idle flush, kill test) filed as `pending/02b-c-deferred-show-commits.md`
+  with the full reader/writer inventory.

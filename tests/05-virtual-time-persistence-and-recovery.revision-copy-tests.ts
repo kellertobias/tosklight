@@ -434,7 +434,7 @@ async function overwriteDestinationFromRevisionCopy(
 
 	const backupDirectory = `${bench.dataDir}/backups`;
 	// The overwrite recovery backup is named `<show name>-<millis>.show`; the same directory
-	// also holds per-mutation backups (`<show name>-<show id>-show-object-<millis>-….show`)
+	// also holds interval-gated autosave checkpoints (`<show name>-<show id>-show-object-<millis>-….show`)
 	// taken BEFORE tracked edits, which a loose prefix match must not select.
 	const overwriteBackupName = new RegExp(
 		`^${escapeRegex(state.destinationName)}-(\\d+)\\.show$`,

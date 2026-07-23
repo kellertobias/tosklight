@@ -1,6 +1,7 @@
 use super::{
     AppState, HighlightInstallPolicy, PlaybackInstallPolicy, ProgrammingInstallOwner,
     install_prepared_snapshot_with_selection_refresh, show_mutation_backup::ShowMutationBackupPlan,
+    speed_groups::application_millis,
 };
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, ActiveShowPorts, ActiveShowUnitOfWork,
@@ -157,6 +158,7 @@ pub(crate) fn invalidate_active_show_document(state: &AppState) {
 }
 
 pub(crate) struct ServerActiveShowUnitOfWork {
+    state: AppState,
     store: ShowStore,
     /// Present for the whole unit; taken only when the unit is dropped (returned to the shared
     /// cache) or discarded after a commit conflict revealed the disk moved underneath it.
@@ -199,6 +201,7 @@ impl ServerActiveShowUnitOfWork {
             }
         };
         Ok(Self {
+            state: state.clone(),
             store,
             document: Some(document),
             cache: Arc::clone(&state.active_show_document),
@@ -247,15 +250,39 @@ impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
 
     fn backup(&mut self, identity: &BackupIdentity) -> Result<(), ActionError> {
         let revision = self.document().revision().value();
-        if identity.show_id != self.document().id() {
+        let show_id = self.document().id();
+        if identity.show_id != show_id {
             return Err(ActionError::new(
                 ActionErrorKind::Invalid,
                 "mutation backup identity does not match the active show",
             )
             .at_revision(revision));
         }
+        // Recovery checkpoints run at most once per configured autosave interval (api-rules §8):
+        // the first mutation on a show always backs up; later mutations skip the full-file copy
+        // until the interval has elapsed. The lock is held across the copy so concurrent
+        // mutation paths cannot duplicate a checkpoint.
+        let now = application_millis(&self.state);
+        let interval_millis = self
+            .state
+            .configuration
+            .read()
+            .autosave_interval_seconds
+            .saturating_mul(1_000);
+        let mut checkpoint = self.state.active_show_backup_checkpoint.lock();
+        let due = match *checkpoint {
+            Some((last_show, last_at)) if last_show == show_id => {
+                now.saturating_sub(last_at) >= interval_millis
+            }
+            _ => true,
+        };
+        if !due {
+            return Ok(());
+        }
         self.backup
-            .create_mutation(&self.store, identity, Some(revision))
+            .create_mutation(&self.store, identity, Some(revision))?;
+        *checkpoint = Some((show_id, now));
+        Ok(())
     }
 
     fn commit(
