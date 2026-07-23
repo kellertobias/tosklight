@@ -109,6 +109,7 @@ fn run_active_show_object_action_with_ports(
         .mutate_objects(action, ports)
         .map_err(active_show_object_api_error)?;
     emit_migration_object_changes(state, show_id, &result.migration_changes);
+    emit_migrated_route_changes(state, show_id, &result.migrated_routes);
     Ok(result)
 }
 
@@ -127,6 +128,27 @@ pub(super) fn emit_migration_object_changes(
                 "show_id": show_id,
                 "kind": change.kind.as_str(),
                 "id": change.object_id,
+                "revision": change.object_revision,
+                "source": "migration",
+            }),
+        );
+    }
+}
+
+/// Publishes the legacy per-object event for route-kind migration write-backs.
+pub(super) fn emit_migrated_route_changes(
+    state: &AppState,
+    show_id: light_core::ShowId,
+    changes: &[light_application::OutputRouteChange],
+) {
+    for change in changes {
+        emit(
+            state,
+            "show_object_changed",
+            serde_json::json!({
+                "show_id": show_id,
+                "kind": "route",
+                "id": change.route_id,
                 "revision": change.object_revision,
                 "source": "migration",
             }),
@@ -182,6 +204,7 @@ pub(super) async fn run_active_show_object_undo_async(
             .map_err(active_show_object_api_error)
             .inspect(|result| {
                 emit_migration_object_changes(&worker_state, show_id, &result.migration_changes);
+                emit_migrated_route_changes(&worker_state, show_id, &result.migrated_routes);
             });
         (undone, activation)
     })

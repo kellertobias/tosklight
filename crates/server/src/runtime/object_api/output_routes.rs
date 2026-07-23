@@ -36,9 +36,16 @@ pub(super) async fn run_output_route_action(
 > {
     let worker_state = state.clone();
     let service = state.active_show_service.clone();
+    let show_id = action.command.show_id;
     let (result, activation) = tokio::task::spawn_blocking(move || {
-        let ports = ServerActiveShowPorts::new(worker_state);
-        (service.mutate_output_route(action, &ports), activation)
+        let ports = ServerActiveShowPorts::new(worker_state.clone());
+        let result = service
+            .mutate_output_route(action, &ports)
+            .inspect(|result| {
+                emit_migration_object_changes(&worker_state, show_id, &result.migration_changes);
+                emit_migrated_route_changes(&worker_state, show_id, &result.migrated_routes);
+            });
+        (result, activation)
     })
     .await
     .map_err(|error| ApiError::internal(format!("active-show service task failed: {error}")))?;

@@ -53,14 +53,26 @@ impl ActiveShowService {
                 route: prepared.route,
                 deleted: prepared.deleted,
             };
+            let migration_changes = migration_changes(&commit, &[]);
+            let migrated_routes =
+                migrated_route_changes(envelope.command.show_id, &commit, Some(&change.route_id));
             ports.install_runtime(&envelope.context, runtime);
             let event = self.events.publish(EventDraft::output_route_changed(
                 &envelope.context,
                 change.clone(),
             ));
+            self.publish_migration_riders(
+                &envelope.context,
+                envelope.command.show_id,
+                commit.revision(),
+                &migration_changes,
+                &migrated_routes,
+            );
             Ok(MutateOutputRouteResult {
                 context: envelope.context.clone(),
                 change,
+                migration_changes,
+                migrated_routes,
                 route_to_terminate: prepared.route_to_terminate,
                 event_sequence: event.sequence,
             })
@@ -90,6 +102,7 @@ impl ActiveShowService {
                 show_revision: committed.show_revision,
                 changes: committed.changes,
                 migration_changes: committed.migration_changes,
+                migrated_routes: committed.migrated_routes,
                 event_sequence: committed.event_sequence,
             })
         })
@@ -118,6 +131,7 @@ impl ActiveShowService {
                 show_revision: committed.show_revision,
                 change: single_change(committed.changes),
                 migration_changes: committed.migration_changes,
+                migrated_routes: committed.migrated_routes,
                 event_sequence: committed.event_sequence,
             })
         })
@@ -137,15 +151,49 @@ impl ActiveShowService {
         let commit = unit.commit(prepared.transaction)?;
         let show_revision = commit.revision();
         let migration_changes = migration_changes(&commit, &prepared.changes);
+        let migrated_routes = migrated_route_changes(show_id, &commit, None);
         ports.install_runtime(context, runtime);
         ports.reconcile_object_changes(&prepared.changes);
-        Ok(self.publish_object_changes(
+        let committed = self.publish_object_changes(
             context,
             show_id,
             show_revision,
             prepared.changes,
             migration_changes,
-        ))
+        );
+        for migrated in &migrated_routes {
+            self.events
+                .publish(EventDraft::output_route_changed(context, migrated.clone()));
+        }
+        Ok(CommittedObjectChanges {
+            migrated_routes,
+            ..committed
+        })
+    }
+
+    /// Publishes events for migration write-backs that rode along a route mutation's commit.
+    fn publish_migration_riders(
+        &self,
+        context: &ActionContext,
+        show_id: ShowId,
+        show_revision: PortableShowRevision,
+        migration_changes: &[super::ActiveShowObjectChange],
+        migrated_routes: &[OutputRouteChange],
+    ) {
+        if !migration_changes.is_empty() {
+            self.events.publish(EventDraft::active_show_objects_changed(
+                context,
+                ActiveShowObjectsChange {
+                    show_id,
+                    show_revision,
+                    changes: migration_changes.to_vec(),
+                },
+            ));
+        }
+        for migrated in migrated_routes {
+            self.events
+                .publish(EventDraft::output_route_changed(context, migrated.clone()));
+        }
     }
 
     fn publish_object_changes(
@@ -170,6 +218,7 @@ impl ActiveShowService {
             show_revision,
             changes,
             migration_changes,
+            migrated_routes: Vec::new(),
             event_sequence: event.sequence,
         }
     }
@@ -319,6 +368,7 @@ struct CommittedObjectChanges {
     show_revision: PortableShowRevision,
     changes: Vec<super::ActiveShowObjectChange>,
     migration_changes: Vec<super::ActiveShowObjectChange>,
+    migrated_routes: Vec<OutputRouteChange>,
     event_sequence: u64,
 }
 
@@ -335,6 +385,29 @@ fn prepare_requested_undo<P: ActiveShowPorts>(
         command.expected_object_revision,
     )?;
     prepare_object_undo(unit.document(), command, undo)
+}
+
+/// Route writes committed by staged compatibility migrations rather than the request itself.
+/// Routes have their own change/event family, so they are reported as `OutputRouteChange`s.
+fn migrated_route_changes(
+    show_id: ShowId,
+    commit: &PortableShowCommit,
+    exclude_route_id: Option<&str>,
+) -> Vec<OutputRouteChange> {
+    commit
+        .written_objects()
+        .iter()
+        .filter(|object| object.key().kind() == "route")
+        .filter(|object| exclude_route_id != Some(object.key().id()))
+        .map(|object| OutputRouteChange {
+            show_id,
+            show_revision: commit.revision(),
+            route_id: object.key().id().to_string(),
+            object_revision: object.revision(),
+            route: serde_json::from_value(object.body().clone()).ok(),
+            deleted: false,
+        })
+        .collect()
 }
 
 /// Object writes committed by staged compatibility migrations rather than the request itself.

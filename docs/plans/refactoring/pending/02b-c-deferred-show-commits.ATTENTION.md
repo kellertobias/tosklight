@@ -56,7 +56,34 @@ npm run test:e2e   # full suite gate
 npm run open       # real desk: program, kill -9, restart, inspect
 ```
 
-## Decisions
+## DECISION NEEDED (2026-07-23, raised at execution time)
 
-All decided (api-rules §8). Accepted trade-off: power loss loses at most the last
-autosave interval of programming.
+The premise of this final stage weakened after 02b-a/02b-b landed, and the maintainer
+should choose the endpoint before the complexity is spent:
+
+1. After 02b-a (no full document load) and 02b-b (no per-mutation full-file backup),
+   the mutation hot path costs **one small SQLite WAL transaction** (`synchronous=NORMAL`
+   already makes durability soft). The heavyweight I/O that motivated §8 is gone.
+2. Deferring that last write is architecturally expensive AND largely self-defeating:
+   - The UI refetches objects right after `show_object_changed`, so a correctness-required
+     flush-on-read would fire after almost every mutation — near write-through cadence in
+     practice, unless reads are served from memory (a much larger rework: ETag/updated_at
+     semantics, every reader site).
+   - Undo restore pops a specific SQLite history row id
+     (`restore_staged_undo`, `crates/show/src/portable/transaction.rs`), so undo against
+     unflushed mutations either forces a flush boundary or a parallel in-memory history.
+   - `updated_at` is stamped per store transaction; faithful replay needs new timestamped
+     store APIs to avoid memory/disk divergence.
+
+**Options:**
+- **(a) Recommended:** declare §8 satisfied by 02b-a + 02b-b (in-memory document +
+  interval-gated checkpoints; write-through WAL commit stays). Delete this chunk.
+- **(b)** Full write-behind including memory-served reads — re-scope this chunk into a
+  read-layer epic (every active-show reader funneled through the in-memory document).
+- **(c)** Defer commits with flush-on-read/undo/boundaries, accepting that UI read
+  patterns make it near write-through in practice.
+
+## Decisions (superseded)
+
+Previously "all decided (api-rules §8)" — see DECISION NEEDED above; the §8 decision
+predates the 02b-a/02b-b outcome.

@@ -41,3 +41,27 @@ cargo test -p light-application
 npm run test:e2e-api
 npm run test:e2e   # full suite gate
 ```
+
+## Result
+
+- `mutate_output_route` now reports and publishes both rider classes from its commit:
+  typed-object migration write-backs (`migration_changes`, published in one
+  `active_show_objects_changed` event) and route-kind migration write-backs
+  (`migrated_routes`, each published as its own `output_route_changed` with the
+  requested route excluded). Decision recorded: migrated routes are published through
+  the route event family, not as object changes.
+- `commit_object_changes` (object mutations + undo) gained the same route-rider
+  collection via the new `migrated_route_changes` helper, so route migrations riding
+  any object commit are published too — closing the `from_storage_kind` gap noted in
+  chunk 02.
+- Server funnels emit the legacy `show_object_changed` (kind `route`,
+  `"source":"migration"`) for migrated routes at all three sites: object mutation,
+  object undo, and route action.
+- Regression test `route_mutation_publishes_migration_write_backs` seeds a legacy
+  cue_list echo plus a destination-less legacy route, mutates a different route, and
+  asserts both riders in the result, the persisted normalizations, and the exact event
+  sequence (requested route → object riders → route rider).
+- Suite numbers: light-application 390 and light-server 411 passed; `test:e2e-api`
+  85 passed / 1 skipped; full e2e **276 passed / 11 skipped / 1 failed** (pre-existing
+  user-dirty product-demo) — no net new regressions.
+- No surprises; scope as filed.

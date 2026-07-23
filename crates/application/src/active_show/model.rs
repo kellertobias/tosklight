@@ -90,6 +90,8 @@ pub struct MutateActiveShowObjectsResult {
     /// Compatibility-migration write-backs committed alongside the requested changes. Reported so
     /// adapters can publish their revision bumps instead of leaving them silent.
     pub migration_changes: Vec<ActiveShowObjectChange>,
+    /// Route-kind compatibility-migration write-backs committed alongside the request.
+    pub migrated_routes: Vec<OutputRouteChange>,
     pub event_sequence: u64,
 }
 
@@ -116,6 +118,8 @@ pub struct UndoActiveShowObjectResult {
     /// Compatibility-migration write-backs committed alongside the undone object. Reported so
     /// adapters can publish their revision bumps instead of leaving them silent.
     pub migration_changes: Vec<ActiveShowObjectChange>,
+    /// Route-kind compatibility-migration write-backs committed alongside the undo.
+    pub migrated_routes: Vec<OutputRouteChange>,
     pub event_sequence: u64,
 }
 
@@ -158,6 +162,10 @@ pub struct OutputRouteChange {
 pub struct MutateOutputRouteResult {
     pub context: ActionContext,
     pub change: OutputRouteChange,
+    /// Compatibility-migration write-backs of typed show objects committed alongside the route.
+    pub migration_changes: Vec<ActiveShowObjectChange>,
+    /// Compatibility-migration write-backs of other routes committed alongside the request.
+    pub migrated_routes: Vec<OutputRouteChange>,
     pub route_to_terminate: Option<OutputRoute>,
     pub event_sequence: u64,
 }
