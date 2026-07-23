@@ -92,7 +92,11 @@ function PatchWindowContent({
 		offsetY: number;
 	} | null>(null);
 	const beginPreviewDrag = (event: ReactPointerEvent<HTMLElement>) => {
-		event.currentTarget.setPointerCapture(event.pointerId);
+		try {
+			event.currentTarget.setPointerCapture(event.pointerId);
+		} catch {
+			// A capture failure only loosens tracking outside the grip; the drag still works.
+		}
 		previewDrag.current = {
 			pointerId: event.pointerId,
 			x: event.clientX,
