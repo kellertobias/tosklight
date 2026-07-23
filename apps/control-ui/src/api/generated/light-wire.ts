@@ -691,6 +691,40 @@ export type PatchSnapshot = { show_id: string, show_revision: number, patch_revi
  */
 profile_revisions: Array<PatchProfileRevisionProjection>, };
 
+export type StagePositionAxis = "x" | "y" | "z" | "rotation_x" | "rotation_y" | "rotation_z";
+
+export type StageLayoutAction = { "type": "move_selection", fixture_ids: Array<string>, axis: StagePositionAxis,
+/**
+ * Meters for translation axes, degrees for rotation axes. Must be finite.
+ */
+delta: number, };
+
+export type StageLayoutActionRequest = {
+/**
+ * Client-generated idempotency identity, scoped to the authenticated desk session.
+ */
+request_id: string, action: StageLayoutAction, };
+
+export type StageLayoutActionOutcome = { request_id: string,
+/**
+ * Stage-layout object revision after the action (unchanged for a no-op).
+ */
+revision: number,
+/**
+ * Selected fixtures whose stored position the action changed, in selection order.
+ */
+moved_fixture_ids: Array<string>,
+/**
+ * `true` when idempotency replay returned the already committed authoritative result.
+ */
+replayed: boolean,
+/**
+ * `false` when no selected fixture had a resolvable position and nothing was written.
+ */
+changed: boolean, };
+
+export type StageLayoutErrorResponse = { error: string, retryable: boolean, };
+
 export type SelectiveImportObjectKey = { kind: string, id: string, };
 
 export type SelectiveImportConflictResolution = "keep_destination" | "replace_destination" | "duplicate";

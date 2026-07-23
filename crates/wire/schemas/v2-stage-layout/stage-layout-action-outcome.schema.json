@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StageLayoutActionOutcome",
+  "description": "Successful result of a stage-layout action.",
+  "type": "object",
+  "properties": {
+    "changed": {
+      "description": "`false` when no selected fixture had a resolvable position and nothing was written.",
+      "type": "boolean"
+    },
+    "moved_fixture_ids": {
+      "description": "Selected fixtures whose stored position the action changed, in selection order.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "replayed": {
+      "description": "`true` when idempotency replay returned the already committed authoritative result.",
+      "type": "boolean"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "revision": {
+      "description": "Stage-layout object revision after the action (unchanged for a no-op).",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "request_id",
+    "revision",
+    "moved_fixture_ids",
+    "replayed",
+    "changed"
+  ]
+}

@@ -190,7 +190,7 @@ pub(super) fn materialize_patched_fixture_definitions(
     Ok(())
 }
 
-fn validate_object_candidate(
+pub(super) fn validate_object_candidate(
     state: &AppState,
     entry: &ShowEntry,
     kind: &str,
@@ -211,7 +211,7 @@ fn validate_object_candidate(
     .map_err(|error| ApiError::bad_request(error.to_string()))
 }
 
-async fn activate_object_change(
+pub(super) async fn activate_object_change(
     state: &AppState,
     entry: &ShowEntry,
     kind: &str,

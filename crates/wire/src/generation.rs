@@ -72,6 +72,9 @@ use crate::v2::selective_import::{
 use crate::v2::speed_group::{
     SpeedGroupActionOutcome, SpeedGroupActionRequest, SpeedGroupErrorResponse, SpeedGroupSnapshot,
 };
+use crate::v2::stage_layout::{
+    StageLayoutActionOutcome, StageLayoutActionRequest, StageLayoutErrorResponse,
+};
 
 const TYPESCRIPT_PATH: &str = "apps/control-ui/src/api/generated/light-wire.ts";
 const SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-command-line";
@@ -80,6 +83,7 @@ const PATCH_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-patch";
 const PLAYBACK_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-playback";
 const PROGRAMMING_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-programming";
 const SELECTIVE_IMPORT_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-selective-import";
+const STAGE_LAYOUT_SCHEMA_DIRECTORY: &str = "crates/wire/schemas/v2-stage-layout";
 
 /// One generated artifact relative to the workspace root.
 #[derive(Debug, Eq, PartialEq)]
@@ -259,6 +263,9 @@ fn playback_and_show_artifacts() -> Vec<GeneratedArtifact> {
         patch_response_schema::<PatchProfileRevisionProjection>(
             "patch-profile-revision-projection",
         ),
+        stage_layout_request_schema::<StageLayoutActionRequest>("stage-layout-action-request"),
+        stage_layout_response_schema::<StageLayoutActionOutcome>("stage-layout-action-outcome"),
+        stage_layout_response_schema::<StageLayoutErrorResponse>("stage-layout-error-response"),
         selective_import_request_schema::<SelectiveImportSelection>("preview-request"),
         selective_import_request_schema::<SelectiveImportApplyRequest>("apply-request"),
         selective_import_response_schema::<SelectiveImportCatalog>("catalog"),
@@ -328,6 +335,14 @@ fn programming_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
     programming_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
 }
 
+fn stage_layout_request_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    stage_layout_schema::<T>(name, SchemaSettings::draft2020_12().for_deserialize())
+}
+
+fn stage_layout_response_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
+    stage_layout_schema::<T>(name, SchemaSettings::draft2020_12().for_serialize())
+}
+
 fn selective_import_request_schema<T: JsonSchema>(name: &str) -> GeneratedArtifact {
     selective_import_schema::<T>(name, SchemaSettings::draft2020_12().for_deserialize())
 }
@@ -350,6 +365,10 @@ fn playback_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> Gener
 
 fn programming_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
     namespaced_schema::<T>(PROGRAMMING_SCHEMA_DIRECTORY, name, settings)
+}
+
+fn stage_layout_schema<T: JsonSchema>(name: &str, settings: SchemaSettings) -> GeneratedArtifact {
+    namespaced_schema::<T>(STAGE_LAYOUT_SCHEMA_DIRECTORY, name, settings)
 }
 
 fn selective_import_schema<T: JsonSchema>(

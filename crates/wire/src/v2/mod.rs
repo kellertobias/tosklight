@@ -22,3 +22,4 @@ pub mod programming;
 pub mod programming_update;
 pub mod selective_import;
 pub mod speed_group;
+pub mod stage_layout;

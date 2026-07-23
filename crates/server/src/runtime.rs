@@ -173,6 +173,7 @@ mod show_patch_wire;
 mod speed_group_service;
 mod speed_group_v2;
 mod speed_groups;
+mod stage_layout_http;
 mod state;
 mod store_api;
 mod store_preload_targets;

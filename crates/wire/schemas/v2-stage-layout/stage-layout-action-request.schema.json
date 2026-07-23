@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StageLayoutActionRequest",
+  "description": "Body of the idempotent stage-layout action POST operation.",
+  "type": "object",
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/StageLayoutAction"
+    },
+    "request_id": {
+      "description": "Client-generated idempotency identity, scoped to the authenticated desk session.",
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "required": [
+    "request_id",
+    "action"
+  ],
+  "$defs": {
+    "StageLayoutAction": {
+      "description": "One stage-layout intent, using the shared fan-out vocabulary: an explicitly ordered\nselection plus a typed operation payload (see `ProgrammingValueMutation::SetSelection`).",
+      "oneOf": [
+        {
+          "description": "Applies one uniform axis delta to every selected fixture that has a resolvable stage\nposition. Fixtures without a stored 2D or 3D position are skipped, never defaulted.",
+          "type": "object",
+          "properties": {
+            "axis": {
+              "$ref": "#/$defs/StagePositionAxis"
+            },
+            "delta": {
+              "description": "Meters for translation axes, degrees for rotation axes. Must be finite.",
+              "type": "number",
+              "format": "double"
+            },
+            "fixture_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 10000,
+              "minItems": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "move_selection"
+            }
+          },
+          "required": [
+            "type",
+            "fixture_ids",
+            "axis",
+            "delta"
+          ]
+        }
+      ]
+    },
+    "StagePositionAxis": {
+      "description": "One editable component of a fixture's 3D stage position.",
+      "type": "string",
+      "enum": [
+        "x",
+        "y",
+        "z",
+        "rotation_x",
+        "rotation_y",
+        "rotation_z"
+      ]
+    }
+  }
+}

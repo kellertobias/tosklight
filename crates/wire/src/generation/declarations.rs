@@ -22,6 +22,7 @@ use crate::v2::programming::*;
 use crate::v2::programming_update::*;
 use crate::v2::selective_import::*;
 use crate::v2::speed_group::*;
+use crate::v2::stage_layout::*;
 
 pub(super) fn all(config: &Config) -> Vec<String> {
     let mut declarations = command_line(config);
@@ -35,6 +36,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(playback_transport(config));
     declarations.extend(playback_topology(config));
     declarations.extend(patch(config));
+    declarations.extend(stage_layout(config));
     declarations.extend(selective_import(config));
     declarations.extend(interaction(config));
     declarations
@@ -373,6 +375,16 @@ fn patch(config: &Config) -> Vec<String> {
         PatchDelta::decl(config),
         PatchFixturesOutcome::decl(config),
         PatchSnapshot::decl(config),
+    ]
+}
+
+fn stage_layout(config: &Config) -> Vec<String> {
+    vec![
+        StagePositionAxis::decl(config),
+        StageLayoutAction::decl(config),
+        StageLayoutActionRequest::decl(config),
+        StageLayoutActionOutcome::decl(config),
+        StageLayoutErrorResponse::decl(config),
     ]
 }
 

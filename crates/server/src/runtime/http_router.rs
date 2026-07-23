@@ -14,6 +14,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(virtual_playback_zones_http::router())
         .merge(programming_update_http::router())
         .merge(show_patch_http::router())
+        .merge(stage_layout_http::router())
         .merge(selective_import_http::router())
         .merge(operator_routes())
         .merge(fixture_routes())

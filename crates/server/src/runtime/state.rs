@@ -50,6 +50,7 @@ pub(super) struct AppState {
     pub(super) active_show_service: ActiveShowService,
     pub(super) playback_topology: PlaybackTopologyService,
     pub(super) show_patch: ShowPatchService,
+    pub(super) stage_layout_replay: Arc<Mutex<stage_layout_http::StageLayoutReplayCache>>,
     pub(super) selective_show_import: SelectiveShowImportService,
     #[cfg(test)]
     pub(super) patch_profile_resolution: Arc<PatchProfileResolutionPause>,
