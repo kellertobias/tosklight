@@ -31,9 +31,7 @@ fn operator_routes() -> Router<AppState> {
     Router::new()
         .route("/", get(operator_ui))
         .route("/assets/{*path}", get(operator_asset))
-        .route("/api/v1/health", get(health))
         .route("/api/v1/readiness", get(readiness))
-        .route("/api/v1/version", get(version))
         .route("/api/v1/diagnostics", get(diagnostics))
         .route("/api/v1/bootstrap", get(bootstrap))
         .route("/api/v1/patch", get(patch_snapshot))
@@ -87,7 +85,6 @@ fn media_and_output_routes() -> Router<AppState> {
             "/api/v1/media/{fixture_id}/thumbnails/refresh",
             post(refresh_media_thumbnails),
         )
-        .route("/api/v1/media/{fixture_id}/thumbnail", get(media_thumbnail))
         .route(
             "/api/v1/media/{fixture_id}/preview/refresh",
             post(refresh_media_preview),
@@ -126,9 +123,7 @@ fn session_routes() -> Router<AppState> {
         .route("/api/v1/desk-lock", get(desk_lock).put(update_desk_lock))
         .route("/api/v1/desk-lock/lock", post(lock_desk))
         .route("/api/v1/desk-lock/unlock", post(unlock_desk))
-        .route("/api/v1/desk-lock/force-unlock", post(force_unlock_desk))
         .route("/api/v1/users", post(create_user))
-        .route("/api/v1/users/{id}", put(update_user).delete(delete_user))
 }
 
 fn show_routes() -> Router<AppState> {
@@ -136,7 +131,6 @@ fn show_routes() -> Router<AppState> {
         .route("/api/v1/shows", get(list_shows).post(upload_show))
         .route("/api/v1/shows/default/open", post(open_clean_default_show))
         .route("/api/v1/shows/rollback", post(rollback_show))
-        .route("/api/v1/shows/{id}", delete(delete_show))
         .route("/api/v1/shows/{id}/open", post(open_show))
         .route("/api/v1/shows/{id}/rename", put(rename_show))
         .route("/api/v1/shows/{id}/download", get(download_show))
@@ -184,11 +178,6 @@ fn playback_routes() -> Router<AppState> {
             "/api/v1/cuelists/{number}/{action}",
             post(pool_playback_action).put(pool_playback_action),
         )
-        .route("/api/v1/qlists/{number}", get(pool_playback_state))
-        .route(
-            "/api/v1/qlists/{number}/{action}",
-            post(pool_playback_action).put(pool_playback_action),
-        )
         .route("/api/v1/playback-pool/{number}", get(pool_playback_state))
         .route(
             "/api/v1/playback-pool/{number}/{action}",
@@ -198,10 +187,6 @@ fn playback_routes() -> Router<AppState> {
         .route("/api/v1/control-desks/{id}", put(update_control_desk))
         .route(
             "/api/v1/control-desks/{id}/page-playbacks/{slot}/{action}",
-            post(paged_playback_action).put(paged_playback_action),
-        )
-        .route(
-            "/api/v1/control-desks/{id}/paged-playbacks/{slot}/{action}",
             post(paged_playback_action).put(paged_playback_action),
         )
         .route("/api/v1/screens", get(list_screens))
@@ -229,7 +214,6 @@ fn programmer_and_update_routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/programmers", get(list_programmers))
         .route("/api/v1/programmers/{id}/clear", post(clear_programmer))
-        .route("/api/v1/programmer/set", post(set_programmer))
         .merge(command_http::router())
         .route(
             "/api/v1/update/settings",
@@ -237,7 +221,6 @@ fn programmer_and_update_routes() -> Router<AppState> {
         )
         .route("/api/v1/update/preview", post(preview_update))
         .route("/api/v1/update/apply", post(apply_update))
-        .route("/api/v1/update/targets", get(update_targets))
         .route("/api/v1/highlight", get(highlight_status))
         .route("/api/v1/highlight/action", post(highlight_action))
         .route(
@@ -245,7 +228,6 @@ fn programmer_and_update_routes() -> Router<AppState> {
             put(patch_preview_highlight),
         )
         .route("/api/v1/master", put(update_master))
-        .route("/api/v1/midi/inputs", get(midi_inputs))
         .route("/api/v1/events", get(ws_events))
         .route("/api/v1/command-history", get(command_history))
         .route("/api/v1/audit", get(audit_events))

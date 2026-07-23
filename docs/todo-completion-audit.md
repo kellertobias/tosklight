@@ -42,7 +42,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 ./build manual
 ./build open
 curl -fsS http://127.0.0.1:5000/api/v1/readiness
-curl -fsS http://127.0.0.1:5000/api/v1/health
 curl -fsS http://127.0.0.1:5000/api/v1/bootstrap
 git diff --check
 ```

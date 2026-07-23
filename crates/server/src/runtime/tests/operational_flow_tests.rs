@@ -86,31 +86,12 @@ impl OperationalScenario {
             .await
             .unwrap();
         assert_eq!(json(dmx).await["overrides"].as_array().unwrap().len(), 1);
-        let response = self
-            .app
-            .clone()
-            .oneshot(
-                Request::post("/api/v1/programmer/set")
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .header(
-                        header::AUTHORIZATION,
-                        format!("Bearer {}", self.token),
-                    )
-                    .body(Body::from(
-                        serde_json::json!({
-                            "fixture_id": self.fixture_id,
-                            "attribute": "intensity",
-                            "value": 0.5
-                        })
-                        .to_string(),
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
-        assert_eq!(self.rendered_intensity(), 128);
         let session = authenticate_token(&self.state, &self.token).unwrap();
+        assert_eq!(
+            execute_programmer_command(&self.state, &session, "FIXTURE 1 AT 50 TIME 0").unwrap(),
+            1
+        );
+        assert_eq!(self.rendered_intensity(), 128);
         assert_eq!(
             execute_programmer_command(&self.state, &session, "FIXTURE 1").unwrap(),
             1
@@ -295,31 +276,7 @@ impl OperationalScenario {
             self.state.active_show.read().as_ref().unwrap().id.0.to_string(),
             self.first_id
         );
-        self.verify_show_deletions(second_id).await;
         self.disconnect_and_clear_programmer().await;
-    }
-
-    async fn verify_show_deletions(&self, second_id: &str) {
-        for (show_id, expected) in [
-            (second_id, StatusCode::NO_CONTENT),
-            (&self.first_id, StatusCode::CONFLICT),
-        ] {
-            let response = self
-                .app
-                .clone()
-                .oneshot(
-                    Request::delete(format!("/api/v1/shows/{show_id}"))
-                        .header(
-                            header::AUTHORIZATION,
-                            format!("Bearer {}", self.token),
-                        )
-                        .body(Body::empty())
-                        .unwrap(),
-                )
-                .await
-                .unwrap();
-            assert_eq!(response.status(), expected);
-        }
     }
 
     async fn disconnect_and_clear_programmer(&self) {

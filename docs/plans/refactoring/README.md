@@ -46,7 +46,9 @@ keep the ordering, note the split in the parent's Result.
 - **Before claiming the first chunk, run `npm run test:e2e` once and record the fresh
   numbers here** — that run is the binding baseline for "no net new regressions".
 
-Fresh baseline (fill in): `____ passed / ____ skipped / ____ failed on <date>`
+Fresh baseline: `274 passed / 13 skipped / 1 failed on 2026-07-23` — the single failure is
+the known user-dirty `product-demo` run (`tests/product-demo.spec.ts` is locally modified),
+same as the last recorded result above.
 
 ## Standing rules (apply to every chunk)
 

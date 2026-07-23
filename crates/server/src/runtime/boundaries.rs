@@ -291,33 +291,3 @@ pub(super) async fn unlock_desk(
     );
     Ok(Json(desk_lock_response(configuration)))
 }
-
-pub(super) async fn force_unlock_desk(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<DeskLockResponse>, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    let operation_lock = state.programming.desk_lock(session.desk.id);
-    let _operation = operation_lock.lock();
-    let supplied = headers
-        .get("x-light-admin-recovery")
-        .and_then(|value| value.to_str().ok());
-    let expected = env::var("LIGHT_ADMIN_RECOVERY_TOKEN").ok();
-    if expected
-        .as_deref()
-        .is_none_or(|expected| supplied != Some(expected))
-    {
-        return Err(ApiError::unauthorized(
-            "administrative recovery token is required",
-        ));
-    }
-    let mut configuration = read_desk_lock(&state, session.desk.id);
-    configuration.locked = false;
-    write_desk_lock(&state, session.desk.id, &configuration)?;
-    emit(
-        &state,
-        "desk_lock_changed",
-        serde_json::json!({"desk_id":session.desk.id,"locked":false,"forced":true}),
-    );
-    Ok(Json(desk_lock_response(configuration)))
-}

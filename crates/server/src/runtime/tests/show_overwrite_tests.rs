@@ -170,7 +170,7 @@ async fn overwrite_and_verify_destination(
     assert_eq!(copy_revisions[0]["name"], "Copy private checkpoint");
 }
 
-async fn verify_copy_survives_source_deletion(
+async fn verify_copy_keeps_identity_and_source_reference(
     app: &Router,
     token: &str,
     source_id: &str,
@@ -184,28 +184,6 @@ async fn verify_copy_survives_source_deletion(
             .iter()
             .any(|show| show["id"] == copy_id)
     );
-    let deleted = app
-        .clone()
-        .oneshot(
-            Request::delete(format!("/api/v1/shows/{source_id}"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
-    let overwrite = app
-        .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{copy_id}/overwrite/{source_id}"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(overwrite.status(), StatusCode::NOT_FOUND);
     let copy = get_show_json(
         app,
         token,
@@ -228,7 +206,7 @@ async fn confirmed_overwrite_preserves_destination_identity_revisions_and_revisi
     let destination_id = prepare_overwrite_destination(&app, &token).await;
     overwrite_and_verify_destination(&app, &token, &copy_id, &destination_id).await;
     assert_eq!(overwrite_revision_body(&revision_path), revision_body);
-    verify_copy_survives_source_deletion(&app, &token, &source_id, &copy_id).await;
+    verify_copy_keeps_identity_and_source_reference(&app, &token, &source_id, &copy_id).await;
     assert!(
         std::fs::read_dir(data_dir.join("backups"))
             .unwrap()

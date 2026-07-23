@@ -1,14 +1,5 @@
 use super::*;
 
-pub(super) async fn midi_inputs(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<Vec<String>>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
-    Ok(Json(
-        light_control::available_midi_inputs().map_err(ApiError::internal)?,
-    ))
-}
 pub(super) async fn update_configuration(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -159,49 +150,6 @@ pub(super) async fn create_user(
         serde_json::json!({"user":user}),
     );
     Ok((StatusCode::CREATED, Json(user)))
-}
-pub(super) async fn update_user(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    headers: HeaderMap,
-    Json(input): Json<UserInput>,
-) -> Result<Json<DeskUser>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
-    let user = state
-        .desk
-        .lock()
-        .update_user(light_core::UserId(id), &input.name, input.enabled)
-        .map_err(ApiError::store)?;
-    emit(
-        &state,
-        "desk_user_changed",
-        serde_json::json!({"user":user}),
-    );
-    Ok(Json(user))
-}
-pub(super) async fn delete_user(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    headers: HeaderMap,
-) -> Result<StatusCode, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    let id = light_core::UserId(id);
-    if session.user.id == id {
-        return Err(ApiError::conflict(
-            "the current session cannot delete its own user",
-        ));
-    }
-    if !state.desk.lock().delete_user(id).map_err(ApiError::store)? {
-        return Err(ApiError::not_found("user"));
-    }
-    state.highlight.clear_user(id);
-    sync_highlight_output(&state);
-    emit(
-        &state,
-        "desk_user_deleted",
-        serde_json::json!({"user_id":id}),
-    );
-    Ok(StatusCode::NO_CONTENT)
 }
 pub(super) async fn close_session(
     State(state): State<AppState>,

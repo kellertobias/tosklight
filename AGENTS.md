@@ -78,7 +78,7 @@ When real operator behavior changed, `npm run open` is the authoritative desktop
 curl -fsS http://127.0.0.1:5000/api/v1/readiness
 ```
 
-Inspect `.artifacts/runtime/light-data/light-server.log` first for app-owned server startup/runtime problems. If readiness is healthy but the app appears stuck, time `/api/v1/readiness`, `/api/v1/health`, and `/api/v1/bootstrap` separately.
+Inspect `.artifacts/runtime/light-data/light-server.log` first for app-owned server startup/runtime problems. If readiness is healthy but the app appears stuck, time `/api/v1/readiness` and `/api/v1/bootstrap` separately.
 
 If the app looks stale, verify the bundle opened by the current `build` script before reworking UI code.
 

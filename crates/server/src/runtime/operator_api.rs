@@ -29,14 +29,6 @@ pub(super) fn embedded_asset(path: &str) -> Response {
     )
         .into_response()
 }
-pub(super) async fn health() -> Json<serde_json::Value> {
-    Json(serde_json::json!({"status":"ok", "service":"light-server", "api_version":"v1"}))
-}
-pub(super) async fn version() -> Json<serde_json::Value> {
-    Json(
-        serde_json::json!({"service":"light-server","version":env!("CARGO_PKG_VERSION"),"api_version":"v1","show_schema":3,"desk_schema":6}),
-    )
-}
 pub(super) async fn readiness(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

@@ -19,20 +19,6 @@ pub(super) struct ThumbnailRequest {
     pub(super) height: u16,
 }
 #[derive(Deserialize)]
-pub(super) struct ThumbnailQuery {
-    #[serde(default = "default_media_library_type")]
-    pub(super) library_type: u8,
-    #[serde(default)]
-    pub(super) library_level: u8,
-    #[serde(default)]
-    pub(super) library_1: u8,
-    #[serde(default)]
-    pub(super) library_2: u8,
-    #[serde(default)]
-    pub(super) library_3: u8,
-    pub(super) element: u8,
-}
-#[derive(Deserialize)]
 pub(super) struct PreviewRequest {
     pub(super) source: u16,
     #[serde(default = "default_media_width")]
@@ -225,20 +211,6 @@ pub(super) struct UpdatePreviewResponse {
     pub(super) preview: update::UpdatePreview,
 }
 
-#[derive(Debug, Default, Deserialize)]
-pub(super) struct UpdateTargetsQuery {
-    #[serde(default)]
-    pub(super) filter: update::UpdateTargetFilter,
-}
-
-#[derive(Serialize)]
-pub(super) struct UpdateMenuResponseEntry {
-    pub(super) target: UpdateApiTarget,
-    pub(super) revision: u64,
-    pub(super) active_or_referenced: bool,
-    pub(super) existing_preview: UpdatePreviewResponse,
-    pub(super) add_new_preview: UpdatePreviewResponse,
-}
 #[derive(Debug, Deserialize)]
 pub(super) struct WsCommand {
     pub(super) protocol_version: u16,

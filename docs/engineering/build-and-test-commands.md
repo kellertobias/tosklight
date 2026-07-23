@@ -69,8 +69,8 @@ curl -fsS http://127.0.0.1:5000/api/v1/readiness
 ```
 
 Check `.artifacts/runtime/light-data/light-server.log` first for app-owned startup problems. If
-readiness is healthy but the app looks stuck, time `/api/v1/readiness`, `/api/v1/health`, and
-`/api/v1/bootstrap` separately.
+readiness is healthy but the app looks stuck, time `/api/v1/readiness` and `/api/v1/bootstrap`
+separately.
 
 **If the app looks stale, verify which bundle the build script actually opened before reworking UI
 code.**

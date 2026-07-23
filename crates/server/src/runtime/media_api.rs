@@ -96,25 +96,6 @@ pub(super) async fn refresh_media_thumbnails(
     }
 }
 
-pub(super) async fn media_thumbnail(
-    State(state): State<AppState>,
-    Path(fixture_id): Path<light_core::FixtureId>,
-    Query(query): Query<ThumbnailQuery>,
-    headers: HeaderMap,
-) -> Result<Response, ApiError> {
-    let _session = authenticate(&state, &headers)?;
-    let key = ThumbnailKey {
-        fixture: fixture_id.0.to_string(),
-        library_type: query.library_type,
-        library: LibraryId {
-            level: query.library_level,
-            ids: [query.library_1, query.library_2, query.library_3],
-        },
-        element: query.element,
-    };
-    cached_image_response(state.media_cache.lock().thumbnail(&key), "thumbnail")
-}
-
 pub(super) async fn refresh_media_preview(
     State(state): State<AppState>,
     Path(fixture_id): Path<light_core::FixtureId>,

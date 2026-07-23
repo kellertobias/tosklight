@@ -256,7 +256,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
             .await
             .unwrap();
     });
-    let app = router(state);
+    let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let refreshed = app
         .clone()
@@ -270,31 +270,21 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
         .await
         .unwrap();
     assert_eq!(refreshed.status(), StatusCode::OK);
-    let image = app
-        .clone()
-        .oneshot(
-            Request::get(format!(
-                "/api/v1/media/{}/thumbnail?element=7",
-                fixture_id.0
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(image.status(), StatusCode::OK);
-    assert_eq!(image.headers()[header::CONTENT_TYPE], "image/jpeg");
-    assert_eq!(
-        image
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .as_ref(),
-        &[1, 2, 3]
-    );
+    let cached = state
+        .media_cache
+        .lock()
+        .thumbnail(&ThumbnailKey {
+            fixture: fixture_id.0.to_string(),
+            library_type: 1,
+            library: LibraryId {
+                level: 0,
+                ids: [0, 0, 0],
+            },
+            element: 7,
+        })
+        .expect("refreshed thumbnail is cached");
+    assert_eq!(cached.image.format, light_media::ImageFormat::Jpeg);
+    assert_eq!(cached.image.bytes, vec![1, 2, 3]);
     let status = app
         .oneshot(
             Request::get("/api/v1/media")

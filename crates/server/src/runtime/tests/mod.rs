@@ -30,8 +30,6 @@ mod playback_topology_route_support;
 mod playback_topology_route_tests;
 #[path = "playback_v2_route_tests.rs"]
 mod playback_v2_route_tests;
-#[path = "programming_interaction_adapter_tests.rs"]
-mod programming_interaction_adapter_tests;
 #[path = "programming_update_route_tests.rs"]
 mod programming_update_route_tests;
 #[path = "selective_import_route_tests.rs"]

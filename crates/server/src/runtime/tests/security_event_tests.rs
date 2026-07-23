@@ -186,14 +186,14 @@ async fn optional_desk_token_guards_the_api_boundary() {
     let app = router(state);
     let denied = app
         .clone()
-        .oneshot(Request::get("/api/v1/health").body(Body::empty()).unwrap())
+        .oneshot(Request::get("/api/v1/readiness").body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
     let allowed = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/health")
+            Request::get("/api/v1/readiness")
                 .header("x-light-desk-token", "shared-secret")
                 .body(Body::empty())
                 .unwrap(),
@@ -204,7 +204,7 @@ async fn optional_desk_token_guards_the_api_boundary() {
     let allowed_ws_boundary = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/health")
+            Request::get("/api/v1/readiness")
                 .header(
                     header::SEC_WEBSOCKET_PROTOCOL,
                     "light.v1, light.desk.b64.c2hhcmVkLXNlY3JldA",
