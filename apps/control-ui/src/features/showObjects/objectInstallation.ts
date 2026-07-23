@@ -33,9 +33,16 @@ export function installAuthoritativeObjects(
 			) as never;
 			projectKinds.add(kind);
 		} else if (
-			!responseEventObserved &&
 			object &&
-			(!existing || existing.revision <= object.revision)
+			(!responseEventObserved
+				? !existing || existing.revision <= object.revision
+				: // A response carrying a strictly newer revision than the stored object is
+					// authoritative even when the watermark already covers its event sequence:
+					// a collection re-hydration can stamp the kind floor at the current show
+					// event sequence while its payload predates a just-committed write (the
+					// 409-retried topology save), and dropping that install pins the stale
+					// revision. Only same-or-older bodies and resurrections stay guarded.
+					existing !== undefined && existing.revision < object.revision)
 		) {
 			if (existing?.revision === object.revision) continue;
 			upsertCollection(collection, object);

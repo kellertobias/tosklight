@@ -63,6 +63,49 @@ describe("ShowObjectsStore", () => {
 		expect(store.getSnapshot().pendingObjectKeys.size).toBe(0);
 	});
 
+	it("installs a strictly newer revision even when the kind floor covers its event", () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID, "session-a");
+		// A collection re-hydration can stamp the kind floor at the current show event
+		// sequence while its payload predates a just-committed write (the 409-retried
+		// topology save). The retried response's newer revision must still install.
+		store.setCollection(SHOW_ID, "group", [group(4, "Stale rehydration")], 20);
+		store.installObjects(
+			SHOW_ID,
+			[{ kind: "group", objectId: "1", object: group(5, "Retried save") }],
+			15,
+			31,
+			"seal",
+		);
+		expect(store.getSnapshot().groups[0]).toMatchObject({
+			revision: 5,
+			body: { name: "Retried save" },
+		});
+	});
+
+	it("keeps same-revision installs and deletions guarded by the kind floor", () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID, "session-a");
+		store.setCollection(SHOW_ID, "group", [group(4, "Authoritative")], 20);
+		const before = store.getSnapshot();
+		store.installObjects(
+			SHOW_ID,
+			[{ kind: "group", objectId: "1", object: group(4, "Replayed body") }],
+			15,
+			31,
+			"seal",
+		);
+		expect(store.getSnapshot().groups).toBe(before.groups);
+		store.installObjects(
+			SHOW_ID,
+			[{ kind: "group", objectId: "1", object: null }],
+			15,
+			31,
+			"seal",
+		);
+		expect(store.getSnapshot().groups).toBe(before.groups);
+	});
+
 	it("abandons pending-only actions without reprojecting either collection", () => {
 		const store = new ShowObjectsStore();
 		store.reset(SHOW_ID, "session-a");

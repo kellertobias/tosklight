@@ -48,31 +48,41 @@ routes as their last caller migrates, and update the Protocols help chapter to d
 v2 surface once v1 is gone. The e2e bench driver may keep using an endpoint only while it is
 still served — migrate bench helpers alongside route deletions.
 
-## 2 — Skipped-test residues (bugs to finish, one investigation each)
+## 2 — Skipped-test residues (RESOLVED 2026-07-23, one deferred residue)
 
-Each was re-verified 2026-07-22 after the scoped-store fixes; skip reasons in the spec files
-are current and precise.
+Four of the five scenarios are fixed and unskipped; one narrowed residue remains deferred:
 
-- **CUE-011 @ui / @supplemental-ui** (`tests/06-cuelist-view-and-settings.spec.ts`): after a
-  retried topology save applies, the Cuelist window header keeps showing the previous
-  revision, and one *silent* extra `cue_list` revision (unchanged body, no
-  `show_object_changed` event) appears while the Settings/Renumber dialogs are exercised.
-  Instrument the ShowObjects install path after `PlaybackTopologyWriter`'s 409-retry, and find
-  the server write that bumps the object revision without an event.
-- **PRELOAD-004 @ui / @supplemental-ui** (`tests/preloadVirtualPlaybackContracts/`): after
-  PRELOAD GO applies the queued actions, the command bar's preload lifecycle view goes stale —
-  hold-to-release finds no active scene and the label never returns to `PRELOAD`. Look at the
-  preload lifecycle store after a GO issued from the same desk.
-- **PBK-005 @supplemental-ui** (`tests/playbackConfiguration/pbk005.ts`): the held-Swap /
-  toggled-Temp interaction never issues its playback action request (`page.waitForRequest`
-  times out). Verify the press/hold gesture wiring on the playback card.
-- **SHOW-005 @ui** (`tests/05-…revision-copy-tests.ts`): the on-screen revision-copy identity
-  shows the group name (`"Center Spot|2"`) instead of the expected
-  `destination-before-overwrite|N` label. Decide whether the UI or the expectation is wrong
-  against `docs/help` and fix accordingly.
-- **PLAYBACK-SELECT-001 @supplemental-ui** (`tests/28-…spec.ts`): the hardware-connected
-  fader-bank slot header never becomes stably clickable, so the ownership checks cannot start.
-  Layout-stability investigation in the hardware-connected layout.
+- **CUE-011 @ui / @supplemental-ui — partially fixed, residue deferred.** The client-side half
+  is fixed: `installAuthoritativeObjects` now installs a response carrying a strictly newer
+  object revision even when a concurrent collection re-hydration already stamped the kind
+  floor at the response's event sequence (unit-covered in `ShowObjectsStore.test.ts` and
+  `writer.test.ts`). The remaining residue is **server-side**, narrowed by trace inspection:
+  during the trigger-choice step the `cue_list` object revision advances with *no client
+  request* and *no `show_object_changed` event*, so no UI can learn the new revision. The
+  topology responses also echo a legacy `chaser_xfade_millis: 0` the request never sent
+  (`lossless_json` merge of the stored raw body), pointing at a cue_list body-normalization
+  write. Deferred: needs a dedicated server-side investigation of that silent write
+  (start at `crates/application/src/playback_topology/candidate.rs` `cue_list_body` /
+  `lossless_json`, and the active-show mutation path's unconditional `next_revision` in
+  `crates/application/src/active_show/objects.rs` whose `show_object_changed` emit is
+  caller-supplied and omittable).
+- **PRELOAD-004 — fixed.** A playback-only Preload GO left the lifecycle projection reporting
+  no active preload (queued Playback actions deliberately did not count), so hold-to-release
+  never armed. A `preload_playback_active` marker (set on GO, cleared on release, outside
+  undo) now feeds `has_active_preload` and the lifecycle summary. Unskipped and green.
+- **PBK-005 — fixed.** The gesture wiring was correct; the test waited on the retired v1
+  per-cuelist button endpoint. It now asserts the v2 desk `playback-actions` request shape.
+  Unskipped and green.
+- **SHOW-005 — fixed.** The recovery-backup content was correct; the test's backup selection
+  was wrong: its loose `startsWith` prefix filter and lexicographic sort usually picked a
+  per-mutation backup (`<name>-<show id>-show-object-<millis>-….show`, taken *before* the
+  tracked edit) instead of the overwrite backup (`<name>-<millis>.show`). The test now matches
+  the overwrite naming exactly and sorts numerically. Unskipped and green.
+- **PLAYBACK-SELECT-001 — fixed.** Two silent UI failures: the fader bank tore its grid down
+  during transient projection refetches (now stays mounted once rendered; only a
+  topology-scope reset returns to the loading placeholder), and the Playback pages menu gated
+  its close on operation-scope currency, staying open after a successful page change and
+  intercepting later clicks (a successful change now always closes). Unskipped and green.
 
 ## 3 — DMX-006 re-authoring + a schema decision
 

@@ -225,6 +225,51 @@ describe("PlaybackTopologyWriter", () => {
 		});
 	});
 
+	it("installs a Cuelist save that lands via the show-revision 409 retry", async () => {
+		const conflict = Object.assign(new Error("stale Show revision"), {
+			status: 409,
+			retryable: false,
+			currentRevision: 12,
+		});
+		const loadObject = vi.fn(async (_show: string, kind: ShowObjectKind) =>
+			kind === "cue_list" ? cueList(1) : null,
+		);
+		const apply = vi
+			.fn()
+			.mockRejectedValueOnce(conflict)
+			.mockImplementation(async (_show, _revision, request) =>
+				changed(
+					request,
+					[present(cueList(2, "legacy-main-list", "Retried"))],
+					13,
+					42,
+				),
+			);
+		const { store, writer } = setup(
+			apply,
+			loadObject as unknown as PlaybackTopologyWriterOptions["loadObject"],
+		);
+
+		// A concurrent collection re-hydration stamps the cue_list kind floor at the
+		// current show event sequence while its payload still predates the retried
+		// commit — the retried response must still install its newer revision.
+		store.setCollection(SHOW_ID, "cue_list", [cueList(1)], 42, 12);
+		const outcome = await writer.saveCueList(
+			CUE_LIST_ID,
+			1,
+			"legacy-main-list",
+			{ ...cueList().body, name: "Retried" },
+		);
+
+		expect(outcome).not.toBeNull();
+		expect(apply).toHaveBeenCalledTimes(2);
+		expect(store.getSnapshot().cueLists[0]).toMatchObject({
+			id: "legacy-main-list",
+			revision: 2,
+			body: { name: "Retried" },
+		});
+	});
+
 	it("sends one revisioned application action and installs its objects atomically", async () => {
 		const apply = vi.fn(
 			async (

@@ -433,12 +433,17 @@ async function overwriteDestinationFromRevisionCopy(
 	).toEqual([[state.destinationRevision, "Destination checkpoint"]]);
 
 	const backupDirectory = `${bench.dataDir}/backups`;
+	// The overwrite recovery backup is named `<show name>-<millis>.show`; the same directory
+	// also holds per-mutation backups (`<show name>-<show id>-show-object-<millis>-….show`)
+	// taken BEFORE tracked edits, which a loose prefix match must not select.
+	const overwriteBackupName = new RegExp(
+		`^${escapeRegex(state.destinationName)}-(\\d+)\\.show$`,
+	);
 	const backupNames = (await fs.readdir(backupDirectory))
-		.filter(
-			(name) =>
-				name.startsWith(`${state.destinationName}-`) && name.endsWith(".show"),
-		)
-		.sort();
+		.map((name) => name.match(overwriteBackupName))
+		.filter((match): match is RegExpMatchArray => match !== null)
+		.sort((left, right) => Number(left[1]) - Number(right[1]))
+		.map((match) => match[0]);
 	expect(backupNames.length).toBeGreaterThan(0);
 	const backup = `${backupDirectory}/${backupNames.at(-1)}`;
 	expect(
@@ -595,11 +600,6 @@ export function registerRevisionCopyScenario(): void {
 	pairedScenario<RevisionCopyState>({
 		id: "SHOW-005",
 		title: "named revisions load as durable, visibly independent copies",
-		// UI-only gap (the @api contract passes, so the engine's revision-copy durability/independence
-		// is correct): the on-screen revision-copy identity does not surface the expected
-		// destination-before-overwrite name form, so the UI assertion on the copied revision label
-		// fails. Unskip once the revision-copy UI exposes the durable copy identity as expected.
-		skip: { ui: "Revision-copy UI does not surface the expected destination-before-overwrite identity label" },
 		arrange: arrangeRevisionCopy,
 		api: exerciseRevisionCopyApi,
 		ui: exerciseRevisionCopyUi,
