@@ -128,6 +128,7 @@ export const tauriDesktopBridge: DesktopBridge = {
 		invoke("hide_console_screen", { screenId }),
 	closeConsoleScreen: (screenId) =>
 		invoke("close_console_screen", { screenId }),
+	openStageViewWindow: () => invoke("open_stage_view_window"),
 	currentWindowState,
 	currentWindowFullscreen,
 	setCurrentWindowFullscreen,

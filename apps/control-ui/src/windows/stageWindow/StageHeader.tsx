@@ -123,30 +123,20 @@ export function StageHeader({
 						"Tap to select · Shift for range · Control/Command tracks macro",
 				}}
 				actions={[
-					...(options.mode === "setup"
-						? []
-						: [
-								[
-									{
-										id: "follow",
-										label: "Follow Preload",
-										active: options.followPreload,
-										onClick: options.toggleFollowPreload,
-									},
-								],
-							]),
+					[
+						{
+							id: "follow",
+							label: "Follow Preload",
+							active: options.followPreload,
+							onClick: options.toggleFollowPreload,
+						},
+					],
 					[
 						{
 							id: "select",
 							label: "Select fixtures",
 							active: options.mode === "select",
 							onClick: () => options.setMode("select"),
-						},
-						{
-							id: "setup",
-							label: "Setup positions",
-							active: options.mode === "setup",
-							onClick: () => options.setMode("setup"),
 						},
 						{
 							id: "navigate",

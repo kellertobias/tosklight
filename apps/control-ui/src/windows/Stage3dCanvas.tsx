@@ -1,5 +1,4 @@
 import { useRef } from "react";
-import type { StagePosition3d } from "../api/ServerContext";
 import type { VisualizationSnapshot } from "../api/types";
 import { useApp } from "../state/AppContext";
 import {
@@ -20,15 +19,12 @@ interface Props {
 	visualization: VisualizationSnapshot | null;
 	selected: readonly string[];
 	virtualHighlight?: readonly string[];
-	setup: boolean;
 	showSelection: boolean;
 	showFloorGrid: boolean;
 	showBeamGuides: boolean;
 	environmentBrightness: number;
 	camera3d?: StageCamera;
 	onSelect: (fixtureId: string, additive: boolean) => void;
-	onMove: (fixtureId: string, position: StagePosition3d) => void;
-	onMoveEnd: (fixtureId: string, position: StagePosition3d) => void;
 }
 
 export function Stage3dCanvas({
@@ -36,15 +32,12 @@ export function Stage3dCanvas({
 	visualization,
 	selected,
 	virtualHighlight = [],
-	setup,
 	showSelection,
 	showFloorGrid,
 	showBeamGuides,
 	environmentBrightness,
 	camera3d,
 	onSelect,
-	onMove,
-	onMoveEnd,
 }: Props) {
 	const { state, dispatch } = useApp();
 	const hostRef = useRef<HTMLDivElement>(null);
@@ -58,12 +51,11 @@ export function Stage3dCanvas({
 		visualization,
 		selected,
 		virtualHighlight,
-		setup,
 		showSelection,
 		showFloorGrid,
 		showBeamGuides,
 		environmentBrightness,
-		callbacks: { onSelect, onMove, onMoveEnd },
+		callbacks: { onSelect },
 	});
 	const { cameraRef, controlsRef, cameraTargetRef } = useStageRenderer({
 		hostRef,

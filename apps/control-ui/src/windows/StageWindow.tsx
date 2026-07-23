@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { Stage2dView } from "./stageWindow/Stage2dView";
 import { Stage3dView } from "./stageWindow/Stage3dView";
@@ -23,7 +22,6 @@ export function StageWindow(props: StageWindowProps) {
 		selection.fixtureIdSet,
 		props.patchedFixtures,
 	);
-	const [setupFixtureId, setSetupFixtureId] = useState<string | null>(null);
 	return (
 		<div className={`stage-window ${props.compact ? "compact" : ""}`}>
 			{!props.compact && (
@@ -37,12 +35,9 @@ export function StageWindow(props: StageWindowProps) {
 					fixtures={stage.fixtures3d}
 					visualization={stage.visualization}
 					options={options}
-					layout={layout}
 					patchSelectionPreview={patchSelectionPreview}
 					patchPreviewFixtures={stage.patchPreviewFixtures}
 					camera3d={props.camera3d}
-					setupFixtureId={setupFixtureId}
-					setSetupFixtureId={setSetupFixtureId}
 					selection={selection}
 				/>
 			) : (

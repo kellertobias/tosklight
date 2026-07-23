@@ -95,6 +95,28 @@ fn hide_console_screen(app: tauri::AppHandle, screen_id: String) -> Result<(), S
     Ok(())
 }
 #[tauri::command]
+fn open_stage_view_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("stage-view") {
+        if !window.is_visible().map_err(|e| e.to_string())? {
+            window.show().map_err(|e| e.to_string())?;
+        }
+        window.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        "stage-view",
+        tauri::WebviewUrl::App("index.html?stage-view=1".into()),
+    )
+    .title("Stage View")
+    .inner_size(1000.0, 720.0)
+    .resizable(true)
+    .build()
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn exit_desktop_app(app: tauri::AppHandle) {
     let _ = app.emit("app-shutting-down", ());
     app.exit(0);
@@ -317,7 +339,7 @@ fn main() {
             "quit"=>request_quit(app),
             _=>{}
         }})
-        .invoke_handler(tauri::generate_handler![list_console_displays,open_console_screen,close_console_screen,hide_console_screen,exit_desktop_app,cancel_quit,frontend_ready])
+        .invoke_handler(tauri::generate_handler![list_console_displays,open_console_screen,close_console_screen,hide_console_screen,open_stage_view_window,exit_desktop_app,cancel_quit,frontend_ready])
         .setup(|app| {
             let open=tauri::menu::MenuItemBuilder::with_id("open-hardware-controls","Open Hardware Controls").build(app)?;
             let tools=tauri::menu::SubmenuBuilder::new(app,"Tools").item(&open).build()?;

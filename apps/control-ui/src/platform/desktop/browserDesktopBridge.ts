@@ -14,6 +14,7 @@ export const browserDesktopBridge: DesktopBridge = {
 	openConsoleScreen: noAction,
 	hideConsoleScreen: noAction,
 	closeConsoleScreen: noAction,
+	openStageViewWindow: noAction,
 	currentWindowState: async () => ({
 		displayId: null,
 		bounds: { x: 0, y: 0, width: 0, height: 0 },

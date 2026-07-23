@@ -75,11 +75,11 @@ The Stage is the spatial selection and visualization surface. In 2D it shows fix
 - **Show group shortcuts** adds the Group strip.
 - The common size and removal controls apply per pane.
 
-### Stage setup is a full-window workflow
+### Stage is a selection and viewing surface
 
-Only the full Stage window exposes **Select fixtures**, **Setup positions**, and **Navigate**. A Stage pane reflects the global mode and can therefore visibly enter setup mode, but it does not contain the controls that enter that mode.
+Only the full Stage window exposes **Select fixtures** and **Navigate**. A Stage pane reflects the global mode, but it does not contain the controls that switch it.
 
-In 2D **Setup positions**, drag fixtures to their show positions. In 3D setup, selected fixtures expose X, Y, Z and three rotation controls. Physical patch and multi-patch positions provide the starting point when no separate Stage transform exists. Add a truss, platform, curtain, or other scenery object from the **Venue** manufacturer in **Show Patch**; these visual-only fixtures receive `0.x` fixture IDs and no DMX address.
+Positions are edited in **Show Patch**: physical patch and multi-patch placement provides every fixture's location and rotation, with **Preview Stage** for visual feedback while patching. Add a truss, platform, curtain, or other scenery object from the **Venue** manufacturer in **Show Patch**; these visual-only fixtures receive `0.x` fixture IDs and no DMX address.
 
 The full Stage settings also control the 2D/3D view, Group shortcuts, selection visibility, 3D beam direction guides, the 3D floor grid, and environment brightness. **Beam direction guides** shows a dotted off-state aim line for every emitter configured as directional, including fixed conventional fixtures; broad strobes and Sunstrip-style emitters have no guide. Turn **Floor grid** off when the neutral base plane and its reference lines should not be rendered. A Stage pane stores its own beam-guide choice in that pane's settings.
 
@@ -87,7 +87,7 @@ The full Stage settings also control the 2D/3D view, Group shortcuts, selection 
 
 ![Stage pane settings](../assets/screenshots/panes/stage-settings.png)
 
-![Full Stage window in Setup positions mode](../assets/screenshots/workflows/stage-setup-2d.png)
+![Full Stage window](../assets/screenshots/workflows/stage-window-2d.png)
 
 ## Channels
 

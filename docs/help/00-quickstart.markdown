@@ -18,7 +18,7 @@ Continue with [Installation and First Start](02-installation.md), [Application L
 - Open the Show menu and choose **New Show**, **Load Show**, or import an MVR as a new show.
 - In **Fixture library**, import GDTF profiles or create a local fixture and its DMX modes.
 - Open **Patch**, choose a fixture mode, and enter fixture IDs and DMX addresses. Add multi-patch instances only when one logical fixture drives more than one physical address.
-- Open **Stage**, switch to **Setup positions**, and place fixtures and scenery in the 2D or 3D plan.
+- Position fixtures and scenery in **Show Patch** (placement per fixture, with **Preview Stage** for visual feedback); open **Stage** to select fixtures in the 2D or 3D plan.
 - Export an MVR after checking unresolved fixtures, retained GDTF sources, addressing, and scenery.
 
 Continue with [Show File Setup](20-Show-Setup/index.md), [Shows, Revisions, and MVR](20-Show-Setup/02-shows-revisions-and-mvr.md), and [Fixture Library](20-Show-Setup/03-fixture-library.md).

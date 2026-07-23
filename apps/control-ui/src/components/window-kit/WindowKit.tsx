@@ -16,12 +16,29 @@ import { createPortal } from "react-dom";
 import { Button, ModalTitleBar } from "../common";
 
 export interface WindowInfo { primary: ReactNode; secondary?: ReactNode }
-export interface WindowAction { id: string; label: ReactNode; onClick: () => void; active?: boolean; disabled?: boolean; ariaLabel?: string }
+export interface WindowAction { id: string; label: ReactNode; onClick: () => void; active?: boolean; disabled?: boolean; ariaLabel?: string; onLongPress?: () => void }
 export interface WindowSettingsTab { id: string; label: string; content: ReactNode }
 export interface WindowEmptyState { title: ReactNode; description?: ReactNode; icon?: ReactNode; action?: ReactNode }
 
 const WindowSettingsContext = createContext<(() => void) | null>(null);
 export const useWindowSettings = () => useContext(WindowSettingsContext);
+
+
+function WindowActionButton({ action }: { action: WindowAction }) {
+  const holdTimer = useRef<number | null>(null);
+  const held = useRef(false);
+  const clearHold = () => { if (holdTimer.current !== null) window.clearTimeout(holdTimer.current); holdTimer.current = null; };
+  return <Button
+    aria-label={action.ariaLabel}
+    disabled={action.disabled}
+    className={action.active ? "active" : ""}
+    onPointerDown={action.onLongPress && (() => { held.current = false; clearHold(); holdTimer.current = window.setTimeout(() => { held.current = true; action.onLongPress?.(); }, 650); })}
+    onPointerUp={action.onLongPress && clearHold}
+    onPointerCancel={action.onLongPress && clearHold}
+    onPointerLeave={action.onLongPress && clearHold}
+    onClick={() => { if (held.current) { held.current = false; return; } action.onClick(); }}
+  >{action.label}</Button>;
+}
 
 export function WindowHeader({ title, info, search, toolbar, actions = [], settings, onSettings, dragHandleProps }: {
   title: ReactNode;
@@ -41,7 +58,7 @@ export function WindowHeader({ title, info, search, toolbar, actions = [], setti
     {toolbar}
     <div className="ui-window-action-groups">
       {actions.filter((group) => group.length).map((group, groupIndex) => <div className="ui-window-action-group" key={groupIndex}>
-        {group.map((action) => <Button key={action.id} aria-label={action.ariaLabel} disabled={action.disabled} className={action.active ? "active" : ""} onClick={action.onClick}>{action.label}</Button>)}
+        {group.map((action) => <WindowActionButton key={action.id} action={action} />)}
       </div>)}
       {settings && <div className="ui-window-action-group ui-window-settings-action"><Button aria-label="Settings" onClick={(event) => onSettings?.(event.currentTarget)}><span aria-hidden="true">⚙</span><span>Settings</span></Button></div>}
     </div>

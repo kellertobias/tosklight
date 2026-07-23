@@ -15,6 +15,7 @@ export type ControllableDesktopAction =
 	| { type: "open_console_screen"; screen: ConsoleScreenWindow }
 	| { type: "hide_console_screen"; screen_id: string }
 	| { type: "close_console_screen"; screen_id: string }
+	| { type: "open_stage_view_window" }
 	| { type: "set_fullscreen"; fullscreen: boolean }
 	| { type: "close_current_window" }
 	| { type: "destroy_current_window" }
@@ -71,6 +72,7 @@ export function controllableBrowserDesktopBridge(
 			perform({ type: "hide_console_screen", screen_id: screenId }),
 		closeConsoleScreen: (screenId) =>
 			perform({ type: "close_console_screen", screen_id: screenId }),
+		openStageViewWindow: () => perform({ type: "open_stage_view_window" }),
 		currentWindowState: async () => decodeWindowState(await port.currentWindowState()),
 		currentWindowFullscreen: async () =>
 			decodeWindowState(await port.currentWindowState()).fullscreen,

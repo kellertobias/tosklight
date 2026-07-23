@@ -61,7 +61,6 @@ export function useStageRenderer({
 		const unbindPointer = bindStagePointerInteraction(
 			renderer,
 			camera,
-			controls,
 			controller,
 		);
 		const resize = () => {

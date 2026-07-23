@@ -31,11 +31,6 @@ function StageFixtureButton({
 		<Button
 			data-fixture-id={fixture.fixtureId || undefined}
 			onClick={(event) => interactions.select(fixture.fixtureId, event)}
-			onPointerDown={(event) =>
-				interactions.beginMove(fixture.fixtureId, event)
-			}
-			onPointerMove={(event) => interactions.move(fixture.fixtureId, event)}
-			onPointerUp={interactions.finishMove}
 			key={fixture.fixtureId || index}
 			className={`stage-fixture ${selected ? "selected" : ""}`}
 			style={
@@ -91,7 +86,6 @@ export function Stage2dView({
 	const fixtureInteractions = useStageFixtureGestures(
 		options.mode,
 		orderedFixtureIds,
-		layout,
 		selection,
 	);
 	const canvas = useStageCanvasGestures(options.mode, selection);

@@ -55,6 +55,7 @@ export type FixturePatchSetupProps = {
 	stagePreviewOpen?: boolean;
 	stagePreviewClearance?: number;
 	onStagePreview?: () => void;
+	onOpenStageWindow?: () => void;
 };
 
 function usePatchUiState() {
@@ -316,6 +317,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 			stagePreviewOpen: props.stagePreviewOpen ?? false,
 			stagePreviewClearance: props.stagePreviewClearance ?? 0,
 			onStagePreview: props.onStagePreview,
+			onOpenStageWindow: props.onOpenStageWindow,
 		},
 	};
 }

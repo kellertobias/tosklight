@@ -43,14 +43,4 @@ export interface StageFixturePresentation {
 export interface StageLayoutModel {
 	positions: Record<string, { x: number; y: number; rotation: number }>;
 	positions3d: Record<string, StagePosition3d>;
-	updatePosition2d: (
-		fixtureId: string,
-		position: { x: number; y: number; rotation: number },
-	) => void;
-	updatePosition3d: (fixtureId: string, position: StagePosition3d) => void;
-	save: () => Promise<void>;
-	savePosition3d: (
-		fixtureId: string,
-		position: StagePosition3d,
-	) => Promise<void>;
 }

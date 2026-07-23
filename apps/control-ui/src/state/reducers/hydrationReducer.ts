@@ -32,6 +32,12 @@ export function reduceHydration(
 					action.windowSettings?.presetFamily,
 					state.presetFamily,
 				),
+				// Persisted layouts predating the Setup-positions removal may still carry it.
+				stageMode:
+					action.windowSettings?.stageMode === "select" ||
+					action.windowSettings?.stageMode === "navigate"
+						? action.windowSettings.stageMode
+						: state.stageMode,
 				builtIn:
 					action.windowSettings?.builtIn == null
 						? (action.windowSettings?.builtIn ?? state.builtIn)

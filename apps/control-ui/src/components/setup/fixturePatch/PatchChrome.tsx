@@ -28,6 +28,7 @@ export function PatchHeader() {
 									label: "Preview Stage",
 									active: props.stagePreviewOpen,
 									onClick: props.onStagePreview,
+									onLongPress: props.onOpenStageWindow,
 								},
 							]
 						: []),

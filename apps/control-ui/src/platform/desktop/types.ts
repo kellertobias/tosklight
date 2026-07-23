@@ -32,6 +32,7 @@ export interface DesktopBridge {
 	openConsoleScreen(screen: ConsoleScreenWindow): Promise<void>;
 	hideConsoleScreen(screenId: string): Promise<void>;
 	closeConsoleScreen(screenId: string): Promise<void>;
+	openStageViewWindow(): Promise<void>;
 	currentWindowState(): Promise<DesktopWindowState>;
 	currentWindowFullscreen(): Promise<boolean>;
 	setCurrentWindowFullscreen(fullscreen: boolean): Promise<void>;

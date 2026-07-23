@@ -6,7 +6,6 @@ import {
 } from "react";
 import { useApp } from "../../state/AppContext";
 import type { StageMode } from "../../types";
-import type { StageLayoutModel } from "./types";
 import type { StageSelectionModel } from "./useStageSelection";
 
 type Point = { x: number; y: number };
@@ -15,11 +14,9 @@ type Marquee = { left: number; top: number; width: number; height: number };
 export function useStageFixtureGestures(
 	mode: StageMode,
 	orderedFixtureIds: string[],
-	layout: StageLayoutModel,
 	selection: StageSelectionModel,
 ) {
 	const selectionAnchor = useRef<string | null>(null);
-	const [draggingFixture, setDraggingFixture] = useState<string | null>(null);
 	const select = (
 		fixtureId: string,
 		event: ReactMouseEvent<HTMLButtonElement>,
@@ -48,38 +45,7 @@ export function useStageFixtureGestures(
 		}
 		selectionAnchor.current = fixtureId;
 	};
-	const beginMove = (
-		fixtureId: string,
-		event: ReactPointerEvent<HTMLButtonElement>,
-	) => {
-		if (mode !== "setup" || !fixtureId) return;
-		event.currentTarget.setPointerCapture(event.pointerId);
-		setDraggingFixture(fixtureId);
-	};
-	const move = (
-		fixtureId: string,
-		event: ReactPointerEvent<HTMLButtonElement>,
-	) => {
-		if (mode !== "setup" || draggingFixture !== fixtureId) return;
-		const bounds = event.currentTarget.parentElement?.getBoundingClientRect();
-		if (!bounds) return;
-		layout.updatePosition2d(fixtureId, {
-			x: Math.max(
-				2,
-				Math.min(94, ((event.clientX - bounds.left) / bounds.width) * 100),
-			),
-			y: Math.max(
-				3,
-				Math.min(90, ((event.clientY - bounds.top) / bounds.height) * 100),
-			),
-			rotation: layout.positions[fixtureId]?.rotation ?? 0,
-		});
-	};
-	const finishMove = () => {
-		if (draggingFixture) void layout.save();
-		setDraggingFixture(null);
-	};
-	return { select, beginMove, move, finishMove };
+	return { select };
 }
 
 function marqueeHits(

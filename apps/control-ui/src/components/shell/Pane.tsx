@@ -32,7 +32,7 @@ export function Pane({
     gridRow: `${pane.y} / span ${pane.height}`,
   } as CSSProperties;
   const stageActions = pane.kind === "stage" ? [
-    ...(state.stageMode === "setup" ? [] : [[{ id: "follow", label: "Follow Preload", active: Boolean(pane.followPreload), onClick: () => { const now = performance.now(); if (now - lastFollowToggle.current < 400) return; lastFollowToggle.current = now; dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option: "followPreload", value: !pane.followPreload }); } }]]),
+    [{ id: "follow", label: "Follow Preload", active: Boolean(pane.followPreload), onClick: () => { const now = performance.now(); if (now - lastFollowToggle.current < 400) return; lastFollowToggle.current = now; dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option: "followPreload", value: !pane.followPreload }); } }],
     [{ id: "groups", label: "Groups", onClick: () => dispatch({ type: "OPEN_GROUPS_FROM_STAGE", origin: "desk" }) }],
   ] : [];
   return (

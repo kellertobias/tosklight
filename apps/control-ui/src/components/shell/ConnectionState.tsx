@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDeskConnection } from "../../features/deskConnection/DeskConnectionContext";
 import { useBootstrapReady } from "../../features/deskSnapshot/DeskSnapshotState";
 import { configuredServerUrl } from "../../api/LightApiClient";
-import appIcon from "../../../src-tauri/icons/icon.svg";
+import appMark from "../../../src-tauri/icons/mark-shadow.svg";
 import { Button, TextField } from "../common";
 import { useDesktopBridge } from "../../platform/desktop";
 
@@ -52,7 +52,7 @@ export function ConnectionState() {
     <div className="connection-cover" role="status">
       <div className="connection-card">
         <div className="app-mark" role="img" aria-label="ToskLight application">
-          <img src={appIcon} alt="" />
+          <img src={appMark} alt="" />
         </div>
         <span className="status-pulse" />
         <h1>

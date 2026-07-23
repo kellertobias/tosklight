@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { ScreenApp } from "./ScreenApp";
+import { StageViewApp } from "./StageViewApp";
 import "./styles.css";
 import "./help.css";
 import "./window-kit.css";
@@ -24,13 +25,14 @@ enableSetOnContextMenu();
 const desktop = createDesktopBridge();
 const sessionHandoff = createSessionHandoff();
 const screenId = new URLSearchParams(window.location.search).get("screen");
+const stageView = new URLSearchParams(window.location.search).get("stage-view") === "1";
 const uiKit = import.meta.env.DEV && new URLSearchParams(window.location.search).get("ui-kit") === "1";
 const productDemo = new URLSearchParams(window.location.search).get("demo") === "product";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <SessionHandoffProvider handoff={sessionHandoff}>
       <DesktopProvider bridge={desktop}>
-        {productDemo ? <ProductDemoApp /> : uiKit ? <UiKitCatalog /> : screenId ? <ScreenApp id={screenId}/> : <App />}
+        {productDemo ? <ProductDemoApp /> : uiKit ? <UiKitCatalog /> : stageView ? <StageViewApp /> : screenId ? <ScreenApp id={screenId}/> : <App />}
       </DesktopProvider>
     </SessionHandoffProvider>
   </StrictMode>,

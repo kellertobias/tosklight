@@ -9,7 +9,6 @@ import {
 } from "react";
 import type * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import type { StagePosition3d } from "../../api/ServerContext";
 import type { VisualizationSnapshot } from "../../api/types";
 import {
 	buildStageScene,
@@ -20,15 +19,11 @@ import {
 
 export type Stage3dCallbacks = {
 	onSelect: (fixtureId: string, additive: boolean) => void;
-	onMove: (fixtureId: string, position: StagePosition3d) => void;
-	onMoveEnd: (fixtureId: string, position: StagePosition3d) => void;
 };
 
 export type StageSceneController = {
 	sceneRef: MutableRefObject<THREE.Scene | null>;
 	fixtureObjectsRef: MutableRefObject<Map<string, THREE.Object3D>>;
-	positionByIdRef: MutableRefObject<Map<string, StagePosition3d>>;
-	setupRef: MutableRefObject<boolean>;
 	latestVisualizationRef: MutableRefObject<VisualizationSnapshot | null>;
 	interactingRef: MutableRefObject<boolean>;
 	callbacksRef: MutableRefObject<Stage3dCallbacks>;
@@ -132,7 +127,6 @@ export function useStageScene({
 	visualization,
 	selected,
 	virtualHighlight,
-	setup,
 	showSelection,
 	showFloorGrid,
 	showBeamGuides,
@@ -143,7 +137,6 @@ export function useStageScene({
 	visualization: VisualizationSnapshot | null;
 	selected: readonly string[];
 	virtualHighlight: readonly string[];
-	setup: boolean;
 	showSelection: boolean;
 	showFloorGrid: boolean;
 	showBeamGuides: boolean;
@@ -152,14 +145,11 @@ export function useStageScene({
 }): StageSceneController {
 	const sceneRef = useRef<THREE.Scene | null>(null);
 	const fixtureObjectsRef = useRef(new Map<string, THREE.Object3D>());
-	const positionByIdRef = useRef(new Map<string, StagePosition3d>());
-	const setupRef = useRef(setup);
 	const latestVisualizationRef = useRef(visualization);
 	const interactingRef = useRef(false);
 	const callbacksRef = useRef(callbacks);
 	const [renderVisualization, setRenderVisualization] = useState(visualization);
 	callbacksRef.current = callbacks;
-	setupRef.current = setup;
 
 	useEffect(() => {
 		latestVisualizationRef.current = visualization;
@@ -191,12 +181,6 @@ export function useStageScene({
 			selected,
 			showSelection,
 		);
-		positionByIdRef.current = new Map(
-			fixtures.map((item) => [
-				item.instanceId ?? item.fixture.fixture_id,
-				item.position,
-			]),
-		);
 		sceneRef.current = next.scene;
 		fixtureObjectsRef.current = next.fixtureObjects;
 		if (previousScene) disposeScene(previousScene);
@@ -216,8 +200,6 @@ export function useStageScene({
 		() => ({
 			sceneRef,
 			fixtureObjectsRef,
-			positionByIdRef,
-			setupRef,
 			latestVisualizationRef,
 			interactingRef,
 			callbacksRef,

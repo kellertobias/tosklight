@@ -281,10 +281,11 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await expect(dmx.locator(".dmx-fixture-card")).not.toContainText("Fixture: Empty");
     await expect(dmx.locator(".dmx-fixture-card")).toContainText(String(patched.fixture_number ?? patched.fixture_id));
 
-    await desk.recordStep("STAGE SCENERY MODEL", "Stage no longer has a separate scene-asset workflow; scenery is added as a visual-only Venue fixture in Show Patch.");
+    await desk.recordStep("STAGE SCENERY MODEL", "Stage has no positioning or scene-asset workflow; scenery and positions live in Show Patch as visual-only Venue fixtures and placement.");
     await openBuiltIn(page, "Stage");
     const stage = page.locator(".stage-window");
-    await stage.getByRole("button", { name: "Setup positions", exact: true }).click();
+    await expect(stage.getByRole("button", { name: "Select fixtures", exact: true })).toBeVisible();
+    await expect(stage.getByRole("button", { name: "Setup positions", exact: true })).toHaveCount(0);
     await expect(stage.getByRole("button", { name: "Import scene", exact: true })).toHaveCount(0);
     await expect(stage.getByRole("button", { name: "Add element", exact: true })).toHaveCount(0);
   });

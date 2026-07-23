@@ -112,7 +112,7 @@ const workflowScreenshots = [
   "show-menu.png",
   "show-patch.png",
   "stage-settings.png",
-  "stage-setup-2d.png",
+  "stage-window-2d.png",
 ].sort();
 
 async function openSeededDefaultStageShow(api: ApiDriver): Promise<ShowEntry> {
@@ -136,7 +136,7 @@ const paneReference = [
   ["cues", "Cues · Cuelist", "cues", null],
   ["cuelists", "Cuelists (tabs)", "cuelists", null],
   ["virtual_playbacks", "Virtual Playbacks", "virtual-playbacks", "Virtual Playbacks"],
-  ["file_manager", "File Manager", "file-manager", "File Manager"],
+  ["file_manager", "File Manager", "file-manager", null],
   ["text_editor", "Text Editor", "text-editor", "Text Editor"],
   ["channels", "Channels", "channels", null],
   ["dynamics", "Dynamics", "dynamics", null],
@@ -151,7 +151,10 @@ async function captureWorkflowReference(page: Page) {
   };
   const closeNested = async (selector: string) => {
     const modal = page.locator(selector);
-    await modal.locator(".modal-close").click();
+    // Modals close via a legacy ".modal-close" button or a ModalTitleBar "Close …" action.
+    const legacyClose = modal.locator(".modal-close");
+    if (await legacyClose.count()) await legacyClose.click();
+    else await modal.getByRole("button", { name: /^Close / }).first().click();
     await expect(modal).toBeHidden();
   };
 
@@ -222,9 +225,8 @@ async function captureWorkflowReference(page: Page) {
 
   await page.getByRole("button", { name: "BUILT-INS" }).click();
   await page.locator(".dock-entry").filter({ hasText: "Stage" }).click();
-  await page.getByRole("button", { name: "Setup positions", exact: true }).click();
   await expect(page.locator(".stage-window")).toBeVisible();
-  await page.locator(".stage-window").screenshot({ path: workflowShot("stage-setup-2d.png") });
+  await page.locator(".stage-window").screenshot({ path: workflowShot("stage-window-2d.png") });
   await page.locator(".stage-window").getByRole("button", { name: "Settings" }).click();
   await page.getByRole("dialog", { name: "Stage Settings" }).screenshot({ path: workflowShot("stage-settings.png") });
   await page.getByRole("dialog", { name: "Stage Settings" }).getByRole("button", { name: "Close settings" }).click();
@@ -268,6 +270,13 @@ async function capturePaneReference(page: Page, selectedDmx: { universe: number;
       await expect(pane.locator(".dmx-fixture-card")).not.toContainText("Fixture: Empty");
     }
     await pane.screenshot({ path: paneShot(`${slug}.png`) });
+    if (slug === "file-manager") {
+      // The File Manager pane has no header Settings button; continue on a fresh desktop.
+      await page.getByRole("button", { name: "DESKTOPS" }).click();
+      await page.getByRole("button", { name: /New desktop/ }).click();
+      await expect(page.locator(".empty-desk")).toBeVisible();
+      continue;
+    }
     await pane.getByRole("button", { name: "Settings" }).click();
     const dialog = page.getByRole("dialog", { name: "Pane Settings" });
     await expect(dialog).toBeVisible();

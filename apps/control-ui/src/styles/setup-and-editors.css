@@ -108,6 +108,9 @@
 .patch-window{position:relative;container-type:size}
 .patch-stage-overlay{position:absolute;z-index:4;right:10px;bottom:10px;width:min(calc(50cqw - 10px),calc((50cqh - 10px)*16/9));max-width:50%;max-height:50%;aspect-ratio:16/9;overflow:hidden;border:1px solid var(--cyan);border-radius:8px;background:#080b0f;box-shadow:0 10px 36px #000b;pointer-events:none}
 .patch-stage-overlay>.stage-window{height:100%}
+.patch-stage-overlay-grip{position:absolute;top:0;left:0;right:0;height:34px;z-index:5;pointer-events:auto;border:0;border-radius:8px 8px 0 0;background:#12202a66;cursor:grab;touch-action:none}
+.patch-stage-overlay-grip::before{content:"";position:absolute;top:14px;left:50%;width:46px;height:5px;transform:translateX(-50%);border-radius:3px;background:var(--line2)}
+.patch-stage-overlay-grip:active{cursor:grabbing}
 .patch-stage-scroll-clearance{width:100%;pointer-events:none}
 
 /* Subheads align as top-level rows when their master rows are excluded. */

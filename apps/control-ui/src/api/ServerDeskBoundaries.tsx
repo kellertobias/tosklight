@@ -6,9 +6,7 @@ import { DeskLockStateProvider } from "../features/deskLock/DeskLockState";
 import { CommandHistoryStateProvider } from "../features/commandHistory/CommandHistoryState";
 import { DeskSnapshotStateProvider } from "../features/deskSnapshot/DeskSnapshotState";
 import { ShellStatusStateProvider } from "../features/shellStatus/ShellStatusState";
-import type { StoredStageLayout } from "../features/server/contracts";
 import type { useServerState } from "../features/server/useServerState";
-import { StageLayoutActionsProvider } from "../features/stageLayout/StageLayoutActionsProvider";
 import { StageLayoutStateProvider } from "../features/stageLayout/StageLayoutState";
 import type { ConfigurationUpdateResult } from "./client/configuration";
 
@@ -28,29 +26,6 @@ export function ServerDeskBoundaries({
 			state.setMatter(result.matter);
 		},
 		[state.setConfiguration, state.setMatter],
-	);
-	const putStageLayout = useCallback(
-		async (
-			showId: string,
-			layout: StoredStageLayout,
-			expectedRevision: number,
-		) => {
-			await state.client.putObject(
-				showId,
-				"stage_layout",
-				"main",
-				layout,
-				expectedRevision,
-			);
-		},
-		[state.client],
-	);
-	const readStageLayout = useCallback(
-		async (showId: string) =>
-			(
-				await state.client.objects<StoredStageLayout>(showId, "stage_layout")
-			).find((item) => item.id === "main") ?? null,
-		[state.client],
 	);
 	return (
 		<DeskSnapshotStateProvider store={state.deskSnapshotStore}>
@@ -72,17 +47,7 @@ export function ServerDeskBoundaries({
 				onError={state.setError}
 			>
 				<StageLayoutStateProvider store={state.stageLayoutStore}>
-					<StageLayoutActionsProvider
-						store={state.stageLayoutStore}
-						showId={state.bootstrap?.active_show?.id ?? null}
-						putStageLayout={putStageLayout}
-						moveStageSelection={state.client.moveStageSelection}
-						readStageLayout={readStageLayout}
-						onApplied={state.setStageLayout}
-						onError={state.setError}
-					>
-						{children}
-					</StageLayoutActionsProvider>
+					{children}
 				</StageLayoutStateProvider>
 			</ConfigurationActionsProvider>
 		</ConfigurationStateProvider>

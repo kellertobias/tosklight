@@ -1,5 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+	type PointerEvent as ReactPointerEvent,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import type { WindowProps } from "./windowTypes";
+import { Button } from "../components/common";
 import { FixturePatchSetupContent } from "../components/setup/FixturePatchSetup";
 import { PatchFeatureBoundary } from "../features/patch/PatchFeatureBoundary";
 import { MediaServerSetup } from "../components/setup/MediaServerSetup";
@@ -74,7 +81,37 @@ function PatchWindowContent({
 		observer.observe(overlay);
 		return () => observer.disconnect();
 	}, [previewVisible]);
-	const tauri = useDesktopBridge().available;
+	const desktop = useDesktopBridge();
+	const tauri = desktop.available;
+	const [previewOffset, setPreviewOffset] = useState({ x: 0, y: 0 });
+	const previewDrag = useRef<{
+		pointerId: number;
+		x: number;
+		y: number;
+		offsetX: number;
+		offsetY: number;
+	} | null>(null);
+	const beginPreviewDrag = (event: ReactPointerEvent<HTMLElement>) => {
+		event.currentTarget.setPointerCapture(event.pointerId);
+		previewDrag.current = {
+			pointerId: event.pointerId,
+			x: event.clientX,
+			y: event.clientY,
+			offsetX: previewOffset.x,
+			offsetY: previewOffset.y,
+		};
+	};
+	const movePreviewDrag = (event: ReactPointerEvent<HTMLElement>) => {
+		const drag = previewDrag.current;
+		if (!drag || drag.pointerId !== event.pointerId) return;
+		setPreviewOffset({
+			x: drag.offsetX + event.clientX - drag.x,
+			y: Math.min(0, drag.offsetY + event.clientY - drag.y),
+		});
+	};
+	const finishPreviewDrag = () => {
+		previewDrag.current = null;
+	};
 	return (
 		<div
 			className={`patch-window ${previewVisible ? "stage-preview-open" : ""}`}
@@ -85,13 +122,27 @@ function PatchWindowContent({
 				stagePreviewOpen={stagePreviewOpen}
 				stagePreviewClearance={stagePreviewClearance}
 				onStagePreview={() => setStagePreviewOpen((open) => !open)}
+				onOpenStageWindow={
+					tauri ? () => void desktop.openStageViewWindow() : undefined
+				}
 			/>
 			{previewVisible && (
 				<aside
 					ref={stagePreview}
 					className="patch-stage-overlay"
 					aria-label="Patch Stage preview"
+					style={{
+						transform: `translate(${previewOffset.x}px, ${previewOffset.y}px)`,
+					}}
 				>
+					<Button
+						className="patch-stage-overlay-grip"
+						aria-label="Move Stage preview"
+						onPointerDown={beginPreviewDrag}
+						onPointerMove={movePreviewDrag}
+						onPointerUp={finishPreviewDrag}
+						onPointerCancel={finishPreviewDrag}
+					/>
 					<StageWindow
 						active={active}
 						compact
