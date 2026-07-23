@@ -84,3 +84,4 @@ include!("operational_flow_tests.rs");
 include!("malformed_show_tests.rs");
 include!("template_group_support.rs");
 include!("template_group_tests.rs");
+include!("spread_compatibility_tests.rs");
