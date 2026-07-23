@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
   <title>prism 3 facet</title>
   <circle cx="32" cy="32" r="24"/><path d="m32 15 15 27H17l15-27Z"/><path d="M32 15v27m15 0H17"/>
 </svg>

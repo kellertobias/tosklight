@@ -1,0 +1,12 @@
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>fixture type strobe squares</title>
+  <defs>
+    <mask id="body-gap" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff" stroke="none"/>
+      <rect x="8" y="31" width="48" height="21" rx="1.5" fill="#000" stroke="#000" stroke-width="7"/>
+    </mask>
+  </defs>
+  <path d="M14 42V22c0-4 3-7 7-7h22c4 0 7 3 7 7v20" mask="url(#body-gap)"/>
+  <rect x="8" y="31" width="48" height="21" rx="1.5"/>
+  <path d="M11.5 33.5H14v2.5h-2.5Zm5.5 0h2.5v2.5H17Zm5.5 0H25v2.5h-2.5Zm5.5 0h2.5v2.5H28Zm5.5 0H36v2.5h-2.5Zm5.5 0h2.5v2.5H39Zm5.5 0H47v2.5h-2.5Zm5.5 0h2.5v2.5H50ZM11.5 38H14v2.5h-2.5Zm5.5 0h2.5v2.5H17Zm5.5 0H25v2.5h-2.5Zm5.5 0h2.5v2.5H28Zm5.5 0H36v2.5h-2.5Zm5.5 0h2.5v2.5H39Zm5.5 0H47v2.5h-2.5Zm5.5 0h2.5v2.5H50ZM11.5 42.5H14V45h-2.5Zm5.5 0h2.5V45H17Zm5.5 0H25V45h-2.5Zm5.5 0h2.5V45H28Zm5.5 0H36V45h-2.5Zm5.5 0h2.5V45H39Zm5.5 0H47V45h-2.5Zm5.5 0h2.5V45H50ZM11.5 47H14v2.5h-2.5Zm5.5 0h2.5v2.5H17Zm5.5 0H25v2.5h-2.5Zm5.5 0h2.5v2.5H28Zm5.5 0H36v2.5h-2.5Zm5.5 0h2.5v2.5H39Zm5.5 0H47v2.5h-2.5Zm5.5 0h2.5v2.5H50Z" fill="currentColor" stroke="none"/>
+</svg>

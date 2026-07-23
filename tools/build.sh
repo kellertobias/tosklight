@@ -25,6 +25,7 @@ usage() {
 tools/build.sh is invoked by the root package.json scripts:
   npm run open                 Build debug server and app, stop old instances, and open ToskLight
   npm run manual               Build PDF and deployable HTML manuals from docs/help Markdown
+  npm run icons:contact-sheets Refresh Help contact-sheet PNGs from assets/icons SVGs
   npm run pages:generate       Assemble the public site: landing page, manual, and code safari
   npm run pages:serve [PORT]   Serve the assembled public site locally
   npm run codesafari           Run the CodeSafari code tour locally
@@ -34,13 +35,14 @@ tools/build.sh is invoked by the root package.json scripts:
   npm run clean                Remove reproducible artifacts while preserving development runtime data
   npm run artifact-path NAME   Print a resolved artifact path (for CI and tooling)
 
-Direct subcommands: open | manual | safari | pages | pages-serve [PORT] | codesafari |
+Direct subcommands: open | manual | icon-contact-sheets | safari | pages | pages-serve [PORT] | codesafari |
   archive [install] | migrate-artifacts | clean [runtime PATH] | path NAME
 EOF
 }
 
 build_manual() {
   ensure_manual_dependencies
+  "$MANUAL_PYTHON" "$ROOT/tools/generate_icon_contact_sheets.py"
   PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" LIGHT_MANUAL_KEYCAP_DIR="$LIGHT_MANUAL_ROOT/pdf/.manual-keycaps" \
     "$MANUAL_PYTHON" "$ROOT/tools/build_manual.py" --output "$LIGHT_MANUAL_PDF"
   PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/verify_manual.py" "$LIGHT_MANUAL_PDF"
@@ -49,6 +51,11 @@ build_manual() {
   PYTHONPATH="${LIGHT_MANUAL_PYTHONPATH:-}" "$MANUAL_PYTHON" "$ROOT/tools/verify_html_manual.py" \
     "$LIGHT_MANUAL_HTML_DIR" \
     "$LIGHT_MANUAL_HTML_ARCHIVE"
+}
+
+build_icon_contact_sheets() {
+  ensure_manual_dependencies
+  "$MANUAL_PYTHON" "$ROOT/tools/generate_icon_contact_sheets.py"
 }
 
 build_safari() {
@@ -232,6 +239,7 @@ build_debug_and_open() {
   require curl
   require open
 
+  build_icon_contact_sheets
   light_check_runtime_migration
   stop_running
   write_tauri_configs
@@ -266,6 +274,7 @@ archive_release() {
   require cargo-zigbuild
   require zig
 
+  build_icon_contact_sheets
   version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$ROOT/Cargo.toml" | head -1)"
   artifact_dir="$LIGHT_RELEASE_DIR"
   app_zip="$artifact_dir/tosklight-$version-macos-$(uname -m).zip"
@@ -375,6 +384,7 @@ print_artifact_path() {
     manual-pdf) printf '%s\n' "$LIGHT_MANUAL_PDF" ;;
     manual-html) printf '%s\n' "$LIGHT_MANUAL_HTML_ARCHIVE" ;;
     manual-html-dir) printf '%s\n' "$LIGHT_MANUAL_HTML_DIR" ;;
+    icon-contact-sheets) printf '%s\n' "$LIGHT_ICON_CONTACT_SHEETS_DIR" ;;
     pages) printf '%s\n' "$LIGHT_PAGES_DIR" ;;
     safari) printf '%s\n' "$LIGHT_SAFARI_DIR" ;;
     release) printf '%s\n' "$LIGHT_RELEASE_DIR" ;;
@@ -387,6 +397,10 @@ print_artifact_path() {
 }
 
 case "${1:-}" in
+  icon-contact-sheets)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    build_icon_contact_sheets
+    ;;
   manual)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
     build_manual

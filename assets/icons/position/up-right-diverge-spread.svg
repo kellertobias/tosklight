@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-  <title>position up right diverge spread</title>
-  <path d="M8 56L28 8M29.39 14.54L28 8L22.38 11.62M11 54L38 8M38.49 14.67L38 8L31.94 10.82M14 52L48 8M47.64 14.68L48 8L41.63 10.03M17 50L58 8M56.88 14.59L58 8L51.44 9.28"/>
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>position up right converge spread</title>
+  <path d="M8 56L32 8M31.73 13.01L32 8L28.15 11.22M20 56L40 8M40.08 13.02L40 8L36.38 11.48M32 56L48 8M48.44 13L48 8L44.65 11.73M44 56L56 8M56.82 12.95L56 8L52.94 11.98"/>
 </svg>

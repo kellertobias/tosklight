@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-  <title>position beam down right diverge point</title>
-  <path d="M8.88 8.42L23.51 57.69L32.49 54.31L11.12 7.58Z" fill="#fff" stroke="none"/><path d="M8.96 8.6L33.85 58.42L42.15 53.58L11.04 7.4Z" fill="#fff" stroke="none"/><path d="M9.06 8.74L44.24 58.98L51.76 53.02L10.94 7.26Z" fill="#fff" stroke="none"/><path d="M9.15 8.85L54.61 59.39L61.39 52.61L10.85 7.15Z" fill="#fff" stroke="none"/>
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>position beam down right converge point</title>
+  <path d="M6.9 9.1L52.29 59.71L59.71 52.29L9.1 6.9Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/><path d="M18.76 8.93L51.8 59.15L60.2 52.85L21.24 7.07Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/><path d="M30.61 8.69L51.3 58.35L60.7 53.65L33.39 7.31Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/><path d="M42.5 8.38L50.91 57.27L61.09 54.73L45.5 7.62Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/>
 </svg>

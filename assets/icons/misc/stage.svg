@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
   <title>misc stage</title>
   <path d="m9 29 23-14 23 14-23 14L9 29Z"/><path d="M9 29v15l23 13 23-13V29M32 43v14"/><path d="M18 35v14m28-14v14"/>
 </svg>

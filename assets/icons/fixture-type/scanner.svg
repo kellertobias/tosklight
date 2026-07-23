@@ -1,0 +1,21 @@
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>fixture type scanner</title>
+  <defs>
+    <mask id="bracket-gap" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff" stroke="none"/>
+      <path d="M30 3h4c1.1 0 2 .9 2 2v23a4 4 0 0 1-8 0V5c0-1.1.9-2 2-2Z" fill="#000" stroke="#000" stroke-width="5"/>
+    </mask>
+  </defs>
+  <g mask="url(#bracket-gap)">
+    <g transform="translate(0 4)">
+      <path d="M21 29.5V9.4L24.3 6h15.3L43 9.4v43l-4.3 4.6H24.8v-3.6h10.4l3.4-3.4V33l-1.6-1.7H22.9L21 29.5Z"/>
+      <path d="M26.4 31.3H33v4.1h-6.6v-4.1Z"/>
+      <g transform="translate(0 -3)">
+        <path d="M30 44.5h3v9h-3v-9Z" stroke-width="1.5"/>
+        <path d="m25.3 51.6 10.8-10.8.8.8-10.8 10.8-.8-.8Z" stroke-width="1.5"/>
+      </g>
+    </g>
+  </g>
+  <path d="M30 3h4c1.1 0 2 .9 2 2v23a4 4 0 0 1-8 0V5c0-1.1.9-2 2-2Z"/>
+  <circle cx="32" cy="28" r="1.75" fill="currentColor" stroke="none"/>
+</svg>

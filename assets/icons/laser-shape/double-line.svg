@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
   <title>laser shape double line</title>
-  <path d="M32 18 10 40m22-22 22 22" stroke-width="1"/><circle cx="32" cy="18" r="2" fill="#fff" stroke="none"/><path d="M10 40h44M10 49h44"/>
+  <path d="M32 18 10 40m22-22 22 22m-22-22L10 49m22-31 22 31" stroke-width="1"/><circle cx="32" cy="18" r="2" fill="currentColor" stroke="none"/><path d="M10 40h44M10 49h44"/>
 </svg>

@@ -27,6 +27,7 @@
     "bundle": "bash tools/build.sh archive",
     "bundle:install": "bash tools/build.sh archive install",
     "manual": "bash tools/build.sh manual",
+    "icons:contact-sheets": "bash tools/build.sh icon-contact-sheets",
     "pages:generate": "bash tools/build.sh pages",
     "pages:serve": "bash tools/build.sh pages-serve",
     "clean": "bash tools/build.sh clean",

@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
   <title>gobo stars</title>
-  <circle cx="32" cy="32" r="24"/><path d="m31 17 2.6 6.2 6.7.6-5.1 4.4 1.6 6.5-5.8-3.5-5.8 3.5 1.6-6.5-5.1-4.4 6.7-.6L31 17Z" fill="#fff" stroke="none"/><path d="m43 36 1.5 3.5 3.8.4-2.9 2.5.9 3.7-3.3-2-3.3 2 .9-3.7-2.9-2.5 3.8-.4L43 36Z" fill="#fff" stroke="none"/>
+  <circle cx="32" cy="32" r="24"/>
+  <g fill="currentColor" stroke="none"><path d="M0-5 1.2-1.6 4.8-1.5 1.9.6 3 4 0 2-3 4-1.9.6-4.8-1.5-1.2-1.6Z" transform="translate(21 20) scale(1.6)"/><path d="M0-5 1.2-1.6 4.8-1.5 1.9.6 3 4 0 2-3 4-1.9.6-4.8-1.5-1.2-1.6Z" transform="translate(35 17) scale(1.12)"/><path d="M0-5 1.2-1.6 4.8-1.5 1.9.6 3 4 0 2-3 4-1.9.6-4.8-1.5-1.2-1.6Z" transform="translate(46 27) scale(1.44)"/><path d="M0-5 1.2-1.6 4.8-1.5 1.9.6 3 4 0 2-3 4-1.9.6-4.8-1.5-1.2-1.6Z" transform="translate(28 30) scale(1.2)"/><path d="M0-5 1.2-1.6 4.8-1.5 1.9.6 3 4 0 2-3 4-1.9.6-4.8-1.5-1.2-1.6Z" transform="translate(17 41) scale(1.04)"/><path d="M0-5 1.2-1.6 4.8-1.5 1.9.6 3 4 0 2-3 4-1.9.6-4.8-1.5-1.2-1.6Z" transform="translate(36 42) scale(1.76)"/><path d="M0-5 1.2-1.6 4.8-1.5 1.9.6 3 4 0 2-3 4-1.9.6-4.8-1.5-1.2-1.6Z" transform="translate(47 44) scale(.88)"/></g>
 </svg>

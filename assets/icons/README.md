@@ -5,13 +5,24 @@ This directory contains an original, from-scratch icon family for lighting-desk 
 ## Visual contract
 
 - 64 × 64 SVG canvas
-- white artwork (`#fff`) on a transparent background
-- primarily 3 px rounded outline strokes
+- black artwork on a transparent background
+- editable originals primarily use 3 px rounded outline strokes
+- generated `.expanded.svg` siblings use only filled geometry
 - simple forms intended to remain legible at compact control-surface sizes
 - lowercase kebab-case filenames grouped by purpose
 - an accessible `<title>` in every SVG
 
-The files use fixed white rather than `currentColor` to preserve the requested delivery appearance. A consuming UI may replace `#fff` with `currentColor` during its asset pipeline if theme tinting is later required.
+Every root SVG has the shared `tosklight-icon` class, a black `color` presentation attribute, and visible strokes and fills expressed as `currentColor`. Inline consumers can recolor an icon with ordinary CSS:
+
+```css
+.tosklight-icon {
+  color: #5ee7f0;
+}
+```
+
+CSS outside an `<img>` cannot style the contents of the referenced SVG. Inline the SVG or load it as a component when runtime recoloring is required. Literal black and white values inside source masks are geometry operations and do not render as icon color.
+
+Run `npm run icons:contact-sheets` after changing the catalog. It generates a filled-geometry `name.expanded.svg` beside every editable `name.svg`, then renders every per-group PNG plus `complete-library.png` under `.artifacts/generated/icon-contact-sheets`. An ignored mirror under `docs/help/assets/icon-contact-sheets` makes the same generated sheets available to in-app Help, the manual, and the static Pages export; contact-sheet PNGs are not committed. Do not edit `.expanded.svg` files directly. The generator skips them as inputs, removes orphaned derivatives, resolves source strokes, transforms, patterns, and transparent mounting cutouts, and Boolean-unions overlapping painted paths into one scale-stable compound path per icon.
 
 ## Catalog
 
@@ -22,17 +33,17 @@ The 25 arrow layouts include:
 - four-arrow `down`, `up`, fan-in, fan-out, and cross families;
 - six-arrow `left-right-in`, `left-right-fan-vertical`, and `top-bottom-fan-horizontal`;
 - parallel `down-left`, `down-right`, `up-left`, and `up-right` diagonals;
-- point-diverging and slightly spread-diverging variants for all four diagonal directions.
+- target-converging variants for all four diagonal directions: one ending at an exact shared point and one retaining a small target spread.
 
 Cross 1 swaps each local pair of arrows. Cross 2 swaps the complete left and right two-arrow banks.
 
 ### Position beams
 
-`position-beam` contains a one-to-one counterpart for every arrow layout. Each filled beam uses the same source and destination coordinates, tapering from the arrow-shaft width at its source to the full arrowhead width at its destination.
+`position-beam` contains a one-to-one counterpart for every arrow layout. Each filled beam uses the same source and destination coordinates, tapering from a narrow source to a wider destination. The beam silhouettes receive a subtle edge expansion for stronger legibility.
 
 ### Gobos
 
-`open`, `ring`, `line`, `cross`, `dot`, `dot-line`, `dots-floral`, `stars`, `flower`, and `triade`, plus `spiral`, `triangle`, `grid`, `burst`, `crescent`, `breakup`, `jungle-vines`, and `jungle-breakup`.
+`open`, `ring`, `line`, `cross`, `dot`, `dot-line`, `dots-floral`, `star`, `stars`, `flower`, and `triade`, plus `spiral`, `triangle`, `grid`, `burst`, `crescent`, `breakup`, `jungle-vines`, `jungle-breakup`, and `radioactive`.
 
 `open` is a fully clear aperture. `ring` is an outlined annular shape.
 
@@ -54,7 +65,7 @@ Cross 1 swaps each local pair of arrows. Cross 2 swaps the complete left and rig
 
 ### Miscellaneous and instruments
 
-`microphone`, `drums`, `guitar`, `piano`, `truss-segment`, and `stage`.
+`drums`, `guitar`, `piano`, `truss-segment`, and `stage`.
 
 ### Functionality
 
@@ -62,13 +73,13 @@ Cross 1 swaps each local pair of arrows. Cross 2 swaps the complete left and rig
 
 ### Fixture type
 
-`fresnel-barn-doors`, `profile-dimmer-lamp`, `parcan`, `acl-set`, `4-blind`, `blinder`, `parcan-short`, `blower`, `hazer`, `strobe`, `strip-light`, `laser`, `profile-moving-light`, `wash-moving-light`, `led-wash-moving-light-lenses`, `projector`, and `led-wall`.
+`fresnel-barn-doors`, `profile-dimmer-lamp`, `parcan`, `acl-set`, `blinder`, `parcan-short`, `blower`, `hazer`, `strobe`, `strobe-lines`, `strobe-squares`, `strobe-squares-flash`, `strip-light`, `laser`, `scanner`, `profile-moving-light`, `wash-moving-light`, `led-wash-moving-light-lenses`, `projector`, and `led-wall`.
 
-These are source SVG assets. They are not automatically bundled by the control UI, and ToskLight fixture-package stage icons currently use raster formats. Import or rasterize an individual icon explicitly when integrating it.
+The files without `.expanded` in their names are the editable source SVG assets. Their generated `.expanded.svg` siblings are the scale-stable integration assets. They are not automatically bundled by the control UI, and ToskLight fixture-package stage icons currently use raster formats. Import or rasterize an individual icon explicitly when integrating it.
 
 Every fixture-type icon is drawn as a side elevation. Moving-light outputs point up-right; suspended conventional lamps point down-left; other optical outputs retain a clear side-facing direction. Multi-cell fixtures show each lamp body in profile.
 
-Composite fixture icons draw lamp bodies behind their foreground arm or bracket. A transparent mask removes hidden fixture strokes and leaves a small clear separation gap around the mount.
+Composite fixture source icons draw lamp bodies behind their foreground arm or bracket. A binary source mask describes the small transparent mounting gap; generation turns that mask into the final cut-out path, so expanded icons contain no mask or shadow-like compositing.
 
 ### Fixture base
 

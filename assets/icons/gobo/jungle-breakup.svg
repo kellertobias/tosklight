@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
   <title>gobo jungle breakup</title>
   <circle cx="32" cy="32" r="24"/><path d="M13 23c6-7 10 3 16-2s9 4 14 0 7 1 9 4M12 38c6-5 9 4 14-1s10 4 15-1 7 0 11 4M20 14c-4 6 4 9 0 15s4 9 0 15 1 6 4 8M39 13c-5 5 3 9-1 14s4 9 0 15 2 7 5 9"/>
 </svg>

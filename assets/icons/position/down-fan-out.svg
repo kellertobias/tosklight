@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
   <title>position down fan out</title>
   <path d="M26 10L8 54M6.57 47.47L8 54L13.6 50.35M30 10L24 54M20.98 48.04L24 54L28.51 49.06M34 10L40 54M35.49 49.06L40 54L43.02 48.04M38 10L56 54M50.4 50.35L56 54L57.43 47.47"/>
 </svg>

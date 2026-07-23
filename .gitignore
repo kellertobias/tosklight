@@ -1,5 +1,6 @@
 # Canonical repository-local development artifacts
 /.artifacts/
+/docs/help/assets/icon-contact-sheets/
 /.next/*
 # Rust
 /target/

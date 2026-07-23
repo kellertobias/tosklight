@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
   <title>misc piano</title>
-  <path d="M9 14h46v36H9z"/><path d="M9 28h46M16 28v22m8-22v22m8-22v22m8-22v22m8-22v22"/><path d="M19 14v22m10-22v22m14-22v22m9-22v22" stroke-width="5"/>
+  <path d="M9 14h46v36H9z"/><path d="M9 28h46M16 28v22m8-22v22m8-22v22m8-22v22m8-22v22"/><path d="M19 28v10m10-10v10m14-10v10m9-10v10" stroke-width="5"/>
 </svg>

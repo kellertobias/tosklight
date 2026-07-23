@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-  <title>position beam up left diverge spread</title>
-  <path d="M57.11 55.54L40.43 6.15L31.57 9.85L54.89 56.46Z" fill="#fff" stroke="none"/><path d="M54.03 53.39L30.14 5.57L21.86 10.43L51.97 54.61Z" fill="#fff" stroke="none"/><path d="M50.95 51.27L19.8 5.07L12.2 10.93L49.05 52.73Z" fill="#fff" stroke="none"/><path d="M47.86 49.16L9.43 4.65L2.57 11.35L46.14 50.84Z" fill="#fff" stroke="none"/>
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>position beam up left converge spread</title>
+  <path d="M57.39 55.31L36.7 5.65L27.3 10.35L54.61 56.69Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/><path d="M45.43 55.4L28.85 5.98L19.15 10.02L42.57 56.6Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/><path d="M33.47 55.51L20.98 6.34L11.02 9.66L30.53 56.49Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/><path d="M21.5 55.62L13.09 6.73L2.91 9.27L18.5 56.38Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/>
 </svg>

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
   <title>position top bottom fan horizontal</title>
   <path d="M42 6L52 29M46.32 25.47L52 29L53.29 22.44M32 6L32 29M28.2 23.5L32 29L35.8 23.5M22 6L12 29M10.71 22.44L12 29L17.68 25.47M42 58L52 35M53.29 41.56L52 35L46.32 38.53M32 58L32 35M35.8 40.5L32 35L28.2 40.5M22 58L12 35M17.68 38.53L12 35L10.71 41.56"/>
 </svg>

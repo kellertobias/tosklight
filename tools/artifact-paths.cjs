@@ -35,6 +35,7 @@ const artifactPaths = Object.freeze({
   controlFrontend: artifact("LIGHT_CONTROL_FRONTEND_DIR", "FRONTEND_CONTROL"),
   hardwareFrontend: artifact("LIGHT_HARDWARE_FRONTEND_DIR", "FRONTEND_HARDWARE"),
   manual: artifact("LIGHT_MANUAL_ROOT", "MANUAL_ROOT"),
+  iconContactSheets: artifact("LIGHT_ICON_CONTACT_SHEETS_DIR", "ICON_CONTACT_SHEETS"),
   release: artifact("LIGHT_RELEASE_DIR", "RELEASE_ROOT"),
   runtime: absolute(configured(
     Object.hasOwn(process.env, "LIGHT_DATA_DIR") ? "LIGHT_DATA_DIR" : "LIGHT_RUNTIME_DATA_DIR",

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
   <title>position beam down left</title>
-  <path d="M54.84 7.71L39.34 54.84L48.66 57.16L57.16 8.29Z" fill="#fff" stroke="none"/><path d="M42.84 7.71L27.34 54.84L36.66 57.16L45.16 8.29Z" fill="#fff" stroke="none"/><path d="M30.84 7.71L15.34 54.84L24.66 57.16L33.16 8.29Z" fill="#fff" stroke="none"/><path d="M18.84 7.71L3.34 54.84L12.66 57.16L21.16 8.29Z" fill="#fff" stroke="none"/>
+  <path d="M54.84 7.71L39.34 54.84L48.66 57.16L57.16 8.29Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/><path d="M42.84 7.71L27.34 54.84L36.66 57.16L45.16 8.29Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/><path d="M30.84 7.71L15.34 54.84L24.66 57.16L33.16 8.29Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/><path d="M18.84 7.71L3.34 54.84L12.66 57.16L21.16 8.29Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/>
 </svg>

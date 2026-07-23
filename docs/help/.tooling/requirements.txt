@@ -2,3 +2,6 @@ reportlab==4.4.3
 markdown-it-py==4.0.0
 pypdf==5.9.0
 pdfplumber==0.11.7
+CairoSVG==2.9.0
+Pillow==12.3.0
+picosvg==0.22.3

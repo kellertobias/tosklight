@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+<svg class="tosklight-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" color="#000" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
   <title>position beam down cross 1</title>
-  <path d="M10.83 10.27L17.32 55.06L26.68 52.94L13.17 9.73Z" fill="#fff" stroke="none"/><path d="M20.83 9.73L7.32 52.94L16.68 55.06L23.17 10.27Z" fill="#fff" stroke="none"/><path d="M40.83 10.27L47.32 55.06L56.68 52.94L43.17 9.73Z" fill="#fff" stroke="none"/><path d="M50.83 9.73L37.32 52.94L46.68 55.06L53.17 10.27Z" fill="#fff" stroke="none"/>
+  <path d="M10.83 10.27L17.32 55.06L26.68 52.94L13.17 9.73Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/><path d="M20.83 9.73L7.32 52.94L16.68 55.06L23.17 10.27Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/><path d="M40.83 10.27L47.32 55.06L56.68 52.94L43.17 9.73Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/><path d="M50.83 9.73L37.32 52.94L46.68 55.06L53.17 10.27Z" fill="currentColor" stroke="currentColor" stroke-width=".8"/>
 </svg>

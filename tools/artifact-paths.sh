@@ -40,6 +40,7 @@ light_init_artifact_paths() {
   light_export_path LIGHT_HARDWARE_FRONTEND_DIR "$repository_root" "${LIGHT_HARDWARE_FRONTEND_DIR-$LIGHT_ARTIFACTS_DIR/$FRONTEND_HARDWARE}" || return 1
   light_export_path LIGHT_PNPM_STORE_DIR "$repository_root" "${LIGHT_PNPM_STORE_DIR-$LIGHT_ARTIFACTS_DIR/$CACHE_PNPM}" || return 1
   light_export_path LIGHT_MANUAL_ROOT "$repository_root" "${LIGHT_MANUAL_ROOT-$LIGHT_ARTIFACTS_DIR/$MANUAL_ROOT}" || return 1
+  light_export_path LIGHT_ICON_CONTACT_SHEETS_DIR "$repository_root" "${LIGHT_ICON_CONTACT_SHEETS_DIR-$LIGHT_ARTIFACTS_DIR/$ICON_CONTACT_SHEETS}" || return 1
   light_export_path LIGHT_RELEASE_DIR "$repository_root" "${LIGHT_RELEASE_DIR-$LIGHT_ARTIFACTS_DIR/$RELEASE_ROOT}" || return 1
   light_export_path LIGHT_RUNTIME_DATA_DIR "$repository_root" "${LIGHT_RUNTIME_DATA_DIR-$LIGHT_ARTIFACTS_DIR/$RUNTIME_DATA}" || return 1
   light_export_path LIGHT_TEST_COVERAGE_DIR "$repository_root" "${LIGHT_TEST_COVERAGE_DIR-$LIGHT_ARTIFACTS_DIR/$TEST_COVERAGE}" || return 1
