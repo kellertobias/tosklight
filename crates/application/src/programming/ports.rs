@@ -16,7 +16,9 @@ pub struct ProgrammingSelectionEnvironment {
 #[derive(Clone, Debug, Default)]
 pub struct ProgrammingValuesEnvironment {
     pub fixture_ids: HashSet<FixtureId>,
-    pub group_ids: HashSet<String>,
+    /// Group id → resolved ordered-membership size, so value validation can reject
+    /// multi-point spreads with more control points than the Group has members.
+    pub group_memberships: HashMap<String, usize>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

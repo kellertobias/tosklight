@@ -78,7 +78,7 @@ impl ValuesSetup {
             ports: ValuesPorts {
                 environment: ProgrammingValuesEnvironment {
                     fixture_ids: fixtures.into_iter().collect(),
-                    group_ids: HashSet::from(["front".into(), "back".into()]),
+                    group_memberships: HashMap::from([("front".into(), 3), ("back".into(), 3)]),
                 },
                 ..Default::default()
             },
@@ -505,6 +505,50 @@ fn values_replay_precedes_revision_checks_and_failures_do_not_mutate() {
     assert_eq!(setup.registry.get(setup.session).unwrap().undo.len(), 1);
     assert_eq!(setup.events.latest_sequence(), 2);
     assert_eq!(*setup.ports.persisted.lock(), vec!["programmer.values"]);
+}
+
+#[test]
+fn group_spread_with_more_control_points_than_members_is_rejected_without_mutation() {
+    let setup = ValuesSetup::new();
+    let rejected = setup
+        .service
+        .handle_values(
+            setup.action(
+                "overfull",
+                0,
+                ProgrammingValuesCommand::SetGroup {
+                    group_id: "front".into(),
+                    attribute: AttributeKey::intensity(),
+                    value: AttributeValue::Spread(vec![1.0, 0.0, 1.0, 0.0]),
+                    timing: Default::default(),
+                },
+            ),
+            &setup.ports,
+        )
+        .unwrap_err();
+    assert_eq!(rejected.kind, ActionErrorKind::Invalid);
+    assert!(rejected.message.contains("control points"));
+    assert!(
+        setup
+            .registry
+            .get(setup.session)
+            .unwrap()
+            .group_values
+            .is_empty()
+    );
+    assert!(setup.ports.persisted.lock().is_empty());
+
+    let accepted = setup.handle(
+        "fits",
+        0,
+        ProgrammingValuesCommand::SetGroup {
+            group_id: "front".into(),
+            attribute: AttributeKey::intensity(),
+            value: AttributeValue::Spread(vec![1.0, 0.0, 1.0]),
+            timing: Default::default(),
+        },
+    );
+    assert_eq!(accepted.outcome.revision(), 1);
 }
 
 #[test]

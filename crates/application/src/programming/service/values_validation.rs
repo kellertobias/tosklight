@@ -99,7 +99,7 @@ fn validate_mutation(
             validate_group(group_id, environment)?;
             validate_identifier(&attribute.0, "attribute")?;
             validate_timing(*timing)?;
-            validate_group_value(value)
+            validate_group_value(group_id, value, environment)
         }
         ProgrammingValueMutation::ReleaseGroup {
             group_id,
@@ -143,7 +143,7 @@ fn validate_preload_mutation(
             validate_group(group_id, environment)?;
             validate_identifier(&attribute.0, "attribute")?;
             validate_preload_timing(*timing)?;
-            validate_group_value(value)
+            validate_group_value(group_id, value, environment)
         }
         ProgrammingPreloadValueMutation::ReleaseGroup {
             group_id,
@@ -172,8 +172,8 @@ fn validate_group(
 ) -> Result<(), ActionError> {
     validate_identifier(group_id, "group_id")?;
     environment
-        .group_ids
-        .contains(group_id)
+        .group_memberships
+        .contains_key(group_id)
         .then_some(())
         .ok_or_else(|| invalid("Group does not exist"))
 }
@@ -222,11 +222,26 @@ fn validate_fixture_value(value: &AttributeValue) -> Result<(), ActionError> {
     validate_value(value)
 }
 
-fn validate_group_value(value: &AttributeValue) -> Result<(), ActionError> {
-    if let AttributeValue::Spread(values) = value
-        && (values.len() < 2 || values.iter().any(|value| !unit_value(*value)))
-    {
-        return Err(invalid("spread requires at least two values within 0-1"));
+fn validate_group_value(
+    group_id: &str,
+    value: &AttributeValue,
+    environment: &ProgrammingValuesEnvironment,
+) -> Result<(), ActionError> {
+    if let AttributeValue::Spread(values) = value {
+        if values.len() < 2 || values.iter().any(|value| !unit_value(*value)) {
+            return Err(invalid("spread requires at least two values within 0-1"));
+        }
+        let members = environment
+            .group_memberships
+            .get(group_id)
+            .copied()
+            .unwrap_or(0);
+        if values.len() > 2 && values.len() > members {
+            return Err(invalid(format!(
+                "spread has {} control points but the Group has only {members} members",
+                values.len()
+            )));
+        }
     }
     validate_value(value)
 }
