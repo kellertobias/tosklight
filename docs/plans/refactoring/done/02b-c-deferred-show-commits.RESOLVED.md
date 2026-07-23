@@ -87,3 +87,17 @@ should choose the endpoint before the complexity is spent:
 
 Previously "all decided (api-rules §8)" — see DECISION NEEDED above; the §8 decision
 predates the 02b-a/02b-b outcome.
+
+## Resolution (maintainer, 2026-07-23)
+
+**Option (a) accepted:** api-rules §8 is satisfied by 02b-a (in-memory document) +
+02b-b (interval-gated checkpoints); the per-mutation SQLite WAL write-through stays.
+Context from the maintainer: expected load is large shows with multiple cue-object
+changes per second and continuous encoder moves needing low latency. Assessment
+recorded in the session notes: encoder value streams never touch the show file
+(programmer state persists to the desk store), playback triggers don't either, and a
+cue-object edit costs one WAL append (sub-millisecond) — the dominant per-mutation cost
+on large shows is the whole-show candidate compile, which write-behind would not have
+removed. That compile cost is tracked as its own follow-up
+(`pending/24-ui-snappiness-and-loading-states.md` scope note). Chunk closed without
+implementation.

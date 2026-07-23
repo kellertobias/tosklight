@@ -50,3 +50,14 @@ npm run test:e2e   # full suite gate
 
 None — the policy is decided; the helper design is implementation detail. If nested-object
 unknown keys turn out to need recursive handling, start top-level-only and note it.
+
+## Maintainer ruling (2026-07-23, recorded from session)
+
+Unknown fields are tolerated by definition: "if the field is unknown it isn't used, so
+it doesn't matter; if it is known, it is part of the contract and gets checked." Apply
+this when implementing: accept-and-log unknown fields everywhere, and drop the
+forged-`mode`-field rejection guard
+(`programmer_values_wire_rejects_transient_or_mode_fields`) together with the
+`deny_unknown_fields` attributes it depends on — replace it with coverage that known
+contract fields are still validated. (Chunk 03b temporarily restored strictness on the
+two programmer-values enums to keep that guard green until this chunk lands.)
