@@ -95,6 +95,7 @@ vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
 vi.mock("../features/groupRuntime/groupRuntimeAuthority", () => ({
 	useGroupRuntimeAuthority: () => ({
 		ready: mocks.ready,
+		serving: mocks.ready,
 		loading: !mocks.ready,
 		canWrite: true,
 		groups: mocks.groups,

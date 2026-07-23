@@ -31,6 +31,13 @@ export type RuntimeGroup = ShowObject<"group"> & {
 export interface GroupRuntimeAuthority {
 	ready: boolean;
 	loading: boolean;
+	/**
+	 * `true` whenever `groups` is usable — live-authoritative or retained from the last
+	 * ready state of the same show. Rendering surfaces gate on this instead of `ready` so
+	 * a transient scope refresh (opening a window re-subscribes the shared runtime stream)
+	 * never blanks already-presented content.
+	 */
+	serving: boolean;
 	canWrite: boolean;
 	groups: readonly RuntimeGroup[];
 	setMaster(groupId: string, value: number): Promise<PlaybackOutcome | null>;
@@ -55,7 +62,8 @@ export function useGroupRuntimeAuthority(
 		!needsRuntime || (status.status === "ready" && selection.ready);
 	const ready = enabled && collectionReady && runtimeReady;
 	const projectionCache = useRef(new Map<string, ProjectedGroupCache>());
-	const groups = useMemo(
+	const retained = useRef<readonly RuntimeGroup[] | null>(null);
+	const liveGroups = useMemo(
 		() =>
 			ready
 				? projectRuntimeGroups(
@@ -63,9 +71,15 @@ export function useGroupRuntimeAuthority(
 						selection.projections,
 						projectionCache.current,
 					)
-				: NO_GROUPS,
+				: null,
 		[portable, ready, selection.projections],
 	);
+	// Retention only bridges transient runtime refreshes within one hydrated Group
+	// collection; a Show switch (or disable) resets the collection and drops it.
+	if (!enabled || !collectionReady) retained.current = null;
+	else if (liveGroups) retained.current = liveGroups;
+	const groups = liveGroups ?? retained.current ?? NO_GROUPS;
+	const serving = enabled && (ready || retained.current !== null);
 	const actions = usePlaybackRuntimeActions();
 	const canWrite = ready && actions !== null;
 	const setMaster = useCallback(
@@ -85,6 +99,7 @@ export function useGroupRuntimeAuthority(
 	return {
 		ready,
 		loading: enabled && !ready,
+		serving,
 		canWrite,
 		groups,
 		setMaster,

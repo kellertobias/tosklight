@@ -254,7 +254,7 @@ export function useFixtureSheetRows({
 			groupRuntimeLoading: false,
 		};
 	}
-	if (observesGroupRuntime && !groupAuthority.ready)
+	if (observesGroupRuntime && !groupAuthority.serving)
 		return {
 			rows: [],
 			activeValuesLoading,

@@ -95,6 +95,7 @@ vi.mock("../features/groupRecording/GroupRecordingProvider", () => ({
 vi.mock("../features/groupRuntime/groupRuntimeAuthority", () => ({
 	useGroupRuntimeAuthority: () => ({
 		ready: mocks.runtimeReady,
+		serving: mocks.runtimeReady,
 		loading: !mocks.runtimeReady,
 		canWrite: mocks.runtimeCanWrite,
 		groups: mocks.groups,

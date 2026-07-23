@@ -98,7 +98,7 @@ export function useGroupPoolModel(active = true) {
 	return {
 		cards,
 		groups,
-		groupRuntimeReady: !hasShow || authority.ready,
+		groupRuntimeReady: !hasShow || authority.serving,
 		canWriteGroupRuntime: hasShow && authority.canWrite,
 		setGroupMaster: authority.setMaster,
 		...metadata,

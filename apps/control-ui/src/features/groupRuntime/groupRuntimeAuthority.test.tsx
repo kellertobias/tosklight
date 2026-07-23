@@ -192,6 +192,7 @@ function Probe({
 	return (
 		<div>
 			<span data-testid="ready">{String(authority.ready)}</span>
+			<span data-testid="serving">{String(authority.serving)}</span>
 			<span data-testid="can-write">{String(authority.canWrite)}</span>
 			<span data-testid="groups">
 				{authority.groups
@@ -337,6 +338,29 @@ describe("Group runtime authority", () => {
 			expect(screen.getByTestId("ready")).toHaveTextContent("true"),
 		);
 		expect(model.runtimeTransport.scopes).toHaveLength(1);
+	});
+
+	it("keeps serving the last ready Groups through a transient runtime refresh", async () => {
+		const runtime = new RuntimeBackend();
+		const model = harness({ runtime });
+		await waitFor(() =>
+			expect(screen.getByTestId("groups")).toHaveTextContent("1::0.25"),
+		);
+		runtime.suspended.add(SHOW_A);
+		act(() => model.runtimeTransport.observer?.closed());
+
+		await waitFor(
+			() => expect(screen.getByTestId("ready")).toHaveTextContent("false"),
+			{ timeout: 3000 },
+		);
+		expect(screen.getByTestId("serving")).toHaveTextContent("true");
+		expect(screen.getByTestId("groups")).toHaveTextContent("1::0.25");
+
+		act(() => runtime.resolve(SHOW_A));
+		await waitFor(() =>
+			expect(screen.getByTestId("ready")).toHaveTextContent("true"),
+		);
+		expect(screen.getByTestId("groups")).toHaveTextContent("1::0.25");
 	});
 
 	it("drops the prior Show immediately during authority replacement", async () => {
