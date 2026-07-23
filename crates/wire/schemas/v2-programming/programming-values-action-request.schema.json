@@ -194,6 +194,7 @@
               "$ref": "#/$defs/ProgrammingAttributeValue"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type",
             "fixture_ids",
@@ -225,6 +226,7 @@
               "$ref": "#/$defs/ProgrammingAttributeValue"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type",
             "fixture_id",
@@ -247,6 +249,7 @@
               "const": "release_fixture"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type",
             "fixture_id",
@@ -276,6 +279,7 @@
               "$ref": "#/$defs/ProgrammingAttributeValue"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type",
             "group_id",
@@ -297,6 +301,7 @@
               "const": "release_group"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type",
             "group_id",
@@ -362,6 +367,7 @@
               "$ref": "#/$defs/ProgrammingAttributeValue"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type",
             "fixture_ids",
@@ -393,6 +399,7 @@
               "$ref": "#/$defs/ProgrammingAttributeValue"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type",
             "fixture_id",
@@ -415,6 +422,7 @@
               "const": "release_fixture"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type",
             "fixture_id",
@@ -444,6 +452,7 @@
               "$ref": "#/$defs/ProgrammingAttributeValue"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type",
             "group_id",
@@ -465,6 +474,7 @@
               "const": "release_group"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type",
             "group_id",
@@ -486,6 +496,7 @@
               "const": "batch"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type",
             "mutations"
@@ -499,6 +510,7 @@
               "const": "clear"
             }
           },
+          "additionalProperties": false,
           "required": [
             "type"
           ]
