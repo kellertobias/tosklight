@@ -1,4 +1,12 @@
-# 03 — Parameter range spread: stop precomputing per-fixture values in the UI
+# 03 — Fan-out family: one server-side contract, proven on parameter range spreads
+
+**Family note (maintainer 2026-07-23):** chunks 03/03b/04/05 are one concept — the server
+computes per-fixture results from an ordered selection plus operation parameters — seen
+from different angles. This chunk designs the **single shared request vocabulary** for
+all of them (ordered selection + operation payload: scalar spread points | color
+endpoints | position delta) and proves it on the parameter-range case. 03b supplies the
+resolver math; 04 and 05 apply the same contract and must not invent parallel request
+shapes.
 
 ## Context (api-rules §4 violation, verified 2026-07-23)
 
@@ -28,8 +36,11 @@ URL: `apps/control-ui/src/api/ProgrammerValuesTransport.ts:170`).
 
 ## Work
 
-1. Make the non-group branch of `setParameterRangeMutations` send one mutation carrying
-   the ordered selection and `{ kind: "spread", value: points }`, mirroring the group branch.
+1. Design the shared fan-out wire shape first (ordered selection + typed operation
+   payload), sized so 04 (position delta → stage layout) and 05 (color endpoints →
+   programmer values) fit the same vocabulary without new plumbing. Then make the
+   non-group branch of `setParameterRangeMutations` send one mutation carrying the
+   ordered selection and `{ kind: "spread", value: points }`, mirroring the group branch.
    If the current `set_fixture` mutation shape can't carry an ordered fixture list + spread,
    extend the v2 programmer-values wire contract (typed, tolerant per api-rules §5) and
    regenerate contracts.

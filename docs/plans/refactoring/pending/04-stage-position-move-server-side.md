@@ -17,7 +17,9 @@ show values) and §3 (whole-object overwrite instead of intent).
 1. Add a server-side intent route (api-rules §3 style), e.g.
    `POST /api/v2/…/stage-layout/actions` with a typed body carrying the ordered selection,
    the axis/key, and the delta (or absolute anchor target); the server computes each
-   fixture's new position and persists only those entries. Carry a client `request_id`
+   fixture's new position and persists only those entries. **Use chunk 03's shared
+   fan-out vocabulary** (selection + operation payload) — this is the same family
+   (uniform delta instead of interpolation); do not invent a parallel request shape. Carry a client `request_id`
    and add a replay window (reuse the existing `ReplayCache` pattern, e.g.
    `crates/application/src/show_patch/replay.rs`).
 2. Wire types in `crates/wire` (tolerant typing per §5), regenerate contracts.

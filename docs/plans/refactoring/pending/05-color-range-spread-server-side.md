@@ -18,9 +18,11 @@ does not build new UI.
 
 ## Work
 
-1. Extend the v2 programmer-values contract (or reuse the `Spread` value kind from chunk 03)
-   so the client sends the ordered selection + the two endpoint colors, and the server
-   interpolates and resolves per-fixture color-channel values.
+1. Extend the v2 programmer-values contract using **chunk 03's shared fan-out vocabulary**
+   (this is the same family: two color endpoints are the control points) so the client
+   sends the ordered selection + the two endpoint colors, and the server interpolates and
+   resolves per-fixture color-channel values (scalar resolution via 03b's shared rule
+   where `AttributeValue::Spread` is stored).
 2. The color→channel resolution in `colorProgrammerAssignments` (which fixture has RGB vs
    CMY heads) is show logic — move it server-side with the interpolation. The UI keeps only
    the gesture (start/end picker positions) and display.
