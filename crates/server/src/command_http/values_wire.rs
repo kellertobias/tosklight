@@ -4,8 +4,8 @@ use light_wire::v2::{events::EventSnapshotCursor, programming as wire};
 
 pub(super) fn values_command(
     action: wire::ProgrammingValuesAction,
-) -> application::ProgrammingValuesCommand {
-    match action {
+) -> Result<application::ProgrammingValuesCommand, application::ActionError> {
+    Ok(match action {
         wire::ProgrammingValuesAction::SetSelection {
             fixture_ids,
             attribute,
@@ -17,7 +17,7 @@ pub(super) fn values_command(
                 attribute,
                 value,
                 timing,
-            }),
+            })?,
         },
         wire::ProgrammingValuesAction::SetFixture {
             fixture_id,
@@ -56,15 +56,16 @@ pub(super) fn values_command(
             attribute: AttributeKey(attribute),
         },
         wire::ProgrammingValuesAction::Batch { mutations } => {
+            let mut expanded = Vec::with_capacity(mutations.len());
+            for mutation in mutations {
+                expanded.extend(application_mutations(mutation)?);
+            }
             application::ProgrammingValuesCommand::Batch {
-                mutations: mutations
-                    .into_iter()
-                    .flat_map(application_mutations)
-                    .collect(),
+                mutations: expanded,
             }
         }
         wire::ProgrammingValuesAction::Clear => application::ProgrammingValuesCommand::Clear,
-    }
+    })
 }
 
 pub(super) fn values_outcome(
@@ -165,7 +166,7 @@ pub(super) fn values_projection(
 /// mutations in the ordered-selection order.
 fn application_mutations(
     mutation: wire::ProgrammingValueMutation,
-) -> Vec<application::ProgrammingValueMutation> {
+) -> Result<Vec<application::ProgrammingValueMutation>, application::ActionError> {
     if let wire::ProgrammingValueMutation::SetSelection {
         fixture_ids,
         attribute,
@@ -175,7 +176,19 @@ fn application_mutations(
     {
         let count = fixture_ids.len();
         let value = application_value(value);
-        return fixture_ids
+        if let AttributeValue::Spread(points) = &value
+            && points.len() > 2
+            && points.len() > count
+        {
+            return Err(application::ActionError::new(
+                application::ActionErrorKind::Invalid,
+                format!(
+                    "spread has {} control points but only {count} selected items",
+                    points.len()
+                ),
+            ));
+        }
+        return Ok(fixture_ids
             .into_iter()
             .enumerate()
             .map(|(index, fixture_id)| {
@@ -194,9 +207,9 @@ fn application_mutations(
                     timing: application_timing(timing),
                 }
             })
-            .collect();
+            .collect());
     }
-    vec![application_mutation(mutation)]
+    Ok(vec![application_mutation(mutation)])
 }
 
 fn application_mutation(

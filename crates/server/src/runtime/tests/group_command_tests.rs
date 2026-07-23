@@ -364,3 +364,39 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[test]
+fn multi_point_spread_with_more_points_than_selection_is_rejected_without_mutation() {
+    let (state, data_dir) = test_state();
+    let user = state.desk.lock().users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "spread-reject".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programmers.start(session.id, user.id);
+    let first = light_core::FixtureId::new();
+    let second = light_core::FixtureId::new();
+    state
+        .engine
+        .replace_snapshot(EngineSnapshot {
+            groups: vec![light_programmer::GroupDefinition {
+                id: "1".into(),
+                name: "Group 1".into(),
+                fixtures: vec![first, second],
+                ..Default::default()
+            }],
+            ..Default::default()
+        })
+        .unwrap();
+    let error =
+        execute_programmer_command(&state, &session, "GROUP 1 AT 0 THRU 50 THRU 100").unwrap_err();
+    assert!(error.contains("control points"), "{error}");
+    // No partial mutation: neither per-fixture values nor a group value landed.
+    let programmer = state.programmers.get(session.id).unwrap();
+    assert!(programmer.values.is_empty());
+    assert!(programmer.group_values.is_empty());
+    let _ = std::fs::remove_dir_all(data_dir);
+}

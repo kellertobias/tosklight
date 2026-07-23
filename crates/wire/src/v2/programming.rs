@@ -116,7 +116,7 @@ pub struct ProgrammingValuesActionRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProgrammingValuesAction {
     /// Server-side fan-out over an explicitly ordered selection (see
     /// `ProgrammingValueMutation::SetSelection`).
@@ -158,7 +158,7 @@ pub enum ProgrammingValuesAction {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProgrammingValueMutation {
     /// Server-side fan-out over an explicitly ordered selection: `Spread` control points
     /// interpolate across the given fixture order; any other value applies uniformly. This is the

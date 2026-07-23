@@ -14,14 +14,8 @@ pub(crate) fn value_for_ordered_position(
     if points.is_empty() {
         return AttributeValue::Normalized(0.0);
     }
-    if points.len() == 1 || count <= 1 {
-        return AttributeValue::Normalized(points[0]);
-    }
-    let position = index as f32 * (points.len() - 1) as f32 / (count - 1) as f32;
-    let left = position.floor() as usize;
-    let right = position.ceil() as usize;
-    let progress = position - left as f32;
-    AttributeValue::Normalized(points[left] + (points[right] - points[left]) * progress)
+    // Shared deterministic anchor rule — every surface resolves stored spreads identically.
+    AttributeValue::Normalized(light_core::spread_position(points, index, count))
 }
 
 pub(crate) type ApplicableSequenceMaster = crate::ContributionSequenceMaster;

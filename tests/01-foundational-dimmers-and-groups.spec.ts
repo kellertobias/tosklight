@@ -65,6 +65,20 @@ test.describe(FOUNDATIONAL_SCENARIOS, () => {
 			3_000,
 			[0, 32, 64, 96, 128, 0, 0, 0, 0, 0, 0, 0],
 		);
+
+		// Deterministic multi-point anchor rule: every control point lands on a real fixture
+		// (normative five-item vector for 100 THRU 0 THRU 100).
+		await pressCommandAndWait(page, "1 THRU 5", "F1 THRU 5");
+		await pressCommandAndWait(
+			page,
+			"AT 100 THRU 0 THRU 100",
+			"AT 100 THRU 0 THRU 100",
+		);
+		await expectSlotsAfterTick(
+			bench,
+			3_000,
+			[255, 128, 0, 128, 255, 0, 0, 0, 0, 0, 0, 0],
+		);
 	});
 
 	pairedScenario<{ overrideSlots: number[]; fixture: string; showId: string }>({

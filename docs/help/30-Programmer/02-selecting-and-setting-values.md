@@ -8,7 +8,7 @@ Select from Stage, Fixtures, a Group pool, or the command line. Selection is add
 
 ## Set values
 
-Use `[AT]` for intensity, recall a Preset, or use the attribute encoders for color, position, beam, and other parameters. For an ordered multi-fixture selection, enter `0 [THRU] 50 [ENTER]` after `[AT]`, or enter the same range in an encoder's value modal, to give the first fixture 0%, the last fixture 50%, and every fixture between them an equally interpolated value. The encoder modal spreads the attribute shown on that encoder; the command line spreads intensity. Fixture Sheet and Channels show the current value and its source. Per-value fade and delay can be entered from the command line.
+Use `[AT]` for intensity, recall a Preset, or use the attribute encoders for color, position, beam, and other parameters. For an ordered multi-fixture selection, enter `0 [THRU] 50 [ENTER]` after `[AT]`, or enter the same range in an encoder's value modal, to give the first fixture 0%, the last fixture 50%, and every fixture between them an equally interpolated value. Repeated `[THRU]` supplies additional control points: `100 [THRU] 0 [THRU] 100` places every control point on a real fixture of the ordered selection — when an interior point falls exactly between two fixtures, both receive it (six fixtures resolve to `100, 50, 0, 0, 50, 100`) — and the desk rejects a spread with more control points than selected fixtures instead of applying part of it. The encoder modal spreads the attribute shown on that encoder; the command line spreads intensity. Fixture Sheet and Channels show the current value and its source. Per-value fade and delay can be entered from the command line.
 
 ## Highlight and Step Through
 

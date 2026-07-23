@@ -91,6 +91,7 @@ fn apply_group_value(
     }
     if value.iter().any(|token| token == "THRU") {
         let points = parse_spread_points(value)?;
+        ensure_spread_fits(&points, fixtures.len())?;
         if frozen {
             let count = fixtures.len();
             set_command_fixture_intensities(

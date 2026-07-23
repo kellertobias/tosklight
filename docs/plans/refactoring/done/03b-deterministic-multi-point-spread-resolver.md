@@ -65,3 +65,44 @@ None — the spec is normative, and it explicitly authorizes the output change f
 multi-point spreads (call it out in the result note and release notes).
 
 Sequence: after 03 (server-side spread routing), together with or before 05.
+
+## Result
+
+- **Resolver:** `light_core::resolve_spread` implements the deterministic anchor rule
+  with exact rational anchor placement (integer → exact item, exact half → both
+  adjacent items, otherwise nearest) and symmetric weighted interpolation so reversed
+  selections resolve to exactly mirrored bytes. `spread_position` now delegates to it;
+  the engine's duplicate (`value_for_ordered_position`) and the server's command/group/
+  fixture/SetSelection paths all route through the one function. For stored legacy
+  spreads with more points than items the resolver deliberately degrades to the old
+  linear sampling so existing shows keep rendering.
+- **P > N rejection (≥3 points):** command line (selection, fixture-range, and group
+  commands — via `ensure_spread_fits`) and the v2 `set_selection` wire (fallible
+  decode) reject with a visible error and no partial mutation; pinned by
+  `multi_point_spread_with_more_points_than_selection_is_rejected_without_mutation`.
+  Remaining gap: `set_group` via the values wire can't see membership size
+  (environment carries only id sets) — filed in `pending/03b-b`.
+- **Unit vectors:** the full normative table (4/5/6/10 × `100 THRU 0 THRU 100`),
+  asymmetric three- and four-point vectors, reversed-control-point mirroring, and the
+  boundary set (empty/one item/single point/plateau/degradation/stability) in
+  `light_core::attributes::spread_tests`.
+- **PROG-002:** extended with the five-item normative multi-point command-line case
+  (`AT 100 THRU 0 THRU 100` → DMX `255,128,0,128,255`); focused run 7/7 green. The
+  remaining cross-surface acceptance (encoder modals both layouts, OSC keypad, recall
+  matrix after membership edits, DEGRP freeze, legacy-show load) split to
+  `pending/03b-b-spread-acceptance-surfaces.md`.
+- **Docs:** the open-questions even-selection entry replaced with the resolved rule;
+  selecting-and-setting-values help documents repeated `THRU`, midpoint expansion, and
+  the rejection; `npm run manual` regenerated cleanly.
+- **Compatibility-visible change (as the spec authorizes):** existing multi-point
+  spreads over selections where anchors move now resolve differently (e.g. 6 items ×
+  `100 THRU 0 THRU 100` was `100,60,20,20,60,100`, now `100,50,0,0,50,100`). Release
+  notes must call this out.
+- **Surprise:** chunk 03 had removed `deny_unknown_fields` from the two touched values
+  enums per the standing rule, which silently broke the deliberate forged-field guard
+  `programmer_values_wire_rejects_transient_or_mode_fields` (its cargo gate ran before
+  the last wire edit). Restored `deny_unknown_fields` on both enums here; chunk 08 must
+  reconcile tolerant typing with that forged-`mode` rejection contract deliberately.
+- Suite numbers: core 5, engine 74+1, programmer 92, server 413 all passed; PROG-002
+  focused 7/7; full e2e **276 passed / 11 skipped / 1 failed** (pre-existing user-dirty
+  product-demo) — no net new regressions.

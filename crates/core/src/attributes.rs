@@ -284,18 +284,82 @@ pub enum AttributeValue {
     RawDmxExact(u32),
 }
 
-/// Resolves the value at `index` of an ordered `count`-strong selection from the given control
-/// points: single-point spreads apply uniformly, multi-point spreads interpolate linearly across
-/// the selection order. Shared by every server-side fan-out path (command line, groups, ordered
-/// selections) so all surfaces distribute identically.
-pub fn spread_position(points: &[f32], index: usize, count: usize) -> f32 {
-    if points.len() == 1 || count <= 1 {
-        return points[0];
+/// Resolves ordered spread control points across a `count`-strong selection using the
+/// deterministic anchor rule (docs/plans/Next/50):
+///
+/// 1. The first and last control points anchor the first and last items.
+/// 2. Interior control point `j` has the ideal position `j × (count - 1) / (points - 1)`,
+///    compared exactly as a rational so floating-point error cannot move an anchor: an integer
+///    position anchors that item, an exact half-position anchors **both** adjacent items
+///    (midpoint expansion), and any other position anchors the nearest item.
+/// 3. Items between adjacent anchors are interpolated in equal steps.
+///
+/// Two-point spreads keep their established endpoint-interpolation meaning (the rule reduces to
+/// it). More control points than items cannot place every point — entry paths reject that input;
+/// this total resolver degrades to plain linear sampling so stored legacy spreads still render.
+pub fn resolve_spread(points: &[f32], count: usize) -> Vec<f32> {
+    if count == 0 {
+        return Vec::new();
     }
+    let first = points.first().copied().unwrap_or(0.0);
+    if points.len() <= 1 || count == 1 {
+        return vec![first; count];
+    }
+    if points.len() > count {
+        return (0..count)
+            .map(|index| linear(points, index, count))
+            .collect();
+    }
+    // Exact anchor placement: ideal position of point j is j*(count-1)/(points-1).
+    let mut anchors: Vec<(usize, f32)> = Vec::with_capacity(points.len() + 2);
+    let denominator = points.len() - 1;
+    for (j, value) in points.iter().enumerate() {
+        let numerator = j * (count - 1);
+        let item = numerator / denominator;
+        let remainder = numerator % denominator;
+        if remainder == 0 {
+            anchors.push((item, *value));
+        } else if remainder * 2 == denominator {
+            anchors.push((item, *value));
+            anchors.push((item + 1, *value));
+        } else if remainder * 2 > denominator {
+            anchors.push((item + 1, *value));
+        } else {
+            anchors.push((item, *value));
+        }
+    }
+    let mut resolved = vec![0.0_f32; count];
+    for window in anchors.windows(2) {
+        let (left_item, left_value) = window[0];
+        let (right_item, right_value) = window[1];
+        resolved[left_item] = left_value;
+        resolved[right_item] = right_value;
+        let span = right_item.saturating_sub(left_item);
+        for step in 1..span {
+            // Symmetric weighted form so a reversed selection resolves to the exact mirrored
+            // bytes (`a + (b-a)*t` is not float-symmetric).
+            resolved[left_item + step] =
+                (left_value * (span - step) as f32 + right_value * step as f32) / span as f32;
+        }
+    }
+    resolved
+}
+
+fn linear(points: &[f32], index: usize, count: usize) -> f32 {
     let position = index as f32 * (points.len() - 1) as f32 / (count - 1) as f32;
     let left = position.floor() as usize;
     let right = position.ceil() as usize;
     points[left] + (points[right] - points[left]) * (position - left as f32)
+}
+
+/// Resolves the value at `index` of an ordered `count`-strong selection from the given control
+/// points via [`resolve_spread`]. Shared by every fan-out path (command line, groups, ordered
+/// selections, engine rendering of stored spreads) so all surfaces distribute identically.
+pub fn spread_position(points: &[f32], index: usize, count: usize) -> f32 {
+    resolve_spread(points, count)
+        .get(index)
+        .copied()
+        .unwrap_or(points.first().copied().unwrap_or(0.0))
 }
 
 impl AttributeValue {
@@ -334,4 +398,81 @@ pub struct TimedValue {
     /// A command-specific delay before the value starts fading.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delay_millis: Option<u64>,
+}
+
+#[cfg(test)]
+mod spread_tests {
+    use super::{resolve_spread, spread_position};
+
+    fn percentages(points: &[f32], count: usize) -> Vec<f32> {
+        resolve_spread(points, count)
+            .into_iter()
+            .map(|value| (value * 100.0 * 10.0).round() / 10.0)
+            .collect()
+    }
+
+    #[test]
+    fn normative_table_for_100_thru_0_thru_100() {
+        let points = [1.0, 0.0, 1.0];
+        assert_eq!(percentages(&points, 4), [100.0, 0.0, 0.0, 100.0]);
+        assert_eq!(percentages(&points, 5), [100.0, 50.0, 0.0, 50.0, 100.0]);
+        assert_eq!(
+            percentages(&points, 6),
+            [100.0, 50.0, 0.0, 0.0, 50.0, 100.0]
+        );
+        assert_eq!(
+            percentages(&points, 10),
+            [100.0, 75.0, 50.0, 25.0, 0.0, 0.0, 25.0, 50.0, 75.0, 100.0]
+        );
+    }
+
+    #[test]
+    fn asymmetric_and_four_point_vectors_place_every_anchor_exactly() {
+        // 10 THRU 80 THRU 20 over 5: interior ideal position 2 is an exact item.
+        assert_eq!(
+            percentages(&[0.1, 0.8, 0.2], 5),
+            [10.0, 45.0, 80.0, 50.0, 20.0]
+        );
+        // Four points over 7: ideals 0, 2, 4, 6 are all integer anchors.
+        assert_eq!(
+            percentages(&[0.0, 1.0, 0.25, 0.75], 7),
+            [0.0, 50.0, 100.0, 62.5, 25.0, 50.0, 75.0]
+        );
+        // Non-half nearest anchor: 3 points over 7 → interior ideal 3 exact.
+        assert_eq!(
+            percentages(&[0.0, 1.0, 0.0], 7),
+            [0.0, 33.3, 66.7, 100.0, 66.7, 33.3, 0.0]
+        );
+    }
+
+    #[test]
+    fn reversed_control_points_mirror_the_resolution() {
+        for count in [4_usize, 5, 6, 9, 10] {
+            let forward = resolve_spread(&[0.1, 0.9, 0.3], count);
+            let mut mirrored = resolve_spread(&[0.3, 0.9, 0.1], count);
+            mirrored.reverse();
+            assert_eq!(forward, mirrored, "count {count}");
+        }
+    }
+
+    #[test]
+    fn boundaries_stay_total_and_established_meanings_hold() {
+        assert!(resolve_spread(&[1.0, 0.0], 0).is_empty());
+        assert_eq!(resolve_spread(&[0.4, 0.8], 1), [0.4]);
+        assert_eq!(resolve_spread(&[0.7], 4), [0.7, 0.7, 0.7, 0.7]);
+        // Established two-point interpolation is unchanged.
+        assert_eq!(percentages(&[0.0, 1.0], 5), [0.0, 25.0, 50.0, 75.0, 100.0]);
+        // Equal adjacent points expand as a flat plateau.
+        assert_eq!(
+            percentages(&[0.0, 0.0, 1.0], 5),
+            [0.0, 0.0, 0.0, 50.0, 100.0]
+        );
+        // More points than items degrades to linear sampling for stored legacy spreads.
+        assert_eq!(percentages(&[0.0, 1.0, 0.0, 1.0], 3), [0.0, 50.0, 100.0]);
+        // Repeated evaluation is byte-for-byte stable and finite.
+        let first = resolve_spread(&[0.2, 0.9, 0.1], 8);
+        assert_eq!(first, resolve_spread(&[0.2, 0.9, 0.1], 8));
+        assert!(first.iter().all(|value| value.is_finite()));
+        assert_eq!(spread_position(&[0.2, 0.9, 0.1], 0, 8), first[0]);
+    }
 }

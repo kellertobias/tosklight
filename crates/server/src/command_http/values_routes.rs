@@ -76,7 +76,8 @@ async fn apply_action(
     let request_id = request.request_id.clone();
     let context =
         http_context(&session, Some(&request_id)).with_expected_revision(request.expected_revision);
-    let command = super::values_wire::values_command(request.action);
+    let command =
+        super::values_wire::values_command(request.action).map_err(ValuesHttpError::application)?;
     let command = light_application::ProgrammingValuesRequest {
         expected_capture_mode_revision: request.expected_capture_mode_revision,
         command,

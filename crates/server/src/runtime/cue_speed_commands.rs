@@ -29,6 +29,18 @@ pub(super) fn parse_spread_points(tokens: &[String]) -> Result<Vec<f32>, String>
 
 pub(super) use light_core::spread_position;
 
+/// Rejects multi-point spreads that cannot place every explicit control point (docs/plans/Next/50).
+/// One- and two-point inputs keep their established single-item/endpoint behavior.
+pub(super) fn ensure_spread_fits(points: &[f32], count: usize) -> Result<(), String> {
+    if points.len() > 2 && points.len() > count {
+        return Err(format!(
+            "spread has {} control points but only {count} selected items",
+            points.len()
+        ));
+    }
+    Ok(())
+}
+
 pub(super) fn parse_command_cue_number(tokens: &[String]) -> Result<f64, String> {
     if tokens.is_empty() {
         return Err("CUE requires a cue number".into());

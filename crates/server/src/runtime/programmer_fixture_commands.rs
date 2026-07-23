@@ -146,6 +146,7 @@ pub(super) fn execute_fixture_programmer_command(
         )?;
     } else if value.iter().any(|token| token == "THRU") {
         let points = parse_spread_points(value)?;
+        ensure_spread_fits(&points, fixtures.len())?;
         let count = fixtures.len();
         set_command_fixture_intensities(
             state,

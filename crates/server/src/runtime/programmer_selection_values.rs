@@ -24,6 +24,7 @@ pub(super) fn apply_current_selection_value(
     }
     if value.iter().any(|token| token == "THRU") {
         let points = parse_spread_points(value)?;
+        ensure_spread_fits(&points, current.selected.len())?;
         if let Some(light_programmer::SelectionExpression::LiveGroup { group_id, .. }) =
             current.selection_expression.clone()
         {
