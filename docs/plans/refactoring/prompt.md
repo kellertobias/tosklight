@@ -1,4 +1,10 @@
-# Execution prompt
+# Execution prompts
+
+Two variants. The **parallel** prompt fans out subagents and worktrees inside a chunk;
+the **sequential** prompt works strictly alone, step by step — use it for small chunks,
+constrained machines, or when the parallel machinery has caused trouble.
+
+## Parallel (subagents + worktrees)
 
 Start a refactoring execution session with exactly this `/goal`:
 
@@ -26,6 +32,27 @@ docs/engineering/api-rules.md throughout. Then append a "## Result" note (what c
 suite numbers, surprises, follow-ups filed as new pending/ files), move the chunk to
 done/, and commit as a topic commit. Do not push. Done when the claimed chunk is in
 done/ with its Result note and the suite is at or above baseline.
+```
+
+## Sequential (no subagents, one chunk, step by step)
+
+```
+/goal In /Users/keller/repos/light (branch `refactoring`), execute exactly ONE chunk of
+the refactoring queue at docs/plans/refactoring/, working alone — no subagents, no
+worktrees, no parallel work. Claim the lowest-numbered file in pending/ by moving it to
+doing/ (max one file there). If the chunk carries the .ATTENTION.md suffix or an
+unresolved DECISION NEEDED, STOP and ask the maintainer. Then work strictly step by
+step: re-verify the chunk's file:line claims against the code, execute its Work items in
+order, and run its smallest relevant checks after each step before moving to the next.
+When the work is complete, run the chunk's verification list and then the full
+`npm run test:e2e` with no net new regressions against the baseline in README.md (run
+and record a fresh baseline first if it is unfilled; re-run suspected flaky failures in
+isolation before treating them as real). cargo fmt; follow AGENTS.md and
+docs/engineering/api-rules.md throughout. Stay inside the chunk's scope — file genuine
+discoveries as new pending/ files instead of expanding. Finish by appending a
+"## Result" note (what changed, suite numbers, surprises, follow-ups), moving the chunk
+to done/, and committing as a topic commit. Do not push. Done when the claimed chunk is
+in done/ with its Result note and the suite is at or above baseline.
 ```
 
 Notes:
