@@ -143,20 +143,16 @@ fn push_range(
     }
 }
 
-fn group_marker(tokens: &[String], index: &mut usize, default_to_group: bool) -> TermKind {
+fn group_marker(tokens: &[String], index: &mut usize) -> Result<TermKind, String> {
     let repeated = tokens
         .get(*index + 1)
         .is_some_and(|candidate| candidate == "GROUP");
     if repeated {
-        *index += 2;
-        TermKind::DereferencedGroup
-    } else if *index == 0 && default_to_group {
-        *index += 1;
-        TermKind::DereferencedGroup
-    } else {
-        *index += 1;
-        TermKind::LiveGroup
+        // The keypad never produces this: the second Group press replaces GROUP with DEGRP.
+        return Err("GROUP GROUP is not a command; use DEGRP to dereference a group".into());
     }
+    *index += 1;
+    Ok(TermKind::LiveGroup)
 }
 
 fn parse_selection_sources(
@@ -180,7 +176,11 @@ fn parse_selection_sources(
                 kind = TermKind::Fixture;
                 index += 1;
             }
-            "GROUP" => kind = group_marker(tokens, &mut index, default_to_group),
+            "GROUP" => kind = group_marker(tokens, &mut index)?,
+            "DEGRP" => {
+                kind = TermKind::DereferencedGroup;
+                index += 1;
+            }
             "FIXTURE" | "FIXTURES" | "CHANNEL" | "CHANNELS" => {
                 kind = TermKind::Fixture;
                 index += 1;

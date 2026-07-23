@@ -15,7 +15,10 @@ fn fixture_selection(
     String,
 > {
     let snapshot = state.engine.snapshot();
-    let (mut fixtures, sources) = if tokens[start..at_index].iter().any(|token| token == "GROUP") {
+    let (mut fixtures, sources) = if tokens[start..at_index]
+        .iter()
+        .any(|token| token == "GROUP" || token == "DEGRP")
+    {
         let parsed = parse_group_mixed_selection(&snapshot, &tokens[start..at_index], false)?;
         (parsed.fixtures, parsed.sources)
     } else {

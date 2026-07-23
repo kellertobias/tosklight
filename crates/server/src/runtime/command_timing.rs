@@ -103,10 +103,6 @@ pub(super) fn tokenize_programmer_command(
         .split_whitespace()
         .map(|token| token.to_ascii_uppercase())
     {
-        if token == "DEGRP" {
-            raw_tokens.extend(["GROUP".to_owned(), "GROUP".to_owned()]);
-            continue;
-        }
         if token == "F" || token == "G" {
             raw_tokens.push(if token == "F" { "FIXTURE" } else { "GROUP" }.to_owned());
             continue;

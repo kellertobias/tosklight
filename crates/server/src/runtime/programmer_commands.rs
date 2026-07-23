@@ -37,7 +37,7 @@ pub(super) fn execute_programmer_command_from(
         command if show_command(command) => {
             execute_show_command(state, session, &tokens, timing, context)
         }
-        "GROUP" => execute_group_programmer_command(
+        "GROUP" | "DEGRP" => execute_group_programmer_command(
             state,
             session,
             command_line,

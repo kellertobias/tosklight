@@ -160,8 +160,16 @@ pub(super) fn execute_group_programmer_command(
     tokens: &[String],
     timing: CommandTiming,
 ) -> Result<usize, String> {
-    let frozen = tokens.get(1).is_some_and(|token| token == "GROUP");
-    let id_index = if frozen { 2 } else { 1 };
+    // DEGRP is the only dereference vocabulary: the keypad's second Group press replaces
+    // GROUP with DEGRP, and string input uses the same word. `GROUP GROUP` is not a command.
+    if tokens
+        .windows(2)
+        .any(|pair| pair[0] == "GROUP" && pair[1] == "GROUP")
+    {
+        return Err("GROUP GROUP is not a command; use DEGRP to dereference a group".into());
+    }
+    let frozen = tokens.first().is_some_and(|token| token == "DEGRP");
+    let id_index = 1;
     let at_index = tokens
         .iter()
         .position(|token| token == "AT")
@@ -176,21 +184,19 @@ pub(super) fn execute_group_programmer_command(
                 "FIXTURE" | "FIXTURES" | "CHANNEL" | "CHANNELS"
             )
         })
-        || tokens[1..at_index]
-            .windows(2)
-            .any(|pair| pair[0] == "GROUP" && pair[1] == "GROUP");
+        || tokens[1..at_index].iter().any(|token| token == "DEGRP");
     if at_index < tokens.len() && mixed {
         return execute_mixed_group_value(
             state,
             session,
-            &tokens[1..at_index],
+            &tokens[..at_index],
             &tokens[at_index + 1..],
             timing,
         );
     }
     if at_index == tokens.len() && mixed && !address.iter().any(|token| token == "DIV") {
         let parsed =
-            parse_group_mixed_selection(&state.engine.snapshot(), &tokens[1..at_index], true)?;
+            parse_group_mixed_selection(&state.engine.snapshot(), &tokens[..at_index], true)?;
         state.programmers.select_expression(
             session.id,
             parsed.fixtures.clone(),
