@@ -343,6 +343,8 @@ mod programmer_groups;
 
 mod snapshot_groups;
 
+mod spread_recall;
+
 mod move_in_black;
 
 mod programmer_fades;

@@ -57,6 +57,7 @@ include!("highlight_timing_tests.rs");
 include!("osc_highlight_tests.rs");
 include!("highlight_session_tests.rs");
 include!("group_command_tests.rs");
+include!("spread_recall_tests.rs");
 include!("command_contract_tests.rs");
 include!("cue_transfer_support.rs");
 include!("cue_transfer_tests.rs");
