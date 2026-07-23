@@ -63,6 +63,10 @@ ShowRecoveryModal, ConnectionState, LayoutPersistence, and the setup-window
 controller/General/Outputs/Network sections. `ServerProvider` still composes the internal
 value that feeds the scoped providers; the compatibility read surface is gone.
 
+**API rules are codified in [`docs/engineering/api-rules.md`](../engineering/api-rules.md)**
+(binding for all new/reworked routes; referenced from `AGENTS.md`). Summary of the decisions
+they capture:
+
 **API direction (maintainer, 2026-07-23):**
 
 1. **Intentional APIs, two shapes.** Reads load whole-object state (snapshots). Writes express
