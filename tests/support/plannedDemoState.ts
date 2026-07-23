@@ -24,7 +24,7 @@ const PLANNED_DEMO_PACKAGES = [
   ["Venue", "Curtain 2 m", "venue--curtain-2-m.toskfixture"],
   ["Generic", "Dimmer Fresnel", "generic--dimmer-fresnel.toskfixture"],
   ["Generic", "Dimmer", "generic--dimmer.toskfixture"],
-  ["Generic", "Dimmer PAR Can", "generic--dimmer-par-can.toskfixture"],
+  ["Generic", "ACL", "generic--acl.toskfixture"],
   ["ROBE", "Robin DLS Profile", "robe--robin-dls-profile.toskfixture"],
   ["JB-Lighting", "JBLED A7", "jb-lighting--jbled-a7.toskfixture"],
   ["Showtec", "Sunstrip LED RGB 42206", "showtec--sunstrip-led-rgb-42206.toskfixture"],
@@ -105,7 +105,7 @@ export async function seedPlannedDemoPatch(
   const curtain = definition("Venue", "Curtain 2 m", "5 m");
   const fresnel = definition("Generic", "Dimmer Fresnel", "8-bit");
   const dimmer = definition("Generic", "Dimmer", "8-bit");
-  const acl = definition("Generic", "Dimmer PAR Can", "8-bit");
+  const acl = definition("Generic", "ACL", "8-bit");
   const profile = definition("ROBE", "Robin DLS Profile", "Mode 3");
   const wash = definition("JB-Lighting", "JBLED A7", "Standard RGB 16 Bit (S16)");
   const strip = definition("Showtec", "Sunstrip LED RGB 42206", "30 Channel");
@@ -158,11 +158,11 @@ export async function seedPlannedDemoPatch(
 
   let address = 13;
   spread(8, -3.8, 3.8).forEach((x, index) => {
-    inputs.push({ phase: "remaining", number: 101 + index, name: `Profile ${index + 1}`, definition: profile, layerId: layers["Back Truss"], universe: 1, address, x, y: 3.85, z: 4, rotation: { x: -90, y: 0, z: 0 } });
+    inputs.push({ phase: "remaining", number: 101 + index, name: `Profile ${index + 1}`, definition: profile, layerId: layers["Back Truss"], universe: 1, address, x, y: 3.85, z: 4 });
     address += profile.footprint;
   });
   spread(7, -3.25, 3.25).forEach((x, index) => {
-    inputs.push({ phase: "remaining", number: 201 + index, name: `Wash ${index + 1}`, definition: wash, layerId: layers["Back Truss"], universe: 1, address, x, y: 3.85, z: 4, rotation: { x: -90, y: 0, z: 0 } });
+    inputs.push({ phase: "remaining", number: 201 + index, name: `Wash ${index + 1}`, definition: wash, layerId: layers["Back Truss"], universe: 1, address, x, y: 3.85, z: 4 });
     address += wash.footprint;
   });
   address = 1;

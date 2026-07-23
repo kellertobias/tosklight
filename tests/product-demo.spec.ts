@@ -111,7 +111,7 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
 
     await desk.titleCard("SHOW SETUP · ACL", "Patch both ACL control fixtures first, place the first ACL by hand, then reveal the two tightly mounted physical fans.");
     await addFixtureViaUi(desk, page, patchWindow, "Back Truss", {
-      search: "Dimmer PAR Can", family: "Dimmer PAR Can", mode: "8-bit",
+      search: "ACL", family: "ACL", mode: "8-bit",
       name: "ACL In", fixtureNumber: 81, patch: "1.1", count: 2,
     });
     const firstAclLocation = { x: -.4, y: 3.8, z: 4.5 };
