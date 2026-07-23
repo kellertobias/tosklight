@@ -2,7 +2,8 @@ import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import { fixtureIdsByNumber, loadCanonicalCopy, putObject } from "./support/catalog";
 
-// Maintainer requirement (docs/plans/refactoring-remaining.md §4): fast-changing playback
+// Maintainer requirement (docs/engineering/api-rules.md §1: volatile state is pushed,
+// not polled — telemetry design decided 2026-07-23): fast-changing playback
 // runtime values are sampled server-side on a render-frame divider nearest ~10 Hz (44 Hz
 // output → every 4th frame ≈ 11 Hz) and pushed as delta ticks on the v2 events lane; the
 // client renders them from a retained store without polling.

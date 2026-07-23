@@ -1,7 +1,7 @@
 # ToskLight refactoring — execution record (DONE)
 
 > **Archived 2026-07-23.** This plan was executed to completion (P1–P4, D1–D4). The follow-up
-> work now lives in [`../refactoring-remaining.md`](../refactoring-remaining.md).
+> work now lives in the chunk queue at [`../refactoring/README.md`](../refactoring/README.md).
 
 Single source of truth for finishing the refactoring on branch `refactoring`. The architectural
 intent lives in [`../major-refactoring.md`](../major-refactoring.md); this file is the current state,

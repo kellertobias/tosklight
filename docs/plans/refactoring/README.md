@@ -3,9 +3,12 @@
 This folder is the execution queue for the remaining ToskLight refactoring work. Every
 chunk was verified against the actual code on 2026-07-23 (file:line references in each
 chunk file were confirmed to exist at planning time — re-verify at execution time, the
-tree moves). The superseded narrative plan lives in
-[`../refactoring-remaining.md`](../refactoring-remaining.md) (now a pointer) and
-[`../major-refactoring.md`](../major-refactoring.md) (architectural intent).
+tree moves). Architectural intent and contracts live in
+[`../major-refactoring.md`](../major-refactoring.md) (bound to by
+`docs/engineering/architecture-boundaries.md` and `refactoring-test-boundaries.md`);
+the completed execution history is
+[`../Done/major-refactoring-execution.DONE.md`](../Done/major-refactoring-execution.DONE.md).
+Start execution sessions with the `/goal` in [`prompt.md`](./prompt.md).
 
 ## Workflow
 
@@ -34,9 +37,9 @@ keep the ordering, note the split in the parent's Result.
 
 ## Suite baseline
 
-- Last recorded full-suite result (2026-07-23, after the section 2–4 fixes landed):
-  **274 passed / 13 skipped**; the only failing test is the user-dirty `product-demo`
-  run. (The older `refactoring-remaining.md` figure of 267/19 predates those fixes.)
+- Last recorded full-suite result (2026-07-23, after the skipped-test/DMX-006/telemetry
+  fixes landed): **274 passed / 13 skipped**; the only failing test is the user-dirty
+  `product-demo` run.
 - Current tree has 6 `test.skip` sites: CUE-011 @supplemental-ui + its @ui skip entry
   (chunk 02), 3× MANUAL-019 @ui and PRELOAD-004 @supplemental-ui (deferred §5 features,
   out of scope here), and the conditional desktop-smoke gate.
@@ -88,22 +91,7 @@ Dependencies are noted inside each chunk (e.g. 05 after 03; 10–11 after 09; 17
 
 ## Execution prompt
 
-Start an execution session with exactly this `/goal`:
-
-```
-/goal In /Users/keller/repos/light (branch `refactoring`), work through
-docs/plans/refactoring/pending/ per docs/plans/refactoring/README.md: claim the
-lowest-numbered pending chunk by moving it to doing/ (max one file there), re-verify its
-file:line claims against the code, execute it within scope, run its verification steps
-plus the full suite, and land it with no net new regressions; then append a "## Result"
-note and move it to done/ with a topic commit (do not push). If the fresh suite baseline
-in README.md is unfilled, run npm run test:e2e first and fill it in. STOP and ask the
-maintainer whenever a chunk contains an unresolved DECISION NEEDED, when a chunk's
-verified premises no longer hold, or when a fix would expand beyond the chunk's scope —
-do not improvise around a decision. Follow AGENTS.md and
-docs/engineering/api-rules.md throughout. Done when the claimed chunk is in done/ with
-its Result note and the suite is at or above baseline.
-```
-
-One chunk per session is the intended cadence; a session may take a second chunk if the
-first was trivial and the suite is green.
+The canonical `/goal` prompt for execution sessions lives in [`prompt.md`](./prompt.md)
+(one chunk at a time; parallel subagents where the work decomposes; isolated git
+worktrees — explicitly based on the current `refactoring` head — for parallel file
+edits, consolidated into the branch once the chunk's verification passes).
