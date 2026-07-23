@@ -34,12 +34,17 @@ const mocks = vi.hoisted(() => ({
 	},
 }));
 
-vi.mock("../api/ServerContext", () => ({
-	useServer: () => ({
-		bootstrap: { active_show: { id: "show-a" } },
-		storePreload: mocks.storePreload,
-	}),
+vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
+	useBootstrapReady: () => true,
+	useActiveShowId: () => "show-a",
 }));
+vi.mock(
+	"../features/programmerActions/ProgrammerActionsContext",
+	async (importOriginal) => ({
+		...(await importOriginal<object>()),
+		useProgrammerActions: () => ({ storePreload: mocks.storePreload }),
+	}),
+);
 vi.mock("../state/AppContext", () => ({
 	useApp: () => ({ state: mocks.state, dispatch: mocks.dispatch }),
 }));

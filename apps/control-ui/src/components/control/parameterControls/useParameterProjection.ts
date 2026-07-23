@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { useServer } from "../../../api/ServerContext";
+import { useHardwareConnected } from "../../../features/deskSnapshot/DeskSnapshotState";
+import { useProgrammerActions } from "../../../features/programmerActions/ProgrammerActionsContext";
 import type { VisualizationSnapshot } from "../../../api/types";
 import { capturesProgrammerWrites } from "../../../features/programmerCaptureMode/contracts";
 import { useProgrammerCaptureModeView } from "../../../features/programmerCaptureMode/ProgrammerCaptureModeView";
@@ -84,7 +85,8 @@ function useResolvedValues(
 }
 
 export function useParameterProjection(family: ParameterFamily, active = true) {
-	const server = useServer();
+	const programmerActions = useProgrammerActions();
+	const hardwareAttached = useHardwareConnected();
 	const { state } = useApp();
 	const selection = useProgrammingSelectionView(active);
 	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
@@ -126,7 +128,7 @@ export function useParameterProjection(family: ParameterFamily, active = true) {
 		supported.has(attribute),
 	);
 	return {
-		server,
+		programmerActions,
 		state,
 		active,
 		programmerFadeMillis: programmerFadeMillis ?? undefined,
@@ -148,9 +150,7 @@ export function useParameterProjection(family: ParameterFamily, active = true) {
 			{ length: 6 },
 			(_, index) => attributes[index] ?? null,
 		),
-		hardwareConnected: Boolean(
-			server.bootstrap?.hardware_connected || state.midiProfile,
-		),
+		hardwareConnected: Boolean(hardwareAttached || state.midiProfile),
 	};
 }
 

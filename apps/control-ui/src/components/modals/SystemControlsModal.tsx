@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useServer } from "../../api/ServerContext";
+import { useSessionSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
+import { useProgrammerActions } from "../../features/programmerActions/ProgrammerActionsContext";
 import {
 	useOutputRuntimeActions,
 	useOutputRuntimeView,
@@ -20,7 +21,8 @@ const EMPTY_PROGRAMMERS = [] as const;
 
 function useSystemControlsModel() {
 	const { state, dispatch } = useApp();
-	const server = useServer();
+	const programmerActions = useProgrammerActions();
+	const session = useSessionSnapshot();
 	const [lampResult, setLampResult] = useState("");
 	const [stoppingAll, setStoppingAll] = useState(false);
 	const output = useOutputRuntimeView(state.systemControlsOpen);
@@ -59,7 +61,7 @@ function useSystemControlsModel() {
 		);
 		await Promise.all(
 			actions.map((action) =>
-				server.controlFixtureAction(
+				programmerActions?.controlFixtureAction(
 					action.fixtureId,
 					action.actionId,
 					phase !== "release",
@@ -91,7 +93,7 @@ function useSystemControlsModel() {
 				),
 				...programmers.flatMap((programmer) =>
 					programmer.sessions[0]
-						? [server.clearProgrammer(programmer.sessions[0].sessionId)]
+						? [programmerActions?.clearProgrammer(programmer.sessions[0].sessionId)]
 						: [],
 				),
 				preload.actions.release(),
@@ -102,7 +104,8 @@ function useSystemControlsModel() {
 	};
 	return {
 		open: state.systemControlsOpen,
-		server,
+		programmerActions,
+		session,
 		master,
 		blackout,
 		outputReady,
@@ -194,13 +197,13 @@ export function SystemControlsModal() {
 						releaseAvailable={model.playbackAuthority.canRelease}
 						programmers={model.programmers}
 						programmersLoading={model.lifecycle === null}
-						currentUserId={model.server.session?.user.id ?? null}
-						currentUserName={model.server.session?.user.name ?? null}
+						currentUserId={model.session?.user.id ?? null}
+						currentUserName={model.session?.user.name ?? null}
 						onReleasePlayback={(source) =>
 							void model.playbackAuthority.release(source)
 						}
 						onClearProgrammer={(sessionId) =>
-							void model.server.clearProgrammer(sessionId)
+							void model.programmerActions?.clearProgrammer(sessionId)
 						}
 					/>
 					<OutputControls

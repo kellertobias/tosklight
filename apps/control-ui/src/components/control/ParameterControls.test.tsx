@@ -110,6 +110,23 @@ vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
 }));
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
+	useHardwareConnected: () => Boolean(server.bootstrap?.hardware_connected),
+}));
+vi.mock(
+	"../../features/programmerActions/ProgrammerActionsContext",
+	async (importOriginal) => ({
+		...(await importOriginal<object>()),
+		useProgrammerActions: () => ({
+			undoProgrammer: vi.fn(),
+			clearProgrammer: vi.fn(),
+			controlFixtureAction: server.controlFixtureAction,
+			generateFixturePresets: server.generateFixturePresets,
+			alignSelection: server.alignSelection,
+			storePreload: vi.fn(),
+		}),
+	}),
+);
 vi.mock(
 	"../../features/visualizationRuntime/VisualizationRuntimeView",
 	() => ({

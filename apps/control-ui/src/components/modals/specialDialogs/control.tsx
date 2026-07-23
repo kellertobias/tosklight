@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from "react";
 import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
-import { useServer } from "../../../api/ServerContext";
+import { useProgrammerActions } from "../../../features/programmerActions/ProgrammerActionsContext";
 import type {
 	ControlActionKind,
 	ControlActionSemantic,
@@ -68,7 +68,7 @@ export function ControlDialog({
 }: {
 	selectedFixtureIds: readonly string[];
 }) {
-	const server = useServer();
+	const programmerActions = useProgrammerActions();
 	const selectedFixtures = useSelectedPatchedFixtures(selectedFixtureIds);
 
 	const fixtureControlActions = (
@@ -97,7 +97,7 @@ export function ControlDialog({
 		if (!actions.length) return;
 		await Promise.all(
 			actions.map((action) =>
-				server.controlFixtureAction(
+				programmerActions?.controlFixtureAction(
 					action.fixtureId,
 					action.actionId,
 					phase !== "release",

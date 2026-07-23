@@ -32,7 +32,7 @@ function createParameterActions(
 	) => {
 		await Promise.all(
 			choice.fixtureIds.map((fixtureId) =>
-				projection.server.controlFixtureAction(
+				projection.programmerActions?.controlFixtureAction(
 					fixtureId,
 					choice.actionId,
 					active,
@@ -42,7 +42,7 @@ function createParameterActions(
 	};
 	const generateDirectPresets = async () => {
 		setGenerationStatus("Generating portable presets…");
-		const result = await projection.server.generateFixturePresets(
+		const result = await projection.programmerActions?.generateFixturePresets(
 			projection.directChoices.fixtureIds,
 		);
 		setGenerationStatus(generationMessage(result?.created.length));

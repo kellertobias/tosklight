@@ -163,6 +163,19 @@ const preloadLifecycle = {
 };
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
+	useSessionSnapshot: () => server.session,
+}));
+vi.mock(
+	"../../features/programmerActions/ProgrammerActionsContext",
+	async (importOriginal) => ({
+		...(await importOriginal<object>()),
+		useProgrammerActions: () => ({
+			clearProgrammer: server.clearProgrammer,
+			controlFixtureAction: server.controlFixtureAction,
+		}),
+	}),
+);
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state: appState, dispatch }),
 }));

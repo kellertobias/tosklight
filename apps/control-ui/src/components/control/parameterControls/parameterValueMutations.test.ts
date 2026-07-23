@@ -12,7 +12,7 @@ function projection(
 	overrides: Partial<ParameterProjection> = {},
 ): ParameterProjection {
 	return {
-		server: {} as ParameterProjection["server"],
+		programmerActions: null,
 		programmerFadeMillis: 1_250,
 		state: {} as ParameterProjection["state"],
 		active: true,

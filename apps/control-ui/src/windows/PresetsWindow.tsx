@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { useServer } from "../api/ServerContext";
+import {
+	useActiveShowId,
+	useBootstrapReady,
+} from "../features/deskSnapshot/DeskSnapshotState";
+import { useProgrammerActions } from "../features/programmerActions/ProgrammerActionsContext";
 import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
 import { requestUpdateTarget } from "../components/control/updateWorkflow";
 import { GroupStrip } from "../components/shared/GroupStrip";
@@ -108,7 +112,9 @@ function usePresetsWindowModel({
 	presetFamily,
 	presetPoolColors,
 }: WindowProps) {
-	const server = useServer();
+	const bootstrapReady = useBootstrapReady();
+	const activeShowId = useActiveShowId();
+	const programmerActions = useProgrammerActions();
 	const presetRecall = usePresetRecall(active);
 	const selection = presetRecall.selection;
 	const storedPresets = usePresets(active);
@@ -143,8 +149,8 @@ function usePresetsWindowModel({
 	const groupsVisible = compact
 		? Boolean(showGroupShortcuts)
 		: state.presetGroupsVisible;
-	const fallback = fallbackPresets(!server.bootstrap);
-	const stored = server.bootstrap?.active_show ? storedPresets : fallback;
+	const fallback = fallbackPresets(!bootstrapReady);
+	const stored = activeShowId !== null ? storedPresets : fallback;
 	const cards = resolvePresetCards(stored, family);
 	const cancelRecording = () => {
 		setRecordPresetIndex(null);
@@ -160,7 +166,8 @@ function usePresetsWindowModel({
 			mode,
 			preloadActive: preload.armed || preload.active,
 			actions: presetRecording,
-			storePreload: server.storePreload,
+			storePreload:
+				programmerActions?.storePreload ?? (async () => false),
 		});
 		if (outcome) await command.reset();
 	};

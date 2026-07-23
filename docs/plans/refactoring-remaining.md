@@ -33,16 +33,17 @@ in suggested order. Each chunk lands independently.
 - Eight dead `useServer()` calls removed (ChannelsWindow, CuelistWindow, useStageLayout,
   DeskLockSettingsModal, SpecialDialogsModal, specialDialogs/color, ProgrammerFadeFader,
   PlaybackTools).
-- `features/highlight` (scoped Highlight store + actions context) and migration of
-  HighlightControls, HardwareControlSummary, and the Fixture Sheet step presenter.
+- `features/highlight` (scoped Highlight store + actions context, incl.
+  `setPatchPreviewHighlight`) and migration of HighlightControls, HardwareControlSummary,
+  the Fixture Sheet step presenter, and PatchWindow.
+- `features/programmerActions` (scoped one-shot programmer actions: undo, clear,
+  control actions, preset generation, align, storePreload) and migration of the numeric
+  pad, SystemControlsModal, specialDialogs/control, PreloadStoreModal, PresetsWindow,
+  and the parameter-controls projection/controller/tabs.
 
-**Remaining consumers (~26 files)**, grouped by the scoped owner they need next:
+**Remaining consumers (~18 files)**, grouped by the scoped owner they need next:
 one-shot/diagnostic actions (DebugModal: `readServerLogs`/`simulateError`/output-health —
-health now readable via `useOutputHealth`), programming actions
-(`useNumericPadController: undoProgrammer`; `useParameterProjection` and its
-controller: `controlFixtureAction`/`generateFixturePresets`/`alignSelection`;
-SystemControlsModal; specialDialogs/control; PreloadStoreModal + PresetsWindow:
-`storePreload`), command line (`CommandLineBar: dismissError`;
+health now readable via `useOutputHealth`), command line (`CommandLineBar: dismissError`;
 CommandLineHistoryPanel: `commandHistory`), fixture library + patch
 (FixtureLibrarySetup, fixtureLibrary/{editor,revisions,transfers,warnings},
 fixturePatch/controller, PatchFeatureBoundary; PatchWindow is migrated —

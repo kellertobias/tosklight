@@ -1,6 +1,6 @@
 import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { useEffect, useMemo, useState } from "react";
-import { useServer } from "../../api/ServerContext";
+import { useProgrammerActions } from "../../features/programmerActions/ProgrammerActionsContext";
 import { useCueRecording } from "../../features/cueRecording/CueRecordingProvider";
 import {
 	useCueLists,
@@ -22,7 +22,7 @@ type PresetRecordMode = "merge" | "overwrite" | "add_missing_fixtures";
 
 export function PreloadStoreModal() {
 	const { state, dispatch } = useApp();
-	const server = useServer();
+	const programmerActions = useProgrammerActions();
 	const cueRecording = useCueRecording();
 	const presets = usePresets();
 	const cueLists = useCueLists();
@@ -54,7 +54,7 @@ export function PreloadStoreModal() {
 		const stored =
 			target === "cue"
 				? await recordCue(cueRecording, targetId, cueNumber, name)
-				: await server.storePreload(
+				: ((await programmerActions?.storePreload(
 						{
 							target,
 							target_id: targetId,
@@ -62,7 +62,7 @@ export function PreloadStoreModal() {
 							mode,
 						},
 						targetObject?.revision ?? 0,
-					);
+					)) ?? false);
 		if (stored) close();
 	};
 

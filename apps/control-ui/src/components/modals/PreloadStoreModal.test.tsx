@@ -30,12 +30,13 @@ const mocks = vi.hoisted(() => ({
 	],
 }));
 
-vi.mock("../../api/ServerContext", () => ({
-	useServer: () => ({
-		storePreload: mocks.storePreload,
-		error: null,
+vi.mock(
+	"../../features/programmerActions/ProgrammerActionsContext",
+	async (importOriginal) => ({
+		...(await importOriginal<object>()),
+		useProgrammerActions: () => ({ storePreload: mocks.storePreload }),
 	}),
-}));
+);
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state: mocks.state, dispatch: mocks.dispatch }),
 }));

@@ -1,4 +1,4 @@
-import { useServer } from "../../../api/ServerContext";
+import { useProgrammerActions } from "../../../features/programmerActions/ProgrammerActionsContext";
 import {
 	usePlaybackDeskView,
 	usePlaybackRuntimeStatus,
@@ -25,7 +25,7 @@ const shiftedWindows: Partial<Record<SoftwareKey, BuiltInWindow>> = {
 };
 
 export function useNumericPadController() {
-	const server = useServer();
+	const programmerActions = useProgrammerActions();
 	const command = useCommandLineSurface({
 		selection: true,
 		observeCommand: false,
@@ -40,7 +40,7 @@ export function useNumericPadController() {
 	const hasSelection = command.selected.length > 0;
 	const hasProgrammerValues = values.ready && values.valueCount > 0;
 	const context = {
-		server,
+		programmerActions,
 		command,
 		state,
 		dispatch,
@@ -67,7 +67,7 @@ export function useNumericPadController() {
 }
 
 interface NumericPadContext {
-	server: ReturnType<typeof useServer>;
+	programmerActions: ReturnType<typeof useProgrammerActions>;
 	command: ReturnType<typeof useCommandLineSurface>;
 	state: ReturnType<typeof useApp>["state"];
 	dispatch: ReturnType<typeof useApp>["dispatch"];
@@ -97,7 +97,7 @@ async function advancePreload({ preload }: NumericPadContext) {
 }
 
 function pressKey(context: NumericPadContext, key: SoftwareKey) {
-	const { state, dispatch, command, server } = context;
+	const { state, dispatch, command, programmerActions } = context;
 	const currentCommand = command.read();
 	if (key === "SHIFT") {
 		dispatch({ type: "SET_SHIFT_ARMED", value: !state.shiftArmed });
@@ -107,7 +107,7 @@ function pressKey(context: NumericPadContext, key: SoftwareKey) {
 		return;
 	if (key === "CLR") return clearStep(context);
 	if (key === "SET" && currentCommand.pristine && handleSet(context)) return;
-	if (key === "UND") return void server.undoProgrammer();
+	if (key === "UND") return void programmerActions?.undoProgrammer();
 	if (key === "ENT") return executeCommand(context);
 	const edited = editTargetedCommandWithSoftwareKey(
 		currentCommand.text,
@@ -168,7 +168,6 @@ function clearStep(context: NumericPadContext) {
 		state,
 		dispatch,
 		command,
-		server,
 		values,
 		valuesActions,
 		selectionActions,

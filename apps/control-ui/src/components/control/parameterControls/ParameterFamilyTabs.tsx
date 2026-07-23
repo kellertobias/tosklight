@@ -47,7 +47,7 @@ function AlignmentControl({ controller }: { controller: ParameterController }) {
 							: alignModes.indexOf(controller.alignMode) + 1) %
 							alignModes.length
 					];
-				void controller.server.alignSelection("pan", next);
+				void controller.programmerActions?.alignSelection("pan", next);
 				controller.setAlignMode(next);
 			}}
 		>

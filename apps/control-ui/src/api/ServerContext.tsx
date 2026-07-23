@@ -8,6 +8,7 @@ import {
 	HighlightActionsProvider,
 	HighlightStateProvider,
 } from "../features/highlight/HighlightState";
+import { ProgrammerActionsProvider } from "../features/programmerActions/ProgrammerActionsContext";
 import { FilesProvider } from "../features/files/FilesContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
@@ -119,10 +120,29 @@ export function ServerProvider({
 			value.setPatchPreviewHighlight,
 		],
 	);
+	const programmerActions = useMemo(
+		() => ({
+			undoProgrammer: value.undoProgrammer,
+			clearProgrammer: value.clearProgrammer,
+			controlFixtureAction: value.controlFixtureAction,
+			generateFixturePresets: value.generateFixturePresets,
+			alignSelection: value.alignSelection,
+			storePreload: value.storePreload,
+		}),
+		[
+			value.undoProgrammer,
+			value.clearProgrammer,
+			value.controlFixtureAction,
+			value.generateFixturePresets,
+			value.alignSelection,
+			value.storePreload,
+		],
+	);
 	return (
 		<ServerContext.Provider value={value}>
 			<HighlightStateProvider store={state.highlightStore}>
 			<HighlightActionsProvider actions={highlightActions}>
+			<ProgrammerActionsProvider actions={programmerActions}>
 			<ServerDeskBoundaries state={state}>
 			<ServerVisualizationRuntimeBoundary state={state}>
 				<ShowObjectsViewProvider
@@ -191,6 +211,7 @@ export function ServerProvider({
 				</ShowObjectsViewProvider>
 			</ServerVisualizationRuntimeBoundary>
 			</ServerDeskBoundaries>
+			</ProgrammerActionsProvider>
 			</HighlightActionsProvider>
 			</HighlightStateProvider>
 		</ServerContext.Provider>
