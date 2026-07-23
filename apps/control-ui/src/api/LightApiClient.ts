@@ -12,6 +12,7 @@ import { LightClientRuntime } from "./client/runtime";
 import { SelectiveImportApiClient } from "./client/selectiveImport";
 import { ShowObjectsApiClient } from "./client/showObjects";
 import { ShowApiClient } from "./client/shows";
+import { StageLayoutApiClient } from "./client/stageLayout";
 
 export {
 	configuredServerUrl,
@@ -42,6 +43,7 @@ export class LightApiClient extends LightClientRuntime {
 	private readonly selectiveImportApi = new SelectiveImportApiClient(
 		this.transport,
 	);
+	private readonly stageLayoutApi = new StageLayoutApiClient(this.transport);
 
 	helpCatalog = bindClientMethod(this.helpApi, "helpCatalog");
 	helpTopic = bindClientMethod(this.helpApi, "helpTopic");
@@ -171,6 +173,7 @@ export class LightApiClient extends LightClientRuntime {
 	deleteObject = bindClientMethod(this.showObjectsApi, "deleteObject");
 	storePreload = bindClientMethod(this.showObjectsApi, "storePreload");
 	undoObject = bindClientMethod(this.showObjectsApi, "undoObject");
+	moveStageSelection = bindClientMethod(this.stageLayoutApi, "moveSelection");
 	programmers = bindClientMethod(this.programmingApi, "programmers");
 	programmingInteractionSnapshot = bindClientMethod(
 		this.programmingApi,

@@ -10,10 +10,13 @@ import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotSt
 import { VerticalTouchFader } from "./VerticalTouchFader";
 import { DualVerticalTouchFader } from "./DualVerticalTouchFader";
 import type { StagePosition3d } from "../../api/ServerContext";
+import type { StagePositionAxis } from "../../api/stageLayoutTypes";
 import { migrateStagePosition } from "../../windows/stage3dScene";
 import { Button } from "../common";
 import { HardwareEncoderDisplay } from "./HardwareEncoderDisplay";
 import { useStageSelection } from "../../windows/stageWindow/useStageSelection";
+
+const axes: Record<keyof StagePosition3d, StagePositionAxis> = { x: "x", y: "y", z: "z", rotationX: "rotation_x", rotationY: "rotation_y", rotationZ: "rotation_z" };
 
 const fields: Array<{ key: keyof StagePosition3d; label: string; scale: number; offset: number }> = [
   { key: "x", label: "X Position", scale: 20, offset: 10 }, { key: "y", label: "Y Position", scale: 20, offset: 0 }, { key: "z", label: "Z Position", scale: 20, offset: 10 },
@@ -35,9 +38,8 @@ export function StageCommandControls() {
   const update = (key: keyof StagePosition3d, nextValue: number) => {
     if (!first) return;
     const delta = nextValue - first[key];
-    const nextPositions = { ...positions };
-    for (const id of selected) if (nextPositions[id]) nextPositions[id] = { ...nextPositions[id], [key]: nextPositions[id][key] + delta };
-    void stageLayoutActions?.saveStageLayout({ version: 2, positions: stagePositions, positions3d: nextPositions });
+    if (delta === 0) return;
+    void stageLayoutActions?.moveStageSelection(selected, axes[key], delta);
   };
   useEffect(() => {
     if (!hardwareConnected) return;

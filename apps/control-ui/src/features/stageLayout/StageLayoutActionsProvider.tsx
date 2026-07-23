@@ -4,12 +4,23 @@ import {
 	useContext,
 	useMemo,
 } from "react";
+import type {
+	StageLayoutActionOutcome,
+	StageLayoutActionRequest,
+	StagePositionAxis,
+} from "../../api/stageLayoutTypes";
 import type { StoredStageLayout } from "../server/contracts";
 import type { StageLayoutObject, StageLayoutStore } from "./store";
 
 export interface StageLayoutActions {
 	/** Persists the stage layout against the revision this desk currently observes. */
 	saveStageLayout(layout: StoredStageLayout): Promise<void>;
+	/** Moves the selected fixtures along one axis via the server-side intent route. */
+	moveStageSelection(
+		fixtureIds: string[],
+		axis: StagePositionAxis,
+		delta: number,
+	): Promise<void>;
 }
 
 interface StageLayoutActionsProviderProps {
@@ -21,6 +32,9 @@ interface StageLayoutActionsProviderProps {
 		layout: StoredStageLayout,
 		expectedRevision: number,
 	): Promise<void>;
+	moveStageSelection(
+		request: StageLayoutActionRequest,
+	): Promise<StageLayoutActionOutcome>;
 	readStageLayout(showId: string): Promise<StageLayoutObject | null>;
 	onApplied(layout: StageLayoutObject | null): void;
 	onError(message: string | null): void;
@@ -34,6 +48,7 @@ export function StageLayoutActionsProvider({
 	store,
 	showId,
 	putStageLayout,
+	moveStageSelection,
 	readStageLayout,
 	onApplied,
 	onError,
@@ -55,8 +70,35 @@ export function StageLayoutActionsProvider({
 					onError(reason instanceof Error ? reason.message : String(reason));
 				}
 			},
+			moveStageSelection: async (fixtureIds, axis, delta) => {
+				try {
+					if (!showId)
+						throw new Error("Open a show before moving stage positions");
+					await moveStageSelection({
+						request_id: crypto.randomUUID(),
+						action: {
+							type: "move_selection",
+							fixture_ids: fixtureIds,
+							axis,
+							delta,
+						},
+					});
+					onApplied(await readStageLayout(showId));
+					onError(null);
+				} catch (reason) {
+					onError(reason instanceof Error ? reason.message : String(reason));
+				}
+			},
 		}),
-		[onApplied, onError, putStageLayout, readStageLayout, showId, store],
+		[
+			moveStageSelection,
+			onApplied,
+			onError,
+			putStageLayout,
+			readStageLayout,
+			showId,
+			store,
+		],
 	);
 	return (
 		<StageLayoutActionsContext.Provider value={actions}>

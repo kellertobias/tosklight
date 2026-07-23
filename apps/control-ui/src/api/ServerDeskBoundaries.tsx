@@ -76,6 +76,7 @@ export function ServerDeskBoundaries({
 						store={state.stageLayoutStore}
 						showId={state.bootstrap?.active_show?.id ?? null}
 						putStageLayout={putStageLayout}
+						moveStageSelection={state.client.moveStageSelection}
 						readStageLayout={readStageLayout}
 						onApplied={state.setStageLayout}
 						onError={state.setError}
