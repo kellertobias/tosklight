@@ -12,7 +12,7 @@ Use Virtual Playbacks for task-specific buttons, not as a substitute for assigni
 
 An exclusion zone is a named set of cells where at most one assigned playback may be On. Hold Shift and select at least two cells, choose **Create Exclusion Zone**, and enter its name. Shift-selection and zone creation are configuration gestures: they do not press, start, or stop the selected cells.
 
-When one member turns On, it wins and every other active member turns Off. Turning the winning member Off does not start another member. Touch, mouse, the F1–F8 current-page shortcuts, REST, OSC, and restored playback state all use this server-owned rule. Automatic full-override release remains a separate playback option.
+When one member turns On, it wins and every other active member turns Off. Turning the winning member Off does not start another member. Touch, mouse, the F1–F8 current-page shortcuts, OSC, and restored playback state all use this server-owned rule. Automatic full-override release remains a separate playback option.
 
 Open the pane's **Settings → Virtual Playbacks** tab to rename a zone, change its cells, or delete it. A cell may belong to several zones; activating it releases the other members of all those zones. Changing playback page keeps the same cell positions and applies them to the new current-page assignments.
 

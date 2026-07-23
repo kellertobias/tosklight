@@ -1,5 +1,5 @@
-# OSC, REST, and WebSocket Protocols
+# OSC Protocol
 
-ToskLight exposes OSC for desk/control-surface input, REST for authenticated snapshots and mutations, and WebSocket for live events and typed control updates.
+ToskLight exposes OSC for desk and control-surface input with authoritative feedback.
 
-Start with [OSC, REST, and WebSocket Protocols](01-osc-rest-and-websocket.md).
+Start with [OSC Protocol](01-osc-rest-and-websocket.md).

@@ -1,6 +1,6 @@
-# OSC, REST, and WebSocket Protocols
+# OSC Protocol
 
-Use these interfaces only on a trusted lighting network. One ToskLight application and its attached OSC hardware form one desk with one shared command line and authoritative desk state. A different desk alias remains an isolated control context.
+Use this interface only on a trusted lighting network. One ToskLight application and its attached OSC hardware form one desk with one shared command line and authoritative desk state. A different desk alias remains an isolated control context.
 
 ## OSC
 
@@ -33,7 +33,7 @@ Highlight and selection-step actions use the OSC subscriber's authenticated user
 
 There is no Capture action: `/highlight/capture` and `/highlight/reset` are not inputs. Any selection operation outside PREV, NEXT, and ALL replaces the remembered source with the resulting actual selection and returns the selection state to complete. Programmer-value changes do not reset it.
 
-Physical button bounce or a repeated identical action is accepted only once inside a 150 ms guard window. Aliases are normalized before this check, so `/previous` followed by `/prev` cannot advance twice. A different action is accepted immediately. Software, keyboard, REST, WebSocket, and OSC all use the same server state; an OSC client must not maintain its own selection, step index, or Highlight state.
+Physical button bounce or a repeated identical action is accepted only once inside a 150 ms guard window. Aliases are normalized before this check, so `/previous` followed by `/prev` cannot advance twice. A different action is accepted immediately. Software, keyboard, and OSC all use the same server state; an OSC client must not maintain its own selection, step index, or Highlight state.
 
 Every normal feedback cycle includes:
 
@@ -51,29 +51,3 @@ Every normal feedback cycle includes:
 | `/light/{desk}/feedback/highlight/fixture/name` | Active stepped fixture/head name, or an empty string in complete-selection state. |
 
 Refresh all of these fields after reconnect instead of applying an old local index. An external authoritative selection event immediately replaces the old step basis and feedback with the resulting complete selection. An action rejected because another user owns live Highlight output leaves the authoritative state unchanged.
-
-## REST
-
-REST is rooted at `/api/v1`. Health, readiness, version, session creation, and the desk-lock boundary are available before ordinary authenticated operations. Create a session with `POST /api/v1/sessions`, then send its bearer token for protected reads and mutations. A LAN deployment should configure `LIGHT_DESK_TOKEN` and must not expose the API directly to an untrusted network.
-
-The main resource families are:
-
-| Resource family | Examples |
-| --- | --- |
-| Service state | `/health`, `/readiness`, `/version`, `/diagnostics`, `/bootstrap` |
-| Sessions and users | `/sessions`, `/users` |
-| Shows and revisions | `/shows`, `/shows/{id}/open`, `/shows/{id}/revisions` |
-| Show objects | `/shows/{id}/objects/{kind}` and revision-checked object mutations |
-| Programmer, Highlight, and playback | `/programmer/set`, `/programmers`, `/highlight`, `/highlight/action`, `/playbacks`, `/playback-pool/{number}/{action}` |
-| Desk and screen control | `/control-desks/{id}`, `/control-desks/{id}/page`, `/screens/{id}` |
-| Output inspection | `/dmx`, `/dmx/override`, `/configuration` |
-
-Treat response revisions as concurrency guards. A stale or invalid mutation must be rejected rather than partially applied. Use the current server response and audit/event stream as the authoritative result instead of assuming a successful local UI update.
-
-For Highlight and selection stepping, `GET /api/v1/highlight` returns the current desk/user state. `POST /api/v1/highlight/action` accepts a body such as `{"action":"next"}`; the action is one of `on`, `off`, `toggle`, `next`, `previous`, or `all`, and the response is the updated state. `active` reports HIGH only. `mode` is `selection` for the complete actual selection or `step` for one stepped item. `active_index` is zero-based in REST and `null` in complete-selection state; the OSC feedback index is deliberately one-based with `0` for complete selection. `total` follows the current live resolution of the remembered source. Because stepping wraps, both availability fields remain true whenever that source contains at least one valid item. `capture` and `reset` are not accepted actions.
-
-## WebSocket events
-
-Connect to `/api/v1/events` with the authenticated token subprotocol. WebSocket events carry live changes that would be inefficient or ambiguous to poll, including show revisions, authoritative desk/programmer state, `highlight_changed`, and typed control feedback. REST establishes or changes state; WebSocket confirms and follows the resulting live state.
-
-Reconnect by refreshing the relevant REST/bootstrap snapshots before applying later events. Do not replay an old client-side snapshot over newer server state after a reconnect.

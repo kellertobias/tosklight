@@ -8,7 +8,7 @@ Preload capture configuration lives in **Desk Setup > Programmer**. MIDI, OSC, R
 
 Network & Inputs reports the active OSC bind address; it does not edit that binding. Configure the server-side OSC bind through the installation configuration, then return here to verify what the running desk loaded. Bind only to the trusted lighting-network interface. One ToskLight application and the OSC hardware subscribed to its alias form one desk: a physical button continues that desk's visible command and behaves like the corresponding UI button. A different desk alias retains its own command line, page, and button state. Programmer values are owned by the logged-in user instead, so a value that has been confirmed into that user's programmer is visible from the same user's sessions on every desk without copying the originating desk's unfinished interaction state.
 
-After binding, test a harmless selection and confirm the command text and result in the application. Avoid exposing OSC to untrusted networks; OSC itself does not provide the desk-token boundary used by REST and WebSocket clients.
+After binding, test a harmless selection and confirm the command text and result in the application. Avoid exposing OSC to untrusted networks; OSC itself does not provide the desk-token boundary used by remote application connections.
 
 ## MIDI and RTP-MIDI
 
@@ -30,10 +30,10 @@ Matter On/Off and Level Control writes use the same authoritative playback dispa
 
 Current builds use the official `rs-matter` development vendor, product, and attestation credentials because ToskLight does not yet ship CSA-issued production credentials. Controllers that accept development devices can commission the bridge; a controller that requires certified production attestation may warn or reject it.
 
-## REST, WebSocket, and remote servers
+## Remote servers
 
-The desktop app normally connects to `http://127.0.0.1:5000`. Change **Light server URL** to operate a remote server, then press **Connect to server**. REST provides snapshots and coarse operations; WebSocket carries live events and typed controls. A LAN server should use `LIGHT_DESK_TOKEN`.
+The desktop app normally connects to `http://127.0.0.1:5000`. Change **Light server URL** to operate a remote server, then press **Connect to server**. A LAN server should use `LIGHT_DESK_TOKEN`.
 
-For address structure, authentication, subscriptions, current-page versus explicit-page playback addressing, and the main REST resource families, continue to [OSC, REST, and WebSocket Protocols](../50-Protocols/01-osc-rest-and-websocket.md).
+For address structure, authentication, subscriptions, and current-page versus explicit-page playback addressing, continue to [OSC Protocol](../50-Protocols/01-osc-rest-and-websocket.md).
 
-![Remote server, REST, and WebSocket configuration](../assets/screenshots/workflows/desk-setup-network-api.png)
+![Remote server configuration](../assets/screenshots/workflows/desk-setup-network-api.png)

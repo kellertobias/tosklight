@@ -63,6 +63,12 @@ ShowRecoveryModal, ConnectionState, LayoutPersistence, and the setup-window
 controller/General/Outputs/Network sections. `ServerProvider` still composes the internal
 value that feeds the scoped providers; the compatibility read surface is gone.
 
+**DECIDED (maintainer, 2026-07-23): REST and WebSocket are not customer-facing for now.**
+The Protocols help chapter and all operator documentation describe OSC only; the HTTP/WS
+API is an internal application transport until explicitly re-published. This supersedes
+"update the Protocols chapter to describe the v2 surface" below — no v2 REST/WS
+documentation chapter is required.
+
 **Remaining for §1: server-side v1 route removal.** Remove unused v1 REST/WebSocket routes
 one route per chunk with a grep for remaining callers (client `api/client/*`, OSC/hardware
 surfaces, desktop bridge, bench helpers under `apps/control-ui/e2e/bench` and root
