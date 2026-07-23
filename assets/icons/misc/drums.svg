@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>misc drums</title>
+  <ellipse cx="33" cy="39" rx="14" ry="12"/><circle cx="33" cy="39" r="4"/><ellipse cx="16" cy="27" rx="8" ry="5"/><ellipse cx="49" cy="27" rx="8" ry="5"/><path d="M16 32v12m33-12v12M33 27V13m-11 0h22M12 53l7-14m34 14-7-14M33 51v6"/>
+</svg>

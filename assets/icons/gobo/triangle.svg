@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <title>gobo triangle</title>
+  <circle cx="32" cy="32" r="24"/><path d="m32 16 15 28H17l15-28Z" fill="#fff" stroke="none"/>
+</svg>
