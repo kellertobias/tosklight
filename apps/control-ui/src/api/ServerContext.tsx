@@ -111,8 +111,13 @@ export function ServerProvider({
 		() => ({
 			highlightAction: value.highlightAction,
 			dismissHighlightError: value.dismissHighlightError,
+			setPatchPreviewHighlight: value.setPatchPreviewHighlight,
 		}),
-		[value.highlightAction, value.dismissHighlightError],
+		[
+			value.highlightAction,
+			value.dismissHighlightError,
+			value.setPatchPreviewHighlight,
+		],
 	);
 	return (
 		<ServerContext.Provider value={value}>

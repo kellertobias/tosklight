@@ -39,10 +39,11 @@ vi.mock("../features/patch/PatchContext", () => ({
 	usePatch: () => ({ fixtures: [{ fixture_id: "projected-fixture" }] }),
 }));
 
-vi.mock("../api/ServerContext", () => ({
-	useServer: () => ({
-		configuration: { patch_preview_highlight_dmx: false },
-		selectedFixtures: [],
+vi.mock("../features/highlight/HighlightState", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	useHighlightActions: () => ({
+		highlightAction: vi.fn(),
+		dismissHighlightError: vi.fn(),
 		setPatchPreviewHighlight: vi.fn(),
 	}),
 }));

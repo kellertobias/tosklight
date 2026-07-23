@@ -45,8 +45,8 @@ SystemControlsModal; specialDialogs/control; PreloadStoreModal + PresetsWindow:
 `storePreload`), command line (`CommandLineBar: dismissError`;
 CommandLineHistoryPanel: `commandHistory`), fixture library + patch
 (FixtureLibrarySetup, fixtureLibrary/{editor,revisions,transfers,warnings},
-fixturePatch/controller, PatchFeatureBoundary, PatchWindow:
-`setPatchPreviewHighlight`), show lifecycle (QuickSetupModal — the largest, ~19
+fixturePatch/controller, PatchFeatureBoundary; PatchWindow is migrated —
+`setPatchPreviewHighlight` now lives on the scoped Highlight actions), show lifecycle (QuickSetupModal — the largest, ~19
 actions — ShowRecoveryModal, setupWindow/controller, ConnectionState,
 LayoutPersistence), media/sound (MediaServerSetup, MatterBridgeSettings,
 useSoundCapture, useSoundToLight), windows (DmxWindow: `readDmx`/`setDmxOverride`/

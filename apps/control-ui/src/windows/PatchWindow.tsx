@@ -6,7 +6,7 @@ import { MediaServerSetup } from "../components/setup/MediaServerSetup";
 import { WindowHeader, WindowScrollArea } from "../components/window-kit";
 import { StageWindow } from "./StageWindow";
 import { usePatchPreviewHighlightDmx } from "../features/configuration/ConfigurationState";
-import { useServer } from "../api/ServerContext";
+import { useHighlightActions } from "../features/highlight/HighlightState";
 import { useDesktopBridge } from "../platform/desktop";
 import { usePatch } from "../features/patch/PatchContext";
 import { useProgrammingSelectionView } from "../features/programmingInteraction/ProgrammingInteractionView";
@@ -34,19 +34,22 @@ function PatchWindowContent({
 	active: boolean;
 	onMedia: () => void;
 }) {
-	const server = useServer();
+	const highlightActions = useHighlightActions();
 	const patch = usePatch();
 	const patchPreviewHighlightDmx = usePatchPreviewHighlightDmx();
 	const [stagePreviewOpen, setStagePreviewOpen] = useState(false);
 	const stagePreview = useRef<HTMLElement>(null);
-	const setPatchPreviewHighlight = useRef(server.setPatchPreviewHighlight);
+	const setPatchPreviewHighlight = useRef(
+		highlightActions?.setPatchPreviewHighlight ?? (async () => false),
+	);
 	const [stagePreviewClearance, setStagePreviewClearance] = useState(0);
 	const previewVisible = stagePreviewOpen;
 	const dmxPreview = active && previewVisible && patchPreviewHighlightDmx;
 	const selection = useProgrammingSelectionView(dmxPreview);
 	useEffect(() => {
-		setPatchPreviewHighlight.current = server.setPatchPreviewHighlight;
-	}, [server.setPatchPreviewHighlight]);
+		if (highlightActions)
+			setPatchPreviewHighlight.current = highlightActions.setPatchPreviewHighlight;
+	}, [highlightActions]);
 	useEffect(() => {
 		void setPatchPreviewHighlight.current(
 			dmxPreview,

@@ -100,6 +100,14 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("../api/ServerContext", () => ({ useServer: () => mocks.server }));
+vi.mock("../features/highlight/HighlightState", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	useHighlightActions: () => ({
+		highlightAction: vi.fn(),
+		dismissHighlightError: vi.fn(),
+		setPatchPreviewHighlight: mocks.server.setPatchPreviewHighlight,
+	}),
+}));
 vi.mock(
 	"../features/programmerValues/useProgrammerValuesMutationQueue",
 	async (importOriginal) => {

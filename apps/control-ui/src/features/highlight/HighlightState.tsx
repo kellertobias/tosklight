@@ -27,6 +27,11 @@ export function HighlightStateProvider({
 export interface HighlightActions {
 	highlightAction: (action: HighlightAction) => Promise<boolean>;
 	dismissHighlightError: () => void;
+	/** Patch-preview DMX highlight for the fixtures being placed; false clears it. */
+	setPatchPreviewHighlight: (
+		active: boolean,
+		fixtureIds?: string[],
+	) => Promise<boolean>;
 }
 
 const HighlightActionsContext = createContext<HighlightActions | null>(null);
