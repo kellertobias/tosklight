@@ -62,3 +62,28 @@ npm run open   # real desk boot; curl -fsS http://127.0.0.1:5000/api/v1/readines
 
 None — 14 and 21 are decided (full v2 moves). This chunk cannot be claimed before
 13–21 are done.
+
+## Known bug to fix here: product-demo black screen on Show Patch (diagnosed 2026-07-23)
+
+The `product-demo` e2e run fails (and is `test.skip`ped until this chunk) because of a
+clean unmount/remount lifecycle bug in exactly the stack this chunk retires. Trace
+evidence from the failing run:
+
+- The demo reaches the Show modal and clicks **Show Patch**; the click lands on the real
+  button and the patch surface even starts loading (`objects/patch_layer` and
+  `objects/unresolved_…` GETs return 200).
+- Within ~20 ms the **entire page** (app + demo companion panels) unmounts to black and
+  stays black — no JS error, no pageerror, no navigation.
+- At that instant the client fires `DELETE /api/v1/sessions/{id}` (the
+  `useServerConnection` effect **cleanup** closing its owned session) followed by a churn
+  of `/api/v2/events` reconnects ("WebSocket is closed before the connection is
+  established") and **no new bootstrap** — the provider tree tore down and never
+  recovered.
+- Trigger correlates with `state.builtIn` flipping to `"patch"` (which also flips
+  `showBeamGuides` on the demo's Stage card): some dependency of the connection effect
+  changes identity on that state transition, re-running the effect cleanup mid-flight.
+
+When rebuilding the provider composition, make the connection lifecycle immune to app-
+state-derived dependency churn (stable identities or a connection owner mounted outside
+the app-state tree). **Acceptance:** un-skip `tests/product-demo.spec.ts` and the Show
+Patch phase passes.
