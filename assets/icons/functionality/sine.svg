@@ -1,4 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-  <title>fixture type hazer</title>
-  <path d="M12 27h31v7l10 7-10 7v5H12V27Z"/><path d="M45 34c-1-4 7-5 5-9s8-5 6-10m-5 24c-1-4 7-5 5-9s7-5 5-10"/>
+  <title>functionality sine</title>
+  <path d="M7 32c7-18 17-18 25 0s18 18 25 0"/>
 </svg>

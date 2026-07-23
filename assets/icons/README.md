@@ -17,15 +17,28 @@ The files use fixed white rather than `currentColor` to preserve the requested d
 
 ### Position
 
-`down`, `up`, `down-fan-out`, `down-fan-in`, `up-fan-out`, `up-fan-in`, `down-cross-1`, `down-cross-2`, `up-cross-1`, and `up-cross-2`.
+The 25 arrow layouts include:
 
-Fan icons use three position paths. Cross 1 is a tighter two-path crossing; Cross 2 is a wider crossing with end-reference bars.
+- four-arrow `down`, `up`, fan-in, fan-out, and cross families;
+- six-arrow `left-right-in`, `left-right-fan-vertical`, and `top-bottom-fan-horizontal`;
+- parallel `down-left`, `down-right`, `up-left`, and `up-right` diagonals;
+- point-diverging and slightly spread-diverging variants for all four diagonal directions.
+
+Cross 1 swaps each local pair of arrows. Cross 2 swaps the complete left and right two-arrow banks.
+
+### Position beams
+
+`position-beam` contains a one-to-one counterpart for every arrow layout. Each filled beam uses the same source and destination coordinates, tapering from the arrow-shaft width at its source to the full arrowhead width at its destination.
 
 ### Gobos
 
-`open`, `ring`, `line`, `cross`, `dot`, `dot-line`, `dots-floral`, `stars`, `flower`, and `triade`, plus six additional designs: `spiral`, `triangle`, `grid`, `burst`, `crescent`, and `breakup`.
+`open`, `ring`, `line`, `cross`, `dot`, `dot-line`, `dots-floral`, `stars`, `flower`, and `triade`, plus `spiral`, `triangle`, `grid`, `burst`, `crescent`, `breakup`, `jungle-vines`, and `jungle-breakup`.
 
 `open` is a fully clear aperture. `ring` is an outlined annular shape.
+
+### Laser shapes
+
+`waveform`, `circle`, `line`, `sine`, `dashed-line`, and `double-line`. Each projected shape uses the standard 3 px stroke, with 1 px projection rays originating at the horizontal center and 30% canvas height.
 
 ### Beam size
 
@@ -45,7 +58,7 @@ Fan icons use three position paths. Cross 1 is a tighter two-path crossing; Cros
 
 ### Functionality
 
-`dynamics`, `timecode`, `schedules`, and `macros`. Timecode uses an original layered-track and playhead motif familiar from timeline-based editing without copying a specific NLE.
+`dynamics`, `timecode`, `schedules`, `macros`, `sine`, `cosine`, `linear-plus`, `linear-minus`, `square`, `pwm`, `random`, and `keyframe-based`. Keyframe-based uses four filled points on its curve. Timecode uses an original layered-track and playhead motif familiar from timeline-based editing without copying a specific NLE.
 
 ### Fixture type
 

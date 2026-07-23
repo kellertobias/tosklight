@@ -1,4 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
   <title>position up cross 2</title>
-  <path d="M18 54 54 20m0 0-8 2m8-2-2 8"/><path d="M46 54 10 20m0 0 8 2m-8-2 2 8"/><path d="M10 54h12m20 0h12"/>
+  <path d="M54 54L22 10M28.31 12.21L22 10L22.16 16.68M42 54L10 10M16.31 12.21L10 10L10.16 16.68M22 54L54 10M53.84 16.68L54 10L47.69 12.21M10 54L42 10M41.84 16.68L42 10L35.69 12.21"/>
 </svg>
