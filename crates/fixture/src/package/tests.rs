@@ -1,5 +1,7 @@
 use super::*;
-use crate::{ChannelResolution, FixtureProfile, FixtureSplit, ModelUnits, PatchPolicy};
+use crate::{
+    ChannelResolution, EmitterLayout, FixtureProfile, FixtureSplit, ModelUnits, PatchPolicy,
+};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use std::fs;
 use std::io::{Cursor, Write};
@@ -53,7 +55,39 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
                 && channel.resolution == ChannelResolution::U8
                 && channel.highlight_raw == 255
         }));
+        assert!(mode.geometry.emitters.iter().all(|emitter| {
+            !emitter.directional
+                && emitter.orientation_degrees.x == 90.0
+                && emitter.origin.z == -126.0
+                && matches!(emitter.layout, EmitterLayout::ExplicitPixels { .. })
+        }));
     }
+    let demo_blinder = blinder
+        .modes
+        .iter()
+        .find(|mode| mode.name == "Two channel, four blind")
+        .unwrap();
+    let lens_centres = demo_blinder
+        .geometry
+        .emitters
+        .iter()
+        .flat_map(|emitter| match &emitter.layout {
+            EmitterLayout::ExplicitPixels { positions } => positions
+                .iter()
+                .map(|position| (position.x, -position.z))
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        lens_centres,
+        [
+            (-115.0, 290.0),
+            (115.0, 290.0),
+            (-115.0, 70.0),
+            (115.0, 70.0)
+        ]
+    );
 
     let fogger = shipped_profile("generic--fogger.toskfixture");
     assert_eq!(
@@ -120,6 +154,75 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
             }]
             && mode.channels.is_empty()));
     }
+}
+
+#[test]
+fn stage_lamp_packages_bind_models_motion_and_emitters() {
+    let acl = shipped_profile("generic--acl.toskfixture");
+    assert_eq!(acl.manufacturer, "Generic");
+    assert_eq!(acl.name, "ACL");
+    assert_eq!(acl.model_units, ModelUnits::Metres);
+    assert_eq!(acl.physical.width_millimetres, Some(80.0));
+    assert_eq!(acl.physical.height_millimetres, Some(80.0));
+    assert_eq!(acl.physical.depth_millimetres, Some(200.0));
+    assert!(
+        acl.model_asset
+            .as_deref()
+            .is_some_and(|asset| { asset.starts_with("data:model/gltf-binary;base64,") })
+    );
+    assert!(acl.modes.iter().all(|mode| {
+        mode.geometry.nodes.len() == 1
+            && mode.geometry.nodes[0].glb_node.as_deref() == Some("acl-body")
+            && mode.geometry.emitters.len() == 1
+            && mode.geometry.emitters[0].origin.y == -192.0
+    }));
+
+    let fresnel = shipped_profile("generic--dimmer-fresnel.toskfixture");
+    assert_eq!(fresnel.model_units, ModelUnits::Metres);
+    assert!(fresnel.modes.iter().all(|mode| {
+        mode.geometry.nodes.len() == 1
+            && mode.geometry.nodes[0].glb_node.as_deref() == Some("fresnel-body")
+            && mode.geometry.emitters.len() == 1
+            && mode.geometry.emitters[0].origin.y == -694.0
+            && mode.geometry.emitters[0].orientation_degrees == crate::Vector3::default()
+    }));
+
+    for filename in [
+        "robe--robin-dls-profile.toskfixture",
+        "jb-lighting--jbled-a7.toskfixture",
+    ] {
+        assert_moving_lamp_geometry(filename);
+    }
+}
+
+fn assert_moving_lamp_geometry(filename: &str) {
+    let mover = shipped_profile(filename);
+    assert_eq!(mover.model_units, ModelUnits::Metres);
+    assert!(
+        mover
+            .model_asset
+            .as_deref()
+            .is_some_and(|asset| { asset.starts_with("data:model/gltf-binary;base64,") })
+    );
+    assert!(mover.modes.iter().all(|mode| {
+        mode.geometry.nodes.len() == 3
+            && mode.geometry.nodes[0].glb_node.as_deref() == Some("moving-base")
+            && mode.geometry.nodes[1].glb_node.as_deref() == Some("moving-yoke")
+            && mode.geometry.nodes[2].glb_node.as_deref() == Some("moving-head")
+            && mode.geometry.nodes[0].motion.is_none()
+            && mode.geometry.nodes[1]
+                .motion
+                .as_ref()
+                .is_some_and(|motion| motion.attribute.0 == "pan")
+            && mode.geometry.nodes[2]
+                .motion
+                .as_ref()
+                .is_some_and(|motion| motion.attribute.0 == "tilt")
+            && mode.geometry.nodes[2].transform.translation.y < 0.0
+            && mode.geometry.emitters.len() == 1
+            && mode.geometry.emitters[0].node_id == mode.geometry.nodes[2].id
+            && mode.geometry.emitters[0].origin.y < 0.0
+    }));
 }
 
 #[test]
