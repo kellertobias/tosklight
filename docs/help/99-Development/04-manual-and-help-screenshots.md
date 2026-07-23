@@ -18,12 +18,19 @@ Run `./test help-screenshots` only when intentionally updating documentation ima
 
 The Dynamics pane remains in screenshot generation so future UI changes are detected, but its screenshot is intentionally not embedded in the manual while Dynamics is a future feature. Development remains available through developer tooling, but it is not an operator **Open Window** choice and is therefore excluded from the Pane Reference screenshot set.
 
+## Refresh icon contact sheets
+
+Run `npm run icons:contact-sheets` after changing an editable SVG below `assets/icons`. The generator first writes a filled-geometry `name.expanded.svg` beside every `name.svg`, then renders one deterministic PNG per icon group plus a complete-library sheet under `.artifacts/generated/icon-contact-sheets`. Existing `.expanded.svg` files are never treated as sources. Each group sheet has a 90-degree group label on the left, a vertical divider, and the group's black icons and editable source filenames on the right.
+
+The expanded derivative resolves strokes, transforms, repeated patterns, and binary mounting-gap masks into filled `currentColor` geometry on a transparent canvas. A final Boolean union joins overlapping painted shapes into one compound path per icon. Do not edit it directly. The generator mirrors the PNGs into the ignored `docs/help/assets/icon-contact-sheets` directory so in-app Help, manual, and Pages builds can package them without adding contact sheets to Git. These builds regenerate and verify the source, expanded-SVG, and generated-PNG hashes before rendering.
+
 ## Authoring contract
 
 - Put operator-facing source in a numbered file or folder below `docs/help`.
 - Give every page exactly one first-level `# Title`; it becomes the Help navigation title, contents entry, running header, and index entry.
 - Use ordinary relative Markdown links and images. The manual build fails for broken local links or images.
 - Keep screenshots under `docs/help/assets/screenshots` and generate them through `./test help-screenshots`.
+- Keep generated expanded icons beside their editable sources. Contact sheets belong under `.artifacts/generated/icon-contact-sheets` with only an ignored Help mirror; regenerate both through `npm run icons:contact-sheets`.
 - Add or update the matching row in [Help Coverage](02-help-coverage.md) when introducing a built-in window or major operator workflow.
 
 ## Release publication
