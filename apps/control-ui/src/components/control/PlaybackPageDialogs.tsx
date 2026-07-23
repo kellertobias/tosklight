@@ -109,11 +109,14 @@ export function PlaybackPageMenu({
 		const token = ready && setActivePage ? operation.begin("select") : null;
 		if (token == null || !setActivePage) return;
 		const selected = await setActivePage(number);
-		const current = operation.complete(
+		operation.complete(
 			token,
 			selected ? null : `Playback Page ${number} could not be selected.`,
 		);
-		if (current && selected) onClose();
+		// A successful page change closes the menu even when the surrounding authority
+		// scope churned while the request was in flight (projections resubscribe for the
+		// new page); gating close on operation currency left the dialog open silently.
+		if (selected) onClose();
 	};
 	const add = async () => {
 		const createPage = topologyActions?.createPage;
@@ -129,8 +132,8 @@ export function PlaybackPageMenu({
 		const failure = outcome
 			? `Playback Page ${nextNumber} could not be selected.`
 			: `Playback Page ${nextNumber} could not be created.`;
-		const current = operation.complete(token, selected ? null : failure);
-		if (current && selected) onClose();
+		operation.complete(token, selected ? null : failure);
+		if (selected) onClose();
 	};
 	return createPortal(
 		<div

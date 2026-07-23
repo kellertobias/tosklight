@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { PhysicalPlaybackConfigurationModal } from "./PhysicalPlaybackConfigurationModal";
 import {
 	type PlaybackFaderBankProps,
@@ -9,7 +9,17 @@ import { PlaybackSlot } from "./playbackFaderBank/PlaybackSlot";
 export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 	function PlaybackFaderBank(props: PlaybackFaderBankProps = {}) {
 		const controller = usePlaybackBankController(props);
-		if (!controller.authorityReady)
+		// Once the grid has rendered for a ready topology, transient projection refetches
+		// (hardware connect, layout changes) must not tear the slot elements down — only a
+		// topology-scope reset returns the bank to its loading placeholder.
+		const [rendered, setRendered] = useState(false);
+		useEffect(() => {
+			if (controller.authorityReady) setRendered(true);
+			else if (!controller.topology.ready) setRendered(false);
+		}, [controller.authorityReady, controller.topology.ready]);
+		const showGrid =
+			controller.authorityReady || (rendered && controller.topology.ready);
+		if (!showGrid)
 			return (
 				<div
 					className="playback-fader-bank playback-authority-status"
