@@ -17,7 +17,7 @@ export interface StageLayoutActions {
 	saveStageLayout(layout: StoredStageLayout): Promise<void>;
 	/** Moves the selected fixtures along one axis via the server-side intent route. */
 	moveStageSelection(
-		fixtureIds: string[],
+		fixtureIds: readonly string[],
 		axis: StagePositionAxis,
 		delta: number,
 	): Promise<void>;
@@ -78,7 +78,7 @@ export function StageLayoutActionsProvider({
 						request_id: crypto.randomUUID(),
 						action: {
 							type: "move_selection",
-							fixture_ids: fixtureIds,
+							fixture_ids: [...fixtureIds],
 							axis,
 							delta,
 						},
