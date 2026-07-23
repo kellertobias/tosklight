@@ -10,6 +10,7 @@ import {
 } from "../features/highlight/HighlightState";
 import { ProgrammerActionsProvider } from "../features/programmerActions/ProgrammerActionsContext";
 import { ShellStatusActionsProvider } from "../features/shellStatus/ShellStatusActionsProvider";
+import { DmxDiagnosticsProvider } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
 import { FilesProvider } from "../features/files/FilesContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
@@ -139,6 +140,14 @@ export function ServerProvider({
 			value.storePreload,
 		],
 	);
+	const dmxDiagnostics = useMemo(
+		() => ({
+			readDmx: value.readDmx,
+			setDmxOverride: value.setDmxOverride,
+			outputRoutes: value.outputRoutes,
+		}),
+		[value.readDmx, value.setDmxOverride, value.outputRoutes],
+	);
 	const shellStatusActions = useMemo(
 		() => ({
 			dismissError: value.dismissError,
@@ -153,6 +162,7 @@ export function ServerProvider({
 			<HighlightActionsProvider actions={highlightActions}>
 			<ProgrammerActionsProvider actions={programmerActions}>
 			<ShellStatusActionsProvider actions={shellStatusActions}>
+			<DmxDiagnosticsProvider diagnostics={dmxDiagnostics}>
 			<ServerDeskBoundaries state={state}>
 			<ServerVisualizationRuntimeBoundary state={state}>
 				<ShowObjectsViewProvider
@@ -221,6 +231,7 @@ export function ServerProvider({
 				</ShowObjectsViewProvider>
 			</ServerVisualizationRuntimeBoundary>
 			</ServerDeskBoundaries>
+			</DmxDiagnosticsProvider>
 			</ShellStatusActionsProvider>
 			</ProgrammerActionsProvider>
 			</HighlightActionsProvider>

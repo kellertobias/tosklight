@@ -3,6 +3,7 @@ import { ConfigurationActionsProvider } from "../features/configuration/Configur
 import { ConfigurationStateProvider } from "../features/configuration/ConfigurationState";
 import { DeskLockActionsProvider } from "../features/deskLock/DeskLockActionsProvider";
 import { DeskLockStateProvider } from "../features/deskLock/DeskLockState";
+import { CommandHistoryStateProvider } from "../features/commandHistory/CommandHistoryState";
 import { DeskSnapshotStateProvider } from "../features/deskSnapshot/DeskSnapshotState";
 import { ShellStatusStateProvider } from "../features/shellStatus/ShellStatusState";
 import type { StoredStageLayout } from "../features/server/contracts";
@@ -53,6 +54,7 @@ export function ServerDeskBoundaries({
 	);
 	return (
 		<DeskSnapshotStateProvider store={state.deskSnapshotStore}>
+		<CommandHistoryStateProvider store={state.commandHistoryStore}>
 		<ShellStatusStateProvider store={state.shellStatusStore}>
 		<DeskLockStateProvider store={state.deskLockStore}>
 		<DeskLockActionsProvider
@@ -86,6 +88,7 @@ export function ServerDeskBoundaries({
 		</DeskLockActionsProvider>
 		</DeskLockStateProvider>
 		</ShellStatusStateProvider>
+		</CommandHistoryStateProvider>
 		</DeskSnapshotStateProvider>
 	);
 }

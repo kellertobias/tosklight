@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import { createPortal } from "react-dom";
-import { useServer } from "../../../api/ServerContext";
+import { useCommandHistory } from "../../../features/commandHistory/CommandHistoryState";
 import { Button } from "../../common";
 
 export function CommandLineHistoryPanel({
@@ -14,7 +14,7 @@ export function CommandLineHistoryPanel({
 	onClose: () => void;
 	onReuse: (command: string) => void;
 }) {
-	const history = useServer().commandHistory;
+	const history = useCommandHistory();
 	if (!open) return null;
 	return createPortal(
 		<section

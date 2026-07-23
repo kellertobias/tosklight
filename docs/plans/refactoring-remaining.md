@@ -42,16 +42,18 @@ in suggested order. Each chunk lands independently.
   and the parameter-controls projection/controller/tabs.
 - `features/shellStatus` actions context (`dismissError`/`simulateError`/`readServerLogs`)
   and migration of CommandLineBar and DebugModal (output health via `useOutputHealth`).
+- `features/commandHistory` scoped store (CommandLineHistoryPanel) and
+  `features/dmxDiagnostics` (`readDmx`/`setDmxOverride`/`outputRoutes`: DmxWindow,
+  ProductDemoApp).
 
-**Remaining consumers (~16 files)**, grouped by the scoped owner they need next:
-command line (CommandLineHistoryPanel: `commandHistory`), fixture library + patch
+**Remaining consumers (~13 files)**, grouped by the scoped owner they need next:
+fixture library + patch
 (FixtureLibrarySetup, fixtureLibrary/{editor,revisions,transfers,warnings},
 fixturePatch/controller, PatchFeatureBoundary; PatchWindow is migrated —
 `setPatchPreviewHighlight` now lives on the scoped Highlight actions), show lifecycle (QuickSetupModal — the largest, ~19
 actions — ShowRecoveryModal, setupWindow/controller, ConnectionState,
-LayoutPersistence), media/sound (MediaServerSetup, MatterBridgeSettings,
-useSoundCapture, useSoundToLight), windows (DmxWindow: `readDmx`/`setDmxOverride`/
-`outputRoutes`; ProductDemoApp: `readDmx`), and FixtureSheetWindow (migrated).
+LayoutPersistence), and media/sound (MediaServerSetup, MatterBridgeSettings,
+useSoundCapture, useSoundToLight).
 Only after every caller is migrated: delete `useServer()` and remove unused v1
 routes per the decided policy below.
 

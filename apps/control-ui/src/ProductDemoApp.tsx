@@ -1,7 +1,8 @@
 import { useConnectionStatus } from "./features/shellStatus/ShellStatusState";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { DmxSnapshot } from "./api/types";
-import { ServerProvider, useServer } from "./api/ServerContext";
+import { ServerProvider } from "./api/ServerContext";
+import { useDmxDiagnostics } from "./features/dmxDiagnostics/DmxDiagnosticsContext";
 import { NumericPad } from "./components/control/NumericPad";
 import { AppShell } from "./components/shell/AppShell";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
@@ -25,13 +26,13 @@ const DEMO_CHAPTERS = [
 ] as const;
 
 function DemoDmxGrid({ universeNumber }: { universeNumber: number }) {
-  const server = useServer();
+  const dmx = useDmxDiagnostics();
   const connectionStatus = useConnectionStatus();
   const [snapshot, setSnapshot] = useState<DmxSnapshot | null>(null);
   useEffect(() => {
     if (connectionStatus !== "connected") return;
     let cancelled = false;
-    const refresh = () => void server.readDmx().then((next) => {
+    const refresh = () => void dmx?.readDmx().then((next) => {
       if (!cancelled) setSnapshot(next);
     }).catch(() => undefined);
     refresh();
@@ -40,7 +41,7 @@ function DemoDmxGrid({ universeNumber }: { universeNumber: number }) {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [connectionStatus, server.readDmx]);
+  }, [connectionStatus, dmx]);
   const universe = snapshot?.universes.find((frame) => frame.universe === universeNumber);
   const slots = useMemo(
     () => Array.from({ length: DEMO_DMX_CHANNELS }, (_, index) => universe?.slots[index] ?? 0),

@@ -41,6 +41,14 @@ const visualizationTransport = {
 } satisfies VisualizationRuntimeTransport;
 
 vi.mock("../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../features/dmxDiagnostics/DmxDiagnosticsContext", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	useDmxDiagnostics: () => ({
+		readDmx: server.readDmx,
+		setDmxOverride: vi.fn(),
+		outputRoutes: server.outputRoutes,
+	}),
+}));
 vi.mock("../state/AppContext", () => ({
 	useApp: () => ({
 		state: { dmxDotSize: "small" },

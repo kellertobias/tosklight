@@ -96,6 +96,10 @@ export function useServerState() {
 	useEffect(() => {
 		deskSnapshotStore.install(bootstrap, session);
 	}, [bootstrap, session, deskSnapshotStore]);
+	const commandHistoryStore = featureStores.commandHistoryStore;
+	useEffect(() => {
+		commandHistoryStore.install(commandHistory);
+	}, [commandHistory, commandHistoryStore]);
 	const highlightStore = featureStores.highlightStore;
 	useEffect(() => {
 		highlightStore.install(highlight.highlight, highlight.highlightError);

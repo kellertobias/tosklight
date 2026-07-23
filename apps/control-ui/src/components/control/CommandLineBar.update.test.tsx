@@ -143,6 +143,10 @@ const server = {
 };
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
+vi.mock("../../features/commandHistory/CommandHistoryState", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	useCommandHistory: () => server.commandHistory,
+}));
 vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
 	useBootstrapReady: () => server.bootstrap !== null,
 	useFrameRateHz: () => server.bootstrap?.frame_rate_hz ?? null,

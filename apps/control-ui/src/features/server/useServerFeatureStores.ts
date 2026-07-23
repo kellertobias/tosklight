@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { ConfigurationStore } from "../configuration/store";
 import { DeskLockStore } from "../deskLock/store";
+import { CommandHistoryStore } from "../commandHistory/CommandHistoryState";
 import { DeskSnapshotStore } from "../deskSnapshot/store";
 import { HighlightStore } from "../highlight/store";
 import { ShellStatusStore } from "../shellStatus/store";
@@ -26,6 +27,7 @@ export function useServerFeatureStores() {
 	return {
 		configurationStore: useRef(new ConfigurationStore()).current,
 		deskLockStore: useRef(new DeskLockStore()).current,
+		commandHistoryStore: useRef(new CommandHistoryStore()).current,
 		deskSnapshotStore: useRef(new DeskSnapshotStore()).current,
 		highlightStore: useRef(new HighlightStore()).current,
 		shellStatusStore: useRef(new ShellStatusStore()).current,
