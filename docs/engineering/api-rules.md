@@ -118,8 +118,9 @@ per-fixture values.
 ## 8 — Persistence cadence (maintainer, 2026-07-23)
 
 - The active show is authoritative **in memory** on the server; the `.show` file is
-  flushed on a configurable autosave interval (default 30 s, desk configuration), not on
-  every mutation. Losing the last interval on power loss is accepted (WAL +
+  flushed on a configurable autosave interval (default 30 s), not on every mutation. The
+  interval is an **operator-facing setting** — shown and editable in the desk settings
+  UI, persisted as desk configuration. Losing the last interval on power loss is accepted (WAL +
   `synchronous=NORMAL` never guaranteed hard durability per-commit anyway).
 - Flush immediately at hard boundaries regardless of interval: show switch/close, named
   revision save, upload/overwrite, **deliberate application quit**, **leaving the Show

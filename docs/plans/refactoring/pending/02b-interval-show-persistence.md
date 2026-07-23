@@ -45,8 +45,12 @@ power loss loses at most the last interval of programming.
    scenario text in `docs/testing/` and the test expectations deliberately, not silently.
 5. Crash-consistency test: kill the server between mutation and flush; on restart the
    show must load cleanly at the last flushed state (no torn document, WAL intact).
-6. Configuration surface: expose `autosave_interval` in desk configuration (v2 config
-   route per the queue's other chunks); document in the Show-Setup help if operator-facing.
+6. Configuration surface — **operator-facing (maintainer, 2026-07-23)**: expose
+   `autosave_interval` in the desk **settings UI** (alongside the existing backup
+   retention setting), persisted via desk configuration (v2 config route per the queue's
+   other chunks), with a sensible bounded range and the 30 s default visible. Document it
+   in the operator help (settings chapter) and update help screenshots only if that page
+   is captured (`npm run test:help-screenshots` deliberately).
 
 ## Definition of done
 
@@ -69,10 +73,9 @@ npm run open       # real desk: program for a minute, pull the process, restart,
 
 ## Decisions
 
-Interval default 30 s and configurability are decided (api-rules §8). One small open
-point: whether the interval is operator-facing (help + settings UI) or an internal
-desk-configuration key only — cheap either way; propose internal-only in the result note
-unless the maintainer says otherwise.
+Interval default 30 s and configurability are decided (api-rules §8); decided
+2026-07-23 that it is **operator-facing** — shown and editable in the settings UI,
+documented in help. No open decisions remain in this chunk.
 
 Sequence: after 02 (CUE-011 — its regression tests are exactly the guard this rework
 must keep green). Before 16 (object intent updates then build on the write-behind path
