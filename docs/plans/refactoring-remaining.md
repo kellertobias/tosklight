@@ -20,7 +20,7 @@ in suggested order. Each chunk lands independently.
   stale show-revision `If-Match`, or a v1 mutation path that never publishes its v2 event —
   those three patterns explained almost every "unimplemented feature" skip so far.
 
-## 1 — Facade retirement (IN PROGRESS 2026-07-23 — four chunks landed, inventory below)
+## 1 — Facade retirement (CONSUMERS DONE 2026-07-23 — useServer() deleted; v1 route removal remains)
 
 **Progress.** Landed consumer-by-consumer chunks:
 
@@ -54,20 +54,26 @@ in suggested order. Each chunk lands independently.
   fixturePatch controller, and PatchFeatureBoundary (attribute registry via
   `useAttributeRegistry`).
 
-**Remaining consumers (5 files, show lifecycle only):** QuickSetupModal — the largest,
-~19 actions — ShowRecoveryModal, setupWindow/controller, ConnectionState, and
-LayoutPersistence.
-Only after every caller is migrated: delete `useServer()` and remove unused v1
-routes per the decided policy below.
+**Zero consumers remain; `useServer()` and the broad ServerContext are deleted.** The final
+chunks added `features/showLifecycle` (shows list + open/save/overwrite/upload/download,
+named revisions, MVR transfer, desk users incl. switchUser, shutdown) and
+`features/deskConnection` (server URL/desk token setters + persisted desk layout), extended
+`features/dmxDiagnostics` with the output-route save/delete, and migrated QuickSetupModal,
+ShowRecoveryModal, ConnectionState, LayoutPersistence, and the setup-window
+controller/General/Outputs/Network sections. `ServerProvider` still composes the internal
+value that feeds the scoped providers; the compatibility read surface is gone.
 
-**Deferred remainder (2026-07-23):** the ~26 consumers above each need a scoped action
-owner that does not exist yet (programming actions, command-line state, fixture-library
-transfers, show lifecycle, media/sound, DMX diagnostics) — six new store/actions features
-plus the QuickSetupModal show-lifecycle surface, then the `useServer()` deletion and
-per-route v1 removal sweeps. That is multi-session work by design ("each chunk lands
-independently"); continue with the same pattern the landed chunks established
-(deskSnapshot/highlight: scoped store installed from `useServerState`, provider in the
-desk boundaries, narrow hooks, migrate consumers, full suite per chunk).
+**Remaining for §1: server-side v1 route removal.** Remove unused v1 REST/WebSocket routes
+one route per chunk with a grep for remaining callers (client `api/client/*`, OSC/hardware
+surfaces, desktop bridge, bench helpers under `apps/control-ui/e2e/bench` and root
+`tests/`), then update the Protocols help chapter to describe the v2 surface. Note the v1
+client modules (`apps/control-ui/src/api/client/*`) are still called by the composed
+`ServerProvider` internals (polling, show data, actions) — each route deletion therefore
+starts by migrating the corresponding internal call to v2 or deleting it with its feature.
+
+**Deferred remainder (2026-07-23, updated):** only the per-route v1 removal sweeps and the
+Protocols-chapter update remain. Each route deletion is its own chunk per the decided
+policy below; the OSC API stays frozen.
 
 ### Plan
 

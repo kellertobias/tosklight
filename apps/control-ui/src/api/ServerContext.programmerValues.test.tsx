@@ -7,7 +7,8 @@ import {
 	useProgrammerValuesView,
 } from "../features/programmerValues/ProgrammerValuesView";
 import { LightApiClient } from "./LightApiClient";
-import { ServerProvider, useServer } from "./ServerContext";
+import { useBootstrapSnapshot } from "../features/deskSnapshot/DeskSnapshotState";
+import { ServerProvider } from "./ServerContext";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -136,7 +137,7 @@ vi.mock("./useServerFeatureBoundaries", () => ({
 let unrelatedRenders = 0;
 
 function UnrelatedServerConsumer() {
-	useServer();
+	useBootstrapSnapshot();
 	unrelatedRenders += 1;
 	return null;
 }

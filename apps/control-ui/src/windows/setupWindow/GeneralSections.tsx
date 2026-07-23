@@ -1,5 +1,10 @@
 import { useConnectionStatus } from "../../features/shellStatus/ShellStatusState";
 import { Button } from "../../components/common";
+import {
+	useBootstrapSnapshot,
+	useSessionSnapshot,
+} from "../../features/deskSnapshot/DeskSnapshotState";
+import { useShowLifecycle } from "../../features/showLifecycle/ShowLifecycleContext";
 import { ShowRecoveryFileManager } from "../../components/setup/ShowRecoveryFileManager";
 import type { SetupWindowController } from "./controller";
 
@@ -8,27 +13,28 @@ export function ShowsRecoverySection({
 }: {
 	controller: SetupWindowController;
 }) {
-	const { server } = controller;
+	const bootstrap = useBootstrapSnapshot();
+	const lifecycle = useShowLifecycle();
 	const connectionStatus = useConnectionStatus();
 	return (
 		<>
 			<h2>Shows & recovery</h2>
 			<div className="setup-cards">
 				<section>
-					<b>{server.bootstrap?.active_show?.name ?? "No show loaded"}</b>
+					<b>{bootstrap?.active_show?.name ?? "No show loaded"}</b>
 					<small>
-						{server.bootstrap?.active_show?.updated_at ??
+						{bootstrap?.active_show?.updated_at ??
 							"Choose a show from the library"}
 					</small>
 				</section>
 				<section>
-					<b>{server.shows.length} library shows</b>
+					<b>{(lifecycle?.shows.length ?? 0)} library shows</b>
 					<small>Portable SQLite files</small>
 				</section>
 				<section>
 					<b>{connectionStatus}</b>
 					<small>
-						{server.bootstrap?.active_show
+						{bootstrap?.active_show
 							? "Autosave active"
 							: "No active show"}
 					</small>
@@ -46,22 +52,24 @@ export function UsersSessionsSection({
 }: {
 	controller: SetupWindowController;
 }) {
-	const { server } = controller;
+	const bootstrap = useBootstrapSnapshot();
+	const session = useSessionSnapshot();
+	const lifecycle = useShowLifecycle();
 	return (
 		<>
 			<h2>Users & sessions</h2>
 			<div className="setup-list">
-				{server.bootstrap?.users.map((user) => (
+				{bootstrap?.users.map((user) => (
 					<article key={user.id}>
 						<b>{user.name}</b>
 						<span>{user.enabled ? "Enabled" : "Disabled"}</span>
 						<small>
-							{user.id === server.session?.user.id
+							{user.id === session?.user.id
 								? "Current operator"
 								: user.id}
 						</small>
-						{user.enabled && user.id !== server.session?.user.id && (
-							<Button onClick={() => server.switchUser(user.name)}>
+						{user.enabled && user.id !== session?.user.id && (
+							<Button onClick={() => lifecycle?.switchUser(user.name)}>
 								Use this operator
 							</Button>
 						)}

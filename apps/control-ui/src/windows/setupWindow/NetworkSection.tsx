@@ -52,7 +52,7 @@ export function NetworkSection({
 				/>
 				<FormField label="">
 					<Button
-						onClick={() => controller.server.setServerUrl(controller.serverUrl)}
+						onClick={() => controller.applyServerUrl(controller.serverUrl)}
 					>
 						Connect to server
 					</Button>

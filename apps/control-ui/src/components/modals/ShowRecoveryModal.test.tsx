@@ -19,6 +19,19 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => mocks }));
+vi.mock("../../features/deskSnapshot/DeskSnapshotState", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	useActiveShowError: () => mocks.bootstrap?.active_show_error ?? null,
+	useActiveShowId: () => mocks.bootstrap?.active_show?.id ?? null,
+	useSessionSnapshot: () => mocks.session ?? null,
+}));
+vi.mock(
+	"../../features/showLifecycle/ShowLifecycleContext",
+	async (importOriginal) => ({
+		...(await importOriginal<object>()),
+		useShowLifecycle: () => mocks,
+	}),
+);
 
 describe("ShowRecoveryModal", () => {
   afterEach(cleanup);

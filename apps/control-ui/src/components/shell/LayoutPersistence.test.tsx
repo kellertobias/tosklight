@@ -18,6 +18,18 @@ vi.mock("../../api/ServerContext", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../api/ServerContext")>();
   return { ...original, useServer: () => mocks.server };
 });
+vi.mock("../../features/deskSnapshot/DeskSnapshotState", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	useActiveShowId: () => mocks.server.bootstrap?.active_show?.id ?? null,
+	useSessionSnapshot: () => mocks.server.session ?? null,
+}));
+vi.mock(
+	"../../features/deskConnection/DeskConnectionContext",
+	async (importOriginal) => ({
+		...(await importOriginal<object>()),
+		useDeskConnection: () => mocks.server,
+	}),
+);
 
 vi.mock("../../state/AppContext", () => ({
   useApp: () => mocks.app,

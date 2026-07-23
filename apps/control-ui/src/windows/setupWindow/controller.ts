@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { configuredServerUrl } from "../../api/LightApiClient";
-import { useServer } from "../../api/ServerContext";
+import { useDeskConnection } from "../../features/deskConnection/DeskConnectionContext";
 import type { DeskConfiguration, UpdateSettings } from "../../api/types";
 import { defaultUpdateSettings } from "../../components/control/updateWorkflow";
 import {
@@ -13,7 +13,7 @@ import { useDeskConfiguration } from "../../features/configuration/Configuration
 import { useProgrammingUpdate } from "../../features/programmingUpdate/ProgrammingUpdateProvider";
 
 export function useSetupWindowController() {
-	const server = useServer();
+	const connection = useDeskConnection();
 	const configurationActions = useConfigurationActions();
 	const configuration = useDeskConfiguration();
 	const programmingUpdate = useProgrammingUpdate();
@@ -135,7 +135,7 @@ export function useSetupWindowController() {
 		screenCanUndo,
 		screenUndo,
 		section,
-		server,
+		applyServerUrl: (url: string) => connection?.setServerUrl(url),
 		serverUrl,
 		setDeskLockSettingsOpen,
 		setFixtureLibraryOpen,

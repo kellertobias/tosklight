@@ -5,6 +5,10 @@ export function selectBootstrap(snapshot: DeskSnapshot) {
 	return snapshot.bootstrap;
 }
 
+export function selectActiveShowError(snapshot: DeskSnapshot) {
+	return snapshot.bootstrap?.active_show_error ?? null;
+}
+
 export function selectAttributeRegistry(snapshot: DeskSnapshot) {
 	return snapshot.bootstrap?.attribute_registry ?? null;
 }

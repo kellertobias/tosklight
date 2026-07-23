@@ -1,35 +1,42 @@
 import { useEffect, useRef } from "react";
-import { deskLayoutScopeKey, useServer } from "../../api/ServerContext";
+import { deskLayoutScopeKey } from "../../api/ServerContext";
+import { useDeskConnection } from "../../features/deskConnection/DeskConnectionContext";
+import {
+	useActiveShowId,
+	useSessionSnapshot,
+} from "../../features/deskSnapshot/DeskSnapshotState";
 import { useApp } from "../../state/AppContext";
 
 export function LayoutPersistence() {
-  const server = useServer();
+  const connection = useDeskConnection();
+  const session = useSessionSnapshot();
+  const activeShowId = useActiveShowId();
   const { state, dispatch } = useApp();
   const hydratedScope = useRef<string | null>(null);
   const skipInitialSave = useRef<string | null>(null);
-  const saveDeskLayout = useRef(server.saveDeskLayout);
-  const scope = deskLayoutScopeKey(server.bootstrap?.active_show?.id, server.session?.user.id);
+  const saveDeskLayout = useRef(connection?.saveDeskLayout ?? (async () => undefined));
+  const scope = deskLayoutScopeKey(activeShowId ?? undefined, session?.user.id);
 
   useEffect(() => {
-    saveDeskLayout.current = server.saveDeskLayout;
-  }, [server.saveDeskLayout]);
+    if (connection) saveDeskLayout.current = connection.saveDeskLayout;
+  }, [connection]);
 
   useEffect(() => {
-    if (!scope || server.deskLayoutScope !== scope || hydratedScope.current === scope) return;
+    if (!scope || connection?.deskLayoutScope !== scope || hydratedScope.current === scope) return;
     hydratedScope.current = scope;
     skipInitialSave.current = scope;
-    if (server.deskLayout) {
+    if (connection?.deskLayout) {
       dispatch({
         type: "HYDRATE_LAYOUT",
-        desks: server.deskLayout.body.desks,
-        activeDeskId: server.deskLayout.body.activeDeskId,
-        windowSettings: server.deskLayout.body.windowSettings,
+        desks: connection?.deskLayout.body.desks,
+        activeDeskId: connection?.deskLayout.body.activeDeskId,
+        windowSettings: connection?.deskLayout.body.windowSettings,
       });
     }
-  }, [scope, server.deskLayout, server.deskLayoutScope, dispatch]);
+  }, [scope, connection?.deskLayout, connection?.deskLayoutScope, dispatch]);
 
   useEffect(() => {
-    if (!scope || server.deskLayoutScope !== scope || hydratedScope.current !== scope) return;
+    if (!scope || connection?.deskLayoutScope !== scope || hydratedScope.current !== scope) return;
     if (skipInitialSave.current === scope) {
       skipInitialSave.current = null;
       return;
@@ -46,7 +53,7 @@ export function LayoutPersistence() {
       fixtureGroupsVisible: state.fixtureGroupsVisible, presetGroupsVisible: state.presetGroupsVisible,
     } }), 600);
     return () => window.clearTimeout(timer);
-  }, [state.desks, state.activeDeskId, state.dockMode, state.builtIn, state.lastBuiltIn, state.presetFamily, state.presetPoolColors, state.playbackColumns, state.playbackRows, state.playbackPage, state.stageMode, state.stageView, state.stageZoom, state.stagePanX, state.stagePanY, state.stageOrbitX, state.stageOrbitY, state.stageGroupsVisible, state.stageShowSelection, state.stageShowFloorGrid, state.stageShowBeamGuides, state.stageEnvironmentBrightness, state.dmxDotSize, state.fixtureSheetOrder, state.fixtureSheetActiveOnly, state.fixtureSheetCueListId, state.fixtureSheetColumns, state.fixtureSheetShowType, state.fixtureSheetIncludedHeads, state.fixtureGroupsVisible, state.presetGroupsVisible, scope, server.deskLayoutScope]);
+  }, [state.desks, state.activeDeskId, state.dockMode, state.builtIn, state.lastBuiltIn, state.presetFamily, state.presetPoolColors, state.playbackColumns, state.playbackRows, state.playbackPage, state.stageMode, state.stageView, state.stageZoom, state.stagePanX, state.stagePanY, state.stageOrbitX, state.stageOrbitY, state.stageGroupsVisible, state.stageShowSelection, state.stageShowFloorGrid, state.stageShowBeamGuides, state.stageEnvironmentBrightness, state.dmxDotSize, state.fixtureSheetOrder, state.fixtureSheetActiveOnly, state.fixtureSheetCueListId, state.fixtureSheetColumns, state.fixtureSheetShowType, state.fixtureSheetIncludedHeads, state.fixtureGroupsVisible, state.presetGroupsVisible, scope, connection?.deskLayoutScope]);
 
   return null;
 }

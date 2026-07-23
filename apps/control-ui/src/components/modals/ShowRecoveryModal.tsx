@@ -1,29 +1,36 @@
 import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { useState } from "react";
-import { useServer } from "../../api/ServerContext";
+import {
+	useActiveShowError,
+	useActiveShowId,
+	useSessionSnapshot,
+} from "../../features/deskSnapshot/DeskSnapshotState";
+import { useShowLifecycle } from "../../features/showLifecycle/ShowLifecycleContext";
 import { Button, ModalTitleBar } from "../common";
 
 export function ShowRecoveryModal() {
-  const server = useServer();
+  const lifecycle = useShowLifecycle();
+  const session = useSessionSnapshot();
+  const activeShowId = useActiveShowId();
   const [busy, setBusy] = useState(false);
-  const error = server.bootstrap?.active_show_error;
-  if (!error || !server.session) return null;
+  const error = useActiveShowError();
+  if (!error || !session || !lifecycle) return null;
   const initialize = async () => {
     setBusy(true);
-    await server.initializeEmptyShow();
+    await lifecycle.initializeEmptyShow();
     setBusy(false);
   };
   const load = async (id: string) => {
     setBusy(true);
-    await server.openShow(id, "safe_blackout");
+    await lifecycle.openShow(id, "safe_blackout");
     setBusy(false);
   };
   const loadCleanDefault = async () => {
     setBusy(true);
-    await server.openCleanDefaultShow();
+    await lifecycle.openCleanDefaultShow();
     setBusy(false);
   };
-  const alternatives = server.shows.filter((show) => show.id !== server.bootstrap?.active_show?.id);
+  const alternatives = lifecycle.shows.filter((show) => show.id !== activeShowId);
   return <div className="show-recovery-layer" role="alertdialog" aria-modal="true" aria-label="Show recovery required">
     <section className="show-recovery-card">
       <ModalTitleBar title="Show File Could Not Be Loaded"/>

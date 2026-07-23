@@ -60,6 +60,18 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => mocks.server }));
+vi.mock("../../features/deskSnapshot/DeskSnapshotState", async (importOriginal) => ({
+	...(await importOriginal<object>()),
+	useBootstrapSnapshot: () => mocks.server.bootstrap,
+	useSessionSnapshot: () => mocks.server.session ?? null,
+}));
+vi.mock(
+	"../../features/showLifecycle/ShowLifecycleContext",
+	async (importOriginal) => ({
+		...(await importOriginal<object>()),
+		useShowLifecycle: () => mocks.server,
+	}),
+);
 vi.mock("../../features/selectiveImport/SelectiveImportContext", () => ({
 	useSelectiveImport: () => ({
 		catalog: mocks.server.selectiveImportCatalog,

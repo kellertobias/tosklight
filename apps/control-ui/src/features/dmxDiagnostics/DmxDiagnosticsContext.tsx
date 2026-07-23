@@ -13,6 +13,12 @@ export interface DmxDiagnostics {
 		value: number | null,
 	) => Promise<void>;
 	outputRoutes: VersionedObject<OutputRoute>[];
+	saveOutputRoute: (
+		id: string,
+		route: OutputRoute,
+		revision: number,
+	) => Promise<boolean>;
+	deleteOutputRoute: (id: string, revision: number) => Promise<boolean>;
 }
 
 const DmxDiagnosticsContext = createContext<DmxDiagnostics | null>(null);

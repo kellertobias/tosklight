@@ -7,7 +7,8 @@ import {
 	useShowObjectsStore,
 } from "../features/showObjects/ShowObjectsState";
 import type { ShowObjectsStore } from "../features/showObjects/store";
-import { ServerProvider, useServer } from "./ServerContext";
+import { useBootstrapSnapshot } from "../features/deskSnapshot/DeskSnapshotState";
+import { ServerProvider } from "./ServerContext";
 
 vi.mock("../features/server/useServerPolling", () => ({
 	useServerPolling: vi.fn(),
@@ -26,7 +27,7 @@ let disabledGroupRenders = 0;
 let presetRenders = 0;
 
 function UnrelatedServerConsumer() {
-	useServer();
+	useBootstrapSnapshot();
 	unrelatedServerRenders += 1;
 	return null;
 }

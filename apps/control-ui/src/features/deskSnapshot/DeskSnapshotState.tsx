@@ -17,6 +17,7 @@ import {
 	selectActiveShow,
 	selectActiveShowId,
 	selectActiveTimecode,
+	selectActiveShowError,
 	selectAttributeRegistry,
 	selectBootstrap,
 	selectBootstrapReady,
@@ -72,6 +73,11 @@ export function useActiveTimecode(): string | null {
 /** Output health counters, or null while the bootstrap is unknown. */
 export function useOutputHealth(): OutputHealth | null {
 	return useDeskSnapshotSelector(selectOutputHealth, Object.is);
+}
+
+/** The active-show load error, or null while none is surfaced. */
+export function useActiveShowError(): string | null {
+	return useDeskSnapshotSelector(selectActiveShowError, Object.is);
 }
 
 /** The desk attribute registry, or null while the bootstrap is unknown. */

@@ -1,13 +1,15 @@
 import { useConnectionStatus, useServerError } from "../../features/shellStatus/ShellStatusState";
 import { useEffect, useMemo, useState } from "react";
-import { useServer } from "../../api/ServerContext";
+import { useDeskConnection } from "../../features/deskConnection/DeskConnectionContext";
+import { useBootstrapReady } from "../../features/deskSnapshot/DeskSnapshotState";
 import { configuredServerUrl } from "../../api/LightApiClient";
 import appIcon from "../../../src-tauri/icons/icon.svg";
 import { Button, TextField } from "../common";
 import { useDesktopBridge } from "../../platform/desktop";
 
 export function ConnectionState() {
-  const server = useServer();
+  const connection = useDeskConnection();
+  const bootstrapReady = useBootstrapReady();
   const connectionStatus = useConnectionStatus();
   const serverError = useServerError();
   const desktop = useDesktopBridge();
@@ -28,7 +30,7 @@ export function ConnectionState() {
     return () => window.clearTimeout(timer);
   }, []);
   if (connectionStatus === "connected") return null;
-  if (server.bootstrap)
+  if (bootstrapReady)
     return (
       <div className={`connection-banner ${connectionStatus}`} role="status">
         <span className="status-pulse" />
@@ -66,7 +68,7 @@ export function ConnectionState() {
             className="connection-form"
             onSubmit={(event) => {
               event.preventDefault();
-              if (deskToken.trim()) server.setDeskToken(deskToken);
+              if (deskToken.trim()) connection?.setDeskToken(deskToken);
             }}
           >
             <TextField
@@ -89,7 +91,7 @@ export function ConnectionState() {
             className="connection-form"
             onSubmit={(event) => {
               event.preventDefault();
-              server.setServerUrl(serverUrl);
+              connection?.setServerUrl(serverUrl);
             }}
           >
             <TextField

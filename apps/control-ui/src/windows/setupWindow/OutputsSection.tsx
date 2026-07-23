@@ -1,4 +1,5 @@
 import { FormLayout, NumberField, TextField } from "../../components/common";
+import { useDmxDiagnostics } from "../../features/dmxDiagnostics/DmxDiagnosticsContext";
 import { OutputRoutesSetup } from "../../components/setup/OutputRoutesSetup";
 import type { SetupWindowController } from "./controller";
 
@@ -7,7 +8,8 @@ export function OutputsSection({
 }: {
 	controller: SetupWindowController;
 }) {
-	const { draft, server } = controller;
+	const { draft } = controller;
+	const dmx = useDmxDiagnostics();
 	if (!draft) return null;
 	return (
 		<>
@@ -54,9 +56,9 @@ export function OutputsSection({
 				/>
 			</FormLayout>
 			<OutputRoutesSetup
-				routes={server.outputRoutes}
-				onSave={server.saveOutputRoute}
-				onDelete={server.deleteOutputRoute}
+				routes={dmx?.outputRoutes ?? []}
+				onSave={dmx?.saveOutputRoute ?? (async () => false)}
+				onDelete={dmx?.deleteOutputRoute ?? (async () => false)}
 				outputBindIp={draft.output_bind_ip}
 			/>
 		</>

@@ -1,9 +1,4 @@
-import {
-	createContext,
-	type PropsWithChildren,
-	useContext,
-	useMemo,
-} from "react";
+import { type PropsWithChildren, useMemo } from "react";
 import {
 	HighlightActionsProvider,
 	HighlightStateProvider,
@@ -11,14 +6,15 @@ import {
 import { ProgrammerActionsProvider } from "../features/programmerActions/ProgrammerActionsContext";
 import { ShellStatusActionsProvider } from "../features/shellStatus/ShellStatusActionsProvider";
 import { DmxDiagnosticsProvider } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
+import { DeskConnectionProvider } from "../features/deskConnection/DeskConnectionContext";
 import { FixtureLibraryProvider } from "../features/fixtureLibrary/FixtureLibraryContext";
+import { ShowLifecycleProvider } from "../features/showLifecycle/ShowLifecycleContext";
 import { MediaServersProvider } from "../features/mediaServers/MediaServersContext";
 import { SoundToLightProvider } from "../features/soundToLight/SoundToLightContext";
 import { FilesProvider } from "../features/files/FilesContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
 import { composeServerContextValue } from "../features/server/composeServerContextValue";
-import type { ServerContextValue } from "../features/server/ServerContextValue";
 import { useCommandLineController } from "../features/server/useCommandLineController";
 import { useFileAccess } from "../features/server/useFileAccess";
 import { useServerConnection } from "../features/server/useServerConnection";
@@ -52,8 +48,6 @@ export {
 	cueOnlyRestoration,
 	deskLayoutScopeKey,
 } from "../features/server/contracts";
-
-const ServerContext = createContext<ServerContextValue | null>(null);
 
 export function ServerProvider({
 	children,
@@ -148,8 +142,76 @@ export function ServerProvider({
 			readDmx: value.readDmx,
 			setDmxOverride: value.setDmxOverride,
 			outputRoutes: value.outputRoutes,
+			saveOutputRoute: value.saveOutputRoute,
+			deleteOutputRoute: value.deleteOutputRoute,
 		}),
-		[value.readDmx, value.setDmxOverride, value.outputRoutes],
+		[
+			value.readDmx,
+			value.setDmxOverride,
+			value.outputRoutes,
+			value.saveOutputRoute,
+			value.deleteOutputRoute,
+		],
+	);
+	const showLifecycle = useMemo(
+		() => ({
+			shows: value.shows,
+			openShow: value.openShow,
+			openCleanDefaultShow: value.openCleanDefaultShow,
+			initializeEmptyShow: value.initializeEmptyShow,
+			saveShowAs: value.saveShowAs,
+			overwriteShow: value.overwriteShow,
+			uploadShow: value.uploadShow,
+			downloadShow: value.downloadShow,
+			listShowRevisions: value.listShowRevisions,
+			saveShowRevision: value.saveShowRevision,
+			openShowRevision: value.openShowRevision,
+			previewMvr: value.previewMvr,
+			applyMvr: value.applyMvr,
+			previewMvrExport: value.previewMvrExport,
+			downloadMvr: value.downloadMvr,
+			createUser: value.createUser,
+			changeUser: value.changeUser,
+			switchUser: value.switchUser,
+			shutdownServer: value.shutdownServer,
+		}),
+		[
+			value.shows,
+			value.openShow,
+			value.openCleanDefaultShow,
+			value.initializeEmptyShow,
+			value.saveShowAs,
+			value.overwriteShow,
+			value.uploadShow,
+			value.downloadShow,
+			value.listShowRevisions,
+			value.saveShowRevision,
+			value.openShowRevision,
+			value.previewMvr,
+			value.applyMvr,
+			value.previewMvrExport,
+			value.downloadMvr,
+			value.createUser,
+			value.changeUser,
+			value.switchUser,
+			value.shutdownServer,
+		],
+	);
+	const deskConnection = useMemo(
+		() => ({
+			setServerUrl: value.setServerUrl,
+			setDeskToken: value.setDeskToken,
+			deskLayout: value.deskLayout,
+			deskLayoutScope: value.deskLayoutScope,
+			saveDeskLayout: value.saveDeskLayout,
+		}),
+		[
+			value.setServerUrl,
+			value.setDeskToken,
+			value.deskLayout,
+			value.deskLayoutScope,
+			value.saveDeskLayout,
+		],
 	);
 	const fixtureLibraryState = useMemo(
 		() => ({
@@ -220,12 +282,13 @@ export function ServerProvider({
 		[value.dismissError, value.simulateError, value.readServerLogs],
 	);
 	return (
-		<ServerContext.Provider value={value}>
-			<HighlightStateProvider store={state.highlightStore}>
+		<HighlightStateProvider store={state.highlightStore}>
 			<HighlightActionsProvider actions={highlightActions}>
 			<ProgrammerActionsProvider actions={programmerActions}>
 			<ShellStatusActionsProvider actions={shellStatusActions}>
 			<DmxDiagnosticsProvider diagnostics={dmxDiagnostics}>
+			<ShowLifecycleProvider lifecycle={showLifecycle}>
+			<DeskConnectionProvider connection={deskConnection}>
 			<FixtureLibraryProvider library={fixtureLibraryState}>
 			<MediaServersProvider media={mediaServersState}>
 			<SoundToLightProvider actions={soundToLightActions}>
@@ -300,17 +363,12 @@ export function ServerProvider({
 			</SoundToLightProvider>
 			</MediaServersProvider>
 			</FixtureLibraryProvider>
+			</DeskConnectionProvider>
+			</ShowLifecycleProvider>
 			</DmxDiagnosticsProvider>
 			</ShellStatusActionsProvider>
 			</ProgrammerActionsProvider>
 			</HighlightActionsProvider>
-			</HighlightStateProvider>
-		</ServerContext.Provider>
+		</HighlightStateProvider>
 	);
-}
-
-export function useServer() {
-	const context = useContext(ServerContext);
-	if (!context) throw new Error("useServer must be used inside ServerProvider");
-	return context;
 }
