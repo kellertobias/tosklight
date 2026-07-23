@@ -120,7 +120,16 @@ Four of the five scenarios are fixed and unskipped; one narrowed residue remains
   (start at `crates/application/src/playback_topology/candidate.rs` `cue_list_body` /
   `lossless_json`, and the active-show mutation path's unconditional `next_revision` in
   `crates/application/src/active_show/objects.rs` whose `show_object_changed` emit is
-  caller-supplied and omittable).
+  caller-supplied and omittable). **Sharper lead (2026-07-23, from the §6 undo-test fix):**
+  the active document runs a *normalize-once write-back* for legacy-shaped objects (groups
+  provably bump one revision with no `show_object_changed` when a document read finds a
+  non-normalized stored body — that is exactly the silent-revision signature). The stored
+  cue_list body carries `chaser_xfade_millis: 0` from the lossless response merge while the
+  serde model skip-serializes zero, so the next normalize pass rewrites the body
+  byte-differently and bumps the revision silently. Reproduce by storing a cue_list with
+  `chaser_xfade_millis: 0` and triggering a document read; fix candidates: emit
+  `show_object_changed` from the normalize write-back, or stop the topology response echo
+  from persisting the skip-serialized field.
 - **PRELOAD-004 — fixed.** A playback-only Preload GO left the lifecycle projection reporting
   no active preload (queued Playback actions deliberately did not count), so hold-to-release
   never armed. A `preload_playback_active` marker (set on GO, cleared on release, outside
