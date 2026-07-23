@@ -54,6 +54,15 @@ useSoundCapture, useSoundToLight), windows (DmxWindow: `readDmx`/`setDmxOverride
 Only after every caller is migrated: delete `useServer()` and remove unused v1
 routes per the decided policy below.
 
+**Deferred remainder (2026-07-23):** the ~26 consumers above each need a scoped action
+owner that does not exist yet (programming actions, command-line state, fixture-library
+transfers, show lifecycle, media/sound, DMX diagnostics) — six new store/actions features
+plus the QuickSetupModal show-lifecycle surface, then the `useServer()` deletion and
+per-route v1 removal sweeps. That is multi-session work by design ("each chunk lands
+independently"); continue with the same pattern the landed chunks established
+(deskSnapshot/highlight: scoped store installed from `useServerState`, provider in the
+desk boundaries, narrow hooks, migrate consumers, full suite per chunk).
+
 ### Plan
 
 `useServer()` was retained as the sanctioned migration facade
