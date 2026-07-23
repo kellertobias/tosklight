@@ -18,9 +18,11 @@ done/      finished chunks, each with a "## Result" note appended
 1. **Claim**: `git mv` the lowest-numbered file from `pending/` to `doing/`. If `doing/`
    already has a file, finish or abandon that one first (abandon = move back to
    `pending/` with a note on what was learned).
-2. **Check decisions**: if the chunk contains **DECISION NEEDED** and the decision is not
-   yet recorded in the file, STOP — ask the maintainer, record the answer in the chunk
-   file, and only then execute.
+2. **Check decisions**: chunks with an unresolved maintainer decision carry the
+   `.ATTENTION.md` suffix (e.g. `06-….ATTENTION.md`) and contain a **DECISION NEEDED**
+   section. STOP — ask the maintainer, record the answer in the chunk file, rename it
+   back to plain `.md`, and only then execute. Conversely: when adding a new chunk that
+   needs a decision, give it the `.ATTENTION.md` suffix.
 3. **Execute** within the chunk's scope. Re-verify its file:line claims before editing.
 4. **Gate**: run the chunk's verification steps; land only with no net new regressions
    against the baseline below.
