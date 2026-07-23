@@ -8,6 +8,9 @@
     "type": "git",
     "url": "https://github.com/kellertobias/tosklight.git"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -16,7 +19,9 @@
     "dev:ui": "bash tools/dev.sh ui",
     "dev:server": "bash tools/dev.sh server",
     "dev:app": "bash tools/dev.sh app",
-    "storybook": "npm --prefix apps/control-ui run storybook",
+    "storybook": "npm --workspace @tosklight/ui run storybook",
+    "storybook:build": "npm --workspace @tosklight/ui run build-storybook",
+    "test:ui-package": "npm --workspace @tosklight/ui run test && npm --workspace @tosklight/ui run typecheck && npm --workspace @tosklight/ui run smoke:stories",
     "codesafari": "bash tools/build.sh codesafari",
     "open": "bash tools/build.sh open",
     "bundle": "bash tools/build.sh archive",
