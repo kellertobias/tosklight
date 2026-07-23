@@ -1,0 +1,292 @@
+use super::*;
+
+async fn open_show(app: &Router, token: &str, show_id: &str) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v1/shows/{show_id}/open"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"transition":"hold_current"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+async fn seed_stage_layout(
+    app: &Router,
+    token: &str,
+    show_id: &str,
+    body: &serde_json::Value,
+) -> u64 {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::put(format!("/api/v1/shows/{show_id}/objects/stage_layout/main"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::IF_MATCH, "0")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    json(response).await["revision"].as_u64().unwrap()
+}
+
+async fn read_stage_layout(app: &Router, token: &str, show_id: &str) -> serde_json::Value {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/shows/{show_id}/objects/stage_layout/main"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    json(response).await
+}
+
+async fn post_stage_layout_action(app: &Router, token: &str, body: &serde_json::Value) -> Response {
+    app.clone()
+        .oneshot(
+            Request::post("/api/v2/stage-layout/actions")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
+fn move_request(
+    request_id: &str,
+    fixture_ids: &[Uuid],
+    axis: &str,
+    delta: f64,
+) -> serde_json::Value {
+    serde_json::json!({
+        "request_id": request_id,
+        "action": {
+            "type": "move_selection",
+            "fixture_ids": fixture_ids,
+            "axis": axis,
+            "delta": delta,
+        },
+    })
+}
+
+#[tokio::test]
+async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Stage move").await;
+    let show_id = show["id"].as_str().unwrap();
+    open_show(&app, &token, show_id).await;
+
+    let (a, b, c, legacy, absent) = (
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+    );
+    let seeded = seed_stage_layout(
+        &app,
+        &token,
+        show_id,
+        &serde_json::json!({
+            "version": 2,
+            "positions": { legacy.to_string(): {"x": 50.0, "y": 50.0, "rotation": 90.0} },
+            "positions3d": {
+                a.to_string(): {"x": 1.0, "y": 2.0, "z": 3.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0},
+                b.to_string(): {"x": -2.0, "y": 0.5, "z": 5.0, "rotationX": 10.0, "rotationY": 0.0, "rotationZ": 0.0, "future_field": "kept"},
+                c.to_string(): {"x": 9.0, "y": 9.0, "z": 9.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0},
+            },
+            "camera3d": {"position": [0.0, 1.0, 2.0], "target": [0.0, 0.0, 0.0]},
+            "future_layout_field": true,
+        }),
+    )
+    .await;
+    let mut events = state.events.subscribe();
+
+    let response = post_stage_layout_action(
+        &app,
+        &token,
+        &move_request("move-1", &[a, legacy, b, absent], "x", 1.5),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let outcome = json(response).await;
+    assert_eq!(outcome["changed"], true);
+    assert_eq!(outcome["replayed"], false);
+    assert_eq!(
+        outcome["moved_fixture_ids"],
+        serde_json::json!([a, legacy, b])
+    );
+    let revision = outcome["revision"].as_u64().unwrap();
+    assert!(revision > seeded);
+
+    let layout = read_stage_layout(&app, &token, show_id).await;
+    let positions3d = &layout["body"]["positions3d"];
+    assert_eq!(positions3d[a.to_string()]["x"], 2.5);
+    assert_eq!(positions3d[a.to_string()]["y"], 2.0);
+    assert_eq!(positions3d[b.to_string()]["x"], -0.5);
+    assert_eq!(positions3d[b.to_string()]["future_field"], "kept");
+    assert_eq!(positions3d[c.to_string()]["x"], 9.0);
+    // The legacy 2D entry is migrated with the stage views' percent-to-meter formula before
+    // the delta applies; the 2D entry itself stays untouched.
+    assert_eq!(positions3d[legacy.to_string()]["x"], 1.5);
+    assert_eq!(positions3d[legacy.to_string()]["y"], 4.0);
+    assert_eq!(positions3d[legacy.to_string()]["z"], 5.0);
+    assert_eq!(positions3d[legacy.to_string()]["rotationZ"], 90.0);
+    assert!(positions3d[absent.to_string()].is_null());
+    assert_eq!(layout["body"]["positions"][legacy.to_string()]["x"], 50.0);
+    assert_eq!(layout["body"]["future_layout_field"], true);
+    assert_eq!(layout["body"]["camera3d"]["position"][2], 2.0);
+
+    let mut observed_change = false;
+    while let Ok(event) = events.try_recv() {
+        if event.kind == "show_object_changed"
+            && event.payload["kind"] == "stage_layout"
+            && event.payload["id"] == "main"
+        {
+            assert_eq!(event.payload["revision"].as_u64(), Some(revision));
+            observed_change = true;
+        }
+    }
+    assert!(observed_change, "stage move must emit show_object_changed");
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn move_selection_replays_on_request_id_and_rejects_reuse_for_a_different_action() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Stage replay").await;
+    let show_id = show["id"].as_str().unwrap();
+    open_show(&app, &token, show_id).await;
+    let fixture = Uuid::new_v4();
+    seed_stage_layout(
+        &app,
+        &token,
+        show_id,
+        &serde_json::json!({
+            "version": 2,
+            "positions": {},
+            "positions3d": { fixture.to_string(): {"x": 1.0, "y": 0.0, "z": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0} },
+        }),
+    )
+    .await;
+
+    let request = move_request("replay-1", &[fixture], "y", 2.0);
+    let first = json(post_stage_layout_action(&app, &token, &request).await).await;
+    assert_eq!(first["changed"], true);
+    let replayed = post_stage_layout_action(&app, &token, &request).await;
+    assert_eq!(replayed.status(), StatusCode::OK);
+    let replayed = json(replayed).await;
+    assert_eq!(replayed["replayed"], true);
+    assert_eq!(replayed["revision"], first["revision"]);
+    let layout = read_stage_layout(&app, &token, show_id).await;
+    assert_eq!(
+        layout["body"]["positions3d"][fixture.to_string()]["y"],
+        2.0,
+        "a replay must not re-apply the delta"
+    );
+
+    let collision = post_stage_layout_action(
+        &app,
+        &token,
+        &move_request("replay-1", &[fixture], "y", 3.0),
+    )
+    .await;
+    assert_eq!(collision.status(), StatusCode::CONFLICT);
+    let collision = json(collision).await;
+    assert_eq!(collision["retryable"], false);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn move_selection_validates_requests_and_tolerates_unknown_fields() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let unauthenticated = post_stage_layout_action(
+        &app,
+        "not-a-token",
+        &move_request("auth", &[Uuid::new_v4()], "x", 1.0),
+    )
+    .await;
+    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+
+    let (token, _) = login(&app, "Operator").await;
+    let inactive = post_stage_layout_action(
+        &app,
+        &token,
+        &move_request("no-show", &[Uuid::new_v4()], "x", 1.0),
+    )
+    .await;
+    assert_eq!(inactive.status(), StatusCode::CONFLICT);
+
+    let show = create_show(&app, &token, "Stage validation").await;
+    let show_id = show["id"].as_str().unwrap();
+    open_show(&app, &token, show_id).await;
+    let fixture = Uuid::new_v4();
+    seed_stage_layout(
+        &app,
+        &token,
+        show_id,
+        &serde_json::json!({
+            "version": 2,
+            "positions": {},
+            "positions3d": { fixture.to_string(): {"x": 1.0, "y": 0.0, "z": 0.0, "rotationX": 0.0, "rotationY": 0.0, "rotationZ": 0.0} },
+        }),
+    )
+    .await;
+
+    let empty_selection = post_stage_layout_action(
+        &app,
+        &token,
+        &move_request("empty-selection", &[], "x", 1.0),
+    )
+    .await;
+    assert_eq!(empty_selection.status(), StatusCode::BAD_REQUEST);
+
+    let blank_request_id =
+        post_stage_layout_action(&app, &token, &move_request("", &[fixture], "x", 1.0)).await;
+    assert_eq!(blank_request_id.status(), StatusCode::BAD_REQUEST);
+
+    // Unknown request fields are accepted, never rejected (api-rules §5).
+    let mut tolerant = move_request("tolerant", &[fixture], "z", -1.0);
+    tolerant["desk_hint"] = serde_json::json!("ignored");
+    tolerant["action"]["velocity"] = serde_json::json!(3);
+    let accepted = post_stage_layout_action(&app, &token, &tolerant).await;
+    assert_eq!(accepted.status(), StatusCode::OK);
+    assert_eq!(json(accepted).await["changed"], true);
+
+    // A zero delta and a selection without any stored position both change nothing.
+    let zero = json(
+        post_stage_layout_action(&app, &token, &move_request("zero", &[fixture], "x", 0.0)).await,
+    )
+    .await;
+    assert_eq!(zero["changed"], false);
+    assert_eq!(zero["moved_fixture_ids"], serde_json::json!([]));
+    let unknown_only = json(
+        post_stage_layout_action(
+            &app,
+            &token,
+            &move_request("unknown-only", &[Uuid::new_v4()], "x", 1.0),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(unknown_only["changed"], false);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
