@@ -1,5 +1,16 @@
 # 07 — Virtual-playback exclusion zones: drop the desk segment, retire the v1 pair
 
+**What exclusion zones are (maintainer, 2026-07-23):** within one exclusion zone, only
+one playback can be active at a time. They are show-level configuration that barely ever
+changes.
+
+**Transport (maintainer, 2026-07-23):** plain REST snapshot loaded when the window
+opens, plus a change event so open windows reload when a zone is edited. No polling, no
+desk-lifetime store, no telemetry lane — this is the low-frequency end of the api-rules
+read model (snapshot read + invalidation event). If no v2 event exists for zone changes
+yet, add one (wire type in `crates/wire/src/v2/events.rs`, published from the zone save
+path) rather than keeping any other refresh mechanism.
+
 ## Context (api-rules §6, decided 2026-07-23; verified against code)
 
 Storage is already show-level: `crates/server/src/runtime/playback_api.rs:109-122` —
@@ -29,8 +40,13 @@ Two parallel route families serve it:
    the snapshot should return the show-level store; keep any desk filtering only if the UI
    depends on it (check `apps/control-ui/src/features/…` consumers and
    `VirtualPlaybackZones` provider) — if it does, filter client-side (display concern).
-3. Migrate the client v1 calls (`playback.ts:150,161`) to the v2 route.
+3. Migrate the client v1 calls (`playback.ts:150,161`) to the v2 route, following the
+   transport pattern above: fetch on window mount, reload on the zone-change event.
 4. Delete the v1 route pair + handlers; grep bench/tests for the v1 paths and migrate them.
+5. While touching the zone save path, verify the enforcement semantic is server-side and
+   tested: activating a playback inside a zone releases/blocks the zone's other active
+   playback (one active playback per zone). If enforcement currently lives client-side
+   anywhere, that's a §4 violation — move it in this chunk and note it in the result.
 
 ## Definition of done
 
