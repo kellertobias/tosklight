@@ -254,7 +254,7 @@ export function registerShow001ProcessRestartTest(): void {
 		).toMatchObject({ value: 0.65 });
 		expect(await fileHash(entry.path)).toBe(showHash);
 		expect(
-			await api.request<any>("GET", "/api/v1/visualization"),
+			await api.request<any>("GET", "/api/v2/output/visualization"),
 		).toMatchObject({ grand_master: 0.5, blackout: false });
 		const firstFrame = await bench.tick(0);
 		expect(firstFrame.universes).toEqual(expectedFirstFrame.universes);

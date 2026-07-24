@@ -140,11 +140,12 @@ async fn patch_preview_highlight_is_default_off_scoped_and_released() {
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let request = |active| {
-        Request::put("/api/v1/patch-preview-highlight")
+        Request::post("/api/v2/output/patch-preview-highlight")
             .header(header::AUTHORIZATION, format!("Bearer {token}"))
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(
                 serde_json::to_vec(&serde_json::json!({
+                    "request_id":"patch-preview-test",
                     "active":active,
                     "fixture_ids":[fixture_id]
                 }))

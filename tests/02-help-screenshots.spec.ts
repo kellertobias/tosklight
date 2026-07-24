@@ -58,11 +58,11 @@ test("captures help and README screenshots from the default show desk", async ({
   await page.getByRole("button", { name: "BUILT-INS" }).click();
   await page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
   await expect(page.locator(".fixture-window")).toBeVisible();
-  await api.request("POST", "/api/v1/highlight/action", { action: "next" });
+  await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "next" });
   await expect(page.locator('.fixture-window [data-step-selection="active"]')).toHaveCount(1);
   await expect(page.locator('.fixture-window [data-step-selection="base"]').first()).toBeVisible();
   await page.screenshot({ path: shot("fixture-sheet-programmer.png"), fullPage: true });
-  await api.request("POST", "/api/v1/highlight/action", { action: "all" });
+  await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "all" });
 
   await captureWorkflowReference(page);
   const patch = await api.patch();

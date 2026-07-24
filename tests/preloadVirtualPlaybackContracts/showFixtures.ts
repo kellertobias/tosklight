@@ -192,7 +192,7 @@ export async function visualizationLevel(
 	fixtureId: string,
 	attribute = "intensity",
 ): Promise<number> {
-	const snapshot = await api.request<any>("GET", "/api/v1/visualization");
+	const snapshot = await api.request<any>("GET", "/api/v2/output/visualization");
 	const value = snapshot.values.find(
 		(entry: any) =>
 			entry.fixture_id === fixtureId && entry.attribute === attribute,

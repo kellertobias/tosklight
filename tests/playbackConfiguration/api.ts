@@ -296,7 +296,7 @@ export async function controls(api: ApiDriver) {
 export async function logicalDmx(api: ApiDriver): Promise<number[]> {
 	const snapshot = await api.request<any>(
 		"GET",
-		"/api/v1/dmx",
+		"/api/v2/output/dmx",
 		undefined,
 		false,
 	);

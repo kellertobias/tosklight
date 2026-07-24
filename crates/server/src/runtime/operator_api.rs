@@ -207,10 +207,12 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
 }
 pub(super) async fn visualization_snapshot(
     State(state): State<AppState>,
+    show: ShowContext,
     headers: HeaderMap,
     Query(query): Query<VisualizationQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
     let snapshot = state.engine.snapshot();
     let options = state.output_control.lock().render_options();
     let mut resolved = state.engine.resolved_values();

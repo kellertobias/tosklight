@@ -319,6 +319,7 @@ export class LightClientRuntime {
 	private authenticate(headers: Headers): void {
 		if (!this.session) throw new Error("A server session is required");
 		headers.set("authorization", `Bearer ${this.session.token}`);
+		if (this.session.desk) headers.set("x-tosk-desk", this.session.desk.id);
 	}
 }
 

@@ -261,7 +261,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
     let refreshed = app
         .clone()
         .oneshot(
-            Request::post(format!("/api/v1/media/{}/thumbnails/refresh", fixture_id.0))
+            Request::post(format!("/api/v2/media-servers/{}/thumbnails/refresh", fixture_id.0))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"elements":[7],"width":64,"height":64}"#))
@@ -287,7 +287,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
     assert_eq!(cached.image.bytes, vec![1, 2, 3]);
     let status = app
         .oneshot(
-            Request::get("/api/v1/media")
+            Request::get("/api/v2/media-servers")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),

@@ -134,12 +134,38 @@ test("HIGHLIGHT-005 @ui › Highlight errors remain reachable above production c
 }) => {
 	await loadCanonicalCopy(api, bench, "highlight-005", "default-stage");
 	const errors = [
-		{
-			status: 409,
-			message: "Highlight output is active for another user on this desk",
-		},
-		{ status: 500, message: "The Highlight action was rejected by the desk" },
+		"Highlight output is active for another user on this desk",
+		"The Highlight action was rejected by the desk",
 	];
+	let nextHighlightError: string | null = null;
+	await page.routeWebSocket("**/api/v2/events", (socket) => {
+		const server = socket.connectToServer();
+		socket.onMessage((message) => {
+			const parsed = JSON.parse(String(message)) as {
+				command?: string;
+				request_id?: string;
+			};
+			if (
+				parsed.command === "highlight.action" &&
+				parsed.request_id &&
+				nextHighlightError
+			) {
+				socket.send(
+					JSON.stringify({
+						protocol_version: 1,
+						request_id: parsed.request_id,
+						ok: false,
+						revision: 0,
+						error: nextHighlightError,
+					}),
+				);
+				nextHighlightError = null;
+				return;
+			}
+			server.send(message);
+		});
+		server.onMessage((message) => socket.send(message));
+	});
 
 	for (const viewport of [
 		{ width: 1280, height: 720 },
@@ -150,23 +176,13 @@ test("HIGHLIGHT-005 @ui › Highlight errors remain reachable above production c
 		await openBuiltIn(page, "Fixtures");
 		await expect(page.locator(".programmer-number-block")).toBeVisible();
 
-		for (const error of errors) {
+		for (const errorMessage of errors) {
 			const before = await softwareHighlightGeometry(page);
-			await page.route(
-				"**/api/v1/highlight/action",
-				async (route) => {
-					await route.fulfill({
-						status: error.status,
-						contentType: "application/json",
-						body: JSON.stringify({ error: error.message }),
-					});
-				},
-				{ times: 1 },
-			);
+			nextHighlightError = errorMessage;
 			await highlightKey(page, "HIGH").click();
 			const alert = page.locator("[data-highlight-error-alert]");
 			await expect(alert).toHaveCount(1);
-			await expect(alert).toContainText(error.message);
+			await expect(alert).toContainText(errorMessage);
 			await page.getByRole("button", { name: /Open show menu/ }).click();
 			const modal = page.getByRole("dialog", { name: "Show", exact: true });
 			await expect(modal).toBeVisible();
@@ -190,17 +206,7 @@ test("HIGHLIGHT-005 @ui › Highlight errors remain reachable above production c
 		const hardware = await bench.osc();
 		const clientId = `highlight-005-${viewport.width}-${crypto.randomUUID()}`;
 		try {
-			await page.route(
-				"**/api/v1/highlight/action",
-				async (route) => {
-					await route.fulfill({
-						status: 409,
-						contentType: "application/json",
-						body: JSON.stringify({ error: errors[0].message }),
-					});
-				},
-				{ times: 1 },
-			);
+			nextHighlightError = errors[0];
 			await highlightKey(page, "HIGH").click();
 			const alert = page.locator("[data-highlight-error-alert]");
 			await expect(alert).toBeVisible();

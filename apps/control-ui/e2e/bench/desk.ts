@@ -411,7 +411,7 @@ export class DeskDriver {
     const session = await this.session();
     const headers = { Authorization: `Bearer ${session.token}` };
     const [dmxResponse, eventsResponse] = await Promise.all([
-      fetch(`${this.baseUrl}/api/v1/dmx`, { headers }),
+      fetch(`${this.baseUrl}/api/v2/output/dmx`, { headers }),
       fetch(`${this.baseUrl}/api/v1/audit?after=${this.auditRevision}`, { headers }),
     ]);
     const dmx = dmxResponse.ok ? await dmxResponse.json() : null;

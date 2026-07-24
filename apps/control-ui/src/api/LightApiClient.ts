@@ -4,8 +4,7 @@ import { DeskApiClient } from "./client/desk";
 import { FileApiClient } from "./client/files";
 import { FixtureApiClient } from "./client/fixtures";
 import { HelpApiClient } from "./client/help";
-import { MediaApiClient } from "./client/media";
-import { OutputApiClient } from "./client/output";
+import { MediaOutputApiClient } from "./client/mediaOutput";
 import { PlaybackApiClient } from "./client/playback";
 import { ProgrammingApiClient } from "./client/programming";
 import { LightClientRuntime } from "./client/runtime";
@@ -28,7 +27,7 @@ export {
 export class LightApiClient extends LightClientRuntime {
 	private readonly fileApi = new FileApiClient(this.transport);
 	private readonly fixtureApi = new FixtureApiClient(this.transport);
-	private readonly mediaApi = new MediaApiClient(this.transport);
+	private readonly mediaOutputApi = new MediaOutputApiClient(this.transport);
 	private readonly showApi = new ShowApiClient(this.transport);
 	private readonly configurationApi = new ConfigurationApiClient(
 		this.transport,
@@ -38,7 +37,6 @@ export class LightApiClient extends LightClientRuntime {
 	private readonly playbackApi = new PlaybackApiClient(this.transport);
 	private readonly helpApi = new HelpApiClient(this.transport);
 	private readonly deskApi = new DeskApiClient(this.transport);
-	private readonly outputApi = new OutputApiClient(this.transport);
 	private readonly selectiveImportApi = new SelectiveImportApiClient(
 		this.transport,
 	);
@@ -47,15 +45,15 @@ export class LightApiClient extends LightClientRuntime {
 	helpTopic = bindClientMethod(this.helpApi, "helpTopic");
 	commandHistory = bindClientMethod(this.deskApi, "commandHistory");
 	createUser = bindClientMethod(this.deskApi, "createUser");
-	setDmxOverride = bindClientMethod(this.outputApi, "setDmxOverride");
+	setDmxOverride = bindClientMethod(this.mediaOutputApi, "setDmxOverride");
 	outputRuntimeLiveAction = bindClientMethod(
-		this.outputApi,
+		this.mediaOutputApi,
 		"outputRuntimeLiveAction",
 	);
-	highlight = bindClientMethod(this.outputApi, "highlight");
-	highlightAction = bindClientMethod(this.outputApi, "highlightAction");
+	highlight = bindClientMethod(this.mediaOutputApi, "highlight");
+	highlightAction = bindClientMethod(this.mediaOutputApi, "highlightAction");
 	setPatchPreviewHighlight = bindClientMethod(
-		this.outputApi,
+		this.mediaOutputApi,
 		"setPatchPreviewHighlight",
 	);
 	auditEvents = bindClientMethod(this.deskApi, "auditEvents");
@@ -111,13 +109,16 @@ export class LightApiClient extends LightClientRuntime {
 		"deleteFixtureDefinition",
 	);
 
-	visualization = bindClientMethod(this.mediaApi, "visualization");
-	dmx = bindClientMethod(this.mediaApi, "dmx");
-	mediaServers = bindClientMethod(this.mediaApi, "mediaServers");
-	refreshMediaPreview = bindClientMethod(this.mediaApi, "refreshMediaPreview");
-	mediaPreview = bindClientMethod(this.mediaApi, "mediaPreview");
+	visualization = bindClientMethod(this.mediaOutputApi, "visualization");
+	dmx = bindClientMethod(this.mediaOutputApi, "dmx");
+	mediaServers = bindClientMethod(this.mediaOutputApi, "mediaServers");
+	refreshMediaPreview = bindClientMethod(
+		this.mediaOutputApi,
+		"refreshMediaPreview",
+	);
+	mediaPreview = bindClientMethod(this.mediaOutputApi, "mediaPreview");
 	refreshMediaThumbnails = bindClientMethod(
-		this.mediaApi,
+		this.mediaOutputApi,
 		"refreshMediaThumbnails",
 	);
 

@@ -96,7 +96,7 @@ async function stage(page: import("../apps/control-ui/node_modules/@playwright/t
 
 interface DmxState { logical: number[]; artnet: { sequence: number; slots: number[] }; sacn: { sequence: number; slots: number[] } }
 async function dmxState(api: any, bench: any): Promise<DmxState> {
-  const snapshot = await api.request<any>("GET", "/api/v1/dmx", undefined, false);
+  const snapshot = await api.request<any>("GET", "/api/v2/output/dmx", undefined, false);
   const logical = snapshot.universes.find((item: any) => item.universe === 1)?.slots.slice(0, 12) ?? Array(12).fill(0);
   const art = bench.artnet.packets.at(-1); const sacn = bench.sacn.packets.at(-1);
   return { logical, artnet: { sequence: art?.sequence ?? 0, slots: Array.from(art?.slots.slice(0, 6) ?? Array(6).fill(0)) }, sacn: { sequence: sacn?.sequence ?? 0, slots: Array.from(sacn?.slots.slice(0, 6) ?? Array(6).fill(0)) } };

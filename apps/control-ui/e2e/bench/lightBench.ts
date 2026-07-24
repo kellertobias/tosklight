@@ -144,7 +144,7 @@ export class LightBench {
   async waitForDmx(address: number, expected: number, timeout = 2_000): Promise<void> {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
-      const response = await fetch(`${this.baseUrl}/api/v1/dmx`);
+      const response = await fetch(`${this.baseUrl}/api/v2/output/dmx`);
       if (response.ok) {
         const snapshot = await response.json() as { universes: Array<{ universe: number; slots: number[] }> };
         if (snapshot.universes.find((universe) => universe.universe === 1)?.slots[address - 1] === expected) return;

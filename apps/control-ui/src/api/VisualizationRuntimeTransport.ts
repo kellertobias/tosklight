@@ -57,7 +57,7 @@ export class HttpVisualizationRuntimeTransport
 		let response: Response;
 		try {
 			response = await this.fetchImplementation(
-				`${this.baseUrl}/api/v1/visualization${query}`,
+				`${this.baseUrl}/api/v2/output/visualization${query}`,
 				{ headers: this.headers() },
 			);
 		} catch (reason) {

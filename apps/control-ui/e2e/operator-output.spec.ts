@@ -94,7 +94,7 @@ async function waitForDmx(request: APIRequestContext, expected: number) {
   await expect.poll(async () => {
     const tick = await request.post("/api/v1/test/clock/advance", { data: { milliseconds: 0 } });
     expect(tick.ok(), `manual output tick: ${await tick.text()}`).toBeTruthy();
-    const snapshot = await jsonRequest<{ universes: Array<{ universe: number; slots: number[] }> }>(request, "get", "/api/v1/dmx");
+    const snapshot = await jsonRequest<{ universes: Array<{ universe: number; slots: number[] }> }>(request, "get", "/api/v2/output/dmx");
     return snapshot.universes.find((universe) => universe.universe === 1)?.slots[0];
   }, { timeout: 8_000 }).toBe(expected);
 }

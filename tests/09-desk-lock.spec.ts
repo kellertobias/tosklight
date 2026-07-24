@@ -26,7 +26,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 		await api.setCommandLineText("");
 		const hardware = await bench.osc();
 		await hardware.subscribe(`desk-lock-${crypto.randomUUID()}`, api.session!.desk.osc_alias);
-		const before = await api.request<any>("GET", "/api/v1/dmx");
+		const before = await api.request<any>("GET", "/api/v2/output/dmx");
 		const wallpaper = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath fill='%23123456' d='M0 0h8v8H0z'/%3E%3C/svg%3E";
 		try {
 			await api.request("PUT", "/api/v1/desk-lock", { message: "Call the operator", wallpaper, unlock_mode: "pin", pin: "1234" });
@@ -50,7 +50,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 			await hardware.send(`/light/${api.session!.desk.osc_alias}/programmer/digit-5`, [true]);
 			await page.waitForTimeout(100);
 			expect(await commandLine(api)).toBe("");
-			expect(await api.request<any>("GET", "/api/v1/dmx")).toEqual(before);
+			expect(await api.request<any>("GET", "/api/v2/output/dmx")).toEqual(before);
 
 			api.session = otherDeskSession;
 			expect((await api.request<any>("GET", "/api/v1/desk-lock")).locked).toBe(false);

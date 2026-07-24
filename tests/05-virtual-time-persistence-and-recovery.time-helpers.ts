@@ -428,7 +428,7 @@ export async function visualizationLevel(
 	fixtureId: string,
 	attribute: string,
 ): Promise<number> {
-	const visualization = await api.request<any>("GET", "/api/v1/visualization");
+	const visualization = await api.request<any>("GET", "/api/v2/output/visualization");
 	return (
 		normalized(
 			visualization.values.find(

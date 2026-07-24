@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ConfigurationApiClient } from "./configuration";
-import { OutputApiClient } from "./output";
+import { MediaOutputApiClient } from "./mediaOutput";
 import type { LiveClientTransport } from "./transport";
 
 const AUTHORITY_ID = "11111111-1111-4111-8111-111111111111";
@@ -8,7 +8,7 @@ const SHOW_ID = "22222222-2222-4222-8222-222222222222";
 const CORRELATION_ID = "33333333-3333-4333-8333-333333333333";
 
 function transportReturning(value: unknown) {
-	const commandWithRequestId = vi.fn(async () => value);
+	const commandWithRequestId = vi.fn(async (..._args: unknown[]) => value);
 	return {
 		transport: {
 			request: vi.fn(),
@@ -82,7 +82,7 @@ describe("typed live runtime actions", () => {
 			replayed: false,
 			durability: "durable",
 		});
-		const client = new OutputApiClient(transport);
+		const client = new MediaOutputApiClient(transport);
 
 		await expect(
 			client.outputRuntimeLiveAction(SHOW_ID, {
@@ -105,5 +105,49 @@ describe("typed live runtime actions", () => {
 			},
 			"output-1",
 		);
+	});
+
+	it("sends DMX override, Highlight, and Patch Preview as single live frames", async () => {
+		const state = { active: true, mode: "all" };
+		const { transport, commandWithRequestId } = transportReturning(state);
+		const client = new MediaOutputApiClient(transport);
+
+		await client.setDmxOverride(2, 17, 128);
+		await expect(client.highlightAction("all")).resolves.toEqual(state);
+		await expect(
+			client.setPatchPreviewHighlight(true, ["fixture-a"]),
+		).resolves.toEqual(state);
+
+		expect(commandWithRequestId).toHaveBeenCalledTimes(3);
+		expect(commandWithRequestId).toHaveBeenNthCalledWith(
+			1,
+			"dmx.override",
+			{
+				request_id: expect.any(String),
+				universe: 2,
+				address: 17,
+				value: 128,
+			},
+			expect.any(String),
+		);
+		expect(commandWithRequestId).toHaveBeenNthCalledWith(
+			2,
+			"highlight.action",
+			{ request_id: expect.any(String), action: "all" },
+			expect.any(String),
+		);
+		expect(commandWithRequestId).toHaveBeenNthCalledWith(
+			3,
+			"patch_preview_highlight.action",
+			{
+				request_id: expect.any(String),
+				active: true,
+				fixture_ids: ["fixture-a"],
+			},
+			expect.any(String),
+		);
+		for (const call of commandWithRequestId.mock.calls) {
+			expect((call[1] as { request_id: string }).request_id).toBe(call[2]);
+		}
 	});
 });

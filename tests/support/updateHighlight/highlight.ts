@@ -116,14 +116,31 @@ export function groupBody(name: string, fixtures: string[]) {
 export async function highlightState(
 	api: Parameters<typeof objects>[0],
 ): Promise<any> {
-	return api.request<any>("GET", "/api/v1/highlight", undefined, true);
+	return api.request<any>(
+		"GET",
+		"/api/v2/output/highlight",
+		undefined,
+		true,
+		undefined,
+		{ deskId: api.session!.desk.id },
+	);
 }
 
 export async function highlightAction(
 	api: Parameters<typeof objects>[0],
 	action: "on" | "off" | "toggle" | "previous" | "next" | "all",
 ): Promise<void> {
-	await api.request("POST", "/api/v1/highlight/action", { action });
+	await api.request(
+		"POST",
+		"/api/v2/output/highlight/actions",
+		{
+			request_id: crypto.randomUUID(),
+			action,
+		},
+		true,
+		undefined,
+		{ deskId: api.session!.desk.id },
+	);
 	// The shared hardware/software repeat guard intentionally rejects duplicate
 	// physical presses inside 150 ms. Acceptance actions model distinct presses.
 	await new Promise((resolve) => setTimeout(resolve, 175));

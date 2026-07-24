@@ -7,9 +7,11 @@ pub(super) struct VisualizationQuery {
 }
 pub(super) async fn media_servers(
     State(state): State<AppState>,
+    show: ShowContext,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let _session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
     let statuses = state.media_status.read();
     let fixtures = state
         .engine
@@ -35,10 +37,12 @@ pub(super) async fn media_servers(
 pub(super) async fn refresh_media_thumbnails(
     State(state): State<AppState>,
     Path(fixture_id): Path<light_core::FixtureId>,
+    show: ShowContext,
     headers: HeaderMap,
-    Json(input): Json<ThumbnailRequest>,
+    TolerantJson(input): TolerantJson<light_wire::v2::output_control::MediaThumbnailRefreshRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
     if !(1..=2).contains(&input.library_type) || input.library_level > 3 {
         return Err(ApiError::bad_request("invalid CITP library type or level"));
     }
@@ -99,10 +103,12 @@ pub(super) async fn refresh_media_thumbnails(
 pub(super) async fn refresh_media_preview(
     State(state): State<AppState>,
     Path(fixture_id): Path<light_core::FixtureId>,
+    show: ShowContext,
     headers: HeaderMap,
-    Json(input): Json<PreviewRequest>,
+    TolerantJson(input): TolerantJson<light_wire::v2::output_control::MediaPreviewRefreshRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
     let address = media_endpoint(&state, fixture_id)?;
     let result = async {
         let mut client = CitpClient::connect(address, Duration::from_secs(3)).await?;
@@ -152,9 +158,11 @@ pub(super) async fn refresh_media_preview(
 pub(super) async fn media_preview(
     State(state): State<AppState>,
     Path((fixture_id, source)): Path<(light_core::FixtureId, u16)>,
+    show: ShowContext,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let _session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
     cached_image_response(
         state.media_cache.lock().preview(&PreviewKey {
             fixture: fixture_id.0.to_string(),
@@ -180,7 +188,9 @@ pub(super) fn media_endpoint(
         .ok_or_else(|| ApiError::bad_request("fixture has no direct-control endpoint"))?;
     Ok(SocketAddr::new(endpoint.ip_address, endpoint.port))
 }
-pub(super) fn library_id(input: &ThumbnailRequest) -> LibraryId {
+pub(super) fn library_id(
+    input: &light_wire::v2::output_control::MediaThumbnailRefreshRequest,
+) -> LibraryId {
     LibraryId {
         level: input.library_level,
         ids: [input.library_1, input.library_2, input.library_3],

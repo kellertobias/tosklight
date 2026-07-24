@@ -783,7 +783,7 @@ describe("LightApiClient authenticated desk services", () => {
 });
 
 describe("LightApiClient Highlight contracts", () => {
-	it("reads and changes server-authoritative Highlight state", async () => {
+	it("reads server-authoritative Highlight state from the v2 snapshot", async () => {
 		const state = {
 			active: true,
 			mode: "selection",
@@ -822,29 +822,12 @@ describe("LightApiClient Highlight contracts", () => {
 		await client.login("Operator");
 
 		expect(await client.highlight()).toEqual(state);
-		expect(await client.highlightAction("all")).toEqual(state);
-		await client.setPatchPreviewHighlight(true, ["fixture-a", "fixture-b"]);
 		expect(fetchMock.mock.calls[1][0]).toBe(
-			"http://desk.local/api/v1/highlight",
+			"http://desk.local/api/v2/output/highlight",
 		);
-		expect(fetchMock.mock.calls[2][0]).toBe(
-			"http://desk.local/api/v1/highlight/action",
-		);
-		expect(fetchMock.mock.calls[2][1].method).toBe("POST");
-		expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({
-			action: "all",
-		});
 		expect(
-			(fetchMock.mock.calls[2][1].headers as Headers).get("authorization"),
+			(fetchMock.mock.calls[1][1].headers as Headers).get("authorization"),
 		).toBe("Bearer token-a");
-		expect(fetchMock.mock.calls[3][0]).toBe(
-			"http://desk.local/api/v1/patch-preview-highlight",
-		);
-		expect(fetchMock.mock.calls[3][1].method).toBe("PUT");
-		expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toEqual({
-			active: true,
-			fixture_ids: ["fixture-a", "fixture-b"],
-		});
 	});
 });
 

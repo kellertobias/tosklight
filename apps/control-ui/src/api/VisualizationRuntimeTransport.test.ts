@@ -29,7 +29,7 @@ describe("HttpVisualizationRuntimeTransport", () => {
 		expect(decoded).toMatchObject({ revision: 7, preload: false });
 		expect(fetch).toHaveBeenCalledOnce();
 		expect(fetch.mock.calls[0]?.[0]).toBe(
-			"http://desk.test/api/v1/visualization",
+			"http://desk.test/api/v2/output/visualization",
 		);
 		const headers = fetch.mock.calls[0]?.[1]?.headers as Headers;
 		expect(headers.get("authorization")).toBe("Bearer session-token");
@@ -51,7 +51,7 @@ describe("HttpVisualizationRuntimeTransport", () => {
 			preload: true,
 		});
 		expect(fetch.mock.calls[0]?.[0]).toBe(
-			"http://desk.test/api/v1/visualization?preload=true",
+			"http://desk.test/api/v2/output/visualization?preload=true",
 		);
 	});
 

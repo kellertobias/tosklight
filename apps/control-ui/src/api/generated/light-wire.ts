@@ -463,6 +463,18 @@ export type OutputRuntimeErrorKind = "invalid" | "unauthorized" | "forbidden" | 
 
 export type OutputRuntimeErrorResponse = { kind: OutputRuntimeErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
 
+export type DmxOverrideRequest = { request_id: string, universe: number, address: number, value?: number | null, };
+
+export type HighlightAction = "on" | "off" | "toggle" | "next" | "previous" | "all";
+
+export type HighlightActionRequest = { request_id: string, action: HighlightAction, };
+
+export type PatchPreviewHighlightRequest = { request_id: string, active: boolean, fixture_ids: Array<string>, };
+
+export type MediaThumbnailRefreshRequest = { library_type: number, library_level: number, library_1: number, library_2: number, library_3: number, elements: Array<number>, width: number, height: number, };
+
+export type MediaPreviewRefreshRequest = { source: number, width: number, height: number, };
+
 export type SpeedGroupId = "A" | "B" | "C" | "D" | "E";
 
 export type SpeedGroupProjection = { group: SpeedGroupId, manual_bpm: number, paused: boolean, speed_master_scale: number, synchronized_with?: SpeedGroupId | null, phase_origin_millis: number, };

@@ -127,6 +127,103 @@ async fn websocket_master_retry_is_idempotent_at_the_typed_boundary() {
 }
 
 #[tokio::test]
+async fn volatile_output_controls_use_correlated_websocket_frames() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = authenticate_token(&state, &token).unwrap();
+    let command = |request_id: &str, command: &str, payload: serde_json::Value| WsCommand {
+        protocol_version: 1,
+        request_id: request_id.into(),
+        session_id: session.id,
+        expected_revision: None,
+        command: command.into(),
+        payload,
+    };
+
+    let dmx = dispatch_ws_command(
+        &state,
+        &session,
+        command(
+            "dmx-override-1",
+            "dmx.override",
+            serde_json::json!({
+                "request_id":"dmx-override-1",
+                "universe":1,
+                "address":7,
+                "value":201
+            }),
+        ),
+    );
+    assert!(dmx.ok, "{:?}", dmx.error);
+    assert_eq!(
+        state.output_control.lock().raw_overrides.get(&(1, 7)),
+        Some(&201)
+    );
+
+    let mismatched = dispatch_ws_command(
+        &state,
+        &session,
+        command(
+            "dmx-envelope",
+            "dmx.override",
+            serde_json::json!({
+                "request_id":"dmx-payload",
+                "universe":1,
+                "address":7,
+                "value":null
+            }),
+        ),
+    );
+    assert!(!mismatched.ok);
+    assert_eq!(
+        state.output_control.lock().raw_overrides.get(&(1, 7)),
+        Some(&201)
+    );
+
+    let patch_preview = dispatch_ws_command(
+        &state,
+        &session,
+        command(
+            "patch-preview-1",
+            "patch_preview_highlight.action",
+            serde_json::json!({
+                "request_id":"patch-preview-1",
+                "active":false,
+                "fixture_ids":[]
+            }),
+        ),
+    );
+    assert!(patch_preview.ok, "{:?}", patch_preview.error);
+    assert_eq!(patch_preview.payload.unwrap()["allowed"], false);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn retired_v1_media_output_and_highlight_routes_are_absent() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    for request in [
+        Request::get("/api/v1/visualization"),
+        Request::get("/api/v1/media"),
+        Request::get("/api/v1/media/00000000-0000-4000-8000-000000000001/preview/0"),
+        Request::get("/api/v1/dmx"),
+        Request::put("/api/v1/dmx/override"),
+        Request::get("/api/v1/highlight"),
+        Request::post("/api/v1/highlight/action"),
+        Request::put("/api/v1/patch-preview-highlight"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_output_action_is_atomic_revisioned_idempotent_and_strict() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

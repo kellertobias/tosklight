@@ -1,15 +1,13 @@
 use super::*;
 
-#[derive(Deserialize)]
-pub(super) struct HighlightActionInput {
-    pub(super) action: HighlightAction,
-}
-
 pub(super) async fn highlight_status(
     State(state): State<AppState>,
+    show: ShowContext,
+    desk: DeskContext,
     headers: HeaderMap,
 ) -> Result<Json<HighlightState>, ApiError> {
-    let session = authenticate(&state, &headers)?;
+    let session = session_for_desk(&state, &headers, &desk)?;
+    show.verify(&state)?;
     let status = run_highlight_http_interaction(
         &state,
         &session,
@@ -39,11 +37,15 @@ fn reconcile_highlight_status(
 
 pub(super) async fn highlight_action(
     State(state): State<AppState>,
+    show: ShowContext,
+    desk: DeskContext,
     headers: HeaderMap,
-    Json(input): Json<HighlightActionInput>,
+    TolerantJson(input): TolerantJson<light_wire::v2::output_control::HighlightActionRequest>,
 ) -> Result<Json<HighlightState>, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    let action = input.action;
+    let session = session_for_desk(&state, &headers, &desk)?;
+    show.verify(&state)?;
+    output_runtime_v2::validate_request_id(&input.request_id).map_err(ApiError::bad_request)?;
+    let action = highlight_action_from_wire(input.action);
     let highlight = run_highlight_http_interaction(
         &state,
         &session,
@@ -52,6 +54,20 @@ pub(super) async fn highlight_action(
     )
     .await?;
     Ok(Json(highlight))
+}
+
+pub(super) fn highlight_action_from_wire(
+    action: light_wire::v2::output_control::HighlightAction,
+) -> HighlightAction {
+    use light_wire::v2::output_control::HighlightAction as Wire;
+    match action {
+        Wire::On => HighlightAction::On,
+        Wire::Off => HighlightAction::Off,
+        Wire::Toggle => HighlightAction::Toggle,
+        Wire::Next => HighlightAction::Next,
+        Wire::Previous => HighlightAction::Previous,
+        Wire::All => HighlightAction::All,
+    }
 }
 
 async fn run_highlight_http_interaction<T: Send + 'static>(
@@ -83,7 +99,7 @@ async fn run_highlight_http_interaction<T: Send + 'static>(
     completed?.output
 }
 
-fn apply_highlight_action(
+pub(super) fn apply_highlight_action(
     state: &AppState,
     session: &Session,
     action: HighlightAction,
@@ -294,19 +310,24 @@ pub(super) fn sync_highlight_output(state: &AppState) {
     state.engine.set_highlighted_fixtures(fixtures);
 }
 
-#[derive(Deserialize)]
-pub(super) struct PatchPreviewHighlightInput {
-    pub(super) active: bool,
-    #[serde(default)]
-    pub(super) fixture_ids: Vec<light_core::FixtureId>,
-}
-
 pub(super) async fn patch_preview_highlight(
     State(state): State<AppState>,
+    show: ShowContext,
+    desk: DeskContext,
     headers: HeaderMap,
-    Json(input): Json<PatchPreviewHighlightInput>,
+    TolerantJson(input): TolerantJson<light_wire::v2::output_control::PatchPreviewHighlightRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let session = authenticate(&state, &headers)?;
+    let session = session_for_desk(&state, &headers, &desk)?;
+    show.verify(&state)?;
+    output_runtime_v2::validate_request_id(&input.request_id).map_err(ApiError::bad_request)?;
+    Ok(Json(apply_patch_preview_highlight(&state, &session, input)))
+}
+
+pub(super) fn apply_patch_preview_highlight(
+    state: &AppState,
+    session: &Session,
+    input: light_wire::v2::output_control::PatchPreviewHighlightRequest,
+) -> serde_json::Value {
     let allowed = state.configuration.read().patch_preview_highlight_dmx;
     let mut active = false;
     if allowed && input.active && !input.fixture_ids.is_empty() {
@@ -320,6 +341,7 @@ pub(super) async fn patch_preview_highlight(
         let fixtures = input
             .fixture_ids
             .into_iter()
+            .map(light_core::FixtureId)
             .filter(|fixture| known.contains(fixture))
             .collect::<HashSet<_>>();
         active = !fixtures.is_empty();
@@ -334,13 +356,13 @@ pub(super) async fn patch_preview_highlight(
     } else {
         state.patch_preview_highlights.lock().remove(&session.id);
     }
-    sync_highlight_output(&state);
+    sync_highlight_output(state);
     emit(
-        &state,
+        state,
         "patch_preview_highlight_changed",
         serde_json::json!({"session_id":session.id,"active":active}),
     );
-    Ok(Json(serde_json::json!({"active":active,"allowed":allowed})))
+    serde_json::json!({"active":active,"allowed":allowed})
 }
 
 pub(super) fn reconcile_highlight_capture_mode(

@@ -1,6 +1,10 @@
 use super::*;
 
-pub(super) async fn dmx_snapshot(State(state): State<AppState>) -> Json<serde_json::Value> {
+pub(super) async fn dmx_snapshot(
+    State(state): State<AppState>,
+    show: ShowContext,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    show.verify(&state)?;
     let control = state.output_control.lock();
     let mut universes = control
         .last_frames
@@ -8,18 +12,29 @@ pub(super) async fn dmx_snapshot(State(state): State<AppState>) -> Json<serde_js
         .map(|(&universe, frame)| serde_json::json!({"universe":universe,"slots":frame.to_vec()}))
         .collect::<Vec<_>>();
     universes.sort_by_key(|universe| universe["universe"].as_u64().unwrap_or_default());
-    Json(serde_json::json!({
+    Ok(Json(serde_json::json!({
         "revision":state.engine.snapshot().revision,
         "universes":universes,
         "overrides":control.raw_overrides.iter().map(|(&(universe,address),&value)| serde_json::json!({"universe":universe,"address":address,"value":value})).collect::<Vec<_>>()
-    }))
+    })))
 }
 pub(super) async fn update_dmx_override(
     State(state): State<AppState>,
+    show: ShowContext,
     headers: HeaderMap,
-    Json(input): Json<RawDmxOverrideInput>,
+    TolerantJson(input): TolerantJson<light_wire::v2::output_control::DmxOverrideRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
+    output_runtime_v2::validate_request_id(&input.request_id).map_err(ApiError::bad_request)?;
+    apply_dmx_override(&state, &session, input)
+}
+
+pub(super) fn apply_dmx_override(
+    state: &AppState,
+    session: &Session,
+    input: light_wire::v2::output_control::DmxOverrideRequest,
+) -> Result<Json<serde_json::Value>, ApiError> {
     if input.universe == 0 || !(1..=512).contains(&input.address) {
         return Err(ApiError::bad_request(
             "universe and DMX address must be non-zero and address must be within 1-512",
@@ -40,7 +55,7 @@ pub(super) async fn update_dmx_override(
     }
     drop(control);
     emit(
-        &state,
+        state,
         "dmx_override_changed",
         serde_json::json!({"session_id":session.id,"universe":input.universe,"address":input.address,"value":input.value}),
     );

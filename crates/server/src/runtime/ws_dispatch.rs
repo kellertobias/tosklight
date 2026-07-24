@@ -17,6 +17,9 @@ const LIVE_ABSOLUTE_COMMANDS: &[&str] = &[
     "programmer.preload.values.action",
     "speed_group.action",
     "output_runtime.action",
+    "dmx.override",
+    "highlight.action",
+    "patch_preview_highlight.action",
     "programmer.command_line.replace",
     "programmer.selection.action",
     "programmer.release",
@@ -61,6 +64,7 @@ const PROGRAMMING_INTERACTION_COMMANDS: &[&str] = &[
     "programmer.values.action",
     "programmer.preload.lifecycle.action",
     "programmer.preload.values.action",
+    "highlight.action",
     "programmer.command_line.replace",
     "programmer.selection.action",
     "programmer.release",
@@ -95,6 +99,9 @@ fn dispatch_ws_payload(
         "output_runtime.action" => {
             Err("Output runtime action requires the typed action boundary".into())
         }
+        "dmx.override" => ws_dmx_override(state, session, command),
+        "highlight.action" => ws_highlight_action(state, session, command),
+        "patch_preview_highlight.action" => ws_patch_preview_highlight(state, session, command),
         "selection.set" => ws_selection_set(state, session, command),
         "selection.gesture" => ws_selection_gesture(state, session, command),
         "group.select" => ws_group_select(state, session, command),

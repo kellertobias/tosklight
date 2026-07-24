@@ -9,6 +9,7 @@ pub mod events;
 pub mod fixture_library;
 pub mod group_management;
 pub mod group_recording;
+pub mod output_control;
 pub mod output_runtime;
 pub mod patch;
 pub mod playback;

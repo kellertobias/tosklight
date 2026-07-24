@@ -135,7 +135,10 @@ pairedScenario<HighlightSequenceState>({
 		const removedActions = await Promise.all(
 			["capture", "reset"].map(async (action) => {
 				try {
-					await api.request("POST", "/api/v1/highlight/action", { action });
+					await api.request("POST", "/api/v2/output/highlight/actions", {
+						request_id: crypto.randomUUID(),
+						action,
+					});
 					return false;
 				} catch {
 					return true;

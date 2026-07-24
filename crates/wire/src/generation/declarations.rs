@@ -9,6 +9,7 @@ use crate::v2::events::*;
 use crate::v2::fixture_library::*;
 use crate::v2::group_management::*;
 use crate::v2::group_recording::*;
+use crate::v2::output_control::*;
 use crate::v2::output_runtime::*;
 use crate::v2::patch::*;
 use crate::v2::playback::*;
@@ -39,6 +40,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(programming_update(config));
     declarations.extend(playback_projection(config));
     declarations.extend(output_runtime_transport(config));
+    declarations.extend(output_control(config));
     declarations.extend(speed_group_transport(config));
     declarations.extend(event_payload(config));
     declarations.extend(fixture_library(config));
@@ -53,6 +55,17 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(show_library(config));
     declarations.extend(interaction(config));
     declarations
+}
+
+fn output_control(config: &Config) -> Vec<String> {
+    vec![
+        DmxOverrideRequest::decl(config),
+        HighlightAction::decl(config),
+        HighlightActionRequest::decl(config),
+        PatchPreviewHighlightRequest::decl(config),
+        MediaThumbnailRefreshRequest::decl(config),
+        MediaPreviewRefreshRequest::decl(config),
+    ]
 }
 
 fn fixture_library(config: &Config) -> Vec<String> {

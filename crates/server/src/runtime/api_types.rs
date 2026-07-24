@@ -1,41 +1,6 @@
 use super::*;
 
 #[derive(Deserialize)]
-pub(super) struct ThumbnailRequest {
-    #[serde(default = "default_media_library_type")]
-    pub(super) library_type: u8,
-    #[serde(default)]
-    pub(super) library_level: u8,
-    #[serde(default)]
-    pub(super) library_1: u8,
-    #[serde(default)]
-    pub(super) library_2: u8,
-    #[serde(default)]
-    pub(super) library_3: u8,
-    pub(super) elements: Vec<u8>,
-    #[serde(default = "default_media_width")]
-    pub(super) width: u16,
-    #[serde(default = "default_media_height")]
-    pub(super) height: u16,
-}
-#[derive(Deserialize)]
-pub(super) struct PreviewRequest {
-    pub(super) source: u16,
-    #[serde(default = "default_media_width")]
-    pub(super) width: u16,
-    #[serde(default = "default_media_height")]
-    pub(super) height: u16,
-}
-pub(super) fn default_media_library_type() -> u8 {
-    1
-}
-pub(super) fn default_media_width() -> u16 {
-    320
-}
-pub(super) fn default_media_height() -> u16 {
-    180
-}
-#[derive(Deserialize)]
 pub(super) struct UserInput {
     pub(super) name: String,
     #[serde(default = "default_true")]
@@ -129,12 +94,6 @@ pub(super) struct ProgrammerSetMany {
 pub(super) struct MasterInput {
     pub(super) grand_master: Option<f32>,
     pub(super) blackout: Option<bool>,
-}
-#[derive(Deserialize)]
-pub(super) struct RawDmxOverrideInput {
-    pub(super) universe: light_core::Universe,
-    pub(super) address: light_core::DmxAddress,
-    pub(super) value: Option<u8>,
 }
 #[derive(Deserialize)]
 pub(super) struct PreloadStoreInput {

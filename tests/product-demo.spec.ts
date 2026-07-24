@@ -346,7 +346,7 @@ test.skip("@ui narrates the complete Full HD product demo surface in one regress
     for (const slot of [1, 2, 3]) await demo.getByLabel(`Playback ${slot} fader`).fill("1");
     await desk.click(demo.getByRole("button", { name: "Playback 3 button 1", exact: true }));
     await bench.tick(1_200);
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/dmx", undefined, false)).universes.some((frame: any) => frame.slots.some((value: number) => value > 0))).toBe(true);
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v2/output/dmx", undefined, false)).universes.some((frame: any) => frame.slots.some((value: number) => value > 0))).toBe(true);
     await pause(page, 1_800);
 
     await desk.click(demo.getByRole("button", { name: "Playback 3 button 1", exact: true }));
@@ -389,7 +389,7 @@ test.skip("@ui narrates the complete Full HD product demo surface in one regress
     await page.keyboard.press("F9");
     await expect.poll(async () => activeNumbers(api)).toContain(4);
     await bench.tick(2_000);
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/dmx", undefined, false)).universes.some((frame: any) => frame.slots.some((value: number) => value > 0))).toBe(true);
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v2/output/dmx", undefined, false)).universes.some((frame: any) => frame.slots.some((value: number) => value > 0))).toBe(true);
     if (UPDATE_DEMO_SHOW) completedShow = await downloadCompletedDemoShow(api, showId);
     await pause(page, 2_000);
 
@@ -704,7 +704,7 @@ async function blueStageColors(api: ApiDriver, rig: Awaited<ReturnType<typeof se
     [...Array.from({ length: 8 }, (_, index) => 101 + index), ...Array.from({ length: 7 }, (_, index) => 201 + index)]
       .flatMap((number) => [rig.fixtures[number].fixture_id, ...rig.fixtures[number].logical_heads.map((head) => head.fixture_id)]),
   );
-  const visualization = await api.request<any>("GET", "/api/v1/visualization");
+  const visualization = await api.request<any>("GET", "/api/v2/output/visualization");
   return (visualization.profile_output_values ?? []).filter((entry: any) => {
     if (!ownerIds.has(entry.fixture_id) || entry.attribute !== "color" || entry.value?.kind !== "color_xyz") return false;
     const { x, y, z } = entry.value.value;

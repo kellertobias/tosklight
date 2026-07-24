@@ -2,16 +2,44 @@ async fn post_highlight_action(app: &Router, token: &str, action: &str) -> serde
     let response = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/highlight/action")
+            Request::post("/api/v2/output/highlight/actions")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(format!(r#"{{"action":"{action}"}}"#)))
+                .body(Body::from(format!(
+                    r#"{{"request_id":"highlight-test","action":"{action}"}}"#
+                )))
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     json(response).await
+}
+
+#[tokio::test]
+async fn highlight_action_websocket_frame_is_correlated_and_authoritative() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = authenticate_token(&state, &token).unwrap();
+    let response = dispatch_ws_command(
+        &state,
+        &session,
+        WsCommand {
+            protocol_version: 1,
+            request_id: "highlight-ws-1".into(),
+            session_id: session.id,
+            expected_revision: None,
+            command: "highlight.action".into(),
+            payload: serde_json::json!({
+                "request_id":"highlight-ws-1",
+                "action":"on"
+            }),
+        },
+    );
+    assert!(response.ok, "{:?}", response.error);
+    assert_eq!(response.payload.unwrap()["active"], true);
+    let _ = std::fs::remove_dir_all(data_dir);
 }
 
 async fn verify_bootstrapped_step_highlight(
@@ -237,7 +265,7 @@ async fn rest_highlight_status_publishes_only_an_authoritative_selection_repair(
     let status = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/highlight")
+            Request::get("/api/v2/output/highlight")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -264,7 +292,7 @@ async fn rest_highlight_status_publishes_only_an_authoritative_selection_repair(
     let before_no_op = state.application_events.latest_sequence();
     let no_op = app
         .oneshot(
-            Request::get("/api/v1/highlight")
+            Request::get("/api/v2/output/highlight")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -326,10 +354,12 @@ async fn same_user_same_desk_highlight_survives_one_session_close_and_clears_wit
     let activated = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/highlight/action")
+            Request::post("/api/v2/output/highlight/actions")
                 .header(header::AUTHORIZATION, format!("Bearer {first_token}"))
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"action":"on"}"#))
+                .body(Body::from(
+                    r#"{"request_id":"highlight-activate","action":"on"}"#,
+                ))
                 .unwrap(),
         )
         .await
@@ -347,7 +377,7 @@ async fn same_user_same_desk_highlight_survives_one_session_close_and_clears_wit
     let shared = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/highlight")
+            Request::get("/api/v2/output/highlight")
                 .header(header::AUTHORIZATION, format!("Bearer {second_token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -373,7 +403,7 @@ async fn same_user_same_desk_highlight_survives_one_session_close_and_clears_wit
     let after_one_close = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/highlight")
+            Request::get("/api/v2/output/highlight")
                 .header(header::AUTHORIZATION, format!("Bearer {second_token}"))
                 .body(Body::empty())
                 .unwrap(),

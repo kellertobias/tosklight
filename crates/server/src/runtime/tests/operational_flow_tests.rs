@@ -62,13 +62,15 @@ impl OperationalScenario {
             .app
             .clone()
             .oneshot(
-                Request::put("/api/v1/dmx/override")
+                Request::post("/api/v2/output/dmx-overrides")
                     .header(header::CONTENT_TYPE, "application/json")
                     .header(
                         header::AUTHORIZATION,
                         format!("Bearer {}", self.token),
                     )
-                    .body(Body::from(r#"{"universe":1,"address":1,"value":200}"#))
+                    .body(Body::from(
+                        r#"{"request_id":"dmx-test-1","universe":1,"address":1,"value":200}"#,
+                    ))
                     .unwrap(),
             )
             .await
@@ -81,7 +83,7 @@ impl OperationalScenario {
         let dmx = self
             .app
             .clone()
-            .oneshot(Request::get("/api/v1/dmx").body(Body::empty()).unwrap())
+            .oneshot(Request::get("/api/v2/output/dmx").body(Body::empty()).unwrap())
             .await
             .unwrap();
         assert_eq!(json(dmx).await["overrides"].as_array().unwrap().len(), 1);

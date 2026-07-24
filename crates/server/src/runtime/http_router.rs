@@ -40,22 +40,28 @@ fn operator_routes() -> Router<AppState> {
 
 fn media_and_output_routes() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/visualization", get(visualization_snapshot))
-        .route("/api/v1/media", get(media_servers))
+        .route("/api/v2/output/visualization", get(visualization_snapshot))
+        .route("/api/v2/media-servers", get(media_servers))
         .route(
-            "/api/v1/media/{fixture_id}/thumbnails/refresh",
+            "/api/v2/media-servers/{fixture_id}/thumbnails/refresh",
             post(refresh_media_thumbnails),
         )
         .route(
-            "/api/v1/media/{fixture_id}/preview/refresh",
+            "/api/v2/media-servers/{fixture_id}/preview/refresh",
             post(refresh_media_preview),
         )
         .route(
-            "/api/v1/media/{fixture_id}/preview/{source}",
+            "/api/v2/media-servers/{fixture_id}/preview/{source}",
             get(media_preview),
         )
-        .route("/api/v1/dmx", get(dmx_snapshot))
-        .route("/api/v1/dmx/override", put(update_dmx_override))
+        .route("/api/v2/output/dmx", get(dmx_snapshot))
+        .route("/api/v2/output/dmx-overrides", post(update_dmx_override))
+        .route("/api/v2/output/highlight", get(highlight_status))
+        .route("/api/v2/output/highlight/actions", post(highlight_action))
+        .route(
+            "/api/v2/output/patch-preview-highlight",
+            post(patch_preview_highlight),
+        )
         .route("/api/v1/shutdown", post(shutdown_server))
         .route(
             "/api/v1/configuration",
@@ -112,12 +118,6 @@ fn programmer_and_update_routes() -> Router<AppState> {
         )
         .route("/api/v1/update/preview", post(preview_update))
         .route("/api/v1/update/apply", post(apply_update))
-        .route("/api/v1/highlight", get(highlight_status))
-        .route("/api/v1/highlight/action", post(highlight_action))
-        .route(
-            "/api/v1/patch-preview-highlight",
-            put(patch_preview_highlight),
-        )
         .route("/api/v1/master", put(update_master))
         .route("/api/v1/command-history", get(command_history))
         .route("/api/v1/audit", get(audit_events))

@@ -207,7 +207,7 @@ async function verifySwapProtection(
 	const cSwapBefore = await activePlayback(api, 53);
 	const dSwapBefore = await activePlayback(api, 54);
 	const beforeSwap = logicalUniverse(await bench.tick(3_000));
-	const beforeResolved = await api.request<any>("GET", "/api/v1/visualization");
+	const beforeResolved = await api.request<any>("GET", "/api/v2/output/visualization");
 	const resolvedLevel = (fixtureNumber: number) =>
 		beforeResolved.values.find(
 			(item: any) =>

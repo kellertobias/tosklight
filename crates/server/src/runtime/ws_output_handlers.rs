@@ -94,6 +94,71 @@ pub(super) fn ws_output_runtime_action(
     Ok(WsTypedRuntimeAction { payload, replayed })
 }
 
+pub(super) fn ws_dmx_override(
+    state: &AppState,
+    session: &Session,
+    command: &WsCommand,
+) -> Result<serde_json::Value, String> {
+    let input: light_wire::v2::output_control::DmxOverrideRequest =
+        serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
+    crate::tolerant_json::log_unknown_value_fields::<
+        light_wire::v2::output_control::DmxOverrideRequest,
+    >("/api/v2/events dmx.override", &command.payload);
+    if input.request_id != command.request_id {
+        return Err("DMX override payload request_id must match the WebSocket request_id".into());
+    }
+    output_runtime_v2::validate_request_id(&input.request_id)?;
+    apply_dmx_override(state, session, input)
+        .map(|Json(value)| value)
+        .map_err(|error| error.message)
+}
+
+pub(super) fn ws_highlight_action(
+    state: &AppState,
+    session: &Session,
+    command: &WsCommand,
+) -> Result<serde_json::Value, String> {
+    let input: light_wire::v2::output_control::HighlightActionRequest =
+        serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
+    crate::tolerant_json::log_unknown_value_fields::<
+        light_wire::v2::output_control::HighlightActionRequest,
+    >("/api/v2/events highlight.action", &command.payload);
+    if input.request_id != command.request_id {
+        return Err("Highlight payload request_id must match the WebSocket request_id".into());
+    }
+    output_runtime_v2::validate_request_id(&input.request_id)?;
+    let state = apply_highlight_action(state, session, highlight_action_from_wire(input.action))
+        .map_err(|error| error.message)?;
+    serde_json::to_value(state).map_err(|error| error.to_string())
+}
+
+pub(super) fn ws_patch_preview_highlight(
+    state: &AppState,
+    session: &Session,
+    command: &WsCommand,
+) -> Result<serde_json::Value, String> {
+    let input: light_wire::v2::output_control::PatchPreviewHighlightRequest =
+        serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
+    crate::tolerant_json::log_unknown_value_fields::<
+        light_wire::v2::output_control::PatchPreviewHighlightRequest,
+    >(
+        "/api/v2/events patch_preview_highlight.action",
+        &command.payload,
+    );
+    if input.request_id != command.request_id {
+        return Err(
+            "Patch Preview Highlight payload request_id must match the WebSocket request_id".into(),
+        );
+    }
+    output_runtime_v2::validate_request_id(&input.request_id)?;
+    let _activation = state
+        .activation_lock
+        .clone()
+        .try_lock_owned()
+        .map_err(|_| "the active show is changing; retry Patch Preview Highlight")?;
+    Ok(apply_patch_preview_highlight(state, session, input))
+}
+
 pub(super) fn ws_master_set(
     state: &AppState,
     session: &Session,

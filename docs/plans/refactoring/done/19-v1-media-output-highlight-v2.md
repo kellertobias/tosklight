@@ -48,3 +48,38 @@ npm run test:e2e   # full suite gate — DMX + highlight + product-demo scenario
 ## Decisions
 
 None.
+
+## Execution
+
+Claimed 2026-07-24; no maintainer decision is open.
+
+## Result
+
+Completed 2026-07-24.
+
+- Replaced the two remaining v1 client modules with one typed
+  `MediaOutputApiClient`; visualization, media-server, preview, and DMX snapshots now use
+  v2 routes, while DMX override, Highlight, and Patch Preview Highlight use one correlated
+  WebSocket frame from the desk UI.
+- Added shared Rust/TypeScript wire DTOs for the touched actions and media refresh intents.
+  HTTP integrator forms use tolerant typed decoding, optional Show/Desk context guards, and
+  the same transport-neutral mutation helpers as WebSocket.
+- Preserved Highlight's existing authenticated status reconciliation, ownership, selection,
+  OSC feedback, and Patch Preview cleanup semantics. The surviving snapshot polling remains
+  assigned to pending Chunk 22's explicit polling-to-events migration.
+- Migrated the visualization runtime transport, DMX window/product demo callers, bench, root
+  acceptance helpers, and WebSocket-aware Highlight error coverage. All listed v1 routes are
+  absent and covered by a 404 regression test.
+
+Verification:
+
+- `cargo test -p light-server --no-default-features`: 475 passed, 1 ignored, plus 14
+  benchmark tests.
+- `npm run test:unit`: passed, including frontend build, workspace Rust tests, generated
+  contracts, and UI unit tests.
+- `npm run test:e2e -- tests/03-network-output-protocols.spec.ts`: passed with the two
+  documented DMX-008 skips.
+- Highlight ownership, WebSocket UI, and WebSocket error-presentation focused reruns passed.
+- `npm run test:e2e -- --reporter=dot`: 285 passed, 11 skipped.
+- `npm run test:architecture`, `cargo fmt --all -- --check`,
+  `cargo test -p light-wire --test generated_contracts`, and `git diff --check`: passed.
