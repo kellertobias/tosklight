@@ -55,3 +55,15 @@ npm run test:desktop-smoke  # desktop boot path uses readiness + bootstrap
 
 Decided (2026-07-23): readiness and diagnostics move to `/api/v2` with the rest. No open
 decisions remain in this chunk.
+
+## Result
+
+Split into three independently verifiable chunks:
+
+- 14a establishes typed v2 server contracts while keeping compatibility routes.
+- 14b migrates the production runtime client and shared bench.
+- 14c migrates the acceptance/operational caller tail, deletes v1 routes, and runs desktop
+  smoke plus full recovery gates.
+
+This preserves the original scope and decisions while avoiding one commit that combines a
+new server contract, all consumer migrations, route deletion, and packaged-desktop proof.
