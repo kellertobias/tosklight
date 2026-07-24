@@ -43,3 +43,22 @@ npm run test:unit
 ## Decisions
 
 Inherited from Chunk 14. No open decisions.
+
+## Result
+
+- Added generated Rust/TypeScript wire contracts for runtime session, bootstrap, readiness, and
+  diagnostics snapshots.
+- Registered the v2 lifecycle routes while retaining the complete v1 compatibility surface.
+- Session creation now uses tolerant JSON decoding on both versions, preserving validation for
+  known fields and accepting value-free logged extensions.
+- Added focused route coverage for v1/v2 parity, authentication, session ownership, tolerant and
+  malformed requests, and malformed-active-show recovery reporting.
+
+Verification passed:
+
+```sh
+cargo fmt --all -- --check
+cargo test -p light-server --no-default-features runtime_v2
+cargo test -p light-wire --no-default-features
+npm run test:unit
+```

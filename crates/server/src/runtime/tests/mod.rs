@@ -38,6 +38,8 @@ mod programmer_values_ws_action_tests;
 mod programming_interaction_ws_action_tests;
 #[path = "programming_update_route_tests.rs"]
 mod programming_update_route_tests;
+#[path = "runtime_v2_route_tests.rs"]
+mod runtime_v2_route_tests;
 #[path = "selective_import_route_tests.rs"]
 mod selective_import_route_tests;
 #[path = "show_patch_route_tests.rs"]

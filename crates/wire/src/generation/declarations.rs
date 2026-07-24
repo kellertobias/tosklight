@@ -20,6 +20,7 @@ use crate::v2::programmer_lifecycle::*;
 use crate::v2::programmer_priority::*;
 use crate::v2::programming::*;
 use crate::v2::programming_update::*;
+use crate::v2::runtime::*;
 use crate::v2::selective_import::*;
 use crate::v2::speed_group::*;
 use crate::v2::stage_layout::*;
@@ -38,10 +39,32 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(playback_topology(config));
     declarations.extend(patch(config));
     declarations.extend(stage_layout(config));
+    declarations.extend(runtime(config));
     declarations.extend(virtual_playback_zones(config));
     declarations.extend(selective_import(config));
     declarations.extend(interaction(config));
     declarations
+}
+
+fn runtime(config: &Config) -> Vec<String> {
+    vec![
+        RuntimeSessionCreateRequest::decl(config),
+        RuntimeDeskUser::decl(config),
+        RuntimePlaybackSurfaceRow::decl(config),
+        RuntimePlaybackSurfaceLayout::decl(config),
+        RuntimeControlDesk::decl(config),
+        RuntimeSessionResponse::decl(config),
+        RuntimeRevisionCopySource::decl(config),
+        RuntimeShowEntry::decl(config),
+        RuntimeOutputHealth::decl(config),
+        RuntimeClientSummary::decl(config),
+        RuntimeAttributeDescriptor::decl(config),
+        RuntimeHighlightFixture::decl(config),
+        RuntimeHighlightState::decl(config),
+        RuntimeBootstrapHighlightState::decl(config),
+        RuntimeBootstrapSnapshot::decl(config),
+        RuntimeReadinessSnapshot::decl(config),
+    ]
 }
 
 fn virtual_playback_zones(config: &Config) -> Vec<String> {

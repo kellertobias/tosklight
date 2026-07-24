@@ -20,6 +20,7 @@ pub mod programmer_lifecycle;
 pub mod programmer_priority;
 pub mod programming;
 pub mod programming_update;
+pub mod runtime;
 pub mod selective_import;
 pub mod speed_group;
 pub mod stage_layout;

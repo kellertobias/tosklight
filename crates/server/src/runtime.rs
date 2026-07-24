@@ -24,6 +24,7 @@ mod programming_update_http;
 mod programming_update_http_error;
 mod programming_update_wire;
 mod programming_update_wire_output;
+mod runtime_wire;
 mod startup_options;
 mod startup_state;
 

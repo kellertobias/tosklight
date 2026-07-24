@@ -1,4 +1,7 @@
 use super::*;
+use crate::tolerant_json::TolerantJson;
+use axum::extract::rejection::JsonRejection;
+use light_wire::v2::runtime as wire;
 
 pub(super) async fn update_configuration(
     State(state): State<AppState>,
@@ -66,8 +69,9 @@ pub(super) async fn update_configuration(
 }
 pub(super) async fn create_session(
     State(state): State<AppState>,
-    Json(input): Json<CreateSession>,
-) -> Result<Json<SessionResponse>, ApiError> {
+    request: Result<TolerantJson<wire::RuntimeSessionCreateRequest>, JsonRejection>,
+) -> Result<Json<wire::RuntimeSessionResponse>, ApiError> {
+    let TolerantJson(input) = request.map_err(|error| ApiError::bad_request(error.body_text()))?;
     let client_id = input
         .client_id
         .or_else(|| {
@@ -118,12 +122,12 @@ pub(super) async fn create_session(
         "session_started",
         serde_json::json!({"session_id":session.id,"user":user.name}),
     );
-    Ok(Json(SessionResponse {
-        session_id: session.id,
+    Ok(Json(wire::RuntimeSessionResponse {
+        session_id: session.id.0,
         client_id,
         token: session.token,
-        user,
-        desk,
+        user: runtime_wire::user(user),
+        desk: runtime_wire::desk(desk),
     }))
 }
 pub(super) async fn create_user(

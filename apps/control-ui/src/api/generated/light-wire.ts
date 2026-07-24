@@ -744,6 +744,42 @@ changed: boolean, };
 
 export type StageLayoutErrorResponse = { error: string, retryable: boolean, };
 
+export type RuntimeSessionCreateRequest = { username: string, desk_id: string | null, client_id: string | null, };
+
+export type RuntimeDeskUser = { id: string, name: string, enabled: boolean, };
+
+export type RuntimePlaybackSurfaceRow = { first_playback_slot: number, has_fader: boolean, button_count: number, };
+
+export type RuntimePlaybackSurfaceLayout = { playbacks_per_row: number, rows: Array<RuntimePlaybackSurfaceRow>, };
+
+export type RuntimeControlDesk = { id: string, name: string, osc_alias: string, columns: number, rows: number, buttons: number, playback_layout: RuntimePlaybackSurfaceLayout | null, };
+
+export type RuntimeSessionResponse = { session_id: string, client_id: string, token: string, user: RuntimeDeskUser, desk: RuntimeControlDesk, };
+
+export type RuntimeRevisionCopySource = { show_id: string, show_name: string, revision: number, revision_name: string, copied_at: string, };
+
+export type RuntimeShowEntry = { id: string, name: string, path: string, revision: number, updated_at: string, revision_copy: RuntimeRevisionCopySource | null, };
+
+export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, send_errors: number, deadline_misses: number, maximum_lateness_micros: number, frame_hz: number, last_tick_micros: number, maximum_tick_micros: number, scheduler_utilization: number, };
+
+export type RuntimeClientSummary = { client_id: string, name: string, connected: boolean, last_connected_at: string | null, desk: RuntimeControlDesk, can_remove: boolean, };
+
+export type RuntimeAttributeDescriptor = { id: string, label: string, family: string, value_type: string, default_unit: string | null, };
+
+export type RuntimeHighlightFixture = { fixture_id: string, name: string | null, number: number | null, };
+
+export type RuntimeHighlightState = { active: boolean, mode: string, output_enabled: boolean, capture_only: boolean, remembered: Array<RuntimeHighlightFixture>, active_index: number | null, active_fixture: RuntimeHighlightFixture | null, can_previous: boolean, can_next: boolean, owner_user_id: string | null, owner_user_name: string | null, message: string | null, };
+
+export type RuntimeBootstrapHighlightState = { session_id: string, desk_id: string, user_id: string, state: RuntimeHighlightState, };
+
+export type RuntimeBootstrapSnapshot = { api_version: string, attribute_registry: Array<RuntimeAttributeDescriptor>, users: Array<RuntimeDeskUser>, desks: Array<RuntimeControlDesk>, clients: Array<RuntimeClientSummary>, active_show: RuntimeShowEntry | null,
+/**
+ * Retained as an empty compatibility collection until the facade is removed.
+ */
+active_programmers: unknown[], highlight_states: Array<RuntimeBootstrapHighlightState>, frame_rate_hz: number, output_health: RuntimeOutputHealth, active_timecode_source: string | null, active_timecode: string | null, active_show_error: string | null, hardware_connected: boolean, };
+
+export type RuntimeReadinessSnapshot = { status: string, active_show: string | null, active_show_error: string | null, recovery_mode: boolean, snapshot_revision: number, };
+
 export type VirtualPlaybackExclusionZone = { id: string, name: string, slots: Array<number>, };
 
 export type VirtualPlaybackExclusionSnapshot = { show_id: string, desks: { [key in string]: { [key in string]: Array<VirtualPlaybackExclusionZone> } }, };

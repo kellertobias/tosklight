@@ -33,8 +33,11 @@ fn operator_routes() -> Router<AppState> {
         .route("/", get(operator_ui))
         .route("/assets/{*path}", get(operator_asset))
         .route("/api/v1/readiness", get(readiness))
+        .route("/api/v2/readiness", get(readiness))
         .route("/api/v1/diagnostics", get(diagnostics))
-        .route("/api/v1/bootstrap", get(bootstrap))
+        .route("/api/v2/diagnostics", get(diagnostics))
+        .route("/api/v1/bootstrap", get(bootstrap_v1))
+        .route("/api/v2/bootstrap", get(bootstrap_v2))
         .route("/api/v1/patch", get(patch_snapshot))
 }
 
@@ -119,7 +122,9 @@ fn media_and_output_routes() -> Router<AppState> {
 fn session_routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/sessions", post(create_session))
+        .route("/api/v2/sessions", post(create_session))
         .route("/api/v1/sessions/{id}", delete(close_session))
+        .route("/api/v2/sessions/{id}", delete(close_session))
         .route("/api/v1/clients/{id}", delete(remove_client))
         .route("/api/v1/desk-lock", get(desk_lock).put(update_desk_lock))
         .route("/api/v1/desk-lock/lock", post(lock_desk))

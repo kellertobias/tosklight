@@ -36,12 +36,6 @@ pub(super) fn default_media_height() -> u16 {
     180
 }
 #[derive(Deserialize)]
-pub(super) struct CreateSession {
-    pub(super) username: String,
-    pub(super) desk_id: Option<Uuid>,
-    pub(super) client_id: Option<Uuid>,
-}
-#[derive(Deserialize)]
 pub(super) struct UserInput {
     pub(super) name: String,
     #[serde(default = "default_true")]
@@ -49,14 +43,6 @@ pub(super) struct UserInput {
 }
 pub(super) fn default_true() -> bool {
     true
-}
-#[derive(Serialize)]
-pub(super) struct SessionResponse {
-    pub(super) session_id: SessionId,
-    pub(super) client_id: Uuid,
-    pub(super) token: String,
-    pub(super) user: DeskUser,
-    pub(super) desk: ControlDesk,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -231,39 +217,4 @@ pub(super) struct WsResponse {
     pub(super) payload: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) error: Option<String>,
-}
-#[derive(Serialize)]
-pub(super) struct BootstrapHighlightState {
-    pub(super) session_id: SessionId,
-    pub(super) desk_id: Uuid,
-    pub(super) user_id: light_core::UserId,
-    pub(super) state: HighlightState,
-}
-
-#[derive(Serialize)]
-pub(super) struct Bootstrap {
-    pub(super) api_version: &'static str,
-    pub(super) attribute_registry: &'static [light_core::AttributeDescriptor],
-    pub(super) users: Vec<DeskUser>,
-    pub(super) desks: Vec<ControlDesk>,
-    pub(super) clients: Vec<ClientSummary>,
-    pub(super) active_show: Option<ShowEntry>,
-    pub(super) active_programmers: Vec<light_programmer::ProgrammerState>,
-    pub(super) highlight_states: Vec<BootstrapHighlightState>,
-    pub(super) frame_rate_hz: u16,
-    pub(super) output_health: OutputHealth,
-    pub(super) active_timecode_source: Option<String>,
-    pub(super) active_timecode: Option<String>,
-    pub(super) active_show_error: Option<String>,
-    pub(super) hardware_connected: bool,
-}
-
-#[derive(Clone, Serialize)]
-pub(super) struct ClientSummary {
-    pub(super) client_id: Uuid,
-    pub(super) name: String,
-    pub(super) connected: bool,
-    pub(super) last_connected_at: Option<String>,
-    pub(super) desk: ControlDesk,
-    pub(super) can_remove: bool,
 }

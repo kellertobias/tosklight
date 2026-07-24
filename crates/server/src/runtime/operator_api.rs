@@ -1,4 +1,5 @@
 use super::*;
+use light_wire::v2::runtime as wire;
 
 pub(super) async fn operator_ui() -> Response {
     embedded_asset("index.html")
@@ -31,20 +32,24 @@ pub(super) fn embedded_asset(path: &str) -> Response {
 }
 pub(super) async fn readiness(
     State(state): State<AppState>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<Json<wire::RuntimeReadinessSnapshot>, ApiError> {
     let active_show_error = state.active_show_error.read().clone();
     let recovery_mode = active_show_error.is_some();
     if !recovery_mode && let Some(show) = state.active_show.read().as_ref() {
         validate_show_file(&show.path).map_err(|error| ApiError::unavailable(error.to_string()))?;
     }
-    Ok(Json(
-        serde_json::json!({"status":"ready","active_show":state.active_show.read().as_ref().map(|show|show.id),"active_show_error":active_show_error,"recovery_mode":recovery_mode,"snapshot_revision":state.engine.snapshot().revision}),
-    ))
+    Ok(Json(wire::RuntimeReadinessSnapshot {
+        status: "ready".into(),
+        active_show: state.active_show.read().as_ref().map(|show| show.id.0),
+        active_show_error,
+        recovery_mode,
+        snapshot_revision: state.engine.snapshot().revision,
+    }))
 }
 pub(super) async fn diagnostics(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<Json<wire::RuntimeDiagnosticsSnapshot>, ApiError> {
     let _session = authenticate(&state, &headers)?;
     // Refresh derived runtime state at the same application timestamp before exposing it. This is
     // especially important under the manually advanced Playwright clock, where no output frame is
@@ -57,11 +62,48 @@ pub(super) async fn diagnostics(
         .unwrap_or_default();
     let output_routes = NetworkOutput::route_diagnostics(&state.engine.snapshot().routes);
     let output_bind_ip = state.configuration.read().output_bind_ip;
-    Ok(Json(
-        serde_json::json!({"output":state.output_health.lock().expect("output health mutex poisoned").clone(),"output_bind_ip":output_bind_ip,"output_routes":output_routes,"route_send_errors":route_send_errors,"active_programmers":state.programmers.active(),"active_playbacks":state.engine.active_playbacks(),"move_in_black":state.engine.move_in_black_runtime(),"timecode_source":state.timecode_router.lock().active_source(),"media_servers":state.media_status.read().clone(),"snapshot_revision":state.engine.snapshot().revision}),
-    ))
+    Ok(Json(wire::RuntimeDiagnosticsSnapshot {
+        output: runtime_wire::output_health(
+            state
+                .output_health
+                .lock()
+                .expect("output health mutex poisoned")
+                .clone(),
+        ),
+        output_bind_ip: output_bind_ip.to_string(),
+        output_routes: serde_json::to_value(output_routes)
+            .map_err(|error| ApiError::internal(error.to_string()))?,
+        route_send_errors: serde_json::to_value(route_send_errors)
+            .map_err(|error| ApiError::internal(error.to_string()))?,
+        active_programmers: serde_json::to_value(state.programmers.active())
+            .map_err(|error| ApiError::internal(error.to_string()))?,
+        active_playbacks: serde_json::to_value(state.engine.active_playbacks())
+            .map_err(|error| ApiError::internal(error.to_string()))?,
+        move_in_black: serde_json::to_value(state.engine.move_in_black_runtime())
+            .map_err(|error| ApiError::internal(error.to_string()))?,
+        timecode_source: state
+            .timecode_router
+            .lock()
+            .active_source()
+            .map(str::to_owned),
+        media_servers: serde_json::to_value(state.media_status.read().clone())
+            .map_err(|error| ApiError::internal(error.to_string()))?,
+        snapshot_revision: state.engine.snapshot().revision,
+    }))
 }
-pub(super) async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> {
+pub(super) async fn bootstrap_v1(
+    State(state): State<AppState>,
+) -> Json<wire::RuntimeBootstrapSnapshot> {
+    Json(bootstrap_snapshot(&state, "v1"))
+}
+
+pub(super) async fn bootstrap_v2(
+    State(state): State<AppState>,
+) -> Json<wire::RuntimeBootstrapSnapshot> {
+    Json(bootstrap_snapshot(&state, "v2"))
+}
+
+fn bootstrap_snapshot(state: &AppState, api_version: &str) -> wire::RuntimeBootstrapSnapshot {
     let (users, desks, client_desks) = {
         let desk = state.desk.lock();
         (
@@ -82,12 +124,12 @@ pub(super) async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> 
             let desk_in_use = sessions
                 .values()
                 .any(|session| session.desk.id == entry.desk.id);
-            ClientSummary {
+            wire::RuntimeClientSummary {
                 client_id,
                 name: entry.desk.name.clone(),
                 connected,
                 last_connected_at: entry.last_connected_at,
-                desk: entry.desk,
+                desk: runtime_wire::desk(entry.desk),
                 can_remove: !connected && !desk_in_use,
             }
         })
@@ -133,36 +175,41 @@ pub(super) async fn bootstrap(State(state): State<AppState>) -> Json<Bootstrap> 
                 &highlight_groups,
                 programmer.blind || programmer.preview,
             );
-            Some(BootstrapHighlightState {
-                session_id: session.id,
+            Some(wire::RuntimeBootstrapHighlightState {
+                session_id: session.id.0,
                 desk_id: session.desk.id,
-                user_id: session.user.id,
-                state: transition.state,
+                user_id: session.user.id.0,
+                state: runtime_wire::highlight(transition.state),
             })
         })
         .collect();
-    Json(Bootstrap {
-        api_version: "v1",
-        attribute_registry: ATTRIBUTE_REGISTRY,
-        users,
-        desks,
+    wire::RuntimeBootstrapSnapshot {
+        api_version: api_version.into(),
+        attribute_registry: ATTRIBUTE_REGISTRY
+            .iter()
+            .map(runtime_wire::attribute)
+            .collect(),
+        users: users.into_iter().map(runtime_wire::user).collect(),
+        desks: desks.into_iter().map(runtime_wire::desk).collect(),
         clients,
-        active_show: state.active_show.read().clone(),
+        active_show: state.active_show.read().clone().map(runtime_wire::show),
         // Bootstrap is intentionally available before login so clients can discover enabled
         // users. Programmer state is authenticated separately through `/api/v1/programmers`.
         active_programmers: Vec::new(),
         highlight_states,
         frame_rate_hz: state.output_rate.load(Ordering::Relaxed),
-        output_health: state
-            .output_health
-            .lock()
-            .expect("output health mutex poisoned")
-            .clone(),
+        output_health: runtime_wire::output_health(
+            state
+                .output_health
+                .lock()
+                .expect("output health mutex poisoned")
+                .clone(),
+        ),
         active_timecode_source,
         active_timecode,
         active_show_error: state.active_show_error.read().clone(),
         hardware_connected: !state.osc_subscribers.lock().is_empty(),
-    })
+    }
 }
 pub(super) async fn patch_snapshot(State(state): State<AppState>) -> Json<serde_json::Value> {
     let snapshot = state.engine.snapshot();
