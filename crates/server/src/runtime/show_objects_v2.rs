@@ -183,7 +183,10 @@ fn apply_route_patch(
     Ok(body)
 }
 
-fn active_entry(state: &AppState, show_id: light_core::ShowId) -> Result<ShowEntry, ApiError> {
+pub(super) fn active_entry(
+    state: &AppState,
+    show_id: light_core::ShowId,
+) -> Result<ShowEntry, ApiError> {
     state
         .active_show
         .read()
@@ -206,7 +209,7 @@ fn materialize_collection(
     Ok(())
 }
 
-fn object_record(object: light_show::VersionedObject) -> wire::ShowObjectRecord {
+pub(super) fn object_record(object: light_show::VersionedObject) -> wire::ShowObjectRecord {
     wire::ShowObjectRecord {
         kind: object.kind,
         id: object.id,
@@ -248,7 +251,7 @@ fn wire_route(route: &light_output::OutputRoute) -> event_wire::OutputRoute {
     }
 }
 
-fn validate_request_id(request_id: &str) -> Result<(), ApiError> {
+pub(super) fn validate_request_id(request_id: &str) -> Result<(), ApiError> {
     if request_id.trim().is_empty() || request_id.len() > 128 {
         return Err(ApiError::bad_request(
             "request_id must contain 1-128 characters",

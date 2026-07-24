@@ -44,6 +44,8 @@ mod runtime_v2_route_tests;
 mod selective_import_route_tests;
 #[path = "show_library_v2_route_tests.rs"]
 mod show_library_v2_route_tests;
+#[path = "show_object_intents_v2_route_tests.rs"]
+mod show_object_intents_v2_route_tests;
 #[path = "show_object_v2_route_tests.rs"]
 mod show_object_v2_route_tests;
 #[path = "show_patch_route_tests.rs"]

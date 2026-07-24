@@ -886,6 +886,34 @@ export type OutputRoutePatch = { protocol?: OutputProtocol | null, logical_unive
 
 export type OutputRouteActionOutcome = { request_id: string, replayed: boolean, change: OutputRouteChange, event_sequence: number, };
 
+export type UserLayoutActionRequest = { request_id: string, action: UserLayoutAction, };
+
+export type UserLayoutAction = { "type": "update", expected_revision: number, patch: UserLayoutPatch, };
+
+export type UserLayoutPatch = { desks?: unknown[] | null, active_desk_id?: string | null, window_settings?: unknown | null, };
+
+export type PatchLayerActionRequest = { request_id: string, action: PatchLayerAction, };
+
+export type PatchLayerAction = { "type": "save", expected_revision: number, layer: PatchLayerInput, };
+
+export type PatchLayerInput = { name: string, order: number, };
+
+export type DynamicRecordActionRequest = { request_id: string, action: DynamicRecordAction, };
+
+export type DynamicRecordAction = { "type": "append", expected_revision: number, speed: number, width: number, direction: DynamicDirection, fixture_ids: Array<string>, group_ids: Array<string>, };
+
+export type DynamicDirection = "forward" | "reverse";
+
+export type PreloadRecordActionRequest = { request_id: string, action: PreloadRecordAction, };
+
+export type PreloadRecordAction = { "type": "preset", target_id: string, expected_revision: number, name: string, mode: PreloadPresetMode, family: PreloadPresetFamily, } | { "type": "cue", cue_list_id: string, expected_revision: number, cue_number: number, name: string | null, };
+
+export type PreloadPresetMode = "merge" | "overwrite" | "add_missing_fixtures";
+
+export type PreloadPresetFamily = "mixed" | "intensity" | "color" | "position" | "beam";
+
+export type ShowObjectActionOutcome = { request_id: string, replayed: boolean, show_id: string, show_revision: number, object: ShowObjectRecord, event_sequence?: number | null, };
+
 export type ProgrammerSelectionRule = { "type": "all" } | { "type": "odd" } | { "type": "even" } | { "type": "every_nth", n: number, offset: number, };
 
 export type ProgrammerSelectionReference = { "type": "fixture", fixture_id: string, } | { "type": "live_group", group_id: string, } | { "type": "remove_fixture", fixture_id: string, } | { "type": "remove_live_group", group_id: string, };

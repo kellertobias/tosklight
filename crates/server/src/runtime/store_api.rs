@@ -218,8 +218,33 @@ pub(super) async fn store_preload(
     Json(input): Json<PreloadStoreInput>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let expected = parse_if_match(&headers)?;
+    let expected_revision = parse_if_match(&headers)?;
     let show_id = light_core::ShowId(id);
+    let stored = store_preload_intent(&state, &session, show_id, input, expected_revision).await?;
+    emit(
+        &state,
+        "preload_stored",
+        serde_json::json!({
+            "session_id":session.id,
+            "target":stored.kind,
+            "target_id":stored.object_id,
+            "revision":stored.revision,
+            "source":stored.source
+        }),
+    );
+    Ok(Json(serde_json::json!({
+        "revision":stored.revision,
+        "event_sequence":stored.event_sequence
+    })))
+}
+
+pub(super) async fn store_preload_intent(
+    state: &AppState,
+    session: &Session,
+    show_id: light_core::ShowId,
+    input: PreloadStoreInput,
+    expected_revision: u64,
+) -> Result<StoredPreloadIntent, ApiError> {
     let activation = state.activation_lock.clone().lock_owned().await;
     let entry = state
         .desk
@@ -255,10 +280,18 @@ pub(super) async fn store_preload(
         "cue" => prepare_preload_cue(&store, &input, fixture_values, group_values)?,
         _ => return Err(ApiError::bad_request("target must be preset or cue")),
     };
+    let kind = prepared.kind.as_str().to_owned();
+    let object_id = prepared.object_id.clone();
     drop(store);
-    let (stored, activation) =
-        store_prepared_preload_target(&state, &session, &entry, activation, prepared, expected)
-            .await?;
+    let (stored, activation) = store_prepared_preload_target(
+        state,
+        session,
+        &entry,
+        activation,
+        prepared,
+        expected_revision,
+    )
+    .await?;
     if use_active_preload {
         let _activation = activation;
         #[cfg(test)]
@@ -268,31 +301,41 @@ pub(super) async fn store_preload(
                 .await
                 .expect("Preload Store release pause task failed");
         }
-        let context = programming_context(&session, light_application::ActionSource::Http, None);
+        let context = programming_context(session, light_application::ActionSource::Http, None);
         run_programming_interaction(
-            &state,
-            &session,
+            state,
+            session,
             &context,
             "http_preload_store",
             ProgrammingLockPolicy::AllowLockedReconciliation,
             || {
                 state.programmers.release_preload(session.id);
-                persist_programmer(&state, &session)
+                persist_programmer(state, session)
             },
         )?
         .output?;
     } else {
         drop(activation);
     }
-    emit(
-        &state,
-        "preload_stored",
-        serde_json::json!({"session_id":session.id,"target":input.target,"target_id":input.target_id,"revision":stored.revision,"source":if use_active_preload { "active_preload" } else { "pending_preload" }}),
-    );
-    Ok(Json(serde_json::json!({
-        "revision":stored.revision,
-        "event_sequence":stored.event_sequence
-    })))
+    Ok(StoredPreloadIntent {
+        kind,
+        object_id,
+        revision: stored.revision,
+        event_sequence: stored.event_sequence,
+        source: if use_active_preload {
+            "active_preload"
+        } else {
+            "pending_preload"
+        },
+    })
+}
+
+pub(super) struct StoredPreloadIntent {
+    pub(super) kind: String,
+    pub(super) object_id: String,
+    pub(super) revision: u64,
+    pub(super) event_sequence: Option<u64>,
+    pub(super) source: &'static str,
 }
 
 struct StoredPreloadTarget {

@@ -275,6 +275,121 @@ describe("LightApiClient server selection and sessions", () => {
 		}
 	});
 
+	it("sends typed intents for layouts, patch layers, dynamics, and preload", async () => {
+		const outcome = {
+			request_id: "request",
+			replayed: false,
+			show_id: "show-a",
+			show_revision: 2,
+			object: {
+				kind: "fixture",
+				id: "object",
+				revision: 1,
+				updated_at: "2026-07-24T00:00:00Z",
+				body: {},
+			},
+			event_sequence: 1,
+		};
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						session_id: "session-a",
+						token: "token-a",
+						user: { id: "user-a", name: "Operator", enabled: true },
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
+			)
+			.mockImplementation(async () =>
+				new Response(JSON.stringify(outcome), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+		const client = new LightApiClient("http://desk.local");
+		await client.login("Operator");
+
+		await client.updateUserLayout(
+			"show-a",
+			"user-a",
+			{ desks: [{ id: "main" }], activeDeskId: "main" },
+			3,
+		);
+		await client.savePatchLayer(
+			"show-a",
+			{ id: "front", name: "Front truss", order: 2 },
+			4,
+		);
+		await client.recordDynamic("show-a", "cue-list", 5, {
+			speed: 60,
+			width: 25,
+			direction: "Reverse",
+			fixtureIds: ["00000000-0000-4000-8000-000000000001"],
+			groupIds: [],
+		});
+		await client.storePreload(
+			"show-a",
+			{
+				target: "preset",
+				target_id: "2.1",
+				name: "Blue",
+				mode: "overwrite",
+				family: "Color",
+			},
+			6,
+		);
+
+		expect(fetchMock.mock.calls.slice(1).map((call) => call[0])).toEqual([
+			"http://desk.local/api/v2/user-layouts/user-a/update",
+			"http://desk.local/api/v2/patch/layers/front/update",
+			"http://desk.local/api/v2/cue-lists/cue-list/dynamics/record",
+			"http://desk.local/api/v2/preload/record",
+		]);
+		const requests = fetchMock.mock.calls
+			.slice(1)
+			.map((call) => JSON.parse(call[1].body as string));
+		expect(requests.map((request) => request.action)).toEqual([
+			{
+				type: "update",
+				expected_revision: 3,
+				patch: { desks: [{ id: "main" }], active_desk_id: "main" },
+			},
+			{
+				type: "save",
+				expected_revision: 4,
+				layer: { name: "Front truss", order: 2 },
+			},
+			{
+				type: "append",
+				expected_revision: 5,
+				speed: 60,
+				width: 25,
+				direction: "reverse",
+				fixture_ids: ["00000000-0000-4000-8000-000000000001"],
+				group_ids: [],
+			},
+			{
+				type: "preset",
+				target_id: "2.1",
+				expected_revision: 6,
+				name: "Blue",
+				mode: "overwrite",
+				family: "color",
+			},
+		]);
+		for (const request of requests) {
+			expect(request.request_id).toEqual(expect.any(String));
+		}
+		for (const call of fetchMock.mock.calls.slice(1)) {
+			const headers = call[1].headers as Headers;
+			expect(headers.get("authorization")).toBe("Bearer token-a");
+			expect(headers.get("x-tosk-show")).toBe("show-a");
+		}
+	});
+
 	it("reads one authenticated portable show object by its encoded identity", async () => {
 		const stored = {
 			kind: "user/layout",

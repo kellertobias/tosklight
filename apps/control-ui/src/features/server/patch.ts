@@ -1,3 +1,4 @@
+import { ApiRequestError } from "../../api/ApiRequestError";
 import type { PatchLayer, VersionedObject } from "../../api/types";
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
@@ -12,15 +13,29 @@ export function createPatchActions(
 				if (!bootstrap?.active_show)
 					throw new Error("No active show is available");
 				const existing = patchLayers.find((item) => item.id === layer.id);
-				const outcome = await client.putObject(
-					bootstrap.active_show.id,
-					"patch_layer",
-					layer.id,
-					layer,
-					existing?.revision ?? 0,
-				);
+				let outcome;
+				try {
+					outcome = await client.savePatchLayer(
+						bootstrap.active_show.id,
+						layer,
+						existing?.revision ?? 0,
+					);
+				} catch (reason) {
+					if (!(reason instanceof ApiRequestError) || reason.status !== 409)
+						throw reason;
+					const current = await client.objectOrNull<PatchLayer>(
+						bootstrap.active_show.id,
+						"patch_layer",
+						layer.id,
+					);
+					outcome = await client.savePatchLayer(
+						bootstrap.active_show.id,
+						layer,
+						current?.revision ?? 0,
+					);
+				}
 				setPatchLayers((current) =>
-					reconcileSavedLayer(current, layer, outcome.revision),
+					reconcileSavedLayer(current, layer, outcome.object.revision),
 				);
 				setError(null);
 				return true;

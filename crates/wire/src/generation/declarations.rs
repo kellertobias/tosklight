@@ -73,6 +73,20 @@ fn show_library(config: &Config) -> Vec<String> {
         OutputRouteAction::decl(config),
         OutputRoutePatch::decl(config),
         OutputRouteActionOutcome::decl(config),
+        UserLayoutActionRequest::decl(config),
+        UserLayoutAction::decl(config),
+        UserLayoutPatch::decl(config),
+        PatchLayerActionRequest::decl(config),
+        PatchLayerAction::decl(config),
+        PatchLayerInput::decl(config),
+        DynamicRecordActionRequest::decl(config),
+        DynamicRecordAction::decl(config),
+        DynamicDirection::decl(config),
+        PreloadRecordActionRequest::decl(config),
+        PreloadRecordAction::decl(config),
+        PreloadPresetMode::decl(config),
+        PreloadPresetFamily::decl(config),
+        ShowObjectActionOutcome::decl(config),
     ]
 }
 

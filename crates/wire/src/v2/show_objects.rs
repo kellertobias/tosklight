@@ -96,6 +96,141 @@ pub struct OutputRouteActionOutcome {
     pub event_sequence: u64,
 }
 
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct UserLayoutActionRequest {
+    pub request_id: String,
+    pub action: UserLayoutAction,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum UserLayoutAction {
+    Update {
+        #[ts(type = "number")]
+        expected_revision: u64,
+        patch: UserLayoutPatch,
+    },
+}
+
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct UserLayoutPatch {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(type = "unknown[] | null", optional = nullable)]
+    pub desks: Option<Vec<serde_json::Value>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub active_desk_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(type = "unknown | null", optional = nullable)]
+    pub window_settings: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchLayerActionRequest {
+    pub request_id: String,
+    pub action: PatchLayerAction,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PatchLayerAction {
+    Save {
+        #[ts(type = "number")]
+        expected_revision: u64,
+        layer: PatchLayerInput,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchLayerInput {
+    pub name: String,
+    pub order: i32,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicRecordActionRequest {
+    pub request_id: String,
+    pub action: DynamicRecordAction,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DynamicRecordAction {
+    Append {
+        #[ts(type = "number")]
+        expected_revision: u64,
+        speed: f64,
+        width: f64,
+        direction: DynamicDirection,
+        fixture_ids: Vec<Uuid>,
+        group_ids: Vec<String>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicDirection {
+    Forward,
+    Reverse,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PreloadRecordActionRequest {
+    pub request_id: String,
+    pub action: PreloadRecordAction,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PreloadRecordAction {
+    Preset {
+        target_id: String,
+        #[ts(type = "number")]
+        expected_revision: u64,
+        name: String,
+        mode: PreloadPresetMode,
+        family: PreloadPresetFamily,
+    },
+    Cue {
+        cue_list_id: String,
+        #[ts(type = "number")]
+        expected_revision: u64,
+        cue_number: f64,
+        name: Option<String>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PreloadPresetMode {
+    Merge,
+    Overwrite,
+    AddMissingFixtures,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PreloadPresetFamily {
+    Mixed,
+    Intensity,
+    Color,
+    Position,
+    Beam,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ShowObjectActionOutcome {
+    pub request_id: String,
+    pub replayed: bool,
+    pub show_id: Uuid,
+    #[ts(type = "number")]
+    pub show_revision: u64,
+    pub object: ShowObjectRecord,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(as = "Option<f64>", optional = nullable)]
+    pub event_sequence: Option<u64>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

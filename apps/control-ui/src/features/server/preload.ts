@@ -1,3 +1,4 @@
+import { ApiRequestError } from "../../api/ApiRequestError";
 import type { ServerController } from "./model";
 import type { ServerContextValue } from "./ServerContextValue";
 import { reconcileShowObject } from "./showObjectMutations";
@@ -19,18 +20,35 @@ export function createPreloadActions(
 			try {
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before storing preload data");
-				const response = await client.storePreload(
-					bootstrap.active_show.id,
-					input,
-					revision,
-				);
+				let response;
+				try {
+					response = await client.storePreload(
+						bootstrap.active_show.id,
+						input,
+						revision,
+					);
+				} catch (reason) {
+					if (!(reason instanceof ApiRequestError) || reason.status !== 409)
+						throw reason;
+					const kind = input.target === "preset" ? "preset" : "cue_list";
+					const current = await client.objectOrNull(
+						bootstrap.active_show.id,
+						kind,
+						input.target_id,
+					);
+					response = await client.storePreload(
+						bootstrap.active_show.id,
+						input,
+						current?.revision ?? 0,
+					);
+				}
 				if (input.target === "preset") {
 					const reconciled = await reconcileShowObject(
 						model,
 						bootstrap.active_show.id,
 						"preset",
 						input.target_id,
-						response.event_sequence,
+						response.event_sequence ?? null,
 					);
 					if (!reconciled) return false;
 				} else await refresh();
@@ -48,36 +66,40 @@ export function createPreloadActions(
 				const target = cueObjects[0];
 				if (!target)
 					throw new Error("Create a Cuelist before storing a dynamic");
-				const body = structuredClone(target.body) as {
-					cues?: Array<{ phasers?: unknown[] }>;
-				};
-				const cue = body.cues?.[0];
-				if (!cue) throw new Error("The Cuelist needs at least one Cue");
-				const phasers = cue.phasers ?? [];
-				cue.phasers = phasers;
-				phasers.push({
-					fixture_ids: selectedGroupId ? [] : selectedFixtures,
-					group_ids: selectedGroupId ? [selectedGroupId] : [],
-					attribute: "intensity",
-					phaser: {
-						mode: "relative",
-						steps: [
-							{ position: 0, value: 0, curve_to_next: "sine" },
-							{ position: 0.5, value: 1, curve_to_next: "sine" },
-						],
-						cycles_per_minute: speed,
-						phase_start_degrees: direction === "Reverse" ? 360 : 0,
-						phase_end_degrees: direction === "Reverse" ? 0 : 360,
-						width: width / 100,
-					},
-				});
-				await client.putObject(
-					bootstrap.active_show.id,
-					"cue_list",
-					target.id,
-					body,
-					target.revision,
-				);
+				try {
+					await client.recordDynamic(
+						bootstrap.active_show.id,
+						target.id,
+						target.revision,
+						{
+							speed,
+							width,
+							direction,
+							fixtureIds: selectedGroupId ? [] : selectedFixtures,
+							groupIds: selectedGroupId ? [selectedGroupId] : [],
+						},
+					);
+				} catch (reason) {
+					if (!(reason instanceof ApiRequestError) || reason.status !== 409)
+						throw reason;
+					const current = await client.object(
+						bootstrap.active_show.id,
+						"cue_list",
+						target.id,
+					);
+					await client.recordDynamic(
+						bootstrap.active_show.id,
+						target.id,
+						current.revision,
+						{
+							speed,
+							width,
+							direction,
+							fixtureIds: selectedGroupId ? [] : selectedFixtures,
+							groupIds: selectedGroupId ? [selectedGroupId] : [],
+						},
+					);
+				}
 				await refresh();
 				setError(null);
 			} catch (reason) {
