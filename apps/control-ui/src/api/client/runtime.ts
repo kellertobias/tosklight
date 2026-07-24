@@ -31,6 +31,7 @@ export class LightClientRuntime {
 
 	constructor(private readonly baseUrl = defaultServerUrl()) {
 		this.transport = {
+			currentDeskId: () => this.session?.desk.id ?? null,
 			request: <T>(path: string, init?: RequestInit, authenticate?: boolean) =>
 				this.request<T>(path, init, authenticate),
 			blob: (path: string, init?: RequestInit) => this.requestBlob(path, init),

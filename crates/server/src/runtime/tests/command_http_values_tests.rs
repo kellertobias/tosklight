@@ -418,7 +418,7 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
         .clone()
         .oneshot(
             Request::post(format!(
-                "/api/v1/programmers/{}/clear",
+                "/api/v2/programmers/{}/clear",
                 scenario.session.id.0
             ))
             .header(

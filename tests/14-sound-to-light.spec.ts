@@ -2,6 +2,7 @@ import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import type { BenchUiContext } from "../apps/control-ui/e2e/bench/fixtures";
 import { loadCanonicalCopy } from "./support/catalog";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
 
 const portableConfiguration = {
   enabled: true,
@@ -33,20 +34,14 @@ test.describe("docs/testing/08-sound-to-light.md", () => {
   pairedScenario<{ configuration: typeof portableConfiguration }>({
     id: "SOUND-001",
     title: "a desk-local audio input drives one authoritative Speed Group with portable response settings",
-    // UI-only gap (the @api contract passes, so the engine and Speed Group selection are
-    // correct): driven through the UI the Speed Group source stays "manual_fallback" instead
-    // of "sound" — the in-browser audio analyzer does not publish observations that select the
-    // Sound source in the current UI flow. Unskip once the browser analyzer drives Sound
-    // selection on-screen.
-    skip: { ui: "Browser audio analyzer does not drive Sound source selection (source stays manual_fallback)" },
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `sound-001-${surface}`, "compact-rig");
-      await api.request("PUT", "/api/v1/speed-groups/A", disabledConfiguration);
+      await updateSpeedGroup(api, "A", disabledConfiguration);
       return { configuration: portableConfiguration };
     },
     api: async ({ api }, scenario) => {
-      await api.request("PUT", "/api/v1/speed-groups/A", scenario.configuration);
-      await api.request("POST", "/api/v1/speed-groups/A/observation", {
+      await updateSpeedGroup(api, "A", scenario.configuration);
+      await api.request("POST", "/api/v2/speed-groups/A/observations", {
         captured_at_millis: 1,
         source_available: true,
         usable_signal: true,
@@ -58,8 +53,8 @@ test.describe("docs/testing/08-sound-to-light.md", () => {
     },
     ui: async (context, scenario) => configureFromRecordedAudio(context, scenario.configuration),
     assert: async ({ api }, scenario) => {
-      await expect.poll(async () => (await api.request<any>("GET", "/api/v1/speed-groups/A")).snapshot.source, { timeout: 8_000 }).toBe("sound");
-      const state = await api.request<any>("GET", "/api/v1/speed-groups/A");
+      await expect.poll(async () => (await api.request<any>("GET", "/api/v2/speed-groups/A")).snapshot.source, { timeout: 8_000 }).toBe("sound");
+      const state = await api.request<any>("GET", "/api/v2/speed-groups/A");
       expect(state.group).toBe("A");
       expect(state.configuration).toEqual(scenario.configuration);
       expect(state.configuration).not.toHaveProperty("device_id");
@@ -76,26 +71,41 @@ test.describe("docs/testing/08-sound-to-light.md", () => {
 
 async function configureFromRecordedAudio({ api, bench, desk, page }: BenchUiContext, configuration: typeof portableConfiguration) {
   await installRecordedKickInput(page);
-  await desk.recordStep("OPEN SPEED GROUP A", "Open the existing Speed Group control; this must configure Sound-to-Light rather than perform a Learn tap.");
   await desk.open(bench.baseUrl);
   api.session = await desk.session();
+
+  await desk.recordStep("ASSIGN RECORDED AUDIO", "Grant microphone access and assign the deterministic 120 BPM kick track once for this desk and browser.");
+  await page.getByRole("button", { name: /Open show menu/ }).click();
+  await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
+  await page.locator(".setup-window nav").getByRole("button", { name: "Network & Inputs", exact: true }).click();
+  const inputs = page.locator(".sound-input-settings");
+  await inputs.getByRole("button", { name: "Request microphone access" }).click();
+  await inputs.getByRole("button", { name: "Not assigned on this desk" }).click();
+  await page.getByRole("option", { name: "Recorded kick track" }).click();
+  await expect(inputs.getByText("Microphone permission: granted")).toBeVisible();
+  const deskId = api.session!.desk.id;
+  expect(await page.evaluate((key) => localStorage.getItem(key), `light.sound-to-light.device.${deskId}`)).toBe("test-line");
+
+  await page.getByRole("button", { name: "DESKTOPS", exact: true }).click();
+  await page.locator(".dock-list .dock-entry.active").click();
   await page.locator(".mode-toggle").click();
   await expect(page.locator(".playback-tools")).toBeVisible();
-  await page.getByRole("button", { name: /Speed group A, .* BPM/ }).click();
+  const speedGroup = page.getByRole("button", { name: /Speed group A, .* BPM/ });
+
+  await desk.recordStep("TAP SPEED GROUP A", "An ordinary Speed Group activation performs tap tempo and does not open settings.");
+  await speedGroup.click();
+  await expect(page.getByRole("dialog", { name: "Speed Group A Sound to Light" })).toHaveCount(0);
+
+  await desk.recordStep("OPEN SPEED GROUP A SETTINGS", "Shift-activate the Speed Group to open its settings without counting another Learn tap.");
+  await speedGroup.click({ modifiers: ["Shift"] });
   const modal = page.getByRole("dialog", { name: "Speed Group A Sound to Light" });
   await expect(modal).toBeVisible();
-  await expect(modal).toContainText("The device ID stays in this browser for this desk and is never saved in the show.");
+  await expect(modal.getByLabel("Audio input")).toHaveCount(0);
+  expect((await api.request<any>("GET", "/api/v2/speed-groups/A")).configuration.enabled).toBe(false);
 
-  await desk.recordStep("ASSIGN RECORDED AUDIO", "Grant the synthetic microphone and assign the deterministic 120 BPM kick track to this browser and desk.");
-  await modal.getByRole("button", { name: "Not assigned on this browser" }).click();
-  await page.getByRole("option", { name: "Recorded kick track" }).click();
-  await expect(modal.getByText("Capturing", { exact: true })).toBeVisible();
-  await expect(modal.getByText("Granted", { exact: true })).toBeVisible();
-  expect((await api.request<any>("GET", "/api/v1/speed-groups/A")).configuration.enabled).toBe(false);
-
-  await desk.recordStep("SET RESPONSE", "Enable tempo analysis, isolate 45–140 Hz, and set gain, confidence, smoothing, hold, accepted BPM, and 2× mapping.");
-  await modal.getByText("Enable Sound-to-Light", { exact: true }).click();
-  await expect(modal.getByRole("switch", { name: "Enable Sound-to-Light" })).toBeChecked();
+  await desk.recordStep("SET RESPONSE", "Select Sound to Light, isolate 45–140 Hz, and set gain, confidence, smoothing, hold, accepted BPM, and 2× mapping.");
+  await modal.getByRole("button", { name: "Manual", exact: true }).click();
+  await page.getByRole("option", { name: "Sound to Light", exact: true }).click();
   await modal.getByRole("button", { name: "Low · 60–180 Hz" }).click();
   await page.getByRole("option", { name: "Custom range" }).click();
   await modal.getByLabel("Custom low frequency").fill(String(configuration.frequency.low_hz));
@@ -111,15 +121,13 @@ async function configureFromRecordedAudio({ api, bench, desk, page }: BenchUiCon
   await expect(modal).toBeHidden();
 
   await desk.recordStep("ANALYZE AND VERIFY", "The browser analyzer now publishes normalized observations; the server should select Sound at about 120 BPM and map it to about 240 BPM.");
-  await expect.poll(async () => (await api.request<any>("GET", "/api/v1/speed-groups/A")).snapshot.source, { timeout: 8_000 }).toBe("sound");
-  const deskId = api.session!.desk.id;
-  expect(await page.evaluate((key) => localStorage.getItem(key), `light.sound-to-light.device.${deskId}.A`)).toBe("test-line");
-  await page.getByRole("button", { name: /Speed group A, .* BPM/ }).click();
+  await expect.poll(async () => (await api.request<any>("GET", "/api/v2/speed-groups/A")).snapshot.source, { timeout: 8_000 }).toBe("sound");
+  await page.getByRole("button", { name: /Speed group A, .* BPM/ }).click({ modifiers: ["Shift"] });
   const live = page.getByRole("dialog", { name: "Speed Group A Sound to Light" });
   await expect(live.getByText("Capturing", { exact: true })).toBeVisible();
   await expect(live.getByText("Usable", { exact: true })).toBeVisible();
   await expect(live.getByText(/Sound · .* BPM/)).toBeVisible();
-  await live.getByRole("button", { name: "Cancel" }).click();
+  await live.getByRole("button", { name: "Close Speed Group settings" }).click();
 }
 
 async function setRange(locator: import("../apps/control-ui/node_modules/@playwright/test/index.js").Locator, value: number) {
@@ -135,6 +143,19 @@ async function setRange(locator: import("../apps/control-ui/node_modules/@playwr
   const key = remaining < 0 ? "ArrowLeft" : "ArrowRight";
   for (let index = 0; index < Math.abs(remaining); index += 1) await locator.press(key);
   if (Number(await locator.inputValue()) !== value) throw new Error(`Unable to set range to ${value}`);
+}
+
+async function updateSpeedGroup(
+  api: ApiDriver,
+  group: string,
+  configuration: Record<string, unknown> & { enabled?: boolean },
+) {
+  const { enabled, ...settings } = configuration;
+  return api.request("POST", `/api/v2/speed-groups/${group}/settings/update`, {
+    request_id: crypto.randomUUID(),
+    source: { type: enabled ? "sound_to_light" : "manual" },
+    configuration: settings,
+  });
 }
 
 async function installRecordedKickInput(page: import("../apps/control-ui/node_modules/@playwright/test/index.js").Page) {

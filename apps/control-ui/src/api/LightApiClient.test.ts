@@ -760,13 +760,17 @@ describe("LightApiClient authenticated desk services", () => {
 		});
 
 		expect(fetchMock.mock.calls.slice(1).map((call) => call[0])).toEqual([
-			"http://desk.local/api/v1/speed-groups/A",
-			"http://desk.local/api/v1/speed-groups/A",
-			"http://desk.local/api/v1/speed-groups/A/observation",
-			"http://desk.local/api/v1/speed-groups/A/action",
+			"http://desk.local/api/v2/speed-groups/A",
+			"http://desk.local/api/v2/speed-groups/A/settings/update",
+			"http://desk.local/api/v2/speed-groups/A/observations",
+			"http://desk.local/api/v2/speed-groups/A/actions",
 		]);
-		expect(fetchMock.mock.calls[2][1].method).toBe("PUT");
-		expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual(configuration);
+		expect(fetchMock.mock.calls[2][1].method).toBe("POST");
+		expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({
+			request_id: expect.any(String),
+			source: { type: "sound_to_light" },
+			configuration: { analysis_mode: "tempo_bpm" },
+		});
 		expect(JSON.parse(fetchMock.mock.calls[2][1].body)).not.toHaveProperty(
 			"device_id",
 		);

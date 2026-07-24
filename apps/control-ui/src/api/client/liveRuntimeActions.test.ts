@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ConfigurationApiClient } from "./configuration";
+import { DeskManagementApiClient as ConfigurationApiClient } from "./deskManagement";
 import { MediaOutputApiClient } from "./mediaOutput";
 import type { LiveClientTransport } from "./transport";
 

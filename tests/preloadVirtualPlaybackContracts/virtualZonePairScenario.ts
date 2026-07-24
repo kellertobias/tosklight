@@ -55,7 +55,7 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 			],
 			{ 1: 74, 2: 75, 3: 76 },
 		);
-		await api.request("PUT", "/api/v1/configuration", {
+		await api.request("PUT", "/api/v2/configuration", {
 			...(await configuration(api)),
 			sequence_master_fade_millis: 0,
 		});

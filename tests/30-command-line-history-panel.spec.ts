@@ -123,7 +123,7 @@ async function executeRejected(api: ApiDriver, value: string) {
 }
 
 async function history(api: ApiDriver): Promise<HistoryEntry[]> {
-  return api.request("GET", "/api/v1/command-history");
+  return api.request("GET", "/api/v2/command-history");
 }
 
 async function enterCommand(page: Page, value: string) {

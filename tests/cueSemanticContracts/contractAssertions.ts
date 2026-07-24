@@ -7,8 +7,8 @@ import {
 import { object } from "../support/catalog";
 
 export async function setSequenceMasterFade(api: ApiDriver, millis: number) {
-	const configuration = await api.request<any>("GET", "/api/v1/configuration");
-	await api.request("PUT", "/api/v1/configuration", {
+	const configuration = await api.request<any>("GET", "/api/v2/configuration");
+	await api.request("PUT", "/api/v2/configuration", {
 		...configuration,
 		programmer_fade_millis: millis,
 		sequence_master_fade_millis: millis,
@@ -16,7 +16,7 @@ export async function setSequenceMasterFade(api: ApiDriver, millis: number) {
 }
 
 export async function currentProgrammer(api: ApiDriver): Promise<any> {
-	const programmers = await api.request<any[]>("GET", "/api/v1/programmers");
+	const programmers = await api.request<any[]>("GET", "/api/v2/programmers");
 	return programmers.find(
 		(programmer) => programmer.session_id === api.session!.session_id,
 	);

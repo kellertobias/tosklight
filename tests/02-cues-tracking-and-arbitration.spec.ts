@@ -132,7 +132,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await assertSpeedGroupsSynchronized(api, bench, 120);
       for (let tap = 0; tap < 5; tap += 1) {
         if (tap > 0) await bench.tick(750);
-        await api.request("POST", "/api/v1/speed-groups/A/action", { action: "learn", captured_at_millis: tap * 750 });
+        await api.request("POST", "/api/v2/speed-groups/A/actions", { action: "learn", captured_at_millis: tap * 750 });
       }
       [speedA, speedC] = await Promise.all([speedGroup(api, "A"), speedGroup(api, "C")]);
       expect([speedA.snapshot.manual_bpm, speedC.snapshot.manual_bpm, speedA.snapshot.synchronized_with, speedC.snapshot.synchronized_with]).toEqual([80, 120, null, null]);
@@ -212,7 +212,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 
       for (let tap = 0; tap < 5; tap += 1) {
         if (tap > 0) await bench.tick(750);
-        const applied = page.waitForResponse((response) => response.url().endsWith("/api/v1/speed-groups/A/action") && response.request().method() === "POST");
+        const applied = page.waitForResponse((response) => response.url().endsWith("/api/v2/speed-groups/A/actions") && response.request().method() === "POST");
         await page.keyboard.press("F9");
         expect((await applied).ok()).toBe(true);
       }
@@ -414,12 +414,16 @@ async function enterSpeedCommand(page: Page, group: string, bpm: string) {
 }
 
 async function speedConfiguration(api: ApiDriver): Promise<number[]> {
-  const response = await api.request<any>("GET", "/api/v1/configuration", undefined, false);
-  return response.configuration.speed_groups_bpm;
+  return Promise.all(
+    ["A", "B", "C", "D", "E"].map(async (group) => {
+      const response = await api.request<any>("GET", `/api/v2/speed-groups/${group}`);
+      return response.snapshot.manual_bpm;
+    }),
+  );
 }
 
 async function speedGroup(api: ApiDriver, group: "A" | "B" | "C") {
-  return api.request<any>("GET", `/api/v1/speed-groups/${group}`);
+  return api.request<any>("GET", `/api/v2/speed-groups/${group}`);
 }
 
 async function assertSpeedGroupsSynchronized(api: ApiDriver, bench: any, expectedBpm: number) {

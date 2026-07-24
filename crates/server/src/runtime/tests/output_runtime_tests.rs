@@ -683,7 +683,7 @@ fn output_persistence_attempts(state: &AppState) -> u64 {
 async fn put_master(app: &Router, token: &str, payload: serde_json::Value) -> Response {
     app.clone()
         .oneshot(
-            Request::put("/api/v1/master")
+            Request::post("/api/v2/output-runtime/global-master/actions")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(payload.to_string()))

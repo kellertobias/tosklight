@@ -412,12 +412,10 @@ export async function operateProgrammerFade(
 	await expect(dialog).toBeHidden();
 	await expect
 		.poll(async () => {
-			const response = await api.request<any>(
-				"GET",
-				"/api/v1/configuration",
-				undefined,
-				false,
-			);
+				const response = await api.request<any>(
+					"GET",
+					"/api/v2/configuration",
+				);
 			return response.configuration.programmer_fade_millis;
 		})
 		.toBe(4_200);

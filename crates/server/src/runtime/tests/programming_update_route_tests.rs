@@ -226,7 +226,8 @@ async fn v2_update_locked_reads_and_settings_keep_exact_scope() {
 
     let blocked = put_settings_request(&scenario, &settings_path).await;
     assert_eq!(blocked.status(), StatusCode::CONFLICT);
-    assert_eq!(json(blocked).await["kind"], "conflict");
+    let blocked = json(blocked).await;
+    assert_eq!(blocked["kind"], "conflict", "{blocked}");
     let foreign = format!(
         "/api/v2/desks/{}/programming-update/settings",
         Uuid::new_v4()
@@ -377,7 +378,7 @@ async fn put_settings_request(scenario: &UpdateRouteScenario, path: &str) -> Res
         .app
         .clone()
         .oneshot(
-            Request::put(path)
+            Request::post(path)
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(
                     header::AUTHORIZATION,
@@ -385,10 +386,13 @@ async fn put_settings_request(scenario: &UpdateRouteScenario, path: &str) -> Res
                 )
                 .body(Body::from(
                     serde_json::json!({
-                        "cue_mode":"existing_only",
-                        "preset_mode":"add_new",
-                        "group_mode":"add_new",
-                        "show_update_modal_on_touch":false
+                        "request_id":"settings-update",
+                        "settings":{
+                            "cue_mode":"existing_only",
+                            "preset_mode":"add_new",
+                            "group_mode":"add_new",
+                            "show_update_modal_on_touch":false
+                        }
                     })
                     .to_string(),
                 ))

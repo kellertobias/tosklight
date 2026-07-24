@@ -5,6 +5,7 @@ import type {
 	SpeedGroupActionInput,
 	SpeedGroupId,
 	SpeedGroupSoundState,
+	SpeedGroupSource,
 } from "../../api/types";
 
 /**
@@ -16,6 +17,7 @@ export interface SoundToLightActions {
 	updateSpeedGroup: (
 		group: SpeedGroupId,
 		configuration: SoundToLightConfig,
+		source?: SpeedGroupSource,
 	) => Promise<SpeedGroupSoundState>;
 	observeSpeedGroup: (
 		group: SpeedGroupId,

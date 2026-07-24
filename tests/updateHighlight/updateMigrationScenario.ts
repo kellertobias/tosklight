@@ -14,6 +14,11 @@ import {
 } from "../support/catalog";
 import { groupBody, openGroups } from "../support/updateHighlight/highlight";
 import { objectRows, readSql, runSql } from "../support/updateHighlight/system";
+import {
+	applyProgrammingUpdate,
+	previewProgrammingUpdate,
+	programmingUpdateSettings,
+} from "./v2UpdateApi";
 
 type UpdateMigrationContext = Pick<
 	BenchUiContext,
@@ -105,13 +110,11 @@ async function prepareLegacyUpdateScenario({
 
 	const configuration = await api.request<any>(
 		"GET",
-		"/api/v1/configuration",
-		undefined,
-		false,
+		"/api/v2/configuration",
 	);
 	await api.request(
 		"PUT",
-		"/api/v1/configuration",
+		"/api/v2/configuration",
 		configuration.configuration,
 	);
 	await bench.stopServerGracefully(api.session!.token);
@@ -157,10 +160,9 @@ async function loadMigratedUpdateState(
 		cue_mode: "add_to_current_cue",
 		preset_mode: "update_existing",
 		group_mode: "update_existing",
-		other_target_modes: {},
 		show_update_modal_on_touch: true,
 	};
-	expect(await api.request<any>("GET", "/api/v1/update/settings")).toEqual(
+	expect(await programmingUpdateSettings(api)).toEqual(
 		migratedDefaults,
 	);
 	expect(
@@ -228,7 +230,7 @@ async function exerciseCueUpdate(
 		"cue_list",
 		cueListId,
 	);
-	const cueResult = await api.request<any>("POST", "/api/v1/update/apply", {
+	const cueResult = await applyProgrammingUpdate(api, {
 		target: {
 			family: { type: "cue" },
 			object_id: cueListId,
@@ -280,7 +282,7 @@ async function exercisePresetUpdate(
 		presetId,
 	);
 	const preset = await object<any>(api, "preset", presetId);
-	const presetResult = await api.request<any>("POST", "/api/v1/update/apply", {
+	const presetResult = await applyProgrammingUpdate(api, {
 		target: { family: { type: "preset" }, object_id: presetId },
 		mode: {
 			target_type: "existing_content",
@@ -324,9 +326,8 @@ async function exerciseGroupUpdate(
 		fixtures: [second, third, first, fourth],
 	});
 	const group = await object<any>(api, "group", groupId);
-	const defaultPreview = await api.request<any>(
-		"POST",
-		"/api/v1/update/preview",
+	const defaultPreview = await previewProgrammingUpdate(
+		api,
 		{
 			target: { family: { type: "group" }, object_id: groupId },
 			mode: {
@@ -399,14 +400,14 @@ async function verifyUpdateAfterRestart(
 	await bench.stopServerGracefully(api.session!.token);
 	await bench.startServer();
 	await api.login();
-	expect(await api.request<any>("GET", "/api/v1/update/settings")).toEqual(
+	expect(await programmingUpdateSettings(api)).toEqual(
 		migratedDefaults,
 	);
 	expect(await readSql(showEntry.path, "SELECT version FROM schema_info")).toBe(
 		"4",
 	);
 	const reopenedPreset = await object<any>(api, "preset", presetId);
-	const repeated = await api.request<any>("POST", "/api/v1/update/apply", {
+	const repeated = await applyProgrammingUpdate(api, {
 		target: { family: { type: "preset" }, object_id: presetId },
 		mode: {
 			target_type: "existing_content",

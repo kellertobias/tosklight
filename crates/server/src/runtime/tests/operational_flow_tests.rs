@@ -299,7 +299,7 @@ impl OperationalScenario {
             .app
             .clone()
             .oneshot(
-                Request::post(format!("/api/v1/programmers/{}/clear", self.session_id))
+                Request::post(format!("/api/v2/programmers/{}/clear", self.session_id))
                     .header(
                         header::AUTHORIZATION,
                         format!("Bearer {second_token}"),

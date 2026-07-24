@@ -280,7 +280,7 @@ export async function setProgrammerFadeThroughUi(
 	await expect(dialog).toBeHidden();
 	await expect
 		.poll(async () => {
-			const response = await api.request<any>("GET", "/api/v1/configuration");
+			const response = await api.request<any>("GET", "/api/v2/configuration");
 			return (response.configuration ?? response).programmer_fade_millis;
 		})
 		.toBe(seconds * 1_000);
@@ -364,9 +364,9 @@ export async function setProgrammerFade(
 	millis: number,
 	sequenceMasterFadeMillis?: number,
 ): Promise<void> {
-	const response = await api.request<any>("GET", "/api/v1/configuration");
+	const response = await api.request<any>("GET", "/api/v2/configuration");
 	const configuration = response.configuration ?? response;
-	await api.request("PUT", "/api/v1/configuration", {
+	await api.request("PUT", "/api/v2/configuration", {
 		...configuration,
 		programmer_fade_millis: millis,
 		...(sequenceMasterFadeMillis == null
@@ -379,13 +379,19 @@ export async function setSpeedGroups(
 	api: ApiDriver,
 	speedGroups: number[],
 ): Promise<void> {
-	const response = await api.request<any>("GET", "/api/v1/configuration");
+	const response = await api.request<any>("GET", "/api/v2/configuration");
 	const configuration = response.configuration ?? response;
-	await api.request("PUT", "/api/v1/configuration", {
+	await api.request("PUT", "/api/v2/configuration", {
 		...configuration,
-		speed_groups_bpm: speedGroups,
 		sequence_master_fade_millis: 0,
 	});
+	for (const [index, bpm] of speedGroups.entries()) {
+		await api.request(
+			"POST",
+			`/api/v2/speed-groups/${String.fromCharCode(65 + index)}/actions`,
+			{ action: "set_bpm", bpm },
+		);
+	}
 }
 
 export function behaviorTimestamps(state: any): unknown {

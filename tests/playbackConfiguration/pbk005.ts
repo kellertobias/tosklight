@@ -46,9 +46,9 @@ const pbk005PairedScenario: PairedScenario<Pbk005State> = {
 		);
 		const configuration = await api.request<any>(
 			"GET",
-			"/api/v1/configuration",
+			"/api/v2/configuration",
 		);
-		await api.request("PUT", "/api/v1/configuration", {
+		await api.request("PUT", "/api/v2/configuration", {
 			...configuration.configuration,
 			sequence_master_fade_millis: 0,
 		});

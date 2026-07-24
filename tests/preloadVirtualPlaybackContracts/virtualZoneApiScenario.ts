@@ -36,7 +36,7 @@ async function prepareAuthoritativeVirtualZone({
 		{ 1: 71, 2: 72, 3: 73 },
 	);
 	await writePage(api, 2, { "1": 73, "2": 71, "3": 72 });
-	await api.request("PUT", "/api/v1/configuration", {
+	await api.request("PUT", "/api/v2/configuration", {
 		...(await configuration(api)),
 		sequence_master_fade_millis: 0,
 	});

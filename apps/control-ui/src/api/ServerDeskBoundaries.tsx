@@ -8,7 +8,7 @@ import { DeskSnapshotStateProvider } from "../features/deskSnapshot/DeskSnapshot
 import { ShellStatusStateProvider } from "../features/shellStatus/ShellStatusState";
 import type { useServerState } from "../features/server/useServerState";
 import { StageLayoutStateProvider } from "../features/stageLayout/StageLayoutState";
-import type { ConfigurationUpdateResult } from "./client/configuration";
+import type { ConfigurationUpdateResult } from "./client/deskManagement";
 
 type ServerState = ReturnType<typeof useServerState>;
 

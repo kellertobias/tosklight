@@ -50,34 +50,6 @@ pub(super) fn emit_update_armed_transition(
     );
 }
 
-pub(super) async fn update_settings(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<update::UpdateSettings>, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    Ok(Json(update_settings_for(&state, session.desk.id)))
-}
-
-pub(super) async fn put_update_settings(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(settings): Json<update::UpdateSettings>,
-) -> Result<Json<update::UpdateSettings>, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    state
-        .configuration
-        .write()
-        .update_settings_by_desk
-        .insert(session.desk.id, settings.clone());
-    persist_server_configuration(&state)?;
-    emit(
-        &state,
-        "update_settings_changed",
-        serde_json::json!({"desk_id":session.desk.id,"settings":settings}),
-    );
-    Ok(Json(settings))
-}
-
 pub(super) fn active_update_cue_contexts(state: &AppState) -> Vec<update::ActiveCueContext> {
     state
         .engine

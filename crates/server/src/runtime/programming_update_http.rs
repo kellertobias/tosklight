@@ -6,6 +6,7 @@ use super::{
     programming_update_http_error::ProgrammingUpdateHttpError, programming_update_wire,
     programming_update_wire_output, read_desk_lock, update_settings_for,
 };
+use crate::tolerant_json::TolerantJson;
 use axum::{
     Json, Router,
     extract::{Path, State, rejection::JsonRejection},
@@ -17,7 +18,8 @@ use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionSource, ActiveShowService, ProgrammingService,
 };
 use light_wire::v2::programming_update::{
-    ProgrammingUpdateActionRequest, ProgrammingUpdatePreviewRequest, ProgrammingUpdateSettings,
+    ProgrammingUpdateActionRequest, ProgrammingUpdatePreviewRequest,
+    ProgrammingUpdateSettingsUpdateOutcome, ProgrammingUpdateSettingsUpdateRequest,
     ProgrammingUpdateTargetsRequest,
 };
 use uuid::Uuid;
@@ -29,7 +31,7 @@ pub(super) fn router() -> Router<AppState> {
         .route("/api/v2/programming-update/actions", post(apply_action))
         .route(
             "/api/v2/desks/{desk_id}/programming-update/settings",
-            get(settings).put(put_settings),
+            get(settings).post(put_settings),
         )
 }
 
@@ -139,11 +141,26 @@ async fn put_settings(
     State(state): State<AppState>,
     Path(desk_id): Path<String>,
     headers: HeaderMap,
-    request: Result<Json<ProgrammingUpdateSettings>, JsonRejection>,
+    request: Result<TolerantJson<ProgrammingUpdateSettingsUpdateRequest>, JsonRejection>,
 ) -> Result<Response, ProgrammingUpdateHttpError> {
     let session = authenticate_update(&state, &headers)?;
     let desk_id = exact_desk(&session, &desk_id)?;
-    let Json(request) = request.map_err(ProgrammingUpdateHttpError::json)?;
+    let TolerantJson(request) = request.map_err(ProgrammingUpdateHttpError::json)?;
+    validate_request_id(&request.request_id)?;
+    let fingerprint = serde_json::to_value(&request)
+        .map_err(|error| ProgrammingUpdateHttpError::invalid(error.to_string()))?;
+    let replay_key = super::desk_management_v2::ReplayKey::new(
+        session.id,
+        "programming-update-settings",
+        &request.request_id,
+    );
+    let mut replay = state.desk_management_replay.lock().await;
+    if let Some(value) = replay
+        .get(&replay_key, &fingerprint)
+        .map_err(ProgrammingUpdateHttpError::api)?
+    {
+        return Ok(Json(value).into_response());
+    }
     let operation_lock = state.programming.desk_lock(desk_id);
     let _operation = operation_lock.lock();
     if read_desk_lock(&state, desk_id).locked {
@@ -151,27 +168,33 @@ async fn put_settings(
     }
     let current = update_settings_for(&state, desk_id);
     let mut settings = current.clone();
-    programming_update_wire::apply_settings(&mut settings, request);
-    if settings == current {
-        return Ok(
-            Json(programming_update_wire::wire_settings(desk_id, &settings)).into_response(),
+    programming_update_wire::apply_settings(&mut settings, request.settings);
+    if settings != current {
+        let previous = state
+            .configuration
+            .write()
+            .update_settings_by_desk
+            .insert(desk_id, settings.clone());
+        if let Err(error) = persist_server_configuration(&state) {
+            restore_settings(&state, desk_id, previous);
+            return Err(ProgrammingUpdateHttpError::api(error));
+        }
+        emit(
+            &state,
+            "update_settings_changed",
+            serde_json::json!({"desk_id":desk_id,"settings":settings}),
         );
     }
-    let previous = state
-        .configuration
-        .write()
-        .update_settings_by_desk
-        .insert(desk_id, settings.clone());
-    if let Err(error) = persist_server_configuration(&state) {
-        restore_settings(&state, desk_id, previous);
-        return Err(ProgrammingUpdateHttpError::api(error));
-    }
-    emit(
-        &state,
-        "update_settings_changed",
-        serde_json::json!({"desk_id":desk_id,"settings":settings}),
-    );
-    Ok(Json(programming_update_wire::wire_settings(desk_id, &settings)).into_response())
+    let outcome = ProgrammingUpdateSettingsUpdateOutcome {
+        request_id: request.request_id.clone(),
+        replayed: false,
+        desk_id,
+        settings: programming_update_wire::wire_settings(desk_id, &settings).settings,
+    };
+    let value = serde_json::to_value(&outcome)
+        .map_err(|error| ProgrammingUpdateHttpError::invalid(error.to_string()))?;
+    replay.insert(replay_key, fingerprint, value);
+    Ok(Json(outcome).into_response())
 }
 
 fn restore_settings(

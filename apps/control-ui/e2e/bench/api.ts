@@ -308,9 +308,73 @@ export class ApiDriver {
     revision?: number,
     context?: { showId?: string; deskId?: string },
   ): Promise<T> {
-    const response = await this.response(method, path, body, authenticate, revision, context);
+    const normalized = this.v2DeskManagementRequest(method, path, body);
+    const response = await this.response(
+      normalized.method,
+      normalized.path,
+      normalized.body,
+      authenticate,
+      revision,
+      context,
+    );
     if (response.status === 204) return undefined as T;
-    return response.json() as Promise<T>;
+    const value = await response.json();
+    if (method === "POST" && path === "/api/v2/users") {
+      return value.user as T;
+    }
+    return value as T;
+  }
+
+  private v2DeskManagementRequest(method: string, path: string, body: unknown) {
+    if (method === "PUT" && path === "/api/v2/configuration") {
+      return {
+        method: "POST",
+        path: "/api/v2/configuration/update",
+        body: { request_id: crypto.randomUUID(), patch: body },
+      };
+    }
+    if (method === "PUT" && /^\/api\/v2\/speed-groups\/[^/]+$/.test(path)) {
+      const configuration = body as Record<string, unknown> & { enabled?: boolean };
+      const { enabled, ...settings } = configuration;
+      return {
+        method: "POST",
+        path: `${path}/settings/update`,
+        body: {
+          request_id: crypto.randomUUID(),
+          source: { type: enabled ? "sound_to_light" : "manual" },
+          configuration: settings,
+        },
+      };
+    }
+    if (path.startsWith("/api/v2/desk-lock")) {
+      if (!this.session) throw new Error("API session is not initialized");
+      const suffix = path.slice("/api/v2/desk-lock".length);
+      return {
+        method:
+          suffix === "/lock" && method === "POST"
+            ? "GET"
+            : method === "PUT"
+              ? "POST"
+              : method,
+        path: `/api/v2/control-desks/${this.session.desk.id}/desk-lock${
+          method === "PUT" ? "/update" : suffix
+        }`,
+        body:
+          method === "PUT"
+            ? { request_id: crypto.randomUUID(), ...(body as object) }
+            : suffix === "/lock" && method === "POST"
+              ? undefined
+              : body,
+      };
+    }
+    if (method === "POST" && path === "/api/v2/users") {
+      return {
+        method,
+        path: "/api/v2/users/create",
+        body: { request_id: crypto.randomUUID(), ...(body as object) },
+      };
+    }
+    return { method, path, body };
   }
 
   async fixtureLibrarySnapshot(): Promise<FixtureLibrarySnapshot> {

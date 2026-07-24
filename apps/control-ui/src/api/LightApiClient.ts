@@ -1,6 +1,5 @@
 import { bindClientMethod } from "./client/bindMethod";
-import { ConfigurationApiClient } from "./client/configuration";
-import { DeskApiClient } from "./client/desk";
+import { DeskManagementApiClient } from "./client/deskManagement";
 import { FileApiClient } from "./client/files";
 import { FixtureApiClient } from "./client/fixtures";
 import { HelpApiClient } from "./client/help";
@@ -29,22 +28,21 @@ export class LightApiClient extends LightClientRuntime {
 	private readonly fixtureApi = new FixtureApiClient(this.transport);
 	private readonly mediaOutputApi = new MediaOutputApiClient(this.transport);
 	private readonly showApi = new ShowApiClient(this.transport);
-	private readonly configurationApi = new ConfigurationApiClient(
+	private readonly deskManagementApi = new DeskManagementApiClient(
 		this.transport,
 	);
 	private readonly showObjectsApi = new ShowObjectsApiClient(this.transport);
 	private readonly programmingApi = new ProgrammingApiClient(this.transport);
 	private readonly playbackApi = new PlaybackApiClient(this.transport);
 	private readonly helpApi = new HelpApiClient(this.transport);
-	private readonly deskApi = new DeskApiClient(this.transport);
 	private readonly selectiveImportApi = new SelectiveImportApiClient(
 		this.transport,
 	);
 
 	helpCatalog = bindClientMethod(this.helpApi, "helpCatalog");
 	helpTopic = bindClientMethod(this.helpApi, "helpTopic");
-	commandHistory = bindClientMethod(this.deskApi, "commandHistory");
-	createUser = bindClientMethod(this.deskApi, "createUser");
+	commandHistory = bindClientMethod(this.deskManagementApi, "commandHistory");
+	createUser = bindClientMethod(this.deskManagementApi, "createUser");
 	setDmxOverride = bindClientMethod(this.mediaOutputApi, "setDmxOverride");
 	outputRuntimeLiveAction = bindClientMethod(
 		this.mediaOutputApi,
@@ -56,7 +54,7 @@ export class LightApiClient extends LightClientRuntime {
 		this.mediaOutputApi,
 		"setPatchPreviewHighlight",
 	);
-	auditEvents = bindClientMethod(this.deskApi, "auditEvents");
+	auditEvents = bindClientMethod(this.deskManagementApi, "auditEvents");
 
 	fileRoots = bindClientMethod(this.fileApi, "fileRoots");
 	fileEntries = bindClientMethod(this.fileApi, "fileEntries");
@@ -141,37 +139,37 @@ export class LightApiClient extends LightClientRuntime {
 	previewSelectiveImport = bindClientMethod(this.selectiveImportApi, "preview");
 	applySelectiveImport = bindClientMethod(this.selectiveImportApi, "apply");
 
-	configuration = bindClientMethod(this.configurationApi, "configuration");
+	configuration = bindClientMethod(this.deskManagementApi, "configuration");
 	updateConfiguration = bindClientMethod(
-		this.configurationApi,
+		this.deskManagementApi,
 		"updateConfiguration",
 	);
-	matterStatus = bindClientMethod(this.configurationApi, "matterStatus");
-	speedGroup = bindClientMethod(this.configurationApi, "speedGroup");
+	matterStatus = bindClientMethod(this.deskManagementApi, "matterStatus");
+	speedGroup = bindClientMethod(this.deskManagementApi, "speedGroup");
 	updateSpeedGroup = bindClientMethod(
-		this.configurationApi,
+		this.deskManagementApi,
 		"updateSpeedGroup",
 	);
 	observeSpeedGroup = bindClientMethod(
-		this.configurationApi,
+		this.deskManagementApi,
 		"observeSpeedGroup",
 	);
 	speedGroupAction = bindClientMethod(
-		this.configurationApi,
+		this.deskManagementApi,
 		"speedGroupAction",
 	);
 	speedGroupRuntimeLiveAction = bindClientMethod(
-		this.configurationApi,
+		this.deskManagementApi,
 		"speedGroupRuntimeLiveAction",
 	);
-	shutdown = bindClientMethod(this.configurationApi, "shutdown");
-	deskLock = bindClientMethod(this.configurationApi, "deskLock");
+	shutdown = bindClientMethod(this.deskManagementApi, "shutdown");
+	deskLock = bindClientMethod(this.deskManagementApi, "deskLock");
 	configureDeskLock = bindClientMethod(
-		this.configurationApi,
+		this.deskManagementApi,
 		"configureDeskLock",
 	);
-	lockDesk = bindClientMethod(this.configurationApi, "lockDesk");
-	unlockDesk = bindClientMethod(this.configurationApi, "unlockDesk");
+	lockDesk = bindClientMethod(this.deskManagementApi, "lockDesk");
+	unlockDesk = bindClientMethod(this.deskManagementApi, "unlockDesk");
 
 	objects = bindClientMethod(this.showObjectsApi, "objects");
 	object = bindClientMethod(this.showObjectsApi, "object");
@@ -182,7 +180,7 @@ export class LightApiClient extends LightClientRuntime {
 	savePatchLayer = bindClientMethod(this.showObjectsApi, "savePatchLayer");
 	recordDynamic = bindClientMethod(this.showObjectsApi, "recordDynamic");
 	storePreload = bindClientMethod(this.showObjectsApi, "storePreload");
-	programmers = bindClientMethod(this.programmingApi, "programmers");
+	programmers = bindClientMethod(this.deskManagementApi, "programmers");
 	programmerValuesLiveAction = bindClientMethod(
 		this.programmingApi,
 		"programmerValuesLiveAction",
@@ -215,7 +213,7 @@ export class LightApiClient extends LightClientRuntime {
 		this.programmingApi,
 		"applyProgrammingSelection",
 	);
-	clearProgrammer = bindClientMethod(this.programmingApi, "clearProgrammer");
+	clearProgrammer = bindClientMethod(this.deskManagementApi, "clearProgrammer");
 	selectGroup = bindClientMethod(this.programmingApi, "selectGroup");
 	selectionMacro = bindClientMethod(this.programmingApi, "selectionMacro");
 	align = bindClientMethod(this.programmingApi, "align");

@@ -29,8 +29,8 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 		const before = await api.request<any>("GET", "/api/v2/output/dmx");
 		const wallpaper = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath fill='%23123456' d='M0 0h8v8H0z'/%3E%3C/svg%3E";
 		try {
-			await api.request("PUT", "/api/v1/desk-lock", { message: "Call the operator", wallpaper, unlock_mode: "pin", pin: "1234" });
-			await api.request("POST", "/api/v1/desk-lock/lock", {});
+			await api.request("PUT", "/api/v2/desk-lock", { message: "Call the operator", wallpaper, unlock_mode: "pin", pin: "1234" });
+			await api.request("POST", "/api/v2/desk-lock/lock", {});
 			const lock = page.getByRole("dialog", { name: "Desk locked" });
 			const secondLock = secondScreen.getByRole("dialog", { name: "Desk locked" });
 			await expect(lock).toBeVisible();
@@ -45,7 +45,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 			await expect(lateLock).toBeVisible();
 			await expect(lateLock).toContainText("Call the operator");
 
-			await expect(api.request("PUT", "/api/v1/master", { grand_master: 0.25 })).rejects.toThrow(/409.*desk is locked/);
+			await expect(api.request("POST", "/api/v2/output-runtime/global-master/actions", { grand_master: 0.25 })).rejects.toThrow(/409.*desk is locked/);
 			await expect(api.executeCommandLine("1 AT 50")).rejects.toThrow(/desk is locked/i);
 			await hardware.send(`/light/${api.session!.desk.osc_alias}/programmer/digit-5`, [true]);
 			await page.waitForTimeout(100);
@@ -53,8 +53,8 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 			expect(await api.request<any>("GET", "/api/v2/output/dmx")).toEqual(before);
 
 			api.session = otherDeskSession;
-			expect((await api.request<any>("GET", "/api/v1/desk-lock")).locked).toBe(false);
-			await api.request("PUT", "/api/v1/master", { grand_master: 1 });
+			expect((await api.request<any>("GET", "/api/v2/desk-lock")).locked).toBe(false);
+			await api.request("POST", "/api/v2/output-runtime/global-master/actions", { grand_master: 1 });
 			api.session = pageDeskSession;
 
 			await lock.getByLabel("PIN").fill("9999");
@@ -67,7 +67,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 			await expect(lock).toBeHidden();
 			await expect(secondLock).toBeHidden();
 			await expect(lateLock).toBeHidden();
-			await expect.poll(async () => (await api.request<any>("GET", "/api/v1/desk-lock")).locked).toBe(false);
+			await expect.poll(async () => (await api.request<any>("GET", "/api/v2/desk-lock")).locked).toBe(false);
 
 			await page.waitForTimeout(100);
 			expect(await commandLine(api)).toBe("");
@@ -84,7 +84,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 	test("LOCK-001 @ui › button mode has no PIN and uses the readable fallback lock screen", async ({ api, bench, desk, page }) => {
 		await desk.open(bench.baseUrl);
 		api.session = await desk.session();
-		await api.request("PUT", "/api/v1/desk-lock", {
+		await api.request("PUT", "/api/v2/desk-lock", {
 			message: "",
 			wallpaper: "https://invalid.example.test/unavailable-lock-screen.png",
 			unlock_mode: "button",
@@ -146,12 +146,12 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 		await settings.getByLabel("Lock message").fill("Stand by for the operator");
 		await titleBar.getByRole("button", { name: "Save Lock Configuration" }).click();
 		await expect(settings).toBeHidden();
-		await expect.poll(async () => (await api.request<any>("GET", "/api/v1/desk-lock")).message).toBe("Stand by for the operator");
+		await expect.poll(async () => (await api.request<any>("GET", "/api/v2/desk-lock")).message).toBe("Stand by for the operator");
 	});
 });
 
 async function commandLine(api: ApiDriver): Promise<string> {
-	const programmers = await api.request<ProgrammerProjection[]>("GET", "/api/v1/programmers");
+	const programmers = await api.request<ProgrammerProjection[]>("GET", "/api/v2/programmers");
 	return programmers.find((programmer) => programmer.session_id === api.session?.session_id)?.command_line ?? "";
 }
 

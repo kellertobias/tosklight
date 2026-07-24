@@ -83,7 +83,7 @@ async fn programmer_list_requires_authentication() {
     let (state, data_dir) = test_state();
     let app = router(state);
     for authorization in [None, Some("Bearer invalid-session")] {
-        let mut request = Request::get("/api/v1/programmers");
+        let mut request = Request::get("/api/v2/programmers");
         if let Some(authorization) = authorization {
             request = request.header(header::AUTHORIZATION, authorization);
         }
@@ -168,7 +168,7 @@ async fn authenticated_programmer_rows(
     let response = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/programmers")
+            Request::get("/api/v2/programmers")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -230,7 +230,7 @@ async fn authenticated_shutdown_requests_orderly_server_cancellation() {
     let unauthorized = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/shutdown")
+            Request::post("/api/v2/shutdown")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -240,7 +240,7 @@ async fn authenticated_shutdown_requests_orderly_server_cancellation() {
     let (token, _) = login(&app, "Operator").await;
     let response = app
         .oneshot(
-            Request::post("/api/v1/shutdown")
+            Request::post("/api/v2/shutdown")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),

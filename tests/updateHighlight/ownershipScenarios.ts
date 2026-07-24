@@ -24,11 +24,11 @@ test("HIGHLIGHT-004 @api › ownership conflicts retain same-user sessions, rele
 		"default-stage",
 	);
 	const fixtures = await fixturesByNumber(api, [101, 102, 103]);
-	await api.request("POST", "/api/v1/users", {
+	await api.request("POST", "/api/v2/users", {
 		name: "Highlight A",
 		enabled: true,
 	});
-	await api.request("POST", "/api/v1/users", {
+	await api.request("POST", "/api/v2/users", {
 		name: "Highlight B",
 		enabled: true,
 	});

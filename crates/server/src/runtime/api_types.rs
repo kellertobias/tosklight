@@ -142,6 +142,7 @@ pub(super) struct UpdateApiRequest {
     pub(super) expected_show_revision: Option<u64>,
 }
 
+#[cfg(test)]
 #[derive(Serialize)]
 pub(super) struct UpdatePreviewResponse {
     pub(super) revision: u64,

@@ -159,7 +159,7 @@ async fn post_sound_observation(
 ) -> Response {
     app.clone()
         .oneshot(
-            Request::post("/api/v1/speed-groups/A/observation")
+            Request::post("/api/v2/speed-groups/A/observations")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(observation.to_string()))
@@ -167,6 +167,102 @@ async fn post_sound_observation(
         )
         .await
         .unwrap()
+}
+
+async fn update_speed_group_source(
+    app: &Router,
+    token: &str,
+    group: &str,
+    request_id: &str,
+    source: serde_json::Value,
+) -> Response {
+    app.clone()
+        .oneshot(
+            Request::post(format!(
+                "/api/v2/speed-groups/{group}/settings/update"
+            ))
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "request_id": request_id,
+                    "source": source,
+                    "configuration": SoundToLightConfig::default(),
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn speed_group_sources_follow_directed_chains_and_reject_cycles() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+
+    let linked = update_speed_group_source(
+        &app,
+        &token,
+        "A",
+        "link-a-to-b",
+        serde_json::json!({"type":"speed_group","group":"B"}),
+    )
+    .await;
+    assert_eq!(linked.status(), StatusCode::OK);
+    let linked = json(linked).await;
+    assert_eq!(linked["source"], serde_json::json!({"type":"speed_group","group":"B"}));
+    assert_eq!(linked["snapshot"]["effective_bpm"], 90.0);
+    assert_eq!(linked["replayed"], false);
+
+    let replayed = update_speed_group_source(
+        &app,
+        &token,
+        "A",
+        "link-a-to-b",
+        serde_json::json!({"type":"speed_group","group":"B"}),
+    )
+    .await;
+    assert_eq!(replayed.status(), StatusCode::OK);
+    assert_eq!(json(replayed).await["replayed"], true);
+
+    assert_eq!(
+        update_speed_group_source(
+            &app,
+            &token,
+            "B",
+            "link-b-to-c",
+            serde_json::json!({"type":"speed_group","group":"C"}),
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        update_speed_group_source(
+            &app,
+            &token,
+            "C",
+            "link-c-to-a",
+            serde_json::json!({"type":"speed_group","group":"A"}),
+        )
+        .await
+        .status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    let conflicting_replay = update_speed_group_source(
+        &app,
+        &token,
+        "A",
+        "link-a-to-b",
+        serde_json::json!({"type":"manual"}),
+    )
+    .await;
+    assert_eq!(conflicting_replay.status(), StatusCode::CONFLICT);
+    let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[tokio::test]
@@ -191,10 +287,17 @@ async fn sound_to_light_is_authoritative_per_speed_group_and_capture_is_desk_sco
     let updated = app
         .clone()
         .oneshot(
-            Request::put("/api/v1/speed-groups/A")
+            Request::post("/api/v2/speed-groups/A/settings/update")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(serde_json::to_vec(&enabled).unwrap()))
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id":"sound-settings-1",
+                        "source":{"type":"sound_to_light"},
+                        "configuration":enabled
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -230,15 +333,13 @@ async fn sound_to_light_is_authoritative_per_speed_group_and_capture_is_desk_sco
 
     // A direct/manual value from any attached surface takes ownership and remains the stable
     // fallback instead of silently retaining Sound mode.
-    let mut direct = state.configuration.read().clone();
-    direct.speed_groups_bpm[0] = 111.0;
     let direct_response = app
         .clone()
         .oneshot(
-            Request::put("/api/v1/configuration")
+            Request::post("/api/v2/speed-groups/A/actions")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(serde_json::to_vec(&direct).unwrap()))
+                .body(Body::from(r#"{"action":"set_bpm","bpm":111}"#))
                 .unwrap(),
         )
         .await
@@ -246,7 +347,7 @@ async fn sound_to_light_is_authoritative_per_speed_group_and_capture_is_desk_sco
     assert_eq!(direct_response.status(), StatusCode::OK);
     let current = app
         .oneshot(
-            Request::get("/api/v1/speed-groups/A")
+            Request::get("/api/v2/speed-groups/A")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),

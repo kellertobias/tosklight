@@ -19,3 +19,17 @@ pub struct ProgrammingUpdateSettingsProjection {
     pub desk_id: Uuid,
     pub settings: ProgrammingUpdateSettings,
 }
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammingUpdateSettingsUpdateRequest {
+    pub request_id: String,
+    pub settings: ProgrammingUpdateSettings,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammingUpdateSettingsUpdateOutcome {
+    pub request_id: String,
+    pub replayed: bool,
+    pub desk_id: Uuid,
+    pub settings: ProgrammingUpdateSettings,
+}

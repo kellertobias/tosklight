@@ -40,19 +40,17 @@ const state: SpeedGroupSoundState = {
 afterEach(cleanup);
 
 describe("SoundToLightModal", () => {
-  it("configures a portable sound profile while keeping the input assignment browser-local", async () => {
-    const onDeviceChange = vi.fn();
+  it("configures Sound to Light without owning the desk audio input", async () => {
     const onPreview = vi.fn();
-    const onSave = vi.fn(async (next: SoundToLightConfig) => ({ ...state, configuration: next }));
+    const onSave = vi.fn(async (next: SoundToLightConfig, source: SpeedGroupSoundState["source"]) => ({
+      ...state,
+      configuration: next,
+      source,
+    }));
     render(<SoundToLightModal
       group="A"
       state={state}
       capture={{ ...inactiveCaptureStatus, observation: { captured_at_millis: 1, source_available: true, usable_signal: true, level: 0.4, selected_band_level: 0.7, detected_bpm: 128, confidence: 0.91 } }}
-      permission="granted"
-      devices={[{ deviceId: "line-in", label: "USB Line Input" }]}
-      deviceId=""
-      onDeviceChange={onDeviceChange}
-      onRefreshInputs={vi.fn(async () => undefined)}
       onPreview={onPreview}
       onSave={onSave}
       onAction={vi.fn(async () => state)}
@@ -62,13 +60,9 @@ describe("SoundToLightModal", () => {
     expect(screen.getByRole("dialog", { name: "Speed Group A Sound to Light" })).toBeInTheDocument();
     expect(screen.getByText("128.0 BPM")).toBeInTheDocument();
     expect(screen.getByRole("meter", { name: "Selected band" })).toHaveAttribute("aria-valuenow", "70");
-    expect(screen.getByText(/device ID stays in this browser/i)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Not assigned on this browser" }));
-    fireEvent.click(screen.getByRole("option", { name: "System default input" }));
-    expect(onDeviceChange).toHaveBeenCalledWith("default");
-
-    fireEvent.click(screen.getByRole("switch", { name: "Enable Sound-to-Light" }));
+    expect(screen.queryByText(/audio input on this desk/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Manual" }));
+    fireEvent.click(screen.getByRole("option", { name: "Sound to Light" }));
     fireEvent.click(screen.getByRole("button", { name: "Low · 60–180 Hz" }));
     fireEvent.click(screen.getByRole("option", { name: "Custom range" }));
     const lowControl = screen.getByLabelText("Custom low frequency").closest(".ui-number-control")!;
@@ -105,32 +99,58 @@ describe("SoundToLightModal", () => {
     });
     expect(saved).not.toHaveProperty("device_id");
     expect(saved).not.toHaveProperty("deviceId");
+    expect(onSave.mock.calls[0][1]).toEqual({ type: "sound_to_light" });
     expect(onPreview).toHaveBeenCalledWith("A", expect.objectContaining({ enabled: true }));
   });
 
-  it("exposes Learn, ratio, and Pause through the authoritative action endpoint", async () => {
+  it("keeps Learn out of settings and exposes title actions without a Cancel footer", async () => {
     const onAction = vi.fn(async () => state);
     render(<SoundToLightModal
       group="A"
       state={state}
       capture={inactiveCaptureStatus}
-      permission="prompt"
-      devices={[]}
-      deviceId=""
-      onDeviceChange={vi.fn()}
-      onRefreshInputs={vi.fn(async () => undefined)}
       onPreview={vi.fn()}
       onSave={vi.fn(async () => state)}
       onAction={onAction}
       onClose={vi.fn()}
     />);
-    fireEvent.click(screen.getByRole("button", { name: "Learn" }));
-    await waitFor(() => expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ action: "learn", captured_at_millis: expect.any(Number) })));
-    fireEvent.click(screen.getByRole("button", { name: "Half" }));
+    expect(screen.queryByRole("button", { name: "Learn" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Half Speed Group speed" }));
     await waitFor(() => expect(onAction).toHaveBeenCalledWith({ action: "half" }));
-    fireEvent.click(screen.getByRole("button", { name: "Double" }));
+    fireEvent.click(screen.getByRole("button", { name: "Double Speed Group speed" }));
     await waitFor(() => expect(onAction).toHaveBeenCalledWith({ action: "double" }));
-    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pause Speed Group" }));
     await waitFor(() => expect(onAction).toHaveBeenCalledWith({ action: "pause" }));
+  });
+
+  it("guards dirty close with discard, save, and stay choices", async () => {
+    const onClose = vi.fn();
+    const onSave = vi.fn(async (next: SoundToLightConfig, source: SpeedGroupSoundState["source"]) => ({
+      ...state,
+      configuration: next,
+      source,
+    }));
+    render(<SoundToLightModal
+      group="A"
+      state={state}
+      capture={inactiveCaptureStatus}
+      onPreview={vi.fn()}
+      onSave={onSave}
+      onAction={vi.fn(async () => state)}
+      onClose={onClose}
+    />);
+    fireEvent.click(screen.getByRole("button", { name: "Manual" }));
+    fireEvent.click(screen.getByRole("option", { name: "Sound to Light" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close Speed Group settings" }));
+    const confirmation = screen.getByRole("alertdialog", { name: "Unsaved Speed Group settings" });
+    expect(within(confirmation).getByRole("button", { name: "Close and discard" })).toBeInTheDocument();
+    expect(within(confirmation).getByRole("button", { name: "Close and save" })).toBeInTheDocument();
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Stay" }));
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Close Speed Group settings" }));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Unsaved Speed Group settings" })).getByRole("button", { name: "Close and save" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }), { type: "sound_to_light" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

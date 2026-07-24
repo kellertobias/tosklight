@@ -48,7 +48,7 @@ export class LightBench {
     const process = this.process;
     if (!process?.pid || process.exitCode !== null) throw new Error("light-server is not running");
     const pid = process.pid;
-    const response = await fetch(`${this.baseUrl}/api/v1/shutdown`, {
+    const response = await fetch(`${this.baseUrl}/api/v2/shutdown`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(5_000),
@@ -158,7 +158,7 @@ export class LightBench {
     const deadline = Date.now() + timeout;
     let last: unknown = null;
     while (Date.now() < deadline) {
-      const response = await fetch(`${this.baseUrl}/api/v1/programmers`, {
+      const response = await fetch(`${this.baseUrl}/api/v2/programmers`, {
         headers: { authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(1_000),
       });
@@ -195,7 +195,7 @@ export class LightBench {
   async failureArtifacts(token: string): Promise<Record<string, string>> {
     let audit: unknown = [];
     try {
-      const response = await fetch(`${this.baseUrl}/api/v1/audit?after=0`, {
+      const response = await fetch(`${this.baseUrl}/api/v2/audit?after=0`, {
         headers: { authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(2_000),
       });

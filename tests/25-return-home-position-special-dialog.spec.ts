@@ -105,7 +105,7 @@ pairedScenario<ReturnHomeState>({
   assert: async ({ api }, state, surface) => {
     expect((await programmer(api)).selected).toEqual(surface === "ui" ? [] : state.selected);
     await expectAssignments(api, state.home);
-    const audit = await api.request<any[]>("GET", "/api/v1/audit?after=0");
+    const audit = await api.request<any[]>("GET", "/api/v2/audit?after=0");
     expect(audit.some((event) => event.kind === "programmer_changed")).toBe(true);
   },
 });

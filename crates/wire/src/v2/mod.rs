@@ -5,6 +5,7 @@ pub mod control_desk_configuration;
 pub mod cue_deletion;
 pub mod cue_recording;
 pub mod cue_transfer;
+pub mod desk_management;
 pub mod events;
 pub mod fixture_library;
 pub mod group_management;

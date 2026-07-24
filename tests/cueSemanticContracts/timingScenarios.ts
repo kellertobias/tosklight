@@ -241,9 +241,9 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await installPlaybackSequence(api, 1, [groupCue(10, [])]);
 		const configuration = await api.request<any>(
 			"GET",
-			"/api/v1/configuration",
+			"/api/v2/configuration",
 		);
-		await api.request("PUT", "/api/v1/configuration", {
+		await api.request("PUT", "/api/v2/configuration", {
 			...configuration,
 			programmer_fade_millis: 9_000,
 			sequence_master_fade_millis: 0,

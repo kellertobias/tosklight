@@ -73,7 +73,7 @@ export async function commandError(
 export async function programmer(api: ApiDriver): Promise<ProgrammerState> {
 	const programmers = await api.request<ProgrammerState[]>(
 		"GET",
-		"/api/v1/programmers",
+		"/api/v2/programmers",
 	);
 	const current =
 		programmers.find(
@@ -92,7 +92,7 @@ export async function expectProgrammer(
 			async () => {
 				const programmers = await api.request<ProgrammerState[]>(
 					"GET",
-					"/api/v1/programmers",
+					"/api/v2/programmers",
 				);
 				let lastError: unknown = null;
 				for (const snapshot of programmers) {

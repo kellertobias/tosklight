@@ -28,6 +28,7 @@ export function useSoundDeviceSelection(
 ) {
 	const [devices, setDevices] = useState<AudioInputDevice[]>([]);
 	const [deviceIds, setDeviceIds] = useState<SoundGroupMap<string>>({});
+	const [deviceId, setDeviceId] = useState("");
 	const [permission, setPermission] = useState<MicrophonePermission>("unknown");
 
 	const refreshInputs = useCallback(async () => {
@@ -52,43 +53,66 @@ export function useSoundDeviceSelection(
 
 	useEffect(() => {
 		if (!enabled || !deskId) {
+			setDeviceId("");
 			setDeviceIds((current) =>
 				Object.keys(current).length === 0 ? current : {},
 			);
 			return;
 		}
-		const mappings: SoundGroupMap<string> = {};
 		const storage = browserLocalStorage();
-		for (const group of speedGroupIds) {
-			const selected = storage?.getItem(soundDeviceStorageKey(deskId, group));
-			if (selected) mappings[group] = selected;
+		const selected =
+			storage?.getItem(soundDeviceStorageKey(deskId)) ??
+			speedGroupIds
+				.map((group) =>
+					storage?.getItem(soundDeviceStorageKey(deskId, group)),
+				)
+				.find(Boolean) ??
+			"";
+		if (selected) {
+			storage?.setItem(soundDeviceStorageKey(deskId), selected);
 		}
-		setDeviceIds(mappings);
+		setDeviceId(selected);
+		setDeviceIds(
+			selected
+				? (Object.fromEntries(
+						speedGroupIds.map((group) => [group, selected]),
+					) as SoundGroupMap<string>)
+				: {},
+		);
 	}, [deskId, enabled]);
 
-	const setDevice = useCallback(
-		(group: SpeedGroupId, deviceId: string) => {
+	const setDeskDevice = useCallback(
+		(nextDeviceId: string) => {
 			if (!enabled || !deskId) return;
-			const key = soundDeviceStorageKey(deskId, group);
+			const key = soundDeviceStorageKey(deskId);
 			const storage = browserLocalStorage();
-			if (deviceId) storage?.setItem(key, deviceId);
+			if (nextDeviceId) storage?.setItem(key, nextDeviceId);
 			else storage?.removeItem(key);
-			setDeviceIds((current) => {
-				const next = { ...current };
-				if (deviceId) next[group] = deviceId;
-				else delete next[group];
-				return next;
-			});
+			setDeviceId(nextDeviceId);
+			setDeviceIds(
+				nextDeviceId
+					? (Object.fromEntries(
+							speedGroupIds.map((group) => [group, nextDeviceId]),
+						) as SoundGroupMap<string>)
+					: {},
+			);
 		},
 		[deskId, enabled],
+	);
+	const setDevice = useCallback(
+		(_group: SpeedGroupId, nextDeviceId: string) =>
+			setDeskDevice(nextDeviceId),
+		[setDeskDevice],
 	);
 
 	return {
 		devices,
+		deviceId,
 		deviceIds,
 		permission,
 		setPermission,
 		refreshInputs,
 		setDevice,
+		setDeskDevice,
 	};
 }

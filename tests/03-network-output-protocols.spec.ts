@@ -414,10 +414,10 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       const before = await api.request<any>("GET", "/api/v2/diagnostics");
       if (surface === "api") expect(state.valuesEventSequence).not.toBeNull();
       else await expect.poll(async () =>
-        (await api.request<any[]>("GET", "/api/v1/audit?after=0"))
+        (await api.request<any[]>("GET", "/api/v2/audit?after=0"))
           .some((event) => event.kind === "command_applied"),
       ).toBe(true);
-      const auditBefore = await api.request<any[]>("GET", "/api/v1/audit?after=0");
+      const auditBefore = await api.request<any[]>("GET", "/api/v2/audit?after=0");
       const auditRevision = Math.max(0, ...auditBefore.map((event) => event.revision));
       const failingErrorsBefore = routeSendErrors(before, state.destination);
       const healthyDestination = `127.0.0.1:${bench.artnet.port}`;
@@ -432,7 +432,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       expect(after.output.send_errors).toBe(before.output.send_errors + 1);
       expect(routeSendErrors(after, state.destination)).toBe(failingErrorsBefore + 1);
       expect(routeSendErrors(after, healthyDestination)).toBe(healthyErrorsBefore);
-      expect(await api.request<any[]>("GET", `/api/v1/audit?after=${auditRevision}`)).toEqual([]);
+      expect(await api.request<any[]>("GET", `/api/v2/audit?after=${auditRevision}`)).toEqual([]);
 
       await api.request("POST", "/api/v1/test/output/failure", { destination: state.destination, enabled: false }, false);
       const recoveryMark = state.failing.mark();
@@ -571,7 +571,7 @@ async function captureConversion(api: ApiDriver, bench: any, fixtureId: string, 
   const sacnMark = bench.sacn.mark();
   const tick = await bench.tick(3_000);
   const offset = fixture.body.address - 1;
-  const programmer = await api.request<any[]>("GET", "/api/v1/programmers");
+  const programmer = await api.request<any[]>("GET", "/api/v2/programmers");
   const stored = programmer.flatMap((state) => state.values).find((entry: any) => entry.fixture_id === fixtureId && entry.attribute === "intensity");
   return {
     percent,

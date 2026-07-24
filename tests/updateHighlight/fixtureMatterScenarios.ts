@@ -88,12 +88,10 @@ pairedScenario<MatterScenarioState>({
 		await loadCanonicalCopy(api, bench, `matter-001-${surface}`);
 		const response = await api.request<any>(
 			"GET",
-			"/api/v1/configuration",
-			undefined,
-			false,
+			"/api/v2/configuration",
 		);
 		if (response.configuration.matter_enabled) {
-			await api.request("PUT", "/api/v1/configuration", {
+			await api.request("PUT", "/api/v2/configuration", {
 				...response.configuration,
 				matter_enabled: false,
 			});
@@ -102,24 +100,20 @@ pairedScenario<MatterScenarioState>({
 		return { observed: null, ...assignment };
 	},
 	api: async ({ api }, state) => {
-		const response = await api.request<any>(
-			"GET",
-			"/api/v1/configuration",
-			undefined,
-			false,
-		);
-		await api.request("PUT", "/api/v1/configuration", {
+			const response = await api.request<any>(
+				"GET",
+				"/api/v2/configuration",
+			);
+		await api.request("PUT", "/api/v2/configuration", {
 			...response.configuration,
 			matter_enabled: true,
 		});
-		state.observed = await api.request<any>("GET", "/api/v1/matter/status");
-		const enabled = await api.request<any>(
-			"GET",
-			"/api/v1/configuration",
-			undefined,
-			false,
-		);
-		await api.request("PUT", "/api/v1/configuration", {
+		state.observed = await api.request<any>("GET", "/api/v2/matter/status");
+			const enabled = await api.request<any>(
+				"GET",
+				"/api/v2/configuration",
+			);
+		await api.request("PUT", "/api/v2/configuration", {
 			...enabled.configuration,
 			matter_enabled: false,
 		});
@@ -154,16 +148,14 @@ pairedScenario<MatterScenarioState>({
 			.poll(
 				async () =>
 					(
-						await api.request<any>(
-							"GET",
-							"/api/v1/configuration",
-							undefined,
-							false,
-						)
+							await api.request<any>(
+								"GET",
+								"/api/v2/configuration",
+							)
 					).configuration.matter_enabled,
 			)
 			.toBe(true);
-		state.observed = await api.request<any>("GET", "/api/v1/matter/status");
+		state.observed = await api.request<any>("GET", "/api/v2/matter/status");
 		await settings
 			.getByRole("switch", { name: "Matter server enabled" })
 			.click();
@@ -171,12 +163,10 @@ pairedScenario<MatterScenarioState>({
 			.poll(
 				async () =>
 					(
-						await api.request<any>(
-							"GET",
-							"/api/v1/configuration",
-							undefined,
-							false,
-						)
+							await api.request<any>(
+								"GET",
+								"/api/v2/configuration",
+							)
 					).configuration.matter_enabled,
 			)
 			.toBe(false);
@@ -208,14 +198,12 @@ pairedScenario<MatterScenarioState>({
 		);
 		const emptyEndpoint = 1 + (state.page - 1) * 127 + (state.emptySlot - 1);
 		expect(endpointIds).not.toContain(emptyEndpoint);
-		const configuration = await api.request<any>(
-			"GET",
-			"/api/v1/configuration",
-			undefined,
-			false,
-		);
+			const configuration = await api.request<any>(
+				"GET",
+				"/api/v2/configuration",
+			);
 		expect(configuration.configuration.matter_enabled).toBe(false);
-		const disabled = await api.request<any>("GET", "/api/v1/matter/status");
+		const disabled = await api.request<any>("GET", "/api/v2/matter/status");
 		expect(disabled.lights).toEqual([]);
 	},
 });

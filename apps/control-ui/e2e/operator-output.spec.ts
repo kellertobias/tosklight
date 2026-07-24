@@ -155,7 +155,7 @@ test("touch programmer path is audited and reaches the rendered DMX output", asy
   await expect.poll(() => page.evaluate(() => window.__lightAuditEvents.some((event) => event.kind === "command_applied" && event.payload.command === "programmer.values.action"))).toBeTruthy();
   await waitForDmx(request, 191);
 
-  const audit = await jsonRequest<AuditEvent[]>(request, "get", "/api/v1/audit?after=0", setupSession);
+  const audit = await jsonRequest<AuditEvent[]>(request, "get", "/api/v2/audit?after=0", setupSession);
   expect(audit.some((event) => event.kind === "command_applied" && event.payload.command === "programmer.values.action")).toBeTruthy();
 
   await page.getByTitle("Open running and output controls").click();

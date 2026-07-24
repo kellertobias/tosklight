@@ -37,7 +37,7 @@ use axum::{
     http::{HeaderMap, Method, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{delete, get, post, put},
+    routing::{delete, get, post},
 };
 use base64::{
     Engine as _,
@@ -108,6 +108,7 @@ mod configuration;
 mod control_desk_configuration_v2;
 mod control_inputs;
 mod cue_speed_commands;
+mod desk_management_v2;
 mod engine_selection_refresh;
 mod event_ws;
 mod fixture_api;

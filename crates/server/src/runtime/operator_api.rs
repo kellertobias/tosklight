@@ -188,7 +188,7 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
         clients,
         active_show: state.active_show.read().clone().map(runtime_wire::show),
         // Bootstrap is intentionally available before login so clients can discover enabled
-        // users. Programmer state is authenticated separately through `/api/v1/programmers`.
+        // users. Programmer state is authenticated separately through `/api/v2/programmers`.
         active_programmers: Vec::new(),
         highlight_states,
         frame_rate_hz: state.output_rate.load(Ordering::Relaxed),

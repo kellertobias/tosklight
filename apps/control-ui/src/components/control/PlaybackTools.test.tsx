@@ -155,6 +155,7 @@ vi.mock(
 );
 
 afterEach(() => {
+	vi.useRealTimers();
 	cleanup();
 	server.session = null;
 	playbackDesk = { active_page: 1 };
@@ -663,26 +664,61 @@ describe("PlaybackTools", () => {
 		expect(runtimeActions.setActivePage).not.toHaveBeenCalled();
 	});
 
-	it("opens the selected Speed Group Sound-to-Light configuration instead of treating the UI button as a Learn tap", async () => {
+	it("taps tempo on ordinary activation and opens settings only with Shift", async () => {
 		server.session = { session_id: "session-a", desk: { id: "desk-a" } };
 		server.speedGroup.mockImplementation(async (group: SpeedGroupId) =>
 			soundState(group),
 		);
+		server.speedGroupAction.mockImplementation(async (group: SpeedGroupId) =>
+			soundState(group),
+		);
 		render(<PlaybackTools />);
-		expect(server.speedGroup).not.toHaveBeenCalled();
+		await waitFor(() => expect(server.speedGroup).toHaveBeenCalledTimes(5));
 		fireEvent.click(
 			screen.getByRole("button", { name: "Speed group A, 120 BPM" }),
 		);
-		await waitFor(() => expect(server.speedGroup).toHaveBeenCalledTimes(5));
+		await waitFor(() =>
+			expect(server.speedGroupAction).toHaveBeenCalledWith(
+				"A",
+				expect.objectContaining({
+					action: "learn",
+					captured_at_millis: expect.any(Number),
+				}),
+			),
+		);
+		expect(screen.queryByRole("dialog", { name: "Speed Group A Sound to Light" })).not.toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Speed group A, 120 BPM" }),
+			{ shiftKey: true },
+		);
 		expect(
 			await screen.findByRole("dialog", {
 				name: "Speed Group A Sound to Light",
 			}),
 		).toBeInTheDocument();
-		expect(
-			screen.getByText("Audio input on this desk/browser"),
-		).toBeInTheDocument();
 		expect(server.setControlTiming).not.toHaveBeenCalled();
+	});
+
+	it("opens Speed Group settings after a hold without also tapping tempo", async () => {
+		server.session = { session_id: "session-a", desk: { id: "desk-a" } };
+		server.speedGroup.mockImplementation(async (group: SpeedGroupId) =>
+			soundState(group),
+		);
+		render(<PlaybackTools />);
+		await waitFor(() => expect(server.speedGroup).toHaveBeenCalledTimes(5));
+		vi.useFakeTimers();
+		const speedGroup = screen.getByRole("button", {
+			name: "Speed group A, 120 BPM",
+		});
+		fireEvent.pointerDown(speedGroup);
+		act(() => vi.advanceTimersByTime(650));
+		fireEvent.pointerUp(speedGroup);
+		fireEvent.click(speedGroup);
+		expect(
+			screen.getByRole("dialog", {
+				name: "Speed Group A Sound to Light",
+			}),
+		).toBeInTheDocument();
 		expect(server.speedGroupAction).not.toHaveBeenCalled();
 	});
 

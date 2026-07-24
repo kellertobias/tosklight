@@ -150,7 +150,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       try {
         await expect.poll(async () => normalizeCommand((await programmerForSession(api, first)).command_line)).toBe("GROUP 1 +");
         await expect.poll(async () => normalizeCommand((await programmerForSession(api, state.second)).command_line)).toBe("GROUP 2 +");
-        const states = await api.request<any[]>("GET", "/api/v1/programmers");
+        const states = await api.request<any[]>("GET", "/api/v2/programmers");
         expect(states.filter((entry) => [first.session_id, state.second.session_id].includes(entry.session_id))
           .every((entry) => entry.values.length === 0 && Object.keys(entry.group_values).length === 0)).toBe(true);
 
@@ -202,7 +202,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await expect(page.getByLabel("Command line")).toHaveClass(/error/);
     },
     assert: async ({ api, bench }) => {
-      const states = await api.request<any[]>("GET", "/api/v1/programmers");
+      const states = await api.request<any[]>("GET", "/api/v2/programmers");
       expect(states.every((state) => state.values.length === 0 && Object.keys(state.group_values).length === 0)).toBe(true);
       expect((await bench.tick(0)).universes.find((entry: any) => entry.universe === 1)!.slots.slice(0, 12)).toEqual(Array(12).fill(0));
     },
@@ -240,7 +240,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       }
       expect(second.command_line).toBe("GROUP 1 +");
 
-      const completed = (await api.request<any[]>("GET", `/api/v1/audit?after=${state.auditBefore}`))
+      const completed = (await api.request<any[]>("GET", `/api/v2/audit?after=${state.auditBefore}`))
         .filter((event) => event.kind === "command_applied" && event.payload?.command === "programmer.execute");
       expect(completed).toHaveLength(1);
       const mark = bench.artnet.mark();
@@ -351,7 +351,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     },
     assert: async ({ api }, state) => {
       expect((await objects(api, "group")).some((entry) => entry.id === "90")).toBe(false);
-      const events = await api.request<any[]>("GET", `/api/v1/audit?after=${state.auditBefore}`);
+      const events = await api.request<any[]>("GET", `/api/v2/audit?after=${state.auditBefore}`);
       expect(events.filter((event: any) => /group|show_object|command/.test(event.kind)).length).toBeGreaterThanOrEqual(3);
     },
   });
@@ -386,7 +386,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       .rejects.toThrow(/409.*revision conflict/i);
 
     const requestId = "api-003-execute-group-1";
-    const historyBefore = await api.request<any[]>("GET", "/api/v1/command-history");
+    const historyBefore = await api.request<any[]>("GET", "/api/v2/command-history");
     const auditBefore = (await audit(api)).at(-1)?.revision ?? 0;
     const executed = await api.executeCommandLineRaw(undefined, requestId);
     expect(executed).toMatchObject({
@@ -395,16 +395,16 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       applied: 12,
       command_line: { text: "GROUP", target: "GROUP", pristine: true },
     });
-    const historyAfterExecution = await api.request<any[]>("GET", "/api/v1/command-history");
+    const historyAfterExecution = await api.request<any[]>("GET", "/api/v2/command-history");
     expect(historyAfterExecution).toHaveLength(historyBefore.length + 1);
-    const executionEvents = (await api.request<any[]>("GET", `/api/v1/audit?after=${auditBefore}`))
+    const executionEvents = (await api.request<any[]>("GET", `/api/v2/audit?after=${auditBefore}`))
       .filter((event) => event.payload?.request_id === requestId);
     expect(executionEvents.filter((event) => event.kind === "command_applied")).toHaveLength(1);
     expect(executionEvents.filter((event) => event.kind === "programmer_changed")).toHaveLength(1);
 
     expect(await api.executeCommandLineRaw(undefined, requestId)).toEqual(executed);
-    expect(await api.request<any[]>("GET", "/api/v1/command-history")).toEqual(historyAfterExecution);
-    const replayEvents = (await api.request<any[]>("GET", `/api/v1/audit?after=${auditBefore}`))
+    expect(await api.request<any[]>("GET", "/api/v2/command-history")).toEqual(historyAfterExecution);
+    const replayEvents = (await api.request<any[]>("GET", `/api/v2/audit?after=${auditBefore}`))
       .filter((event) => event.payload?.request_id === requestId);
     expect(replayEvents).toEqual(executionEvents);
 
@@ -607,7 +607,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await hardware.send("/light/main/programmer/unknown", [true]);
       await hardware.send("/light/main/programmer/digit-1", [true]);
       await bench.tick(0);
-      const states = await api.request<any[]>("GET", "/api/v1/programmers");
+      const states = await api.request<any[]>("GET", "/api/v2/programmers");
       expect(states.every((state) => !state.command_line && state.values.length === 0)).toBe(true);
     } finally { await hardware.close(); }
   });
@@ -658,7 +658,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
         await expect.poll(async () => fixtureProgrammerValue(api, fixtures[number], "intensity")).toBeCloseTo(0.5, 4);
       }
       await expect(secondPage.getByLabel("Command line")).toHaveValue("G1 + F2");
-      const completed = (await api.request<any[]>("GET", `/api/v1/audit?after=${commandRevision}`))
+      const completed = (await api.request<any[]>("GET", `/api/v2/audit?after=${commandRevision}`))
         .filter((event) => event.kind === "command_applied");
       expect(completed).toHaveLength(1);
       const art = bench.artnet.mark(); await bench.tick(3_000);
@@ -912,7 +912,7 @@ async function assertRevisionConflict(api: ApiDriver, state: RevisionConflictSta
 }
 
 async function programmerForSession(api: ApiDriver, session: Session): Promise<any> {
-  const states = await api.request<any[]>("GET", "/api/v1/programmers");
+  const states = await api.request<any[]>("GET", "/api/v2/programmers");
   const found = states.find((state) => state.session_id === session.session_id);
   expect(found).toBeDefined();
   return found!;
@@ -924,7 +924,7 @@ function programmerFixtureValue(programmer: any, fixtureId: string, attribute: s
 }
 
 async function audit(api: ApiDriver): Promise<any[]> {
-  return api.request<any[]>("GET", "/api/v1/audit?after=0");
+  return api.request<any[]>("GET", "/api/v2/audit?after=0");
 }
 
 async function appendFixtureFive(api: ApiDriver): Promise<number> {
@@ -1073,13 +1073,13 @@ async function ensureGroupSeven(api: ApiDriver): Promise<void> {
 }
 
 async function fixtureProgrammerValue(api: ApiDriver, fixtureId: string, attribute: string): Promise<number | null> {
-  const states = await api.request<any[]>("GET", "/api/v1/programmers");
+  const states = await api.request<any[]>("GET", "/api/v2/programmers");
   const value = states.flatMap((state) => state.values).find((entry) => entry.fixture_id === fixtureId && entry.attribute === attribute);
   return normalizedValue(value);
 }
 
 async function programmerCommand(api: ApiDriver, session: Session): Promise<string | null> {
-  const states = await api.request<any[]>("GET", "/api/v1/programmers");
+  const states = await api.request<any[]>("GET", "/api/v2/programmers");
   return states.find((state) => state.session_id === session.session_id)?.command_line?.trim() ?? null;
 }
 

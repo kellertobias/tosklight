@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSequenceMasterFadeMillis } from "../../features/configuration/ConfigurationState";
 import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
@@ -31,7 +31,10 @@ export function PlaybackTools() {
 	const command = useCommandLineSurface({ observeCommand: false });
 	const speedGroups = useSpeedGroupRuntimeView();
 	const [soundGroup, setSoundGroup] = useState<SpeedGroupId | null>(null);
-	const sound = useSoundToLight(soundGroup !== null);
+	const sound = useSoundToLight(true);
+	const holdTimer = useRef<number | null>(null);
+	const heldGroup = useRef<SpeedGroupId | null>(null);
+	const suppressClick = useRef(false);
 	useSpeedGroupKeyboardTap(sound.action);
 	const pressCommandKey = (key: SoftwareKey) => {
 		const currentCommand = command.read();
@@ -67,25 +70,49 @@ export function PlaybackTools() {
 		if (edited.execute) void command.execute(edited.command);
 	};
 	const selectedSoundState = soundGroup ? sound.states[soundGroup] : undefined;
+	const cancelHold = () => {
+		if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
+		holdTimer.current = null;
+		heldGroup.current = null;
+	};
+	const beginHold = (group: SpeedGroupId, modified: boolean) => {
+		cancelHold();
+		if (modified) return;
+		heldGroup.current = group;
+		holdTimer.current = window.setTimeout(() => {
+			if (heldGroup.current !== group) return;
+			suppressClick.current = true;
+			setSoundGroup(group);
+			cancelHold();
+		}, 650);
+	};
+	const activateSpeedGroup = (
+		group: SpeedGroupId,
+		modified: boolean,
+	) => {
+		cancelHold();
+		if (suppressClick.current) {
+			suppressClick.current = false;
+			return;
+		}
+		if (modified || state.shiftArmed) {
+			if (state.shiftArmed)
+				dispatch({ type: "SET_SHIFT_ARMED", value: false });
+			setSoundGroup(group);
+			return;
+		}
+		void sound.action(group, {
+			action: "learn",
+			captured_at_millis: monotonicEpochMillis(),
+		});
+	};
 	return (
 		<div className="playback-tools">
-			<div className="playback-command-keys">
-				{(["SET", "CPY", "MOV", "DEL", "SHIFT"] as const).map((key) => (
-					<Button
-						className={
-							(key === "SET" && state.playbackSetArmed) ||
-							(key === "SHIFT" && state.shiftArmed)
-								? "active"
-								: ""
-						}
-						data-keypad-key={key}
-						key={key}
-						onClick={() => pressCommandKey(key)}
-					>
-						{key}
-					</Button>
-				))}
-			</div>
+			<PlaybackCommandKeys
+				setArmed={state.playbackSetArmed}
+				shiftArmed={state.shiftArmed}
+				onPress={pressCommandKey}
+			/>
 			<PlaybackPageControl />
 			<ProgrammerFadeFader />
 			<div className="cue-fade-master">
@@ -103,55 +130,28 @@ export function PlaybackTools() {
 					}
 				/>
 			</div>
-			<div className="speed-group-stack">
-				{(["A", "B", "C", "D", "E"] as const).map((group, index) => {
-					const speedState = sound.states[group];
-					const bpm = speedGroups.ready
-						? speedGroups.projection?.groups[index]?.manualBpm
-						: undefined;
-					const displayBpm =
-						bpm === undefined
-							? "—"
-							: Number.isInteger(bpm)
-								? String(bpm)
-								: bpm.toFixed(1);
-					return (
-						<Button
-							style={
-								bpm === undefined
-									? undefined
-									: ({ "--bpm": bpm } as CSSProperties)
-							}
-							className={`active ${speedState?.configuration.enabled ? "sound-enabled" : ""}`}
-							aria-label={
-								bpm === undefined
-									? `Speed group ${group}, loading`
-									: `Speed group ${group}, ${displayBpm} BPM`
-							}
-							title={`Open Speed Group ${group} Sound-to-Light configuration`}
-							key={group}
-							onClick={() => setSoundGroup(group)}
-						>
-							<strong className="speed-group-label">{group}</strong>
-							<span className="speed-group-value">{displayBpm}</span>
-							<small className="speed-group-unit">BPM</small>
-						</Button>
-					);
-				})}
-			</div>
+			<SpeedGroupControls
+				bpms={
+					speedGroups.ready
+						? speedGroups.projection?.groups.map((group) => group.manualBpm) ?? []
+						: []
+				}
+				controller={sound}
+				shiftArmed={state.shiftArmed}
+				onHoldStart={beginHold}
+				onHoldEnd={cancelHold}
+				onActivate={activateSpeedGroup}
+			/>
 			{soundGroup && selectedSoundState && (
 				<SoundToLightModal
 					group={soundGroup}
 					state={selectedSoundState}
 					capture={sound.captures[soundGroup] ?? inactiveCaptureStatus}
-					permission={sound.permission}
-					devices={sound.devices}
-					deviceId={sound.deviceIds[soundGroup] ?? ""}
 					controllerError={sound.error}
-					onDeviceChange={(deviceId) => sound.setDevice(soundGroup, deviceId)}
-					onRefreshInputs={sound.refreshInputs}
 					onPreview={sound.setPreview}
-					onSave={(configuration) => sound.save(soundGroup, configuration)}
+					onSave={(configuration, source) =>
+						sound.save(soundGroup, configuration, source)
+					}
 					onAction={(input) => sound.action(soundGroup, input)}
 					onClose={() => setSoundGroup(null)}
 				/>
@@ -163,6 +163,91 @@ export function PlaybackTools() {
 					onClose={() => setSoundGroup(null)}
 				/>
 			)}
+		</div>
+	);
+}
+
+function PlaybackCommandKeys({
+	setArmed,
+	shiftArmed,
+	onPress,
+}: {
+	setArmed: boolean;
+	shiftArmed: boolean;
+	onPress: (key: SoftwareKey) => void;
+}) {
+	return <div className="playback-command-keys">
+		{(["SET", "CPY", "MOV", "DEL", "SHIFT"] as const).map((key) => (
+			<Button
+				className={
+					(key === "SET" && setArmed) || (key === "SHIFT" && shiftArmed)
+						? "active"
+						: ""
+				}
+				data-keypad-key={key}
+				key={key}
+				onClick={() => onPress(key)}
+			>
+				{key}
+			</Button>
+		))}
+	</div>;
+}
+
+function SpeedGroupControls({
+	bpms,
+	controller,
+	shiftArmed,
+	onHoldStart,
+	onHoldEnd,
+	onActivate,
+}: {
+	bpms: Array<number | undefined>;
+	controller: SoundToLightController;
+	shiftArmed: boolean;
+	onHoldStart: (group: SpeedGroupId, modified: boolean) => void;
+	onHoldEnd: () => void;
+	onActivate: (group: SpeedGroupId, modified: boolean) => void;
+}) {
+	return (
+		<div className="speed-group-stack">
+			{(["A", "B", "C", "D", "E"] as const).map((group, index) => {
+				const bpm = bpms[index];
+				const displayBpm =
+					bpm === undefined
+						? "—"
+						: Number.isInteger(bpm)
+							? String(bpm)
+							: bpm.toFixed(1);
+				return (
+					<Button
+						style={
+							bpm === undefined
+								? undefined
+								: ({ "--bpm": bpm } as CSSProperties)
+						}
+						className={`active ${controller.states[group]?.configuration.enabled ? "sound-enabled" : ""}`}
+						aria-label={
+							bpm === undefined
+								? `Speed group ${group}, loading`
+								: `Speed group ${group}, ${displayBpm} BPM`
+						}
+						title={`Tap Speed Group ${group}; Shift or hold for settings`}
+						key={group}
+						onPointerDown={(event) =>
+							onHoldStart(group, event.shiftKey || shiftArmed)
+						}
+						onPointerUp={onHoldEnd}
+						onPointerCancel={onHoldEnd}
+						onPointerLeave={onHoldEnd}
+						onClick={(event) => onActivate(group, event.shiftKey)}
+					>
+						<strong className="speed-group-label">{group}</strong>
+						<span className="speed-group-value">{displayBpm}</span>
+						<small className="speed-group-unit">BPM</small>
+					</Button>
+				);
+			})}
 		</div>
 	);
 }

@@ -60,6 +60,8 @@ pub(super) struct AppState {
         Arc<tokio::sync::Mutex<screen_configuration_v2::ScreenConfigurationReplayCache>>,
     pub(super) control_desk_configuration_replay:
         Arc<tokio::sync::Mutex<control_desk_configuration_v2::ControlDeskConfigurationReplayCache>>,
+    pub(super) desk_management_replay:
+        Arc<tokio::sync::Mutex<desk_management_v2::DeskManagementReplayCache>>,
     pub(super) stage_layout_replay: Arc<Mutex<stage_layout_http::StageLayoutReplayCache>>,
     pub(super) virtual_playback_zones_replay:
         Arc<Mutex<virtual_playback_zones_http::VirtualPlaybackZonesReplayCache>>,
@@ -108,6 +110,7 @@ pub(super) struct SoundCaptureOwner {
 #[derive(Serialize)]
 pub(super) struct SpeedGroupResponse {
     pub(super) group: String,
+    pub(super) source: light_wire::v2::desk_management::SpeedGroupSource,
     pub(super) configuration: SoundToLightConfig,
     pub(super) snapshot: SpeedSnapshot,
 }

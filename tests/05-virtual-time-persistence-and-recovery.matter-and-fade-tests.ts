@@ -25,11 +25,9 @@ export function registerMatterRestartTest(): void {
 		const showA = await loadCanonicalCopy(api, bench, "matter-002-a");
 		const configuration = await api.request<any>(
 			"GET",
-			"/api/v1/configuration",
-			undefined,
-			false,
+			"/api/v2/configuration",
 		);
-		await api.request("PUT", "/api/v1/configuration", {
+		await api.request("PUT", "/api/v2/configuration", {
 			...configuration.configuration,
 			matter_enabled: true,
 		});
@@ -37,7 +35,7 @@ export function registerMatterRestartTest(): void {
 		const endpointId = 1 + (assignment.page - 1) * 127 + (assignment.slot - 1);
 		await expect
 			.poll(async () => {
-				const status = await api.request<any>("GET", "/api/v1/matter/status");
+				const status = await api.request<any>("GET", "/api/v2/matter/status");
 				return status.lights.find(
 					(light: any) => light.endpoint_id === endpointId,
 				)?.playback_number;
@@ -48,14 +46,14 @@ export function registerMatterRestartTest(): void {
 		expect(showB.id).not.toBe(showA.id);
 		await expect
 			.poll(async () => {
-				const status = await api.request<any>("GET", "/api/v1/matter/status");
+				const status = await api.request<any>("GET", "/api/v2/matter/status");
 				return status.lights.some(
 					(light: any) => light.endpoint_id === endpointId,
 				);
 			})
 			.toBe(false);
 		expect(
-			(await api.request<any>("GET", "/api/v1/configuration", undefined, false))
+			(await api.request<any>("GET", "/api/v2/configuration"))
 				.configuration.matter_enabled,
 		).toBe(true);
 
@@ -64,7 +62,7 @@ export function registerMatterRestartTest(): void {
 		});
 		await expect
 			.poll(async () => {
-				const status = await api.request<any>("GET", "/api/v1/matter/status");
+				const status = await api.request<any>("GET", "/api/v2/matter/status");
 				return status.lights.find(
 					(light: any) => light.endpoint_id === endpointId,
 				)?.playback_number;
@@ -75,7 +73,7 @@ export function registerMatterRestartTest(): void {
 		await bench.startServer();
 		await api.login();
 		expect(
-			(await api.request<any>("GET", "/api/v1/configuration", undefined, false))
+			(await api.request<any>("GET", "/api/v2/configuration"))
 				.configuration.matter_enabled,
 		).toBe(true);
 		expect(
@@ -84,20 +82,18 @@ export function registerMatterRestartTest(): void {
 		).toBe(showA.id);
 		await expect
 			.poll(async () => {
-				const status = await api.request<any>("GET", "/api/v1/matter/status");
+				const status = await api.request<any>("GET", "/api/v2/matter/status");
 				return status.lights.find(
 					(light: any) => light.endpoint_id === endpointId,
 				)?.playback_number;
 			})
 			.toBe(assignment.playbackNumber);
 
-		const enabled = await api.request<any>(
-			"GET",
-			"/api/v1/configuration",
-			undefined,
-			false,
-		);
-		await api.request("PUT", "/api/v1/configuration", {
+			const enabled = await api.request<any>(
+				"GET",
+				"/api/v2/configuration",
+			);
+		await api.request("PUT", "/api/v2/configuration", {
 			...enabled.configuration,
 			matter_enabled: false,
 		});
@@ -105,11 +101,11 @@ export function registerMatterRestartTest(): void {
 		await bench.startServer();
 		await api.login();
 		expect(
-			(await api.request<any>("GET", "/api/v1/configuration", undefined, false))
+			(await api.request<any>("GET", "/api/v2/configuration"))
 				.configuration.matter_enabled,
 		).toBe(false);
 		expect(
-			(await api.request<any>("GET", "/api/v1/matter/status")).lights,
+			(await api.request<any>("GET", "/api/v2/matter/status")).lights,
 		).toEqual([]);
 	});
 }

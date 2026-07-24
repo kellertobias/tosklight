@@ -105,8 +105,8 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
   });
 
   test("MANUAL-019 @ui › every operator file field opens the confined picker with its own extension contract", async ({ api, desk, page }) => {
-    const configuration = await api.request<any>("GET", "/api/v1/configuration");
-    await api.request("PUT", "/api/v1/configuration", {
+    const configuration = await api.request<any>("GET", "/api/v2/configuration");
+    await api.request("PUT", "/api/v2/configuration", {
       ...configuration.configuration,
       file_manager_system_picker_fallback: false,
     });

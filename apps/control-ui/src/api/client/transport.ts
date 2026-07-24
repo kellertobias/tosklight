@@ -9,6 +9,7 @@ export interface ClientTransport {
 }
 
 export interface LiveClientTransport extends ClientTransport {
+	currentDeskId(): string | null;
 	command(
 		command: string,
 		payload: unknown,

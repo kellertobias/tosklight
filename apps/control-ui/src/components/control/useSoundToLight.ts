@@ -38,11 +38,13 @@ export interface SoundToLightController {
 	states: SoundGroupMap<SpeedGroupSoundState>;
 	captures: SoundGroupMap<SoundCaptureStatus>;
 	devices: AudioInputDevice[];
+	deviceId: string;
 	deviceIds: SoundGroupMap<string>;
 	permission: MicrophonePermission;
 	loading: boolean;
 	error: string | null;
 	setDevice: (group: SpeedGroupId, deviceId: string) => void;
+	setDeskDevice: (deviceId: string) => void;
 	setPreview: (
 		group: SpeedGroupId,
 		configuration: SoundToLightConfig | null,
@@ -51,6 +53,7 @@ export interface SoundToLightController {
 	save: (
 		group: SpeedGroupId,
 		configuration: SoundToLightConfig,
+		source?: import("../../api/types").SpeedGroupSource,
 	) => Promise<SpeedGroupSoundState>;
 	action: (
 		group: SpeedGroupId,
@@ -79,11 +82,13 @@ export function useSoundToLight(enabled = true): SoundToLightController {
 
 	const {
 		devices,
+		deviceId,
 		deviceIds,
 		permission,
 		setPermission,
 		refreshInputs,
 		setDevice,
+		setDeskDevice,
 	} = useSoundDeviceSelection(enabled ? deskId : null, mounted, enabled);
 
 	useEffect(() => {
@@ -124,10 +129,18 @@ export function useSoundToLight(enabled = true): SoundToLightController {
 	);
 
 	const save = useCallback(
-		async (group: SpeedGroupId, configuration: SoundToLightConfig) => {
+		async (
+			group: SpeedGroupId,
+			configuration: SoundToLightConfig,
+			source?: import("../../api/types").SpeedGroupSource,
+		) => {
 			try {
 				const state = acceptState(
-					await requireSound(serverRef.current).updateSpeedGroup(group, configuration),
+					await requireSound(serverRef.current).updateSpeedGroup(
+						group,
+						configuration,
+						source,
+					),
 				);
 				setError(null);
 				return state;
@@ -163,11 +176,13 @@ export function useSoundToLight(enabled = true): SoundToLightController {
 		states,
 		captures,
 		devices,
+		deviceId,
 		deviceIds,
 		permission,
 		loading,
 		error,
 		setDevice,
+		setDeskDevice,
 		setPreview,
 		refreshInputs,
 		save,

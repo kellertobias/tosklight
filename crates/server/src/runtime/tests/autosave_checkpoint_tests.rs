@@ -66,16 +66,19 @@ async fn autosave_interval_is_validated_operator_configuration() {
         (5, StatusCode::OK),
         (600, StatusCode::OK),
     ] {
-        let mut configuration =
-            serde_json::to_value(state.configuration.read().clone()).unwrap();
-        configuration["autosave_interval_seconds"] = serde_json::json!(value);
         let response = app
             .clone()
             .oneshot(
-                Request::put("/api/v1/configuration")
+                Request::post("/api/v2/configuration/update")
                     .header(header::CONTENT_TYPE, "application/json")
                     .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                    .body(Body::from(configuration.to_string()))
+                    .body(Body::from(
+                        serde_json::json!({
+                            "request_id":format!("autosave-{value}"),
+                            "patch":{"autosave_interval_seconds":value}
+                        })
+                        .to_string(),
+                    ))
                     .unwrap(),
             )
             .await

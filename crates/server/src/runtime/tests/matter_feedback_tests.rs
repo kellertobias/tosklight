@@ -153,15 +153,15 @@ async fn matter_enablement_is_desk_persistent_and_status_is_explicit() {
         .unwrap();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
-    let mut configuration = state.configuration.read().clone();
-    configuration.matter_enabled = true;
     let response = app
         .clone()
         .oneshot(
-            Request::put("/api/v1/configuration")
+            Request::post("/api/v2/configuration/update")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(serde_json::to_vec(&configuration).unwrap()))
+                .body(Body::from(
+                    r#"{"request_id":"matter-enable","patch":{"matter_enabled":true}}"#,
+                ))
                 .unwrap(),
         )
         .await
@@ -186,7 +186,7 @@ async fn matter_enablement_is_desk_persistent_and_status_is_explicit() {
 
     let status = app
         .oneshot(
-            Request::get("/api/v1/matter/status")
+            Request::get("/api/v2/matter/status")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),

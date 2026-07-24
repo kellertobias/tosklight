@@ -130,11 +130,29 @@ pub(super) fn application_millis(state: &AppState) -> u64 {
 /// separate phase-advancing flag so resuming does not lose that rate.
 pub(super) fn refresh_speed_group_engine(state: &AppState) -> [SpeedSnapshot; 5] {
     let now = application_millis(state);
-    let snapshots = {
+    let mut snapshots = {
         let controllers = state.speed_groups.lock();
         std::array::from_fn(|index| controllers[index].snapshot(now))
     };
     let timing = state.configuration.read().clone();
+    let base = snapshots;
+    for index in 0..snapshots.len() {
+        let mut source = index;
+        while let SpeedGroupSource::SpeedGroup { group } = timing.speed_group_sources[source] {
+            let next = usize::from(group).saturating_sub(1);
+            if next >= snapshots.len() || next == source {
+                break;
+            }
+            source = next;
+        }
+        if source != index {
+            snapshots[index].effective_bpm = base[source].effective_bpm;
+            snapshots[index].phase_advancing =
+                base[source].phase_advancing && !snapshots[index].paused;
+            snapshots[index].phase_origin_millis = base[source].phase_origin_millis;
+            snapshots[index].beat_phase = base[source].beat_phase;
+        }
+    }
     let effective_bpm = snapshots.map(|snapshot| snapshot.effective_bpm.clamp(0.1, 999.0));
     state.engine.set_control_timing(
         effective_bpm,
@@ -166,8 +184,31 @@ pub(super) fn speed_group_response(
     let configuration = state.speed_groups.lock()[index].sound_config().clone();
     SpeedGroupResponse {
         group: speed_group_name(index),
+        source: wire_speed_group_source(state.configuration.read().speed_group_sources[index]),
         configuration,
         snapshot: snapshots[index],
+    }
+}
+
+fn wire_speed_group_source(
+    source: SpeedGroupSource,
+) -> light_wire::v2::desk_management::SpeedGroupSource {
+    use light_wire::v2::{
+        desk_management::SpeedGroupSource as WireSource, speed_group::SpeedGroupId as WireGroup,
+    };
+    match source {
+        SpeedGroupSource::Manual => WireSource::Manual,
+        SpeedGroupSource::SoundToLight => WireSource::SoundToLight,
+        SpeedGroupSource::SpeedGroup { group } => WireSource::SpeedGroup {
+            group: match group {
+                1 => WireGroup::A,
+                2 => WireGroup::B,
+                3 => WireGroup::C,
+                4 => WireGroup::D,
+                5 => WireGroup::E,
+                _ => unreachable!("validated Speed Group sources stay within A-E"),
+            },
+        },
     }
 }
 
@@ -179,34 +220,6 @@ pub(super) async fn speed_group(
     let _session = authenticate(&state, &headers)?;
     let index = speed_group_index(&group)?;
     let snapshots = refresh_speed_group_engine(&state);
-    Ok(Json(speed_group_response(&state, index, snapshots)))
-}
-
-pub(super) async fn update_speed_group(
-    State(state): State<AppState>,
-    Path(group): Path<String>,
-    headers: HeaderMap,
-    Json(configuration): Json<SoundToLightConfig>,
-) -> Result<Json<SpeedGroupResponse>, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    let index = speed_group_index(&group)?;
-    configuration
-        .validate()
-        .map_err(|error| ApiError::bad_request(error.to_string()))?;
-    state.speed_groups.lock()[index]
-        .set_sound_config(configuration.clone())
-        .map_err(|error| ApiError::bad_request(error.to_string()))?;
-    state.configuration.write().speed_group_sound_to_light[index] = configuration.clone();
-    if !configuration.enabled {
-        state.sound_capture_owners.lock()[index] = None;
-    }
-    persist_server_configuration(&state)?;
-    let snapshots = refresh_speed_group_engine(&state);
-    emit(
-        &state,
-        "speed_group_changed",
-        serde_json::json!({"group":speed_group_name(index),"desk_id":session.desk.id,"configuration":configuration}),
-    );
     Ok(Json(speed_group_response(&state, index, snapshots)))
 }
 

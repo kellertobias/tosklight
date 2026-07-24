@@ -135,12 +135,22 @@ export class HttpProgrammingUpdateTransport
 		validateScopeId(deskId, "desk_id");
 		const body = encodeProgrammingUpdateSettings(wireSettings(settings));
 		const result = await this.request(this.settingsPath(deskId), {
-			method: "PUT",
+			method: "POST",
 			headers: this.headers(true),
-			body: JSON.stringify(body),
+			body: JSON.stringify({
+				request_id: crypto.randomUUID(),
+				settings: body,
+			}),
 		});
+		const outcome = result.value as {
+			desk_id: unknown;
+			settings: unknown;
+		};
 		return programmingUpdateSettingsProjection(
-			decodeProgrammingUpdateSettingsProjection(result.value, deskId),
+			decodeProgrammingUpdateSettingsProjection(
+				{ desk_id: outcome.desk_id, settings: outcome.settings },
+				deskId,
+			),
 		);
 	}
 

@@ -60,7 +60,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
       await api.setCommandLineText("COPY");
       const claimed = await api.request<any>("POST", "/api/v1/files/input-context", { instance_id: "acceptance-file-manager", action: "copy", origin: "pending" });
       expect(claimed).toEqual(expect.objectContaining({ instance_id: "acceptance-file-manager", action: "copy", session_id: api.session!.session_id, desk_id: api.session!.desk.id }));
-      const programmers = await api.request<any[]>("GET", "/api/v1/programmers");
+      const programmers = await api.request<any[]>("GET", "/api/v2/programmers");
       expect(programmers.find((programmer) => programmer.session_id === api.session!.session_id)?.command_line).toBe("");
       const competingClaim = await request.post(`${bench.baseUrl}/api/v1/files/input-context`, { headers: { ...authorization, "content-type": "application/json" }, data: { instance_id: "another-pane", action: "copy", origin: "toolbar" } });
       expect(competingClaim.status()).toBe(409);
@@ -71,7 +71,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
         await hardware.send(`/light/${alias}/programmer/enter`, [true]);
         await expect.poll(() => api.request<any>("GET", "/api/v1/files/input-context"))
           .toEqual(expect.objectContaining({ instance_id: "acceptance-file-manager", action: "copy" }));
-        expect((await api.request<any[]>("GET", "/api/v1/programmers")).find((programmer) => programmer.session_id === api.session!.session_id)?.command_line).toBe("");
+        expect((await api.request<any[]>("GET", "/api/v2/programmers")).find((programmer) => programmer.session_id === api.session!.session_id)?.command_line).toBe("");
         await hardware.send(`/light/${alias}/programmer/escape`, [true]);
         await expect.poll(() => api.request("GET", "/api/v1/files/input-context")).toBeNull();
       } finally {
@@ -324,7 +324,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
 
   test("FILE-016 @ui › form fields use the confined picker first and expose a constrained system fallback only when enabled", async ({ api, bench, desk, page }) => {
     await desk.open(bench.baseUrl);
-    expect((await api.request<any>("GET", "/api/v1/configuration")).configuration.file_manager_system_picker_fallback).toBe(false);
+    expect((await api.request<any>("GET", "/api/v2/configuration")).configuration.file_manager_system_picker_fallback).toBe(false);
 
     await page.getByRole("button", { name: /Open show menu/ }).click();
     await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
@@ -337,12 +337,12 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     await expect(dialog.getByRole("button", { name: "Open system file picker" })).toHaveCount(0);
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
 
-    const configuration = await api.request<any>("GET", "/api/v1/configuration");
-    await api.request("PUT", "/api/v1/configuration", {
+    const configuration = await api.request<any>("GET", "/api/v2/configuration");
+    await api.request("PUT", "/api/v2/configuration", {
       ...configuration.configuration,
       file_manager_system_picker_fallback: true,
     });
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/configuration")).configuration.file_manager_system_picker_fallback).toBe(true);
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v2/configuration")).configuration.file_manager_system_picker_fallback).toBe(true);
 
     await page.getByRole("button", { name: "Choose lock wallpaper" }).click();
     dialog = page.getByRole("dialog", { name: "Choose files or folders" });

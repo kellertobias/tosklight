@@ -9,15 +9,46 @@ pub(super) fn apply_speed_group_playback_action(
 ) -> Result<bool, ApiError> {
     let index = speed_group_index(group)?;
     let now = application_millis(state);
+    let takes_manual_control = action != "pause";
+    let configured_source = state.configuration.read().speed_group_sources[index];
+    let linked_fallback = if takes_manual_control
+        && matches!(configured_source, SpeedGroupSource::SpeedGroup { .. })
+    {
+        Some(refresh_speed_group_engine(state)[index].effective_bpm)
+    } else {
+        None
+    };
     let mut controllers = state.speed_groups.lock();
+    let manual_ownership_changed = takes_manual_control
+        && (configured_source != SpeedGroupSource::Manual
+            || controllers[index].sound_config().enabled
+            || state.sound_capture_owners.lock()[index].is_some());
+    if let Some(effective_bpm) = linked_fallback {
+        controllers[index]
+            .set_manual_fallback_bpm(effective_bpm)
+            .map_err(speed_error)?;
+    }
+    if takes_manual_control {
+        let mut sound_configuration = controllers[index].sound_config().clone();
+        sound_configuration.enabled = false;
+        controllers[index]
+            .set_sound_config(sound_configuration)
+            .map_err(speed_error)?;
+    }
     let before = controller_snapshots(&controllers, now);
     let affected = apply_speed_action(state, &mut controllers, index, now, action, input, fader)?;
-    let changed = action == "learn" || speed_group_changed(&before, &controllers, &affected, now);
+    let changed = action == "learn"
+        || manual_ownership_changed
+        || speed_group_changed(&before, &controllers, &affected, now);
     if !changed {
         return Ok(false);
     }
     copy_speed_group_runtime_to_configuration(state, &controllers, &affected);
     drop(controllers);
+    if takes_manual_control {
+        state.configuration.write().speed_group_sources[index] = SpeedGroupSource::Manual;
+        state.sound_capture_owners.lock()[index] = None;
+    }
     persist_server_configuration(state)?;
     refresh_speed_group_engine(state);
     Ok(true)

@@ -45,6 +45,44 @@ export type ControlDeskConfigurationPatch = { name: string | null, osc_alias: st
 
 export type ControlDeskConfigurationActionOutcome = { request_id: string, replayed: boolean, desk: RuntimeControlDesk, removed: boolean, page: number | null, event_sequence: number | null, page_creation_event_sequence: number | null, };
 
+export type ConfigurationUpdateRequest = { request_id: string, patch: ConfigurationPatch, };
+
+export type ConfigurationPatch = { frame_rate_hz?: number | null, output_bind_ip?: string | null, osc_bind?: string | null | null, art_timecode_bind?: string | null | null, midi_inputs?: Array<string> | null, rtp_midi_bind?: string | null | null, timecode_sources?: Array<TimecodeSourceConfiguration> | null, osc_timecode?: OscTimecodeConfiguration | null | null, backup_retention?: number | null, autosave_interval_seconds?: number, programmer_fade_millis?: number, sequence_master_fade_millis?: number, preload_programmer_changes?: boolean | null, preload_physical_playback_actions?: boolean | null, preload_virtual_playback_actions?: boolean | null, patch_preview_highlight_dmx?: boolean | null, matter_enabled?: boolean | null, file_manager_system_picker_fallback?: boolean | null, file_manager_roots?: Array<FileManagerRoot> | null, };
+
+export type TimecodeSourceConfiguration = { source_prefix: string, priority: number, fallback: boolean, loss_timeout_millis: number, };
+
+export type OscTimecodeConfiguration = { address: string, rate: string, };
+
+export type FileManagerRoot = { id: string, label: string, path: string, icon?: string | null, };
+
+export type SpeedGroupSettingsUpdateRequest = { request_id: string, source: SpeedGroupSource, configuration: SoundToLightConfiguration, };
+
+export type SpeedGroupSource = { "type": "manual" } | { "type": "speed_group", group: SpeedGroupId, } | { "type": "sound_to_light" };
+
+export type SoundToLightConfiguration = { analysis_mode: SoundAnalysisMode, frequency: FrequencySelection, input_gain_db: number, confidence_threshold: number, smoothing: number, minimum_bpm: number, maximum_bpm: number, signal_hold_millis: number, multiplier: number, };
+
+export type SoundAnalysisMode = "tempo_bpm";
+
+export type FrequencySelection = { "type": "preset", preset: FrequencyPreset, } | { "type": "custom", low_hz: number, high_hz: number, };
+
+export type FrequencyPreset = "sub" | "low" | "mid" | "high" | "full_range";
+
+export type SpeedGroupLiveActionRequest = { action: SpeedGroupLiveAction, bpm?: number | null, captured_at_millis?: number, };
+
+export type OutputMasterActionRequest = { grand_master?: number | null, blackout?: boolean | null, };
+
+export type SpeedGroupLiveAction = "set_bpm" | "learn" | "double" | "half" | "pause";
+
+export type SoundObservation = { captured_at_millis: number, source_available: boolean, usable_signal: boolean, level: number, selected_band_level: number, detected_bpm?: number | null, confidence: number, };
+
+export type DeskLockConfigurationUpdateRequest = { request_id: string, message: string, wallpaper?: string | null, unlock_mode: DeskUnlockMode, pin?: string | null, };
+
+export type DeskUnlockMode = "button" | "pin";
+
+export type DeskUnlockRequest = { pin?: string | null, };
+
+export type UserCreateRequest = { request_id: string, name: string, enabled: boolean, };
+
 export type EventCapability = "programmer" | "playback" | "show" | "desk" | "output" | "system";
 
 export type EventClass = "transition" | "projection" | "command_outcome" | "error" | "safety" | "telemetry";
@@ -380,6 +418,10 @@ export type ProgrammingUpdateErrorResponse = { kind: ProgrammingUpdateErrorKind,
 export type ProgrammingUpdateSettings = { cue_mode: ProgrammingUpdateCueMode, preset_mode: ProgrammingUpdateExistingContentMode, group_mode: ProgrammingUpdateExistingContentMode, show_update_modal_on_touch: boolean, };
 
 export type ProgrammingUpdateSettingsProjection = { desk_id: string, settings: ProgrammingUpdateSettings, };
+
+export type ProgrammingUpdateSettingsUpdateRequest = { request_id: string, settings: ProgrammingUpdateSettings, };
+
+export type ProgrammingUpdateSettingsUpdateOutcome = { request_id: string, replayed: boolean, desk_id: string, settings: ProgrammingUpdateSettings, };
 
 export type PlaybackSurface = "virtual" | "physical";
 

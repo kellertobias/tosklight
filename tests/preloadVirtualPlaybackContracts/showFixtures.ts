@@ -119,7 +119,7 @@ export async function pageObject(api: ApiDriver, page: number) {
 }
 
 export async function configuration(api: ApiDriver): Promise<Configuration> {
-	return (await api.request<any>("GET", "/api/v1/configuration")).configuration;
+	return (await api.request<any>("GET", "/api/v2/configuration")).configuration;
 }
 
 export async function setCaptureMask(
@@ -131,7 +131,7 @@ export async function setCaptureMask(
 	cueFade = 3_000,
 ) {
 	const current = await configuration(api);
-	await api.request("PUT", "/api/v1/configuration", {
+	await api.request("PUT", "/api/v2/configuration", {
 		...current,
 		programmer_fade_millis: programmerFade,
 		sequence_master_fade_millis: cueFade,
@@ -201,7 +201,7 @@ export async function visualizationLevel(
 }
 
 export async function audit(api: ApiDriver, after = 0): Promise<any[]> {
-	return api.request("GET", `/api/v1/audit?after=${after}`);
+	return api.request("GET", `/api/v2/audit?after=${after}`);
 }
 
 export function summarizePlaybackState(snapshot: any, numbers: number[]) {

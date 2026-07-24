@@ -12,6 +12,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(playback_v2::router())
         .merge(playback_topology_http::router())
         .merge(control_desk_configuration_v2::router())
+        .merge(desk_management_v2::router())
         .merge(screen_configuration_v2::router())
         .merge(virtual_playback_zones_http::router())
         .merge(programming_update_http::router())
@@ -62,34 +63,12 @@ fn media_and_output_routes() -> Router<AppState> {
             "/api/v2/output/patch-preview-highlight",
             post(patch_preview_highlight),
         )
-        .route("/api/v1/shutdown", post(shutdown_server))
-        .route(
-            "/api/v1/configuration",
-            get(configuration).put(update_configuration),
-        )
-        .route("/api/v1/matter/status", get(matter_bridge_status))
-        .route(
-            "/api/v1/speed-groups/{group}",
-            get(speed_group).put(update_speed_group),
-        )
-        .route(
-            "/api/v1/speed-groups/{group}/observation",
-            post(observe_speed_group),
-        )
-        .route(
-            "/api/v1/speed-groups/{group}/action",
-            post(speed_group_action),
-        )
 }
 
 fn session_routes() -> Router<AppState> {
     Router::new()
         .route("/api/v2/sessions", post(create_session))
         .route("/api/v2/sessions/{id}", delete(close_session))
-        .route("/api/v1/desk-lock", get(desk_lock).put(update_desk_lock))
-        .route("/api/v1/desk-lock/lock", post(lock_desk))
-        .route("/api/v1/desk-lock/unlock", post(unlock_desk))
-        .route("/api/v1/users", post(create_user))
 }
 
 fn show_routes() -> Router<AppState> {
@@ -108,19 +87,7 @@ fn show_object_routes() -> Router<AppState> {
 }
 
 fn programmer_and_update_routes() -> Router<AppState> {
-    Router::new()
-        .route("/api/v1/programmers", get(list_programmers))
-        .route("/api/v1/programmers/{id}/clear", post(clear_programmer))
-        .merge(command_http::router())
-        .route(
-            "/api/v1/update/settings",
-            get(update_settings).put(put_update_settings),
-        )
-        .route("/api/v1/update/preview", post(preview_update))
-        .route("/api/v1/update/apply", post(apply_update))
-        .route("/api/v1/master", put(update_master))
-        .route("/api/v1/command-history", get(command_history))
-        .route("/api/v1/audit", get(audit_events))
+    Router::new().merge(command_http::router())
 }
 
 fn with_test_routes(router: Router<AppState>, enabled: bool) -> Router<AppState> {
@@ -160,6 +127,8 @@ fn cors_layer() -> CorsLayer {
             header::IF_MATCH,
             header::RANGE,
             header::HeaderName::from_static("x-light-desk-token"),
+            header::HeaderName::from_static("x-tosk-desk"),
+            header::HeaderName::from_static("x-tosk-show"),
         ])
         .expose_headers([
             header::ETAG,

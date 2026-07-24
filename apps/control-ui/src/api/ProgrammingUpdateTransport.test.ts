@@ -282,8 +282,11 @@ describe("Programming Update v2 HTTP adapter", () => {
 			`/desks/${DESK_ID}/programming-update/settings`,
 		);
 		expect(getInit?.method).toBeUndefined();
-		expect(putInit?.method).toBe("PUT");
-		expect(JSON.parse(String(putInit?.body))).toEqual(settings());
+		expect(putInit?.method).toBe("POST");
+		expect(JSON.parse(String(putInit?.body))).toMatchObject({
+			request_id: expect.any(String),
+			settings: settings(),
+		});
 
 		const foreignFetch = vi
 			.fn<typeof globalThis.fetch>()

@@ -62,6 +62,10 @@ export interface MatterBridgeStatus {
 }
 
 export type SpeedGroupId = "A" | "B" | "C" | "D" | "E";
+export type SpeedGroupSource =
+	| { type: "manual" }
+	| { type: "speed_group"; group: SpeedGroupId }
+	| { type: "sound_to_light" };
 
 export type FrequencyPreset = "sub" | "low" | "mid" | "high" | "full_range";
 
@@ -123,6 +127,7 @@ export interface SpeedSnapshot {
 
 export interface SpeedGroupSoundState {
 	group: SpeedGroupId;
+	source?: SpeedGroupSource;
 	configuration: SoundToLightConfig;
 	snapshot: SpeedSnapshot;
 }

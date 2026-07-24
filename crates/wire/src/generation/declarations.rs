@@ -5,6 +5,7 @@ use crate::v2::control_desk_configuration::*;
 use crate::v2::cue_deletion::*;
 use crate::v2::cue_recording::*;
 use crate::v2::cue_transfer::*;
+use crate::v2::desk_management::*;
 use crate::v2::events::*;
 use crate::v2::fixture_library::*;
 use crate::v2::group_management::*;
@@ -35,6 +36,7 @@ use crate::v2::virtual_playback_zones::*;
 pub(super) fn all(config: &Config) -> Vec<String> {
     let mut declarations = command_line(config);
     declarations.extend(control_desk_configuration(config));
+    declarations.extend(desk_management(config));
     declarations.extend(event_subscription(config));
     declarations.extend(programming(config));
     declarations.extend(programming_update(config));
@@ -55,6 +57,30 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(show_library(config));
     declarations.extend(interaction(config));
     declarations
+}
+
+fn desk_management(config: &Config) -> Vec<String> {
+    vec![
+        ConfigurationUpdateRequest::decl(config),
+        ConfigurationPatch::decl(config),
+        TimecodeSourceConfiguration::decl(config),
+        OscTimecodeConfiguration::decl(config),
+        FileManagerRoot::decl(config),
+        SpeedGroupSettingsUpdateRequest::decl(config),
+        SpeedGroupSource::decl(config),
+        SoundToLightConfiguration::decl(config),
+        SoundAnalysisMode::decl(config),
+        FrequencySelection::decl(config),
+        FrequencyPreset::decl(config),
+        SpeedGroupLiveActionRequest::decl(config),
+        OutputMasterActionRequest::decl(config),
+        SpeedGroupLiveAction::decl(config),
+        crate::v2::desk_management::SoundObservation::decl(config),
+        DeskLockConfigurationUpdateRequest::decl(config),
+        DeskUnlockMode::decl(config),
+        DeskUnlockRequest::decl(config),
+        UserCreateRequest::decl(config),
+    ]
 }
 
 fn output_control(config: &Config) -> Vec<String> {
@@ -184,7 +210,7 @@ fn speed_group_transport(config: &Config) -> Vec<String> {
         SpeedGroupAuthorityProjection::decl(config),
         SpeedGroupSnapshot::decl(config),
         SpeedGroupAction::decl(config),
-        SpeedGroupActionRequest::decl(config),
+        crate::v2::speed_group::SpeedGroupActionRequest::decl(config),
         SpeedGroupDurability::decl(config),
         SpeedGroupActionState::decl(config),
         SpeedGroupActionOutcome::decl(config),
@@ -237,6 +263,8 @@ fn programming_update(config: &Config) -> Vec<String> {
         ProgrammingUpdateErrorResponse::decl(config),
         ProgrammingUpdateSettings::decl(config),
         ProgrammingUpdateSettingsProjection::decl(config),
+        ProgrammingUpdateSettingsUpdateRequest::decl(config),
+        ProgrammingUpdateSettingsUpdateOutcome::decl(config),
     ]
 }
 

@@ -1,16 +1,6 @@
 use super::*;
 
-pub(super) async fn preview_update(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(request): Json<UpdateApiRequest>,
-) -> Result<Json<UpdatePreviewResponse>, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    Ok(Json(preview_update_application(
-        &state, &session, &request,
-    )?))
-}
-
+#[cfg(test)]
 pub(super) fn preview_update_application(
     state: &AppState,
     session: &Session,
@@ -46,6 +36,7 @@ pub(super) fn preview_update_application(
     })
 }
 
+#[cfg(test)]
 pub(super) fn perform_update(
     state: &AppState,
     session: &Session,
@@ -78,6 +69,7 @@ pub(super) fn perform_update_from(
 
 #[derive(Clone, Copy)]
 enum UpdateProgrammingBoundary {
+    #[cfg(test)]
     Unowned,
     HeldByCaller,
 }
@@ -118,6 +110,7 @@ fn perform_update_with_boundary(
         ServerProgrammingUpdatePorts::new(state.clone(), session.clone(), within_interaction, true);
     let action = light_application::ActionEnvelope { context, command };
     let result = match programming {
+        #[cfg(test)]
         UpdateProgrammingBoundary::Unowned => {
             state
                 .programming
@@ -206,13 +199,4 @@ fn publish_legacy_update(
             "application_event_sequence":result.outcome.event_sequence,
         }),
     );
-}
-
-pub(super) async fn apply_update(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(request): Json<UpdateApiRequest>,
-) -> Result<Json<update::UpdateResult>, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    Ok(Json(perform_update(&state, &session, &request)?))
 }

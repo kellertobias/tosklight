@@ -4,7 +4,7 @@ import {
 	useContext,
 	useMemo,
 } from "react";
-import type { DeskLockInput } from "../../api/client/configuration";
+import type { DeskLockInput } from "../../api/client/deskManagement";
 import type { DeskLockState } from "../../api/types";
 import type { DeskLockStore } from "./store";
 

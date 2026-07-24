@@ -312,7 +312,7 @@ export function logicalUniverse(snapshot: {
 }
 
 export async function audit(api: ApiDriver): Promise<any[]> {
-	return api.request<any[]>("GET", "/api/v1/audit?after=0");
+	return api.request<any[]>("GET", "/api/v2/audit?after=0");
 }
 
 export async function inertSnapshot(api: ApiDriver, number: number) {
@@ -337,14 +337,11 @@ export async function setSpeedRates(
 	api: ApiDriver,
 	rates: number[],
 ): Promise<void> {
-	const response = await api.request<any>("GET", "/api/v1/configuration");
-	await api.request("PUT", "/api/v1/configuration", {
-		...response.configuration,
-		speed_groups_bpm: rates,
-		speed_group_sound_to_light:
-			response.configuration.speed_group_sound_to_light.map((sound: any) => ({
-				...sound,
-				enabled: false,
-			})),
-	});
+	for (const [index, bpm] of rates.entries()) {
+		await api.request(
+			"POST",
+			`/api/v2/speed-groups/${String.fromCharCode(65 + index)}/actions`,
+			{ action: "set_bpm", bpm },
+		);
+	}
 }

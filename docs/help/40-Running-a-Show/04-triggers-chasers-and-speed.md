@@ -22,15 +22,19 @@ Use `[SHIFT] [TIME]` for the `SPD GRP` command-line workflow documented in [Comm
 
 ## Sound to Light
 
-Switch the lower control section to Playbacks, then touch a Speed Group A–E control in Playback Tools to open that group's **Sound to Light** configuration. Opening it is a configuration action; it does not count as a Learn tap. The attached Speed Master **Learn** button and the modal's **Learn** action remain manual tap-tempo controls.
+Switch the lower control section to Playbacks. An ordinary tap or click on Speed Group A–E performs tap tempo immediately. Hold the control, or use Shift while tapping/clicking it, to open that group's settings.
 
-Choose **Audio input on this desk/browser** to grant microphone access and assign the input captured by this browser. The selected device ID stays in this browser, scoped to this desk and Speed Group. It is never written into the show, so another machine or browser starts unassigned instead of trying to open a device that may not exist there. If a saved local input still exists when the application reconnects, the browser resumes capture when Sound-to-Light is enabled.
+Choose the microphone once under **Desk Setup > Network & Inputs > Inputs**. Permission and the selected device ID stay in this browser, scoped to the desk rather than to an individual Speed Group. They are never written into the show, so another machine or browser starts unassigned instead of trying to open a device that may not exist there. If a saved local input still exists when the application reconnects, the browser resumes capture for Speed Groups that use Sound to Light.
+
+Each Speed Group source is exactly one of **Manual**, **Speed Group**, or **Sound to Light**. Manual hides source-specific settings. Speed Group follows another group; the current group is excluded and the desk rejects direct or indirect reference cycles. Sound to Light exposes the analysis settings and live feedback below.
 
 The current analysis mode is **Tempo / BPM**. Choose a preset region—Sub 30–80 Hz, Low 60–180 Hz, Mid 180–2,000 Hz, High 2,000–12,000 Hz, or Full range 30–18,000 Hz—or enter a custom ordered range from 20 to 20,000 Hz. Use the live input and selected-band meters to set input gain. Confidence threshold rejects uncertain tempo estimates; Tempo smoothing reduces abrupt accepted changes; minimum and maximum tempo reject estimates outside the useful range.
 
 The status strip distinguishes permission, input capture, and usable selected-band signal. The live panel shows detected tempo, confidence, effective speed, and the server's authoritative source. The browser analyzes at 100 ms intervals and sends normalized observations; normal request/network latency is additional. The server owns accepted tempo, smoothing, source selection, hold expiry, and the final Speed Group rate.
 
-The Sound speed ratio maps the detected tempo from 0.125× through 8×. **Double** and **Half** change that ratio while Sound-to-Light is enabled; in manual mode they change the learned BPM instead. A Speed Master scale is applied after the Sound ratio. **Pause** freezes Speed Group phase without discarding its current rate. Attached OSC hardware receives the effective mapped BPM; its beat indication stops while paused, and its Speed Group encoder follows the same authoritative value.
+The Sound speed ratio maps the detected tempo from 0.125× through 8×. The title bar provides `÷2`, `×2`, and **Pause/Resume** as immediate actions; they do not dirty the settings form. A Speed Master scale is applied after the Sound ratio. Pause freezes Speed Group phase without discarding its current rate. Attached OSC hardware receives the effective mapped BPM; its beat indication stops while paused, and its Speed Group encoder follows the same authoritative value.
+
+**Apply** is in the title bar. Closing an unchanged modal closes immediately. Closing after edits asks whether to **Close and discard**, **Close and save**, or **Stay**.
 
 If the input disappears, the selected band becomes quiet, confidence drops, or tempo leaves the accepted range, the group holds its last accepted Sound rate for the configured Signal-loss hold and then returns to its stored manual BPM. The modal reports the reason rather than failing silently. Disabling Sound-to-Light also returns to the stored manual rate. A direct BPM command or the first **Learn** tap deliberately takes manual ownership and disables Sound-to-Light.
 

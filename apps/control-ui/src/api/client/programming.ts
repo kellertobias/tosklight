@@ -53,7 +53,7 @@ import {
 	decodeProgrammingCommandLine,
 	decodeProgrammingInteractionSnapshot,
 } from "../programmingWire";
-import type { GeneratedFixturePresetResult, ProgrammerState } from "../types";
+import type { GeneratedFixturePresetResult } from "../types";
 import type { LiveClientTransport } from "./transport";
 
 type SelectionGestureSource =
@@ -176,16 +176,6 @@ export class ProgrammingApiClient {
 			userId,
 			request.requestId,
 		);
-	}
-
-	programmers(): Promise<ProgrammerState[]> {
-		return this.transport.request("/api/v1/programmers");
-	}
-
-	clearProgrammer(sessionId: string) {
-		return this.transport.request(`/api/v1/programmers/${sessionId}/clear`, {
-			method: "POST",
-		});
 	}
 
 	selectGroup(

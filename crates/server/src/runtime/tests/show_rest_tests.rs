@@ -78,13 +78,21 @@ async fn rest_session_show_and_revision_flow() {
             .next()
             .is_some()
     );
-    let configuration=app.clone().oneshot(Request::put("/api/v1/configuration").header(header::CONTENT_TYPE,"application/json").header(header::AUTHORIZATION,format!("Bearer {token}")).body(Body::from(r#"{"frame_rate_hz":40,"output_bind_ip":"0.0.0.0","osc_bind":null,"art_timecode_bind":null,"backup_retention":5,"speed_groups_bpm":[101,102,103,104],"programmer_fade_millis":1250,"sequence_master_fade_millis":2500}"#)).unwrap()).await.unwrap();
+    let configuration=app.clone().oneshot(Request::post("/api/v2/configuration/update").header(header::CONTENT_TYPE,"application/json").header(header::AUTHORIZATION,format!("Bearer {token}")).body(Body::from(r#"{"request_id":"configuration-test","patch":{"frame_rate_hz":40,"output_bind_ip":"0.0.0.0","osc_bind":null,"art_timecode_bind":null,"backup_retention":5,"programmer_fade_millis":1250,"sequence_master_fade_millis":2500}}"#)).unwrap()).await.unwrap();
     assert_eq!(configuration.status(), StatusCode::OK);
     assert_eq!(state.output_rate.load(Ordering::Relaxed), 40);
-    assert_eq!(
-        state.configuration.read().speed_groups_bpm,
-        [101.0, 102.0, 103.0, 104.0, 15.0]
-    );
+    for (index, bpm) in [101, 102, 103, 104].into_iter().enumerate() {
+        let group = char::from(b'A' + index as u8);
+        let response = app.clone().oneshot(
+            Request::post(format!("/api/v2/speed-groups/{group}/actions"))
+                .header(header::CONTENT_TYPE,"application/json")
+                .header(header::AUTHORIZATION,format!("Bearer {token}"))
+                .body(Body::from(format!(r#"{{"action":"set_bpm","bpm":{bpm}}}"#)))
+                .unwrap()
+        ).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+    assert_eq!(state.configuration.read().speed_groups_bpm, [101.0, 102.0, 103.0, 104.0, 15.0]);
     assert_eq!(state.configuration.read().programmer_fade_millis, 1_250);
     assert_eq!(
         state.configuration.read().sequence_master_fade_millis,
@@ -93,10 +101,10 @@ async fn rest_session_show_and_revision_flow() {
     let user = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/users")
+            Request::post("/api/v2/users/create")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(r#"{"name":"Video","enabled":true}"#))
+                .body(Body::from(r#"{"request_id":"create-video","name":"Video","enabled":true}"#))
                 .unwrap(),
         )
         .await

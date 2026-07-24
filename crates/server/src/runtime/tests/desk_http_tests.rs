@@ -4,12 +4,13 @@ async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
     let second = state.desk.lock().add_desk("Second", "second").unwrap();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
-    let configure = app.clone().oneshot(Request::put("/api/v1/desk-lock").header(header::AUTHORIZATION, format!("Bearer {token}")).header(header::CONTENT_TYPE,"application/json").body(Body::from(r#"{"message":"Call the operator","wallpaper":null,"unlock_mode":"pin","pin":"1234"}"#)).unwrap()).await.unwrap();
+    let desk_id = state.sessions.read().values().find(|session| session.token == token).unwrap().desk.id;
+    let configure = app.clone().oneshot(Request::post(format!("/api/v2/control-desks/{desk_id}/desk-lock/update")).header(header::AUTHORIZATION, format!("Bearer {token}")).header(header::CONTENT_TYPE,"application/json").body(Body::from(r#"{"request_id":"desk-lock-configure","message":"Call the operator","wallpaper":null,"unlock_mode":"pin","pin":"1234"}"#)).unwrap()).await.unwrap();
     assert_eq!(configure.status(), StatusCode::OK);
     let lock = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/desk-lock/lock")
+            Request::get(format!("/api/v2/control-desks/{desk_id}/desk-lock/lock"))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from("{}"))
@@ -32,14 +33,6 @@ async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
         )
         .locked
     );
-    let desk_id = state
-        .sessions
-        .read()
-        .values()
-        .find(|session| session.token == token)
-        .unwrap()
-        .desk
-        .id;
     let reopened = DeskStore::open(data_dir.join("desk.sqlite")).unwrap();
     let persisted: DeskLockConfiguration =
         serde_json::from_str(&reopened.setting(&desk_lock_key(desk_id)).unwrap().unwrap()).unwrap();
@@ -50,7 +43,7 @@ async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
     let blocked = app
         .clone()
         .oneshot(
-            Request::put("/api/v1/master")
+            Request::post("/api/v2/output-runtime/global-master/actions")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"grand_master":0.5}"#))
@@ -62,7 +55,7 @@ async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
     let wrong = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/desk-lock/unlock")
+            Request::post(format!("/api/v2/control-desks/{desk_id}/desk-lock/unlock"))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"pin":"9999"}"#))
@@ -91,7 +84,7 @@ async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
     let unaffected = app
         .clone()
         .oneshot(
-            Request::put("/api/v1/master")
+            Request::post("/api/v2/output-runtime/global-master/actions")
                 .header(header::AUTHORIZATION, format!("Bearer {second_token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"grand_master":0.5}"#))
@@ -103,7 +96,7 @@ async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
 
     let unlock = app
         .oneshot(
-            Request::post("/api/v1/desk-lock/unlock")
+            Request::post(format!("/api/v2/control-desks/{desk_id}/desk-lock/unlock"))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"pin":"1234"}"#))

@@ -8,6 +8,7 @@ import {
 	programmer,
 } from "../support/catalog";
 import { escapeRegex, openGroups } from "../support/updateHighlight/highlight";
+import { applyProgrammingUpdate } from "./v2UpdateApi";
 
 interface UpdateGroupState {
 	showId: string;
@@ -54,7 +55,7 @@ pairedScenario<UpdateGroupState>({
 		};
 	},
 	api: async ({ api }, state) => {
-		await api.request("POST", "/api/v1/update/apply", {
+		await applyProgrammingUpdate(api, {
 			target: { family: { type: "group" }, object_id: state.groupId },
 			mode: { target_type: "existing_content", mode: "add_new" },
 			expected_revision: state.revision,

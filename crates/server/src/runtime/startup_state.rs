@@ -82,6 +82,7 @@ fn load_configuration(
         .map(|json| serde_json::from_str(&json))
         .transpose()?
         .unwrap_or_default();
+    configuration.migrate_speed_group_sources();
     configuration.osc_bind = osc_bind_override
         .or(configuration.osc_bind)
         .or(Some(SocketAddr::from(([127, 0, 0, 1], 9000))));

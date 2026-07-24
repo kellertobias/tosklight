@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
   FrequencyPreset,
@@ -7,10 +7,11 @@ import type {
   SpeedGroupActionInput,
   SpeedGroupId,
   SpeedGroupSoundState,
+  SpeedGroupSource,
 } from "../../api/types";
-import { Button, FormField, FormLayout, Input, NumberField, SelectField, SwitchField } from "../common";
+import { Button, FormField, FormLayout, Input, NumberField, SelectField } from "../common";
 import { ModalTitleBar } from "../common/ModalTitleBar";
-import { monotonicEpochMillis, type AudioInputDevice, type MicrophonePermission, type SoundCaptureStatus } from "./soundToLightAnalyzer";
+import { type SoundCaptureStatus } from "./soundToLightAnalyzer";
 import "./SoundToLightModal.css";
 
 const frequencyOptions: Array<{ value: FrequencyPreset | "custom"; label: string }> = [
@@ -30,14 +31,6 @@ function reasonLabel(reason: SoundLossReason) {
   return "waiting for tempo analysis";
 }
 
-function permissionLabel(permission: MicrophonePermission) {
-  if (permission === "granted") return "Granted";
-  if (permission === "denied") return "Denied";
-  if (permission === "prompt") return "Permission required";
-  if (permission === "unsupported") return "Unsupported";
-  return "Not checked";
-}
-
 function captureLabel(capture: SoundCaptureStatus) {
   if (capture.phase === "capturing") return "Capturing";
   if (capture.phase === "requesting") return "Requesting access";
@@ -49,6 +42,8 @@ function captureLabel(capture: SoundCaptureStatus) {
 }
 
 function sourceLabel(state: SpeedGroupSoundState) {
+  if (state.source?.type === "manual") return "Manual";
+  if (state.source?.type === "speed_group") return `Speed Group ${state.source.group}`;
   const status = state.snapshot.sound_status;
   if (status.state === "disabled") return "Manual";
   if (status.state === "active") return `Sound · ${status.detected_bpm.toFixed(1)} BPM`;
@@ -102,16 +97,132 @@ function RangeField({ label, value, minimum, maximum, step, unit, onChange }: {
   </div></FormField>;
 }
 
+function SoundToLightFields({
+  group,
+  state,
+  capture,
+  draft,
+  source,
+  frequency,
+  inputLevel,
+  bandLevel,
+  detectedBpm,
+  confidence,
+  onSourceTypeSelect,
+  onSourceChange,
+  onUpdate,
+  onCustomFrequencyChange,
+}: {
+  group: SpeedGroupId;
+  state: SpeedGroupSoundState;
+  capture: SoundCaptureStatus;
+  draft: SoundToLightConfig;
+  source: SpeedGroupSource;
+  frequency: FrequencyPreset | "custom";
+  inputLevel: number;
+  bandLevel: number;
+  detectedBpm: number | null;
+  confidence: number;
+  onSourceTypeSelect: (value: string) => void;
+  onSourceChange: (source: SpeedGroupSource) => void;
+  onUpdate: <Key extends keyof SoundToLightConfig>(key: Key, value: SoundToLightConfig[Key]) => void;
+  onCustomFrequencyChange: (change: { low_hz?: number; high_hz?: number }) => void;
+}) {
+  const observation = capture.observation;
+  return <>
+    <SelectField
+      label="Speed Group source"
+      value={source.type}
+      options={[
+        { value: "manual", label: "Manual" },
+        { value: "speed_group", label: "Speed Group" },
+        { value: "sound_to_light", label: "Sound to Light" },
+      ]}
+      onChange={onSourceTypeSelect}
+    />
+    {source.type === "speed_group" && <SelectField
+      label="Source Speed Group"
+      value={source.group}
+      options={(["A", "B", "C", "D", "E"] as const).filter((candidate) => candidate !== group).map((candidate) => ({ value: candidate, label: `Speed Group ${candidate}` }))}
+      onChange={(sourceGroup) => onSourceChange({ type: "speed_group", group: sourceGroup })}
+    />}
+    <section className="sound-live-panel" aria-label="Live sound analysis">
+      <div className="sound-meter-stack">
+        <Meter label="Input level" value={inputLevel}/>
+        <div>
+          <Meter label="Selected band" value={bandLevel}/>
+          {source.type === "sound_to_light" && <SelectField label="Frequency region" value={frequency} options={frequencyOptions} onChange={(value) => onUpdate("frequency", value === "custom" ? { type: "custom", low_hz: 60, high_hz: 180 } : { type: "preset", preset: value })}/>}
+        </div>
+      </div>
+      <dl>
+        <div><dt>Detected tempo</dt><dd>{detectedBpm == null ? "—" : `${detectedBpm.toFixed(1)} BPM`}</dd></div>
+        <div><dt>Confidence</dt><dd>{Math.round(confidence * 100)}%</dd></div>
+        <div><dt>Effective speed</dt><dd>{state.snapshot.effective_bpm.toFixed(1)} BPM</dd></div>
+        <div><dt>Authoritative source</dt><dd>{sourceLabel(state)}</dd></div>
+      </dl>
+    </section>
+    {source.type === "sound_to_light" && <>
+      <div className="sound-status-grid" aria-label="Audio status">
+        <article className={`status-${capture.phase}`}><small>Audio source</small><strong>{captureLabel(capture)}</strong></article>
+        <article className={observation?.usable_signal || state.snapshot.usable_signal ? "status-usable" : "status-waiting"}><small>Selected-band signal</small><strong>{observation?.usable_signal || state.snapshot.usable_signal ? "Usable" : "Waiting / quiet"}</strong></article>
+      </div>
+      <p className="sound-capture-message">{capture.message}</p>
+      <FormLayout columns={2} minColumnWidth={250} className="sound-configuration-grid">
+        <SelectField label="Analysis" value="tempo_bpm" disabled options={[{ value: "tempo_bpm", label: "Tempo / BPM" }]} onChange={() => undefined}/>
+        {draft.frequency.type === "custom" && <div className="sound-custom-frequency">
+          <NumberField label="Low frequency" aria-label="Custom low frequency" value={draft.frequency.low_hz} min={20} max={19_999} unit="Hz" onValueChange={(value) => onCustomFrequencyChange({ low_hz: Number(value) })}/>
+          <NumberField label="High frequency" aria-label="Custom high frequency" value={draft.frequency.high_hz} min={21} max={20_000} unit="Hz" onValueChange={(value) => onCustomFrequencyChange({ high_hz: Number(value) })}/>
+        </div>}
+        <RangeField label="Input gain" value={draft.input_gain_db} minimum={-60} maximum={60} step={1} unit=" dB" onChange={(value) => onUpdate("input_gain_db", value)}/>
+        <RangeField label="Confidence threshold" value={draft.confidence_threshold} minimum={0} maximum={1} step={0.01} unit="" onChange={(value) => onUpdate("confidence_threshold", value)}/>
+        <RangeField label="Tempo smoothing" value={draft.smoothing} minimum={0} maximum={0.99} step={0.01} unit="" onChange={(value) => onUpdate("smoothing", value)}/>
+        <NumberField label="Minimum accepted tempo" aria-label="Minimum accepted BPM" value={draft.minimum_bpm} min={0.1} max={998} step={1} allowDecimal unit="BPM" onChange={(event) => onUpdate("minimum_bpm", Number(event.target.value))}/>
+        <NumberField label="Maximum accepted tempo" aria-label="Maximum accepted BPM" value={draft.maximum_bpm} min={0.2} max={999} step={1} allowDecimal unit="BPM" onChange={(event) => onUpdate("maximum_bpm", Number(event.target.value))}/>
+        <NumberField label="Signal-loss hold" aria-label="Signal hold seconds" value={draft.signal_hold_millis / 1_000} min={0} max={60} step={0.5} allowDecimal unit="s" onChange={(event) => onUpdate("signal_hold_millis", Math.round(Number(event.target.value) * 1_000))}/>
+        <NumberField label="Sound speed ratio" aria-label="Sound multiplier" value={draft.multiplier} min={0.125} max={8} step={0.125} allowDecimal unit="×" onChange={(event) => onUpdate("multiplier", Number(event.target.value))}/>
+      </FormLayout>
+    </>}
+  </>;
+}
+
+function DirtyCloseConfirmation({
+  visible,
+  invalid,
+  onDiscard,
+  onSave,
+  onStay,
+}: {
+  visible: boolean;
+  invalid: boolean;
+  onDiscard: () => void;
+  onSave: () => void;
+  onStay: () => void;
+}) {
+  if (!visible) return null;
+  return <div className="stacked-modal-layer" onPointerDown={(event) => event.stopPropagation()}>
+    <section className="nested-modal" role="alertdialog" aria-modal="true" aria-label="Unsaved Speed Group settings">
+      <h3>Save Speed Group changes?</h3>
+      <p>This Speed Group has unapplied settings.</p>
+      <footer className="modal-actions">
+        <Button onClick={onDiscard}>Close and discard</Button>
+        <Button variant="primary" disabled={invalid} onClick={onSave}>Close and save</Button>
+        <Button onClick={onStay}>Stay</Button>
+      </footer>
+    </section>
+  </div>;
+}
+
+function selectedSource(value: string, group: SpeedGroupId): SpeedGroupSource {
+  if (value === "sound_to_light") return { type: "sound_to_light" };
+  if (value === "speed_group") return { type: "speed_group", group: group === "A" ? "B" : "A" };
+  return { type: "manual" };
+}
+
 export function SoundToLightModal({
   group,
   state,
   capture,
-  permission,
-  devices,
-  deviceId,
   controllerError,
-  onDeviceChange,
-  onRefreshInputs,
   onPreview,
   onSave,
   onAction,
@@ -120,18 +231,21 @@ export function SoundToLightModal({
   group: SpeedGroupId;
   state: SpeedGroupSoundState;
   capture: SoundCaptureStatus;
-  permission: MicrophonePermission;
-  devices: AudioInputDevice[];
-  deviceId: string;
+  permission?: unknown;
+  devices?: unknown[];
+  deviceId?: string;
+  onDeviceChange?: (deviceId: string) => void;
+  onRefreshInputs?: () => Promise<void>;
   controllerError?: string | null;
-  onDeviceChange: (deviceId: string) => void;
-  onRefreshInputs: () => Promise<void>;
   onPreview: (group: SpeedGroupId, configuration: SoundToLightConfig | null) => void;
-  onSave: (configuration: SoundToLightConfig) => Promise<SpeedGroupSoundState>;
+  onSave: (configuration: SoundToLightConfig, source: SpeedGroupSource) => Promise<SpeedGroupSoundState>;
   onAction: (input: SpeedGroupActionInput) => Promise<SpeedGroupSoundState>;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<SoundToLightConfig>(() => structuredClone(state.configuration));
+  const [source, setSource] = useState<SpeedGroupSource>(() => state.source ?? (state.configuration.enabled ? { type: "sound_to_light" } : { type: "manual" }));
+  const [baseline, setBaseline] = useState(() => ({ configuration: structuredClone(state.configuration), source: state.source ?? (state.configuration.enabled ? { type: "sound_to_light" } as const : { type: "manual" } as const) }));
+  const [confirmClose, setConfirmClose] = useState(false);
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   useEffect(() => { onPreview(group, draft); }, [draft, group, onPreview]);
@@ -143,32 +257,27 @@ export function SoundToLightModal({
   const detectedBpm = observation?.detected_bpm ?? state.snapshot.sound_bpm;
   const confidence = observation?.confidence ?? (state.snapshot.sound_status.state === "active" ? state.snapshot.sound_status.confidence : 0);
   const frequency = draft.frequency.type === "preset" ? draft.frequency.preset : "custom";
-  const options = useMemo(() => {
-    const available = devices.filter((device) => device.deviceId && device.deviceId !== "default");
-    const result: Array<{ value: string; label: string }> = [
-      { value: "", label: "Not assigned on this browser" },
-      { value: "default", label: "System default input" },
-      ...available.map((device) => ({ value: device.deviceId, label: device.label })),
-    ];
-    if (deviceId && !result.some((option) => option.value === deviceId)) result.push({ value: deviceId, label: "Previously selected input · unavailable" });
-    return result;
-  }, [deviceId, devices]);
+  const dirty = JSON.stringify({ configuration: draft, source }) !== JSON.stringify(baseline);
   const update = <Key extends keyof SoundToLightConfig>(key: Key, value: SoundToLightConfig[Key]) => setDraft((current) => ({ ...current, [key]: value }));
   const updateCustomFrequency = (change: { low_hz?: number; high_hz?: number }) => setDraft((current) => {
     const frequency = current.frequency.type === "custom" ? current.frequency : { type: "custom" as const, low_hz: 60, high_hz: 180 };
     return { ...current, frequency: { ...frequency, ...change } };
   });
-  const apply = async () => {
+  const apply = async (closeAfterSave = true) => {
     if (invalid) {
       setLocalError(invalid);
       return;
     }
     setBusy(true);
     try {
-      const saved = await onSave(draft);
+      const saved = await onSave({ ...draft, enabled: source.type === "sound_to_light" }, source);
+      const savedSource = saved.source ?? source;
       setDraft(structuredClone(saved.configuration));
+      setSource(savedSource);
+      setBaseline({ configuration: structuredClone(saved.configuration), source: savedSource });
       setLocalError(null);
-      onClose();
+      setConfirmClose(false);
+      if (closeAfterSave) onClose();
     } catch (reason) {
       setLocalError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -179,7 +288,18 @@ export function SoundToLightModal({
     setBusy(true);
     try {
       const next = await onAction(input);
-      setDraft(structuredClone(next.configuration));
+      const nextSource = next.source ?? baseline.source;
+      setDraft((current) => {
+        const merged = structuredClone(current);
+        for (const key of Object.keys(current) as Array<keyof SoundToLightConfig>) {
+          if (JSON.stringify(current[key]) === JSON.stringify(baseline.configuration[key])) {
+            (merged as unknown as Record<string, unknown>)[key] = structuredClone(next.configuration[key]);
+          }
+        }
+        return merged;
+      });
+      if (JSON.stringify(source) === JSON.stringify(baseline.source)) setSource(nextSource);
+      setBaseline({ configuration: structuredClone(next.configuration), source: nextSource });
       setLocalError(null);
     } catch (reason) {
       setLocalError(reason instanceof Error ? reason.message : String(reason));
@@ -187,52 +307,60 @@ export function SoundToLightModal({
       setBusy(false);
     }
   };
-  return createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
+  const requestClose = () => dirty ? setConfirmClose(true) : onClose();
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || confirmClose) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (dirty) setConfirmClose(true);
+      else onClose();
+    };
+    document.addEventListener("keydown", escape, true);
+    return () => document.removeEventListener("keydown", escape, true);
+  }, [confirmClose, dirty, onClose]);
+  const selectSource = (value: string) => {
+    const next = selectedSource(value, group);
+    setSource(next);
+    setDraft((current) => ({ ...current, enabled: next.type === "sound_to_light" }));
+  };
+  return createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && requestClose()}>
     <section className="nested-modal sound-to-light-modal" role="dialog" aria-modal="true" aria-label={`Speed Group ${group} Sound to Light`}>
-      <ModalTitleBar title={`Speed Group ${group} · Sound to Light`} closeLabel="Close Sound-to-Light configuration" onClose={onClose}/>
-      <div className="sound-status-grid" aria-label="Audio status">
-        <article className={`status-${permission}`}><small>Microphone permission</small><strong>{permissionLabel(permission)}</strong></article>
-        <article className={`status-${capture.phase}`}><small>Audio source</small><strong>{captureLabel(capture)}</strong></article>
-        <article className={observation?.usable_signal || state.snapshot.usable_signal ? "status-usable" : "status-waiting"}><small>Selected-band signal</small><strong>{observation?.usable_signal || state.snapshot.usable_signal ? "Usable" : "Waiting / quiet"}</strong></article>
-      </div>
-      <p className="sound-capture-message">{capture.message}</p>
-      <div className="sound-source-row">
-        <SelectField label="Audio input on this desk/browser" value={deviceId} options={options} onChange={onDeviceChange} description="The device ID stays in this browser for this desk and is never saved in the show."/>
-        <Button onClick={() => void onRefreshInputs()}>Refresh inputs</Button>
-      </div>
-      <section className="sound-live-panel" aria-label="Live sound analysis">
-        <div className="sound-meter-stack"><Meter label="Input level" value={inputLevel}/><Meter label="Selected band" value={bandLevel}/></div>
-        <dl>
-          <div><dt>Detected tempo</dt><dd>{detectedBpm == null ? "—" : `${detectedBpm.toFixed(1)} BPM`}</dd></div>
-          <div><dt>Confidence</dt><dd>{Math.round(confidence * 100)}%</dd></div>
-          <div><dt>Effective speed</dt><dd>{state.snapshot.effective_bpm.toFixed(1)} BPM</dd></div>
-          <div><dt>Authoritative source</dt><dd>{sourceLabel(state)}</dd></div>
-        </dl>
-      </section>
-      <FormLayout columns={2} minColumnWidth={250} className="sound-configuration-grid">
-        <SwitchField label="Enable Sound-to-Light" checked={draft.enabled} onChange={(event) => update("enabled", event.target.checked)} description="When signal is lost, this group holds the last sound tempo, then returns to its manual BPM."/>
-        <SelectField label="Analysis" value="tempo_bpm" disabled options={[{ value: "tempo_bpm", label: "Tempo / BPM" }]} onChange={() => undefined}/>
-        <SelectField label="Frequency region" value={frequency} options={frequencyOptions} onChange={(value) => update("frequency", value === "custom" ? { type: "custom", low_hz: 60, high_hz: 180 } : { type: "preset", preset: value })}/>
-        {draft.frequency.type === "custom" && <div className="sound-custom-frequency">
-          <NumberField label="Low frequency" aria-label="Custom low frequency" value={draft.frequency.low_hz} min={20} max={19_999} unit="Hz" onValueChange={(value) => updateCustomFrequency({ low_hz: Number(value) })}/>
-          <NumberField label="High frequency" aria-label="Custom high frequency" value={draft.frequency.high_hz} min={21} max={20_000} unit="Hz" onValueChange={(value) => updateCustomFrequency({ high_hz: Number(value) })}/>
-        </div>}
-        <RangeField label="Input gain" value={draft.input_gain_db} minimum={-60} maximum={60} step={1} unit=" dB" onChange={(value) => update("input_gain_db", value)}/>
-        <RangeField label="Confidence threshold" value={draft.confidence_threshold} minimum={0} maximum={1} step={0.01} unit="" onChange={(value) => update("confidence_threshold", value)}/>
-        <RangeField label="Tempo smoothing" value={draft.smoothing} minimum={0} maximum={0.99} step={0.01} unit="" onChange={(value) => update("smoothing", value)}/>
-        <NumberField label="Minimum accepted tempo" aria-label="Minimum accepted BPM" value={draft.minimum_bpm} min={0.1} max={998} step={1} allowDecimal unit="BPM" onChange={(event) => update("minimum_bpm", Number(event.target.value))}/>
-        <NumberField label="Maximum accepted tempo" aria-label="Maximum accepted BPM" value={draft.maximum_bpm} min={0.2} max={999} step={1} allowDecimal unit="BPM" onChange={(event) => update("maximum_bpm", Number(event.target.value))}/>
-        <NumberField label="Signal-loss hold" aria-label="Signal hold seconds" value={draft.signal_hold_millis / 1_000} min={0} max={60} step={0.5} allowDecimal unit="s" onChange={(event) => update("signal_hold_millis", Math.round(Number(event.target.value) * 1_000))}/>
-        <NumberField label="Sound speed ratio" aria-label="Sound multiplier" value={draft.multiplier} min={0.125} max={8} step={0.125} allowDecimal unit="×" onChange={(event) => update("multiplier", Number(event.target.value))}/>
-      </FormLayout>
-      <section className="sound-manual-actions" aria-label="Speed Group controls">
-        <Button disabled={busy} onClick={() => void action({ action: "learn", captured_at_millis: monotonicEpochMillis() })}>Learn</Button>
-        <Button disabled={busy} onClick={() => void action({ action: "half" })}>Half</Button>
-        <Button disabled={busy} onClick={() => void action({ action: "double" })}>Double</Button>
-        <Button active={state.snapshot.paused} disabled={busy} onClick={() => void action({ action: "pause" })}>{state.snapshot.paused ? "Resume" : "Pause"}</Button>
-      </section>
+      <ModalTitleBar
+        title={`Speed Group ${group}`}
+        actions={<>
+          <Button aria-label="Half Speed Group speed" disabled={busy} onClick={() => void action({ action: "half" })}>÷2</Button>
+          <Button aria-label="Double Speed Group speed" disabled={busy} onClick={() => void action({ action: "double" })}>×2</Button>
+          <Button aria-label={state.snapshot.paused ? "Resume Speed Group" : "Pause Speed Group"} active={state.snapshot.paused} disabled={busy} onClick={() => void action({ action: "pause" })}>{state.snapshot.paused ? "Resume" : "Pause"}</Button>
+          <Button variant="primary" loading={busy} disabled={Boolean(invalid) || !dirty} onClick={() => void apply()}>Apply</Button>
+        </>}
+        closeLabel="Close Speed Group settings"
+        onClose={requestClose}
+      />
+      <SoundToLightFields
+        group={group}
+        state={state}
+        capture={capture}
+        draft={draft}
+        source={source}
+        frequency={frequency}
+        inputLevel={inputLevel}
+        bandLevel={bandLevel}
+        detectedBpm={detectedBpm}
+        confidence={confidence}
+        onSourceTypeSelect={selectSource}
+        onSourceChange={setSource}
+        onUpdate={update}
+        onCustomFrequencyChange={updateCustomFrequency}
+      />
       {(invalid || localError || controllerError) && <p className="sound-error" role="alert">{localError ?? invalid ?? controllerError}</p>}
-      <footer className="modal-actions"><Button onClick={onClose}>Cancel</Button><Button variant="primary" loading={busy} disabled={Boolean(invalid)} onClick={() => void apply()}>Apply</Button></footer>
+      <DirtyCloseConfirmation
+        visible={confirmClose}
+        invalid={Boolean(invalid)}
+        onDiscard={onClose}
+        onSave={() => void apply(true)}
+        onStay={() => setConfirmClose(false)}
+      />
     </section>
   </div>, document.body);
 }

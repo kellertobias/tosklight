@@ -38,11 +38,11 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		);
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
-		await api.request("POST", "/api/v1/users", {
+		await api.request("POST", "/api/v2/users", {
 			name: "Programmer A",
 			enabled: true,
 		});
-		await api.request("POST", "/api/v1/users", {
+		await api.request("POST", "/api/v2/users", {
 			name: "Programmer B",
 			enabled: true,
 		});

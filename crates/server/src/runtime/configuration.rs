@@ -11,6 +11,20 @@ pub(super) fn default_speed_groups() -> [f64; 5] {
 pub(super) fn default_sound_to_light() -> [SoundToLightConfig; 5] {
     std::array::from_fn(|_| SoundToLightConfig::default())
 }
+pub(super) fn default_speed_group_sources() -> [SpeedGroupSource; 5] {
+    std::array::from_fn(|_| SpeedGroupSource::Manual)
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub(super) enum SpeedGroupSource {
+    #[default]
+    Manual,
+    SpeedGroup {
+        group: u8,
+    },
+    SoundToLight,
+}
 pub(super) fn deserialize_speed_groups<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<[f64; 5], D::Error> {
@@ -46,6 +60,8 @@ pub(super) struct DeskConfiguration {
     pub(super) speed_groups_bpm: [f64; 5],
     #[serde(default = "default_sound_to_light")]
     pub(super) speed_group_sound_to_light: [SoundToLightConfig; 5],
+    #[serde(default = "default_speed_group_sources")]
+    pub(super) speed_group_sources: [SpeedGroupSource; 5],
     pub(super) programmer_fade_millis: u64,
     pub(super) sequence_master_fade_millis: u64,
     pub(super) preload_programmer_changes: bool,
@@ -105,6 +121,7 @@ impl Default for DeskConfiguration {
             autosave_interval_seconds: default_autosave_interval_seconds(),
             speed_groups_bpm: default_speed_groups(),
             speed_group_sound_to_light: default_sound_to_light(),
+            speed_group_sources: default_speed_group_sources(),
             programmer_fade_millis: 3_000,
             sequence_master_fade_millis: 3_000,
             preload_programmer_changes: true,
@@ -119,6 +136,18 @@ impl Default for DeskConfiguration {
     }
 }
 impl DeskConfiguration {
+    pub(super) fn migrate_speed_group_sources(&mut self) {
+        for index in 0..self.speed_group_sources.len() {
+            if self.speed_group_sources[index] == SpeedGroupSource::Manual
+                && self.speed_group_sound_to_light[index].enabled
+            {
+                self.speed_group_sources[index] = SpeedGroupSource::SoundToLight;
+            }
+            self.speed_group_sound_to_light[index].enabled =
+                self.speed_group_sources[index] == SpeedGroupSource::SoundToLight;
+        }
+    }
+
     pub(super) fn validate(&self) -> Result<(), ApiError> {
         if !(40..=44).contains(&self.frame_rate_hz) {
             return Err(ApiError::bad_request("frame_rate_hz must be 40-44"));
@@ -145,6 +174,7 @@ impl DeskConfiguration {
                 .validate()
                 .map_err(|error| ApiError::bad_request(error.to_string()))?;
         }
+        validate_speed_group_source_graph(&self.speed_group_sources)?;
         if self.programmer_fade_millis > 60_000 || self.sequence_master_fade_millis > 60_000 {
             return Err(ApiError::bad_request(
                 "fade times must be 0-60000 milliseconds",
@@ -166,4 +196,32 @@ impl DeskConfiguration {
         }
         Ok(())
     }
+}
+
+pub(super) fn validate_speed_group_source_graph(
+    sources: &[SpeedGroupSource; 5],
+) -> Result<(), ApiError> {
+    for start in 0..sources.len() {
+        let mut visited = [false; 5];
+        let mut current = start;
+        loop {
+            if visited[current] {
+                return Err(ApiError::bad_request(
+                    "Speed Group sources must not contain direct or indirect cycles",
+                ));
+            }
+            visited[current] = true;
+            let SpeedGroupSource::SpeedGroup { group } = sources[current] else {
+                break;
+            };
+            let Some(next) = usize::from(group).checked_sub(1) else {
+                return Err(ApiError::bad_request("Speed Group source must be A-E"));
+            };
+            if next >= sources.len() {
+                return Err(ApiError::bad_request("Speed Group source must be A-E"));
+            }
+            current = next;
+        }
+    }
+    Ok(())
 }

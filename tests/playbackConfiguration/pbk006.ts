@@ -240,13 +240,14 @@ export function registerPbk006UiScenario(): void {
 		expect(secondButtonBox).not.toBeNull();
 		expect(bottomButtonBox).not.toBeNull();
 		expect(Math.abs(firstButtonBox!.y - secondButtonBox!.y)).toBeLessThan(2);
-		expect(bottomButtonBox!.y).toBeGreaterThan(
-			firstButtonBox!.y + firstButtonBox!.height,
-		);
-		expect(bottomButtonBox!.width).toBeGreaterThan(firstButtonBox!.width * 1.9);
-		await playbackCard(page, 1)
-			.getByRole("button", { name: "DOUBLE", exact: true })
-			.click();
+			expect(bottomButtonBox!.y).toBeGreaterThan(
+				firstButtonBox!.y + firstButtonBox!.height,
+			);
+			expect(bottomButtonBox!.width).toBeGreaterThan(firstButtonBox!.width * 1.9);
+			await page.getByRole("button", { name: "ESC", exact: true }).click();
+			await playbackCard(page, 1)
+				.getByRole("button", { name: "DOUBLE", exact: true })
+				.click();
 		await expect
 			.poll(async () => (await controls(api)).speed_groups[0].manual_bpm)
 			.toBe(240);

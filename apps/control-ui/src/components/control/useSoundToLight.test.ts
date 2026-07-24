@@ -42,8 +42,8 @@ describe("Sound-to-Light capture ownership", () => {
     expect(shouldPublishSoundObservation(state(true))).toBe(true);
   });
 
-  it("scopes machine-specific device IDs by desk and Speed Group", () => {
-    expect(soundDeviceStorageKey("desk-one", "A")).not.toBe(soundDeviceStorageKey("desk-two", "A"));
-    expect(soundDeviceStorageKey("desk-one", "A")).not.toBe(soundDeviceStorageKey("desk-one", "B"));
+  it("uses one machine-specific device ID per desk while retaining legacy migration keys", () => {
+    expect(soundDeviceStorageKey("desk-one")).not.toBe(soundDeviceStorageKey("desk-two"));
+    expect(soundDeviceStorageKey("desk-one")).not.toBe(soundDeviceStorageKey("desk-one", "A"));
   });
 });

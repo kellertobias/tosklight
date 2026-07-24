@@ -107,7 +107,7 @@ pub(super) async fn desk_lock_boundary(
         || is_speed_group_action_route(request.method(), path)
         || is_cue_deletion_action_route(request.method(), path)
         || path == "/api/v2/sessions"
-        || path.starts_with("/api/v1/desk-lock")
+        || is_v2_desk_lock_route(path)
     {
         return next.run(request).await;
     }
@@ -124,6 +124,22 @@ pub(super) async fn desk_lock_boundary(
         return ApiError::conflict("desk is locked").into_response();
     }
     next.run(request).await
+}
+
+fn is_v2_desk_lock_route(path: &str) -> bool {
+    let parts = path.trim_matches('/').split('/').collect::<Vec<_>>();
+    matches!(
+        parts.as_slice(),
+        ["api", "v2", "control-desks", _, "desk-lock"]
+            | [
+                "api",
+                "v2",
+                "control-desks",
+                _,
+                "desk-lock",
+                "update" | "lock" | "unlock"
+            ]
+    )
 }
 
 fn is_cue_deletion_action_route(method: &Method, path: &str) -> bool {
@@ -162,7 +178,7 @@ fn is_programming_update_route(method: &Method, path: &str) -> bool {
                 "preview" | "targets" | "actions"
             ]
         ) | (
-            &Method::PUT,
+            &Method::POST,
             ["api", "v2", "desks", _, "programming-update", "settings"]
         )
     )

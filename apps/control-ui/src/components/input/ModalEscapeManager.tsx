@@ -7,7 +7,10 @@ export function ModalEscapeManager() {
       const layers = [...document.querySelectorAll<HTMLElement>(".modal-backdrop,.stacked-modal-layer")];
       const top = layers.at(-1);
       if (!top) return;
-      const close = top.querySelector<HTMLButtonElement>(".modal-close") ?? top.querySelector<HTMLButtonElement>("button");
+      const close =
+        top.querySelector<HTMLButtonElement>(".ui-modal-title-close") ??
+        top.querySelector<HTMLButtonElement>(".modal-close") ??
+        top.querySelector<HTMLButtonElement>("button");
       if (!close) return;
       event.preventDefault(); event.stopImmediatePropagation(); close.click();
     };

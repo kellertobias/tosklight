@@ -35,7 +35,7 @@ async function ownedServerScenario() {
   let seeder;
   try {
     seeder = await startSeededServer(dataDir, port, "desktop-001");
-    await authenticated(seeder.token, port, "POST", "/api/v1/shutdown");
+    await authenticated(seeder.token, port, "POST", "/api/v2/shutdown");
     await waitForExit(seeder.child, 5_000, "DESKTOP-001 seed server exit");
     await waitForPortClosed(port, 5_000, "DESKTOP-001 pre-launch port closure");
 
@@ -108,7 +108,7 @@ async function independentServerScenario() {
     await fs.access(created.path);
     await fs.access(path.join(dataDir, "desk.sqlite"));
 
-    await authenticated(independent.token, port, "POST", "/api/v1/shutdown");
+    await authenticated(independent.token, port, "POST", "/api/v2/shutdown");
     await waitForExit(independent.child, 5_000, "DESKTOP-002 independent cleanup exit");
   } catch (error) {
     throw withLogs(error, desktop?.log, independent?.log);

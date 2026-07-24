@@ -92,16 +92,16 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       sameDesk.session = await sameDesk.request("POST", "/api/v2/sessions", { username: "Operator", desk_id: api.session!.desk.id }, false);
       expect((await playbackState(sameDesk)).selected_playback).toBe(2);
 
-      await api.request("PUT", "/api/v1/master", { grand_master: 0.5, blackout: false });
+      await api.request("POST", "/api/v2/output-runtime/global-master/actions", { grand_master: 0.5, blackout: false });
       await api.executeCommandLine("CUE SET 1 CUE 3");
       const masterFrame = await bench.tick(3_000);
       const visualization = await api.request<any>("GET", "/api/v2/output/visualization");
       expect(visualization).toMatchObject({ grand_master: 0.5, blackout: false });
       expect(visualization.values.some((item: any) => item.attribute === "intensity" && Math.abs(item.value?.value - 0.8) < 0.001)).toBe(true);
       expect(masterFrame.universes.find((universe: any) => universe.universe === 1)?.slots[0]).toBe(102);
-      await api.request("PUT", "/api/v1/master", { blackout: true });
+      await api.request("POST", "/api/v2/output-runtime/global-master/actions", { blackout: true });
       expect((await bench.tick(0)).universes.find((universe: any) => universe.universe === 1)?.slots[0]).toBe(0);
-      await api.request("PUT", "/api/v1/master", { grand_master: 1, blackout: false });
+      await api.request("POST", "/api/v2/output-runtime/global-master/actions", { grand_master: 1, blackout: false });
 
       await api.executeCommandLine("CUE CUE SET 1 CUE 2");
       expect((await runtime(api, 1)).loaded_cue_number).toBe(2);

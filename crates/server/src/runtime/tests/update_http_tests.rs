@@ -2,7 +2,8 @@
 async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     let (state, data_dir) = test_state();
     let user = state.desk.lock().users().unwrap().remove(0);
-    let front = test_control_desk();
+    let mut front = test_control_desk();
+    front.id = Uuid::new_v4();
     let mut wing = test_control_desk();
     wing.id = Uuid::new_v4();
     wing.osc_alias = "wing".into();
@@ -37,25 +38,46 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
         cue_mode: update::CueUpdateMode::ExistingOnly,
         preset_mode: update::ExistingContentMode::AddNew,
         group_mode: update::ExistingContentMode::AddNew,
-        other_target_modes: HashMap::from([("macro".into(), update::ExistingContentMode::AddNew)]),
+        other_target_modes: HashMap::new(),
         show_update_modal_on_touch: false,
     };
 
     let saved = app
         .clone()
         .oneshot(
-            Request::put("/api/v1/update/settings")
+            Request::post(format!(
+                "/api/v2/desks/{}/programming-update/settings",
+                front.id
+            ))
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::AUTHORIZATION, format!("Bearer {}", writer.token))
-                .body(Body::from(serde_json::to_vec(&expected).unwrap()))
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id":"settings-persist",
+                        "settings":{
+                            "cue_mode":"existing_only",
+                            "preset_mode":"add_new",
+                            "group_mode":"add_new",
+                            "show_update_modal_on_touch":false
+                        }
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(saved.status(), StatusCode::OK);
+    let saved_status = saved.status();
+    let saved = json(saved).await;
+    assert_eq!(saved_status, StatusCode::OK, "{saved}");
     assert_eq!(
-        serde_json::from_value::<update::UpdateSettings>(json(saved).await).unwrap(),
-        expected
+        saved["settings"],
+        serde_json::json!({
+            "cue_mode":"existing_only",
+            "preset_mode":"add_new",
+            "group_mode":"add_new",
+            "show_update_modal_on_touch":false
+        })
     );
 
     let persisted = state
@@ -85,7 +107,10 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     let same_desk = reloaded_app
         .clone()
         .oneshot(
-            Request::get("/api/v1/update/settings")
+            Request::get(format!(
+                "/api/v2/desks/{}/programming-update/settings",
+                front.id
+            ))
                 .header(header::AUTHORIZATION, format!("Bearer {}", reader.token))
                 .body(Body::empty())
                 .unwrap(),
@@ -94,12 +119,20 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
         .unwrap();
     assert_eq!(same_desk.status(), StatusCode::OK);
     assert_eq!(
-        serde_json::from_value::<update::UpdateSettings>(json(same_desk).await).unwrap(),
-        expected
+        json(same_desk).await["settings"],
+        serde_json::json!({
+            "cue_mode":"existing_only",
+            "preset_mode":"add_new",
+            "group_mode":"add_new",
+            "show_update_modal_on_touch":false
+        })
     );
     let isolated = reloaded_app
         .oneshot(
-            Request::get("/api/v1/update/settings")
+            Request::get(format!(
+                "/api/v2/desks/{}/programming-update/settings",
+                wing.id
+            ))
                 .header(
                     header::AUTHORIZATION,
                     format!("Bearer {}", other_desk.token),
@@ -111,8 +144,13 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
         .unwrap();
     assert_eq!(isolated.status(), StatusCode::OK);
     assert_eq!(
-        serde_json::from_value::<update::UpdateSettings>(json(isolated).await).unwrap(),
-        update::UpdateSettings::default()
+        json(isolated).await["settings"],
+        serde_json::json!({
+            "cue_mode":"add_to_current_cue",
+            "preset_mode":"update_existing",
+            "group_mode":"update_existing",
+            "show_update_modal_on_touch":true
+        })
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }

@@ -4,7 +4,7 @@ import {
 	useContext,
 	useMemo,
 } from "react";
-import type { ConfigurationUpdateResult } from "../../api/client/configuration";
+import type { ConfigurationUpdateResult } from "../../api/client/deskManagement";
 import type { DeskConfiguration } from "../../api/types";
 import type { ConfigurationStore } from "./store";
 

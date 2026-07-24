@@ -6,6 +6,7 @@ import {
 	TextField,
 } from "../../components/common";
 import { MatterBridgeSettings } from "../../components/setup/MatterBridgeSettings";
+import { SoundInputSettings } from "../../components/setup/SoundInputSettings";
 import type { SetupWindowController } from "./controller";
 
 function NetworkInputs({ controller }: { controller: SetupWindowController }) {
@@ -31,6 +32,7 @@ function NetworkInputs({ controller }: { controller: SetupWindowController }) {
 					<span>{draft?.rtp_midi_bind ?? "Disabled"}</span>
 				</article>
 			</div>
+			<SoundInputSettings />
 		</>
 	);
 }
