@@ -305,6 +305,23 @@ export function registerPbk005FeedbackScenario(): void {
 			{ 1: 54, 2: 55 },
 		);
 		await poolAction(api, 54, "on");
+		const playbackFrames: any[] = [];
+		page.on("websocket", (socket) => {
+			if (!socket.url().includes("/api/v1/events")) return;
+			socket.on("framesent", (frame) => {
+				const payload =
+					typeof frame.payload === "string"
+						? frame.payload
+						: frame.payload.toString();
+				try {
+					const message = JSON.parse(payload);
+					if (message?.command === "playback.action")
+						playbackFrames.push(message);
+				} catch {
+					// Non-JSON frames are not live playback actions.
+				}
+			});
+		});
 		await desk.open(bench.baseUrl);
 		await openPlaybackMode(page);
 		const swap = playbackCard(page, 2).getByRole("button", {
@@ -336,22 +353,32 @@ export function registerPbk005FeedbackScenario(): void {
 			name: "TEMP",
 			exact: true,
 		});
-		// The card issues its actions through the v2 desk playback-actions route; the
-		// legacy per-cuelist v1 endpoint is no longer on the interaction path.
-		const [tempRequest] = await Promise.all([
-			page.waitForRequest(
-				(request) =>
-					request.url().includes("/playback-actions") &&
-					request.method() === "POST" &&
-					request.postDataJSON()?.address?.playback_number === 55,
-			),
-			temp.click(),
-		]);
-		expect(tempRequest.postDataJSON()).toMatchObject({
-			address: { kind: "playback", playback_number: 55 },
-			action: { type: "configured_button", number: 2, pressed: true },
-			surface: "physical",
-		});
+		await temp.click();
+		await expect
+			.poll(() =>
+				playbackFrames.find(
+					(frame) =>
+						frame.payload?.address?.playback_number === 55 &&
+						frame.payload?.action?.type === "configured_button" &&
+						frame.payload.action.number === 2,
+				),
+			)
+			.toMatchObject({
+				request_id: expect.any(String),
+				payload: {
+					request_id: expect.any(String),
+					address: { kind: "playback", playback_number: 55 },
+					action: { type: "configured_button", number: 2, pressed: true },
+					surface: "physical",
+				},
+			});
+		const tempFrame = playbackFrames.find(
+			(frame) =>
+				frame.payload?.address?.playback_number === 55 &&
+				frame.payload?.action?.type === "configured_button" &&
+				frame.payload.action.number === 2,
+		);
+		expect(tempFrame.payload.request_id).toBe(tempFrame.request_id);
 		await expect
 			.poll(async () => (await activePlayback(api, 55)).temporary_active)
 			.toBe(true);

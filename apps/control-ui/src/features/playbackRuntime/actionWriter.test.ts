@@ -338,7 +338,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 		expect(store.getSnapshot().error).toBeNull();
 	});
 
-	it("replays a retry with the exact request ID and virtual surface metadata", async () => {
+	it("sends a failed live action once and repairs authoritative state", async () => {
 		const store = readyStore();
 		const requests: PlaybackActionRequest[] = [];
 		const retryable = Object.assign(new Error("temporarily offline"), {
@@ -346,14 +346,15 @@ describe("PlaybackRuntimeActionWriter", () => {
 		});
 		const applyAction = vi.fn(async (_showId, _deskId, request) => {
 			requests.push(request);
-			if (requests.length === 1) throw retryable;
-			return { ...outcome(request, cueProjection(1, 1)), replayed: true };
+			throw retryable;
 		});
+		const repair = vi.fn(async () => undefined);
 		const writer = new PlaybackRuntimeActionWriter({
 			showId: SHOW_ID,
 			deskId: DESK_ID,
 			store,
 			applyAction,
+			repair,
 		});
 
 		const result = await writer.poolPlaybackAction(1, "button", {
@@ -362,19 +363,19 @@ describe("PlaybackRuntimeActionWriter", () => {
 			surface: "virtual",
 		});
 
-		expect(applyAction).toHaveBeenCalledTimes(2);
-		expect(requests[1]).toBe(requests[0]);
-		expect(requests[1].request_id).toBe(requests[0].request_id);
+		expect(applyAction).toHaveBeenCalledOnce();
+		expect(repair).toHaveBeenCalledOnce();
+		expect(repair).toHaveBeenCalledWith(retryable);
 		expect(requests[0]).toMatchObject({
 			address: { kind: "playback", playback_number: 1 },
 			action: { type: "configured_button", number: 1, pressed: true },
 			surface: "virtual",
 		});
-		expect(result?.replayed).toBe(true);
-		expect(runtime(store).cue_index).toBe(1);
+		expect(result).toBeNull();
+		expect(store.getSnapshot().error).toBe(retryable);
 	});
 
-	it("retries an exact mapped Cuelist release with one request identity", async () => {
+	it("sends a failed Cuelist release once", async () => {
 		const store = readyStore();
 		const requests: PlaybackActionRequest[] = [];
 		const retryable = Object.assign(new Error("temporarily offline"), {
@@ -382,17 +383,15 @@ describe("PlaybackRuntimeActionWriter", () => {
 		});
 		const applyAction = vi.fn(async (_showId, _deskId, request) => {
 			requests.push(request);
-			if (requests.length === 1) throw retryable;
-			return {
-				...outcome(request, released(cueProjection()), 12),
-				replayed: true,
-			};
+			throw retryable;
 		});
+		const repair = vi.fn(async () => undefined);
 		const writer = new PlaybackRuntimeActionWriter({
 			showId: SHOW_ID,
 			deskId: DESK_ID,
 			store,
 			applyAction,
+			repair,
 		});
 
 		const result = await writer.releaseCueListSource({
@@ -400,14 +399,14 @@ describe("PlaybackRuntimeActionWriter", () => {
 			cueListId: "33333333-3333-4333-8333-333333333333",
 		});
 
-		expect(requests).toHaveLength(2);
-		expect(requests[1]).toBe(requests[0]);
+		expect(requests).toHaveLength(1);
+		expect(repair).toHaveBeenCalledOnce();
 		expect(requests[0]).toMatchObject({
 			address: { kind: "playback", playback_number: 1 },
 			action: { type: "release" },
 			surface: "virtual",
 		});
-		expect(result?.replayed).toBe(true);
+		expect(result).toBeNull();
 	});
 
 	it("addresses an exact direct Cuelist runtime without borrowing a Playback", async () => {
@@ -722,11 +721,10 @@ describe("PlaybackRuntimeActionWriter", () => {
 		expect(onError).not.toHaveBeenCalled();
 	});
 
-	it("sends a held-button safety release after its writer scope was replaced", async () => {
+	it("sends a held-button safety release only once after scope replacement", async () => {
 		const store = readyStore();
 		const pressOutcome = deferred<PlaybackOutcome>();
 		const requests: PlaybackActionRequest[] = [];
-		let releaseAttempts = 0;
 		const retryable = Object.assign(new Error("reconnecting"), {
 			retryable: true,
 		});
@@ -734,9 +732,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 			requests.push(request);
 			if (request.action.type === "configured_button" && request.action.pressed)
 				return pressOutcome.promise;
-			releaseAttempts += 1;
-			if (releaseAttempts === 1) throw retryable;
-			return outcome(request, cueProjection(), null);
+			throw retryable;
 		});
 		const writer = new PlaybackRuntimeActionWriter({
 			showId: SHOW_ID,
@@ -761,10 +757,9 @@ describe("PlaybackRuntimeActionWriter", () => {
 				pressed: false,
 				surface: "virtual",
 			}),
-		).resolves.not.toBeNull();
+		).rejects.toBe(retryable);
 
-		expect(applyAction).toHaveBeenCalledTimes(3);
-		expect(requests[2]).toBe(requests[1]);
+		expect(applyAction).toHaveBeenCalledTimes(2);
 		expect(requests[1]).toMatchObject({
 			action: { type: "configured_button", number: 1, pressed: false },
 			surface: "virtual",
@@ -869,31 +864,25 @@ describe("PlaybackRuntimeActionWriter", () => {
 		expect(store.getSnapshot().error).toBeNull();
 	});
 
-	it("retries a Group request with one request ID", async () => {
+	it("sends a failed Group request once and repairs authority", async () => {
 		const store = groupReadyStore();
 		const requests: PlaybackActionRequest[] = [];
 		const applyAction = vi.fn(async (_showId, _deskId, request) => {
 			requests.push(request);
-			if (requests.length === 1)
-				throw Object.assign(new Error("offline"), { retryable: true });
-			return {
-				...groupOutcome(request, groupProjection(GROUP_ID, 0.5), 15),
-				replayed: true,
-			};
+			throw Object.assign(new Error("offline"), { retryable: true });
 		});
+		const repair = vi.fn(async () => undefined);
 		const writer = new PlaybackRuntimeActionWriter({
 			showId: SHOW_ID,
 			deskId: DESK_ID,
 			store,
 			applyAction,
+			repair,
 		});
 
-		await expect(writer.setGroupMaster(GROUP_ID, 0.5)).resolves.toMatchObject({
-			replayed: true,
-		});
-		expect(requests).toHaveLength(2);
-		expect(requests[1]).toBe(requests[0]);
-		expect(requests[1].request_id).toBe(requests[0].request_id);
+		await expect(writer.setGroupMaster(GROUP_ID, 0.5)).resolves.toBeNull();
+		expect(requests).toHaveLength(1);
+		expect(repair).toHaveBeenCalledOnce();
 	});
 
 	it("rejects absent, malformed, and mismatched Group authority", async () => {
@@ -962,18 +951,14 @@ describe("PlaybackRuntimeActionWriter", () => {
 		expect(store.getSnapshot().error).toBeNull();
 	});
 
-	it("sends a captured Group Flash release through its original writer", async () => {
+	it("sends a captured Group Flash release once through its original writer", async () => {
 		const store = groupReadyStore(17);
 		const requests: PlaybackActionRequest[] = [];
-		let releaseAttempts = 0;
 		const applyAction = vi.fn(async (_showId, _deskId, request) => {
 			requests.push(request);
 			if (request.action.type === "flash" && request.action.pressed)
 				return groupOutcome(request, groupProjection(GROUP_ID, 1, 17), 18);
-			releaseAttempts += 1;
-			if (releaseAttempts === 1)
-				throw Object.assign(new Error("reconnecting"), { retryable: true });
-			return groupOutcome(request, groupProjection(GROUP_ID, 1, 17), null);
+			throw Object.assign(new Error("reconnecting"), { retryable: true });
 		});
 		const writer = new PlaybackRuntimeActionWriter({
 			showId: SHOW_ID,
@@ -985,9 +970,11 @@ describe("PlaybackRuntimeActionWriter", () => {
 		await writer.setGroupFlash(GROUP_ID, true);
 		writer.stop();
 		store.reset(SHOW_ID, DESK_ID, "authority-b");
-		await expect(writer.setGroupFlash(GROUP_ID, false)).resolves.not.toBeNull();
+		await expect(writer.setGroupFlash(GROUP_ID, false)).rejects.toThrow(
+			"reconnecting",
+		);
 
-		expect(requests.at(-1)).toBe(requests.at(-2));
+		expect(requests).toHaveLength(2);
 		expect(requests.at(-1)).toMatchObject({
 			address: { kind: "group", group_id: GROUP_ID },
 			action: { type: "flash", pressed: false },

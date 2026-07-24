@@ -311,6 +311,23 @@ export function registerPbk004ReloadFeedbackScenario(): void {
 			{ 1: 47 },
 		);
 		await poolAction(api, 47, "on");
+		const playbackFrames: any[] = [];
+		page.on("websocket", (socket) => {
+			if (!socket.url().includes("/api/v1/events")) return;
+			socket.on("framesent", (frame) => {
+				const payload =
+					typeof frame.payload === "string"
+						? frame.payload
+						: frame.payload.toString();
+				try {
+					const message = JSON.parse(payload);
+					if (message?.command === "playback.action")
+						playbackFrames.push(message);
+				} catch {
+					// Non-JSON frames are not live playback actions.
+				}
+			});
+		});
 		await desk.open(bench.baseUrl);
 		await openPlaybackMode(page);
 		let slider = playbackCard(page, 1).getByRole("slider", { name: "X-fade" });
@@ -319,11 +336,26 @@ export function registerPbk004ReloadFeedbackScenario(): void {
 			.poll(async () => (await activePlayback(api, 47)).manual_xfade_progress)
 			.toBeCloseTo(0.25, 3);
 		await expect(playbackCard(page, 1)).toContainText("Cue 1 → 2 · 25%");
-		await page.reload();
+		await desk.open(bench.baseUrl);
 		await openPlaybackMode(page);
 		await expect(playbackCard(page, 1)).toContainText("Cue 1 → 2 · 25%");
 		slider = playbackCard(page, 1).getByRole("slider", { name: "X-fade" });
-		await slider.fill("100");
+		await expect(slider).toHaveValue("25");
+		await slider.focus();
+		await slider.press("End");
+		await expect
+			.poll(() =>
+				playbackFrames.findLast(
+					(frame) =>
+						frame.payload?.address?.playback_number === 47 &&
+						frame.payload?.action?.type === "master",
+				),
+			)
+			.toMatchObject({
+				payload: {
+					action: { type: "master", value: 1 },
+				},
+			});
 		await expect
 			.poll(async () => (await activePlayback(api, 47)).current_cue_number)
 			.toBe(2);

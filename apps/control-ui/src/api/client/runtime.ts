@@ -38,6 +38,12 @@ export class LightClientRuntime {
 				revision === undefined
 					? this.command(command, payload)
 					: this.command(command, payload, revision),
+			commandWithRequestId: (
+				command: string,
+				payload: unknown,
+				requestId: string,
+				revision?: number,
+			) => this.sendCommand(command, payload, requestId, revision),
 		};
 	}
 
@@ -118,10 +124,23 @@ export class LightClientRuntime {
 		payload: unknown,
 		expectedRevision?: number,
 	): Promise<unknown> {
+		return this.sendCommand(
+			command,
+			payload,
+			crypto.randomUUID(),
+			expectedRevision,
+		);
+	}
+
+	private sendCommand(
+		command: string,
+		payload: unknown,
+		requestId: string,
+		expectedRevision?: number,
+	): Promise<unknown> {
 		if (!this.session || !this.socket || !this.socketIsOpen()) {
 			return Promise.reject(new Error("Live server connection is not ready"));
 		}
-		const requestId = crypto.randomUUID();
 		return new Promise((resolve, reject) => {
 			const timer = window.setTimeout(() => {
 				this.pending.delete(requestId);

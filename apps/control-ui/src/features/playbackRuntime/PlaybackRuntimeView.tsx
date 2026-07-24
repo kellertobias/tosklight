@@ -98,10 +98,22 @@ export function PlaybackRuntimeViewProvider({
 						store,
 						applyAction,
 						applyDeskPage: applyDeskPage ?? undefined,
+						repair: session
+							? (error) => session.repairAuthority(error)
+							: undefined,
 						onError,
 					})
 				: null,
-		[applyAction, applyDeskPage, authorityKey, deskId, onError, showId, store],
+		[
+			applyAction,
+			applyDeskPage,
+			authorityKey,
+			deskId,
+			onError,
+			session,
+			showId,
+			store,
+		],
 	);
 	const authority = useMemo<PlaybackRuntimeAuthority | null>(
 		() =>

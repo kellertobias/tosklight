@@ -11,7 +11,6 @@ import {
 	cueListReleaseRequest,
 	groupActionRequest,
 	isPlaybackSafetyRelease,
-	isRetryablePlaybackFailure,
 	playbackActionError,
 } from "./actionWriterSupport";
 import type { PlaybackIdentity, PlaybackOutcome } from "./contracts";
@@ -72,6 +71,7 @@ interface PlaybackRuntimeActionWriterOptions {
 	store: PlaybackRuntimeStore;
 	applyAction: PlaybackRuntimeActionApply;
 	applyDeskPage?: PlaybackDeskPageApply;
+	repair?: (error: Error) => Promise<void>;
 	onError?: (error: Error | null) => void;
 }
 
@@ -206,7 +206,11 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 			optimistic ??
 			this.options.store.beginRequest(playbackIdentity(playbackNumber));
 		try {
-			const outcome = await this.applyWithRetry(request, scope);
+			const outcome = await this.options.applyAction(
+				this.options.showId,
+				this.options.deskId,
+				request,
+			);
 			return this.accept(outcome, request, token, scope);
 		} catch (reason) {
 			return this.rollback(reason, token, scope);
@@ -220,7 +224,11 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		const request = cueListReleaseRequest(source);
 		const token = this.options.store.beginRequest(source.identity);
 		try {
-			const outcome = await this.applyWithRetry(request, scope);
+			const outcome = await this.options.applyAction(
+				this.options.showId,
+				this.options.deskId,
+				request,
+			);
 			return this.accept(outcome, request, token, scope);
 		} catch (reason) {
 			return this.rollback(reason, token, scope);
@@ -242,7 +250,11 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 				: this.options.store.beginOptimisticMaster(identity, optimisticMaster);
 		if (!token) throw new Error("Authoritative Group runtime is not ready");
 		try {
-			const outcome = await this.applyWithRetry(request, scope);
+			const outcome = await this.options.applyAction(
+				this.options.showId,
+				this.options.deskId,
+				request,
+			);
 			assertGroupOutcome(outcome, groupId);
 			return this.accept(outcome, request, token, scope);
 		} catch (reason) {
@@ -295,39 +307,12 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 			: null;
 	}
 
-	private async applyWithRetry(request: PlaybackActionRequest, scope: number) {
-		try {
-			return await this.options.applyAction(
-				this.options.showId,
-				this.options.deskId,
-				request,
-			);
-		} catch (reason) {
-			if (!this.isCurrent(scope) || !isRetryablePlaybackFailure(reason))
-				throw reason;
-			return this.options.applyAction(
-				this.options.showId,
-				this.options.deskId,
-				request,
-			);
-		}
-	}
-
 	private async sendSafetyRelease(request: PlaybackActionRequest) {
-		try {
-			return await this.options.applyAction(
-				this.options.showId,
-				this.options.deskId,
-				request,
-			);
-		} catch (reason) {
-			if (!isRetryablePlaybackFailure(reason)) throw reason;
-			return this.options.applyAction(
-				this.options.showId,
-				this.options.deskId,
-				request,
-			);
-		}
+		return this.options.applyAction(
+			this.options.showId,
+			this.options.deskId,
+			request,
+		);
 	}
 
 	private accept(
@@ -344,11 +329,22 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		return outcome;
 	}
 
-	private rollback(reason: unknown, token: string, scope: number) {
+	private async rollback(reason: unknown, token: string, scope: number) {
 		if (!this.isCurrent(scope)) return null;
 		const error = playbackActionError(reason);
 		if (!this.options.store.rollbackProjection(token, error)) return null;
 		this.reportActionError(error);
+		try {
+			await this.options.repair?.(error);
+		} catch (repairReason) {
+			if (!this.isCurrent(scope)) return null;
+			const repairError = playbackActionError(repairReason);
+			const combined = new Error(
+				`Playback runtime repair failed after ${error.message}: ${repairError.message}`,
+			);
+			this.options.store.reportActionError(combined);
+			this.reportActionError(combined);
+		}
 		return null;
 	}
 

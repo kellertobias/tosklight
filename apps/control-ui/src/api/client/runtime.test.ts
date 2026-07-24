@@ -147,6 +147,28 @@ describe("LightClientRuntime", () => {
 		await vi.advanceTimersByTimeAsync(5_000);
 		await timedOut;
 	});
+
+	it("never replays an unresolved command onto a reconnected socket", async () => {
+		vi.useFakeTimers();
+		const client = connectedClient();
+		const first = await openEvents(client);
+		const unresolved = expect(
+			client.command("playback.action", { request_id: "playback-a" }),
+		).rejects.toThrow("Command timed out: playback.action");
+		expect(first.sent).toHaveLength(1);
+
+		const reconnecting = client.connectEvents();
+		const replacement = FakeWebSocket.instances.at(-1);
+		if (!replacement) throw new Error("Expected a replacement event socket");
+		replacement.emit("open");
+		await reconnecting;
+
+		expect(replacement).not.toBe(first);
+		expect(replacement.sent).toEqual([]);
+		await vi.advanceTimersByTimeAsync(5_000);
+		await unresolved;
+		expect(replacement.sent).toEqual([]);
+	});
 });
 
 async function openEvents(client: LightApiClient): Promise<FakeWebSocket> {

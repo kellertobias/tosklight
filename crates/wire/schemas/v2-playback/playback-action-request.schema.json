@@ -21,7 +21,6 @@
       "$ref": "#/$defs/PlaybackSurface"
     }
   },
-  "additionalProperties": false,
   "required": [
     "request_id",
     "address",
@@ -489,7 +488,6 @@
               "const": "cue_list"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "cue_list_id"
@@ -508,7 +506,6 @@
               "const": "group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "group_id"
@@ -528,7 +525,6 @@
               "minimum": 0
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "playback_number"
@@ -548,7 +544,6 @@
               "minimum": 0
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "slot"
@@ -574,7 +569,6 @@
               "minimum": 0
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "page",

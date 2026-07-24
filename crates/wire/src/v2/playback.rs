@@ -13,7 +13,6 @@ use super::events::EventSnapshotCursor;
 
 /// One authenticated, idempotent Playback mutation.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PlaybackActionRequest {
     /// Idempotency is retained for the 4096 most-recent IDs in the live server process. After
     /// eviction or restart, clients repair from a narrow runtime snapshot before retrying.
@@ -27,7 +26,7 @@ pub struct PlaybackActionRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PlaybackAddress {
     CueList {
         cue_list_id: Uuid,
@@ -237,12 +236,17 @@ mod tests {
     }
 
     #[test]
-    fn group_address_is_strict_and_opaque() {
+    fn group_address_is_opaque_and_tolerates_future_fields() {
         let request: PlaybackActionRequest = serde_json::from_value(serde_json::json!({
             "request_id": "group-master",
-            "address": {"kind": "group", "group_id": " Front · 1 "},
-            "action": {"type": "master", "value": 0.5},
+            "address": {
+                "kind": "group",
+                "group_id": " Front · 1 ",
+                "playback_number": 2
+            },
+            "action": {"type": "master", "value": 0.5, "velocity": 3},
             "surface": "virtual",
+            "future_transport_hint": true,
         }))
         .expect("decode Group action");
         assert_eq!(
@@ -251,13 +255,10 @@ mod tests {
                 group_id: " Front · 1 ".into()
             }
         );
-
-        let forged = serde_json::json!({
-            "request_id": "forged-assignment",
-            "address": {"kind": "group", "group_id": "front", "playback_number": 2},
-            "action": {"type": "flash", "pressed": true},
-            "surface": "virtual",
-        });
-        assert!(serde_json::from_value::<PlaybackActionRequest>(forged).is_err());
+        assert_eq!(
+            request.action,
+            PlaybackAction::Master { value: 0.5 },
+            "additional fields cannot forge a different action"
+        );
     }
 }

@@ -58,3 +58,33 @@ restart) and confirm no action replays on reconnect.
 
 None — transport split is decided (api-rules §2/§4-transport). Chunks 10 and 11 repeat
 this pattern for other action families; land this one first to establish it.
+
+## Result
+
+- Added the correlated `playback.action` command family to the existing authenticated
+  `/api/v1/events` command socket and routed it through the same typed adapter and
+  application service as the retained HTTP integrator endpoint. The plan's
+  `/api/v2/events` reference was stale: that socket is the subscription/repair lane and
+  remains action-free.
+- Moved the desk playback writer, including faders and held keyboard/button actions, to
+  one-shot WebSocket sends with the same request ID in the command envelope and typed
+  payload. Removed the live-control retry helper; failures now report the error and repair
+  from an authoritative snapshot without replaying a frame after reconnect.
+- Made playback action requests forward-compatible at both HTTP and WebSocket boundaries,
+  logging ignored fields while retaining strict typed action validation, and refreshed the
+  generated wire schemas.
+- Updated PBK browser coverage to assert the actual outbound WebSocket frames and to use
+  the desk session-handoff helper when verifying behavior across a document reload.
+
+Verification:
+
+- `cargo test -p light-server` — 433 passed, 1 ignored; benchmark and doc-test targets
+  passed.
+- `cargo test -p light-wire v2::playback::tests` — 4 passed.
+- `cargo test -p light-wire --test generated_contracts` — 1 passed.
+- `npm run test:unit` — 275 Vitest files / 1,994 tests passed; Rust workspace, architecture,
+  source-size, generated-contract, and production-build gates passed.
+- Focused playback transport/runtime suites — 5 files / 74 tests passed.
+- `npm run test:e2e -- tests/29-playback-telemetry.spec.ts` — 1 passed.
+- PBK-004 reload scenario repeated three times in parallel — 3 passed.
+- `npm run test:e2e` — 285 passed, 11 intentionally skipped.

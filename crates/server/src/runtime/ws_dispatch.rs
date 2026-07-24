@@ -34,6 +34,7 @@ const LIVE_ABSOLUTE_COMMANDS: &[&str] = &[
     "playback.back",
     "playback.pause",
     "playback.release",
+    "playback.action",
     "preset.apply",
 ];
 
@@ -63,6 +64,7 @@ const PROGRAMMING_INTERACTION_COMMANDS: &[&str] = &[
     "preload.go",
     "preload.clear",
     "preload.release",
+    "playback.action",
     "preset.apply",
 ];
 
@@ -109,6 +111,7 @@ fn dispatch_ws_payload(
         "playback.go" | "playback.back" | "playback.pause" | "playback.release" => {
             ws_playback_go(state, session, command)
         }
+        "playback.action" => ws_playback_action(state, session, command, context),
         _ => Err("unknown command".into()),
     }
 }

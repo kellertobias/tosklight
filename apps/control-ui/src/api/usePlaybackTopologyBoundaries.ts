@@ -42,10 +42,10 @@ export function usePlaybackTopologyBoundaries(state: ServerState) {
 			: null;
 	const applyPlaybackRuntimeAction = useCallback(
 		(
-			show: string,
-			desk: string,
+			_show: string,
+			_desk: string,
 			request: Parameters<ServerState["client"]["playbackRuntimeAction"]>[2],
-		) => playbackClientRef.current.playbackRuntimeAction(show, desk, request),
+		) => playbackClientRef.current.playbackRuntimeLiveAction(request),
 		[],
 	);
 	const applyPlaybackDeskPage = useCallback(

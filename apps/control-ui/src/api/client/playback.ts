@@ -97,6 +97,24 @@ export class PlaybackApiClient {
 		return outcome;
 	}
 
+	async playbackRuntimeLiveAction(
+		request: PlaybackActionRequest,
+	): Promise<PlaybackActionOutcome> {
+		const value = await this.transport.commandWithRequestId(
+			"playback.action",
+			request,
+			request.request_id,
+		);
+		const outcome = decodePlaybackOutcome(value);
+		if (outcome.request_id !== request.request_id)
+			throw new WireValidationError(
+				"$.request_id",
+				`request ID ${request.request_id}`,
+				outcome.request_id,
+			);
+		return outcome;
+	}
+
 	screens(): Promise<ScreenSnapshot> {
 		return this.transport.request("/api/v1/screens");
 	}

@@ -14,6 +14,12 @@ export interface LiveClientTransport extends ClientTransport {
 		payload: unknown,
 		expectedRevision?: number,
 	): Promise<unknown>;
+	commandWithRequestId(
+		command: string,
+		payload: unknown,
+		requestId: string,
+		expectedRevision?: number,
+	): Promise<unknown>;
 }
 
 export function jsonRequest(

@@ -44,13 +44,19 @@ function actionOutcome(requestId = REQUEST_ID) {
 
 function clientReturning(value: unknown) {
 	const request = vi.fn(async (_path: string, _init?: RequestInit) => value);
+	const commandWithRequestId = vi.fn(async () => value);
 	const transport = {
 		request,
 		blob: vi.fn(),
 		absoluteUrl: vi.fn(),
 		command: vi.fn(),
+		commandWithRequestId,
 	} as unknown as LiveClientTransport;
-	return { client: new PlaybackApiClient(transport), request };
+	return {
+		client: new PlaybackApiClient(transport),
+		request,
+		commandWithRequestId,
+	};
 }
 
 describe("PlaybackApiClient v2 action boundary", () => {
@@ -98,6 +104,35 @@ describe("PlaybackApiClient v2 action boundary", () => {
 
 		await expect(
 			client.playbackRuntimeAction(SHOW_ID, DESK_ID, actionRequest),
+		).rejects.toMatchObject({
+			name: "WireValidationError",
+			path: "$.request_id",
+			message: expect.stringContaining(`request ID ${REQUEST_ID}`),
+		});
+	});
+
+	it("sends a live Playback action once over the established command socket", async () => {
+		const { client, commandWithRequestId, request } = clientReturning(
+			actionOutcome(),
+		);
+
+		await expect(
+			client.playbackRuntimeLiveAction(actionRequest),
+		).resolves.toMatchObject({ request_id: REQUEST_ID });
+		expect(commandWithRequestId).toHaveBeenCalledOnce();
+		expect(commandWithRequestId).toHaveBeenCalledWith(
+			"playback.action",
+			actionRequest,
+			REQUEST_ID,
+		);
+		expect(request).not.toHaveBeenCalled();
+	});
+
+	it("rejects a live outcome belonging to another request", async () => {
+		const { client } = clientReturning(actionOutcome("playback-request-2"));
+
+		await expect(
+			client.playbackRuntimeLiveAction(actionRequest),
 		).rejects.toMatchObject({
 			name: "WireValidationError",
 			path: "$.request_id",

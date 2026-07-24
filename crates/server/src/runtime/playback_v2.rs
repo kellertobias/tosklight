@@ -2,12 +2,16 @@
 
 mod wire;
 
-pub(super) use wire::{desk_projection, runtime_change, runtime_projection, telemetry_tick};
+pub(super) use wire::{
+    action_outcome, application_command, desk_projection, runtime_change, runtime_projection,
+    telemetry_tick,
+};
 
 use super::{
     AppState, ProgrammingLockPolicy, Session, authenticate, playback_service,
     run_programming_interaction,
 };
+use crate::tolerant_json::TolerantJson;
 use axum::{
     Json, Router,
     extract::{Path, State, rejection::JsonRejection},
@@ -41,7 +45,7 @@ async fn unscoped_playback_action(
     State(state): State<AppState>,
     Path(desk_id): Path<String>,
     headers: HeaderMap,
-    request: Result<Json<PlaybackActionRequest>, JsonRejection>,
+    request: Result<TolerantJson<PlaybackActionRequest>, JsonRejection>,
 ) -> Result<Response, PlaybackHttpError> {
     playback_action(state, None, desk_id, headers, request).await
 }
@@ -50,7 +54,7 @@ async fn scoped_playback_action(
     State(state): State<AppState>,
     Path((show_id, desk_id)): Path<(Uuid, String)>,
     headers: HeaderMap,
-    request: Result<Json<PlaybackActionRequest>, JsonRejection>,
+    request: Result<TolerantJson<PlaybackActionRequest>, JsonRejection>,
 ) -> Result<Response, PlaybackHttpError> {
     playback_action(state, Some(show_id), desk_id, headers, request).await
 }
@@ -60,10 +64,11 @@ async fn playback_action(
     expected_show: Option<Uuid>,
     desk_id: String,
     headers: HeaderMap,
-    request: Result<Json<PlaybackActionRequest>, JsonRejection>,
+    request: Result<TolerantJson<PlaybackActionRequest>, JsonRejection>,
 ) -> Result<Response, PlaybackHttpError> {
     let session = authenticated_desk(&state, &headers, &desk_id)?;
-    let Json(request) = request.map_err(|error| PlaybackHttpError::invalid(error.body_text()))?;
+    let TolerantJson(request) =
+        request.map_err(|error| PlaybackHttpError::invalid(error.body_text()))?;
     let (request_id, command) =
         wire::application_command(request).map_err(PlaybackHttpError::invalid)?;
     let _activation = state.activation_lock.clone().lock_owned().await;

@@ -155,23 +155,29 @@ describe("PlaybackRuntimeViewProvider", () => {
 
 	it("reports scoped action failures through the provider error channel", async () => {
 		const store = new PlaybackRuntimeStore();
-		store.reset(SHOW_ID, DESK_ID, "authority-a");
+		const transport = new FakeTransport();
+		const loadSnapshot = vi.fn(async (identities) =>
+			playbackSnapshot(identities),
+		);
+		const applyAction = vi.fn().mockRejectedValue(new Error("action failed"));
 		const onError = vi.fn();
 		let actions: ReturnType<typeof usePlaybackRuntimeActions> = null;
-		render(
+		const { unmount } = render(
 			<PlaybackRuntimeViewProvider
 				showId={SHOW_ID}
 				deskId={DESK_ID}
 				authorityKey="authority-a"
 				store={store}
-				transport={null}
-				loadSnapshot={vi.fn()}
-				applyAction={vi.fn().mockRejectedValue(new Error("action failed"))}
+				transport={transport}
+				loadSnapshot={loadSnapshot}
+				applyAction={applyAction}
 				onError={onError}
 			>
 				<ActionProbe capture={(value) => (actions = value)} />
+				<RuntimeProbe visible onRender={vi.fn()} />
 			</PlaybackRuntimeViewProvider>,
 		);
+		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledOnce());
 
 		await act(async () => {
 			await actions?.poolPlaybackAction(1, "button", {
@@ -181,11 +187,14 @@ describe("PlaybackRuntimeViewProvider", () => {
 			});
 		});
 
-		expect(store.getSnapshot().error?.message).toBe("action failed");
-		expect(onError).toHaveBeenCalledOnce();
+		expect(applyAction).toHaveBeenCalledOnce();
+		expect(loadSnapshot).toHaveBeenCalledTimes(2);
+		expect(store.getSnapshot().error).toBeNull();
 		expect(onError).toHaveBeenCalledWith(
 			expect.objectContaining({ message: "action failed" }),
 		);
+		expect(onError).toHaveBeenLastCalledWith(null);
+		unmount();
 	});
 
 	it("does not fetch or subscribe a hidden view and isolates irrelevant events", async () => {

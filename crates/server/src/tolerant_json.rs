@@ -15,6 +15,14 @@ const MAX_LOGGED_FIELD_PATH_LENGTH: usize = 256;
 /// deliberately never included in the log entry.
 pub(crate) struct TolerantJson<T>(pub(crate) T);
 
+pub(crate) fn log_unknown_value_fields<T>(route: &str, raw: &serde_json::Value)
+where
+    T: DeserializeOwned,
+{
+    let bytes = serde_json::to_vec(raw).expect("a serde_json::Value always serializes as JSON");
+    collect_and_log_unknown_fields::<T>(route, &bytes);
+}
+
 impl<T, S> FromRequest<S> for TolerantJson<T>
 where
     T: DeserializeOwned,
@@ -34,37 +42,44 @@ where
             serde_json::to_vec(&raw).expect("a serde_json::Value always serializes as JSON");
         let Json(value) = Json::<T>::from_bytes(&bytes)?;
 
-        let mut unknown_fields = BTreeSet::new();
-        let mut unknown_field_count = 0usize;
-        let mut fields_truncated = false;
-        let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
-        let ignored_result = serde_ignored::deserialize::<_, _, T>(&mut deserializer, |path| {
-            unknown_field_count = unknown_field_count.saturating_add(1);
-            let path = truncate_field_path(path.to_string());
-            if !unknown_fields.contains(&path) {
-                if unknown_fields.len() < MAX_LOGGED_UNKNOWN_FIELDS {
-                    unknown_fields.insert(path);
-                } else {
-                    fields_truncated = true;
-                }
-            }
-        });
-
-        if ignored_result.is_err() {
-            tracing::error!(
-                route = %route,
-                "tolerant JSON field collection failed after the same body passed typed validation"
-            );
-        } else if unknown_field_count > 0 {
-            log_unknown_fields(
-                &route,
-                unknown_field_count,
-                unknown_fields,
-                fields_truncated,
-            );
-        }
+        collect_and_log_unknown_fields::<T>(&route, &bytes);
 
         Ok(Self(value))
+    }
+}
+
+fn collect_and_log_unknown_fields<T>(route: &str, bytes: &[u8])
+where
+    T: DeserializeOwned,
+{
+    let mut unknown_fields = BTreeSet::new();
+    let mut unknown_field_count = 0usize;
+    let mut fields_truncated = false;
+    let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
+    let ignored_result = serde_ignored::deserialize::<_, _, T>(&mut deserializer, |path| {
+        unknown_field_count = unknown_field_count.saturating_add(1);
+        let path = truncate_field_path(path.to_string());
+        if !unknown_fields.contains(&path) {
+            if unknown_fields.len() < MAX_LOGGED_UNKNOWN_FIELDS {
+                unknown_fields.insert(path);
+            } else {
+                fields_truncated = true;
+            }
+        }
+    });
+
+    if ignored_result.is_err() {
+        tracing::error!(
+            route = %route,
+            "tolerant JSON field collection failed after the same body passed typed validation"
+        );
+    } else if unknown_field_count > 0 {
+        log_unknown_fields(
+            &route,
+            unknown_field_count,
+            unknown_fields,
+            fields_truncated,
+        );
     }
 }
 

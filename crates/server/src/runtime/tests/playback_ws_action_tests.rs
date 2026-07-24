@@ -1,0 +1,184 @@
+use super::*;
+
+#[tokio::test]
+async fn playback_action_ws_frame_uses_typed_service_and_ui_source_once() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = state
+        .sessions
+        .read()
+        .values()
+        .find(|session| session.token == token)
+        .cloned()
+        .unwrap();
+    open_test_show(&app, &token).await;
+    install_playback(&state);
+    let cursor = state.application_events.latest_sequence();
+    let request_id = "ws-playback-action";
+
+    let response = dispatch_ws_command(
+        &state,
+        &session,
+        WsCommand {
+            protocol_version: 1,
+            request_id: request_id.into(),
+            session_id: session.id,
+            expected_revision: None,
+            command: "playback.action".into(),
+            payload: serde_json::json!({
+                "request_id": request_id,
+                "address": {
+                    "kind": "playback",
+                    "playback_number": 1,
+                    "future_address_hint": true
+                },
+                "action": {"type": "go", "pressed": true, "velocity": 3},
+                "surface": "virtual",
+                "future_transport_hint": "accepted"
+            }),
+        },
+    );
+
+    assert!(response.ok, "{:?}", response.error);
+    let payload = response.payload.unwrap();
+    assert_eq!(payload["request_id"], request_id);
+    assert_eq!(payload["outcome"]["status"], "applied");
+    assert_eq!(payload["resolved"]["playback_number"], 1);
+    assert_eq!(payload["projection"]["runtime"]["current"]["number"], 1.0);
+    assert_eq!(payload["replayed"], false);
+    let light_application::EventReplay::Events(events) = state.application_events.replay(
+        cursor,
+        &light_application::EventFilter::for_desk(session.desk.id),
+    ) else {
+        panic!("playback event should be retained");
+    };
+    let playback_events = events
+        .iter()
+        .filter(|event| {
+            matches!(
+                event.payload,
+                light_application::ApplicationEvent::Playback(_)
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(playback_events.len(), 1);
+    assert_eq!(
+        playback_events[0].source,
+        light_application::EventSource::Action(light_application::ActionSource::UserInterface)
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn playback_action_ws_frame_rejects_mismatched_request_identity_without_mutation() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = state
+        .sessions
+        .read()
+        .values()
+        .find(|session| session.token == token)
+        .cloned()
+        .unwrap();
+    open_test_show(&app, &token).await;
+    install_playback(&state);
+    let cursor = state.application_events.latest_sequence();
+
+    let response = dispatch_ws_command(
+        &state,
+        &session,
+        WsCommand {
+            protocol_version: 1,
+            request_id: "ws-envelope".into(),
+            session_id: session.id,
+            expected_revision: None,
+            command: "playback.action".into(),
+            payload: serde_json::json!({
+                "request_id": "different-payload",
+                "address": {"kind": "playback", "playback_number": 1},
+                "action": {"type": "go", "pressed": true},
+                "surface": "virtual"
+            }),
+        },
+    );
+
+    assert!(!response.ok);
+    assert!(
+        response
+            .error
+            .unwrap()
+            .contains("request_id must match the WebSocket request_id")
+    );
+    assert_eq!(state.application_events.latest_sequence(), cursor);
+    assert!(state.engine.playback_runtime().is_empty());
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+async fn open_test_show(app: &Router, token: &str) {
+    let show = create_show(app, token, "Playback WS show").await;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!(
+                "/api/v1/shows/{}/open",
+                show["id"].as_str().unwrap()
+            ))
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(r#"{"transition":"hold_current"}"#))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+fn install_playback(state: &AppState) {
+    let cue_list = light_playback::CueList {
+        id: light_core::CueListId::new(),
+        name: "Main".into(),
+        priority: 0,
+        mode: light_playback::CueListMode::Sequence,
+        looped: false,
+        chaser_step_millis: 1_000,
+        speed_group: None,
+        intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
+        wrap_mode: Some(light_playback::WrapMode::Off),
+        restart_mode: light_playback::RestartMode::FirstCue,
+        force_cue_timing: false,
+        disable_cue_timing: false,
+        chaser_xfade_millis: 0,
+        chaser_xfade_percent: Some(0),
+        speed_multiplier: 1.0,
+        cues: vec![light_playback::Cue::new(1.0)],
+    };
+    let target = light_playback::PlaybackTarget::CueList {
+        cue_list_id: cue_list.id,
+    };
+    state
+        .engine
+        .replace_snapshot(EngineSnapshot {
+            cue_lists: vec![cue_list],
+            playbacks: vec![light_playback::PlaybackDefinition {
+                number: 1,
+                name: "Playback 1".into(),
+                buttons: light_playback::PlaybackDefinition::default_buttons(&target),
+                button_count: 3,
+                fader: light_playback::PlaybackDefinition::default_fader(&target),
+                has_fader: true,
+                go_activates: true,
+                auto_off: true,
+                xfade_millis: 0,
+                color: "#20c997".into(),
+                flash_release: light_playback::FlashReleaseMode::default(),
+                protect_from_swap: false,
+                presentation_icon: None,
+                presentation_image: None,
+                target,
+            }],
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+}

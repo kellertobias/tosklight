@@ -218,6 +218,10 @@ export class LightApiClient extends LightClientRuntime {
 		this.playbackApi,
 		"playbackRuntimeAction",
 	);
+	playbackRuntimeLiveAction = bindClientMethod(
+		this.playbackApi,
+		"playbackRuntimeLiveAction",
+	);
 	screens = bindClientMethod(this.playbackApi, "screens");
 	putScreen = bindClientMethod(this.playbackApi, "putScreen");
 	deleteScreen = bindClientMethod(this.playbackApi, "deleteScreen");

@@ -55,19 +55,6 @@ export function isPlaybackSafetyRelease(
 	);
 }
 
-export function isRetryablePlaybackFailure(reason: unknown) {
-	if (reason instanceof TypeError) return true;
-	if (!(reason instanceof Error)) return false;
-	const failure = reason as Error & { retryable?: unknown; status?: unknown };
-	if (typeof failure.retryable === "boolean") return failure.retryable;
-	return (
-		failure.status === 0 ||
-		failure.status === 408 ||
-		failure.status === 429 ||
-		(typeof failure.status === "number" && failure.status >= 500)
-	);
-}
-
 export function playbackActionError(reason: unknown) {
 	return reason instanceof Error ? reason : new Error(String(reason));
 }

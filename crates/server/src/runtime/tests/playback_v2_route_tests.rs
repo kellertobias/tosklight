@@ -979,7 +979,7 @@ async fn v2_group_snapshot_is_exact_and_rejects_foreign_or_invalid_identity() {
 }
 
 #[tokio::test]
-async fn v2_group_actions_reject_forged_unsupported_missing_and_wrong_assignments() {
+async fn v2_group_actions_reject_unsupported_missing_and_wrong_assignments() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -989,12 +989,6 @@ async fn v2_group_actions_reject_forged_unsupported_missing_and_wrong_assignment
     let cursor = state.application_events.latest_sequence();
 
     for request in [
-        serde_json::json!({
-            "request_id":"forged-group-assignment",
-            "address":{"kind":"group","group_id":"front","playback_number":2},
-            "action":{"type":"master","value":0.5},
-            "surface":"virtual"
-        }),
         group_action_request(
             "unsupported-group-action",
             "front",
