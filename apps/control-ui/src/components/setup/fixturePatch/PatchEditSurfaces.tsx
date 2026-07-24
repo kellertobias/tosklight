@@ -25,7 +25,7 @@ export function MultipatchVectorDialog() {
 		<div className="stacked-modal-layer">
 			<section className="nested-modal patch-edit-modal">
 				<ModalTitleBar
-					title={`Set multi-patch ${edit.kind}`}
+					title={`Set multi-patch ${vectorEditTitle(edit.kind, edit.axis)}`}
 					actions={
 						<Button
 							className="primary"
@@ -38,7 +38,7 @@ export function MultipatchVectorDialog() {
 					onClose={() => requestMultipatchEditClose(controller)}
 				/>
 				<EditError />
-				<VectorInputs kind={edit.kind} />
+				<VectorInputs kind={edit.kind} axis={edit.axis} />
 			</section>
 		</div>
 	);
@@ -79,7 +79,11 @@ export function FixtureEditDialog() {
 		<div className="stacked-modal-layer">
 			<section className="nested-modal patch-edit-modal">
 				<ModalTitleBar
-					title={`Set fixture ${editTitle(edit)}`}
+					title={`Set fixture ${
+						edit === "location" || edit === "rotation"
+							? vectorEditTitle(edit, controller.ui.editAxis ?? undefined)
+							: editTitle(edit)
+					}`}
 					actions={
 						edit === "name" ? undefined : (
 							<Button
@@ -148,7 +152,7 @@ function FixtureEditFields() {
 		);
 	if (edit === "highlight") return <HighlightFields />;
 	if (edit === "location" || edit === "rotation")
-		return <VectorInputs kind={edit} />;
+		return <VectorInputs kind={edit} axis={controller.ui.editAxis ?? undefined} />;
 	if (edit === "mode") return <ModeField />;
 	return null;
 }
@@ -182,24 +186,32 @@ function HighlightFields() {
 	);
 }
 
-function VectorInputs({ kind }: { kind: "location" | "rotation" }) {
+function VectorInputs({
+	kind,
+	axis,
+}: {
+	kind: "location" | "rotation";
+	axis?: "x" | "y" | "z";
+}) {
 	const controller = usePatchController();
+	const axes = axis ? ([axis] as const) : (["x", "y", "z"] as const);
 	return (
 		<div className="vector-inputs">
-			{(["x", "y", "z"] as const).map((axis) => (
+			{axes.map((entry) => (
 				<NumberField
-					key={axis}
-					label={`${axis.toUpperCase()} ${kind === "location" ? "(m)" : ""}`}
+					key={entry}
+					autoFocus={Boolean(axis)}
+					label={`${entry.toUpperCase()} ${kind === "location" ? "(m)" : "(°)"}`}
 					allowDecimal
 					value={
 						kind === "location"
-							? controller.ui.vector[axis] / 1000
-							: controller.ui.vector[axis]
+							? controller.ui.vector[entry] / 1000
+							: controller.ui.vector[entry]
 					}
 					onChange={(event) =>
 						controller.ui.setVector({
 							...controller.ui.vector,
-							[axis]:
+							[entry]:
 								kind === "location"
 									? Math.round(Number(event.target.value) * 1000)
 									: Number(event.target.value),
@@ -209,6 +221,13 @@ function VectorInputs({ kind }: { kind: "location" | "rotation" }) {
 			))}
 		</div>
 	);
+}
+
+function vectorEditTitle(
+	kind: "location" | "rotation",
+	axis?: "x" | "y" | "z",
+) {
+	return axis ? `${kind} ${axis.toUpperCase()}` : kind;
 }
 
 function ModeField() {

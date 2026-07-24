@@ -34,6 +34,7 @@ export function beginMultipatchEdit(
 	fixture: PatchController["data"]["all"][number],
 	instance: MultiPatchInstance,
 	kind: NonNullable<MultiPatchEdit>["kind"],
+	axis?: NonNullable<MultiPatchEdit>["axis"],
 ) {
 	const { ui } = controller;
 	ui.setEditError("");
@@ -42,6 +43,7 @@ export function beginMultipatchEdit(
 		fixtureId: fixture.fixture_id,
 		instanceId: instance.id,
 		kind,
+		axis,
 	});
 	if (kind === "address") {
 		ui.setEditText(
@@ -109,7 +111,14 @@ function multipatchChanges(
 		return splitAddressChanges(controller, fixture);
 	if (edit.kind === "address")
 		return singleAddressChanges(controller, fixture, instance, value);
-	return { [edit.kind]: controller.ui.vector };
+	if (edit.kind !== "location" && edit.kind !== "rotation") return null;
+	// A single-axis edit recomposes over the instance's current siblings so it can
+	// never resubmit a stale value for an axis it did not touch.
+	return {
+		[edit.kind]: edit.axis
+			? { ...instance[edit.kind], [edit.axis]: controller.ui.vector[edit.axis] }
+			: controller.ui.vector,
+	};
 }
 
 function splitAddressChanges(
@@ -190,10 +199,12 @@ export function multipatchVectorIsDirty(controller: PatchController) {
 	const instance = fixture?.multipatch?.find(
 		(item) => item.id === edit.instanceId,
 	);
-	return Boolean(
-		instance &&
-			JSON.stringify(controller.ui.vector) !==
-				JSON.stringify(instance[edit.kind]),
+	if (!instance || (edit.kind !== "location" && edit.kind !== "rotation"))
+		return false;
+	if (edit.axis)
+		return controller.ui.vector[edit.axis] !== instance[edit.kind][edit.axis];
+	return (
+		JSON.stringify(controller.ui.vector) !== JSON.stringify(instance[edit.kind])
 	);
 }
 

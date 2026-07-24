@@ -1,14 +1,6 @@
 import type { FixtureDefinition } from "../../../api/types";
 import { isDmxPatchable } from "../patchUtils";
 
-export function formatRotation(
-	rotation: { x: number; y: number; z: number } | undefined,
-) {
-	return (["x", "y", "z"] as const)
-		.map((axis) => `${Number((rotation?.[axis] ?? 0).toFixed(3))}°`)
-		.join(" / ");
-}
-
 export function FixtureTypeIcon({ type }: { type: string }) {
 	const kind = fixtureTypeKind(type);
 	return (

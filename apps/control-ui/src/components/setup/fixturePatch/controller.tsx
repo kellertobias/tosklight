@@ -37,10 +37,13 @@ export type EditKind =
 	| "highlight"
 	| null;
 
+export type VectorAxis = "x" | "y" | "z";
+
 export type MultiPatchEdit = {
 	fixtureId: string;
 	instanceId: string;
 	kind: "address" | "location" | "rotation";
+	axis?: VectorAxis;
 } | null;
 
 export type PlacementBaseline = {
@@ -90,6 +93,7 @@ function usePatchUiState() {
 	>({});
 	const [editError, setEditError] = useState("");
 	const [vector, setVector] = useState({ x: 0, y: 0, z: 0 });
+	const [editAxis, setEditAxis] = useState<VectorAxis | null>(null);
 	const [pending, setPending] = useState<Partial<PatchedFixture> | null>(null);
 	const [blockedBy, setBlockedBy] = useState<PatchedFixture[]>([]);
 	const [highlightDrafts, setHighlightDrafts] = useState<
@@ -152,6 +156,8 @@ function usePatchUiState() {
 		setEditError,
 		vector,
 		setVector,
+		editAxis,
+		setEditAxis,
 		pending,
 		setPending,
 		blockedBy,

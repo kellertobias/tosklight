@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PatchedFixture } from "../../api/types";
+import type { MultiPatchInstance, PatchedFixture } from "../../api/types";
 import {
 	FixturePatchSetup,
 	fixtureDisplayId,
@@ -848,7 +848,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		fireEvent.click(within(fixtureRow.cells[9]).getByRole("button"));
 
 		const modal = screen
-			.getByRole("heading", { name: "Set fixture location" })
+			.getByRole("heading", { name: "Set fixture location X" })
 			.closest("section") as HTMLElement;
 		const titleBar = modal.querySelector(".ui-modal-titlebar") as HTMLElement;
 		expect(
@@ -874,6 +874,70 @@ describe("schema-v2 location and multi-patch editing", () => {
 		await waitFor(() =>
 			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
 				location: { x: 1000, y: 0, z: 0 },
+			}),
+		);
+	});
+
+	it("edits exactly one axis and never resubmits the sibling axes", async () => {
+		const { current } = fixturesWithConflict();
+		current.location = { x: 111, y: 222, z: 333 };
+		current.rotation = { x: 10, y: 20, z: 30 };
+		server.patch.fixtures = [current];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+		const fixtureRow = screen.getByRole("row", {
+			name: /17 Split Wash 17/,
+		}) as HTMLTableRowElement;
+		fireEvent.click(within(fixtureRow.cells[13]).getByRole("button"));
+
+		const modal = screen
+			.getByRole("heading", { name: "Set fixture rotation Y" })
+			.closest("section") as HTMLElement;
+		expect(within(modal).queryByRole("textbox", { name: "X (°)" })).toBeNull();
+		fireEvent.change(within(modal).getByRole("textbox", { name: "Y (°)" }), {
+			target: { value: "45" },
+		});
+		fireEvent.click(within(modal).getByRole("button", { name: "Set" }));
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				rotation: { x: 10, y: 45, z: 30 },
+			}),
+		);
+	});
+
+	it("edits exactly one multi-patch instance axis without touching its siblings", async () => {
+		const { current } = fixturesWithConflict();
+		current.multipatch = [
+			{
+				...(current.multipatch?.[0] as MultiPatchInstance),
+				location: { x: 111, y: 222, z: 333 },
+				rotation: { x: 10, y: 20, z: 30 },
+			},
+		];
+		server.patch.fixtures = [current];
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+		const instanceRow = document.querySelector(
+			"tr.multipatch-row",
+		) as HTMLTableRowElement;
+		fireEvent.click(within(instanceRow.cells[13]).getByRole("button"));
+
+		const modal = screen
+			.getByRole("heading", { name: "Set multi-patch rotation Y" })
+			.closest("section") as HTMLElement;
+		fireEvent.change(within(modal).getByRole("textbox", { name: "Y (°)" }), {
+			target: { value: "45" },
+		});
+		fireEvent.click(within(modal).getByRole("button", { name: "Set" }));
+		await waitFor(() =>
+			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
+				multipatch: [
+					expect.objectContaining({
+						id: "current-mp",
+						location: { x: 111, y: 222, z: 333 },
+						rotation: { x: 10, y: 45, z: 30 },
+					}),
+				],
 			}),
 		);
 	});

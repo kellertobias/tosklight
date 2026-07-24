@@ -1,7 +1,7 @@
 import type { PatchedFixture } from "../../../api/types";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { fixtureRanges, groupFixtureFamilies } from "../patchUtils";
-import type { EditKind, PatchController } from "./controller";
+import type { EditKind, PatchController, VectorAxis } from "./controller";
 import {
 	definitionSplits,
 	effectiveSplitPatches,
@@ -13,6 +13,7 @@ export function armEdit(
 	controller: PatchController,
 	fixture: PatchedFixture,
 	kind: Exclude<EditKind, null>,
+	axis?: VectorAxis,
 ) {
 	const { ui, appState } = controller;
 	if (!appState.patchSetArmed) return;
@@ -43,6 +44,7 @@ export function armEdit(
 	else if (kind === "location" || kind === "rotation")
 		ui.setVector(fixture[kind] ?? { x: 0, y: 0, z: 0 });
 	else if (kind === "mode") selectFixtureFamily(controller, fixture);
+	ui.setEditAxis(kind === "location" || kind === "rotation" ? (axis ?? null) : null);
 	ui.setEdit(kind);
 }
 
@@ -145,13 +147,11 @@ export function cancelEdit(controller: PatchController) {
 
 export function fixtureVectorIsDirty(controller: PatchController) {
 	const { selected } = controller.data;
-	const { edit, vector } = controller.ui;
-	return Boolean(
-		selected &&
-			(edit === "location" || edit === "rotation") &&
-			JSON.stringify(vector) !==
-				JSON.stringify(selected[edit] ?? { x: 0, y: 0, z: 0 }),
-	);
+	const { edit, vector, editAxis } = controller.ui;
+	if (!selected || (edit !== "location" && edit !== "rotation")) return false;
+	const stored = selected[edit] ?? { x: 0, y: 0, z: 0 };
+	if (editAxis) return vector[editAxis] !== stored[editAxis];
+	return JSON.stringify(vector) !== JSON.stringify(stored);
 }
 
 export function requestFixtureEditClose(controller: PatchController) {

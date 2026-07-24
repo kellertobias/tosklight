@@ -150,8 +150,10 @@ test("patch, store, speed-group, and debug TODO workflows are reachable", async 
   await page.getByRole("button", { name: "Open show menu" }).click();
   await page.getByRole("button", { name: "Show Patch", exact: true }).click();
   await expect(page.locator(".patch-window")).toBeVisible();
-  await expect(page.locator(".patch-table thead")).toContainText("Location X/Y/Z");
-  await expect(page.locator(".patch-table thead")).toContainText("Rotation X/Y/Z");
+  for (const axis of ["X", "Y", "Z"]) {
+    await expect(page.locator(".patch-table thead")).toContainText(`Location ${axis}`);
+    await expect(page.locator(".patch-table thead")).toContainText(`Rotation ${axis}`);
+  }
   await page.getByRole("button", { name: "SET", exact: true }).click();
   await page.locator(".patch-table tbody .patch-value").first().click();
   await expect(page.getByRole("heading", { name: "Set fixture name" })).toBeVisible();

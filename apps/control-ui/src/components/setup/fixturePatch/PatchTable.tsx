@@ -7,7 +7,6 @@ import { armEdit, selectSplitAddress } from "./editSession";
 import { selectPatchFixture } from "./fixtureActions";
 import {
 	FixtureTypeIcon,
-	formatRotation,
 	MultiPatchBranch,
 } from "./fixtureDisplay";
 import { fixtureDisplayId } from "./fixtureIds";
@@ -29,8 +28,12 @@ const columns = [
 	"MIB",
 	"MIB Delay",
 	"Highlight Look",
-	"Location X/Y/Z",
-	"Rotation X/Y/Z",
+	"Location X",
+	"Location Y",
+	"Location Z",
+	"Rotation X",
+	"Rotation Y",
+	"Rotation Z",
 	"Layer",
 ];
 
@@ -243,25 +246,26 @@ function FixtureTransformCells({ fixture }: { fixture: PatchedFixture }) {
 	const controller = usePatchController();
 	return (
 		<>
-			<td className="patch-secondary">
-				<Button
-					className="patch-value"
-					onClick={() => armEdit(controller, fixture, "location")}
-				>
-					{(["x", "y", "z"] as const)
-						.map((axis) => ((fixture.location?.[axis] ?? 0) / 1000).toFixed(3))
-						.join(" / ")}{" "}
-					m
-				</Button>
-			</td>
-			<td className="patch-secondary">
-				<Button
-					className="patch-value"
-					onClick={() => armEdit(controller, fixture, "rotation")}
-				>
-					{formatRotation(fixture.rotation)}
-				</Button>
-			</td>
+			{(["x", "y", "z"] as const).map((axis) => (
+				<td className="patch-secondary" key={`location-${axis}`}>
+					<Button
+						className="patch-value"
+						onClick={() => armEdit(controller, fixture, "location", axis)}
+					>
+						{((fixture.location?.[axis] ?? 0) / 1000).toFixed(3)} m
+					</Button>
+				</td>
+			))}
+			{(["x", "y", "z"] as const).map((axis) => (
+				<td className="patch-secondary" key={`rotation-${axis}`}>
+					<Button
+						className="patch-value"
+						onClick={() => armEdit(controller, fixture, "rotation", axis)}
+					>
+						{Number((fixture.rotation?.[axis] ?? 0).toFixed(3))}°
+					</Button>
+				</td>
+			))}
 		</>
 	);
 }
@@ -325,29 +329,30 @@ function MultiPatchRow({
 			<td />
 			<td />
 			<td />
-			<td className="patch-secondary">
-				<Button
-					className="patch-value"
-					onClick={() =>
-						beginMultipatchEdit(controller, fixture, instance, "location")
-					}
-				>
-					{(["x", "y", "z"] as const)
-						.map((axis) => (instance.location[axis] / 1000).toFixed(3))
-						.join(" / ")}{" "}
-					m
-				</Button>
-			</td>
-			<td className="patch-secondary">
-				<Button
-					className="patch-value"
-					onClick={() =>
-						beginMultipatchEdit(controller, fixture, instance, "rotation")
-					}
-				>
-					{formatRotation(instance.rotation)}
-				</Button>
-			</td>
+			{(["x", "y", "z"] as const).map((axis) => (
+				<td className="patch-secondary" key={`location-${axis}`}>
+					<Button
+						className="patch-value"
+						onClick={() =>
+							beginMultipatchEdit(controller, fixture, instance, "location", axis)
+						}
+					>
+						{(instance.location[axis] / 1000).toFixed(3)} m
+					</Button>
+				</td>
+			))}
+			{(["x", "y", "z"] as const).map((axis) => (
+				<td className="patch-secondary" key={`rotation-${axis}`}>
+					<Button
+						className="patch-value"
+						onClick={() =>
+							beginMultipatchEdit(controller, fixture, instance, "rotation", axis)
+						}
+					>
+						{Number(instance.rotation[axis].toFixed(3))}°
+					</Button>
+				</td>
+			))}
 			<td />
 		</tr>
 	);

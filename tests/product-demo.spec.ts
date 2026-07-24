@@ -490,7 +490,7 @@ async function positionFixtureViaUi(
   rotation?: { x: number; y: number; z: number },
 ): Promise<void> {
   await editFixtureVector(desk, page, keypad, row, 9, "Set fixture location", location, true);
-  if (rotation) await editFixtureVector(desk, page, keypad, row, 10, "Set fixture rotation", rotation, false);
+  if (rotation) await editFixtureVector(desk, page, keypad, row, 12, "Set fixture rotation", rotation, false);
 }
 
 async function editFixtureVector(
@@ -498,20 +498,21 @@ async function editFixtureVector(
   page: Page,
   keypad: Locator,
   row: Locator,
-  cell: number,
+  baseCell: number,
   heading: string,
   value: { x: number; y: number; z: number },
   metres: boolean,
 ): Promise<void> {
   const setButton = keypad.getByRole("button", { name: "SET", exact: true });
-  await expect(setButton).not.toHaveClass(/patch-set-armed/);
-  await desk.click(setButton);
-  await expect(setButton).toHaveClass(/patch-set-armed/);
-  await desk.click(row.locator("td").nth(cell).getByRole("button"));
-  const modal = page.locator(".patch-edit-modal", { hasText: heading });
-  for (const axis of ["X", "Y", "Z"] as const)
-    await modal.getByLabel(`${axis}${metres ? " (m)" : ""}`, { exact: true }).fill(String(value[axis.toLowerCase() as "x" | "y" | "z"]));
-  await desk.click(modal.getByRole("button", { name: "Set", exact: true }));
+  for (const [offset, axis] of (["X", "Y", "Z"] as const).entries()) {
+    await expect(setButton).not.toHaveClass(/patch-set-armed/);
+    await desk.click(setButton);
+    await expect(setButton).toHaveClass(/patch-set-armed/);
+    await desk.click(row.locator("td").nth(baseCell + offset).getByRole("button"));
+    const modal = page.locator(".patch-edit-modal", { hasText: `${heading} ${axis}` });
+    await modal.getByLabel(`${axis} ${metres ? "(m)" : "(°)"}`, { exact: true }).fill(String(value[axis.toLowerCase() as "x" | "y" | "z"]));
+    await desk.click(modal.getByRole("button", { name: "Set", exact: true }));
+  }
 }
 
 async function positionMultipatchViaUi(
@@ -520,11 +521,12 @@ async function positionMultipatchViaUi(
   row: Locator,
   location: { x: number; y: number; z: number },
 ): Promise<void> {
-  await desk.click(row.locator("td").nth(9).getByRole("button"));
-  const modal = page.locator(".patch-edit-modal", { hasText: "Set multi-patch location" });
-  for (const axis of ["X", "Y", "Z"] as const)
+  for (const [offset, axis] of (["X", "Y", "Z"] as const).entries()) {
+    await desk.click(row.locator("td").nth(9 + offset).getByRole("button"));
+    const modal = page.locator(".patch-edit-modal", { hasText: `Set multi-patch location ${axis}` });
     await modal.getByLabel(`${axis} (m)`, { exact: true }).fill(String(location[axis.toLowerCase() as "x" | "y" | "z"]));
-  await desk.click(modal.getByRole("button", { name: "Set", exact: true }));
+    await desk.click(modal.getByRole("button", { name: "Set", exact: true }));
+  }
 }
 
 function fixtureRow(patchWindow: Locator, fixtureNumber: number | string): Locator {

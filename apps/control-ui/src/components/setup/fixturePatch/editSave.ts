@@ -17,7 +17,7 @@ export function saveEdit(
 	value = controller.ui.editText,
 ) {
 	const { selected, all, definition } = controller.data;
-	const { edit, vector } = controller.ui;
+	const { edit, vector, editAxis } = controller.ui;
 	if (!selected) return;
 	if (edit === "number") saveFixtureNumber(controller, value);
 	if (edit === "name")
@@ -33,7 +33,13 @@ export function saveEdit(
 			});
 	}
 	if (edit === "location" || edit === "rotation")
-		void applyEdit(controller, { [edit]: vector });
+		void applyEdit(controller, {
+			// A single-axis edit recomposes over the fixture's current siblings so it can
+			// never resubmit a stale value for an axis it did not touch.
+			[edit]: editAxis
+				? { ...(selected[edit] ?? { x: 0, y: 0, z: 0 }), [editAxis]: vector[editAxis] }
+				: vector,
+		});
 	if (edit === "mode" && definition) {
 		const highlight_overrides = compatibleHighlightOverrides(
 			definition,
