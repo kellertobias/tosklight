@@ -17,6 +17,10 @@ The failure reproduced three times. Chunk 24 does not touch the Color dialog, Pr
 transport, or repair policy, so expanding a loading-state refactor into that value-write path
 would mix unrelated behavior and reduce reviewability.
 
+A later full gate on 2026-07-24 passed `COLOR-RANGE-001 @ui` and finished at
+287 passed / 9 skipped. Treat the defect as intermittent and preserve both the failing
+conflict message and the later green run when diagnosing it.
+
 ## Work
 
 1. Reproduce the software-to-hardware Color range transition in

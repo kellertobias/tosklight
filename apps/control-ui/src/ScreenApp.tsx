@@ -11,6 +11,7 @@ import { useScreenWindowPersistence } from "./platform/desktop";
 import { LoadingSurface } from "./components/common";
 import { ConnectionState } from "./components/shell/ConnectionState";
 import { DeskLoadingOverlay } from "./components/shell/DeskLoadingOverlay";
+import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 
 function ScreenSurface({ id }: { id: string }) {
   const server = useScreens();
@@ -67,9 +68,11 @@ export function ScreenApp({ id }: { id: string }) {
   return (
     <ServerRuntime sessionRole="secondary">
       <AppProvider>
-        <ScreenSurface id={id} />
-        <ConnectionState />
-        <DeskLoadingOverlay />
+        <PatchFeatureBoundary>
+          <ScreenSurface id={id} />
+          <ConnectionState />
+          <DeskLoadingOverlay />
+        </PatchFeatureBoundary>
       </AppProvider>
       <DeskLockOverlay />
     </ServerRuntime>
