@@ -10,11 +10,7 @@ import { selectedGroupId } from "../../../features/programmingInteraction/contra
 import { useProgrammingSelectionView } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { useVisualizationRuntimeSnapshot } from "../../../features/visualizationRuntime/VisualizationRuntimeView";
 import { useApp } from "../../../state/AppContext";
-import {
-	directProgrammerChoices,
-	type ParameterFamily,
-	parameterFamilies,
-} from "./model";
+import { type ParameterFamily, parameterFamilies } from "./model";
 import { useParameterPreloadValues } from "./useParameterPreloadValues";
 import { useParameterProgrammerValues } from "./useParameterProgrammerValues";
 import {
@@ -116,14 +112,6 @@ export function useParameterProjection(family: ParameterFamily, active = true) {
 	);
 	const programmerFadeMillis = useProgrammerFadeMillis();
 	const values = useResolvedValues(visualization, selectedFixtureIds);
-	const selectedFixtures = useSelectedPatchedFixtures(
-		selectedFixtureIds,
-		active,
-	);
-	const directChoices = useMemo(
-		() => directProgrammerChoices(selectedFixtures, selectedFixtureIds),
-		[selectedFixtures, selectedFixtureIds],
-	);
 	const attributes = parameterFamilies[family].filter((attribute) =>
 		supported.has(attribute),
 	);
@@ -145,7 +133,6 @@ export function useParameterProjection(family: ParameterFamily, active = true) {
 		groupProgrammerValues:
 			programmerValuesView?.groupValues ?? EMPTY_PROGRAMMER_VALUES,
 		...values,
-		directChoices,
 		encoderSlots: Array.from(
 			{ length: 6 },
 			(_, index) => attributes[index] ?? null,

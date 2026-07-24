@@ -27,7 +27,7 @@ function alignLabel(mode: ParameterController["alignMode"]) {
 }
 
 function AlignmentControl({ controller }: { controller: ParameterController }) {
-	if (controller.directMode || controller.family !== "Position") return null;
+	if (controller.family !== "Position") return null;
 	const label = alignLabel(controller.alignMode);
 	return (
 		<Button
@@ -69,7 +69,6 @@ function SpecialDialogButton({
 	controller: ParameterController;
 }) {
 	if (
-		controller.directMode ||
 		!specialParameterFamilies.has(controller.family as SpecialParameterFamily)
 	)
 		return null;
@@ -104,32 +103,19 @@ export function ParameterFamilyTabs({
 				<Button
 					key={name}
 					aria-label={name}
-					className={`attribute-family ${!controller.directMode && controller.family === name ? "active" : ""}`}
-					onClick={() => {
-						controller.setFamily(name);
-						controller.setDirectMode(false);
-					}}
+					className={`attribute-family ${controller.family === name ? "active" : ""}`}
+					onClick={() => controller.setFamily(name)}
 				>
 					<FamilyLabel full={name} compact={compactFamilyLabels[name]} />
 				</Button>
 			))}
-			<Button
-				aria-label="Direct values and actions"
-				className={`attribute-family direct-family ${controller.directMode ? "active" : ""}`}
-				onClick={() => controller.setDirectMode(true)}
-			>
-				<FamilyLabel full="Direct" compact="Dir" />
-			</Button>
 			<span className="family-spacer" />
 			<AlignmentControl controller={controller} />
 			<SpecialDialogButton controller={controller} />
 			<Button
 				aria-label="Dynamics"
 				className={`dynamics-family ${controller.dynamicsMode ? "active" : ""}`}
-				onClick={() => {
-					controller.setDirectMode(false);
-					controller.setDynamicsMode(!controller.dynamicsMode);
-				}}
+				onClick={() => controller.setDynamicsMode(!controller.dynamicsMode)}
 			>
 				<FamilyLabel full="Dynamics" compact="Dyn" />
 			</Button>

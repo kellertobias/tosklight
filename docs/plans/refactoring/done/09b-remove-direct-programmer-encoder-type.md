@@ -60,3 +60,19 @@ None — Next/64 states the removal plainly. The rest of Next/64 (history fold-u
 polish, macro-surface redesign, icon, clock) stays feature work and is NOT adopted.
 
 Sequence: before chunk 10 (less encoder surface to migrate to WS).
+
+## Result
+
+Completed 2026-07-24.
+
+- Removed the Direct family tab, picker, choice projection, mutations, and software and
+  hardware encoder branches while retaining the ordinary absolute encoder value dialogs.
+- Made the Control Special Dialog the complete fixture-action surface: it now includes
+  Fan High, every authored action by stable profile/mode/action identity, correct
+  momentary/timed/latched lifecycles, and the explicit portable-preset generator.
+- Updated fixture-authoring copy, operator help, and encoder acceptance wording; rebuilt
+  and verified the 140-page PDF and offline HTML manual.
+- Verified focused control tests (24), architecture and type checks, the full unit gate
+  (276 Vitest files / 1,992 tests plus the Rust workspace), the UI E2E gate
+  (102 passed / 7 intentionally skipped), and the full E2E gate
+  (285 passed / 11 intentionally skipped).

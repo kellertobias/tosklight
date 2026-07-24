@@ -127,14 +127,6 @@ export function EncoderSurfaces({
 }: {
 	controller: ParameterController;
 }) {
-	if (controller.directMode && controller.hardwareConnected)
-		return (
-			<>
-				{Array.from({ length: 6 }, (_, index) => (
-					<HardwareEncoderDisplay key={index} slot={index + 1} />
-				))}
-			</>
-		);
 	if (!controller.selectedFixtureIds.length && !controller.selectedGroupId)
 		return (
 			<div className="parameter-empty">

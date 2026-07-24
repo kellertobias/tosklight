@@ -51,14 +51,12 @@ function nextEncoderValue(
 export function useHardwareParameterEncoders(
 	projection: ParameterProjection,
 	actions: HardwareParameterActions,
-	directMode: boolean,
 ) {
 	const latest = useRef({ projection, actions });
 	const accumulated = useRef<AccumulatedEncoderValue | null>(null);
 	latest.current = { projection, actions };
 	useEffect(() => {
-		if (!projection.active || !projection.hardwareConnected || directMode)
-			return;
+		if (!projection.active || !projection.hardwareConnected) return;
 		const handleEncoder = (event: Event) => {
 			const { projection, actions } = latest.current;
 			if (!actions.canWriteValues) return;
@@ -91,5 +89,5 @@ export function useHardwareParameterEncoders(
 			accumulated.current = null;
 			window.removeEventListener("light:encoder-action", handleEncoder);
 		};
-	}, [projection.active, projection.hardwareConnected, directMode]);
+	}, [projection.active, projection.hardwareConnected]);
 }

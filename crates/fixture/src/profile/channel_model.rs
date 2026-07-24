@@ -237,8 +237,8 @@ pub enum ControlActionKind {
 }
 
 /// Portable operator meaning for fixture-control actions. `Custom` preserves profiles authored
-/// before semantic control actions were introduced and actions which intentionally only appear in
-/// Direct Mode.
+/// before semantic control actions were introduced and authored actions shown by name in the
+/// Control Special Dialog.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ControlActionSemantic {

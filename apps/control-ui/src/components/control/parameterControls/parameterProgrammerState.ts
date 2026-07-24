@@ -1,5 +1,4 @@
 import {
-	type DirectValueChoice,
 	discreteProgrammerTarget,
 	formatDiscreteValues,
 	formatNormalizedRange,
@@ -88,20 +87,6 @@ export function discreteParameterDisplay(
 				target ?? projection.discreteByFixture.get(fixtureId)?.get(attribute);
 			return value == null ? [] : [value];
 		}),
-	);
-}
-
-export function directParameterChoiceActive(
-	projection: ParameterProjection,
-	choice: DirectValueChoice,
-) {
-	return choice.assignments.some((assignment) =>
-		projection.programmerValues.some(
-			(entry) =>
-				entry.fixtureId === assignment.fixtureId &&
-				entry.attribute === assignment.attribute &&
-				discreteProgrammerTarget(entry.value) === choice.semanticId,
-		),
 	);
 }
 

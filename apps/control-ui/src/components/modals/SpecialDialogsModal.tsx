@@ -21,7 +21,9 @@ import { DynamicsDialog } from "./specialDialogs/dynamics";
 import { PositionDialog, usePositionDialog } from "./specialDialogs/position";
 
 export {
+	type AuthoredFixtureControlChoice,
 	type CompatibleFixtureControlAction,
+	compatibleAuthoredControlActions,
 	compatibleSpecialDialogActions,
 } from "./specialDialogs/control";
 

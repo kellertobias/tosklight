@@ -3,13 +3,11 @@ import { useParameterController } from "./parameterControls/useParameterControll
 import { StageCommandControls } from "./StageCommandControls";
 import { useApp } from "../../state/AppContext";
 
-export {
-	type DirectControlChoice,
-	type DirectValueChoice,
-	directProgrammerChoices,
-} from "./parameterControls/model";
-
-export function ParameterControls({ active = true }: { active?: boolean } = {}) {
+export function ParameterControls({
+	active = true,
+}: {
+	active?: boolean;
+} = {}) {
 	const { state } = useApp();
 	const stageVisible =
 		state.builtIn === "stage" ||

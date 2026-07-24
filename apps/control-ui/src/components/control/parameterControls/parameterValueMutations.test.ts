@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-	directValueMutations,
 	releaseParameterMutations,
 	setParameterMutations,
 	setParameterRangeMutations,
@@ -26,7 +25,6 @@ function projection(
 		normalizedByFixture: new Map(),
 		discrete: new Map(),
 		discreteByFixture: new Map(),
-		directChoices: { values: [], actions: [], fixtureIds: [] },
 		encoderSlots: Array.from({ length: 6 }, () => "intensity"),
 		hardwareConnected: false,
 		...overrides,
@@ -119,24 +117,9 @@ describe("parameter value mutation builders", () => {
 		]);
 	});
 
-	it("batches portable direct values and skips empty submissions", async () => {
+	it("skips empty mutation submissions", async () => {
 		const actions = { batch: vi.fn(async () => ({ status: "changed" })) };
-		const mutations = directValueMutations(projection(), {
-			key: "indexed:gobo.dots",
-			label: "Dots",
-			semanticId: "gobo.dots",
-			kind: "indexed",
-			assignments: [
-				{ fixtureId: "fixture-3", attribute: "gobo.1" },
-				{ fixtureId: "fixture-1", attribute: "gobo.2" },
-			],
-		});
-		await submitParameterMutations(actions, mutations, () => "request-1");
-		await submitParameterMutations(actions, [], () => "request-2");
-		expect(actions.batch).toHaveBeenCalledOnce();
-		expect(actions.batch).toHaveBeenCalledWith({
-			requestId: "request-1",
-			mutations,
-		});
+		await submitParameterMutations(actions, [], () => "request-1");
+		expect(actions.batch).not.toHaveBeenCalled();
 	});
 });

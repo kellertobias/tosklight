@@ -127,13 +127,10 @@ vi.mock(
 		}),
 	}),
 );
-vi.mock(
-	"../../features/visualizationRuntime/VisualizationRuntimeView",
-	() => ({
-		useVisualizationRuntimeSnapshot: ({ enabled = true }) =>
-			enabled ? visualization.snapshot : null,
-	}),
-);
+vi.mock("../../features/visualizationRuntime/VisualizationRuntimeView", () => ({
+	useVisualizationRuntimeSnapshot: ({ enabled = true }) =>
+		enabled ? visualization.snapshot : null,
+}));
 vi.mock(
 	"../../features/programmerCaptureMode/ProgrammerCaptureModeView",
 	() => ({
@@ -270,13 +267,10 @@ describe("ParameterControls projection lifecycle", () => {
 		server.patch.fixtures = [schemaV2Fixture()];
 
 		render(<ParameterControls />);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Direct values and actions" }),
-		);
 
 		expect(
-			screen.getByRole("button", { name: "Dots indexed value" }),
-		).toBeDisabled();
+			screen.getAllByRole("img", { name: /Encoder \d unassigned/ }),
+		).toHaveLength(6);
 		expect(normalValuesActions.batch).not.toHaveBeenCalled();
 		expect(preloadValuesActions.batch).not.toHaveBeenCalled();
 		expect(legacyProgrammerValuesAccess).not.toHaveBeenCalled();
@@ -575,21 +569,6 @@ describe("ParameterControls hardware encoders", () => {
 			],
 		});
 	});
-
-	it("clears all physical encoder mappings in Direct mode", () => {
-		server.bootstrap.hardware_connected = true;
-		server.selectedFixtures = ["fixture-1"];
-		server.patch.fixtures = [schemaV2Fixture()];
-		render(<ParameterControls />);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Direct values and actions" }),
-		);
-		for (let slot = 1; slot <= 6; slot += 1)
-			expect(
-				screen.getByLabelText(`Encoder ${slot} unassigned`),
-			).toBeInTheDocument();
-		expect(screen.queryByLabelText(/Encoder 1:/)).not.toBeInTheDocument();
-	});
 });
 
 describe("ParameterControls hardware feedback values", () => {
@@ -661,17 +640,17 @@ describe("ParameterControls hardware feedback values", () => {
 			},
 		];
 		visualization.snapshot = visualizationSnapshot([
-				{
-					fixture_id: "fixture-1",
-					attribute: "intensity",
-					value: { kind: "normalized", value: 0.25 },
-				},
-				{
-					fixture_id: "fixture-2",
-					attribute: "intensity",
-					value: { kind: "normalized", value: 0.75 },
-				},
-			]);
+			{
+				fixture_id: "fixture-1",
+				attribute: "intensity",
+				value: { kind: "normalized", value: 0.25 },
+			},
+			{
+				fixture_id: "fixture-2",
+				attribute: "intensity",
+				value: { kind: "normalized", value: 0.75 },
+			},
+		]);
 
 		render(<ParameterControls />);
 
@@ -755,12 +734,12 @@ describe("ParameterControls programmer targets and alignment", () => {
 			},
 		];
 		visualization.snapshot = visualizationSnapshot([
-				{
-					fixture_id: "fixture-1",
-					attribute: "intensity",
-					value: { kind: "normalized", value: 0 },
-				},
-			]);
+			{
+				fixture_id: "fixture-1",
+				attribute: "intensity",
+				value: { kind: "normalized", value: 0 },
+			},
+		]);
 
 		render(<ParameterControls />);
 
@@ -822,12 +801,12 @@ describe("ParameterControls Group targets and alignment", () => {
 			},
 		];
 		visualization.snapshot = visualizationSnapshot([
-				{
-					fixture_id: "fixture-1",
-					attribute: "intensity",
-					value: { kind: "normalized", value: 0 },
-				},
-			]);
+			{
+				fixture_id: "fixture-1",
+				attribute: "intensity",
+				value: { kind: "normalized", value: 0 },
+			},
+		]);
 
 		render(<ParameterControls />);
 
@@ -874,125 +853,3 @@ function visualizationSnapshot(
 		profile_output_values: [],
 	};
 }
-
-describe("ParameterControls schema-v2 direct picker", () => {
-	it("programs indexed values by stable semantic ID", () => {
-		server.selectedFixtures = ["fixture-1"];
-		server.patch.fixtures = [schemaV2Fixture()];
-
-		render(<ParameterControls />);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Direct values and actions" }),
-		);
-		fireEvent.click(screen.getByRole("button", { name: "Dots indexed value" }));
-
-		expect(normalValuesActions.batch).toHaveBeenCalledWith({
-			requestId: expect.any(String),
-			mutations: [
-				{
-					action: "set_fixture",
-					fixtureId: "fixture-1",
-					attribute: "gobo.1",
-					value: { kind: "discrete", value: "gobo.dots" },
-					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
-				},
-			],
-		});
-	});
-
-	it("holds and releases every assignment through one typed momentary action", () => {
-		server.selectedFixtures = ["fixture-1"];
-		server.patch.fixtures = [schemaV2Fixture()];
-
-		render(<ParameterControls />);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Direct values and actions" }),
-		);
-		const action = screen.getByRole("button", {
-			name: "Lamp reset momentary control action",
-		});
-		fireEvent.pointerDown(action, { pointerId: 7 });
-		fireEvent.pointerUp(action, { pointerId: 7 });
-
-		expect(server.controlFixtureAction.mock.calls).toEqual([
-			["fixture-1", "action-1", true],
-			["fixture-1", "action-1", false],
-		]);
-	});
-
-	it("toggles latched actions and lets the server own timed-pulse release", () => {
-		const fixture = schemaV2Fixture();
-		fixture.definition.profile_snapshot.modes[0].control_actions = [
-			{
-				id: "action-latched",
-				name: "Lamp power",
-				kind: "latched",
-				duration_millis: null,
-				assignments: [
-					{ channel_id: "channel-1", active_raw: 255, inactive_raw: 0 },
-				],
-			},
-			{
-				id: "action-pulse",
-				name: "Fixture reset",
-				kind: "timed_pulse",
-				duration_millis: 750,
-				assignments: [
-					{ channel_id: "channel-1", active_raw: 255, inactive_raw: 0 },
-				],
-			},
-		];
-		server.selectedFixtures = ["fixture-1"];
-		server.patch.fixtures = [fixture];
-
-		render(<ParameterControls />);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Direct values and actions" }),
-		);
-		const latched = screen.getByRole("button", {
-			name: "Lamp power latched control action",
-		});
-		fireEvent.click(latched);
-		fireEvent.click(latched);
-		fireEvent.click(
-			screen.getByRole("button", {
-				name: "Fixture reset timed_pulse control action",
-			}),
-		);
-
-		expect(server.controlFixtureAction.mock.calls).toEqual([
-			["fixture-1", "action-latched", true],
-			["fixture-1", "action-latched", false],
-			["fixture-1", "action-pulse", true],
-		]);
-	});
-
-	it("creates portable presets only after the explicit operator action", async () => {
-		server.selectedFixtures = ["fixture-1"];
-		server.patch.fixtures = [schemaV2Fixture()];
-		server.generateFixturePresets.mockResolvedValueOnce({
-			created: [
-				{
-					address: { family: "Beam", number: 1 },
-					number: 1,
-					name: "Dots",
-					family: "Beam",
-				},
-			],
-		});
-
-		render(<ParameterControls />);
-		expect(server.generateFixturePresets).not.toHaveBeenCalled();
-		fireEvent.click(
-			screen.getByRole("button", { name: "Direct values and actions" }),
-		);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Generate portable presets" }),
-		);
-
-		expect(server.generateFixturePresets).toHaveBeenCalledWith(["fixture-1"]);
-		expect(await screen.findByRole("status")).toHaveTextContent(
-			"Created 1 portable preset",
-		);
-	});
-});

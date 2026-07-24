@@ -4,7 +4,6 @@ import type {
 	ProgrammerValuesMutation,
 	ProgrammerValueTiming,
 } from "../../../features/programmerValues/contracts";
-import type { DirectValueChoice } from "./model";
 import type { ParameterProjection } from "./useParameterProjection";
 
 export interface ParameterValuesMutationPort {
@@ -26,9 +25,7 @@ export function setParameterMutations(
 	attribute: string,
 	value: AttributeValue,
 ) {
-	const timing = parameterValueTiming(
-		projection.programmerFadeMillis,
-	);
+	const timing = parameterValueTiming(projection.programmerFadeMillis);
 	if (projection.selectedGroupId)
 		return [
 			{
@@ -105,24 +102,6 @@ export function releaseParameterMutations(
 					},
 				] satisfies ProgrammerValuesMutation[])
 			: [],
-	);
-}
-
-export function directValueMutations(
-	projection: ParameterProjection,
-	choice: DirectValueChoice,
-) {
-	const timing = parameterValueTiming(
-		projection.programmerFadeMillis,
-	);
-	return choice.assignments.map(
-		(assignment): ProgrammerValuesMutation => ({
-			action: "set_fixture",
-			fixtureId: assignment.fixtureId,
-			attribute: assignment.attribute,
-			value: { kind: "discrete", value: choice.semanticId },
-			timing,
-		}),
 	);
 }
 

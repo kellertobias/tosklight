@@ -3,9 +3,7 @@ import { useProgrammerPreloadValuesActions } from "../../../features/programmerP
 import { LatestProgrammerValuesWriteQueue } from "../../../features/programmerValues/LatestProgrammerValuesWriteQueue";
 import { useProgrammerValuesActions } from "../../../features/programmerValues/ProgrammerValuesView";
 import { useStrictModeSafeStop } from "../../../features/shared/useStrictModeSafeStop";
-import type { DirectValueChoice } from "./model";
 import {
-	directValueMutations,
 	type ParameterValuesMutationPort,
 	parameterMutationKey,
 	releaseParameterMutations,
@@ -52,10 +50,6 @@ export function useParameterValueActions(projection: ParameterProjection) {
 		releaseParameter: (attribute: string) =>
 			queue.submitBarrier(() =>
 				submit(releaseParameterMutations(projection, attribute)),
-			),
-		applyDirectValue: (choice: DirectValueChoice) =>
-			queue.submitBarrier(() =>
-				submit(directValueMutations(projection, choice)),
 			),
 	};
 }

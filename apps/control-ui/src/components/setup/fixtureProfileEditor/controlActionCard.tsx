@@ -146,7 +146,7 @@ export function ControlActionCard({
 				label="Operator action"
 				value={action.semantic ?? "custom"}
 				options={[
-					{ value: "custom", label: "Custom / Direct Mode only" },
+					{ value: "custom", label: "Custom / Control Special Dialog" },
 					{ value: "lamp_on", label: "Lamp On (strike)" },
 					{ value: "lamp_off", label: "Lamp Off" },
 					{ value: "reset", label: "Reset" },

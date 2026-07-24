@@ -21,6 +21,12 @@ Open **Position → Special Dialog** and press **Return Home** beside the relati
 
 Return Home is one normal programmer gesture. It follows Programmer Fade and the current Blind, Preview, or Preload mode, and one **UND** restores the preceding programmer values. Record or Update the result when it should become show data. Return Home itself does not edit fixture-profile defaults or save values into a Cue or Preset.
 
+## Run fixture control actions
+
+Open **Control → Special Dialog** to run the selected fixtures' authored control actions. The familiar Lamp, Reset, and Fan buttons apply only where a fixture profile provides the matching action; the Fixture controls row exposes every authored action by its profile name, including Custom actions. Momentary actions remain active only while held, timed actions release on the fixture profile's timer, and latched actions toggle on and off.
+
+Control actions are live fixture overrides, not recordable encoder values. Use **Generate portable presets** in the same dialog when fixed or indexed fixture functions should become portable Preset choices for the selected fixtures.
+
 ## Align a Color range
 
 Open **Color → Special Dialog** to apply the picker's chosen color uniformly to the current selection. To create a range, hold Shift on the normal keyboard or attached hardware while pressing a start point, drag to the end point, and release. The preview line and endpoint markers show the active range without covering the picker.
