@@ -3,12 +3,88 @@ import { expect } from "../apps/control-ui/e2e/bench/fixtures";
 import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
 import { batchProgrammerValues } from "../apps/control-ui/e2e/bench/programmerValues";
 import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/programmingSelection";
-import {
-  colorProgrammerAssignments,
-  interpolatePickerRange,
-  type PickerColor,
-} from "../apps/control-ui/src/components/modals/specialColor";
 import { loadCanonicalCopy, programmer } from "./support/catalog";
+
+type PickerColor = { hue: number; saturation: number; brightness: number };
+
+// Test-owned oracle mirroring the server's color-range contract (crates/core
+// `color_range_color` + `hsv_to_rgb`, expanded per supported channel): open arcs pin both
+// endpoints, interior fixtures interpolate hue along the gesture's travel and saturation
+// linearly, and every color uses the end brightness.
+function interpolatePickerRange(
+  count: number,
+  start: PickerColor,
+  end: PickerColor,
+): PickerColor[] {
+  if (count <= 0) return [];
+  if (count === 1) return [end];
+  return Array.from({ length: count }, (_, index) => {
+    if (index === 0) return { ...start, brightness: end.brightness };
+    if (index === count - 1) return end;
+    const ratio = index / (count - 1);
+    return {
+      hue: start.hue + (end.hue - start.hue) * ratio,
+      saturation: start.saturation + (end.saturation - start.saturation) * ratio,
+      brightness: end.brightness,
+    };
+  });
+}
+
+function hsvToRgb({ hue, saturation, brightness }: PickerColor) {
+  const i = Math.floor(hue * 6);
+  const f = hue * 6 - i;
+  const p = brightness * (1 - saturation);
+  const q = brightness * (1 - f * saturation);
+  const t = brightness * (1 - (1 - f) * saturation);
+  return (
+    [
+      [brightness, t, p],
+      [q, brightness, p],
+      [p, brightness, t],
+      [p, q, brightness],
+      [t, p, brightness],
+      [brightness, p, q],
+    ] as number[][]
+  )[i % 6];
+}
+
+function colorProgrammerAssignments(
+  selectedFixtures: readonly string[],
+  patch: readonly any[],
+  colors: PickerColor[],
+): Assignment[] {
+  return selectedFixtures.flatMap((fixtureId, index) => {
+    const fixture = patch.find(
+      (candidate: any) =>
+        candidate.fixture_id === fixtureId ||
+        candidate.logical_heads.some((head: any) => head.fixture_id === fixtureId),
+    );
+    if (!fixture) return [];
+    const logicalHead = fixture.logical_heads.find(
+      (head: any) => head.fixture_id === fixtureId,
+    );
+    const heads = logicalHead
+      ? fixture.definition.heads.filter((head: any) => head.index === logicalHead.head_index)
+      : fixture.definition.heads.filter((head: any) => head.shared);
+    const attributes = new Set(
+      heads.flatMap((head: any) => head.parameters.map((parameter: any) => parameter.attribute)),
+    );
+    const color = colors[index];
+    if (!color) return [];
+    const [red, green, blue] = hsvToRgb(color);
+    const values: Array<[string, number]> = [
+      ["color.red", red],
+      ["color.green", green],
+      ["color.blue", blue],
+      ["color.cyan", 1 - red],
+      ["color.magenta", 1 - green],
+      ["color.yellow", 1 - blue],
+    ];
+    return values.flatMap(([attribute, value]) =>
+      attributes.has(attribute) ? [{ fixtureId, attribute, value }] : [],
+    );
+  });
+}
 
 type Assignment = { fixtureId: string; attribute: string; value: number };
 type ColorRangeState = {
@@ -24,11 +100,6 @@ const end: PickerColor = { hue: 0.9, saturation: 0.2, brightness: 0.85 };
 pairedScenario<ColorRangeState>({
   id: "COLOR-RANGE-001",
   title: "Shift-drag applies an ordered Color range from software and attached hardware",
-  // UI-only gap (the @api contract passes, so the engine's ordered Color-range spread is
-  // correct): the on-screen Shift-drag applies only one endpoint instead of the ordered
-  // range (received 1, expected 2), so the drag-to-spread gesture is not fully wired in the
-  // UI. Unskip once Shift-drag applies the full ordered range on-screen.
-  skip: { ui: "Shift-drag applies only one Color step, not the ordered range" },
   arrange: async ({ api, bench }, surface) => {
     const show = await loadCanonicalCopy(api, bench, `color-range-001-${surface}`, "default-stage");
     const patch = await api.request<any>("GET", "/api/v1/patch", undefined, false);
@@ -75,7 +146,23 @@ pairedScenario<ColorRangeState>({
     return { showId: show.id, selected, range, prior };
   },
   api: async ({ api }, state) => {
-    await setMany(api, state.showId, state.range);
+    // The server owns the interpolation: one fan-out action carries the ordered selection,
+    // both endpoints, and the gesture's hue travel.
+    await batchProgrammerValues(api, {
+      surface: "api",
+      showId: state.showId,
+      mutations: [
+        {
+          action: "set_selection_color_range",
+          fixtureIds: state.selected,
+          start: { hue: start.hue, saturation: start.saturation },
+          end: { hue: end.hue, saturation: end.saturation },
+          hueTravel: end.hue - start.hue,
+          brightness: end.brightness,
+          timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+        },
+      ],
+    });
   },
   ui: async ({ api, bench, desk, page }, state) => {
     await desk.open(api.baseUrl);
@@ -211,7 +298,12 @@ async function expectAssignments(api: any, expected: Assignment[]): Promise<void
   }).toBe(true);
 }
 
+// One applied values action bumps the authoritative projection revision exactly once, so the
+// revision counts batches (the v2 route does not emit legacy programmer_changed audit events).
 async function batchCommandCount(api: any): Promise<number> {
-  const audit = await api.request<any[]>("GET", "/api/v1/audit?after=0");
-  return audit.filter((event) => event.kind === "programmer_changed").length;
+  const snapshot = await api.request<any>(
+    "GET",
+    `/api/v2/users/${api.session!.user.id}/programmer-values/snapshot`,
+  );
+  return snapshot.projection.revision;
 }

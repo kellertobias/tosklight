@@ -626,6 +626,187 @@ fn assert_only_values_events(scenario: &CommandHttpScenario, expected: usize) {
     )));
 }
 
+fn color_range_fixture(number: u32, attributes: &[&str]) -> light_fixture::PatchedFixture {
+    let (template, _, _) = schema_v2_direct_fixture();
+    let mut fixture = template;
+    fixture.fixture_id = light_core::FixtureId::new();
+    fixture.fixture_number = Some(number);
+    fixture.address = Some(1 + (number as u16 - 1) * 8);
+    fixture.definition.heads = vec![light_fixture::LogicalHead {
+        index: 0,
+        name: "Main".into(),
+        shared: true,
+        parameters: attributes
+            .iter()
+            .map(|attribute| light_fixture::Parameter {
+                attribute: light_core::AttributeKey((*attribute).into()),
+                components: vec![],
+                default: 0.0,
+                virtual_dimmer: false,
+                metadata: Default::default(),
+                capabilities: vec![],
+            })
+            .collect(),
+    }];
+    fixture
+}
+
+fn programmer_color_values(
+    scenario: &CommandHttpScenario,
+) -> impl Fn(light_core::FixtureId, &str) -> Option<f32> + use<> {
+    let programmer = scenario.state.programmers.get(scenario.session.id).unwrap();
+    move |fixture: light_core::FixtureId, attribute: &str| {
+        programmer
+            .values
+            .iter()
+            .find(|value| value.fixture_id == fixture && value.attribute.0 == attribute)
+            .and_then(|value| value.value.normalized())
+    }
+}
+
+#[tokio::test]
+async fn color_range_resolves_rgb_and_cmy_channels_server_side_in_selection_order() {
+    let scenario = CommandHttpScenario::new().await;
+    let rgb_first = color_range_fixture(1, &["color.red", "color.green", "color.blue"]);
+    let cmy_middle = color_range_fixture(2, &["color.cyan", "color.magenta", "color.yellow"]);
+    let rgb_last = color_range_fixture(3, &["color.red", "color.green", "color.blue"]);
+    let ids = [
+        rgb_first.fixture_id,
+        cmy_middle.fixture_id,
+        rgb_last.fixture_id,
+    ];
+    scenario
+        .state
+        .engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![rgb_first, cmy_middle, rgb_last],
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+
+    // Red → blue the short way; the CMY fixture sits mid-arc on green and an id outside the
+    // patch is skipped without failing the request.
+    let absent = light_core::FixtureId::new();
+    let action = serde_json::json!({
+        "request_id": "color-range",
+        "expected_revision": 0,
+        "expected_capture_mode_revision": 0,
+        "action": {
+            "type": "set_selection_color_range",
+            "fixture_ids": [ids[0].0, ids[1].0, ids[2].0, absent.0],
+            "start": {"hue": 0.0, "saturation": 1.0},
+            "end": {"hue": 0.5, "saturation": 1.0},
+            "hue_travel": 0.5,
+            "brightness": 1.0,
+            "timing": {"fade": false}
+        }
+    });
+    let response = scenario.values_action(action).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let value = programmer_color_values(&scenario);
+    // 4 selected ids → ratio thirds: red, green (1/3), cyan-ish? No — endpoints pin over the
+    // 4-strong selection; the absent id occupies the last slot, so the patched fixtures sit at
+    // ratios 0, 1/3, 2/3 → red, green, cyan-blue boundary.
+    assert_eq!(value(ids[0], "color.red"), Some(1.0));
+    assert_eq!(value(ids[0], "color.green"), Some(0.0));
+    assert_eq!(value(ids[0], "color.blue"), Some(0.0));
+    assert_eq!(value(ids[0], "color.cyan"), None);
+    // Hue 1/6 at full saturation → RGB (1, 1, 0) → CMY (0, 0, 1).
+    assert_eq!(value(ids[1], "color.cyan"), Some(0.0));
+    assert_eq!(value(ids[1], "color.magenta"), Some(0.0));
+    assert_eq!(value(ids[1], "color.yellow"), Some(1.0));
+    assert_eq!(value(ids[1], "color.red"), None);
+    // Hue 1/3 → green.
+    assert_eq!(value(ids[2], "color.red"), Some(0.0));
+    assert_eq!(value(ids[2], "color.green"), Some(1.0));
+    assert_eq!(value(ids[2], "color.blue"), Some(0.0));
+    assert_eq!(value(absent, "color.red"), None);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn color_range_supports_a_full_revolution_back_to_the_start_color() {
+    let scenario = CommandHttpScenario::new().await;
+    let fixtures: Vec<_> = (1..=3)
+        .map(|number| color_range_fixture(number, &["color.red", "color.green", "color.blue"]))
+        .collect();
+    let ids: Vec<_> = fixtures.iter().map(|fixture| fixture.fixture_id).collect();
+    scenario
+        .state
+        .engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures,
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+
+    // Maintainer-pinned: red → red with one full revolution distributes the wheel once —
+    // hues 0°, 120°, 240° → red, green, blue.
+    let action = serde_json::json!({
+        "request_id": "color-revolution",
+        "expected_revision": 0,
+        "expected_capture_mode_revision": 0,
+        "action": {
+            "type": "set_selection_color_range",
+            "fixture_ids": [ids[0].0, ids[1].0, ids[2].0],
+            "start": {"hue": 0.0, "saturation": 1.0},
+            "end": {"hue": 0.0, "saturation": 1.0},
+            "hue_travel": 1.0,
+            "brightness": 1.0,
+            "timing": {"fade": false}
+        }
+    });
+    let response = scenario.values_action(action).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let value = programmer_color_values(&scenario);
+    assert_eq!(value(ids[0], "color.red"), Some(1.0));
+    assert_eq!(value(ids[0], "color.green"), Some(0.0));
+    assert_eq!(value(ids[1], "color.green"), Some(1.0));
+    assert_eq!(value(ids[1], "color.red"), Some(0.0));
+    assert_eq!(value(ids[2], "color.blue"), Some(1.0));
+    assert_eq!(value(ids[2], "color.red"), Some(0.0));
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn color_range_rejects_out_of_range_payloads_without_mutation() {
+    let scenario = CommandHttpScenario::new().await;
+    let fixture = color_range_fixture(1, &["color.red", "color.green", "color.blue"]);
+    let id = fixture.fixture_id;
+    scenario
+        .state
+        .engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture],
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    let action = serde_json::json!({
+        "request_id": "color-invalid",
+        "expected_revision": 0,
+        "expected_capture_mode_revision": 0,
+        "action": {
+            "type": "set_selection_color_range",
+            "fixture_ids": [id.0],
+            "start": {"hue": 1.5, "saturation": 1.0},
+            "end": {"hue": 0.0, "saturation": 1.0},
+            "hue_travel": 0.0,
+            "brightness": 1.0,
+            "timing": {"fade": false}
+        }
+    });
+    let response = scenario.values_action(action).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let value = programmer_color_values(&scenario);
+    assert_eq!(value(id, "color.red"), None);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
 #[tokio::test]
 async fn set_selection_resolves_the_spread_server_side_in_selection_order() {
     let scenario = CommandHttpScenario::new().await;

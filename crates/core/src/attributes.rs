@@ -352,6 +352,74 @@ fn linear(points: &[f32], index: usize, count: usize) -> f32 {
     points[left] + (points[right] - points[left]) * (position - left as f32)
 }
 
+/// Hue/saturation picker coordinates (both 0..1) plus brightness, as used by the operator
+/// color dialog. Hue is cyclic; saturation and brightness are plain unit scalars.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PickerColor {
+    pub hue: f32,
+    pub saturation: f32,
+    pub brightness: f32,
+}
+
+/// Exact port of the operator color dialog's HSV→RGB conversion so a server-resolved color
+/// range reproduces the former client bytes.
+pub fn hsv_to_rgb(color: PickerColor) -> [f32; 3] {
+    let PickerColor {
+        hue,
+        saturation,
+        brightness,
+    } = color;
+    let i = (hue * 6.0).floor();
+    let f = hue * 6.0 - i;
+    let p = brightness * (1.0 - saturation);
+    let q = brightness * (1.0 - f * saturation);
+    let t = brightness * (1.0 - (1.0 - f) * saturation);
+    match (i as i32).rem_euclid(6) {
+        0 => [brightness, t, p],
+        1 => [q, brightness, p],
+        2 => [p, brightness, t],
+        3 => [p, q, brightness],
+        4 => [t, p, brightness],
+        _ => [brightness, p, q],
+    }
+}
+
+/// Resolves the color at `index` of an ordered `count`-strong selection for a color-range
+/// gesture. Hue interpolates along `hue_travel` (total signed travel in revolutions, so the
+/// long way around and multiple full rainbow cycles are expressible) with wraparound;
+/// saturation interpolates linearly; every color uses the uniform `brightness` (the dialog's
+/// range semantics). Endpoints are pinned — except for a closed loop (integer non-zero travel
+/// back to the start color), where the wheel distributes across `count` slots so a full
+/// revolution over N fixtures yields N distinct evenly spaced hues instead of repeating the
+/// start.
+pub fn color_range_color(
+    start: (f32, f32),
+    end: (f32, f32),
+    hue_travel: f32,
+    brightness: f32,
+    index: usize,
+    count: usize,
+) -> PickerColor {
+    let closed = count > 1 && hue_travel != 0.0 && hue_travel.fract() == 0.0 && start == end;
+    if count <= 1 || (!closed && index + 1 >= count) {
+        return PickerColor {
+            hue: end.0,
+            saturation: end.1,
+            brightness,
+        };
+    }
+    let ratio = if closed {
+        index as f32 / count as f32
+    } else {
+        index as f32 / (count - 1) as f32
+    };
+    PickerColor {
+        hue: (start.0 + hue_travel * ratio).rem_euclid(1.0),
+        saturation: start.1 + (end.1 - start.1) * ratio,
+        brightness,
+    }
+}
+
 /// Resolves the value at `index` of an ordered `count`-strong selection from the given control
 /// points via [`resolve_spread`]. Shared by every fan-out path (command line, groups, ordered
 /// selections, engine rendering of stored spreads) so all surfaces distribute identically.
@@ -398,6 +466,93 @@ pub struct TimedValue {
     /// A command-specific delay before the value starts fading.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delay_millis: Option<u64>,
+}
+
+#[cfg(test)]
+mod color_range_tests {
+    use super::{PickerColor, color_range_color, hsv_to_rgb};
+
+    fn hues(start: (f32, f32), end: (f32, f32), travel: f32, count: usize) -> Vec<f32> {
+        (0..count)
+            .map(|index| {
+                let color = color_range_color(start, end, travel, 1.0, index, count);
+                (color.hue * 360.0 * 10.0).round() / 10.0
+            })
+            .collect()
+    }
+
+    #[test]
+    fn one_full_revolution_from_red_distributes_the_wheel_without_repeating() {
+        // Maintainer-pinned: 3 fixtures, red → red with one revolution → 0°, 120°, 240°.
+        assert_eq!(hues((0.0, 1.0), (0.0, 1.0), 1.0, 3), [0.0, 120.0, 240.0]);
+        // Two revolutions cover the wheel twice across six fixtures.
+        assert_eq!(
+            hues((0.0, 1.0), (0.0, 1.0), 2.0, 6),
+            [0.0, 120.0, 240.0, 0.0, 120.0, 240.0]
+        );
+        // Reverse direction winds the other way.
+        assert_eq!(hues((0.0, 1.0), (0.0, 1.0), -1.0, 3), [0.0, 240.0, 120.0]);
+    }
+
+    #[test]
+    fn open_arcs_pin_both_endpoints_and_wrap_through_the_seam() {
+        // Straight short-way range keeps the former client semantics: endpoints exact.
+        assert_eq!(
+            hues((0.0, 1.0), (2.0 / 3.0, 1.0), 2.0 / 3.0, 3),
+            [0.0, 120.0, 240.0]
+        );
+        // The long way around from red to blue passes through the wrap seam.
+        let long_way = hues((0.0, 1.0), (2.0 / 3.0, 1.0), -1.0 / 3.0, 3);
+        assert_eq!(long_way, [0.0, 300.0, 240.0]);
+        // Saturation interpolates linearly while brightness stays uniform.
+        let middle = color_range_color((0.0, 0.2), (0.5, 0.8), 0.5, 0.4, 1, 3);
+        assert_eq!(middle.saturation, 0.5);
+        assert_eq!(middle.brightness, 0.4);
+    }
+
+    #[test]
+    fn single_and_zero_counts_resolve_to_the_end_color() {
+        let single = color_range_color((0.1, 0.3), (0.6, 0.9), 0.5, 0.7, 0, 1);
+        assert_eq!((single.hue, single.saturation), (0.6, 0.9));
+        let none = color_range_color((0.1, 0.3), (0.6, 0.9), 0.5, 0.7, 0, 0);
+        assert_eq!((none.hue, none.saturation), (0.6, 0.9));
+    }
+
+    #[test]
+    fn hsv_conversion_matches_the_former_client_table() {
+        assert_eq!(
+            hsv_to_rgb(PickerColor {
+                hue: 0.0,
+                saturation: 1.0,
+                brightness: 1.0
+            }),
+            [1.0, 0.0, 0.0]
+        );
+        assert_eq!(
+            hsv_to_rgb(PickerColor {
+                hue: 1.0 / 3.0,
+                saturation: 1.0,
+                brightness: 1.0
+            }),
+            [0.0, 1.0, 0.0]
+        );
+        assert_eq!(
+            hsv_to_rgb(PickerColor {
+                hue: 2.0 / 3.0,
+                saturation: 1.0,
+                brightness: 1.0
+            }),
+            [0.0, 0.0, 1.0]
+        );
+        assert_eq!(
+            hsv_to_rgb(PickerColor {
+                hue: 0.0,
+                saturation: 0.0,
+                brightness: 0.5
+            }),
+            [0.5, 0.5, 0.5]
+        );
+    }
 }
 
 #[cfg(test)]

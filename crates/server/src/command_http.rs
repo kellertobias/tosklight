@@ -5,6 +5,8 @@
 
 #[path = "command_http/adapter.rs"]
 mod adapter;
+#[path = "command_http/color_attributes.rs"]
+mod color_attributes;
 #[path = "command_http/cue_deletion_command.rs"]
 mod cue_deletion_command;
 #[path = "command_http/cue_deletion_ports.rs"]

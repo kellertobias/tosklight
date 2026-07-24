@@ -62,6 +62,7 @@ function applyMutation(
 		// The server resolves the per-fixture fan-out; the optimistic projection waits for the
 		// authoritative outcome instead of duplicating the interpolation client-side.
 		case "set_selection":
+		case "set_selection_color_range":
 			return unchanged;
 		case "set_fixture": {
 			const key = fixtureKey(mutation);

@@ -163,6 +163,28 @@
         "z"
       ]
     },
+    "ProgrammingPickerColor": {
+      "description": "Hue/saturation picker coordinates (both 0..1) as captured by the operator color dialog.",
+      "type": "object",
+      "properties": {
+        "hue": {
+          "type": "number",
+          "format": "float",
+          "maximum": 1.0,
+          "minimum": 0.0
+        },
+        "saturation": {
+          "type": "number",
+          "format": "float",
+          "maximum": 1.0,
+          "minimum": 0.0
+        }
+      },
+      "required": [
+        "hue",
+        "saturation"
+      ]
+    },
     "ProgrammingValueMutation": {
       "oneOf": [
         {
@@ -200,6 +222,55 @@
             "fixture_ids",
             "attribute",
             "value"
+          ]
+        },
+        {
+          "description": "Server-side color-range fan-out over an explicitly ordered selection: the picker\nendpoints interpolate hue-aware across the fixture order — `hue_travel` carries the\ngesture's total signed hue distance in revolutions (1.0 = once around the wheel), so\nlong-way-around and multi-revolution ranges are expressible — and every fixture stores\nonly the color channels its heads support.",
+          "type": "object",
+          "properties": {
+            "brightness": {
+              "type": "number",
+              "format": "float",
+              "maximum": 1.0,
+              "minimum": 0.0
+            },
+            "end": {
+              "$ref": "#/$defs/ProgrammingPickerColor"
+            },
+            "fixture_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 10000
+            },
+            "hue_travel": {
+              "type": "number",
+              "format": "float"
+            },
+            "start": {
+              "$ref": "#/$defs/ProgrammingPickerColor"
+            },
+            "timing": {
+              "$ref": "#/$defs/ProgrammingValueTiming",
+              "default": {
+                "fade": false
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "set_selection_color_range"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "fixture_ids",
+            "start",
+            "end",
+            "hue_travel",
+            "brightness"
           ]
         },
         {
@@ -479,6 +550,55 @@
             "type",
             "group_id",
             "attribute"
+          ]
+        },
+        {
+          "description": "Server-side color-range fan-out over an explicitly ordered selection: the picker\nendpoints interpolate hue-aware across the fixture order — `hue_travel` carries the\ngesture's total signed hue distance in revolutions (1.0 = once around the wheel), so\nlong-way-around and multi-revolution ranges are expressible — and every fixture stores\nonly the color channels its heads support.",
+          "type": "object",
+          "properties": {
+            "brightness": {
+              "type": "number",
+              "format": "float",
+              "maximum": 1.0,
+              "minimum": 0.0
+            },
+            "end": {
+              "$ref": "#/$defs/ProgrammingPickerColor"
+            },
+            "fixture_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 10000
+            },
+            "hue_travel": {
+              "type": "number",
+              "format": "float"
+            },
+            "start": {
+              "$ref": "#/$defs/ProgrammingPickerColor"
+            },
+            "timing": {
+              "$ref": "#/$defs/ProgrammingValueTiming",
+              "default": {
+                "fade": false
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "set_selection_color_range"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "fixture_ids",
+            "start",
+            "end",
+            "hue_travel",
+            "brightness"
           ]
         },
         {

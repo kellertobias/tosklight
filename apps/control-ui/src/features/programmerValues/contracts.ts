@@ -64,6 +64,15 @@ export type ProgrammerValuesMutation =
 			timing: ProgrammerValueTiming;
 	  }
 	| {
+			action: "set_selection_color_range";
+			fixtureIds: readonly string[];
+			start: { hue: number; saturation: number };
+			end: { hue: number; saturation: number };
+			hueTravel: number;
+			brightness: number;
+			timing: ProgrammerValueTiming;
+	  }
+	| {
 			action: "set_fixture";
 			fixtureId: string;
 			attribute: string;

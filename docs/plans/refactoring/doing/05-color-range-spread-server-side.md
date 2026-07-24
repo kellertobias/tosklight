@@ -63,3 +63,10 @@ None. Depends on chunk 03 landing first if it reuses the extended spread mutatio
 (sequence 03 → 03b → 05); if the color interpolation ends up storing
 `AttributeValue::Spread`, its ordered resolution must use 03b's shared anchor rule
 (Next/50 requirement).
+
+## Decision addendum (maintainer, 2026-07-24)
+
+Scope clarified while executing: **all attribute spreads entered via encoders must be
+computed server-side, never client-side** — not only the color range. Audit every
+encoder-entered write path for remaining client-side per-fixture computation and either
+fix it in this chunk (if it is spread math) or file it as a follow-up chunk.

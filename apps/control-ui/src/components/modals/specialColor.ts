@@ -1,12 +1,8 @@
-import type { PatchedFixture } from "../../api/types";
+import type { ProgrammerValuesMutation } from "../../features/programmerValues/contracts";
 
 export type PickerColor = { hue: number; saturation: number; brightness: number };
-export type ColorProgrammerAssignment = {
-  fixtureId: string;
-  attribute: string;
-  value: number;
-};
 
+/** Picker-space HSV→RGB for the dialog swatch; value resolution happens server-side. */
 export function hsvToRgb({ hue, saturation, brightness }: PickerColor) {
   const i = Math.floor(hue * 6);
   const f = hue * 6 - i;
@@ -25,65 +21,43 @@ export function hsvToRgb({ hue, saturation, brightness }: PickerColor) {
   )[i % 6];
 }
 
-export function interpolatePickerRange(
-  count: number,
+/** Release points this close to the gesture start read as "back on the start color". */
+const CLOSED_LOOP_EPSILON = 0.02;
+
+/**
+ * One server-side color-range fan-out for the ordered selection. `hueTravel` is the signed
+ * hue distance accumulated along the drag in revolutions, so ranges may run the long way
+ * around the wheel or wind multiple full rainbow cycles. A drag released back on its start
+ * color with whole-revolution travel snaps to the exact closed loop, which the server
+ * distributes across the selection without repeating the start hue.
+ */
+export function colorRangeMutation(
+  fixtureIds: readonly string[],
   start: PickerColor,
   end: PickerColor,
-): PickerColor[] {
-  if (count <= 0) return [];
-  if (count === 1) return [end];
-  return Array.from({ length: count }, (_, index) => {
-    if (index === 0) return { ...start, brightness: end.brightness };
-    if (index === count - 1) return end;
-    const ratio = index / (count - 1);
-    return {
-      hue: start.hue + (end.hue - start.hue) * ratio,
-      saturation:
-        start.saturation + (end.saturation - start.saturation) * ratio,
-      brightness: end.brightness,
-    };
-  });
-}
-
-/** Resolves RGB or CMY values for each ordered selected fixture/head. */
-export function colorProgrammerAssignments(
-  selectedFixtures: readonly string[],
-  patch: readonly PatchedFixture[],
-  colors: PickerColor[],
-): ColorProgrammerAssignment[] {
-  return selectedFixtures.flatMap((fixtureId, index) => {
-    const fixture = patch.find(
-      (candidate) =>
-        candidate.fixture_id === fixtureId ||
-        candidate.logical_heads.some((head) => head.fixture_id === fixtureId),
-    );
-    if (!fixture) return [];
-    const logicalHead = fixture.logical_heads.find(
-      (head) => head.fixture_id === fixtureId,
-    );
-    const heads = logicalHead
-      ? fixture.definition.heads.filter(
-          (head) => head.index === logicalHead.head_index,
-        )
-      : fixture.definition.heads.filter((head) => head.shared);
-    const attributes = new Set(
-      heads.flatMap((head) =>
-        head.parameters.map((parameter) => parameter.attribute),
-      ),
-    );
-    const color = colors[index];
-    if (!color) return [];
-    const [red, green, blue] = hsvToRgb(color);
-    const values: Array<[string, number]> = [
-      ["color.red", red],
-      ["color.green", green],
-      ["color.blue", blue],
-      ["color.cyan", 1 - red],
-      ["color.magenta", 1 - green],
-      ["color.yellow", 1 - blue],
-    ];
-    return values.flatMap(([attribute, value]) =>
-      attributes.has(attribute) ? [{ fixtureId, attribute, value }] : [],
-    );
-  });
+  hueTravel: number,
+  brightness: number,
+  fadeMillis?: number,
+): ProgrammerValuesMutation {
+  const revolutions = Math.round(hueTravel);
+  const closed =
+    revolutions !== 0 &&
+    Math.abs(hueTravel - revolutions) < CLOSED_LOOP_EPSILON &&
+    Math.abs(end.hue - start.hue) < CLOSED_LOOP_EPSILON &&
+    Math.abs(end.saturation - start.saturation) < CLOSED_LOOP_EPSILON;
+  return {
+    action: "set_selection_color_range",
+    fixtureIds,
+    start: { hue: start.hue, saturation: start.saturation },
+    end: closed
+      ? { hue: start.hue, saturation: start.saturation }
+      : { hue: end.hue, saturation: end.saturation },
+    hueTravel: closed ? revolutions : hueTravel,
+    brightness,
+    timing: {
+      fade: true,
+      fadeMillis: fadeMillis ?? 3_000,
+      delayMillis: null,
+    },
+  };
 }

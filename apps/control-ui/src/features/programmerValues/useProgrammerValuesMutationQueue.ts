@@ -105,6 +105,8 @@ export function programmerValuesMutationKey(
 				return `fixture:${mutation.fixtureId}:${mutation.attribute}`;
 			if (mutation.action === "set_selection")
 				return `selection:${mutation.fixtureIds.join(",")}:${mutation.attribute}`;
+			if (mutation.action === "set_selection_color_range")
+				return `selection-color:${mutation.fixtureIds.join(",")}`;
 			return `group:${mutation.groupId}:${mutation.attribute}`;
 		})
 		.join("\u0000");

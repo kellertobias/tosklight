@@ -235,6 +235,16 @@ function encodeMutation(
 			value: mutation.value,
 			timing: encodeTiming(mutation.timing),
 		};
+	if (mutation.action === "set_selection_color_range")
+		return {
+			type: mutation.action,
+			fixture_ids: [...mutation.fixtureIds],
+			start: mutation.start,
+			end: mutation.end,
+			hue_travel: mutation.hueTravel,
+			brightness: mutation.brightness,
+			timing: encodeTiming(mutation.timing),
+		};
 	if (mutation.action === "set_fixture")
 		return {
 			type: mutation.action,

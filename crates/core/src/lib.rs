@@ -6,7 +6,8 @@ mod clock;
 
 pub use attributes::{
     ATTRIBUTE_REGISTRY, AttributeClass, AttributeDescriptor, AttributeKey, AttributeValue,
-    AttributeValueType, MergeMode, TimedValue, Xyz, attribute_descriptor, spread_position,
+    AttributeValueType, MergeMode, PickerColor, TimedValue, Xyz, attribute_descriptor,
+    color_range_color, hsv_to_rgb, spread_position,
 };
 pub use clock::{ApplicationClock, EngineClock, ManualClock, SharedClock, SystemClock};
 

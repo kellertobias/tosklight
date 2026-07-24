@@ -1,18 +1,11 @@
 import { type PointerEvent, useRef, useState } from "react";
-import { useSelectedPatchedFixtures } from "../../../features/patch/PatchState";
 import { useProgrammerFadeMillis } from "../../../features/configuration/ConfigurationState";
 import {
-	normalizedFixtureMutations,
 	programmerValuesMutationKey,
 	type ProgrammerValuesMutationQueueController,
 } from "../../../features/programmerValues/useProgrammerValuesMutationQueue";
 import { Button } from "../../common";
-import {
-	colorProgrammerAssignments,
-	hsvToRgb,
-	interpolatePickerRange,
-	type PickerColor,
-} from "../specialColor";
+import { colorRangeMutation, hsvToRgb, type PickerColor } from "../specialColor";
 import { normalizedPointerPosition } from "./pointer";
 
 interface ColorRangePreview {
@@ -51,23 +44,30 @@ export function useColorDialog(
 	const colorRangeGesture = useRef<{
 		pointerId: number;
 		start: PickerColor;
+		/** Signed hue distance accumulated along the drag, in revolutions. */
+		hueTravel: number;
+		lastHue: number;
 	} | null>(null);
-	const selectedFixtures = useSelectedPatchedFixtures(selectedFixtureIds);
 
-	const applyColors = async (
-		colors: PickerColor[],
+	// The server interpolates the range and resolves each fixture's RGB/CMY channels; the
+	// dialog only ships the gesture (endpoints, winding, brightness).
+	const applyColorRange = async (
+		start: PickerColor,
+		end: PickerColor,
+		hueTravel: number,
 		mode: "latest" | "barrier",
 	) => {
-		const assignments = colorProgrammerAssignments(
-			selectedFixtureIds,
-			selectedFixtures,
-			colors,
-		);
-		const mutations = normalizedFixtureMutations(
-			assignments,
-			programmerFadeMillis,
-		);
-		if (!mutations.length) return;
+		if (!selectedFixtureIds.length) return;
+		const mutations = [
+			colorRangeMutation(
+				selectedFixtureIds,
+				start,
+				end,
+				hueTravel,
+				end.brightness,
+				programmerFadeMillis,
+			),
+		];
 		if (mode === "barrier") await valueWrites.submitBarrier(mutations);
 		else
 			await valueWrites.submitLatest(
@@ -88,13 +88,12 @@ export function useColorDialog(
 		setSaturation(next.saturation);
 		const gesture = colorRangeGesture.current;
 		if (gesture?.pointerId === event.pointerId) {
+			gesture.hueTravel += next.hue - gesture.lastHue;
+			gesture.lastHue = next.hue;
 			setColorRangePreview({ start: gesture.start, end: next, active: true });
 			return;
 		}
-		void applyColors(
-			selectedFixtureIds.map(() => next),
-			"latest",
-		);
+		void applyColorRange(next, next, 0, "latest");
 	};
 
 	const startColor = (event: PointerEvent<HTMLDivElement>) => {
@@ -102,7 +101,12 @@ export function useColorDialog(
 		event.currentTarget.setPointerCapture(event.pointerId);
 		const start = pickerColor(event);
 		if (event.shiftKey || shiftArmed) {
-			colorRangeGesture.current = { pointerId: event.pointerId, start };
+			colorRangeGesture.current = {
+				pointerId: event.pointerId,
+				start,
+				hueTravel: 0,
+				lastHue: start.hue,
+			};
 			setHue(start.hue);
 			setSaturation(start.saturation);
 			setColorRangePreview({ start, end: start, active: true });
@@ -120,10 +124,8 @@ export function useColorDialog(
 		setSaturation(end.saturation);
 		setColorRangePreview({ start: gesture.start, end, active: false });
 		if (!valueWrites.canWrite) return;
-		void applyColors(
-			interpolatePickerRange(selectedFixtureIds.length, gesture.start, end),
-			"barrier",
-		);
+		const hueTravel = gesture.hueTravel + (end.hue - gesture.lastHue);
+		void applyColorRange(gesture.start, end, hueTravel, "barrier");
 	};
 
 	const cancelColor = (event: PointerEvent<HTMLDivElement>) => {
@@ -136,14 +138,8 @@ export function useColorDialog(
 		if (!valueWrites.canWrite) return;
 		const value = Math.max(0, Math.min(1, brightness + delta));
 		setBrightness(value);
-		void applyColors(
-			selectedFixtureIds.map(() => ({
-				hue,
-				saturation,
-				brightness: value,
-			})),
-			"barrier",
-		);
+		const color = { hue, saturation, brightness: value };
+		void applyColorRange(color, color, 0, "barrier");
 	};
 
 	const color = hsvToRgb({ hue, saturation, brightness });

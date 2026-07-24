@@ -150,6 +150,22 @@ pub enum ProgrammingValuesAction {
         group_id: String,
         attribute: String,
     },
+    /// Server-side color-range fan-out over an explicitly ordered selection: the picker
+    /// endpoints interpolate hue-aware across the fixture order — `hue_travel` carries the
+    /// gesture's total signed hue distance in revolutions (1.0 = once around the wheel), so
+    /// long-way-around and multi-revolution ranges are expressible — and every fixture stores
+    /// only the color channels its heads support.
+    SetSelectionColorRange {
+        #[schemars(length(max = 10_000))]
+        fixture_ids: Vec<Uuid>,
+        start: ProgrammingPickerColor,
+        end: ProgrammingPickerColor,
+        hue_travel: f32,
+        #[schemars(range(min = 0.0, max = 1.0))]
+        brightness: f32,
+        #[serde(default)]
+        timing: ProgrammingValueTiming,
+    },
     Batch {
         #[schemars(length(max = 10_000))]
         mutations: Vec<ProgrammingValueMutation>,
@@ -169,6 +185,22 @@ pub enum ProgrammingValueMutation {
         fixture_ids: Vec<Uuid>,
         attribute: String,
         value: ProgrammingAttributeValue,
+        #[serde(default)]
+        timing: ProgrammingValueTiming,
+    },
+    /// Server-side color-range fan-out over an explicitly ordered selection: the picker
+    /// endpoints interpolate hue-aware across the fixture order — `hue_travel` carries the
+    /// gesture's total signed hue distance in revolutions (1.0 = once around the wheel), so
+    /// long-way-around and multi-revolution ranges are expressible — and every fixture stores
+    /// only the color channels its heads support.
+    SetSelectionColorRange {
+        #[schemars(length(max = 10_000))]
+        fixture_ids: Vec<Uuid>,
+        start: ProgrammingPickerColor,
+        end: ProgrammingPickerColor,
+        hue_travel: f32,
+        #[schemars(range(min = 0.0, max = 1.0))]
+        brightness: f32,
         #[serde(default)]
         timing: ProgrammingValueTiming,
     },
@@ -194,6 +226,15 @@ pub enum ProgrammingValueMutation {
         group_id: String,
         attribute: String,
     },
+}
+
+/// Hue/saturation picker coordinates (both 0..1) as captured by the operator color dialog.
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammingPickerColor {
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub hue: f32,
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub saturation: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

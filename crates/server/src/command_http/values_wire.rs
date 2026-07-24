@@ -2,8 +2,11 @@ use light_application as application;
 use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
 use light_wire::v2::{events::EventSnapshotCursor, programming as wire};
 
+use super::color_attributes::{COLOR_CHANNELS, ColorAttributeIndex};
+
 pub(super) fn values_command(
     action: wire::ProgrammingValuesAction,
+    colors: &ColorAttributeIndex,
 ) -> Result<application::ProgrammingValuesCommand, application::ActionError> {
     Ok(match action {
         wire::ProgrammingValuesAction::SetSelection {
@@ -12,12 +15,35 @@ pub(super) fn values_command(
             value,
             timing,
         } => application::ProgrammingValuesCommand::Batch {
-            mutations: application_mutations(wire::ProgrammingValueMutation::SetSelection {
-                fixture_ids,
-                attribute,
-                value,
-                timing,
-            })?,
+            mutations: application_mutations(
+                wire::ProgrammingValueMutation::SetSelection {
+                    fixture_ids,
+                    attribute,
+                    value,
+                    timing,
+                },
+                colors,
+            )?,
+        },
+        wire::ProgrammingValuesAction::SetSelectionColorRange {
+            fixture_ids,
+            start,
+            end,
+            hue_travel,
+            brightness,
+            timing,
+        } => application::ProgrammingValuesCommand::Batch {
+            mutations: application_mutations(
+                wire::ProgrammingValueMutation::SetSelectionColorRange {
+                    fixture_ids,
+                    start,
+                    end,
+                    hue_travel,
+                    brightness,
+                    timing,
+                },
+                colors,
+            )?,
         },
         wire::ProgrammingValuesAction::SetFixture {
             fixture_id,
@@ -58,7 +84,7 @@ pub(super) fn values_command(
         wire::ProgrammingValuesAction::Batch { mutations } => {
             let mut expanded = Vec::with_capacity(mutations.len());
             for mutation in mutations {
-                expanded.extend(application_mutations(mutation)?);
+                expanded.extend(application_mutations(mutation, colors)?);
             }
             application::ProgrammingValuesCommand::Batch {
                 mutations: expanded,
@@ -166,7 +192,27 @@ pub(super) fn values_projection(
 /// mutations in the ordered-selection order.
 fn application_mutations(
     mutation: wire::ProgrammingValueMutation,
+    colors: &ColorAttributeIndex,
 ) -> Result<Vec<application::ProgrammingValueMutation>, application::ActionError> {
+    if let wire::ProgrammingValueMutation::SetSelectionColorRange {
+        fixture_ids,
+        start,
+        end,
+        hue_travel,
+        brightness,
+        timing,
+    } = mutation
+    {
+        return color_range_mutations(
+            fixture_ids,
+            start,
+            end,
+            hue_travel,
+            brightness,
+            timing,
+            colors,
+        );
+    }
     if let wire::ProgrammingValueMutation::SetSelection {
         fixture_ids,
         attribute,
@@ -212,12 +258,88 @@ fn application_mutations(
     Ok(vec![application_mutation(mutation)])
 }
 
+/// Expands one color-range gesture into per-fixture normalized channel mutations: the server
+/// interpolates hue-aware across the ordered selection and each fixture receives values for
+/// exactly the color channels its heads expose — the show logic the color dialog used to run
+/// client-side.
+fn color_range_mutations(
+    fixture_ids: Vec<uuid::Uuid>,
+    start: wire::ProgrammingPickerColor,
+    end: wire::ProgrammingPickerColor,
+    hue_travel: f32,
+    brightness: f32,
+    timing: wire::ProgrammingValueTiming,
+    colors: &ColorAttributeIndex,
+) -> Result<Vec<application::ProgrammingValueMutation>, application::ActionError> {
+    for (name, value) in [
+        ("start.hue", start.hue),
+        ("start.saturation", start.saturation),
+        ("end.hue", end.hue),
+        ("end.saturation", end.saturation),
+        ("brightness", brightness),
+    ] {
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+            return Err(application::ActionError::new(
+                application::ActionErrorKind::Invalid,
+                format!("color range {name} must be between 0 and 1"),
+            ));
+        }
+    }
+    if !hue_travel.is_finite() {
+        return Err(application::ActionError::new(
+            application::ActionErrorKind::Invalid,
+            "color range hue_travel must be finite",
+        ));
+    }
+    let count = fixture_ids.len();
+    let timing = application_timing(timing);
+    Ok(fixture_ids
+        .into_iter()
+        .enumerate()
+        .flat_map(|(index, fixture_id)| {
+            let fixture_id = FixtureId(fixture_id);
+            let Some(supported) = colors.get(&fixture_id).filter(|list| !list.is_empty()) else {
+                return Vec::new();
+            };
+            let color = light_core::color_range_color(
+                (start.hue, start.saturation),
+                (end.hue, end.saturation),
+                hue_travel,
+                brightness,
+                index,
+                count,
+            );
+            let rgb = light_core::hsv_to_rgb(color);
+            COLOR_CHANNELS
+                .iter()
+                .filter(|(attribute, _, _)| supported.contains(attribute))
+                .map(|(attribute, component, inverted)| {
+                    let value = if *inverted {
+                        1.0 - rgb[*component]
+                    } else {
+                        rgb[*component]
+                    };
+                    application::ProgrammingValueMutation::SetFixture {
+                        fixture_id,
+                        attribute: AttributeKey((*attribute).into()),
+                        value: AttributeValue::Normalized(value),
+                        timing,
+                    }
+                })
+                .collect()
+        })
+        .collect())
+}
+
 fn application_mutation(
     mutation: wire::ProgrammingValueMutation,
 ) -> application::ProgrammingValueMutation {
     match mutation {
         wire::ProgrammingValueMutation::SetSelection { .. } => {
             unreachable!("SetSelection is expanded by application_mutations")
+        }
+        wire::ProgrammingValueMutation::SetSelectionColorRange { .. } => {
+            unreachable!("SetSelectionColorRange is expanded by application_mutations")
         }
         wire::ProgrammingValueMutation::SetFixture {
             fixture_id,
