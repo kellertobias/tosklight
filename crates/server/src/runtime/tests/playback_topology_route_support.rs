@@ -41,6 +41,25 @@ impl TopologyScenario {
         .await
     }
 
+    pub async fn action_without_show_guard(
+        &self,
+        revision: u64,
+        body: serde_json::Value,
+    ) -> Response {
+        self.app
+            .clone()
+            .oneshot(
+                Request::post("/api/v2/playback-topology/actions")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::IF_MATCH, revision.to_string())
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
     pub fn document(&self) -> light_show::PortableShowDocument {
         show_document(&self.state, &self.show_id)
     }
@@ -91,7 +110,8 @@ pub(super) async fn post_topology(
     body: serde_json::Value,
     desk_boundary: Option<&str>,
 ) -> Response {
-    let mut request = Request::post(format!("/api/v2/shows/{show_id}/playback-topology/actions"))
+    let mut request = Request::post("/api/v2/playback-topology/actions")
+        .header("x-tosk-show", show_id)
         .header(header::CONTENT_TYPE, "application/json");
     if let Some(token) = token {
         request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));

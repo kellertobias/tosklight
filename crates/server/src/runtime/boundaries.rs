@@ -158,8 +158,6 @@ fn is_programming_update_route(method: &Method, path: &str) -> bool {
             [
                 "api",
                 "v2",
-                "shows",
-                _,
                 "programming-update",
                 "preview" | "targets" | "actions"
             ]

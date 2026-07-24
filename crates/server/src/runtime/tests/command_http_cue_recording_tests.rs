@@ -261,7 +261,7 @@ async fn cue_record_route_rejects_missing_authority_and_forged_context() {
             )
             .await
             .status(),
-        StatusCode::NOT_FOUND
+        StatusCode::CONFLICT
     );
 
     let ports = command_http::ServerProgrammingPorts::new(

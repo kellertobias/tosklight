@@ -254,9 +254,8 @@ impl CommandHttpScenario {
         token: Option<&str>,
         input: serde_json::Value,
     ) -> Response {
-        let mut request = Request::post(format!(
-            "/api/v2/shows/{show_id}/presets/recall"
-        ));
+        let mut request =
+            Request::post("/api/v2/presets/recall").header("x-tosk-show", show_id);
         if let Some(token) = token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }
@@ -392,9 +391,8 @@ impl CommandHttpScenario {
         token: Option<&str>,
         input: serde_json::Value,
     ) -> Response {
-        let mut request = Request::post(format!(
-            "/api/v2/shows/{show_id}/presets/record"
-        ));
+        let mut request =
+            Request::post("/api/v2/presets/record").header("x-tosk-show", show_id);
         if let Some(token) = token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }
@@ -416,7 +414,8 @@ impl CommandHttpScenario {
         token: Option<&str>,
         input: serde_json::Value,
     ) -> Response {
-        let mut request = Request::post(format!("/api/v2/shows/{show_id}/groups/manage"));
+        let mut request =
+            Request::post("/api/v2/groups/manage").header("x-tosk-show", show_id);
         if let Some(token) = token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }
@@ -438,7 +437,8 @@ impl CommandHttpScenario {
         token: Option<&str>,
         input: serde_json::Value,
     ) -> Response {
-        let mut request = Request::post(format!("/api/v2/shows/{show_id}/groups/record"));
+        let mut request =
+            Request::post("/api/v2/groups/record").header("x-tosk-show", show_id);
         if let Some(token) = token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }
@@ -461,7 +461,8 @@ impl CommandHttpScenario {
         expected_show_revision: Option<u64>,
         input: serde_json::Value,
     ) -> Response {
-        let mut request = Request::post(format!("/api/v2/shows/{show_id}/cues/record"));
+        let mut request =
+            Request::post("/api/v2/cues/record").header("x-tosk-show", show_id);
         if let Some(token) = token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }

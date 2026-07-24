@@ -383,7 +383,7 @@ async fn group_management_rejects_missing_auth_forged_scope_and_a_foreign_show()
             .group_management_action(&Uuid::new_v4().to_string(), Some(&scenario.token), request)
             .await
             .status(),
-        StatusCode::NOT_FOUND
+        StatusCode::CONFLICT
     );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

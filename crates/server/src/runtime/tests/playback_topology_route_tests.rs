@@ -211,8 +211,8 @@ async fn topology_route_rejects_missing_authority_and_forged_scope() {
         None,
     )
     .await;
-    assert_eq!(foreign_show.status(), StatusCode::NOT_FOUND);
-    assert_eq!(json(foreign_show).await["kind"], "not_found");
+    assert_eq!(foreign_show.status(), StatusCode::CONFLICT);
+    assert_eq!(json(foreign_show).await["kind"], "conflict");
 
     for field in ["show_id", "desk_id", "user_id", "session_id"] {
         let mut forged = request.clone();
@@ -250,6 +250,22 @@ async fn topology_route_rejects_missing_authority_and_forged_scope() {
             .contains("safe integer")
     );
     assert_eq!(scenario.state.application_events.latest_sequence(), cursor);
+    scenario.cleanup();
+}
+
+#[tokio::test]
+async fn topology_route_defaults_to_the_active_show_without_a_guard() {
+    let scenario = TopologyScenario::new("Playback topology active default").await;
+    let revision = scenario.show_revision();
+
+    let response = scenario
+        .action_without_show_guard(revision, configure_request("headerless-active-show", 0, 0))
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let outcome = json(response).await;
+    assert_eq!(outcome["status"], "changed");
+    assert_eq!(outcome["show_revision"], revision + 1);
     scenario.cleanup();
 }
 

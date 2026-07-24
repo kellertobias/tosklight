@@ -1,41 +1,39 @@
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Path, State, rejection::JsonRejection},
+    extract::{DefaultBodyLimit, State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::post,
 };
 use light_application::{ActionEnvelope, ActionError, ActionErrorKind};
-use light_core::ShowId;
 use light_programmer::CueRecordingCapturedSource;
 use light_wire::v2::cue_recording::{CueRecordErrorKind, CueRecordErrorResponse, CueRecordRequest};
-use uuid::Uuid;
 
-use super::super::{ApiError, AppState, Session};
+use super::super::{ApiError, AppState, Session, ShowContext};
 use super::{cue_recording_wire, programming_ports::ServerProgrammingPorts, routes::http_context};
 
 const BODY_LIMIT: usize = 32 * 1024;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v2/shows/{show_id}/cues/record", post(record_cue))
+        .route("/api/v2/cues/record", post(record_cue))
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
 }
 
 async fn record_cue(
     State(state): State<AppState>,
-    Path(show_id): Path<String>,
+    show: ShowContext,
     headers: HeaderMap,
     request: Result<Json<CueRecordRequest>, JsonRejection>,
 ) -> Result<Response, CueRecordHttpError> {
     let session = authenticated_mutation(&state, &headers)?;
-    let show_id = parse_show_id(&show_id)?;
+    let show_id = show.resolve(&state).map_err(CueRecordHttpError::api)?;
     let expected_revision =
         super::super::parse_if_match(&headers).map_err(CueRecordHttpError::api)?;
     let Json(request) = request.map_err(CueRecordHttpError::json)?;
     super::routes::validate_request_id(&request.request_id).map_err(CueRecordHttpError::api)?;
     let (request_id, command) =
-        cue_recording_wire::application_command(ShowId(show_id), expected_revision, request)
+        cue_recording_wire::application_command(show_id, expected_revision, request)
             .map_err(CueRecordHttpError::invalid)?;
     let context =
         http_context(&session, Some(&request_id)).with_expected_revision(expected_revision);
@@ -90,10 +88,6 @@ fn authenticated_mutation(
         return Err(CueRecordHttpError::conflict("desk is locked"));
     }
     Ok(session)
-}
-
-fn parse_show_id(value: &str) -> Result<Uuid, CueRecordHttpError> {
-    Uuid::parse_str(value).map_err(|_| CueRecordHttpError::invalid("show_id must be a UUID"))
 }
 
 fn json_with_etag<T: serde::Serialize>(revision: u64, body: T) -> Response {

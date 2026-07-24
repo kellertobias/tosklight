@@ -95,7 +95,8 @@ impl CueTransferRouteScenario {
         expected_show_revision: Option<u64>,
         body: serde_json::Value,
     ) -> Response {
-        let mut request = Request::post(format!("/api/v2/shows/{show_id}/cues/transfer"));
+        let mut request =
+            Request::post("/api/v2/cues/transfer").header("x-tosk-show", show_id);
         if let Some(token) = token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }

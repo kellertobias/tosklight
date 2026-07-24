@@ -69,7 +69,7 @@ export class HttpProgrammingUpdateTransport
 		validateScopeId(showId, "show_id");
 		const wireRequest = wirePreviewRequest(request);
 		const body = encodeProgrammingUpdatePreviewRequest(wireRequest);
-		const result = await this.post(this.showPath(showId, "preview"), body);
+		const result = await this.post(showId, "preview", body);
 		const decoded = decodeProgrammingUpdatePreviewResponse(
 			result.value,
 			showId,
@@ -83,7 +83,7 @@ export class HttpProgrammingUpdateTransport
 		validateScopeId(showId, "show_id");
 		const wireRequest = wireTargetsRequest(request);
 		const body = encodeProgrammingUpdateTargetsRequest(wireRequest);
-		const result = await this.post(this.showPath(showId, "targets"), body);
+		const result = await this.post(showId, "targets", body);
 		const decoded = decodeProgrammingUpdateTargetsResponse(
 			result.value,
 			showId,
@@ -103,7 +103,8 @@ export class HttpProgrammingUpdateTransport
 		const wireRequest = wireActionRequest(request);
 		const body = encodeProgrammingUpdateActionRequest(wireRequest);
 		const result = await this.post(
-			this.showPath(showId, "actions"),
+			showId,
+			"actions",
 			body,
 			expectedShowRevision,
 		);
@@ -143,12 +144,20 @@ export class HttpProgrammingUpdateTransport
 		);
 	}
 
-	private post(path: string, body: unknown, revision?: number) {
-		return this.request(path, {
+	private post(
+		showId: string,
+		operation: string,
+		body: unknown,
+		revision?: number,
+	) {
+		return this.request(
+			`${this.baseUrl}/api/v2/programming-update/${operation}`,
+			{
 			method: "POST",
-			headers: this.headers(true, revision),
+			headers: this.headers(true, revision, showId),
 			body: JSON.stringify(body),
-		});
+			},
+		);
 	}
 
 	private async request(path: string, init: RequestInit) {
@@ -164,20 +173,16 @@ export class HttpProgrammingUpdateTransport
 		return { response, value };
 	}
 
-	private headers(json = false, revision?: number) {
+	private headers(json = false, revision?: number, showId?: string) {
 		const headers = new Headers({
 			authorization: `Bearer ${this.options.sessionToken}`,
 		});
 		if (json) headers.set("content-type", "application/json");
 		if (revision != null) headers.set("if-match", `"${revision}"`);
+		if (showId) headers.set("x-tosk-show", showId);
 		if (this.options.deskBoundaryToken)
 			headers.set("x-light-desk-token", this.options.deskBoundaryToken);
 		return headers;
-	}
-
-	private showPath(showId: string, operation: string) {
-		const scope = `${this.baseUrl}/api/v2/shows/${encodeURIComponent(showId)}`;
-		return `${scope}/programming-update/${operation}`;
 	}
 
 	private settingsPath(deskId: string) {

@@ -172,13 +172,14 @@ describe("Programming Update v2 HTTP adapter", () => {
 		});
 
 		expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([
-			`http://desk.local/api/v2/shows/${SHOW_ID}/programming-update/preview`,
-			`http://desk.local/api/v2/shows/${SHOW_ID}/programming-update/targets`,
+			"http://desk.local/api/v2/programming-update/preview",
+			"http://desk.local/api/v2/programming-update/targets",
 		]);
 		for (const [, init] of fetch.mock.calls) {
 			const headers = init?.headers as Headers;
 			expect(headers.get("authorization")).toBe("Bearer session-token");
 			expect(headers.get("x-light-desk-token")).toBe("desk-token");
+			expect(headers.get("x-tosk-show")).toBe(SHOW_ID);
 			expect(headers.get("if-match")).toBeNull();
 		}
 		expect(fetch.mock.calls.flat().join(" ")).not.toMatch(/bootstrap|api\/v1/);
@@ -201,6 +202,7 @@ describe("Programming Update v2 HTTP adapter", () => {
 		const [url, init] = fetch.mock.calls[0];
 		expect(String(url)).toContain("/programming-update/actions");
 		const headers = init?.headers as Headers;
+		expect(headers.get("x-tosk-show")).toBe(SHOW_ID);
 		expect(headers.get("if-match")).toBe('"10"');
 		expect(JSON.parse(String(init?.body))).toEqual(actionRequest());
 	});

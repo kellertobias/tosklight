@@ -49,10 +49,10 @@ export class HttpCueTransferTransport
 	) {
 		programmingUuidAt(showId, "$.scope.show_id");
 		const response = await this.fetchResponse(
-			`${this.baseUrl}/api/v2/shows/${encodeURIComponent(showId)}/cues/transfer`,
+			`${this.baseUrl}/api/v2/cues/transfer`,
 			{
 				method: "POST",
-				headers: this.headers(expectedShowRevision),
+				headers: this.headers(showId, expectedShowRevision),
 				body: JSON.stringify(encodeCueTransferActionRequest(request)),
 			},
 		);
@@ -82,10 +82,11 @@ export class HttpCueTransferTransport
 		return commandLine;
 	}
 
-	private headers(revision: number) {
+	private headers(showId: string, revision: number) {
 		const headers = this.authHeaders();
 		headers.set("content-type", "application/json");
 		headers.set("if-match", `"${revision}"`);
+		headers.set("x-tosk-show", showId);
 		return headers;
 	}
 

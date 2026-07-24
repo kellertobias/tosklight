@@ -338,7 +338,7 @@ async fn group_record_route_rejects_missing_auth_forged_state_and_wrong_show() {
             )
             .await
             .status(),
-        StatusCode::NOT_FOUND
+        StatusCode::CONFLICT
     );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

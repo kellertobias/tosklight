@@ -216,7 +216,7 @@ describe("Preset recording v2 HTTP adapter", () => {
 		expect(fetchMock).toHaveBeenCalledOnce();
 		const [url, init] = fetchMock.mock.calls[0];
 		expect(String(url)).toBe(
-			`http://desk.local/api/v2/shows/${SHOW_ID}/presets/record`,
+			"http://desk.local/api/v2/presets/record",
 		);
 		expect(init?.method).toBe("POST");
 		expect((init?.headers as Headers).get("authorization")).toBe(
@@ -225,6 +225,7 @@ describe("Preset recording v2 HTTP adapter", () => {
 		expect((init?.headers as Headers).get("x-light-desk-token")).toBe(
 			"desk-token",
 		);
+		expect((init?.headers as Headers).get("x-tosk-show")).toBe(SHOW_ID);
 		expect(String(url)).not.toMatch(/bootstrap|programmers/);
 	});
 

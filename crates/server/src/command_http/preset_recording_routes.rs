@@ -1,18 +1,16 @@
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Path, State, rejection::JsonRejection},
+    extract::{DefaultBodyLimit, State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::post,
 };
 use light_application::{ActionEnvelope, ActionError, ActionErrorKind};
-use light_core::ShowId;
 use light_wire::v2::preset_recording::{
     PresetRecordErrorKind, PresetRecordErrorResponse, PresetRecordRequest,
 };
-use uuid::Uuid;
 
-use super::super::{ApiError, AppState, Session};
+use super::super::{ApiError, AppState, Session, ShowContext};
 use super::{
     preset_recording_wire, programming_ports::ServerProgrammingPorts, routes::http_context,
 };
@@ -22,20 +20,18 @@ const NAME_LIMIT: usize = 256;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
-        .route(
-            "/api/v2/shows/{show_id}/presets/record",
-            post(record_preset),
-        )
+        .route("/api/v2/presets/record", post(record_preset))
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
 }
 
 async fn record_preset(
     State(state): State<AppState>,
-    Path(show_id): Path<Uuid>,
+    show: ShowContext,
     headers: HeaderMap,
     request: Result<Json<PresetRecordRequest>, JsonRejection>,
 ) -> Result<Response, PresetRecordHttpError> {
     let session = authenticated_mutation(&state, &headers)?;
+    let show_id = show.resolve(&state).map_err(PresetRecordHttpError::api)?;
     let Json(request) = request.map_err(PresetRecordHttpError::json)?;
     super::routes::validate_request_id(&request.request_id).map_err(PresetRecordHttpError::api)?;
     validate_name(&request.name)?;
@@ -43,7 +39,7 @@ async fn record_preset(
         preset_recording_wire::address(request.address).map_err(PresetRecordHttpError::invalid)?;
     let context = http_context(&session, Some(&request.request_id));
     let command = light_application::ProgrammingPresetRecordRequest {
-        show_id: ShowId(show_id),
+        show_id,
         address,
         name: request.name,
         mode: preset_recording_wire::mode(request.mode),

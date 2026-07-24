@@ -62,7 +62,7 @@ describe("HttpGroupRecordingTransport", () => {
 		expect(outcome).toMatchObject({ status: "changed", eventSequence: 12 });
 		expect(fetch).toHaveBeenCalledOnce();
 		const [url, init] = fetch.mock.calls[0];
-		expect(url).toBe(`http://light.test/api/v2/shows/${SHOW_ID}/groups/record`);
+		expect(url).toBe("http://light.test/api/v2/groups/record");
 		expect(url).not.toContain("bootstrap");
 		expect(init?.method).toBe("POST");
 		expect(new Headers(init?.headers).get("authorization")).toBe(
@@ -71,6 +71,7 @@ describe("HttpGroupRecordingTransport", () => {
 		expect(new Headers(init?.headers).get("x-light-desk-token")).toBe(
 			"desk-token",
 		);
+		expect(new Headers(init?.headers).get("x-tosk-show")).toBe(SHOW_ID);
 		expect(JSON.parse(String(init?.body))).toEqual({
 			request_id: "record-1",
 			group_id: "Front Wash A / É",

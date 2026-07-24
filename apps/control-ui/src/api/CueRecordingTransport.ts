@@ -45,8 +45,8 @@ export class HttpCueRecordingTransport implements CueRecordingTransport {
 		expectedShowRevision: number,
 		request: CueRecordingRequest,
 	) {
-		const headers = this.headers(expectedShowRevision);
-		const url = `${this.baseUrl}/api/v2/shows/${encodeURIComponent(showId)}/cues/record`;
+		const headers = this.headers(showId, expectedShowRevision);
+		const url = `${this.baseUrl}/api/v2/cues/record`;
 		let response: Response;
 		try {
 			response = await this.fetchImplementation(url, {
@@ -68,11 +68,12 @@ export class HttpCueRecordingTransport implements CueRecordingTransport {
 		return outcome;
 	}
 
-	private headers(revision: number) {
+	private headers(showId: string, revision: number) {
 		const headers = new Headers({
 			authorization: `Bearer ${this.options.sessionToken}`,
 			"content-type": "application/json",
 			"if-match": `"${revision}"`,
+			"x-tosk-show": showId,
 		});
 		if (this.options.deskBoundaryToken)
 			headers.set("x-light-desk-token", this.options.deskBoundaryToken);

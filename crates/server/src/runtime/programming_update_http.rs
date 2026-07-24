@@ -1,9 +1,10 @@
 //! Authenticated strict v2 HTTP surface for Programming-owned Update workflows.
 
 use super::{
-    AppState, ServerProgrammingUpdatePorts, Session, authenticate, emit, parse_if_match,
-    persist_server_configuration, programming_update_http_error::ProgrammingUpdateHttpError,
-    programming_update_wire, programming_update_wire_output, read_desk_lock, update_settings_for,
+    AppState, ServerProgrammingUpdatePorts, Session, ShowContext, authenticate, emit,
+    parse_if_match, persist_server_configuration,
+    programming_update_http_error::ProgrammingUpdateHttpError, programming_update_wire,
+    programming_update_wire_output, read_desk_lock, update_settings_for,
 };
 use axum::{
     Json, Router,
@@ -15,7 +16,6 @@ use axum::{
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionSource, ActiveShowService, ProgrammingService,
 };
-use light_core::ShowId;
 use light_wire::v2::programming_update::{
     ProgrammingUpdateActionRequest, ProgrammingUpdatePreviewRequest, ProgrammingUpdateSettings,
     ProgrammingUpdateTargetsRequest,
@@ -24,18 +24,9 @@ use uuid::Uuid;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
-        .route(
-            "/api/v2/shows/{show_id}/programming-update/preview",
-            post(preview),
-        )
-        .route(
-            "/api/v2/shows/{show_id}/programming-update/targets",
-            post(targets),
-        )
-        .route(
-            "/api/v2/shows/{show_id}/programming-update/actions",
-            post(apply_action),
-        )
+        .route("/api/v2/programming-update/preview", post(preview))
+        .route("/api/v2/programming-update/targets", post(targets))
+        .route("/api/v2/programming-update/actions", post(apply_action))
         .route(
             "/api/v2/desks/{desk_id}/programming-update/settings",
             get(settings).put(put_settings),
@@ -44,12 +35,14 @@ pub(super) fn router() -> Router<AppState> {
 
 async fn preview(
     State(state): State<AppState>,
-    Path(show_id): Path<String>,
+    show: ShowContext,
     headers: HeaderMap,
     request: Result<Json<ProgrammingUpdatePreviewRequest>, JsonRejection>,
 ) -> Result<Response, ProgrammingUpdateHttpError> {
     let session = authenticate_update(&state, &headers)?;
-    let show_id = parse_show_id(&show_id)?;
+    let show_id = show
+        .resolve(&state)
+        .map_err(ProgrammingUpdateHttpError::api)?;
     let Json(request) = request.map_err(ProgrammingUpdateHttpError::json)?;
     validate_request_id(&request.request_id)?;
     let (request_id, command) = programming_update_wire::preview_request(show_id, request)
@@ -69,12 +62,14 @@ async fn preview(
 
 async fn targets(
     State(state): State<AppState>,
-    Path(show_id): Path<String>,
+    show: ShowContext,
     headers: HeaderMap,
     request: Result<Json<ProgrammingUpdateTargetsRequest>, JsonRejection>,
 ) -> Result<Response, ProgrammingUpdateHttpError> {
     let session = authenticate_update(&state, &headers)?;
-    let show_id = parse_show_id(&show_id)?;
+    let show_id = show
+        .resolve(&state)
+        .map_err(ProgrammingUpdateHttpError::api)?;
     let Json(request) = request.map_err(ProgrammingUpdateHttpError::json)?;
     validate_request_id(&request.request_id)?;
     let (request_id, command) = programming_update_wire::targets_request(show_id, request);
@@ -93,12 +88,14 @@ async fn targets(
 
 async fn apply_action(
     State(state): State<AppState>,
-    Path(show_id): Path<String>,
+    show: ShowContext,
     headers: HeaderMap,
     request: Result<Json<ProgrammingUpdateActionRequest>, JsonRejection>,
 ) -> Result<Response, ProgrammingUpdateHttpError> {
     let session = authenticate_update(&state, &headers)?;
-    let show_id = parse_show_id(&show_id)?;
+    let show_id = show
+        .resolve(&state)
+        .map_err(ProgrammingUpdateHttpError::api)?;
     let expected_show_revision =
         parse_if_match(&headers).map_err(ProgrammingUpdateHttpError::api)?;
     let Json(request) = request.map_err(ProgrammingUpdateHttpError::json)?;
@@ -223,10 +220,6 @@ fn authenticate_update(
     headers: &HeaderMap,
 ) -> Result<Session, ProgrammingUpdateHttpError> {
     authenticate(state, headers).map_err(ProgrammingUpdateHttpError::api)
-}
-
-fn parse_show_id(value: &str) -> Result<ShowId, ProgrammingUpdateHttpError> {
-    parse_non_nil_uuid(value, "show_id").map(ShowId)
 }
 
 fn exact_desk(session: &Session, value: &str) -> Result<Uuid, ProgrammingUpdateHttpError> {

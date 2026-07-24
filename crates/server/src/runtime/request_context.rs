@@ -13,6 +13,23 @@ pub(super) const DESK_CONTEXT_HEADER: &str = "x-tosk-desk";
 pub(super) struct ShowContext(Option<ShowId>);
 
 impl ShowContext {
+    pub(super) fn resolve(&self, state: &AppState) -> Result<ShowId, ApiError> {
+        let active = state
+            .active_show
+            .read()
+            .as_ref()
+            .map(|show| show.id)
+            .ok_or_else(|| ApiError::conflict("no show is active"))?;
+        if let Some(requested) = self.0 {
+            if active != requested {
+                return Err(ApiError::conflict(
+                    "X-Tosk-Show does not match the active show",
+                ));
+            }
+        }
+        Ok(active)
+    }
+
     pub(super) fn verify(&self, state: &AppState) -> Result<(), ApiError> {
         let Some(requested) = self.0 else {
             return Ok(());

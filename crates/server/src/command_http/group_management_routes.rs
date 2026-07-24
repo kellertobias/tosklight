@@ -1,18 +1,16 @@
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Path, State, rejection::JsonRejection},
+    extract::{DefaultBodyLimit, State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::post,
 };
 use light_application::{ActionEnvelope, ActionError, ActionErrorKind};
-use light_core::ShowId;
 use light_wire::v2::group_management::{
     GroupManagementErrorKind, GroupManagementErrorResponse, GroupManagementRequest,
 };
-use uuid::Uuid;
 
-use super::super::{ApiError, AppState, Session};
+use super::super::{ApiError, AppState, Session, ShowContext};
 use super::{
     group_management_wire, programming_ports::ServerProgrammingPorts, routes::http_context,
 };
@@ -22,24 +20,27 @@ const GROUP_ID_LIMIT: usize = 256;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v2/shows/{show_id}/groups/manage", post(manage_group))
+        .route("/api/v2/groups/manage", post(manage_group))
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
 }
 
 async fn manage_group(
     State(state): State<AppState>,
-    Path(show_id): Path<Uuid>,
+    show: ShowContext,
     headers: HeaderMap,
     request: Result<Json<GroupManagementRequest>, JsonRejection>,
 ) -> Result<Response, GroupManagementHttpError> {
     let session = authenticated_mutation(&state, &headers)?;
+    let show_id = show
+        .resolve(&state)
+        .map_err(GroupManagementHttpError::api)?;
     let Json(request) = request.map_err(GroupManagementHttpError::json)?;
     super::routes::validate_request_id(&request.request_id)
         .map_err(GroupManagementHttpError::api)?;
     validate_group_id(&request.group_id)?;
     let context = http_context(&session, Some(&request.request_id));
     let command = light_application::GroupManagementRequest {
-        show_id: ShowId(show_id),
+        show_id,
         group_id: request.group_id,
         operation: group_management_wire::operation(request.operation),
         expected_object_revision: request.expected_object_revision,

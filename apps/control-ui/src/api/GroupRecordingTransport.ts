@@ -44,7 +44,8 @@ export class HttpGroupRecordingTransport implements GroupRecordingTransport {
 	async record(showId: string, request: GroupRecordingRequest) {
 		const headers = this.headers();
 		headers.set("content-type", "application/json");
-		const url = `${this.baseUrl}/api/v2/shows/${encodeURIComponent(showId)}/groups/record`;
+		headers.set("x-tosk-show", showId);
+		const url = `${this.baseUrl}/api/v2/groups/record`;
 		let response: Response;
 		try {
 			response = await this.fetchImplementation(url, {

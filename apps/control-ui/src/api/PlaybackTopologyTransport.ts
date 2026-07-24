@@ -48,12 +48,12 @@ export class HttpPlaybackTopologyTransport
 		expectedShowRevision: number,
 		request: PlaybackTopologyRequest,
 	) {
-		const url = `${this.baseUrl}/api/v2/shows/${encodeURIComponent(showId)}/playback-topology/actions`;
+		const url = `${this.baseUrl}/api/v2/playback-topology/actions`;
 		let response: Response;
 		try {
 			response = await this.fetchImplementation(url, {
 				method: "POST",
-				headers: this.headers(expectedShowRevision),
+				headers: this.headers(showId, expectedShowRevision),
 				body: JSON.stringify(encodePlaybackTopologyRequest(request)),
 			});
 		} catch (reason) {
@@ -69,11 +69,12 @@ export class HttpPlaybackTopologyTransport
 		return outcome;
 	}
 
-	private headers(revision: number) {
+	private headers(showId: string, revision: number) {
 		const headers = new Headers({
 			authorization: `Bearer ${this.options.sessionToken}`,
 			"content-type": "application/json",
 			"if-match": `"${revision}"`,
+			"x-tosk-show": showId,
 		});
 		if (this.options.deskBoundaryToken)
 			headers.set("x-light-desk-token", this.options.deskBoundaryToken);

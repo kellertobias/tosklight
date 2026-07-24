@@ -36,7 +36,8 @@ export class HttpPresetRecallTransport implements PresetRecallTransport {
 		if (this.options.recall) return this.options.recall(scope, request);
 		const headers = this.headers();
 		headers.set("content-type", "application/json");
-		const path = `/api/v2/shows/${encodeURIComponent(scope.showId)}/presets/recall`;
+		headers.set("x-tosk-show", scope.showId);
+		const path = "/api/v2/presets/recall";
 		let response: Response;
 		try {
 			response = await this.fetchImplementation(`${this.baseUrl}${path}`, {

@@ -192,7 +192,7 @@ function assertNarrowCalls(fetchMock: ReturnType<typeof topologyFetch>) {
 		"http://desk.local/api/v2/playback-runtime/snapshot",
 		`http://desk.local/api/v1/shows/${SHOW_ID}/objects/playback_page/1`,
 		`http://desk.local/api/v1/shows/${SHOW_ID}/objects/playback/1`,
-		`http://desk.local/api/v2/shows/${SHOW_ID}/playback-topology/actions`,
+		"http://desk.local/api/v2/playback-topology/actions",
 	]);
 	expect(urls.some((url) => /bootstrap|\/playbacks|programmers/.test(url))).toBe(
 		false,

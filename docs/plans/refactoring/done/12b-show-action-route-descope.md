@@ -31,3 +31,16 @@ npm run test:e2e
 ## Decisions
 
 Inherited from parent chunk 12. No open decisions.
+
+## Result
+
+- Removed active-Show path scope from playback topology, Programming Update, Group
+  management/recording, Cue recording/transfer, and Preset recall/recording routes.
+- Extended the shared Show context boundary to resolve the active Show while preserving
+  headerless integrator calls and rejecting mismatched guards before mutation.
+- Migrated desk transports, bench helpers, server tests, and lock-boundary route matching
+  while preserving typed errors, revisions, replay, and outcomes.
+- Verified with `cargo test -p light-server --no-default-features` (443 passed, 1
+  ignored), `npm run test:unit` (including 1,999 frontend tests),
+  `npm run test:e2e-api` (86 passed, 1 skipped), and `npm run test:e2e` (285
+  passed, 11 skipped).

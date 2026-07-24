@@ -1,12 +1,12 @@
 //! Authenticated v2 actions for portable Cuelist, Playback, and Page topology.
 
 use super::{
-    ApiError, AppState, ServerPlaybackTopologyPorts, Session, authenticate, parse_if_match,
-    playback_topology_wire,
+    ApiError, AppState, ServerPlaybackTopologyPorts, Session, ShowContext, authenticate,
+    parse_if_match, playback_topology_wire,
 };
 use axum::{
     Json, Router,
-    extract::{Path, State, rejection::JsonRejection},
+    extract::{State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::post,
@@ -15,29 +15,26 @@ use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource,
     PlaybackTopologyCommand,
 };
-use light_core::ShowId;
 use light_wire::v2::playback_topology::{
     PlaybackTopologyActionRequest, PlaybackTopologyErrorKind, PlaybackTopologyErrorResponse,
 };
-use uuid::Uuid;
 
 const JAVASCRIPT_MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route(
-        "/api/v2/shows/{show_id}/playback-topology/actions",
-        post(apply_action),
-    )
+    Router::new().route("/api/v2/playback-topology/actions", post(apply_action))
 }
 
 async fn apply_action(
     State(state): State<AppState>,
-    Path(show_id): Path<String>,
+    show: ShowContext,
     headers: HeaderMap,
     request: Result<Json<PlaybackTopologyActionRequest>, JsonRejection>,
 ) -> Result<Response, PlaybackTopologyHttpError> {
     let session = authenticate(&state, &headers).map_err(PlaybackTopologyHttpError::api)?;
-    let show_id = parse_show_id(&show_id)?;
+    let show_id = show
+        .resolve(&state)
+        .map_err(PlaybackTopologyHttpError::api)?;
     let expected_revision = parse_if_match(&headers).map_err(PlaybackTopologyHttpError::api)?;
     validate_safe_revision(expected_revision, "If-Match")?;
     let Json(request) = request.map_err(PlaybackTopologyHttpError::json)?;
@@ -67,17 +64,6 @@ async fn run_action(
     .await
     .map_err(PlaybackTopologyHttpError::blocking)?
     .map_err(PlaybackTopologyHttpError::application)
-}
-
-fn parse_show_id(value: &str) -> Result<ShowId, PlaybackTopologyHttpError> {
-    let id = Uuid::parse_str(value)
-        .map_err(|_| PlaybackTopologyHttpError::invalid("show_id must be a UUID"))?;
-    if id.is_nil() {
-        return Err(PlaybackTopologyHttpError::invalid(
-            "show_id must not be nil",
-        ));
-    }
-    Ok(ShowId(id))
 }
 
 fn validate_request_id(value: &str) -> Result<(), PlaybackTopologyHttpError> {

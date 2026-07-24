@@ -45,7 +45,8 @@ export class HttpPresetRecordingTransport
 	async record(showId: string, request: PresetRecordingRequest) {
 		const headers = this.headers();
 		headers.set("content-type", "application/json");
-		const url = `${this.baseUrl}/api/v2/shows/${encodeURIComponent(showId)}/presets/record`;
+		headers.set("x-tosk-show", showId);
+		const url = `${this.baseUrl}/api/v2/presets/record`;
 		let response: Response;
 		try {
 			response = await this.fetchImplementation(url, {

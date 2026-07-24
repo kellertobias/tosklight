@@ -229,7 +229,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     const staleDialog = page.getByRole("dialog", { name: "Renumber Cues" });
     await staleDialog.getByLabel("Start Cue").fill("10");
     let intercepted = false;
-    const topologyActionUrl = "**/api/v2/shows/*/playback-topology/actions";
+    const topologyActionUrl = "**/api/v2/playback-topology/actions";
     await page.route(topologyActionUrl, async (route) => {
       const request = route.request();
       const payload = request.method() === "POST" ? request.postDataJSON() : null;

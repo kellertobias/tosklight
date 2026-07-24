@@ -1,36 +1,34 @@
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Path, State, rejection::JsonRejection},
+    extract::{DefaultBodyLimit, State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::post,
 };
 use light_application::{ActionEnvelope, ActionError, ActionErrorKind};
-use light_core::ShowId;
 use light_wire::v2::cue_transfer::{
     CueTransferErrorKind, CueTransferErrorResponse, CueTransferRequest,
 };
-use uuid::Uuid;
 
-use super::super::{ApiError, AppState, Session};
+use super::super::{ApiError, AppState, Session, ShowContext};
 use super::{ServerProgrammingCueTransferPorts, cue_transfer_wire, routes::http_context};
 
 const BODY_LIMIT: usize = 16 * 1024;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v2/shows/{show_id}/cues/transfer", post(transfer_cue))
+        .route("/api/v2/cues/transfer", post(transfer_cue))
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
 }
 
 async fn transfer_cue(
     State(state): State<AppState>,
-    Path(show_id): Path<String>,
+    show: ShowContext,
     headers: HeaderMap,
     request: Result<Json<CueTransferRequest>, JsonRejection>,
 ) -> Result<Response, CueTransferHttpError> {
     let session = authenticated_mutation(&state, &headers)?;
-    let show_id = parse_show_id(&show_id)?;
+    let show_id = show.resolve(&state).map_err(CueTransferHttpError::api)?;
     let expected_revision =
         super::super::parse_if_match(&headers).map_err(CueTransferHttpError::api)?;
     let Json(request) = request.map_err(CueTransferHttpError::json)?;
@@ -69,15 +67,6 @@ fn authenticated_mutation(
         return Err(CueTransferHttpError::conflict("desk is locked"));
     }
     Ok(session)
-}
-
-fn parse_show_id(value: &str) -> Result<ShowId, CueTransferHttpError> {
-    let id = Uuid::parse_str(value)
-        .map_err(|_| CueTransferHttpError::invalid("show_id must be a UUID"))?;
-    if id.is_nil() {
-        return Err(CueTransferHttpError::invalid("show_id must not be nil"));
-    }
-    Ok(ShowId(id))
 }
 
 fn json_with_etag<T: serde::Serialize>(revision: u64, body: T) -> Response {

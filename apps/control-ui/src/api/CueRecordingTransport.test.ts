@@ -103,12 +103,13 @@ describe("Cue recording v2 HTTP adapter", () => {
 		expect(fetchMock).toHaveBeenCalledOnce();
 		const [url, init] = fetchMock.mock.calls[0];
 		expect(String(url)).toBe(
-			`http://desk.local/api/v2/shows/${SHOW_ID}/cues/record`,
+			"http://desk.local/api/v2/cues/record",
 		);
 		expect(init?.method).toBe("POST");
 		const headers = init?.headers as Headers;
 		expect(headers.get("authorization")).toBe("Bearer session-token");
 		expect(headers.get("x-light-desk-token")).toBe("desk-token");
+		expect(headers.get("x-tosk-show")).toBe(SHOW_ID);
 		expect(headers.get("if-match")).toBe('"7"');
 		expect(headers.get("content-type")).toBe("application/json");
 		expect(JSON.parse(String(init?.body))).toEqual({

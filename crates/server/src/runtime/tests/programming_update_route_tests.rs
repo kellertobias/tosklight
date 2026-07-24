@@ -93,15 +93,13 @@ impl UpdateRouteScenario {
         body: serde_json::Value,
         revision: Option<u64>,
     ) -> Response {
-        let mut request = Request::post(format!(
-            "/api/v2/shows/{}/programming-update/{operation}",
-            self.show_id.0
-        ))
-        .header(
-            header::AUTHORIZATION,
-            format!("Bearer {}", self.session.token),
-        )
-        .header(header::CONTENT_TYPE, "application/json");
+        let mut request = Request::post(format!("/api/v2/programming-update/{operation}"))
+            .header("x-tosk-show", self.show_id.0.to_string())
+            .header(
+                header::AUTHORIZATION,
+                format!("Bearer {}", self.session.token),
+            )
+            .header(header::CONTENT_TYPE, "application/json");
         if let Some(revision) = revision {
             request = request.header(header::IF_MATCH, revision.to_string());
         }

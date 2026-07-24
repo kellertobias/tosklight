@@ -1,18 +1,16 @@
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Path, State, rejection::JsonRejection},
+    extract::{DefaultBodyLimit, State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::post,
 };
 use light_application::{ActionEnvelope, ActionError, ActionErrorKind};
-use light_core::ShowId;
 use light_wire::v2::preset_recall::{
     PresetRecallErrorKind, PresetRecallErrorResponse, PresetRecallRequest,
 };
-use uuid::Uuid;
 
-use super::super::{ApiError, AppState, Session};
+use super::super::{ApiError, AppState, Session, ShowContext};
 use super::{preset_recording_wire, programming_ports::ServerProgrammingPorts};
 use crate::tolerant_json::TolerantJson;
 
@@ -20,27 +18,25 @@ const BODY_LIMIT: usize = 32 * 1024;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
-        .route(
-            "/api/v2/shows/{show_id}/presets/recall",
-            post(recall_preset),
-        )
+        .route("/api/v2/presets/recall", post(recall_preset))
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
 }
 
 async fn recall_preset(
     State(state): State<AppState>,
-    Path(show_id): Path<Uuid>,
+    show: ShowContext,
     headers: HeaderMap,
     request: Result<TolerantJson<PresetRecallRequest>, JsonRejection>,
 ) -> Result<Response, PresetRecallHttpError> {
     let session = authenticated_mutation(&state, &headers)?;
+    let show_id = show.resolve(&state).map_err(PresetRecallHttpError::api)?;
     let TolerantJson(request) = request.map_err(PresetRecallHttpError::json)?;
     super::routes::validate_request_id(&request.request_id).map_err(PresetRecallHttpError::api)?;
     let address =
         preset_recording_wire::address(request.address).map_err(PresetRecallHttpError::invalid)?;
     let expectation = light_application::ProgrammingPresetRecallRevisionExpectation::Exact;
     let command = light_application::ProgrammingPresetRecallRequest {
-        show_id: ShowId(show_id),
+        show_id,
         address,
         expected_preset_revision: expectation(request.expected_preset_revision),
         expected_show_revision: expectation(request.expected_show_revision),

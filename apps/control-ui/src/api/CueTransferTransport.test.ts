@@ -41,11 +41,12 @@ describe("HttpCueTransferTransport", () => {
 		});
 		expect(fetch).toHaveBeenCalledOnce();
 		const [url, init] = fetch.mock.calls[0];
-		expect(url).toBe(`http://desk.test/api/v2/shows/${SHOW_ID}/cues/transfer`);
+		expect(url).toBe("http://desk.test/api/v2/cues/transfer");
 		expect(init?.method).toBe("POST");
 		const headers = new Headers(init?.headers);
 		expect(headers.get("authorization")).toBe("Bearer session-token");
 		expect(headers.get("x-light-desk-token")).toBe("desk-token");
+		expect(headers.get("x-tosk-show")).toBe(SHOW_ID);
 		expect(headers.get("if-match")).toBe('"7"');
 		expect(JSON.parse(String(init?.body))).toEqual({
 			request_id: REQUEST_ID,
