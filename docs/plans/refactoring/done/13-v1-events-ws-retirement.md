@@ -46,3 +46,15 @@ reload.
 
 None. This is the riskiest v1-retirement chunk — take it before the bulk data-route
 migrations (14–20) so the event backbone is settled first.
+
+## Result
+
+Split at execution time so command multiplexing, facade notification migration, and
+final route/plumbing deletion can each be reviewed and gated independently:
+
+- `13a-v2-event-command-multiplexing.md`
+- `13b-v2-facade-event-migration.md`
+- `13c-v1-event-route-removal.md`
+
+No production behavior changed in this parent chunk; the three ordered children retain
+its complete definition of done.
