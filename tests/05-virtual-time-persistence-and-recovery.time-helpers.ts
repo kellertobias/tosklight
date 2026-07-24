@@ -196,11 +196,11 @@ export async function recordFirstCuelistThroughUi(
 	await page.locator(".cuelist-card").first().click();
 	await expect
 		.poll(async () => {
-			const playbacks = await api.request<any>("GET", "/api/v1/playbacks");
+			const playbacks = await api.request<any>("GET", "/api/v2/playback-overview");
 			return playbacks.pool.some((definition: any) => definition.number === 1);
 		})
 		.toBe(true);
-	const playbacks = await api.request<any>("GET", "/api/v1/playbacks");
+	const playbacks = await api.request<any>("GET", "/api/v2/playback-overview");
 	const definition = playbacks.pool.find(
 		(candidate: any) => candidate.number === 1,
 	);

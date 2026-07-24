@@ -3,7 +3,7 @@ use super::{
     ProgrammingLockPolicy, Session, cuelist_for_page_playback, dispatch_playback_action, emit,
     intercept_update_playback_target, persist_active_playbacks, persist_output_runtime,
     persist_programmer, predicted_preload_temp_state, preload_capture_action_with_temp_state,
-    programming_context, run_programming_interaction, set_group_playback_master,
+    run_programming_interaction, set_group_playback_master,
 };
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource,
@@ -35,49 +35,16 @@ mod support;
 pub(super) use desk::ChangePage;
 use ports::ServerPlaybackPorts;
 pub(super) use projection::automatic_changes as automatic_projection_changes;
-pub(super) use response::{cue_list_http_payload, pool_http_payload, websocket_payload};
+pub(super) use response::websocket_payload;
 
 use conversion::{
-    action_touched, activation_surface, legacy_action, parse_action, parse_pending, parse_surface,
-    source_name, surface_name,
+    action_touched, activation_surface, legacy_action, parse_action, parse_pending, source_name,
+    surface_name,
 };
 use support::{
     action_error, api_action_error, capture_enabled, captures_preload, invalid, operator_context,
     playback_definition, resolve_group_playback,
 };
-
-pub(super) fn http_action(
-    state: &AppState,
-    session: &Session,
-    address: PlaybackAddress,
-    action_name: &str,
-    input: &PoolPlaybackInput,
-) -> Result<PlaybackResult, ApiError> {
-    let command = PlaybackCommand {
-        address,
-        action: parse_action(action_name, input)?,
-        surface: parse_surface(input.surface.as_deref()),
-    };
-    let context = programming_context(session, ActionSource::Http, None);
-    let playback_context = context.clone();
-    run_programming_interaction(
-        state,
-        session,
-        &context,
-        "http",
-        ProgrammingLockPolicy::RequireUnlocked,
-        || {
-            execute(
-                state,
-                Some(session),
-                Some(&session.desk),
-                playback_context,
-                command,
-            )
-        },
-    )?
-    .output
-}
 
 pub(super) fn osc_action(
     state: &AppState,

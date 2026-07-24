@@ -133,20 +133,20 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     const blockerCueListId = await installIntensityBlocker(api, enabled.id);
 
     await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
-    await api.request("POST", `/api/v1/playbacks/${mibCueListId}/release`, {});
-    await api.request("POST", `/api/v1/playbacks/${blockerCueListId}/release`, {});
-    await api.request("POST", "/api/v1/cuelists/1/off", {});
-    await api.request("POST", "/api/v1/cuelists/2/off", {});
-    await api.request("POST", "/api/v1/cuelists/2/go", {});
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
+    await api.cueListPlaybackAction(mibCueListId, "release", {});
+    await api.cueListPlaybackAction(blockerCueListId, "release", {});
+    await api.playbackNumberAction(1, "off", {});
+    await api.playbackNumberAction(2, "off", {});
+    await api.playbackNumberAction(2, "go", {});
+    await api.playbackNumberAction(1, "go", {});
+    await api.playbackNumberAction(1, "go", {});
     await bench.tick(5_000);
 
     let enabledRuntime = mibFor(await mibDiagnostics(api), enabled.id, mibCueListId);
     expect(enabledRuntime).toMatchObject({ state: "blocked", dark_since: null, delay_deadline: null });
     expect(enabledRuntime.positions[0].current.value).toBeCloseTo(0.2, 4);
 
-    await api.request("POST", "/api/v1/cuelists/2/off", {});
+    await api.playbackNumberAction(2, "off", {});
     await bench.tick(0);
     enabledRuntime = mibFor(await mibDiagnostics(api), enabled.id, mibCueListId);
     expect(enabledRuntime.state).toBe("delaying");
@@ -154,13 +154,13 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     expect(Date.parse(enabledRuntime.delay_deadline) - firstDarkSince).toBe(1_000);
 
     await bench.tick(500);
-    await api.request("POST", "/api/v1/cuelists/2/go", {});
+    await api.playbackNumberAction(2, "go", {});
     await bench.tick(1);
     enabledRuntime = mibFor(await mibDiagnostics(api), enabled.id, mibCueListId);
     expect(enabledRuntime).toMatchObject({ state: "blocked", dark_since: null });
 
     await bench.tick(499);
-    await api.request("POST", "/api/v1/cuelists/2/off", {});
+    await api.playbackNumberAction(2, "off", {});
     await bench.tick(0);
     enabledRuntime = mibFor(await mibDiagnostics(api), enabled.id, mibCueListId);
     expect(enabledRuntime.state).toBe("delaying");
@@ -204,8 +204,8 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await putObject(api, "cue_list", cueListId, withDarkChain, initial.revision);
 
     await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
+    await api.playbackNumberAction(1, "go", {});
+    await api.playbackNumberAction(1, "go", {});
     await bench.tick(2_000);
     let enabledRuntime = mibFor(await mibDiagnostics(api), enabled.id, cueListId);
     expect(enabledRuntime).toMatchObject({ state: "delaying", current_cue_number: 2, target_cue_number: 3 });
@@ -339,12 +339,12 @@ async function runExactTiming(
   bench: any,
   state: MibState,
   triggerGo: (expectedCue: number) => Promise<void> = async () => {
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
+    await api.playbackNumberAction(1, "go", {});
   },
 ) {
   await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
-  await api.request("POST", `/api/v1/playbacks/${state.cueListId}/release`, {});
-  await api.request("POST", "/api/v1/cuelists/1/off", {});
+  await api.cueListPlaybackAction(state.cueListId, "release", {});
+  await api.playbackNumberAction(1, "off", {});
   await triggerGo(1);
   await triggerGo(2);
 
@@ -395,7 +395,7 @@ async function runExactTiming(
 }
 
 async function activeCueNumber(api: any, cueListId: string): Promise<number | null> {
-  const snapshot = await api.request<any>("GET", "/api/v1/playbacks");
+  const snapshot = await api.request<any>("GET", "/api/v2/playback-overview");
   return snapshot.active.find((entry: any) => entry.cue_list_id === cueListId)?.current_cue_number ?? null;
 }
 

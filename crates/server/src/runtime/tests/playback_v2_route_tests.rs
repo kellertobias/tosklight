@@ -1,6 +1,84 @@
 use super::*;
 
 #[tokio::test]
+async fn retired_v1_playback_read_and_action_routes_are_absent() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let cue_list_id = Uuid::new_v4();
+    let desk_id = Uuid::new_v4();
+    for request in [
+        Request::get("/api/v1/playbacks")
+            .body(Body::empty())
+            .unwrap(),
+        Request::get("/api/v1/cuelists/1")
+            .body(Body::empty())
+            .unwrap(),
+        Request::get("/api/v1/playback-pool/1")
+            .body(Body::empty())
+            .unwrap(),
+        Request::post(format!("/api/v1/playbacks/{cue_list_id}/go"))
+            .body(Body::empty())
+            .unwrap(),
+        Request::post("/api/v1/cuelists/1/go")
+            .body(Body::empty())
+            .unwrap(),
+        Request::post("/api/v1/playback-pool/1/go")
+            .body(Body::empty())
+            .unwrap(),
+        Request::post(format!(
+            "/api/v1/control-desks/{desk_id}/page-playbacks/1/go"
+        ))
+        .body(Body::empty())
+        .unwrap(),
+    ] {
+        assert_eq!(
+            app.clone().oneshot(request).await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn v2_playback_overview_is_authenticated_and_keeps_desk_scope() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+
+    let denied = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/playback-overview")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
+
+    let overview = app
+        .oneshot(
+            Request::get("/api/v2/playback-overview")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(overview.status(), StatusCode::OK);
+    let overview = json(overview).await;
+    assert_eq!(overview["desk"]["id"], desk_id.to_string());
+    assert_eq!(overview["active_page"], 1);
+    assert_eq!(overview["pool"].as_array().unwrap().len(), 2);
+    assert_eq!(overview["cue_lists"].as_array().unwrap().len(), 1);
+    assert!(overview["authoritative_controls"].is_object());
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_context_headers_default_to_the_single_or_main_control_desk() {
     let (single_state, single_data_dir) = test_state();
     let single_app = router(single_state.clone());
@@ -782,7 +860,7 @@ async fn v2_group_selection_publishes_one_live_or_static_programming_event() {
 }
 
 #[tokio::test]
-async fn legacy_http_group_playback_selection_uses_the_same_typed_event_boundary() {
+async fn v2_http_group_playback_selection_uses_the_same_typed_event_boundary() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -791,16 +869,17 @@ async fn legacy_http_group_playback_selection_uses_the_same_typed_event_boundary
     let fixture = install_playback_test_state(&state);
     let cursor = state.application_events.latest_sequence();
 
-    let response = app
-        .clone()
-        .oneshot(
-            Request::post("/api/v1/playback-pool/2/select")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        action_request(
+            "select-live-group-v2",
+            2,
+            serde_json::json!({"type":"select","pressed":true}),
+        ),
+    )
+    .await;
 
     assert_eq!(response.status(), StatusCode::OK);
     let events = playback_selection_events(&state, desk_id, cursor);

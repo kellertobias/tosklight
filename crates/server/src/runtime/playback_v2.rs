@@ -8,8 +8,9 @@ pub(super) use wire::{
 };
 
 use super::{
-    AppState, DeskContext, ProgrammingLockPolicy, Session, ShowContext, playback_service,
-    run_programming_interaction, session_for_desk,
+    ApiError, AppState, DeskContext, ProgrammingLockPolicy, Session, ShowContext, authenticate,
+    authoritative_playback_controls, playback_service, run_programming_interaction, runtime_wire,
+    session_for_desk,
 };
 use crate::tolerant_json::TolerantJson;
 use axum::{
@@ -17,16 +18,18 @@ use axum::{
     extract::{State, rejection::JsonRejection},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
 };
 use light_application::{ActionContext, ActionSource};
 use light_wire::v2::playback::{
-    PlaybackActionRequest, PlaybackErrorKind, PlaybackErrorResponse, PlaybackRuntimeSnapshotRequest,
+    PlaybackActionRequest, PlaybackErrorKind, PlaybackErrorResponse, PlaybackOverview,
+    PlaybackRuntimeSnapshotRequest,
 };
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v2/playback-actions", post(playback_action))
         .route("/api/v2/playback-runtime/snapshot", post(playback_snapshot))
+        .route("/api/v2/playback-overview", get(playback_overview))
 }
 
 async fn playback_action(
@@ -84,6 +87,46 @@ async fn playback_snapshot(
     let snapshot = playback_service::snapshot(&state, &session, context, &identities)
         .map_err(PlaybackHttpError::api)?;
     Ok(Json(wire::runtime_snapshot(snapshot)).into_response())
+}
+
+async fn playback_overview(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<PlaybackOverview>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    let snapshot = state.engine.snapshot();
+    let (active_page, selected_playback) = state
+        .active_show
+        .read()
+        .as_ref()
+        .map(|show| {
+            let desk = state.desk.lock();
+            (
+                desk.desk_page(session.desk.id, show.id).unwrap_or(1),
+                desk.selected_playback(session.desk.id, show.id)
+                    .unwrap_or(None),
+            )
+        })
+        .unwrap_or((1, None));
+    Ok(Json(PlaybackOverview {
+        cue_lists: json_values(&snapshot.cue_lists)?,
+        pool: json_values(&snapshot.playbacks)?,
+        pages: json_values(&snapshot.playback_pages)?,
+        active: json_values(&state.engine.playback_runtime_status())?,
+        desk: runtime_wire::desk(session.desk),
+        active_page,
+        selected_playback,
+        authoritative_controls: authoritative_playback_controls(&state),
+    }))
+}
+
+fn json_values<T: serde::Serialize>(values: &[T]) -> Result<Vec<serde_json::Value>, ApiError> {
+    values
+        .iter()
+        .map(|value| {
+            serde_json::to_value(value).map_err(|error| ApiError::internal(error.to_string()))
+        })
+        .collect()
 }
 
 fn http_context(session: &Session) -> ActionContext {

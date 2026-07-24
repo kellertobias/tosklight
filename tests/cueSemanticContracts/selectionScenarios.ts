@@ -52,9 +52,9 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		const second = await installPlaybackSequence(api, 2, [
 			fixtureCue(1, [[fixtures[2], "intensity", 0.3]]),
 		]);
-		await api.request("POST", "/api/v1/cuelists/2/select", {});
+		await api.playbackNumberAction(2, "select", {});
 		expect((await playbackState(api)).selected_playback).toBe(2);
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
 		expect((await playbackState(api)).selected_playback).toBe(2);
 
 		await setProgrammerFixtureValue(api, {
@@ -193,7 +193,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			[0, 1, 1],
 		];
 		await assertCompactGroupSequence(bench, expected, () =>
-			api.request("POST", "/api/v1/cuelists/1/go", {}),
+			api.playbackNumberAction(1, "go", {}),
 		);
 		state.completed = true;
 	},

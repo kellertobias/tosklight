@@ -1,4 +1,9 @@
 import type { SoftwareKey } from "../../../shared/programmerKeypad";
+import type {
+  PlaybackAction,
+  PlaybackActionOutcome,
+  PlaybackAddress,
+} from "../../src/api/generated/light-wire";
 import type { PatchSnapshot as LegacyPatchSnapshot } from "../../src/api/types";
 import { decodePatchSnapshot } from "../../src/api/patchWire";
 import { projectionToPatchedFixture } from "../../src/features/patch/model";
@@ -297,6 +302,79 @@ export class ApiDriver {
     return response.json() as Promise<T>;
   }
 
+  playbackNumberAction<T = PlaybackActionOutcome>(
+    playbackNumber: number,
+    action: string,
+    input: Record<string, unknown> = {},
+  ): Promise<T> {
+    return this.playbackHttpAction(
+      { kind: "playback", playback_number: playbackNumber },
+      action,
+      input,
+    );
+  }
+
+  cueListPlaybackAction<T = PlaybackActionOutcome>(
+    cueListId: string,
+    action: string,
+    input: Record<string, unknown> = {},
+  ): Promise<T> {
+    return this.playbackHttpAction(
+      { kind: "cue_list", cue_list_id: cueListId },
+      action,
+      input,
+    );
+  }
+
+  currentPagePlaybackAction<T = PlaybackActionOutcome>(
+    slot: number,
+    action: string,
+    input: Record<string, unknown> = {},
+  ): Promise<T> {
+    return this.playbackHttpAction({ kind: "current_page", slot }, action, input);
+  }
+
+  explicitPagePlaybackAction<T = PlaybackActionOutcome>(
+    page: number,
+    slot: number,
+    action: string,
+    input: Record<string, unknown> = {},
+  ): Promise<T> {
+    return this.playbackHttpAction(
+      { kind: "explicit_page", page, slot },
+      action,
+      input,
+    );
+  }
+
+  private async playbackHttpAction<T>(
+    address: PlaybackAddress,
+    action: string,
+    input: Record<string, unknown>,
+  ): Promise<T> {
+    if (!this.session) throw new Error("API session is not initialized");
+    const bootstrap = await this.request<{ active_show: { id: string } | null }>(
+      "GET",
+      "/api/v2/bootstrap",
+      undefined,
+      false,
+    );
+    if (!bootstrap.active_show) throw new Error("No active show");
+    return this.request<T>(
+      "POST",
+      "/api/v2/playback-actions",
+      {
+        request_id: crypto.randomUUID(),
+        address,
+        action: structuredPlaybackAction(action, input),
+        surface: input.surface === "virtual" ? "virtual" : "physical",
+      },
+      true,
+      undefined,
+      { showId: bootstrap.active_show.id, deskId: this.session.desk.id },
+    );
+  }
+
   private async response(
     method: string,
     path: string,
@@ -463,6 +541,44 @@ export class ApiDriver {
       await closeWebSocket(socket, `API command ${command}`);
     }
   }
+}
+
+function structuredPlaybackAction(
+  action: string,
+  input: Record<string, unknown>,
+): PlaybackAction {
+  const pressed = typeof input.pressed === "boolean" ? input.pressed : true;
+  if (action === "release") return { type: "release" };
+  if (action === "button") {
+    if (typeof input.button !== "number") throw new Error("button number is required");
+    return { type: "configured_button", number: input.button, pressed };
+  }
+  if (action === "master") {
+    if (typeof input.value !== "number") throw new Error("master value is required");
+    return { type: "master", value: input.value };
+  }
+  if (action === "go-to" || action === "load") {
+    if (typeof input.cue_number !== "number") throw new Error("cue number is required");
+    return {
+      type: action === "go-to" ? "go_to" : "load",
+      cue_number: input.cue_number,
+    };
+  }
+  if (action === "xfade-on" || action === "xfade-off") {
+    return { type: "crossfade", enabled: action === "xfade-on" };
+  }
+  if (action === "temp-on" || action === "temp-off") {
+    return { type: "temporary", enabled: action === "temp-on", pressed };
+  }
+  const type = ({
+    "go-minus": "back",
+    "fast-forward": "fast_forward",
+    "fast-rewind": "fast_rewind",
+    "select-contents": "select_contents",
+    "select-dereferenced": "select_dereferenced",
+    "pause-dynamics": "pause_dynamics",
+  } as Record<string, string>)[action] ?? action;
+  return { type, pressed } as PlaybackAction;
 }
 
 async function parseRevisionedCommandLine(response: Response): Promise<RevisionedCommandLine> {

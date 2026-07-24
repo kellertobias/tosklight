@@ -94,7 +94,7 @@ export async function playbackAtSlot(
 }
 
 export async function playbackState(api: ApiDriver): Promise<any> {
-	return api.request("GET", "/api/v1/playbacks");
+	return api.request("GET", "/api/v2/playback-overview");
 }
 
 export async function runtime(

@@ -371,15 +371,15 @@ async function assertCueTransferOutcome(api: ApiDriver, bench: any, setup: Await
     expect(sourceAfter.body).toEqual(sourceBefore.body);
     expect(transferred.id).not.toBe(setup.sourceCueId);
   }
-  await api.request("POST", "/api/v1/cuelists/2/go", {});
-  await api.request("POST", "/api/v1/cuelists/2/go", {});
+  await api.playbackNumberAction(2, "go", {});
+  await api.playbackNumberAction(2, "go", {});
   let frame = await bench.tick(3_000);
   const slots = frame.universes.find((universe: any) => universe.universe === 1)?.slots ?? [];
   expect(slots.slice(0, 12)).toEqual([...Array(4).fill(transfer.status ? 255 : 0), ...Array(4).fill(255), ...Array(4).fill(255)]);
   if (transfer.moves) {
-    await api.request("POST", `/api/v1/playbacks/${setup.destinationId}/release`, {});
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
-    await api.request("POST", "/api/v1/cuelists/1/go", {});
+    await api.cueListPlaybackAction(setup.destinationId, "release", {});
+    await api.playbackNumberAction(1, "go", {});
+    await api.playbackNumberAction(1, "go", {});
     frame = await bench.tick(3_000);
     const recalculated = frame.universes.find((universe: any) => universe.universe === 1)?.slots ?? [];
     expect(recalculated.slice(0, 12)).toEqual(Array(12).fill(0));

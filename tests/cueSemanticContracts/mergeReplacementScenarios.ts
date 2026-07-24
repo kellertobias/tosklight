@@ -57,9 +57,9 @@ registerPairedCueScenario<{ completed: boolean }>({
 		};
 
 		let prepared = await prepare("merge-003-full", false);
-		await api.request("POST", "/api/v1/cuelists/1/on", {});
+		await api.playbackNumberAction(1, "on", {});
 		await bench.tick(1);
-		await api.request("POST", "/api/v1/cuelists/2/on", {});
+		await api.playbackNumberAction(2, "on", {});
 		await bench.tick(0);
 		expect(await runtime(api, 1)).toMatchObject({ enabled: false });
 		expect(await rgbValues(api, prepared.fixture)).toEqual([1, 0, 0]);
@@ -72,13 +72,13 @@ registerPairedCueScenario<{ completed: boolean }>({
 			{ ...definition.body, auto_off: false },
 			definition.revision,
 		);
-		await api.request("POST", "/api/v1/cuelists/2/off", {});
-		await api.request("POST", "/api/v1/cuelists/1/on", {});
+		await api.playbackNumberAction(2, "off", {});
+		await api.playbackNumberAction(1, "on", {});
 		await bench.tick(1);
-		await api.request("POST", "/api/v1/cuelists/2/on", {});
+		await api.playbackNumberAction(2, "on", {});
 		await bench.tick(0);
 		expect(await runtime(api, 1)).toMatchObject({ enabled: true });
-		await api.request("POST", "/api/v1/cuelists/2/off", {});
+		await api.playbackNumberAction(2, "off", {});
 		await bench.tick(0);
 		expect(await rgbValues(api, prepared.fixture)).toEqual([0, 0, 1]);
 
@@ -90,26 +90,26 @@ registerPairedCueScenario<{ completed: boolean }>({
 			{ ...definition.body, auto_off: true },
 			definition.revision,
 		);
-		await api.request("POST", "/api/v1/cuelists/1/on", {});
-		await api.request("POST", "/api/v1/cuelists/2/flash", { pressed: true });
+		await api.playbackNumberAction(1, "on", {});
+		await api.playbackNumberAction(2, "flash", { pressed: true });
 		await bench.tick(0);
 		expect(await runtime(api, 1)).toMatchObject({ enabled: true });
 		expect(await rgbValues(api, prepared.fixture)).toEqual([1, 0, 0]);
-		await api.request("POST", "/api/v1/cuelists/2/flash", { pressed: false });
+		await api.playbackNumberAction(2, "flash", { pressed: false });
 		await bench.tick(0);
 		expect(await rgbValues(api, prepared.fixture)).toEqual([0, 0, 1]);
-		await api.request("POST", "/api/v1/cuelists/2/temp", {});
+		await api.playbackNumberAction(2, "temp", {});
 		await bench.tick(0);
 		expect(await runtime(api, 1)).toMatchObject({ enabled: true });
 		expect(await rgbValues(api, prepared.fixture)).toEqual([1, 0, 0]);
-		await api.request("POST", "/api/v1/cuelists/2/temp", {});
+		await api.playbackNumberAction(2, "temp", {});
 		await bench.tick(0);
 		expect(await rgbValues(api, prepared.fixture)).toEqual([0, 0, 1]);
 
 		prepared = await prepare("merge-003-partial", true);
-		await api.request("POST", "/api/v1/cuelists/1/on", {});
+		await api.playbackNumberAction(1, "on", {});
 		await bench.tick(1);
-		await api.request("POST", "/api/v1/cuelists/2/on", {});
+		await api.playbackNumberAction(2, "on", {});
 		await bench.tick(0);
 		expect(await runtime(api, 1)).toMatchObject({ enabled: true });
 		expect(await visualizationLevel(api, prepared.fixture, "intensity")).toBe(
@@ -179,7 +179,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		expect(await runtime(api, 1)).toMatchObject({ enabled: false });
 		expect(await rgbValues(api, fixture)).toEqual([1, 0, 0]);
 
-		await api.request("POST", "/api/v1/cuelists/2/off", {});
+		await api.playbackNumberAction(2, "off", {});
 		await first.getByRole("button", { name: "ON", exact: true }).click();
 		const flash = second.getByRole("button", { name: "FLASH", exact: true });
 		await flash.hover();
@@ -209,8 +209,8 @@ registerPairedCueScenario<{ completed: boolean }>({
 			stored.body,
 			stored.revision,
 		);
-		await api.request("POST", "/api/v1/cuelists/1/off", {});
-		await api.request("POST", "/api/v1/cuelists/2/off", {});
+		await api.playbackNumberAction(1, "off", {});
+		await api.playbackNumberAction(2, "off", {});
 		await first.getByRole("button", { name: "ON", exact: true }).click();
 		await bench.tick(1);
 		await second.getByRole("button", { name: "ON", exact: true }).click();

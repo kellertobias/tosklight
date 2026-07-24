@@ -13,13 +13,13 @@ test("PLAYBACK-COLOR-001 @supplemental-ui › runtime strengthens configured col
   await expect(card).toBeVisible();
   const slot = Number(await card.getAttribute("data-playback-slot"));
   const before = await background(card);
-  await api.request("POST", `/api/v1/control-desks/${api.session!.desk.id}/page-playbacks/${slot}/button`, { button: 2, pressed: true, surface: "virtual" });
+  await api.currentPagePlaybackAction(slot, "button", { button: 2, pressed: true, surface: "virtual" });
   await expect(card).toHaveClass(/running/);
   await expect.poll(() => background(card)).not.toBe(before);
 
-  const state = await api.request<any>("GET", "/api/v1/playbacks");
+  const state = await api.request<any>("GET", "/api/v2/playback-overview");
   const number = state.pages.find((candidate: any) => candidate.number === state.active_page).slots[String(slot)];
-  await api.request("POST", `/api/v1/playback-pool/${number}/select`, {});
+  await api.playbackNumberAction(number, "select", {});
   await expect(card).toHaveClass(/selected/);
   await expect(card).toHaveClass(/running/);
   expect(await card.getAttribute("data-selected-playback")).toBe("true");

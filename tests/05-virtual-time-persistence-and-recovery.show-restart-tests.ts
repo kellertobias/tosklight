@@ -69,7 +69,7 @@ export function registerShow001PairedScenario(): void {
 				surface: "api",
 				showId: state.copyId,
 			});
-			await api.request("POST", "/api/v1/cuelists/1/go", {});
+			await api.playbackNumberAction(1, "go", {});
 			await api.executeCommandLine("FIXTURE 12 AT 65");
 			await api.saveShowRevision(state.copyId, state.revisionName);
 		},
@@ -187,7 +187,7 @@ export function registerShow001ProcessRestartTest(): void {
 		expect((await object<any>(api, "group", "3")).body.fixtures).toEqual(
 			expectedGroup,
 		);
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
 		await api.executeCommandLine("FIXTURE 12 AT 65");
 		await bench.tick(0);
 		await setOutputRuntime(api, {

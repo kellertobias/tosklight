@@ -194,6 +194,28 @@ pub struct PlaybackRuntimeSnapshot {
     pub projections: Vec<PlaybackRuntimeProjection>,
 }
 
+/// Authenticated desk snapshot for topology and runtime inspection.
+///
+/// Portable Cuelist, Playback, and Page bodies remain opaque here because their exact
+/// extension-preserving schema is owned by the Show-object boundary. The top-level scope and
+/// desk-owned fields are stable and typed.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackOverview {
+    #[ts(type = "unknown[]")]
+    pub cue_lists: Vec<serde_json::Value>,
+    #[ts(type = "unknown[]")]
+    pub pool: Vec<serde_json::Value>,
+    #[ts(type = "unknown[]")]
+    pub pages: Vec<serde_json::Value>,
+    #[ts(type = "unknown[]")]
+    pub active: Vec<serde_json::Value>,
+    pub desk: super::runtime::RuntimeControlDesk,
+    pub active_page: u8,
+    pub selected_playback: Option<u16>,
+    #[ts(type = "unknown")]
+    pub authoritative_controls: serde_json::Value,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

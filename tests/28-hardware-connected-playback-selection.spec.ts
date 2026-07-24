@@ -149,11 +149,11 @@ function playback(number: number, name: string, target: any, buttons: [string, s
 }
 
 async function selectPlayback(api: ApiDriver, number: number) {
-  await api.request("POST", `/api/v1/playback-pool/${number}/select`, {});
+  await api.playbackNumberAction(number, "select", {});
 }
 
 async function playbackState(api: ApiDriver) {
-  return api.request<any>("GET", "/api/v1/playbacks");
+  return api.request<any>("GET", "/api/v2/playback-overview");
 }
 
 async function openPlaybackMode(page: Page) {

@@ -52,7 +52,7 @@ export function registerPbk001PairedScenario(): void {
 			return { ...prepared, before: await inertSnapshot(api, 40) };
 		},
 		api: async ({ api }, state) => {
-			await api.request("GET", "/api/v1/playback-pool/40");
+			await playbackSnapshot(api);
 			state.inspected = await playbackConfigurationObservation(
 				api,
 				1,
@@ -113,7 +113,7 @@ export function registerPbk001PairedScenario(): void {
 }
 
 export function registerPbk001ReadApiScenario(): void {
-	test("PBK-001 @supplemental › direct and legacy read APIs preserve page/slot state", async ({
+	test("PBK-001 @supplemental › typed overview preserves page and slot state", async ({
 		api,
 		bench,
 	}) => {
@@ -145,10 +145,6 @@ export function registerPbk001ReadApiScenario(): void {
 		expect(
 			snapshot.pool.find((candidate: any) => candidate.number === 40),
 		).toEqual(before.object.body);
-		const direct = await api.request<any>("GET", "/api/v1/playback-pool/40");
-		const legacyAlias = await api.request<any>("GET", "/api/v1/cuelists/40");
-		expect(direct.playback).toEqual(before.object.body);
-		expect(legacyAlias.playback).toEqual(before.object.body);
 		expect(await inertSnapshot(api, 40)).toEqual(before);
 	});
 }

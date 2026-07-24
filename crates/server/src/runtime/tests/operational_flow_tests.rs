@@ -167,12 +167,23 @@ impl OperationalScenario {
             .app
             .clone()
             .oneshot(
-                Request::post(format!("/api/v1/playbacks/{}/go", self.cue_list_id.0))
+                Request::post("/api/v2/playback-actions")
                     .header(
                         header::AUTHORIZATION,
                         format!("Bearer {}", self.token),
                     )
-                    .body(Body::empty())
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header("x-tosk-show", &self.first_id)
+                    .header("x-tosk-desk", session.desk.id.to_string())
+                    .body(Body::from(
+                        serde_json::json!({
+                            "request_id":"operational-flow-go",
+                            "address":{"kind":"cue_list","cue_list_id":self.cue_list_id.0},
+                            "action":{"type":"go","pressed":true},
+                            "surface":"physical"
+                        })
+                        .to_string(),
+                    ))
                     .unwrap(),
             )
             .await
@@ -182,7 +193,7 @@ impl OperationalScenario {
             .app
             .clone()
             .oneshot(
-                Request::get("/api/v1/playbacks")
+                Request::get("/api/v2/playback-overview")
                     .header(
                         header::AUTHORIZATION,
                         format!("Bearer {}", self.token),

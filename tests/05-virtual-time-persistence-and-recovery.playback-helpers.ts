@@ -191,22 +191,20 @@ export async function restartPlaybackRun(
 	numbers: number[],
 ): Promise<void> {
 	for (const number of [1, 2])
-		await api
-			.request("POST", `/api/v1/cuelists/${number}/off`, {})
-			.catch(() => undefined);
+		await api.playbackNumberAction(number, "off", {}).catch(() => undefined);
 	await api.openShow(showId, {
 		transition: "hold_current",
 	});
 	await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
 	for (const number of numbers)
-		await api.request("POST", `/api/v1/cuelists/${number}/go`, {});
+		await api.playbackNumberAction(number, "go", {});
 }
 
 export async function playbackRuntime(
 	api: ApiDriver,
 	number: number,
 ): Promise<any> {
-	const state = await api.request<any>("GET", "/api/v1/playbacks");
+	const state = await api.request<any>("GET", "/api/v2/playback-overview");
 	const runtime = state.active.find(
 		(item: any) => item.playback_number === number,
 	);

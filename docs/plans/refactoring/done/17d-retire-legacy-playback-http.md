@@ -56,3 +56,22 @@ node tools/check-architecture.mjs
 ## Decisions
 
 Inherited from chunk 17. No open decisions.
+
+## Result
+
+- Added typed v2 playback-action helpers for cue-list, playback-number,
+  current-page, and explicit-page addresses, then migrated all root acceptance
+  callers away from the legacy playback HTTP routes.
+- Added `GET /api/v2/playback-overview` as a bounded, authenticated,
+  desk-scoped replacement for legacy configuration/runtime reads.
+- Removed the v1 playback read and action route families plus their dead HTTP
+  adapters and serializers. Regression coverage proves the retired routes are
+  absent and preserves current-page versus explicit-page addressing.
+- Verification passed: `cargo test -p light-server` (472 passed, 1 ignored,
+  plus 14 benchmark tests), `npm run test:unit` (277 Vitest files / 2005 tests
+  plus the Rust workspace), focused playback E2E (68 passed), architecture and
+  source-size gates, and the full E2E repeat (285 passed / 11 skipped).
+- The first full E2E run had one PBK-006 timing failure; the exact scenario
+  passed in isolation and the complete repeat passed every scenario. The
+  Playwright process retained a teardown handle after printing the repeat's
+  final counts and was stopped after completion. No follow-up chunk is needed.

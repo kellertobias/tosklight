@@ -74,10 +74,7 @@ fn parse_cue_number(input: &PoolPlaybackInput, go_to: bool) -> Result<PlaybackAc
     })
 }
 
-pub(super) fn legacy_action(
-    action: PlaybackAction,
-    surface: PlaybackSurface,
-) -> (&'static str, PoolPlaybackInput) {
+pub(super) fn legacy_action(action: PlaybackAction) -> (&'static str, PoolPlaybackInput) {
     let (name, value, cue_number, button) = structured_action(action);
     (
         name,
@@ -86,7 +83,6 @@ pub(super) fn legacy_action(
             cue_number,
             pressed: action.pressed(),
             button,
-            surface: Some(surface_name(surface).to_owned()),
         },
     )
 }
@@ -137,15 +133,6 @@ fn simple_action_name(action: PlaybackAction) -> &'static str {
     }
 }
 
-pub(super) fn parse_surface(surface: Option<&str>) -> PlaybackSurface {
-    match surface {
-        Some("virtual") => PlaybackSurface::Virtual,
-        Some("osc") => PlaybackSurface::Osc,
-        Some("matter") => PlaybackSurface::Matter,
-        _ => PlaybackSurface::Physical,
-    }
-}
-
 pub(super) const fn surface_name(surface: PlaybackSurface) -> &'static str {
     match surface {
         PlaybackSurface::Physical => "physical",
@@ -176,18 +163,6 @@ pub(super) fn parse_pending(action: &str) -> PendingPlaybackAction {
         "temp-on" => PendingPlaybackAction::TemporaryOn,
         "temp-off" => PendingPlaybackAction::TemporaryOff,
         _ => unreachable!("preload returned unsupported action"),
-    }
-}
-
-pub(super) const fn pending_name(action: PendingPlaybackAction) -> &'static str {
-    match action {
-        PendingPlaybackAction::Toggle => "toggle",
-        PendingPlaybackAction::Go => "go",
-        PendingPlaybackAction::Back => "go-minus",
-        PendingPlaybackAction::Off => "off",
-        PendingPlaybackAction::On => "on",
-        PendingPlaybackAction::TemporaryOn => "temp-on",
-        PendingPlaybackAction::TemporaryOff => "temp-off",
     }
 }
 

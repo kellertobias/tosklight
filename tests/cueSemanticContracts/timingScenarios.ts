@@ -34,28 +34,28 @@ registerPairedCueScenario<{ completed: boolean }>({
 			fixtureCue(1, [[fixture, "intensity", 0]], { fade_millis: 0 }),
 			fixtureCue(2, [[fixture, "intensity", 1]], { fade_millis: 4_000 }),
 		]);
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
+		await api.playbackNumberAction(1, "go", {});
 		expect(slot(await bench.tick(0), 1)).toBe(0);
 		expect(slot(await bench.tick(2_000), 1)).toBe(128);
 		expect(slot(await bench.tick(2_000), 1)).toBe(255);
 
-		await api.request("POST", "/api/v1/cuelists/1/off", {});
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "off", {});
+		await api.playbackNumberAction(1, "go", {});
+		await api.playbackNumberAction(1, "go", {});
 		expect(slot(await bench.tick(1_000), 1)).toBe(64);
-		await api.request("POST", `/api/v1/playbacks/${installed.id}/pause`, {});
+		await api.cueListPlaybackAction(installed.id, "pause", {});
 		const paused = await runtime(api, 1);
 		expect(paused.paused).toBe(true);
 		expect(slot(await bench.tick(10_000), 1)).toBe(64);
 		expect((await runtime(api, 1)).activated_at).toBe(paused.activated_at);
-		await api.request("POST", `/api/v1/playbacks/${installed.id}/go`, {});
+		await api.cueListPlaybackAction(installed.id, "go", {});
 		expect((await runtime(api, 1)).paused).toBe(false);
 		expect(slot(await bench.tick(3_000), 1)).toBe(255);
-		await api.request("POST", `/api/v1/playbacks/${installed.id}/back`, {});
+		await api.cueListPlaybackAction(installed.id, "back", {});
 		expect((await runtime(api, 1)).current_cue_number).toBe(1);
 		expect(slot(await bench.tick(0), 1)).toBe(0);
-		await api.request("POST", `/api/v1/playbacks/${installed.id}/release`, {});
+		await api.cueListPlaybackAction(installed.id, "release", {});
 		expect((await playbackState(api)).active).toHaveLength(0);
 		state.completed = true;
 	},
@@ -150,7 +150,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			),
 		]);
 
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
 		await bench.tick(499);
 		expect(await visualizationLevel(api, fixtures[1], "intensity")).toBe(0);
 		expect(await visualizationLevel(api, fixtures[4], "intensity")).toBe(0);
@@ -177,7 +177,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			5,
 		);
 
-		await api.request("POST", "/api/v1/cuelists/1/off", {});
+		await api.playbackNumberAction(1, "off", {});
 		let stored = await object<any>(api, "cue_list", installed.id);
 		const timingBytes = JSON.stringify(stored.body.cues[0].changes);
 		await putObject(
@@ -187,7 +187,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			{ ...stored.body, force_cue_timing: true },
 			stored.revision,
 		);
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
 		await bench.tick(2_500);
 		expect(await visualizationLevel(api, fixtures[1], "intensity")).toBeCloseTo(
 			1 / 3,
@@ -217,8 +217,8 @@ registerPairedCueScenario<{ completed: boolean }>({
 			{ ...stored.body, force_cue_timing: false },
 			stored.revision,
 		);
-		await api.request("POST", "/api/v1/cuelists/1/off", {});
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "off", {});
+		await api.playbackNumberAction(1, "go", {});
 		await bench.tick(2_000);
 		expect(await visualizationLevel(api, fixtures[1], "intensity")).toBeCloseTo(
 			0.375,

@@ -17,7 +17,7 @@ test.describe("docs/engineering/refactoring-test-boundaries.md", () => {
   }) => {
     await loadCanonicalCopy(api, bench, "cue-navigation-websocket-compatibility", "compact-rig");
     await installTwinPlaybacks(api);
-    await api.request("POST", "/api/v1/cuelists/2/select", {});
+    await api.playbackNumberAction(2, "select", {});
 
     // Go To through the textual envelope moves the desk-selected Playback.
     const goTo = await api.command<unknown>("programmer.execute", { value: "CUE 3" });
@@ -106,7 +106,7 @@ async function installTwinPlaybacks(api: ApiDriver): Promise<string> {
 }
 
 async function playbackState(api: ApiDriver): Promise<any> {
-  return api.request("GET", "/api/v1/playbacks");
+  return api.request("GET", "/api/v2/playback-overview");
 }
 
 async function runtime(api: ApiDriver, playback: number): Promise<any> {

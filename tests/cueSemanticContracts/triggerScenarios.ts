@@ -98,22 +98,22 @@ registerPairedCueScenario<{ completed: boolean }>({
 		};
 
 		await setup("cue-005-go", { type: "manual" });
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
 		await bench.tick(2_000);
 		await bench.tick(604_800_000);
 		expect((await runtime(api, 1)).current_cue_number).toBe(1);
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
 		expect((await runtime(api, 1)).current_cue_number).toBe(2);
 
 		await setup("cue-005-follow", { type: "follow", delay_millis: 0 });
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
 		await bench.tick(1_999);
 		expect((await runtime(api, 1)).current_cue_number).toBe(1);
 		await bench.tick(1);
 		expect((await runtime(api, 1)).current_cue_number).toBe(2);
 
 		await setup("cue-005-time", { type: "wait", delay_millis: 4_000 });
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
 		await bench.tick(5_999);
 		expect((await runtime(api, 1)).current_cue_number).toBe(1);
 		await bench.tick(1);
@@ -126,7 +126,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			{ type: "follow", delay_millis: 0 },
 			true,
 		);
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
 		await bench.tick(3_999);
 		expect((await runtime(api, 1)).current_cue_number).toBe(1);
 		await bench.tick(1);

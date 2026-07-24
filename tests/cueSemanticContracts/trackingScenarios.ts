@@ -79,22 +79,22 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			});
 		await bench.tick(1);
 
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
+		await api.playbackNumberAction(1, "go", {});
 		await bench.tick(0);
 		expect(await visualizationLevel(api, rgb, "intensity")).toBe(0.5);
 		expect(await rgbValues(api, rgb)).toEqual([0, 1, 0]);
 
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
 		await bench.tick(0);
 		expect(await visualizationLevel(api, rgb, "intensity")).toBe(0.5);
 		expect(await rgbValues(api, rgb)).toEqual([0, 0, 1]);
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
 		await bench.tick(0);
 		expect(await visualizationLevel(api, rgb, "intensity")).toBe(0.5);
 		expect(await rgbValues(api, rgb)).toEqual([0, 0, 1]);
 
-		await api.request("POST", "/api/v1/cuelists/1/off", {});
+		await api.playbackNumberAction(1, "off", {});
 		await bench.tick(0);
 		expect(await rgbValues(api, rgb)).toEqual([0, 1, 0]);
 		state.completed = true;
@@ -184,7 +184,7 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 			groupCue(2, [["2", "intensity", 1]]),
 			groupCue(3, [["3", "intensity", 1]]),
 		]);
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
 		const beforeRuntime = await runtime(api, 1);
 		const beforeSlots = logicalSlots(await bench.tick(0), 12);
 		const before = await object<any>(api, "cue_list", installed.id);
@@ -220,7 +220,7 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 			normal_next_cue_number: 2,
 		});
 		expect(logicalSlots(await bench.tick(0), 12)).toEqual(beforeSlots);
-		await api.request("POST", "/api/v1/cuelists/1/go", {});
+		await api.playbackNumberAction(1, "go", {});
 		expect(await runtime(api, 1)).toMatchObject({ current_cue_number: 2 });
 		expect(logicalSlots(await bench.tick(0), 12)).toEqual([
 			...Array(4).fill(0),

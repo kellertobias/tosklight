@@ -80,7 +80,7 @@ export function registerFixtureTimingTest(): void {
 			});
 			await expect.poll(async () => (await programmer(api)).values).toEqual([]);
 			await openFixtures(page);
-			await api.request("POST", "/api/v1/cuelists/1/go", {});
+			await api.playbackNumberAction(1, "go", {});
 			await assertCueReplayBoundaries(api, bench, page, desk, [
 				{ fixtureId, number: 1, slot: 1 },
 			]);
@@ -146,7 +146,7 @@ export function registerGroupTimingTest(): void {
 				.poll(async () => (await programmer(api)).group_values)
 				.toEqual({});
 			await openFixtures(page);
-			await api.request("POST", "/api/v1/cuelists/1/go", {});
+			await api.playbackNumberAction(1, "go", {});
 			await assertCueReplayBoundaries(
 				api,
 				bench,

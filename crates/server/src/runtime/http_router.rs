@@ -24,7 +24,6 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(session_routes())
         .merge(show_routes())
         .merge(show_object_routes())
-        .merge(playback_routes())
         .merge(programmer_and_update_routes())
         .merge(file_manager::router());
     with_transport_layers(with_test_routes(router, test_bench), state)
@@ -140,26 +139,6 @@ fn show_object_routes() -> Router<AppState> {
             "/api/v1/shows/{id}/objects/{kind}/{object_id}",
             get(get_object),
         )
-}
-
-fn playback_routes() -> Router<AppState> {
-    Router::new()
-        .route("/api/v1/playbacks/{id}/{action}", post(playback_action))
-        .route("/api/v1/cuelists/{number}", get(pool_playback_state))
-        .route(
-            "/api/v1/cuelists/{number}/{action}",
-            post(pool_playback_action).put(pool_playback_action),
-        )
-        .route("/api/v1/playback-pool/{number}", get(pool_playback_state))
-        .route(
-            "/api/v1/playback-pool/{number}/{action}",
-            post(pool_playback_action).put(pool_playback_action),
-        )
-        .route(
-            "/api/v1/control-desks/{id}/page-playbacks/{slot}/{action}",
-            post(paged_playback_action).put(paged_playback_action),
-        )
-        .route("/api/v1/playbacks", get(playbacks))
 }
 
 fn programmer_and_update_routes() -> Router<AppState> {

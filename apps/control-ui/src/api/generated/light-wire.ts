@@ -529,6 +529,8 @@ export type EventClientMessage = { "type": "subscribe", filter: EventSubscriptio
 
 export type EventServerMessage = { "type": "ready", cursor: EventSnapshotCursor, } | { "type": "event", event: EventEnvelope, } | { "type": "gap", gap: SequenceGap, } | { "type": "repaired", cursor: EventSnapshotCursor, } | { "type": "error", error: string, };
 
+export type PlaybackOverview = { cue_lists: unknown[], pool: unknown[], pages: unknown[], active: unknown[], desk: RuntimeControlDesk, active_page: number, selected_playback: number | null, authoritative_controls: unknown, };
+
 export type PlaybackActionRequest = {
 /**
  * Idempotency is retained for the 4096 most-recent IDs in the live server process. After

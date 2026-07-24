@@ -75,7 +75,7 @@ export async function programShow001ThroughUi(
 	await cuelist.click();
 	await expect
 		.poll(async () =>
-			(await api.request<any>("GET", "/api/v1/playbacks")).pool.some(
+			(await api.request<any>("GET", "/api/v2/playback-overview")).pool.some(
 				(playback: any) => playback.number === 1,
 			),
 		)
@@ -89,7 +89,7 @@ export async function programShow001ThroughUi(
 		.click();
 	await expect
 		.poll(async () => {
-			const playbacks = await api.request<any>("GET", "/api/v1/playbacks");
+			const playbacks = await api.request<any>("GET", "/api/v2/playback-overview");
 			return playbacks.pages.find((candidate: any) => candidate.number === 1)
 				?.slots?.["1"];
 		})
@@ -137,7 +137,7 @@ export async function assertShow001State(
 	expect((await object<any>(api, "group", "3")).body.fixtures).toEqual(
 		[1, 2, 3, 4, 5, 6].map((number) => state.fixtureIds[number]),
 	);
-	const playbacks = await api.request<any>("GET", "/api/v1/playbacks");
+	const playbacks = await api.request<any>("GET", "/api/v2/playback-overview");
 	const definition = playbacks.pool.find(
 		(playback: any) => playback.number === 1,
 	);

@@ -55,7 +55,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await page.locator(".mode-toggle").click();
     await second.getByRole("button", { name: "GO −", exact: true }).click();
     await expect.poll(async () => runtime(api, 2)).toMatchObject({ current_cue_number: 1, loaded_cue_number: 3, effective_next_is_loaded: true });
-    await api.request("POST", "/api/v1/cuelists/2/off", {});
+    await api.playbackNumberAction(2, "off", {});
     await expect.poll(async () => runtime(api, 2)).toMatchObject({ enabled: false, effective_next_is_loaded: false });
     expect((await runtime(api, 2)).loaded_cue_number).toBeUndefined();
     state.completed = true;
@@ -68,7 +68,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     api: async ({ api, bench }, state) => {
       const show = await loadCanonicalCopy(api, bench, "cue-go-to-load-wire", "compact-rig");
       const cueListId = await installTwinPlaybacks(api);
-      await api.request("POST", "/api/v1/cuelists/2/select", {});
+      await api.playbackNumberAction(2, "select", {});
       await api.executeCommandLine("CUE SET 1 CUE 3");
       await api.executeCommandLine("CUE CUE SET 1 . 2 CUE 2");
       expect(await runtime(api, 1)).toMatchObject({ current_cue_number: 3, master: 1, enabled: true });
@@ -77,14 +77,14 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       const before = await playbackState(api);
       await expect(api.executeCommandLine("CUE 99")).rejects.toThrow(/cue does not exist/i);
       await expect(api.executeCommandLine("CUE SET 99 CUE 1")).rejects.toThrow(/playback 99 does not exist/i);
-      await expect(api.request("POST", `/api/v1/playbacks/${cueListId}/go`, {})).rejects.toThrow(/multiple playbacks/i);
+      await expect(api.cueListPlaybackAction(cueListId, "go", {})).rejects.toThrow(/multiple playbacks/i);
       expect(await playbackState(api)).toMatchObject({ selected_playback: before.selected_playback, active: before.active });
 
       const otherDesk = new ApiDriver(api.baseUrl);
       await otherDesk.login("Operator");
       expect((await playbackState(otherDesk)).selected_playback).toBeNull();
       await expect(otherDesk.executeCommandLine("CUE 2")).rejects.toThrow(/no playback is selected/i);
-      await otherDesk.request("POST", "/api/v1/cuelists/1/select", {});
+      await otherDesk.playbackNumberAction(1, "select", {});
       expect((await playbackState(otherDesk)).selected_playback).toBe(1);
       expect((await playbackState(api)).selected_playback).toBe(2);
 
@@ -234,7 +234,7 @@ function playbackCard(page: any, name: string) {
 }
 
 async function playbackState(api: ApiDriver): Promise<any> {
-  return api.request("GET", "/api/v1/playbacks");
+  return api.request("GET", "/api/v2/playback-overview");
 }
 
 async function runtime(api: ApiDriver, playback: number): Promise<any> {

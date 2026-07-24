@@ -147,16 +147,16 @@ async function verifyFirstDeskPageAndOsc({
 		},
 	);
 	for (const number of [71, 72, 73]) await poolAction(api, number, "off");
-	await api.request(
-		"POST",
-		`/api/v1/control-desks/${api.session.desk.id}/page-playbacks/1/button`,
-		{ button: 1, pressed: true, surface: "virtual" },
-	);
-	await api.request(
-		"POST",
-		`/api/v1/control-desks/${api.session.desk.id}/page-playbacks/2/button`,
-		{ button: 1, pressed: true, surface: "virtual" },
-	);
+	await api.currentPagePlaybackAction(1, "button", {
+		button: 1,
+		pressed: true,
+		surface: "virtual",
+	});
+	await api.currentPagePlaybackAction(2, "button", {
+		button: 1,
+		pressed: true,
+		surface: "virtual",
+	});
 	expect(await activePlayback(api, 73)).toMatchObject({ enabled: false });
 	expect(await activePlayback(api, 71)).toMatchObject({ enabled: true });
 	await api.request(

@@ -265,7 +265,7 @@ impl ServerPlaybackPorts<'_> {
             unreachable!("pool Playback address was validated")
         };
         let definition = playback_definition(self.state, number)?;
-        let (action_name, input) = legacy_action(action, surface);
+        let (action_name, input) = legacy_action(action);
         if captures_preload(context.source)
             && let Some(pending) =
                 self.capture(context, &definition, action_name, &input, surface, page)?

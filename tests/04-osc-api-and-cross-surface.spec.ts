@@ -261,7 +261,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     api: async ({ api }, state) => {
       state.session = api.session!;
       await setDeskPage(api, state.session, 2);
-      await api.request("POST", `/api/v1/control-desks/${state.session.desk.id}/page-playbacks/1/button`, {
+      await api.currentPagePlaybackAction(1, "button", {
         button: 1,
         pressed: true,
         surface: "hardware",
@@ -1031,12 +1031,12 @@ async function installPlayback(api: ApiDriver): Promise<{ firstCueListId: string
 }
 
 async function activePlayback(api: ApiDriver, number: number): Promise<any | undefined> {
-  const playbacks = await api.request<any>("GET", "/api/v1/playbacks");
+  const playbacks = await api.request<any>("GET", "/api/v2/playback-overview");
   return playbacks.active.find((playback: any) => playback.playback_number === number);
 }
 
 async function deskPage(api: ApiDriver, session: Session): Promise<number> {
-  return (await withSession(api, session, () => api.request<any>("GET", "/api/v1/playbacks"))).active_page;
+  return (await withSession(api, session, () => api.request<any>("GET", "/api/v2/playback-overview"))).active_page;
 }
 
 async function setDeskPage(api: ApiDriver, session: Session, page: number): Promise<void> {

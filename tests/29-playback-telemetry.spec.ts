@@ -36,8 +36,8 @@ test("TELEMETRY-001 @supplemental-ui › playback fades stream ~10 Hz delta samp
   await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
   const hydrationSnapshots = snapshotRequests.length;
 
-  await api.request("POST", "/api/v1/cuelists/1/go", {});
-  await api.request("POST", "/api/v1/cuelists/2/go", {});
+  await api.playbackNumberAction(1, "go", {});
+  await api.playbackNumberAction(2, "go", {});
 
   // One simulated second of render frames at the configured 44 Hz output rate. The frame
   // divider (4) must produce ~11 sampled ticks while the fades progress.

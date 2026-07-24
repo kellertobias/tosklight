@@ -45,14 +45,14 @@ export function registerVirtualBehaviorTest(): void {
 		await setSpeedGroups(api, [120, 90, 60, 30, 15]);
 		await restartPlaybackRun(api, bench, showId, [1]);
 		await bench.tick(250);
-		await api.request("POST", `/api/v1/playbacks/${chaserId}/pause`, {});
+		await api.cueListPlaybackAction(chaserId, "pause", {});
 		const paused = await playbackRuntime(api, 1);
 		await bench.tick(3_000);
 		expect(await playbackRuntime(api, 1)).toMatchObject({
 			current_cue_number: paused.current_cue_number,
 			paused: true,
 		});
-		await api.request("POST", `/api/v1/playbacks/${chaserId}/go`, {});
+		await api.cueListPlaybackAction(chaserId, "go", {});
 		await bench.tick(249);
 		expect((await playbackRuntime(api, 1)).current_cue_number).toBe(1);
 		await bench.tick(1);
@@ -78,7 +78,7 @@ export function registerVirtualBehaviorTest(): void {
 		);
 		expect(phaserDirect).toBeCloseTo(0.5, 6);
 
-		await api.request("POST", "/api/v1/cuelists/3/button", {
+		await api.playbackNumberAction(3, "button", {
 			button: 3,
 			pressed: true,
 		});
@@ -87,7 +87,7 @@ export function registerVirtualBehaviorTest(): void {
 			phaserDirect,
 			6,
 		);
-		await api.request("POST", "/api/v1/cuelists/3/button", {
+		await api.playbackNumberAction(3, "button", {
 			button: 3,
 			pressed: true,
 		});

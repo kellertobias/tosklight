@@ -147,15 +147,11 @@ export async function poolAction<T = any>(
 	action: string,
 	body: Record<string, unknown> = {},
 ): Promise<T> {
-	return api.request<T>(
-		action === "master" ? "PUT" : "POST",
-		`/api/v1/playback-pool/${number}/${action}`,
-		body,
-	);
+	return api.playbackNumberAction<T>(number, action, body);
 }
 
 export async function playbacks(api: ApiDriver): Promise<any> {
-	return api.request("GET", "/api/v1/playbacks");
+	return api.request("GET", "/api/v2/playback-overview");
 }
 
 export async function activePlayback(

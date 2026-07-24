@@ -280,7 +280,6 @@ pub(super) fn handle_playback_osc(
         value: value.map(|value| value.clamp(0.0, 1.0)),
         pressed: Some(pressed),
         button,
-        surface: Some("osc".into()),
         ..PoolPlaybackInput::default()
     };
     let path_alias = if parts

@@ -713,7 +713,7 @@ async function blueStageColors(api: ApiDriver, rig: Awaited<ReturnType<typeof se
 }
 
 async function activeNumbers(api: ApiDriver): Promise<number[]> {
-  return (await api.request<any>("GET", "/api/v1/playbacks")).active
+  return (await api.request<any>("GET", "/api/v2/playback-overview")).active
     .filter((item: any) => item.enabled)
     .map((item: any) => item.playback_number);
 }
