@@ -31,3 +31,14 @@ npm run test:e2e
 ## Decisions
 
 Inherited from chunk 16. No open decisions.
+
+## Result
+
+Split after caller discovery into:
+
+- 16c1: test-bench v2 show-object seeding and root acceptance/bench migration;
+- 16c2: programmer-owned recording undo and typed store compatibility cleanup;
+- 16c3: Rust route-test migration and final generic v1 mutation deletion.
+
+The split keeps test-only infrastructure, operator undo semantics, and route retirement in
+separately reviewable and independently gated commits.
