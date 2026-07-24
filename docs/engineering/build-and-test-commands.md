@@ -102,6 +102,20 @@ Test layering:
 | Type/build gate | `tsc --noEmit && vite build` | tsc/vite |
 | Acceptance | root `tests/`, using the bench in `apps/control-ui/e2e/bench/` | Playwright |
 
+There is no tracked `@tosklight/ui` package or Storybook configuration. Presentation primitives
+are app-local under `apps/control-ui/src/components/common/` and
+`apps/control-ui/src/components/window-kit/`. Their supported replacement contract is:
+
+```sh
+npm run test:unit     # component tests plus Control UI typecheck and production build
+npm run test:e2e-ui   # real-browser operator and layout acceptance
+```
+
+The former `storybook`, `storybook:build`, and `test:ui-package` root scripts were retired because
+they selected a nonexistent workspace. A future shared-library extraction must add tracked source,
+consumers, and executable package gates together; generated `dist/` or Storybook output is not
+source.
+
 Acceptance tests act through the same public surfaces an operator uses — visible UI, exact OSC, the
 command-line HTTP API, or explicit deterministic bench controls. `pairedScenario(...)` registers an
 `@api` and a `@ui` test with the same arrangement and the same assert oracle, which is how surface

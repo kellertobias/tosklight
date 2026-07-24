@@ -1,17 +1,19 @@
 ---
 slug: ui-library
 title: UI Library
-summary: "Presentation primitives and the visual system. Not yet an extracted package."
+summary: "App-local presentation primitives and their executable verification contract."
 order: 20
 ---
 
 # UI Library
 
-There is no shared UI package yet. The primitives live inside `apps/control-ui`.
+There is no tracked shared UI package or Storybook configuration. The primitives live inside
+`apps/control-ui`.
 `docs/plans/Next/58-shared-frontend-libraries.md` specifies the intended split into a
 component/window-system library plus an app-layout library, but it is specification only.
 
-Knowing that saves searching for a `packages/ui` that does not exist.
+Knowing that saves searching for `@tosklight/ui` source that does not exist. Ignored `dist/` and
+`storybook-static/` files are generated remnants, not an ownership boundary or recoverable source.
 
 ## Where the primitives are
 
@@ -58,6 +60,16 @@ contract consistent across surfaces.
 - Extend an existing primitive rather than adding a near-duplicate.
 - Keep touch targets desk-appropriate. Hover may reveal detail but must not be required.
 - Preserve both software-only and hardware-connected layouts when changing a primitive.
+
+## Executable contract
+
+There is no standalone package gate. `npm run test:unit` runs the app-local component tests,
+Control UI typecheck, and production build. `npm run test:e2e-ui` exercises the real browser and
+operator layouts. Run both when changing shared presentation behavior.
+
+A future extraction is one coherent change: add tracked package source and its consumers together,
+then add package-specific tests or Storybook gates. Do not revive root scripts before that contract
+exists.
 
 ## Read first
 

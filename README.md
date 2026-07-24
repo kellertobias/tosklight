@@ -84,8 +84,8 @@ tour and still explore any file. `pages:generate` creates the responsive, deploy
   Selection; Value Spreading; the Portable Show; Add a Capability; Recording and Live References;
   Fixture Semantics; Playback Runtime; State Ownership to Pixels; and Rust/Tauri for TypeScript
   developers.
-- **Components** — Control UI, UI Library, Tauri apps, Backend/Application, Engine & Output, Help
-  Generator, and Testbench.
+- **Components** — Control UI, app-local UI primitives, Tauri apps, Backend/Application, Engine &
+  Output, Help Generator, and Testbench.
 - **Glossary** — the operator vocabulary (Cue, Playback, Programmer, patch) and the architecture
   concepts (action context, projections, revisions, tick budget) you need before reading the code.
 
@@ -109,6 +109,12 @@ Show objects use the kinds `patched_fixture`, `cue_list`, and `route` for the li
 [Build and test commands](docs/engineering/build-and-test-commands.md) documents every `npm run` dev, build, and test script, what `npm run test:architecture` enforces, and which check to run for which change.
 
 All persisted-data changes are also governed by the [backward-compatibility acceptance criteria](docs/acceptance-criteria.md). A feature is not complete until legacy-file behavior is migrated and tested, or the compatibility requirement has been explicitly decided with the operator.
+
+The repository does not currently ship a standalone UI package or Storybook. Reusable presentation
+primitives live in `apps/control-ui/src/components/common/` and
+`apps/control-ui/src/components/window-kit/`; their executable gates are the Control UI component
+tests, typecheck/production build in `npm run test:unit`, and the real-browser coverage in
+`npm run test:e2e-ui`.
 
 ```sh
 cargo test --workspace --no-fail-fast
