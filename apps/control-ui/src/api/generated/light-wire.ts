@@ -780,6 +780,24 @@ active_programmers: unknown[], highlight_states: Array<RuntimeBootstrapHighlight
 
 export type RuntimeReadinessSnapshot = { status: string, active_show: string | null, active_show_error: string | null, recovery_mode: boolean, snapshot_revision: number, };
 
+export type ScreenPlaybackSurfaceRow = { first_playback_slot: number, has_fader: boolean, button_count: number, };
+
+export type ScreenPlaybackSurfaceLayout = { playbacks_per_row: number, rows: Array<ScreenPlaybackSurfaceRow>, };
+
+export type ScreenPageMode = "follow_main" | "independent";
+
+export type ScreenConfiguration = { id: string, name: string, layout: unknown, show_dock: boolean, show_playbacks: boolean, playback_count: number, playback_rows: number, first_playback_slot: number, page_mode: ScreenPageMode, show_page_controls: boolean, desired_open: boolean, display_id: string | null, bounds: unknown, fullscreen: boolean, playback_layout: ScreenPlaybackSurfaceLayout | null, };
+
+export type ScreenConfigurationSnapshot = { screens: Array<ScreenConfiguration>, active_pages: Record<string, number>, };
+
+export type ScreenConfigurationActionRequest = { request_id: string, action: ScreenConfigurationAction, };
+
+export type ScreenConfigurationAction = { "type": "create", configuration: ScreenConfiguration, } | { "type": "update", screen_id: string, patch: ScreenConfigurationPatch, } | { "type": "delete", screen_id: string, } | { "type": "set_page", screen_id: string, page: number, };
+
+export type ScreenConfigurationPatch = { name: string | null, layout: unknown, show_dock: boolean | null, show_playbacks: boolean | null, playback_count: number | null, playback_rows: number | null, first_playback_slot: number | null, page_mode: ScreenPageMode | null, show_page_controls: boolean | null, desired_open: boolean | null, display_id: string | null, clear_display_id: boolean, bounds: unknown, clear_bounds: boolean, fullscreen: boolean | null, playback_layout: ScreenPlaybackSurfaceLayout | null, clear_playback_layout: boolean, };
+
+export type ScreenConfigurationActionOutcome = { request_id: string, replayed: boolean, screen: ScreenConfiguration | null, active_page: number | null, };
+
 export type VirtualPlaybackExclusionZone = { id: string, name: string, slots: Array<number>, };
 
 export type VirtualPlaybackExclusionSnapshot = { show_id: string, desks: { [key in string]: { [key in string]: Array<VirtualPlaybackExclusionZone> } }, };

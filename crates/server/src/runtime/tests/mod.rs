@@ -40,6 +40,8 @@ mod programming_interaction_ws_action_tests;
 mod programming_update_route_tests;
 #[path = "runtime_v2_route_tests.rs"]
 mod runtime_v2_route_tests;
+#[path = "screen_configuration_v2_tests.rs"]
+mod screen_configuration_v2_tests;
 #[path = "selective_import_route_tests.rs"]
 mod selective_import_route_tests;
 #[path = "show_library_v2_route_tests.rs"]

@@ -21,6 +21,7 @@ use crate::v2::programmer_priority::*;
 use crate::v2::programming::*;
 use crate::v2::programming_update::*;
 use crate::v2::runtime::*;
+use crate::v2::screen_configuration::*;
 use crate::v2::selective_import::*;
 use crate::v2::show_library::*;
 use crate::v2::show_objects::*;
@@ -42,11 +43,26 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(patch(config));
     declarations.extend(stage_layout(config));
     declarations.extend(runtime(config));
+    declarations.extend(screen_configuration(config));
     declarations.extend(virtual_playback_zones(config));
     declarations.extend(selective_import(config));
     declarations.extend(show_library(config));
     declarations.extend(interaction(config));
     declarations
+}
+
+fn screen_configuration(config: &Config) -> Vec<String> {
+    vec![
+        ScreenPlaybackSurfaceRow::decl(config),
+        ScreenPlaybackSurfaceLayout::decl(config),
+        ScreenPageMode::decl(config),
+        ScreenConfiguration::decl(config),
+        ScreenConfigurationSnapshot::decl(config),
+        ScreenConfigurationActionRequest::decl(config),
+        ScreenConfigurationAction::decl(config),
+        ScreenConfigurationPatch::decl(config),
+        ScreenConfigurationActionOutcome::decl(config),
+    ]
 }
 
 fn show_library(config: &Config) -> Vec<String> {

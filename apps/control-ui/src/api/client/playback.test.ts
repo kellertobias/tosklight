@@ -1,17 +1,37 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PlaybackActionRequest } from "../generated/light-wire";
 import {
-	DESK_ID,
 	cueProjection,
+	DESK_ID,
 	deskProjection,
 	GROUP_ID,
 	groupProjection,
 } from "../../features/playbackRuntime/testFixtures";
+import type { PlaybackActionRequest } from "../generated/light-wire";
+import type { ScreenConfiguration } from "../types";
 import { PlaybackApiClient } from "./playback";
 import type { LiveClientTransport } from "./transport";
 
 const REQUEST_ID = "playback-request-1";
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
+const SCREEN_ID = "22222222-2222-4222-8222-222222222222";
+
+const screen: ScreenConfiguration = {
+	id: SCREEN_ID,
+	name: "Screen",
+	layout: { desks: [], activeDeskId: "main" },
+	show_dock: true,
+	show_playbacks: true,
+	playback_count: 8,
+	playback_rows: 1,
+	first_playback_slot: 1,
+	page_mode: "follow_main",
+	show_page_controls: true,
+	desired_open: false,
+	display_id: null,
+	bounds: null,
+	fullscreen: false,
+	playback_layout: null,
+};
 
 const actionRequest: PlaybackActionRequest = {
 	request_id: REQUEST_ID,
@@ -142,6 +162,66 @@ describe("PlaybackApiClient v2 action boundary", () => {
 			name: "WireValidationError",
 			path: "$.request_id",
 			message: expect.stringContaining(`request ID ${REQUEST_ID}`),
+		});
+	});
+
+	it("creates screens through the typed v2 intent boundary", async () => {
+		const request = vi
+			.fn()
+			.mockResolvedValueOnce({ screens: [], active_pages: {} })
+			.mockResolvedValueOnce({
+				request_id: "screen-create",
+				replayed: false,
+				screen,
+				active_page: null,
+			});
+		const client = new PlaybackApiClient({
+			request,
+			blob: vi.fn(),
+			absoluteUrl: vi.fn(),
+			command: vi.fn(),
+			commandWithRequestId: vi.fn(),
+		} as unknown as LiveClientTransport);
+
+		await expect(client.putScreen(screen)).resolves.toEqual(screen);
+		expect(request).toHaveBeenNthCalledWith(1, "/api/v2/screens");
+		expect(request).toHaveBeenNthCalledWith(
+			2,
+			"/api/v2/screens/actions",
+			expect.objectContaining({
+				method: "POST",
+				body: expect.stringContaining('"type":"create"'),
+			}),
+		);
+	});
+
+	it("sends only changed screen fields after a v2 snapshot", async () => {
+		const request = vi
+			.fn()
+			.mockResolvedValueOnce({ screens: [screen], active_pages: {} })
+			.mockResolvedValueOnce({
+				request_id: "screen-update",
+				replayed: false,
+				screen: { ...screen, name: "Renamed" },
+				active_page: null,
+			});
+		const transport = {
+			request,
+			blob: vi.fn(),
+			absoluteUrl: vi.fn(),
+			command: vi.fn(),
+			commandWithRequestId: vi.fn(),
+		} as unknown as LiveClientTransport;
+		const client = new PlaybackApiClient(transport);
+		await client.screens();
+		await client.putScreen({ ...screen, name: "Renamed" });
+		const body = JSON.parse(request.mock.calls[1][1].body as string);
+
+		expect(request.mock.calls[0][0]).toBe("/api/v2/screens");
+		expect(body.action).toMatchObject({
+			type: "update",
+			screen_id: SCREEN_ID,
+			patch: { name: "Renamed", show_dock: null },
 		});
 	});
 

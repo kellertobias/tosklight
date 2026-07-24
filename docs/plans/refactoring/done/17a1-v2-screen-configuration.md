@@ -34,3 +34,19 @@ npm run test:e2e
 ## Decisions
 
 Inherited from chunk 17. No open decisions.
+
+## Result
+
+- Added generated screen configuration DTOs, an authenticated v2 snapshot, and one tolerant,
+  replay-safe action endpoint for explicit create, sparse update, delete, and independent-page
+  intents.
+- Migrated the control client to cache v2 snapshots, distinguish create from update safely, send only
+  changed fields, and use generated request contracts; removed all public v1 screen routes and
+  handlers.
+- Covered request replay/collision, future fields, sparse extension preservation, follow-main
+  rejection, independent pages, existing desk-store rows, client create/update payloads, and v1
+  route absence.
+- Verified wire contracts (83 tests plus generated-artifact check), server unit coverage (466 passed,
+  one ignored), frontend unit coverage (2,004 passed), architecture/formatting, and the full E2E
+  suite (285 passed, 11 intentional skips). The first sandboxed unit attempt hit the known CITP UDP
+  permission boundary; the complete escalated run passed.

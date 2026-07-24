@@ -150,6 +150,7 @@ mod programmer_group_commands;
 mod programmer_selection_values;
 mod programming_interaction;
 mod request_context;
+mod screen_configuration_v2;
 mod screens_playback;
 mod selective_import_adapter;
 mod selective_import_http;

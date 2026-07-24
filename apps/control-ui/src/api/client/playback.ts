@@ -3,9 +3,13 @@ import type {
 	PlaybackActionRequest,
 	PlaybackRuntimeIdentity,
 	PlaybackRuntimeSnapshot,
+	ScreenConfigurationAction,
+	ScreenConfigurationActionOutcome,
+	ScreenConfigurationActionRequest,
+	ScreenConfigurationPatch,
+	ScreenConfiguration as WireScreenConfiguration,
 } from "../generated/light-wire";
 import { decodePlaybackOutcome, decodePlaybackSnapshot } from "../playbackWire";
-import { WireValidationError } from "../wireValidation";
 import type {
 	ControlDesk,
 	PlaybackDefinition,
@@ -13,6 +17,7 @@ import type {
 	ScreenConfiguration,
 	ScreenSnapshot,
 } from "../types";
+import { WireValidationError } from "../wireValidation";
 import type { LiveClientTransport } from "./transport";
 
 type PoolPlaybackAction =
@@ -57,6 +62,9 @@ interface PlaybackPageSelectionOptions {
 }
 
 export class PlaybackApiClient {
+	private screensById = new Map<string, ScreenConfiguration>();
+	private screensLoaded = false;
+
 	constructor(private readonly transport: LiveClientTransport) {}
 
 	async playbackRuntimeSnapshot(
@@ -122,30 +130,40 @@ export class PlaybackApiClient {
 		return outcome;
 	}
 
-	screens(): Promise<ScreenSnapshot> {
-		return this.transport.request("/api/v1/screens");
+	async screens(): Promise<ScreenSnapshot> {
+		const snapshot =
+			await this.transport.request<ScreenSnapshot>("/api/v2/screens");
+		this.screensById = new Map(
+			snapshot.screens.map((screen) => [screen.id, screen]),
+		);
+		this.screensLoaded = true;
+		return snapshot;
 	}
 
-	putScreen(screen: ScreenConfiguration): Promise<ScreenConfiguration> {
-		return this.transport.request(`/api/v1/screens/${screen.id}`, {
-			method: "PUT",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(screen),
-		});
+	async putScreen(screen: ScreenConfiguration): Promise<ScreenConfiguration> {
+		if (!this.screensLoaded) await this.screens();
+		const existing = this.screensById.get(screen.id);
+		const action: ScreenConfigurationAction = existing
+			? {
+					type: "update",
+					screen_id: screen.id,
+					patch: screenPatch(existing, screen),
+				}
+			: { type: "create", configuration: wireScreen(screen) };
+		const outcome = await this.screenAction(action);
+		const saved = outcome.screen as ScreenConfiguration | null;
+		if (!saved) throw new Error("Screen update returned no screen");
+		this.screensById.set(saved.id, saved);
+		return saved;
 	}
 
-	deleteScreen(id: string): Promise<void> {
-		return this.transport.request(`/api/v1/screens/${id}`, {
-			method: "DELETE",
-		});
+	async deleteScreen(id: string): Promise<void> {
+		await this.screenAction({ type: "delete", screen_id: id });
+		this.screensById.delete(id);
 	}
 
-	setScreenPage(id: string, page: number) {
-		return this.transport.request(`/api/v1/screens/${id}/page`, {
-			method: "PUT",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ page }),
-		});
+	async setScreenPage(id: string, page: number): Promise<void> {
+		await this.screenAction({ type: "set_page", screen_id: id, page });
 	}
 
 	playbackAction(
@@ -246,4 +264,68 @@ export class PlaybackApiClient {
 			method: "DELETE",
 		});
 	}
+
+	private screenAction(
+		action: ScreenConfigurationAction,
+	): Promise<ScreenConfigurationActionOutcome> {
+		const request: ScreenConfigurationActionRequest = {
+			request_id: crypto.randomUUID(),
+			action,
+		};
+		return this.transport.request("/api/v2/screens/actions", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(request),
+		});
+	}
+}
+
+function wireScreen(screen: ScreenConfiguration): WireScreenConfiguration {
+	return {
+		...screen,
+		playback_layout: screen.playback_layout ?? null,
+	};
+}
+
+function screenPatch(
+	current: ScreenConfiguration,
+	next: ScreenConfiguration,
+): ScreenConfigurationPatch {
+	const changed = <T>(before: T, after: T) =>
+		JSON.stringify(before) === JSON.stringify(after) ? null : after;
+	return {
+		name: changed(current.name, next.name),
+		layout: changed(current.layout, next.layout),
+		show_dock: changed(current.show_dock, next.show_dock),
+		show_playbacks: changed(current.show_playbacks, next.show_playbacks),
+		playback_count: changed(current.playback_count, next.playback_count),
+		playback_rows: changed(current.playback_rows, next.playback_rows),
+		first_playback_slot: changed(
+			current.first_playback_slot,
+			next.first_playback_slot,
+		),
+		page_mode: changed(current.page_mode, next.page_mode),
+		show_page_controls: changed(
+			current.show_page_controls,
+			next.show_page_controls,
+		),
+		desired_open: changed(current.desired_open, next.desired_open),
+		display_id:
+			next.display_id == null
+				? null
+				: changed(current.display_id, next.display_id),
+		clear_display_id: current.display_id != null && next.display_id == null,
+		bounds: next.bounds == null ? null : changed(current.bounds, next.bounds),
+		clear_bounds: current.bounds != null && next.bounds == null,
+		fullscreen: changed(current.fullscreen, next.fullscreen),
+		playback_layout:
+			next.playback_layout == null
+				? null
+				: changed(
+						current.playback_layout ?? null,
+						next.playback_layout ?? null,
+					),
+		clear_playback_layout:
+			current.playback_layout != null && next.playback_layout == null,
+	};
 }
