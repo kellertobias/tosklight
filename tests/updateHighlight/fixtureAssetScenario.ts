@@ -239,12 +239,7 @@ async function loadCreatedProfile(
 ) {
 	const { manufacturer, name, physical, expectedAssets } = data;
 	const profile = (
-		await api.request<any[]>(
-			"GET",
-			"/api/v1/fixture-profiles",
-			undefined,
-			false,
-		)
+		(await api.fixtureLibrarySnapshot()).profiles as any[]
 	).find(
 		(candidate) =>
 			candidate.manufacturer === manufacturer && candidate.name === name,
@@ -307,12 +302,7 @@ async function createProfileRevision(
 		.click();
 	await expect(editor).toBeHidden();
 
-	const revisions = await api.request<any[]>(
-		"GET",
-		`/api/v1/fixture-profiles/${profile.id}/revisions`,
-		undefined,
-		false,
-	);
+	const revisions = await api.fixtureProfileRevisions<any>(profile.id);
 	expect(revisions.map((candidate) => candidate.revision)).toEqual([1, 2]);
 	expect(revisions[0]).toMatchObject({
 		photograph_asset: null,

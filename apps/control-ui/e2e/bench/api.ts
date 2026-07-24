@@ -1,5 +1,11 @@
 import type { SoftwareKey } from "../../../shared/programmerKeypad";
 import type {
+  FixtureLibraryAction,
+  FixtureLibraryActionOutcome,
+  FixtureDefinitionsSnapshot,
+  FixtureLibraryWarningsSnapshot,
+  FixtureProfilesSnapshot,
+  FixtureProfileRevisionsSnapshot,
   PlaybackAction,
   PlaybackActionOutcome,
   PlaybackAddress,
@@ -10,6 +16,11 @@ import { projectionToPatchedFixture } from "../../src/features/patch/model";
 
 export interface Session { session_id: string; client_id: string; token: string; user: { id: string; name: string }; desk: { id: string; osc_alias: string } }
 export interface CommandResponse<T = unknown> { protocol_version: number; request_id: string; ok: boolean; revision: number; payload?: T; error?: string }
+export interface FixtureLibrarySnapshot {
+  definitions: unknown[];
+  profiles: unknown[];
+  warnings: string[];
+}
 
 export type CommandTarget = "FIXTURE" | "GROUP";
 export type CommandKeyPhase = "press" | "release";
@@ -300,6 +311,57 @@ export class ApiDriver {
     const response = await this.response(method, path, body, authenticate, revision, context);
     if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
+  }
+
+  async fixtureLibrarySnapshot(): Promise<FixtureLibrarySnapshot> {
+    const [definitions, profiles, warnings] = await Promise.all([
+      this.fixtureDefinitionsSnapshot(),
+      this.fixtureProfilesSnapshot(),
+      this.fixtureLibraryWarningsSnapshot(),
+    ]);
+    return {
+      definitions: definitions.definitions,
+      profiles: profiles.profiles,
+      warnings: warnings.warnings,
+    };
+  }
+
+  fixtureDefinitionsSnapshot(): Promise<FixtureDefinitionsSnapshot> {
+    return this.request("GET", "/api/v2/fixture-library/definitions");
+  }
+
+  fixtureProfilesSnapshot(): Promise<FixtureProfilesSnapshot> {
+    return this.request("GET", "/api/v2/fixture-library/profiles");
+  }
+
+  fixtureLibraryWarningsSnapshot(): Promise<FixtureLibraryWarningsSnapshot> {
+    return this.request("GET", "/api/v2/fixture-library/warnings");
+  }
+
+  async fixtureProfileRevisions<T = unknown>(id: string): Promise<T[]> {
+    const snapshot = await this.request<FixtureProfileRevisionsSnapshot>(
+      "GET",
+      `/api/v2/fixture-library/profiles/${encodeURIComponent(id)}/revisions`,
+    );
+    return snapshot.profiles as T[];
+  }
+
+  async fixtureLibraryAction<T = FixtureLibraryActionOutcome["result"]>(
+    action: FixtureLibraryAction,
+  ): Promise<T> {
+    const outcome = await this.request<FixtureLibraryActionOutcome>(
+      "POST",
+      "/api/v2/fixture-library",
+      { request_id: crypto.randomUUID(), action },
+    );
+    return outcome.result as T;
+  }
+
+  importFixturePackage(source: Uint8Array): Promise<FixtureLibraryActionOutcome["result"]> {
+    return this.fixtureLibraryAction({
+      type: "import_package",
+      package_base64: Buffer.from(source).toString("base64"),
+    });
   }
 
   playbackNumberAction<T = PlaybackActionOutcome>(

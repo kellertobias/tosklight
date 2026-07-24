@@ -32,7 +32,11 @@ pairedScenario<FixtureProfileState>({
 		const profile = blankFixtureProfile();
 		profile.manufacturer = state.manufacturer;
 		profile.name = state.name;
-		await api.request("PUT", "/api/v1/fixture-profiles", profile, true, 0);
+		await api.fixtureLibraryAction({
+			type: "save_profile",
+			profile,
+			expected_revision: 0,
+		});
 	},
 	ui: async ({ bench, desk, page }, state) => {
 		await desk.open(bench.baseUrl);
@@ -58,12 +62,7 @@ pairedScenario<FixtureProfileState>({
 		await expect(editor).toBeHidden();
 	},
 	assert: async ({ api }, state) => {
-		const profiles = await api.request<any[]>(
-			"GET",
-			"/api/v1/fixture-profiles",
-			undefined,
-			false,
-		);
+		const profiles = (await api.fixtureLibrarySnapshot()).profiles as any[];
 		const profile = profiles.find(
 			(candidate) =>
 				candidate.manufacturer === state.manufacturer &&
@@ -76,12 +75,7 @@ pairedScenario<FixtureProfileState>({
 			name: "Default",
 			splits: [{ number: 1, footprint: 1 }],
 		});
-		const revisions = await api.request<any[]>(
-			"GET",
-			`/api/v1/fixture-profiles/${profile.id}/revisions`,
-			undefined,
-			false,
-		);
+		const revisions = await api.fixtureProfileRevisions<any>(profile.id);
 		expect(revisions.map((candidate) => candidate.revision)).toEqual([1]);
 	},
 });

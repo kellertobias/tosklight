@@ -373,6 +373,31 @@ fn round_trips_profile_and_embedded_assets() {
 }
 
 #[test]
+fn shipped_fresnel_round_trips_without_identity_or_asset_loss() {
+    let original = shipped_profile("generic--dimmer-fresnel.toskfixture");
+    let exported = write_fixture_package(&original).unwrap();
+    let restored = read_fixture_package(&exported).unwrap();
+    assert_eq!(
+        serde_json::to_value(&restored).unwrap(),
+        serde_json::to_value(&original).unwrap()
+    );
+    assert_eq!(
+        restored
+            .modes
+            .iter()
+            .map(|mode| mode.id)
+            .collect::<Vec<_>>(),
+        original
+            .modes
+            .iter()
+            .map(|mode| mode.id)
+            .collect::<Vec<_>>()
+    );
+    assert!(restored.stage_icon_asset.is_some());
+    assert!(restored.model_asset.is_some());
+}
+
+#[test]
 fn rejects_unsafe_duplicate_and_unreferenced_paths() {
     let manifest = serde_json::to_vec(&FixturePackageManifest::new(profile())).unwrap();
     assert!(read_fixture_package(&archive(&[("../fixture.json", &manifest)])).is_err());

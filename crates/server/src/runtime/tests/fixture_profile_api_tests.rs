@@ -33,11 +33,20 @@ async fn fixture_profile_api_rejects_invalid_discrete_wheel_before_storing_revis
 
     let response = app
         .oneshot(
-            Request::put("/api/v1/fixture-profiles")
+            Request::post("/api/v2/fixture-library")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
-                .header(header::IF_MATCH, "0")
-                .body(Body::from(serde_json::to_vec(&profile).unwrap()))
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": "invalid-wheel",
+                        "action": {
+                            "type": "save_profile",
+                            "profile": profile,
+                            "expected_revision": 0
+                        }
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -192,7 +201,7 @@ async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
 }
 
 #[tokio::test]
-async fn fixture_profile_api_assigns_atomic_revisions_retains_gdtf_and_rejects_stale_edits() {
+async fn fixture_library_v2_is_replay_safe_and_preserves_package_and_gdtf_bytes() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -205,24 +214,44 @@ async fn fixture_profile_api_assigns_atomic_revisions_retains_gdtf_and_rejects_s
     let created = app
         .clone()
         .oneshot(
-            Request::put("/api/v1/fixture-profiles")
+            Request::post("/api/v2/fixture-library")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
-                .header(header::IF_MATCH, "0")
-                .body(Body::from(serde_json::to_vec(&profile).unwrap()))
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": "create-orbit",
+                        "action": {
+                            "type": "save_profile",
+                            "profile": profile,
+                            "expected_revision": 0,
+                            "future_hint": true
+                        },
+                        "future_root": true
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(created.status(), StatusCode::OK);
     let created = json(created).await;
-    assert_eq!(created["revision"], 1);
+    assert_eq!(created["result"]["revision"], 1);
+    let created_profile = serde_json::to_value(
+        state
+            .fixture_library
+            .lock()
+            .profile(profile_id, 1)
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
 
     let exported = app
         .clone()
         .oneshot(
             Request::get(format!(
-                "/api/v1/fixture-profiles/{}/1/package",
+                "/api/v2/fixture-library/profiles/{}/revisions/1/package",
                 profile_id.0
             ))
             .header(header::AUTHORIZATION, format!("Bearer {token}"))
@@ -244,28 +273,67 @@ async fn fixture_profile_api_assigns_atomic_revisions_retains_gdtf_and_rejects_s
     let imported = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/fixture-packages/import")
+            Request::post("/api/v2/fixture-library")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(
-                    header::CONTENT_TYPE,
-                    light_fixture::FIXTURE_PACKAGE_MIME_TYPE,
-                )
-                .body(Body::from(package))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": "import-orbit",
+                        "action": {
+                            "type": "import_package",
+                            "package_base64": STANDARD.encode(&package)
+                        }
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(imported.status(), StatusCode::OK);
-    assert_eq!(json(imported).await["revision"], 1);
+    let imported = json(imported).await;
+    assert_eq!(imported["result"]["revision"], 1);
+    assert!(!imported["replayed"].as_bool().unwrap());
+
+    let replayed = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/fixture-library")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": "import-orbit",
+                        "action": {
+                            "type": "import_package",
+                            "package_base64": STANDARD.encode(&package)
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(json(replayed).await["replayed"].as_bool().unwrap());
 
     let stale = app
         .clone()
         .oneshot(
-            Request::put("/api/v1/fixture-profiles")
+            Request::post("/api/v2/fixture-library")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
-                .header(header::IF_MATCH, "0")
-                .body(Body::from(created.to_string()))
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": "stale-orbit",
+                        "action": {
+                            "type": "save_profile",
+                            "profile": created_profile,
+                            "expected_revision": 0
+                        }
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -276,18 +344,26 @@ async fn fixture_profile_api_assigns_atomic_revisions_retains_gdtf_and_rejects_s
     let retained = app
         .clone()
         .oneshot(
-            Request::put(format!(
-                "/api/v1/fixture-profiles/{}/1/source-gdtf",
-                profile_id.0
-            ))
+            Request::post("/api/v2/fixture-library")
             .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::CONTENT_TYPE, "application/octet-stream")
-            .body(Body::from(source.as_slice()))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "request_id": "attach-orbit-gdtf",
+                    "action": {
+                        "type": "attach_gdtf",
+                        "profile_id": profile_id.0,
+                        "revision": 1,
+                        "source_base64": STANDARD.encode(source)
+                    }
+                })
+                .to_string(),
+            ))
             .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(retained.status(), StatusCode::NO_CONTENT);
+    assert_eq!(retained.status(), StatusCode::OK);
     assert_eq!(
         state
             .fixture_library
@@ -302,26 +378,62 @@ async fn fixture_profile_api_assigns_atomic_revisions_retains_gdtf_and_rejects_s
         .clone()
         .oneshot(
             Request::get(format!(
-                "/api/v1/fixture-profiles/{}/revisions",
+                "/api/v2/fixture-library/profiles/{}/revisions",
                 profile_id.0
             ))
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(revisions.status(), StatusCode::OK);
-    assert_eq!(json(revisions).await.as_array().unwrap().len(), 1);
+    assert_eq!(
+        json(revisions).await["profiles"].as_array().unwrap().len(),
+        1
+    );
 
-    let warnings = app
-        .oneshot(
-            Request::get("/api/v1/fixture-profiles/warnings")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(warnings.status(), StatusCode::OK);
-    assert!(json(warnings).await.as_array().unwrap().is_empty());
+    for (path, field) in [
+        ("/api/v2/fixture-library/definitions", "definitions"),
+        ("/api/v2/fixture-library/profiles", "profiles"),
+        ("/api/v2/fixture-library/warnings", "warnings"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(path)
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(json(response).await[field].is_array());
+    }
+
+    for (method, path) in [
+        ("GET", "/api/v1/fixture-library"),
+        ("PUT", "/api/v1/fixture-library"),
+        ("DELETE", "/api/v1/fixture-library/00000000-0000-0000-0000-000000000001/1"),
+        ("GET", "/api/v1/fixture-profiles"),
+        ("PUT", "/api/v1/fixture-profiles"),
+        ("GET", "/api/v1/fixture-profiles/warnings"),
+        ("GET", "/api/v1/fixture-profiles/00000000-0000-0000-0000-000000000001/revisions"),
+        ("DELETE", "/api/v1/fixture-profiles/00000000-0000-0000-0000-000000000001/1"),
+        ("GET", "/api/v1/fixture-profiles/00000000-0000-0000-0000-000000000001/1/package"),
+        ("POST", "/api/v1/fixture-packages/import"),
+        ("PUT", "/api/v1/fixture-profiles/00000000-0000-0000-0000-000000000001/1/source-gdtf"),
+    ] {
+        let request = Request::builder()
+            .method(method)
+            .uri(path)
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            app.clone().oneshot(request).await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+    }
     let _ = std::fs::remove_dir_all(data_dir);
 }

@@ -889,19 +889,74 @@ describe("LightApiClient fixture-profile contracts", () => {
 					user: { id: "user-a", name: "Operator", enabled: true },
 				}),
 			)
-			.mockResolvedValueOnce(response([profile]))
-			.mockResolvedValueOnce(response(["A legacy mode could not be migrated"]))
-			.mockResolvedValueOnce(response([profile]))
-			.mockResolvedValueOnce(response({ ...profile, revision: 4 }))
-			.mockResolvedValueOnce(new Response(null, { status: 204 }))
-			.mockResolvedValueOnce(response(profile))
+			.mockResolvedValueOnce(
+				response({ profiles: [profile] }),
+			)
+			.mockResolvedValueOnce(
+				response({
+					warnings: ["A legacy mode could not be migrated"],
+				}),
+			)
+			.mockResolvedValueOnce(response({ profiles: [profile] }))
+			.mockResolvedValueOnce(
+				response({
+					request_id: "save-profile",
+					replayed: false,
+					result: {
+						type: "profile",
+						profile_id: profile.id,
+						revision: 4,
+					},
+				}),
+			)
+			.mockResolvedValueOnce(
+				response({
+					profiles: [{ ...profile, revision: 4 }],
+				}),
+			)
+			.mockResolvedValueOnce(
+				response({
+					request_id: "attach-gdtf",
+					replayed: false,
+					result: {
+						type: "gdtf_attached",
+						profile_id: profile.id,
+						revision: profile.revision,
+					},
+				}),
+			)
+			.mockResolvedValueOnce(
+				response({
+					request_id: "import-package",
+					replayed: false,
+					result: {
+						type: "profile",
+						profile_id: profile.id,
+						revision: profile.revision,
+					},
+				}),
+			)
+			.mockResolvedValueOnce(
+				response({ profiles: [profile] }),
+			)
 			.mockResolvedValueOnce(
 				new Response(new Uint8Array([0x50, 0x4b]), {
 					status: 200,
 					headers: { "content-type": "application/vnd.tosklight.fixture+zip" },
 				}),
 			)
-			.mockResolvedValueOnce(new Response(null, { status: 204 }));
+			.mockResolvedValueOnce(
+				response({
+					request_id: "delete-profile",
+					replayed: false,
+					result: {
+						type: "deleted",
+						resource: "profile",
+						id: profile.id,
+						revision: profile.revision,
+					},
+				}),
+			);
 		vi.stubGlobal("fetch", fetchMock);
 		const client = new LightApiClient("http://desk.local");
 		await client.login("Operator");
@@ -920,30 +975,29 @@ describe("LightApiClient fixture-profile contracts", () => {
 		await client.deleteFixtureProfile(profile.id, profile.revision);
 
 		expect(fetchMock.mock.calls.slice(1).map((call) => call[0])).toEqual([
-			"http://desk.local/api/v1/fixture-profiles",
-			"http://desk.local/api/v1/fixture-profiles/warnings",
-			"http://desk.local/api/v1/fixture-profiles/profile-a/revisions",
-			"http://desk.local/api/v1/fixture-profiles",
-			"http://desk.local/api/v1/fixture-profiles/profile-a/3/source-gdtf",
-			"http://desk.local/api/v1/fixture-packages/import",
-			"http://desk.local/api/v1/fixture-profiles/profile-a/3/package",
-			"http://desk.local/api/v1/fixture-profiles/profile-a/3",
+			"http://desk.local/api/v2/fixture-library/profiles",
+			"http://desk.local/api/v2/fixture-library/warnings",
+			"http://desk.local/api/v2/fixture-library/profiles/profile-a/revisions",
+			"http://desk.local/api/v2/fixture-library",
+			"http://desk.local/api/v2/fixture-library/profiles",
+			"http://desk.local/api/v2/fixture-library",
+			"http://desk.local/api/v2/fixture-library",
+			"http://desk.local/api/v2/fixture-library/profiles",
+			"http://desk.local/api/v2/fixture-library/profiles/profile-a/revisions/3/package",
+			"http://desk.local/api/v2/fixture-library",
 		]);
-		expect(fetchMock.mock.calls[4][1].method).toBe("PUT");
-		expect(
-			(fetchMock.mock.calls[4][1].headers as Headers).get("if-match"),
-		).toBe("3");
-		expect(fetchMock.mock.calls[5][1].method).toBe("PUT");
-		expect(
-			(fetchMock.mock.calls[5][1].headers as Headers).get("content-type"),
-		).toBe("application/octet-stream");
+		expect(fetchMock.mock.calls[4][1].method).toBe("POST");
 		expect(fetchMock.mock.calls[6][1].method).toBe("POST");
 		expect(
 			(fetchMock.mock.calls[6][1].headers as Headers).get("content-type"),
-		).toBe("application/vnd.tosklight.fixture+zip");
+		).toBe("application/json");
+		expect(fetchMock.mock.calls[7][1].method).toBe("POST");
 		expect(
-			(fetchMock.mock.calls[7][1].headers as Headers).get("authorization"),
+			(fetchMock.mock.calls[7][1].headers as Headers).get("content-type"),
+		).toBe("application/json");
+		expect(
+			(fetchMock.mock.calls[9][1].headers as Headers).get("authorization"),
 		).toBe("Bearer token-a");
-		expect(fetchMock.mock.calls[8][1].method).toBe("DELETE");
+		expect(fetchMock.mock.calls[10][1].method).toBe("POST");
 	});
 });

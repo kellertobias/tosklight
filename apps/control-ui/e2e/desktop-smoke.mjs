@@ -51,15 +51,18 @@ async function ownedServerScenario() {
     if (!bootstrap.attribute_registry?.some((attribute) => attribute.id === "intensity")) {
       throw new Error("DESKTOP-001 packaged desk did not expose the canonical fixture attribute registry");
     }
-    const fixtureProfiles = await authenticated(seeder.token, port, "GET", "/api/v1/fixture-profiles");
+    const ready = await waitForValue(async () => JSON.parse(await fs.readFile(marker, "utf8")), 15_000, "DESKTOP-001 frontend-ready marker");
+    if (ready.ready !== true || ready.server !== `127.0.0.1:${port}`) throw new Error(`DESKTOP-001 invalid frontend marker: ${JSON.stringify(ready)}`);
+    const session = await request(port, "POST", "/api/v2/sessions", { username: "Operator" });
+    const fixtureProfiles = (
+      await authenticated(session.token, port, "GET", "/api/v2/fixture-library/profiles")
+    ).profiles;
     if (!fixtureProfiles.length || fixtureProfiles.some((profile) => profile.schema_version !== 2 || profile.revision < 1)) {
       throw new Error("DESKTOP-001 packaged desk did not start with revisioned schema-v2 fixture profiles");
     }
     if (!fixtureProfiles.some((profile) => profile.manufacturer === "Generic") || fixtureProfiles.some((profile) => profile.reserved_source != null)) {
       throw new Error("DESKTOP-001 packaged desk did not load transferable Generic fixture packages");
     }
-    const ready = await waitForValue(async () => JSON.parse(await fs.readFile(marker, "utf8")), 15_000, "DESKTOP-001 frontend-ready marker");
-    if (ready.ready !== true || ready.server !== `127.0.0.1:${port}`) throw new Error(`DESKTOP-001 invalid frontend marker: ${JSON.stringify(ready)}`);
 
     await waitForExit(desktop.child, 8_000, "DESKTOP-001 app exit");
     await waitFor(async () => !pidAlive(childPid), 5_000, `DESKTOP-001 child PID ${childPid} exit`);

@@ -6,6 +6,7 @@ use crate::v2::cue_deletion::*;
 use crate::v2::cue_recording::*;
 use crate::v2::cue_transfer::*;
 use crate::v2::events::*;
+use crate::v2::fixture_library::*;
 use crate::v2::group_management::*;
 use crate::v2::group_recording::*;
 use crate::v2::output_runtime::*;
@@ -40,6 +41,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(output_runtime_transport(config));
     declarations.extend(speed_group_transport(config));
     declarations.extend(event_payload(config));
+    declarations.extend(fixture_library(config));
     declarations.extend(playback_transport(config));
     declarations.extend(playback_topology(config));
     declarations.extend(patch(config));
@@ -51,6 +53,20 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(show_library(config));
     declarations.extend(interaction(config));
     declarations
+}
+
+fn fixture_library(config: &Config) -> Vec<String> {
+    vec![
+        FixtureDefinitionsSnapshot::decl(config),
+        FixtureProfilesSnapshot::decl(config),
+        FixtureLibraryWarningsSnapshot::decl(config),
+        FixtureProfileRevisionsSnapshot::decl(config),
+        FixtureLibraryActionRequest::decl(config),
+        FixtureLibraryAction::decl(config),
+        FixtureLibraryActionOutcome::decl(config),
+        FixtureLibraryActionResult::decl(config),
+        FixtureLibraryResource::decl(config),
+    ]
 }
 
 fn control_desk_configuration(config: &Config) -> Vec<String> {

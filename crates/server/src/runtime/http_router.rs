@@ -19,7 +19,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(stage_layout_http::router())
         .merge(selective_import_http::router())
         .merge(operator_routes())
-        .merge(fixture_routes())
+        .merge(fixture_api::router())
         .merge(media_and_output_routes())
         .merge(session_routes())
         .merge(show_routes())
@@ -36,46 +36,6 @@ fn operator_routes() -> Router<AppState> {
         .route("/api/v2/readiness", get(readiness))
         .route("/api/v2/diagnostics", get(diagnostics))
         .route("/api/v2/bootstrap", get(bootstrap_v2))
-}
-
-fn fixture_routes() -> Router<AppState> {
-    Router::new()
-        .route(
-            "/api/v1/fixture-library",
-            get(list_fixture_library).put(put_fixture_library),
-        )
-        .route(
-            "/api/v1/fixture-library/{id}/{revision}",
-            delete(delete_fixture_library),
-        )
-        .route(
-            "/api/v1/fixture-profiles",
-            get(list_fixture_profiles).put(put_fixture_profile),
-        )
-        .route(
-            "/api/v1/fixture-profiles/warnings",
-            get(list_fixture_profile_warnings),
-        )
-        .route(
-            "/api/v1/fixture-profiles/{id}/revisions",
-            get(list_fixture_profile_revisions),
-        )
-        .route(
-            "/api/v1/fixture-profiles/{id}/{revision}",
-            delete(delete_fixture_profile),
-        )
-        .route(
-            "/api/v1/fixture-profiles/{id}/{revision}/package",
-            get(export_fixture_package),
-        )
-        .route(
-            "/api/v1/fixture-packages/import",
-            post(import_fixture_package),
-        )
-        .route(
-            "/api/v1/fixture-profiles/{id}/{revision}/source-gdtf",
-            put(put_fixture_profile_source_gdtf),
-        )
 }
 
 fn media_and_output_routes() -> Router<AppState> {

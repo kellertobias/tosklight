@@ -529,6 +529,24 @@ export type EventClientMessage = { "type": "subscribe", filter: EventSubscriptio
 
 export type EventServerMessage = { "type": "ready", cursor: EventSnapshotCursor, } | { "type": "event", event: EventEnvelope, } | { "type": "gap", gap: SequenceGap, } | { "type": "repaired", cursor: EventSnapshotCursor, } | { "type": "error", error: string, };
 
+export type FixtureDefinitionsSnapshot = { definitions: unknown[], };
+
+export type FixtureProfilesSnapshot = { profiles: unknown[], };
+
+export type FixtureLibraryWarningsSnapshot = { warnings: Array<string>, };
+
+export type FixtureProfileRevisionsSnapshot = { profiles: unknown[], };
+
+export type FixtureLibraryActionRequest = { request_id: string, action: FixtureLibraryAction, };
+
+export type FixtureLibraryAction = { "type": "save_profile", profile: unknown, expected_revision: number, } | { "type": "delete_profile_revision", profile_id: string, revision: number, } | { "type": "import_package", package_base64: string, } | { "type": "attach_gdtf", profile_id: string, revision: number, source_base64: string, } | { "type": "save_definition", definition: unknown, } | { "type": "delete_definition_revision", definition_id: string, revision: number, };
+
+export type FixtureLibraryActionOutcome = { request_id: string, replayed: boolean, result: FixtureLibraryActionResult, };
+
+export type FixtureLibraryActionResult = { "type": "profile", profile_id: string, revision: number, } | { "type": "definition", definition_id: string, revision: number, } | { "type": "deleted", resource: FixtureLibraryResource, id: string, revision: number, } | { "type": "gdtf_attached", profile_id: string, revision: number, };
+
+export type FixtureLibraryResource = "profile" | "definition";
+
 export type PlaybackOverview = { cue_lists: unknown[], pool: unknown[], pages: unknown[], active: unknown[], desk: RuntimeControlDesk, active_page: number, selected_playback: number | null, authoritative_controls: unknown, };
 
 export type PlaybackActionRequest = {

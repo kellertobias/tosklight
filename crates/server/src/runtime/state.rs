@@ -51,6 +51,8 @@ pub(super) struct AppState {
     pub(super) show_patch: ShowPatchService,
     pub(super) show_library_replay:
         Arc<tokio::sync::Mutex<show_library_v2::ShowLibraryReplayCache>>,
+    pub(super) fixture_library_replay:
+        Arc<tokio::sync::Mutex<fixture_api_replay::FixtureLibraryReplayCache>>,
     pub(super) show_object_replay: Arc<tokio::sync::Mutex<show_objects_v2::ShowObjectReplayCache>>,
     pub(super) show_object_intent_replay:
         Arc<tokio::sync::Mutex<show_object_intents_v2::ShowObjectIntentReplayCache>>,

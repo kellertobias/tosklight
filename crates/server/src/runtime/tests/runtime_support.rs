@@ -65,6 +65,7 @@ fn test_state_with_programmers(
             playback_topology: PlaybackTopologyService::new(active_show_service.clone()),
             show_patch: ShowPatchService::new(active_show_service.clone()),
             show_library_replay: Arc::default(),
+            fixture_library_replay: Arc::default(),
             show_object_replay: Arc::default(),
             show_object_intent_replay: Arc::default(),
             screen_configuration_replay: Arc::default(),

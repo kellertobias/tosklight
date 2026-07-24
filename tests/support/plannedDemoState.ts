@@ -34,20 +34,12 @@ const PLANNED_DEMO_PACKAGES = [
 ] as const;
 
 export async function ensurePlannedDemoFixtureLibrary(api: ApiDriver): Promise<void> {
-  let profiles = await api.request<FixtureProfile[]>("GET", "/api/v1/fixture-profiles", undefined, false);
+  let profiles = (await api.fixtureLibrarySnapshot()).profiles as FixtureProfile[];
   for (const [manufacturer, name, archive] of PLANNED_DEMO_PACKAGES) {
     if (profiles.some((candidate) => candidate.manufacturer === manufacturer && candidate.name === name)) continue;
     const bytes = await fs.readFile(new URL(`../../assets/fixture-library/${archive}`, import.meta.url));
-    const response = await fetch(`${api.baseUrl}/api/v1/fixture-packages/import`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${api.session?.token}`,
-        "content-type": "application/vnd.tosklight.fixture+zip",
-      },
-      body: bytes,
-    });
-    if (!response.ok) throw new Error(`Importing ${archive} returned ${response.status}: ${await response.text()}`);
-    profiles = await api.request<FixtureProfile[]>("GET", "/api/v1/fixture-profiles", undefined, false);
+    await api.importFixturePackage(bytes);
+    profiles = (await api.fixtureLibrarySnapshot()).profiles as FixtureProfile[];
   }
 }
 
@@ -85,8 +77,9 @@ export async function seedPlannedDemoPatch(
   selectedLayerIds?: readonly string[],
 ): Promise<PlannedDemoRig> {
   await ensurePlannedDemoFixtureLibrary(api);
-  const legacyLibrary = await api.request<FixtureDefinition[]>("GET", "/api/v1/fixture-library", undefined, false);
-  const profiles = await api.request<FixtureProfile[]>("GET", "/api/v1/fixture-profiles", undefined, false);
+  const snapshot = await api.fixtureLibrarySnapshot();
+  const legacyLibrary = snapshot.definitions as FixtureDefinition[];
+  const profiles = snapshot.profiles as FixtureProfile[];
   const library = [...legacyLibrary, ...fixtureDefinitionsFromProfiles(profiles)];
   const definition = (manufacturer: string, name: string, mode: string) => {
     const found = library.find((candidate) => candidate.manufacturer === manufacturer && candidate.name === name && candidate.mode === mode);

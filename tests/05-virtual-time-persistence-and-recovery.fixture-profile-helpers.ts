@@ -12,23 +12,13 @@ export type LegacyFixtureRow = {
 };
 
 export async function fixtureProfiles(api: ApiDriver): Promise<any[]> {
-	return api.request<any[]>(
-		"GET",
-		"/api/v1/fixture-profiles",
-		undefined,
-		false,
-	);
+	return (await api.fixtureProfilesSnapshot()).profiles;
 }
 
 export async function fixtureProfileWarnings(
 	api: ApiDriver,
 ): Promise<string[]> {
-	return api.request<string[]>(
-		"GET",
-		"/api/v1/fixture-profiles/warnings",
-		undefined,
-		false,
-	);
+	return (await api.fixtureLibraryWarningsSnapshot()).warnings;
 }
 
 export function transferableProfileSnapshot(profiles: any[]): any[] {
