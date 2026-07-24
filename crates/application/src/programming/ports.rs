@@ -1,4 +1,4 @@
-use super::{CueMoveCopyChoice, ExecutionPolicy};
+use super::{CueMoveCopyChoice, ExecutionPolicy, ProgrammingShowUndoTarget};
 use crate::{ActionContext, ActionError};
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use light_programmer::GroupDefinition;
@@ -95,6 +95,17 @@ pub trait ProgrammingPorts: Send + Sync {
     }
 
     fn persist(&self, context: &ActionContext, operation: &'static str) -> Option<String>;
+
+    fn undo_show_recording(
+        &self,
+        _context: &ActionContext,
+        _target: &ProgrammingShowUndoTarget,
+    ) -> Result<light_core::Revision, ActionError> {
+        Err(ActionError::new(
+            crate::ActionErrorKind::Unavailable,
+            "show recording undo is unavailable",
+        ))
+    }
 
     fn capture_programmer_on_preload(&self, _context: &ActionContext) -> bool {
         true

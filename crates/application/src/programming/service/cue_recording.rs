@@ -4,6 +4,7 @@ use crate::{
     ProgrammingCueActivationPolicy, ProgrammingCueActivationResult, ProgrammingCueCapturePolicy,
     ProgrammingCueCommit, ProgrammingCueCommitResult, ProgrammingCueRecordOutcome,
     ProgrammingCueRecordRequest, ProgrammingCueRecordResult, ProgrammingCueRecordingPorts,
+    ProgrammingShowUndoObject, ProgrammingShowUndoOperation, ProgrammingShowUndoTarget,
 };
 use light_core::{SessionId, UserId};
 use light_programmer::{
@@ -76,6 +77,41 @@ impl ProgrammingService {
             completion,
             runtime,
         );
+        if result.outcome.show_event_sequence().is_some() {
+            let projections = result.outcome.projections();
+            let created_cue_list = projections.cue_list.object_revision == 1;
+            let objects = std::iter::once(&projections.cue_list)
+                .chain(
+                    created_cue_list
+                        .then_some(projections.playback.as_ref())
+                        .flatten(),
+                )
+                .chain(
+                    created_cue_list
+                        .then_some(projections.page.as_ref())
+                        .flatten(),
+                )
+                .map(|projection| ProgrammingShowUndoObject {
+                    kind: projection.kind,
+                    object_id: projection.object_id.clone(),
+                    expected_object_revision: projection.object_revision,
+                    operation: if projection.object_revision == 1 {
+                        ProgrammingShowUndoOperation::DeleteCreated
+                    } else {
+                        ProgrammingShowUndoOperation::RestorePrevious
+                    },
+                })
+                .collect();
+            self.remember_show_mutation(
+                identity.session_id,
+                identity.user_id,
+                identity.desk_id,
+                ProgrammingShowUndoTarget {
+                    show_id: projections.show_id,
+                    objects,
+                },
+            );
+        }
         self.remember_cue_recording(identity, envelope.command, result.clone());
         Ok(result)
     }

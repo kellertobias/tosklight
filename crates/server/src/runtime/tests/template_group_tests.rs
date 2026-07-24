@@ -117,22 +117,23 @@ impl TemplateGroupScenario {
             .app
             .clone()
             .oneshot(
-                Request::post(format!(
-                    "/api/v1/shows/{}/preload/store",
-                    self.entry.id.0
-                ))
+                Request::post("/api/v2/preload/record")
                 .header(
                     header::AUTHORIZATION,
                     format!("Bearer {}", self.token),
                 )
+                .header("x-tosk-show", self.entry.id.0.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
-                .header(header::IF_MATCH, "1")
                 .body(Body::from(
                     serde_json::json!({
-                        "target": "cue",
-                        "target_id": self.cue_object_id(),
-                        "cue_number": 2.0,
-                        "name": "Preloaded position"
+                        "request_id": Uuid::new_v4().to_string(),
+                        "action": {
+                            "type": "cue",
+                            "cue_list_id": self.cue_object_id(),
+                            "expected_revision": 1,
+                            "cue_number": 2.0,
+                            "name": "Preloaded position"
+                        }
                     })
                     .to_string(),
                 ))
@@ -141,7 +142,7 @@ impl TemplateGroupScenario {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(json(response).await["revision"], 2);
+        assert_eq!(json(response).await["object"]["revision"], 2);
         let persisted = self.stored_cue_list();
         assert_eq!(persisted.cues.len(), 2);
         assert!(persisted.cues[1].group_changes.iter().any(|change| {

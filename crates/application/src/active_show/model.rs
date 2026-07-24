@@ -123,6 +123,33 @@ pub struct UndoActiveShowObjectResult {
     pub event_sequence: u64,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UndoActiveShowRecordingOperation {
+    RestorePrevious,
+    DeleteCreated,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UndoActiveShowRecordingObject {
+    pub kind: ActiveShowObjectKind,
+    pub object_id: String,
+    pub expected_object_revision: Revision,
+    pub operation: UndoActiveShowRecordingOperation,
+}
+
+/// Reverses every portable object changed by one programmer recording in one transaction.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UndoActiveShowRecordingCommand {
+    pub show_id: ShowId,
+    pub objects: Vec<UndoActiveShowRecordingObject>,
+}
+
+impl ApplicationCommand for UndoActiveShowRecordingCommand {
+    type Value = MutateActiveShowObjectsResult;
+
+    const FAMILY: CommandFamily = CommandFamily::Show;
+}
+
 /// One typed output-route edit performed against the active portable show.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MutateOutputRouteCommand {

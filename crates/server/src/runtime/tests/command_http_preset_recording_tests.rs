@@ -33,6 +33,34 @@ async fn scenario_with_recordable_value() -> (CommandHttpScenario, String) {
 }
 
 #[tokio::test]
+async fn programmer_undo_removes_a_newly_recorded_preset() {
+    let (scenario, show_id) = scenario_with_recordable_value().await;
+    let response = scenario
+        .preset_recording_action(
+            &show_id,
+            Some(&scenario.token),
+            preset_record_request("preset-programmer-undo", "mixed", 7, 0),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let undone = scenario
+        .press_key(&scenario.token, "UND", "undo-new-preset-recording")
+        .await;
+    assert_eq!(undone.status(), StatusCode::OK);
+    let entry = scenario.state.active_show.read().clone().unwrap();
+    assert!(
+        ShowStore::open(&entry.path)
+            .unwrap()
+            .portable_document()
+            .unwrap()
+            .object("preset", "7")
+            .is_none()
+    );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
 async fn preset_record_route_is_authoritative_replay_safe_and_sparse_on_no_change() {
     let (scenario, show_id) = scenario_with_recordable_value().await;
     let baseline = scenario.state.application_events.latest_sequence();
@@ -46,7 +74,7 @@ async fn preset_record_route_is_authoritative_replay_safe_and_sparse_on_no_chang
         serde_json::from_value(json(response).await).unwrap();
     assert_eq!(first.request_id(), "preset-route-record");
     assert!(!first.replayed());
-    assert_eq!(first.preset().id, "0.7");
+    assert_eq!(first.preset().id, "7");
     assert_eq!(first.preset().revision, 1);
     assert_eq!(first.preset().body["number"], 7);
     let event_sequence = first.event_sequence().unwrap();
@@ -150,7 +178,7 @@ async fn plain_preset_and_group_record_commands_use_typed_capabilities() {
         .app
         .clone()
         .oneshot(
-            Request::get(format!("/api/v1/shows/{show_id}/objects/preset/0.8"))
+            Request::get(format!("/api/v1/shows/{show_id}/objects/preset/8"))
                 .header(
                     header::AUTHORIZATION,
                     format!("Bearer {}", scenario.token),
@@ -212,7 +240,7 @@ async fn osc_record_key_sequence_commits_through_the_typed_preset_capability() {
         .app
         .clone()
         .oneshot(
-            Request::get(format!("/api/v1/shows/{show_id}/objects/preset/0.9"))
+            Request::get(format!("/api/v1/shows/{show_id}/objects/preset/9"))
                 .header(
                     header::AUTHORIZATION,
                     format!("Bearer {}", scenario.token),

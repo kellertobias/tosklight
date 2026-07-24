@@ -2,10 +2,10 @@ use super::{
     ActiveShowObjectsChange, ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity,
     MutateActiveShowObjectsCommand, MutateActiveShowObjectsResult, MutateOutputRouteCommand,
     MutateOutputRouteResult, OutputRouteChange, UndoActiveShowObjectCommand,
-    UndoActiveShowObjectResult,
+    UndoActiveShowObjectResult, UndoActiveShowRecordingCommand, UndoActiveShowRecordingOperation,
     objects::{PreparedObjectChanges, prepare_object_mutation},
     route::prepare_route_mutation,
-    undo::{prepare_object_undo, validate_object_undo},
+    undo::{prepare_object_undo, prepare_recording_undo, validate_object_undo},
 };
 use crate::{ActionContext, ActionEnvelope, ActionError, EventBus, EventDraft};
 use light_core::ShowId;
@@ -130,6 +130,54 @@ impl ActiveShowService {
                 context: envelope.context.clone(),
                 show_revision: committed.show_revision,
                 change: single_change(committed.changes),
+                migration_changes: committed.migration_changes,
+                migrated_routes: committed.migrated_routes,
+                event_sequence: committed.event_sequence,
+            })
+        })
+    }
+
+    pub fn undo_recording<P: ActiveShowPorts>(
+        &self,
+        envelope: ActionEnvelope<UndoActiveShowRecordingCommand>,
+        ports: &P,
+    ) -> Result<MutateActiveShowObjectsResult, ActionError> {
+        ports.authorize_mutation(&envelope.context)?;
+        ports.run_active_show_lifecycle(&envelope.context, envelope.command.show_id, || {
+            let _ordered = self.operation.lock();
+            let unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
+            let undoes = envelope
+                .command
+                .objects
+                .iter()
+                .filter(|object| {
+                    matches!(
+                        object.operation,
+                        UndoActiveShowRecordingOperation::RestorePrevious
+                    )
+                })
+                .map(|object| {
+                    ports.prepare_object_undo(
+                        &unit,
+                        object.kind.as_str(),
+                        &object.object_id,
+                        object.expected_object_revision,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let prepared = prepare_recording_undo(unit.document(), &envelope.command, undoes)?;
+            let committed = self.commit_object_changes(
+                &envelope.context,
+                envelope.command.show_id,
+                unit,
+                ports,
+                prepared,
+                "undo-show-recording",
+            )?;
+            Ok(MutateActiveShowObjectsResult {
+                context: envelope.context.clone(),
+                show_revision: committed.show_revision,
+                changes: committed.changes,
                 migration_changes: committed.migration_changes,
                 migrated_routes: committed.migrated_routes,
                 event_sequence: committed.event_sequence,

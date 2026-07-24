@@ -1,9 +1,10 @@
 use super::ProgrammingService;
 use crate::{
-    ActionEnvelope, ActionError, ActionErrorKind, ProgrammingGroupCommit,
+    ActionEnvelope, ActionError, ActionErrorKind, ActiveShowObjectKind, ProgrammingGroupCommit,
     ProgrammingGroupCommitResult, ProgrammingGroupProjection, ProgrammingGroupRecordOutcome,
     ProgrammingGroupRecordRequest, ProgrammingGroupRecordResult, ProgrammingGroupRecordingPorts,
-    ProgrammingGroupRevisionExpectation,
+    ProgrammingGroupRevisionExpectation, ProgrammingShowUndoObject, ProgrammingShowUndoOperation,
+    ProgrammingShowUndoTarget,
 };
 use light_core::{SessionId, UserId};
 use std::sync::Arc;
@@ -70,6 +71,31 @@ impl ProgrammingService {
             completion,
         )?;
         self.finish_successful_group_gesture(&envelope, &commit);
+        if result.outcome.event_sequence().is_some() {
+            let projection = result.outcome.projection();
+            self.remember_show_mutation(
+                identity.session_id,
+                identity.user_id,
+                identity.desk_id,
+                ProgrammingShowUndoTarget {
+                    show_id: projection.show_id,
+                    objects: vec![ProgrammingShowUndoObject {
+                        kind: ActiveShowObjectKind::Group,
+                        object_id: projection.object_id.clone(),
+                        expected_object_revision: projection.object_revision,
+                        operation: if matches!(
+                            envelope.command.expected_object_revision,
+                            ProgrammingGroupRevisionExpectation::Exact(0)
+                        ) && !projection.deleted
+                        {
+                            ProgrammingShowUndoOperation::DeleteCreated
+                        } else {
+                            ProgrammingShowUndoOperation::RestorePrevious
+                        },
+                    }],
+                },
+            );
+        }
         self.remember_group_recording(identity, envelope.command, result.clone());
         Ok(result)
     }

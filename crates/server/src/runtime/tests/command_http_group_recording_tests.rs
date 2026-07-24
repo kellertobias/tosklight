@@ -76,6 +76,72 @@ async fn group_record_route_is_authoritative_replay_safe_and_sparse_on_no_change
     assert_eq!(no_change.group_revision(), 1);
     assert_eq!(scenario.state.application_events.latest_sequence(), baseline + 1);
     assert_eq!(highlight_reconciliations(&scenario, "show_selection_refresh"), 1);
+
+    scenario
+        .state
+        .programmers
+        .select(scenario.session.id, []);
+    let changed = scenario
+        .group_recording_action(
+            &show_id,
+            Some(&scenario.token),
+            group_record_request("group-route-empty", "Front Wash", "overwrite", 1),
+        )
+        .await;
+    assert_eq!(changed.status(), StatusCode::OK);
+    let changed: light_wire::v2::group_recording::GroupRecordOutcome =
+        serde_json::from_value(json(changed).await).unwrap();
+    assert_eq!(changed.group_revision(), 2);
+    assert!(
+        scenario
+            .state
+            .engine
+            .snapshot()
+            .groups
+            .iter()
+            .find(|group| group.id == "Front Wash")
+            .unwrap()
+            .fixtures
+            .is_empty()
+    );
+
+    let undone = scenario
+        .press_key(&scenario.token, "UND", "undo-group-recording")
+        .await;
+    assert_eq!(undone.status(), StatusCode::OK);
+    assert_eq!(
+        scenario
+            .state
+            .engine
+            .snapshot()
+            .groups
+            .iter()
+            .find(|group| group.id == "Front Wash")
+            .unwrap()
+            .fixtures,
+        [fixture]
+    );
+    assert!(
+        !scenario.state.programmers.redo(scenario.session.id),
+        "show recording undo must not expose an unsafe snapshot redo"
+    );
+    let selection_undone = scenario
+        .press_key(&scenario.token, "UND", "undo-selection-after-recording")
+        .await;
+    assert_eq!(selection_undone.status(), StatusCode::OK);
+    let removed = scenario
+        .press_key(&scenario.token, "UND", "undo-created-group-recording")
+        .await;
+    assert_eq!(removed.status(), StatusCode::OK);
+    assert!(
+        scenario
+            .state
+            .engine
+            .snapshot()
+            .groups
+            .iter()
+            .all(|group| group.id != "Front Wash")
+    );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

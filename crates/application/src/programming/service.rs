@@ -65,6 +65,8 @@ mod publication;
 mod selection;
 #[path = "service/selection_refresh.rs"]
 mod selection_refresh;
+#[path = "service/show_history.rs"]
+mod show_history;
 #[path = "service/state.rs"]
 mod state;
 #[path = "service/support.rs"]
@@ -84,6 +86,7 @@ mod values_replay_memory;
 #[path = "service/values_validation.rs"]
 mod values_validation;
 
+use super::show_history::ShowHistory;
 use cue_deletion_replay::CueDeletionReplayCache;
 use cue_recording_replay::CueRecordingReplayCache;
 use cue_transfer_replay::{CueTransferChoiceCache, CueTransferReplayCache};
@@ -128,6 +131,7 @@ pub struct ProgrammingService {
     group_recording_replay: Arc<Mutex<GroupRecordingReplayCache>>,
     preset_recording_replay: Arc<Mutex<PresetRecordingReplayCache>>,
     preset_recall_replay: Arc<Mutex<PresetRecallReplayCache>>,
+    show_history: Arc<Mutex<ShowHistory>>,
     update_replay: Arc<Mutex<UpdateReplayCache>>,
     pub(super) events: EventBus,
     lifecycle_publication: Arc<Mutex<LifecyclePublicationGate>>,
@@ -157,6 +161,7 @@ impl ProgrammingService {
             group_recording_replay: Arc::default(),
             preset_recording_replay: Arc::default(),
             preset_recall_replay: Arc::default(),
+            show_history: Arc::default(),
             update_replay: Arc::default(),
             events,
             lifecycle_publication: Arc::default(),

@@ -32,7 +32,8 @@ pub use active_show::{
     ActiveShowUnitOfWork, BackupIdentity, MutateActiveShowObjectsCommand,
     MutateActiveShowObjectsResult, MutateOutputRouteCommand, MutateOutputRouteResult,
     OutputRouteChange, OutputRouteMutation, UndoActiveShowObjectCommand,
-    UndoActiveShowObjectResult,
+    UndoActiveShowObjectResult, UndoActiveShowRecordingCommand, UndoActiveShowRecordingObject,
+    UndoActiveShowRecordingOperation,
 };
 pub use event::{
     ApplicationEvent, DeliveryPolicy, DeskEvent, EventBus, EventCapability, EventClass, EventDraft,
@@ -147,7 +148,8 @@ pub use programming::{
     ProgrammingPrioritySnapshot, ProgrammingRecalledPresetProjection, ProgrammingReconciliation,
     ProgrammingRecordedCue, ProgrammingResult, ProgrammingSelectionEnvironment,
     ProgrammingSelectionQuery, ProgrammingSelectionRefreshEvent, ProgrammingSelectionRefreshResult,
-    ProgrammingSelectionTarget, ProgrammingService, ProgrammingValueIntent,
+    ProgrammingSelectionTarget, ProgrammingService, ProgrammingShowUndoObject,
+    ProgrammingShowUndoOperation, ProgrammingShowUndoTarget, ProgrammingValueIntent,
     ProgrammingValueMutation, ProgrammingValueOperation, ProgrammingValueTiming,
     ProgrammingValuesChange, ProgrammingValuesCommand, ProgrammingValuesEnvironment,
     ProgrammingValuesOutcome, ProgrammingValuesProjection, ProgrammingValuesRequest,

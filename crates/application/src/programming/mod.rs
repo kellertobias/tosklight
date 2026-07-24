@@ -24,6 +24,7 @@ mod preset_recording;
 mod priority;
 mod projection;
 mod service;
+mod show_history;
 pub mod update;
 mod values_action;
 mod values_projection;
@@ -128,6 +129,9 @@ pub use priority::{
 };
 pub use projection::{ProgrammingInteractionProjection, ProgrammingLiveSnapshot};
 pub use service::ProgrammingService;
+pub use show_history::{
+    ProgrammingShowUndoObject, ProgrammingShowUndoOperation, ProgrammingShowUndoTarget,
+};
 pub use values_action::{
     ProgrammingValueIntent, ProgrammingValueMutation, ProgrammingValueOperation,
     ProgrammingValueTiming, ProgrammingValuesCommand, ProgrammingValuesOutcome,

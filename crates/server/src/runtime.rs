@@ -262,7 +262,6 @@ use show_open::*;
 use show_patch_adapter::*;
 use speed_groups::*;
 use state::*;
-use store_api::*;
 use store_preload_targets::*;
 use test_bench::*;
 use update_api::*;

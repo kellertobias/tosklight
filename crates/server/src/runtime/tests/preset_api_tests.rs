@@ -48,175 +48,6 @@ fn preset_serialization_preserves_nested_extensions_but_not_deleted_values() {
 }
 
 #[tokio::test]
-async fn inactive_preset_merge_preserves_stored_and_requested_nested_extensions() {
-    let (state, data_dir) = test_state();
-    let app = router(state.clone());
-    let (token, _) = login(&app, "Operator").await;
-    let created = create_show(&app, &token, "Inactive preset extensions").await;
-    let show_id = created["id"].as_str().unwrap();
-    assert!(state.active_show.read().is_none());
-    let fixture = light_core::FixtureId::new();
-    let fixture_key = fixture.0.to_string();
-
-    let first = app
-        .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/presets/1.1/store"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::IF_MATCH, "0")
-                .body(Body::from(
-                    serde_json::json!({
-                        "mode": "overwrite",
-                        "preset": preset_request_value(
-                            &fixture_key,
-                            0.25,
-                            serde_json::json!({"future_server": {"kept": true}}),
-                        )
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(first.status(), StatusCode::OK);
-
-    let second = app
-        .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/presets/1.1/store"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::IF_MATCH, "1")
-                .body(Body::from(
-                    serde_json::json!({
-                        "mode": "merge",
-                        "preset": preset_request_value(
-                            &fixture_key,
-                            0.75,
-                            serde_json::json!({"future_client": "accepted"}),
-                        )
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(second.status(), StatusCode::OK);
-
-    let stored = app
-        .oneshot(
-            Request::get(format!(
-                "/api/v1/shows/{show_id}/objects/preset/1.1"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(stored.status(), StatusCode::OK);
-    let stored = json(stored).await;
-    let value = &stored["body"]["values"][&fixture_key]["intensity"];
-    assert_eq!(value["future_server"], serde_json::json!({"kept": true}));
-    assert_eq!(value["future_client"], "accepted");
-    assert!((value["value"].as_f64().unwrap() - 0.75).abs() < 1e-6);
-
-    let _ = std::fs::remove_dir_all(data_dir);
-}
-
-fn preset_request_value(
-    fixture_key: &str,
-    value: f64,
-    extensions: serde_json::Value,
-) -> serde_json::Value {
-    let mut attribute = serde_json::json!({"kind": "normalized", "value": value});
-    attribute
-        .as_object_mut()
-        .unwrap()
-        .extend(extensions.as_object().unwrap().clone());
-    serde_json::json!({
-        "name": "Look",
-        "family": "Intensity",
-        "number": 1,
-        "values": {(fixture_key): {"intensity": attribute}},
-        "group_values": {}
-    })
-}
-
-#[tokio::test]
-async fn preset_store_endpoint_merges_with_revision_control() {
-    let (state, data_dir) = test_state();
-    let app = router(state);
-    let (token, _) = login(&app, "Operator").await;
-    let created = create_show(&app, &token, "Preset Test").await;
-    let show_id = created["id"].as_str().unwrap().to_owned();
-    let fixture = light_core::FixtureId::new();
-    let first = light_programmer::Preset {
-        name: "Look".into(),
-        family: light_programmer::PresetFamily::Intensity,
-        number: 1,
-        values: HashMap::from([(
-            fixture,
-            HashMap::from([
-                (
-                    light_core::AttributeKey::intensity(),
-                    light_core::AttributeValue::Normalized(0.5),
-                ),
-                (
-                    light_core::AttributeKey("pan".into()),
-                    light_core::AttributeValue::Normalized(0.25),
-                ),
-            ]),
-        )]),
-        group_values: HashMap::new(),
-    };
-    let stored = app
-        .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/presets/1.1/store"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::IF_MATCH, "0")
-                .body(Body::from(
-                    serde_json::json!({"mode":"overwrite","preset":first}).to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(stored.status(), StatusCode::OK);
-    let stored = json(stored).await;
-    assert_eq!(stored["revision"], 1);
-    assert_eq!(stored["preset"]["family"], "Intensity");
-    assert_eq!(
-        stored["preset"]["values"][fixture.0.to_string()]
-            .as_object()
-            .unwrap()
-            .len(),
-        1
-    );
-    let stale = app
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/presets/1.1/store"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::IF_MATCH, "0")
-                .body(Body::from(
-                    serde_json::json!({"mode":"merge","preset":{"name":"","values":{}}})
-                        .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(stale.status(), StatusCode::CONFLICT);
-    let _ = std::fs::remove_dir_all(data_dir);
-}
-
-#[tokio::test]
 async fn preset_object_api_uses_family_scoped_numbers() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
@@ -325,38 +156,44 @@ async fn preset_object_api_uses_family_scoped_numbers() {
 }
 
 #[tokio::test]
-async fn store_endpoint_persists_default_family_preset_under_its_bare_address() {
+async fn typed_recording_persists_default_family_preset_under_its_bare_address() {
     // Regression (HIGHLIGHT-001): storing a default-family ("Mixed"/"All") Preset through the
     // bare pool address `197` must persist and read back under object id `197`, matching legacy
     // shows and the operator's addressing rather than the internal canonical `0.197`.
     let (state, data_dir) = test_state();
     let app = router(state.clone());
-    let (token, _) = login(&app, "Operator").await;
+    let (token, session_id) = login(&app, "Operator").await;
     let created = create_show(&app, &token, "Bare preset address").await;
     let show_id = created["id"].as_str().unwrap();
     let fixture = light_core::FixtureId::new();
     let fixture_key = fixture.0.to_string();
+    let opened = app
+        .clone()
+        .oneshot(open_show_request(&token, show_id))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
+    state.programmers.set(
+        light_core::SessionId(Uuid::parse_str(&session_id).unwrap()),
+        fixture,
+        light_core::AttributeKey("pan".into()),
+        light_core::AttributeValue::Normalized(0.41),
+    );
 
     let stored = app
         .clone()
         .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/presets/197/store"))
+            Request::post("/api/v2/presets/record")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::IF_MATCH, "0")
+                .header("x-tosk-show", show_id)
                 .body(Body::from(
                     serde_json::json!({
+                        "request_id": "bare-mixed-preset",
+                        "address": {"family": "mixed", "number": 197},
+                        "name": "Highlight isolation",
                         "mode": "overwrite",
-                        "preset": {
-                            "name": "Highlight isolation",
-                            "family": "Mixed",
-                            "values": {
-                                (fixture_key.clone()): {
-                                    "pan": {"kind": "normalized", "value": 0.41}
-                                }
-                            },
-                            "group_values": {},
-                        }
+                        "expected_object_revision": 0
                     })
                     .to_string(),
                 ))

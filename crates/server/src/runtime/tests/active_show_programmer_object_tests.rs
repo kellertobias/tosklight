@@ -1,6 +1,34 @@
 use super::*;
 
 #[tokio::test]
+async fn retired_object_undo_preset_store_and_preload_store_routes_are_absent() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Retired recording compatibility routes").await;
+    let show_id = show["id"].as_str().unwrap();
+    for path in [
+        format!("/api/v1/shows/{show_id}/objects/group/1/undo"),
+        format!("/api/v1/shows/{show_id}/presets/1/store"),
+        format!("/api/v1/shows/{show_id}/preload/store"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(path)
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
@@ -90,40 +118,6 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
     .await;
     assert_eq!(preset.status(), StatusCode::OK);
 
-    let before_store_sequence = state.application_events.latest_sequence();
-    let stored_preset = app
-        .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/presets/2.3/store"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::IF_MATCH, "1")
-                .body(Body::from(
-                    serde_json::json!({
-                        "mode":"merge",
-                        "preset":{
-                            "name":"Merged color three",
-                            "family":"Color",
-                            "number":3,
-                            "values":{},
-                            "group_values":{},
-                            "future_store_field":"accepted"
-                        }
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(stored_preset.status(), StatusCode::OK);
-    assert_eq!(stored_preset.headers()[header::ETAG], "\"2\"");
-    let stored_preset_response = json(stored_preset).await;
-    assert_eq!(
-        stored_preset_response["event_sequence"],
-        before_store_sequence + 1
-    );
-
     let document = ShowStore::open(&entry.path)
         .unwrap()
         .portable_document()
@@ -145,9 +139,8 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
         serde_json::json!([])
     );
     let stored_preset = document.object("preset", "2.3").unwrap();
-    assert_eq!(stored_preset.revision(), 2);
+    assert_eq!(stored_preset.revision(), 1);
     assert_eq!(stored_preset.body()["future_preset_field"], 42);
-    assert_eq!(stored_preset.body()["future_store_field"], "accepted");
     let snapshot = state.engine.snapshot();
     assert_eq!(snapshot.revision, document.revision().value());
     assert_eq!(
@@ -219,13 +212,6 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
         .filter(|event| event.kind == "show_object_changed")
         .count();
     assert_eq!(changed, 3);
-    assert_eq!(
-        audit
-            .iter()
-            .filter(|event| event.kind == "preset_stored")
-            .count(),
-        1
-    );
     drop(audit);
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -310,7 +296,7 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
     assert_eq!(changed["event_sequence"], before_put_sequence + 1);
 
     let before = ActiveUndoBoundary::capture(&state, &entry, &data_dir);
-    let stale = undo_show_object(&app, &token, show_id, "group", "7", 1).await;
+    let stale = undo_show_object(&state, &token, show_id, "group", "7", 1).await;
     assert_eq!(stale.status(), StatusCode::CONFLICT);
     before.assert_unchanged(&state, &entry, &data_dir);
     assert_eq!(
@@ -322,11 +308,11 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
         &original
     );
 
-    let no_history = undo_show_object(&app, &token, show_id, "preset", "2.1", 1).await;
+    let no_history = undo_show_object(&state, &token, show_id, "preset", "2.1", 1).await;
     assert_eq!(no_history.status(), StatusCode::BAD_REQUEST);
     before.assert_unchanged(&state, &entry, &data_dir);
 
-    let invalid = undo_show_object(&app, &token, show_id, "group", "9", 2).await;
+    let invalid = undo_show_object(&state, &token, show_id, "group", "9", 2).await;
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
     before.assert_unchanged(&state, &entry, &data_dir);
     assert_eq!(
@@ -338,7 +324,7 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
         &invalid_history
     );
 
-    let response = undo_show_object(&app, &token, show_id, "group", "7", 2).await;
+    let response = undo_show_object(&state, &token, show_id, "group", "7", 2).await;
     assert_eq!(response.status(), StatusCode::OK);
     let response = json(response).await;
     assert_eq!(response["revision"], 3);
@@ -401,20 +387,11 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
                 .contains("-show-object-"))
     );
     let _ = correlation_id;
-    let compatibility_events = state
-        .audit_events
-        .lock()
-        .iter()
-        .filter(|event| event.kind == "show_object_undone")
-        .cloned()
-        .collect::<Vec<_>>();
-    assert_eq!(compatibility_events.len(), 1);
-    assert_eq!(compatibility_events[0].payload["revision"], 3);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[tokio::test]
-async fn inactive_object_put_and_undo_keep_legacy_runtime_and_return_null_cursor() {
+async fn inactive_object_put_keeps_legacy_runtime_and_returns_null_cursor() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -427,23 +404,13 @@ async fn inactive_object_put_and_undo_keep_legacy_runtime_and_return_null_cursor
         .show(light_core::ShowId(show_uuid))
         .unwrap()
         .unwrap();
-    let original = serde_json::json!({
-        "id":"4",
-        "name":"Original",
-        "fixtures":[],
-        "future_extension":{"preserved":true}
-    });
-    let store = ShowStore::open(&entry.path).unwrap();
-    store.put_object("group", "4", &original, 0).unwrap();
-    store
-        .put_object(
-            "group",
-            "4",
-            &serde_json::json!({"id":"4","name":"Changed","fixtures":[]}),
-            1,
-        )
-        .unwrap();
-
+    let before_runtime = state.engine.snapshot();
+    let before_sequence = state.application_events.latest_sequence();
+    let before_revision = ShowStore::open(&entry.path)
+        .unwrap()
+        .portable_document()
+        .unwrap()
+        .revision();
     let put = put_active_object(
         &app,
         &token,
@@ -459,39 +426,20 @@ async fn inactive_object_put_and_undo_keep_legacy_runtime_and_return_null_cursor
     assert_eq!(put["revision"], 1);
     assert!(put["event_sequence"].is_null());
 
-    let before_runtime = state.engine.snapshot();
-    let before_sequence = state.application_events.latest_sequence();
-    let before_revision = ShowStore::open(&entry.path)
-        .unwrap()
-        .portable_document()
-        .unwrap()
-        .revision();
-    let response = undo_show_object(&app, &token, show_id, "group", "4", 2).await;
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let response = json(response).await;
-    assert_eq!(response["revision"], 3);
-    assert!(response["event_sequence"].is_null());
     let document = ShowStore::open(&entry.path)
         .unwrap()
         .portable_document()
         .unwrap();
     assert_eq!(document.revision().value(), before_revision.value() + 1);
-    assert_eq!(document.object("group", "4").unwrap().body(), &original);
+    assert_eq!(
+        document.object("group", "5").unwrap().body()["name"],
+        "Inactive Put"
+    );
     assert!(std::sync::Arc::ptr_eq(
         &state.engine.snapshot(),
         &before_runtime
     ));
     assert_eq!(state.application_events.latest_sequence(), before_sequence);
-    assert_eq!(
-        state
-            .audit_events
-            .lock()
-            .iter()
-            .filter(|event| event.kind == "show_object_undone")
-            .count(),
-        1
-    );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -589,25 +537,35 @@ async fn put_active_object(
 }
 
 async fn undo_show_object(
-    app: &Router,
+    state: &AppState,
     token: &str,
     show_id: &str,
     kind: &str,
     object_id: &str,
     revision: u64,
 ) -> Response {
-    app.clone()
-        .oneshot(
-            Request::post(format!(
-                "/api/v1/shows/{show_id}/objects/{kind}/{object_id}/undo"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::IF_MATCH, revision.to_string())
-            .body(Body::empty())
-            .unwrap(),
-        )
-        .await
-        .unwrap()
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::AUTHORIZATION,
+        format!("Bearer {token}").parse().unwrap(),
+    );
+    let session = authenticate(state, &headers).unwrap();
+    let action = undo_active_show_object_action(
+        operator_action_context(&session, light_application::ActionSource::Http),
+        light_core::ShowId(Uuid::parse_str(show_id).unwrap()),
+        light_application::ActiveShowObjectKind::from_storage_kind(kind).unwrap(),
+        object_id,
+        revision,
+    );
+    let activation = state.activation_lock.clone().lock_owned().await;
+    match run_active_show_object_undo_async(state, activation, action).await {
+        Ok((result, _activation)) => Json(serde_json::json!({
+            "revision": result.change.object_revision,
+            "event_sequence": result.event_sequence
+        }))
+        .into_response(),
+        Err(error) => error.into_response(),
+    }
 }
 
 struct ActiveObjectScenario {
@@ -1042,17 +1000,21 @@ async fn active_preload_preset_uses_one_typed_show_boundary_and_returns_its_even
     let response = app
         .clone()
         .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/preload/store"))
+            Request::post("/api/v2/preload/record")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::IF_MATCH, "1")
+                .header("x-tosk-show", show_id.to_string())
                 .body(Body::from(
                     serde_json::json!({
-                        "target":"preset",
-                        "target_id":"1.4",
-                        "name":"From Preload",
-                        "mode":"merge",
-                        "family":"Intensity"
+                        "request_id": Uuid::new_v4().to_string(),
+                        "action": {
+                            "type":"preset",
+                            "target_id":"1.4",
+                            "expected_revision":1,
+                            "name":"From Preload",
+                            "mode":"merge",
+                            "family":"intensity"
+                        }
                     })
                     .to_string(),
                 ))
@@ -1062,7 +1024,7 @@ async fn active_preload_preset_uses_one_typed_show_boundary_and_returns_its_even
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let response = json(response).await;
-    assert_eq!(response["revision"], 2);
+    assert_eq!(response["object"]["revision"], 2);
     assert_eq!(response["event_sequence"], before_sequence + 1);
 
     let document = store.portable_document().unwrap();

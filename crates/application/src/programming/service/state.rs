@@ -32,6 +32,9 @@ impl ProgrammingService {
         context: &ActionContext,
         ports: &dyn ProgrammingPorts,
     ) -> Result<ProgrammingOutcome, ActionError> {
+        if self.undo_show_mutation(context, ports)? {
+            return Ok(accepted(ProgrammingAction::Undone, None, None));
+        }
         let changed = self
             .programmers
             .with_staged_transaction(session, |staged| Ok::<_, String>(staged.undo(session)))

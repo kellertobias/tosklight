@@ -5,7 +5,10 @@ use crate::programming::update::{
     ProgrammingUpdateResult, ProgrammingUpdateTargetRequest, ProgrammingUpdateTargetsRequest,
     ProgrammingUpdateTargetsResult,
 };
-use crate::{ActionEnvelope, ActionError, ActionErrorKind, ActiveShowService};
+use crate::{
+    ActionEnvelope, ActionError, ActionErrorKind, ActiveShowService, ProgrammingShowUndoObject,
+    ProgrammingShowUndoOperation, ProgrammingShowUndoTarget,
+};
 use light_core::{SessionId, UserId};
 use light_programmer::{
     ProgrammerUpdateCaptureError, ProgrammerUpdateContent, ProgrammerUpdateMenuCapture,
@@ -257,6 +260,25 @@ impl ProgrammingService {
         let result = self.apply_new_update(envelope.clone(), active_show, ports, identity.clone());
         let after = self.update_interaction_snapshot(&identity)?;
         self.publish_update_interaction(&envelope.context, &identity, &before, &after);
+        if let Ok(result) = &result
+            && !result.replayed
+        {
+            let projection = &result.outcome.projection;
+            self.remember_show_mutation(
+                identity.session_id,
+                identity.user_id,
+                identity.desk_id,
+                ProgrammingShowUndoTarget {
+                    show_id: projection.show_id,
+                    objects: vec![ProgrammingShowUndoObject {
+                        kind: projection.kind,
+                        object_id: projection.object_id.clone(),
+                        expected_object_revision: projection.object_revision,
+                        operation: ProgrammingShowUndoOperation::RestorePrevious,
+                    }],
+                },
+            );
+        }
         result
     }
 

@@ -40,6 +40,61 @@ fn active_show_revision(scenario: &CommandHttpScenario) -> u64 {
 }
 
 #[tokio::test]
+async fn programmer_undo_reverses_a_new_cue_list_and_playback_atomically() {
+    let scenario = CommandHttpScenario::new().await;
+    let show_id = scenario
+        .create_and_open_show("Cue recording programmer undo")
+        .await;
+    set_cue_record_value(&scenario);
+    let response = scenario
+        .cue_recording_action(
+            &show_id,
+            Some(&scenario.token),
+            Some(active_show_revision(&scenario)),
+            cue_record_request(
+                "cue-recording-undo",
+                serde_json::json!({"kind":"pool","playback_number":27}),
+                Some(1.0),
+                "current_capture",
+                "hold",
+            ),
+        )
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let outcome: light_wire::v2::cue_recording::CueRecordOutcome =
+        serde_json::from_value(json(response).await).unwrap();
+    let light_wire::v2::cue_recording::CueRecordOutcome::Changed { projections, .. } = outcome
+    else {
+        panic!("new Cue recording must change the show")
+    };
+
+    let undone = scenario
+        .press_key(&scenario.token, "UND", "undo-new-cue-recording")
+        .await;
+    assert_eq!(undone.status(), StatusCode::OK);
+    let entry = scenario.state.active_show.read().clone().unwrap();
+    let document = ShowStore::open(&entry.path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    assert!(
+        document
+            .object("cue_list", &projections.cue_list.id)
+            .is_none()
+    );
+    assert!(document.object("playback", "27").is_none());
+    assert!(
+        scenario
+            .state
+            .engine
+            .snapshot()
+            .playbacks
+            .iter()
+            .all(|playback| playback.number != 27)
+    );
+}
+
+#[tokio::test]
 async fn cue_record_route_is_atomic_replay_safe_sparse_and_revisioned() {
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario.create_and_open_show("Cue record route").await;

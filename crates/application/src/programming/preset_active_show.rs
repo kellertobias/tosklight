@@ -43,7 +43,7 @@ fn prepare_recording(
     validate_revision(existing.as_ref().map(|(object, _)| *object), commit)?;
     let preset = commit.merged_with(existing.as_ref().map(|(_, preset)| preset))?;
     let object_id = existing.as_ref().map_or_else(
-        || commit.address.storage_key(),
+        || new_preset_object_id(commit.address),
         |(object, _)| object.key().id().to_owned(),
     );
     let raw_body = merged_body(existing.as_ref(), &preset)?;
@@ -95,6 +95,14 @@ fn prepare_recording(
             ),
         },
     })
+}
+
+fn new_preset_object_id(address: PresetAddress) -> String {
+    if address.family == light_programmer::PresetFamily::Mixed {
+        address.number.to_string()
+    } else {
+        address.storage_key()
+    }
 }
 
 fn complete_recording<P: ProgrammingPresetActiveShowPorts>(

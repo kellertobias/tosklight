@@ -347,6 +347,70 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         )
     }
 
+    fn undo_show_recording(
+        &self,
+        context: &ActionContext,
+        target: &light_application::ProgrammingShowUndoTarget,
+    ) -> Result<light_core::Revision, ActionError> {
+        let owner = super::super::ProgrammingInstallOwner {
+            desk_id: context.desk_id,
+            user_id: self.session.user.id,
+            gesture: super::super::ProgrammingOwnerGesturePolicy::Preserve,
+            highlight: super::super::ProgrammingOwnerHighlightPolicy::DeferToOuterInteraction,
+        };
+        let ports = super::super::ServerActiveShowPorts::show_objects_with_programming_owner(
+            self.state.clone(),
+            owner,
+        );
+        let action = light_application::ActionEnvelope {
+            context: context.clone(),
+            command: light_application::UndoActiveShowRecordingCommand {
+                show_id: target.show_id,
+                objects: target
+                    .objects
+                    .iter()
+                    .map(|object| light_application::UndoActiveShowRecordingObject {
+                        kind: object.kind,
+                        object_id: object.object_id.clone(),
+                        expected_object_revision: object.expected_object_revision,
+                        operation: match object.operation {
+                            light_application::ProgrammingShowUndoOperation::RestorePrevious => {
+                                light_application::UndoActiveShowRecordingOperation::RestorePrevious
+                            }
+                            light_application::ProgrammingShowUndoOperation::DeleteCreated => {
+                                light_application::UndoActiveShowRecordingOperation::DeleteCreated
+                            }
+                        },
+                    })
+                    .collect(),
+            },
+        };
+        let result = self
+            .state
+            .active_show_service
+            .undo_recording(action, &ports)?;
+        super::super::emit_migration_object_changes(
+            self.state,
+            target.show_id,
+            &result.migration_changes,
+        );
+        super::super::emit_migrated_route_changes(
+            self.state,
+            target.show_id,
+            &result.migrated_routes,
+        );
+        result
+            .changes
+            .first()
+            .map(|change| change.object_revision)
+            .ok_or_else(|| {
+                ActionError::new(
+                    ActionErrorKind::Internal,
+                    "show recording undo produced no object change",
+                )
+            })
+    }
+
     fn capture_programmer_on_preload(&self, _context: &ActionContext) -> bool {
         self.state.configuration.read().preload_programmer_changes
     }

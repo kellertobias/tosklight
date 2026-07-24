@@ -137,11 +137,6 @@ pub(super) struct RawDmxOverrideInput {
     pub(super) value: Option<u8>,
 }
 #[derive(Deserialize)]
-pub(super) struct PresetStoreInput {
-    pub(super) mode: light_programmer::PresetStoreMode,
-    pub(super) preset: serde_json::Value,
-}
-#[derive(Deserialize)]
 pub(super) struct PreloadStoreInput {
     pub(super) target: String,
     pub(super) target_id: String,

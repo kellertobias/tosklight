@@ -55,6 +55,29 @@ impl ProgrammerState {
 }
 
 impl ProgrammerRegistry {
+    pub fn undo_depth(&self, session: SessionId) -> Option<usize> {
+        self.states
+            .read()
+            .get(&self.key(session))
+            .map(|state| state.undo.len())
+    }
+
+    /// A show mutation inserted into the unified operator history invalidates snapshot redo.
+    ///
+    /// Show-object redo is deliberately unsupported: replaying a historical whole-object body
+    /// after newer edits would violate the active show's revision boundary.
+    pub fn clear_redo(&self, session: SessionId) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        let mut states = self.states.write();
+        let Some(state) = states.get_mut(&self.key(session)) else {
+            return false;
+        };
+        let changed = !state.redo.is_empty();
+        state.redo.clear();
+        changed
+    }
+
     pub fn undo(&self, session: SessionId) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();

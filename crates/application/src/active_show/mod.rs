@@ -10,7 +10,8 @@ pub use model::{
     ActiveShowObjectMutationKind, ActiveShowObjectsChange, MutateActiveShowObjectsCommand,
     MutateActiveShowObjectsResult, MutateOutputRouteCommand, MutateOutputRouteResult,
     OutputRouteChange, OutputRouteMutation, UndoActiveShowObjectCommand,
-    UndoActiveShowObjectResult,
+    UndoActiveShowObjectResult, UndoActiveShowRecordingCommand, UndoActiveShowRecordingObject,
+    UndoActiveShowRecordingOperation,
 };
 pub use ports::{ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity};
 pub use service::ActiveShowService;

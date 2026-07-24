@@ -16,7 +16,7 @@ async fn active_preload_cue_is_one_lossless_contextual_show_transaction() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let response = json(response).await;
-    assert_eq!(response["revision"], 2);
+    assert_eq!(response["object"]["revision"], 2);
     assert_eq!(response["event_sequence"], before.event_sequence + 1);
     scenario.assert_one_active_commit(&before);
     assert!(!scenario.has_active_preload());
@@ -66,48 +66,6 @@ async fn active_preload_cue_is_one_lossless_contextual_show_transaction() {
             && change.changes[0].object_id == scenario.cue_list_id()
             && change.changes[0].body.as_ref() == Some(stored.body())
     ));
-}
-
-#[tokio::test]
-async fn inactive_preload_cue_keeps_the_compatibility_path_and_raw_extensions() {
-    let scenario = CuePreloadScenario::new("Inactive Preload Cue", false).await;
-    scenario.activate_preload();
-    let before = scenario.boundary();
-
-    let response = scenario.store_preload(1).await;
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let response = json(response).await;
-    assert_eq!(response["revision"], 2);
-    assert!(response["event_sequence"].is_null());
-    assert_eq!(
-        scenario.document().revision().value(),
-        before.show_revision + 1
-    );
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        before.event_sequence
-    );
-    assert!(std::sync::Arc::ptr_eq(
-        &scenario.state.engine.snapshot(),
-        &before.runtime
-    ));
-    assert!(!scenario.has_active_preload());
-    let body = scenario
-        .document()
-        .object("cue_list", &scenario.cue_list_id())
-        .unwrap()
-        .body()
-        .clone();
-    assert_eq!(body["cues"][0]["name"], "From active Preload");
-    assert_eq!(
-        body["cues"][0]["future_cue_metadata"]["owner"],
-        "newer-desk"
-    );
-    assert_eq!(
-        body["cues"][0]["group_changes"][0]["future_change_metadata"]["curve"],
-        "soft"
-    );
 }
 
 #[tokio::test]
@@ -220,16 +178,20 @@ impl CuePreloadScenario {
         self.app
             .clone()
             .oneshot(
-                Request::post(format!("/api/v1/shows/{}/preload/store", self.entry.id.0))
+                Request::post("/api/v2/preload/record")
                     .header(header::CONTENT_TYPE, "application/json")
                     .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
-                    .header(header::IF_MATCH, expected.to_string())
+                    .header("x-tosk-show", self.entry.id.0.to_string())
                     .body(Body::from(
                         serde_json::json!({
-                            "target":"cue",
-                            "target_id":self.cue_list_id(),
-                            "cue_number":1.0,
-                            "name":"From active Preload"
+                            "request_id": Uuid::new_v4().to_string(),
+                            "action": {
+                                "type":"cue",
+                                "cue_list_id":self.cue_list_id(),
+                                "expected_revision":expected,
+                                "cue_number":1.0,
+                                "name":"From active Preload"
+                            }
                         })
                         .to_string(),
                     ))

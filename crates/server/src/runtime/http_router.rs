@@ -139,15 +139,6 @@ fn show_object_routes() -> Router<AppState> {
             "/api/v1/shows/{id}/objects/{kind}/{object_id}",
             get(get_object).put(put_object).delete(delete_object),
         )
-        .route(
-            "/api/v1/shows/{id}/objects/{kind}/{object_id}/undo",
-            post(undo_object),
-        )
-        .route(
-            "/api/v1/shows/{id}/presets/{preset_id}/store",
-            post(store_preset),
-        )
-        .route("/api/v1/shows/{id}/preload/store", post(store_preload))
 }
 
 fn playback_routes() -> Router<AppState> {

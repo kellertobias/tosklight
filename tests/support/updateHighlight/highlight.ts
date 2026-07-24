@@ -50,34 +50,22 @@ export async function storeCurrentProgrammerPreset(
 	showId: string,
 	presetId: string,
 ) {
-	const programmers = await api.request<any[]>(
-		"GET",
-		"/api/v1/programmers",
-	);
-	const current = programmers.find(
-		(entry) => entry.session_id === api.session!.session_id,
-	);
-	expect(current).toBeDefined();
-	const values: Record<string, Record<string, unknown>> = {};
-	for (const entry of current.values ?? []) {
-		const fixtureValues = values[entry.fixture_id] ?? {};
-		fixtureValues[entry.attribute] = entry.value;
-		values[entry.fixture_id] = fixtureValues;
-	}
 	await api.request(
 		"POST",
-		`/api/v1/shows/${showId}/presets/${presetId}/store`,
+		"/api/v2/presets/record",
 		{
-			mode: "overwrite",
-			preset: {
-				name: "Highlight isolation",
-				family: "Mixed",
-				values,
-				group_values: {},
+			request_id: crypto.randomUUID(),
+			address: {
+				family: "mixed",
+				number: Number(presetId),
 			},
+			name: "Highlight isolation",
+			mode: "overwrite",
+			expected_object_revision: 0,
 		},
 		true,
-		0,
+		undefined,
+		{ showId },
 	);
 }
 

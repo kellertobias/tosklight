@@ -50,6 +50,7 @@ pub(super) fn delete_active_show_object(
     }
 }
 
+#[cfg(test)]
 pub(super) fn undo_active_show_object_action(
     context: light_application::ActionContext,
     show_id: light_core::ShowId,
@@ -183,6 +184,7 @@ pub(super) async fn run_active_show_object_action_async(
 
 /// Runs while the caller holds `activation_lock`, keeping the active identity stable through the
 /// infallible runtime installation.
+#[cfg(test)]
 pub(super) async fn run_active_show_object_undo_async(
     state: &AppState,
     activation: tokio::sync::OwnedMutexGuard<()>,

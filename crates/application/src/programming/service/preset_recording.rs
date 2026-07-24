@@ -1,9 +1,10 @@
 use super::ProgrammingService;
 use crate::{
-    ActionEnvelope, ActionError, ActionErrorKind, ProgrammingPresetCommit,
+    ActionEnvelope, ActionError, ActionErrorKind, ActiveShowObjectKind, ProgrammingPresetCommit,
     ProgrammingPresetCommitResult, ProgrammingPresetProjection, ProgrammingPresetRecordOutcome,
     ProgrammingPresetRecordRequest, ProgrammingPresetRecordResult, ProgrammingPresetRecordingPorts,
-    ProgrammingPresetRevisionExpectation,
+    ProgrammingPresetRevisionExpectation, ProgrammingShowUndoObject, ProgrammingShowUndoOperation,
+    ProgrammingShowUndoTarget,
 };
 use light_core::{SessionId, UserId};
 use std::sync::Arc;
@@ -61,6 +62,30 @@ impl ProgrammingService {
         let commit = ProgrammingPresetCommit::new(&envelope.command, captured);
         let completion = ports.commit_preset(&envelope.context, &commit)?;
         let result = complete_result(&envelope, &identity.request_id, completion)?;
+        if result.outcome.event_sequence().is_some() {
+            let projection = result.outcome.projection();
+            self.remember_show_mutation(
+                identity.session_id,
+                identity.user_id,
+                identity.desk_id,
+                ProgrammingShowUndoTarget {
+                    show_id: projection.show_id,
+                    objects: vec![ProgrammingShowUndoObject {
+                        kind: ActiveShowObjectKind::Preset,
+                        object_id: projection.object_id.clone(),
+                        expected_object_revision: projection.object_revision,
+                        operation: if matches!(
+                            envelope.command.expected_object_revision,
+                            ProgrammingPresetRevisionExpectation::Exact(0)
+                        ) {
+                            ProgrammingShowUndoOperation::DeleteCreated
+                        } else {
+                            ProgrammingShowUndoOperation::RestorePrevious
+                        },
+                    }],
+                },
+            );
+        }
         self.remember_preset_recording(identity, envelope.command, result.clone());
         Ok(result)
     }

@@ -257,13 +257,7 @@ async function exerciseCueUpdate(
 	expect(await objectRows(showEntry.path, "cue_list", cueListId)).toEqual(
 		unrelatedBeforeCue,
 	);
-	await api.request(
-		"POST",
-		`/api/v1/shows/${show.id}/objects/cue_list/${cueListId}/undo`,
-		undefined,
-		true,
-		updatedCue.revision,
-	);
+	await api.sendCommandKey("UND");
 	expect((await object<any>(api, "cue_list", cueListId)).body).toEqual(
 		authoritativeCueBaseline,
 	);
@@ -274,7 +268,6 @@ async function exercisePresetUpdate(
 	state: MigratedUpdateState,
 ): Promise<void> {
 	const {
-		show,
 		showEntry,
 		first,
 		presetId,
@@ -305,13 +298,7 @@ async function exercisePresetUpdate(
 	expect(await objectRows(showEntry.path, "preset", presetId)).toEqual(
 		unrelatedBeforePreset,
 	);
-	await api.request(
-		"POST",
-		`/api/v1/shows/${show.id}/objects/preset/${presetId}/undo`,
-		undefined,
-		true,
-		updatedPreset.revision,
-	);
+	await api.sendCommandKey("UND");
 	expect((await object<any>(api, "preset", presetId)).body).toEqual(
 		authoritativePresetBaseline,
 	);
@@ -398,13 +385,7 @@ async function exerciseGroupUpdate(
 		first,
 		fourth,
 	]);
-	await api.request(
-		"POST",
-		`/api/v1/shows/${show.id}/objects/group/${groupId}/undo`,
-		undefined,
-		true,
-		updatedGroup.revision,
-	);
+	await api.sendCommandKey("UND");
 	expect((await object<any>(api, "group", groupId)).body).toEqual(
 		authoritativeGroupBaseline,
 	);

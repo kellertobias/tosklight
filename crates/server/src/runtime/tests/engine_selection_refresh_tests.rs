@@ -68,7 +68,7 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
     let undone = tokio::time::timeout(
         Duration::from_secs(2),
         undo_active_object(
-            &scenario.app,
+            &scenario.state,
             &scenario.actor.token,
             &scenario.show_id,
             "group",
@@ -410,25 +410,35 @@ async fn put_active_object(
 }
 
 async fn undo_active_object(
-    app: &Router,
+    state: &AppState,
     token: &str,
     show_id: &str,
     kind: &str,
     object_id: &str,
     expected_revision: u64,
 ) -> Response {
-    app.clone()
-        .oneshot(
-            Request::post(format!(
-                "/api/v1/shows/{show_id}/objects/{kind}/{object_id}/undo"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::IF_MATCH, expected_revision.to_string())
-            .body(Body::empty())
-            .unwrap(),
-        )
-        .await
-        .unwrap()
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::AUTHORIZATION,
+        format!("Bearer {token}").parse().unwrap(),
+    );
+    let session = authenticate(state, &headers).unwrap();
+    let action = undo_active_show_object_action(
+        operator_action_context(&session, light_application::ActionSource::Http),
+        light_core::ShowId(Uuid::parse_str(show_id).unwrap()),
+        light_application::ActiveShowObjectKind::from_storage_kind(kind).unwrap(),
+        object_id,
+        expected_revision,
+    );
+    let activation = state.activation_lock.clone().lock_owned().await;
+    match run_active_show_object_undo_async(state, activation, action).await {
+        Ok((result, _activation)) => Json(serde_json::json!({
+            "revision": result.change.object_revision,
+            "event_sequence": result.event_sequence
+        }))
+        .into_response(),
+        Err(error) => error.into_response(),
+    }
 }
 
 fn group_body(fixtures: impl IntoIterator<Item = light_core::FixtureId>) -> serde_json::Value {
