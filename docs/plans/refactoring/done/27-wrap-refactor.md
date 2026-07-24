@@ -1,6 +1,6 @@
 # 27 — Close the refactor and complete the CodeSafari handoff
 
-Status: in progress.
+Status: complete.
 
 ## Purpose
 
@@ -363,5 +363,35 @@ fresh acceptance and desktop runs above.
   `npm run test:architecture`, and `npm --prefix apps/control-ui run typecheck`: passed.
 - `npm run pages:generate`: passed after the anchors and responsive override; no generated site is
   tracked.
-- Local integration remains the only unfinished Phase 3 action. The unrelated dirty worktree stays
-  excluded; a temporary clean worktree will fast-forward `main` without stashing it.
+- Local integration used a temporary clean worktree and left the unrelated dirty checkout
+  unstashed and unchanged.
+
+## Result
+
+Completed on 2026-07-24.
+
+- The committed capstone before integration was
+  `c5693d96a72cb4bd2b3265110e29e647d71c6a88`; local `main` started at
+  `5c92eb07a75925fbca74bba028086567cddee7ff`.
+- `main` was already the merge base and had zero commits not present on `refactoring`, so rebasing
+  would have rewritten nothing. A temporary clean worktree fast-forwarded `main` to
+  `c5693d96a72cb4bd2b3265110e29e647d71c6a88` with `git merge --ff-only refactoring`. Both refs
+  resolved to that exact commit after integration; no merge commit, force update, push, or branch
+  deletion occurred. The original checkout then switched to `main` without stashing or altering
+  the maintainer's unrelated dirty files.
+- Post-integration verification on the clean committed tree passed `npm run test:architecture`,
+  the production Control UI build, the Rust unit suites, `npm run test:e2e` (287 passed / 9
+  intentionally skipped), and `npm run test:desktop-smoke` (2 passed). Three CITP media tests were
+  denied loopback sockets by the restricted runner during `npm run test:unit`; the focused
+  `cargo test -p light-media --lib` rerun with loopback access passed all 5 tests.
+- `REFACTORING-SUMMARY.md` is the durable architecture and verification handoff. Living rules
+  remain in `docs/engineering/`, while 12 CodeSafari learning paths now contain 47 source-backed
+  steps and 111 glossary concepts. Pinned CodeSafari validation reports no problems; export,
+  manual generation, wide/narrow visual inspection, and interactive Start/Next navigation passed.
+- The required 32-universe/100 Hz output floor passed with no deadline misses. The
+  64-universe/120 Hz target reached 68.8 Hz and remains a documented performance target rather
+  than a capstone blocker; CPU, allocation, socket-delivery, and sound-analysis measurements were
+  not available in this environment.
+- Storybook and the UI-package gate remain unavailable because the named `@tosklight/ui` workspace
+  has no tracked source or manifest. Pending chunk `27a-restore-ui-package-gates.md` owns the
+  explicit restore-or-retire decision; generated artifacts were not treated as recoverable source.
