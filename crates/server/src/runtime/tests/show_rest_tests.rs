@@ -18,32 +18,21 @@ async fn rest_session_show_and_revision_flow() {
     let show = create_show(&app, token, "Tour").await;
     let show_id = show["id"].as_str().unwrap();
     let uri = format!("/api/v1/shows/{show_id}/objects/group/front");
-    let response = app
-        .clone()
-        .oneshot(
-            Request::put(&uri)
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::IF_MATCH, "0")
-                .body(Body::from(r#"{"name":"Front","fixtures":[]}"#))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = seed_show_object(
+        &state,
+        token,
+        show_id,
+        "group",
+        "front",
+        0,
+        serde_json::json!({"name":"Front","fixtures":[]}),
+    )
+    .await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()[header::ETAG], "\"1\"");
-    let conflict = app
-        .clone()
-        .oneshot(
-            Request::put(&uri)
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::IF_MATCH, "0")
-                .body(Body::from("{}"))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let conflict =
+        seed_show_object(&state, token, show_id, "group", "front", 0, serde_json::json!({}))
+            .await;
     assert_eq!(conflict.status(), StatusCode::CONFLICT);
     let objects = app
         .clone()

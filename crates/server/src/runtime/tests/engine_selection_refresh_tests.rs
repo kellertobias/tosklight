@@ -25,7 +25,7 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
     let changed = tokio::time::timeout(
         Duration::from_secs(2),
         put_active_object(
-            &scenario.app,
+            &scenario.state,
             &scenario.actor.token,
             &scenario.show_id,
             "group",
@@ -132,7 +132,7 @@ async fn active_show_install_clears_each_desk_pending_choice_once() {
     let before = scenario.state.application_events.latest_sequence();
 
     let response = put_active_object(
-        &scenario.app,
+        &scenario.state,
         &scenario.actor.token,
         &scenario.show_id,
         "group",
@@ -283,7 +283,6 @@ struct ActiveGroupScenario {
     data_dir: PathBuf,
     actor: Session,
     peer: Session,
-    app: Router,
     show_id: String,
     first: light_core::FixtureId,
     second: light_core::FixtureId,
@@ -304,7 +303,7 @@ impl ActiveGroupScenario {
         second.address = Some(3);
         for fixture in [&first, &second] {
             let response = put_active_object(
-                &app,
+                &state,
                 &actor.token,
                 &show_id,
                 "patched_fixture",
@@ -316,7 +315,7 @@ impl ActiveGroupScenario {
             assert_eq!(response.status(), StatusCode::OK);
         }
         let seed = put_active_object(
-            &app,
+            &state,
             &actor.token,
             &show_id,
             "group",
@@ -333,7 +332,6 @@ impl ActiveGroupScenario {
             data_dir,
             actor,
             peer,
-            app,
             show_id,
             first: first.fixture_id,
             second: second.fixture_id,
@@ -386,7 +384,7 @@ async fn open_show(app: &Router, token: &str, show_id: &str) {
 }
 
 async fn put_active_object(
-    app: &Router,
+    state: &AppState,
     token: &str,
     show_id: &str,
     kind: &str,
@@ -394,19 +392,16 @@ async fn put_active_object(
     expected_revision: u64,
     body: serde_json::Value,
 ) -> Response {
-    app.clone()
-        .oneshot(
-            Request::put(format!(
-                "/api/v1/shows/{show_id}/objects/{kind}/{object_id}"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .header(header::IF_MATCH, expected_revision.to_string())
-            .body(Body::from(body.to_string()))
-            .unwrap(),
-        )
-        .await
-        .unwrap()
+    seed_show_object(
+        state,
+        token,
+        show_id,
+        kind,
+        object_id,
+        expected_revision,
+        body,
+    )
+    .await
 }
 
 async fn undo_active_object(

@@ -310,29 +310,23 @@ async fn ordinary_http_and_patch_share_one_outer_lock_order_without_deadlock() {
     open_show_for_patch_test(&app, &token, &show_id).await;
 
     state.active_show_http_lifecycle.arm();
-    let group_app = app.clone();
+    let group_state = state.clone();
     let group_token = token.clone();
     let group_show_id = show_id.clone();
     let group = tokio::spawn(async move {
-        group_app
-            .oneshot(
-                Request::put(format!(
-                    "/api/v1/shows/{group_show_id}/objects/group/before-patch"
-                ))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {group_token}"))
-                .header(header::IF_MATCH, "0")
-                .body(Body::from(
-                    serde_json::json!({
-                        "name":"Stored before Patch lifecycle",
-                        "fixtures":[]
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-            )
-            .await
-            .unwrap()
+        seed_show_object(
+            &group_state,
+            &group_token,
+            &group_show_id,
+            "group",
+            "before-patch",
+            0,
+            serde_json::json!({
+                "name":"Stored before Patch lifecycle",
+                "fixtures":[]
+            }),
+        )
+        .await
     });
     let ordinary_pause = Arc::clone(&state.active_show_http_lifecycle);
     tokio::task::spawn_blocking(move || ordinary_pause.wait_until_started())
@@ -425,29 +419,24 @@ async fn paused_profile_resolution_releases_activation_for_an_http_show_mutation
 
     let group = tokio::time::timeout(
         Duration::from_secs(2),
-        app.clone().oneshot(
-            Request::put(format!(
-                "/api/v1/shows/{show_id}/objects/group/during-resolution"
-            ))
-            .header(header::CONTENT_TYPE, "application/json")
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::IF_MATCH, "0")
-            .body(Body::from(
-                serde_json::json!({
-                    "name":"Stored during Patch planning",
-                    "fixtures":[]
-                })
-                .to_string(),
-            ))
-            .unwrap(),
+        seed_show_object(
+            &state,
+            &token,
+            &show_id,
+            "group",
+            "during-resolution",
+            0,
+            serde_json::json!({
+                "name":"Stored during Patch planning",
+                "fixtures":[]
+            }),
         ),
     )
     .await;
     state.patch_profile_resolution.release();
     let patch = patch.await.unwrap();
-    let group = group
-        .expect("ordinary active-show HTTP mutation was blocked by Patch profile resolution")
-        .unwrap();
+    let group =
+        group.expect("ordinary active-show HTTP mutation was blocked by Patch profile resolution");
 
     assert_eq!(group.status(), StatusCode::OK);
     assert_eq!(patch.status(), StatusCode::OK);

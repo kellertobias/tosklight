@@ -282,30 +282,24 @@ async fn selection_waits_for_active_group_install_before_resolving_its_environme
     assert_eq!(group.status(), StatusCode::OK);
 
     scenario.state.active_show_http_lifecycle.arm();
-    let group_scenario = scenario.app.clone();
+    let group_state = scenario.state.clone();
     let group_token = scenario.token.clone();
     let group_show_id = show_id.clone();
     let second_id = second.fixture_id;
     let group_update = tokio::spawn(async move {
-        group_scenario
-            .oneshot(
-                Request::put(format!(
-                    "/api/v1/shows/{group_show_id}/objects/group/1"
-                ))
-                .header(header::AUTHORIZATION, format!("Bearer {group_token}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::IF_MATCH, "1")
-                .body(Body::from(
-                    serde_json::json!({
-                        "name": "Ordered Group",
-                        "fixtures": [second_id.0],
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-            )
-            .await
-            .unwrap()
+        seed_show_object(
+            &group_state,
+            &group_token,
+            &group_show_id,
+            "group",
+            "1",
+            1,
+            serde_json::json!({
+                "name": "Ordered Group",
+                "fixtures": [second_id.0],
+            }),
+        )
+        .await
     });
     let pause = Arc::clone(&scenario.state.active_show_http_lifecycle);
     tokio::task::spawn_blocking(move || pause.wait_until_started())

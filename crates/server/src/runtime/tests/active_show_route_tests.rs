@@ -1,7 +1,26 @@
 use super::*;
 
+async fn post_output_route_action(
+    app: &Router,
+    token: &str,
+    show_id: &str,
+    body: serde_json::Value,
+) -> Response {
+    app.clone()
+        .oneshot(
+            Request::post("/api/v2/output-routes/actions")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-show", show_id)
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
 #[tokio::test]
-async fn active_route_put_and_delete_share_the_prepared_application_boundary() {
+async fn typed_route_update_and_delete_share_the_prepared_application_boundary() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -50,20 +69,22 @@ async fn active_route_put_and_delete_share_the_prepared_application_boundary() {
         "future_client_field": "accepted"
     });
 
-    let updated = app
-        .clone()
-        .oneshot(
-            Request::put(format!("/api/v1/shows/{show_id}/objects/route/main"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::IF_MATCH, "1")
-                .body(Body::from(updated_route.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let updated = post_output_route_action(
+        &app,
+        &token,
+        show_id,
+        serde_json::json!({
+            "request_id": "active-route-update",
+            "action": {
+                "type": "update",
+                "route_id": "main",
+                "expected_revision": 1,
+                "patch": updated_route,
+            }
+        }),
+    )
+    .await;
     assert_eq!(updated.status(), StatusCode::OK);
-    assert_eq!(updated.headers()[header::ETAG], "\"2\"");
 
     let document = ShowStore::open(&entry.path)
         .unwrap()
@@ -75,7 +96,7 @@ async fn active_route_put_and_delete_share_the_prepared_application_boundary() {
         stored.body()["future_server_field"],
         serde_json::json!({"kept": true})
     );
-    assert_eq!(stored.body()["future_client_field"], "accepted");
+    assert!(stored.body()["future_client_field"].is_null());
     assert_eq!(
         state.engine.snapshot().revision,
         document.revision().value()
@@ -87,18 +108,21 @@ async fn active_route_put_and_delete_share_the_prepared_application_boundary() {
     );
     assert_output_route_event(&state, before_events, "main", false);
 
-    let stale = app
-        .clone()
-        .oneshot(
-            Request::put(format!("/api/v1/shows/{show_id}/objects/route/main"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::IF_MATCH, "1")
-                .body(Body::from(updated_route.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let stale = post_output_route_action(
+        &app,
+        &token,
+        show_id,
+        serde_json::json!({
+            "request_id": "active-route-stale",
+            "action": {
+                "type": "update",
+                "route_id": "main",
+                "expected_revision": 1,
+                "patch": {"enabled": false},
+            }
+        }),
+    )
+    .await;
     assert_eq!(stale.status(), StatusCode::CONFLICT);
     assert_eq!(
         state.application_events.latest_sequence(),
@@ -115,18 +139,21 @@ async fn active_route_put_and_delete_share_the_prepared_application_boundary() {
         2
     );
 
-    let deleted = app
-        .clone()
-        .oneshot(
-            Request::delete(format!("/api/v1/shows/{show_id}/objects/route/main"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::IF_MATCH, "2")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+    let deleted = post_output_route_action(
+        &app,
+        &token,
+        show_id,
+        serde_json::json!({
+            "request_id": "active-route-delete",
+            "action": {
+                "type": "delete",
+                "route_id": "main",
+                "expected_revision": 2,
+            }
+        }),
+    )
+    .await;
+    assert_eq!(deleted.status(), StatusCode::OK);
     let document = ShowStore::open(&entry.path)
         .unwrap()
         .portable_document()

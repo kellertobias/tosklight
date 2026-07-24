@@ -10,23 +10,21 @@ async fn open_show(app: &Router, token: &str, show_id: &str) {
 }
 
 async fn seed_stage_layout(
-    app: &Router,
+    state: &AppState,
     token: &str,
     show_id: &str,
     body: &serde_json::Value,
 ) -> u64 {
-    let response = app
-        .clone()
-        .oneshot(
-            Request::put(format!("/api/v1/shows/{show_id}/objects/stage_layout/main"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::IF_MATCH, "0")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = seed_show_object(
+        state,
+        token,
+        show_id,
+        "stage_layout",
+        "main",
+        0,
+        body.clone(),
+    )
+    .await;
     assert_eq!(response.status(), StatusCode::OK);
     json(response).await["revision"].as_u64().unwrap()
 }
@@ -93,7 +91,7 @@ async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order
         Uuid::new_v4(),
     );
     let seeded = seed_stage_layout(
-        &app,
+        &state,
         &token,
         show_id,
         &serde_json::json!({
@@ -163,14 +161,14 @@ async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order
 #[tokio::test]
 async fn move_selection_replays_on_request_id_and_rejects_reuse_for_a_different_action() {
     let (state, data_dir) = test_state();
-    let app = router(state);
+    let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let show = create_show(&app, &token, "Stage replay").await;
     let show_id = show["id"].as_str().unwrap();
     open_show(&app, &token, show_id).await;
     let fixture = Uuid::new_v4();
     seed_stage_layout(
-        &app,
+        &state,
         &token,
         show_id,
         &serde_json::json!({
@@ -211,7 +209,7 @@ async fn move_selection_replays_on_request_id_and_rejects_reuse_for_a_different_
 #[tokio::test]
 async fn move_selection_validates_requests_and_tolerates_unknown_fields() {
     let (state, data_dir) = test_state();
-    let app = router(state);
+    let app = router(state.clone());
     let unauthenticated = post_stage_layout_action(
         &app,
         "not-a-token",
@@ -234,7 +232,7 @@ async fn move_selection_validates_requests_and_tolerates_unknown_fields() {
     open_show(&app, &token, show_id).await;
     let fixture = Uuid::new_v4();
     seed_stage_layout(
-        &app,
+        &state,
         &token,
         show_id,
         &serde_json::json!({
@@ -288,7 +286,7 @@ async fn move_selection_validates_requests_and_tolerates_unknown_fields() {
 #[tokio::test]
 async fn move_selection_defaults_patched_fixtures_without_any_stored_position() {
     let (state, data_dir) = test_state();
-    let app = router(state);
+    let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let seeded_path = data_dir.join("seeded-default.show");
     default_show::initialise(&seeded_path).unwrap();
@@ -332,24 +330,16 @@ async fn move_selection_defaults_patched_fixtures_without_any_stored_position() 
     assert!(patched.len() >= 2, "the seeded default show is patched");
 
     let current = read_stage_layout(&app, &token, &show_id).await;
-    let response = app
-        .clone()
-        .oneshot(
-            Request::put(format!("/api/v1/shows/{show_id}/objects/stage_layout/main"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(
-                    header::IF_MATCH,
-                    current["revision"].as_u64().unwrap().to_string(),
-                )
-                .body(Body::from(
-                    serde_json::json!({"version": 2, "positions": {}, "positions3d": {}})
-                        .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let response = seed_show_object(
+        &state,
+        &token,
+        &show_id,
+        "stage_layout",
+        "main",
+        current["revision"].as_u64().unwrap(),
+        serde_json::json!({"version": 2, "positions": {}, "positions3d": {}}),
+    )
+    .await;
     assert_eq!(response.status(), StatusCode::OK);
 
     // Selection order [second, first] — each defaults to its authoritative patch-order grid

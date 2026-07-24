@@ -1,5 +1,4 @@
 import type { PresetFamily } from "../../presetFamilies";
-import type { ShowObjectMutationResponse } from "../../features/showObjects/contracts";
 import type {
 	OutputRoute,
 	OutputRouteAction,
@@ -161,32 +160,6 @@ export class ShowObjectsApiClient {
 		);
 	}
 
-	putObject<T>(
-		showId: string,
-		kind: string,
-		id: string,
-		body: T,
-		revision: number,
-	): Promise<ShowObjectMutationResponse> {
-		return this.transport.request(showObjectPath(showId, kind, id), {
-			method: "PUT",
-			headers: revisionHeaders(revision, true),
-			body: JSON.stringify(body),
-		});
-	}
-
-	deleteObject(
-		showId: string,
-		kind: string,
-		id: string,
-		revision: number,
-	): Promise<void> {
-		return this.transport.request(showObjectPath(showId, kind, id), {
-			method: "DELETE",
-			headers: revisionHeaders(revision),
-		});
-	}
-
 	storePreload(
 		showId: string,
 		input: PreloadStoreInput,
@@ -218,18 +191,6 @@ export class ShowObjectsApiClient {
 			};
 		}
 		return this.showObjectAction("/api/v2/preload/record", showId, action);
-	}
-
-	undoObject(
-		showId: string,
-		kind: string,
-		id: string,
-		revision: number,
-	): Promise<ShowObjectMutationResponse> {
-		return this.transport.request(`${showObjectPath(showId, kind, id)}/undo`, {
-			method: "POST",
-			headers: revisionHeaders(revision),
-		});
 	}
 
 	private outputRouteAction(
@@ -271,10 +232,6 @@ export class ShowObjectsApiClient {
 	}
 }
 
-function showObjectPath(showId: string, kind: string, id: string): string {
-	return `/api/v1/shows/${showId}/objects/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`;
-}
-
 function v2ShowObjectPath(kind: string, id: string): string {
 	return `/api/v2/objects/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`;
 }
@@ -296,11 +253,4 @@ function preloadFamily(family: PresetFamily | undefined) {
 		default:
 			return "mixed" as const;
 	}
-}
-
-function revisionHeaders(revision: number, json = false): HeadersInit {
-	return {
-		...(json ? { "content-type": "application/json" } : {}),
-		"if-match": String(revision),
-	};
 }

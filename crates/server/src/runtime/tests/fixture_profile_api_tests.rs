@@ -99,7 +99,7 @@ async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
 
     for invalid in [inconsistent_identity, unknown_split, overlapping_multipatch] {
         let response = put_show_object(
-            &app,
+            &state,
             &token,
             &show_id.0.to_string(),
             "patched_fixture",
@@ -169,7 +169,7 @@ async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
         missing_multipatch,
     ] {
         let response = put_show_object(
-            &app,
+            &state,
             &token,
             &show_id.0.to_string(),
             "patched_fixture",

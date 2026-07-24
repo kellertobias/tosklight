@@ -17,7 +17,7 @@ async fn active_show_document_cache_reuses_and_detects_out_of_band_writes() {
     // The first mutation loads the document and leaves it cached at the committed revision.
     assert_eq!(
         put_show_object(
-            &app,
+            &state,
             &token,
             &show_id,
             "group",
@@ -39,7 +39,7 @@ async fn active_show_document_cache_reuses_and_detects_out_of_band_writes() {
     // The second mutation reuses the cache and stays byte-identical with the store.
     assert_eq!(
         put_show_object(
-            &app,
+            &state,
             &token,
             &show_id,
             "group",
@@ -65,7 +65,7 @@ async fn active_show_document_cache_reuses_and_detects_out_of_band_writes() {
     // The next mutation must detect the stale cache, reload, and succeed with the fresh data.
     assert_eq!(
         put_show_object(
-            &app,
+            &state,
             &token,
             &show_id,
             "group",

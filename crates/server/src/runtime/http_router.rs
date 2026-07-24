@@ -137,7 +137,7 @@ fn show_object_routes() -> Router<AppState> {
         .route("/api/v1/shows/{id}/objects/{kind}", get(list_objects))
         .route(
             "/api/v1/shows/{id}/objects/{kind}/{object_id}",
-            get(get_object).put(put_object).delete(delete_object),
+            get(get_object),
         )
 }
 

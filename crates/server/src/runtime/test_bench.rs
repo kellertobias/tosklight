@@ -150,40 +150,37 @@ pub(super) enum TestShowObjectSeedAction {
 /// Test-bench-only adapter for seeding portable object fixtures.
 ///
 /// The route is registered only when `--test-bench` supplies a manual clock on a loopback
-/// server. It deliberately delegates to the same compatibility implementation until the final
-/// generic-route retirement chunk extracts that implementation into a private service.
+/// server. It calls a private seeding boundary so the public v1 mutation routes can remain absent.
 pub(super) async fn seed_test_show_object(
     State(state): State<AppState>,
     Path((show_id, kind, object_id)): Path<(Uuid, String, String)>,
-    mut headers: HeaderMap,
+    headers: HeaderMap,
     TolerantJson(request): TolerantJson<TestShowObjectSeedRequest>,
 ) -> Result<Response, ApiError> {
-    headers.insert(
-        header::IF_MATCH,
-        request
-            .expected_revision
-            .to_string()
-            .parse()
-            .map_err(|error| {
-                ApiError::bad_request(format!("invalid expected revision: {error}"))
-            })?,
-    );
+    let session = authenticate(&state, &headers)?;
+    let show_id = light_core::ShowId(show_id);
     match request.action {
         TestShowObjectSeedAction::Put { body } => {
-            put_object(
-                State(state),
-                Path((show_id, kind, object_id)),
-                headers,
-                Json(body),
+            seed_object_for_test_put(
+                &state,
+                &session,
+                show_id,
+                kind,
+                object_id,
+                request.expected_revision,
+                body,
             )
             .await
         }
-        TestShowObjectSeedAction::Delete => {
-            Ok(
-                delete_object(State(state), Path((show_id, kind, object_id)), headers)
-                    .await?
-                    .into_response(),
-            )
-        }
+        TestShowObjectSeedAction::Delete => Ok(seed_object_for_test_delete(
+            &state,
+            &session,
+            show_id,
+            kind,
+            object_id,
+            request.expected_revision,
+        )
+        .await?
+        .into_response()),
     }
 }

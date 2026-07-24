@@ -22,7 +22,7 @@ async fn recovery_checkpoints_follow_the_autosave_interval() {
     for number in 1..=3 {
         assert_eq!(
             put_show_object(
-                &app,
+                &state,
                 &token,
                 &show_id,
                 "group",
@@ -40,7 +40,7 @@ async fn recovery_checkpoints_follow_the_autosave_interval() {
     clock.advance_millis(30_000);
     assert_eq!(
         put_show_object(
-            &app,
+            &state,
             &token,
             &show_id,
             "group",

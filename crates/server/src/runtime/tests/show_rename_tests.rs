@@ -18,20 +18,16 @@ async fn active_empty_show_rename_preserves_identity_content_and_revisions() {
     assert_eq!(reopened_empty.name, "New Empty Show");
     assert!(FsPath::new(&reopened_empty.path).exists());
     drop(reopened_desk);
-    let stored = app
-        .clone()
-        .oneshot(
-            Request::put(format!(
-                "/api/v1/shows/{show_id}/objects/user_layout/operator"
-            ))
-            .header(header::CONTENT_TYPE, "application/json")
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::IF_MATCH, "0")
-            .body(Body::from(r#"{"marker":"before naming"}"#))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
+    let stored = seed_show_object(
+        &state,
+        &token,
+        show_id,
+        "user_layout",
+        "operator",
+        0,
+        serde_json::json!({"marker":"before naming"}),
+    )
+    .await;
     assert_eq!(stored.status(), StatusCode::OK);
     let revision = app
         .clone()

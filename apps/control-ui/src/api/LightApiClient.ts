@@ -180,10 +180,7 @@ export class LightApiClient extends LightClientRuntime {
 	updateUserLayout = bindClientMethod(this.showObjectsApi, "updateUserLayout");
 	savePatchLayer = bindClientMethod(this.showObjectsApi, "savePatchLayer");
 	recordDynamic = bindClientMethod(this.showObjectsApi, "recordDynamic");
-	putObject = bindClientMethod(this.showObjectsApi, "putObject");
-	deleteObject = bindClientMethod(this.showObjectsApi, "deleteObject");
 	storePreload = bindClientMethod(this.showObjectsApi, "storePreload");
-	undoObject = bindClientMethod(this.showObjectsApi, "undoObject");
 	programmers = bindClientMethod(this.programmingApi, "programmers");
 	programmerValuesLiveAction = bindClientMethod(
 		this.programmingApi,

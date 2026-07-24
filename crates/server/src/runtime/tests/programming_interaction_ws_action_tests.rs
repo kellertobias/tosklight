@@ -169,24 +169,19 @@ async fn selection_action_ws_accepts_the_complete_action_union() {
     open_default_show(&app, &token).await;
     let fixture_id = state.engine.snapshot().fixtures[0].fixture_id;
     let show_id = state.active_show.read().as_ref().unwrap().id.0;
-    let group = app
-        .clone()
-        .oneshot(
-            Request::put(format!("/api/v1/shows/{show_id}/objects/group/1"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::IF_MATCH, "0")
-                .body(Body::from(
-                    serde_json::json!({
-                        "name": "WS selection group",
-                        "fixtures": [fixture_id.0],
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let group = seed_show_object(
+        &state,
+        &token,
+        &show_id.to_string(),
+        "group",
+        "1",
+        0,
+        serde_json::json!({
+            "name": "WS selection group",
+            "fixtures": [fixture_id.0],
+        }),
+    )
+    .await;
     if group.status() != StatusCode::OK {
         let status = group.status();
         let body = group.into_body().collect().await.unwrap().to_bytes();

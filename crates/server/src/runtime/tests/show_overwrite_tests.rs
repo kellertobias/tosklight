@@ -27,7 +27,7 @@ async fn prepare_overwrite_source(
     let source_id = source["id"].as_str().unwrap().to_owned();
     assert_eq!(
         put_show_object(
-            app,
+            state,
             token,
             &source_id,
             "user_layout",
@@ -60,31 +60,31 @@ async fn prepare_overwrite_source(
         .as_str()
         .unwrap()
         .to_owned();
-    let copy_edit = app
-        .clone()
-        .oneshot(
-            Request::put(format!(
-                "/api/v1/shows/{copy_id}/objects/user_layout/operator"
-            ))
-            .header(header::CONTENT_TYPE, "application/json")
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::IF_MATCH, "1")
-            .body(Body::from(r#"{"marker":"copy edit"}"#))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
+    let copy_edit = seed_show_object(
+        state,
+        token,
+        &copy_id,
+        "user_layout",
+        "operator",
+        1,
+        serde_json::json!({"marker":"copy edit"}),
+    )
+    .await;
     assert_eq!(copy_edit.status(), StatusCode::OK);
     save_show_revision(app, token, &copy_id, "Copy private checkpoint").await;
     (source_id, copy_id, revision_path, revision_body)
 }
 
-async fn prepare_overwrite_destination(app: &Router, token: &str) -> String {
+async fn prepare_overwrite_destination(
+    state: &AppState,
+    app: &Router,
+    token: &str,
+) -> String {
     let destination = create_show(app, token, "Destination").await;
     let destination_id = destination["id"].as_str().unwrap().to_owned();
     assert_eq!(
         put_show_object(
-            app,
+            state,
             token,
             &destination_id,
             "user_layout",
@@ -177,7 +177,7 @@ async fn confirmed_overwrite_preserves_destination_identity_revisions_and_revisi
     let (token, _) = login(&app, "Operator").await;
     let (source_id, copy_id, revision_path, revision_body) =
         prepare_overwrite_source(&state, &app, &token).await;
-    let destination_id = prepare_overwrite_destination(&app, &token).await;
+    let destination_id = prepare_overwrite_destination(&state, &app, &token).await;
     overwrite_and_verify_destination(&app, &token, &copy_id, &destination_id).await;
     assert_eq!(overwrite_revision_body(&revision_path), revision_body);
     verify_copy_keeps_identity_and_source_reference(&app, &token, &source_id, &copy_id).await;

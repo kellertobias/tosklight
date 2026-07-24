@@ -230,15 +230,15 @@ pub(super) async fn activate_object_change(
     }
     Ok(())
 }
-pub(super) async fn put_object(
-    State(state): State<AppState>,
-    Path((id, kind, object_id)): Path<(Uuid, String, String)>,
-    headers: HeaderMap,
-    Json(body): Json<serde_json::Value>,
+pub(super) async fn seed_object_for_test_put(
+    state: &AppState,
+    session: &Session,
+    show_id: light_core::ShowId,
+    kind: String,
+    object_id: String,
+    expected: u64,
+    body: serde_json::Value,
 ) -> Result<Response, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    let expected = parse_if_match(&headers)?;
-    let show_id = light_core::ShowId(id);
     let entry = state
         .desk
         .lock()
@@ -253,7 +253,7 @@ pub(super) async fn put_object(
         .is_some_and(|active| active.id == show_id);
     if active && kind == "route" {
         let action = output_route_action(
-            &session,
+            session,
             show_id,
             object_id,
             expected,
@@ -289,7 +289,7 @@ pub(super) async fn put_object(
                     .map_err(ApiError::bad_request)?;
             }
             let action = active_show_object_action(
-                operator_action_context(&session, light_application::ActionSource::Http),
+                operator_action_context(session, light_application::ActionSource::Http),
                 show_id,
                 vec![put_active_show_object(
                     object_kind,
@@ -349,19 +349,19 @@ pub(super) async fn put_object(
         .into_response())
 }
 
-pub(super) async fn delete_object(
-    State(state): State<AppState>,
-    Path((id, kind, object_id)): Path<(Uuid, String, String)>,
-    headers: HeaderMap,
+pub(super) async fn seed_object_for_test_delete(
+    state: &AppState,
+    session: &Session,
+    show_id: light_core::ShowId,
+    kind: String,
+    object_id: String,
+    expected: u64,
 ) -> Result<StatusCode, ApiError> {
-    let session = authenticate(&state, &headers)?;
     if kind != "route" {
         return Err(ApiError::bad_request(
             "generic object deletion is currently limited to output routes",
         ));
     }
-    let expected = parse_if_match(&headers)?;
-    let show_id = light_core::ShowId(id);
     let entry = state
         .desk
         .lock()
@@ -376,7 +376,7 @@ pub(super) async fn delete_object(
         .is_some_and(|active| active.id == show_id);
     if active {
         let action = output_route_action(
-            &session,
+            session,
             show_id,
             object_id,
             expected,

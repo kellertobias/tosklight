@@ -88,6 +88,42 @@ async fn show_object_v2_snapshots_require_authentication_and_active_show_scope()
 }
 
 #[tokio::test]
+async fn generic_v1_object_mutations_are_absent_while_reads_remain() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let show_id = open_show(&app, &token, "Retired object mutations").await;
+    let path = format!("/api/v1/shows/{show_id}/objects/group/1");
+
+    for request in [
+        Request::put(&path)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from("{}"))
+            .unwrap(),
+        Request::delete(&path)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap(),
+    ] {
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    let read = app
+        .oneshot(
+            Request::get(path)
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(read.status(), StatusCode::NOT_FOUND);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn output_route_v2_actions_are_partial_tolerant_and_replay_safe() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

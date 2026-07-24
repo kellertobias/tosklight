@@ -71,6 +71,23 @@ async function showAction<T>(request: APIRequestContext, session: Session, actio
   return outcome.result.show as T;
 }
 
+async function seedObject(
+  request: APIRequestContext,
+  session: Session,
+  showId: string,
+  kind: string,
+  objectId: string,
+  body: unknown,
+) {
+  await jsonRequest(
+    request,
+    "post",
+    `/api/v2/test/shows/${showId}/objects/${encodeURIComponent(kind)}/${encodeURIComponent(objectId)}`,
+    session,
+    { expected_revision: 0, action: { type: "put", body } },
+  );
+}
+
 async function waitForDmx(request: APIRequestContext, expected: number) {
   const settle = await request.post("/api/v1/test/clock/advance", { data: { millis: 3_000 } });
   expect(settle.ok(), `manual fade settle: ${await settle.text()}`).toBeTruthy();
@@ -114,7 +131,7 @@ test("touch programmer path is audited and reaches the rendered DMX output", asy
   const setupSession = await jsonRequest<Session>(request, "post", "/api/v2/sessions", undefined, { username: "Operator" });
   const show = await showAction<{ id: string }>(request, setupSession, { type: "create", name: `E2E-${crypto.randomUUID()}`, data_base64: null, overwrite: false });
   const fixtureIds = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
-  for (const [index, fixtureId] of fixtureIds.entries()) await jsonRequest(request, "put", `/api/v1/shows/${show.id}/objects/patched_fixture/dimmer-${index + 1}`, setupSession, {
+  for (const [index, fixtureId] of fixtureIds.entries()) await seedObject(request, setupSession, show.id, "patched_fixture", `dimmer-${index + 1}`, {
     fixture_id: fixtureId, fixture_number: index + 1,
     definition: {
       schema_version: 1, id: crypto.randomUUID(), revision: 1, manufacturer: "E2E", model: `Dimmer ${index + 1}`, mode: "1ch", footprint: 1,
@@ -122,7 +139,7 @@ test("touch programmer path is audited and reaches the rendered DMX output", asy
       color_calibration: null, hazardous: false, signal_loss_policy: { type: "hold_last" }, safe_values: {},
     }, universe: 1, address: index + 1, logical_heads: [],
   });
-  await jsonRequest(request, "put", `/api/v1/shows/${show.id}/objects/group/1`, setupSession, { name: "All Dimmers", fixtures: fixtureIds, master: 1, playback_fader: 1 });
+  await seedObject(request, setupSession, show.id, "group", "1", { name: "All Dimmers", fixtures: fixtureIds, master: 1, playback_fader: 1 });
   await showAction(request, setupSession, { type: "open", show_id: show.id, transition: "hold_current", transition_millis: null });
 
   await page.addInitScript((deskId) => {

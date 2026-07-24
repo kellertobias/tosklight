@@ -57,7 +57,7 @@ async fn preset_object_api_uses_family_scoped_numbers() {
 
     for (storage_key, family) in [("2.1", "Color"), ("3.1", "Position")] {
         let response = put_show_object(
-            &app,
+            &state,
             &token,
             show_id,
             "preset",
@@ -136,7 +136,7 @@ async fn preset_object_api_uses_family_scoped_numbers() {
     );
 
     let global_plain_id = put_show_object(
-        &app,
+        &state,
         &token,
         show_id,
         "preset",

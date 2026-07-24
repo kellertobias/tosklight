@@ -20,7 +20,7 @@ impl OperationalScenario {
         ] {
             assert_eq!(
                 put_show_object(
-                    &self.app,
+                    &self.state,
                     &self.token,
                     &self.first_id,
                     object_type,
@@ -131,7 +131,7 @@ impl OperationalScenario {
         };
         assert_eq!(
             put_show_object(
-                &self.app,
+                &self.state,
                 &self.token,
                 &self.first_id,
                 "preset",

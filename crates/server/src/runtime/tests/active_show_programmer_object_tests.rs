@@ -68,7 +68,7 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
         .revision();
 
     let updated = put_active_object(
-        &app,
+        &state,
         &token,
         show_id,
         "group",
@@ -88,7 +88,7 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
     );
 
     let empty = put_active_object(
-        &app,
+        &state,
         &token,
         show_id,
         "group",
@@ -100,7 +100,7 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
     assert_eq!(empty.status(), StatusCode::OK);
 
     let preset = put_active_object(
-        &app,
+        &state,
         &token,
         show_id,
         "preset",
@@ -161,7 +161,7 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
 
     let revision_before_failures = document.revision();
     let invalid = put_active_object(
-        &app,
+        &state,
         &token,
         show_id,
         "preset",
@@ -172,7 +172,7 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
     .await;
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
     let stale = put_active_object(
-        &app,
+        &state,
         &token,
         show_id,
         "group",
@@ -281,7 +281,7 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
 
     let before_put_sequence = state.application_events.latest_sequence();
     let changed = put_active_object(
-        &app,
+        &state,
         &token,
         show_id,
         "group",
@@ -412,7 +412,7 @@ async fn inactive_object_put_keeps_legacy_runtime_and_returns_null_cursor() {
         .unwrap()
         .revision();
     let put = put_active_object(
-        &app,
+        &state,
         &token,
         show_id,
         "group",
@@ -513,7 +513,7 @@ async fn open_show_for_test(app: &Router, token: &str, show_id: &str) {
 }
 
 async fn put_active_object(
-    app: &Router,
+    state: &AppState,
     token: &str,
     show_id: &str,
     kind: &str,
@@ -521,19 +521,7 @@ async fn put_active_object(
     revision: u64,
     body: serde_json::Value,
 ) -> Response {
-    app.clone()
-        .oneshot(
-            Request::put(format!(
-                "/api/v1/shows/{show_id}/objects/{kind}/{object_id}"
-            ))
-            .header(header::CONTENT_TYPE, "application/json")
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::IF_MATCH, revision.to_string())
-            .body(Body::from(body.to_string()))
-            .unwrap(),
-        )
-        .await
-        .unwrap()
+    seed_show_object(state, token, show_id, kind, object_id, revision, body).await
 }
 
 async fn undo_show_object(

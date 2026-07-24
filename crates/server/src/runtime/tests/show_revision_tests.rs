@@ -1,25 +1,20 @@
 async fn put_revision_layout(
-    app: &Router,
+    state: &AppState,
     token: &str,
     show_id: &str,
     revision: u64,
     marker: &str,
 ) -> Response {
-    app.clone()
-        .oneshot(
-            Request::put(format!(
-                "/api/v1/shows/{show_id}/objects/user_layout/operator"
-            ))
-            .header(header::CONTENT_TYPE, "application/json")
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::IF_MATCH, revision.to_string())
-            .body(Body::from(
-                serde_json::json!({"marker": marker}).to_string(),
-            ))
-            .unwrap(),
-        )
-        .await
-        .unwrap()
+    seed_show_object(
+        state,
+        token,
+        show_id,
+        "user_layout",
+        "operator",
+        revision,
+        serde_json::json!({"marker": marker}),
+    )
+    .await
 }
 
 async fn open_named_revision(app: &Router, token: &str, show_id: &str) -> Response {
@@ -74,7 +69,7 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
         )
         .unwrap();
     std::fs::remove_file(seed_path).unwrap();
-    let first = put_revision_layout(&app, &token, show_id, 0, "manual").await;
+    let first = put_revision_layout(&state, &token, show_id, 0, "manual").await;
     assert_eq!(first.status(), StatusCode::OK);
     let saved = app
         .clone()
@@ -97,7 +92,7 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
         .unwrap()
         .unwrap();
     let saved_source = std::fs::read(&saved_revision.path).unwrap();
-    let autosaved = put_revision_layout(&app, &token, show_id, 1, "autosave").await;
+    let autosaved = put_revision_layout(&state, &token, show_id, 1, "autosave").await;
     assert_eq!(autosaved.status(), StatusCode::OK);
     let opened = open_named_revision(&app, &token, show_id).await;
     assert_eq!(opened.status(), StatusCode::OK);
@@ -142,7 +137,7 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
     let copy_objects = json(copy_objects).await;
     assert_eq!(copy_objects[0]["body"]["marker"], "manual");
 
-    let copy_edit = put_revision_layout(&app, &token, copy_id, 1, "copy edit").await;
+    let copy_edit = put_revision_layout(&state, &token, copy_id, 1, "copy edit").await;
     assert_eq!(copy_edit.status(), StatusCode::OK);
     let original_after_copy_edit = revision_layout(&app, &token, show_id).await;
     assert_eq!(
@@ -175,22 +170,40 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
     let _ = std::fs::remove_dir_all(data_dir);
 }
 async fn put_show_object(
-    app: &Router,
+    state: &AppState,
     token: &str,
     show: &str,
     kind: &str,
     id: &str,
     body: serde_json::Value,
 ) -> Response {
-    app.clone()
-        .oneshot(
-            Request::put(format!("/api/v1/shows/{show}/objects/{kind}/{id}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::IF_MATCH, "0")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap()
+    seed_show_object(state, token, show, kind, id, 0, body).await
+}
+
+async fn seed_show_object(
+    state: &AppState,
+    token: &str,
+    show: &str,
+    kind: &str,
+    id: &str,
+    expected_revision: u64,
+    body: serde_json::Value,
+) -> Response {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::AUTHORIZATION,
+        format!("Bearer {token}").parse().unwrap(),
+    );
+    let session = authenticate(state, &headers).unwrap();
+    seed_object_for_test_put(
+        state,
+        &session,
+        light_core::ShowId(Uuid::parse_str(show).unwrap()),
+        kind.to_owned(),
+        id.to_owned(),
+        expected_revision,
+        body,
+    )
+    .await
+    .unwrap_or_else(ApiError::into_response)
 }

@@ -582,23 +582,16 @@ impl CommandHttpScenario {
         expected_revision: u64,
         body: serde_json::Value,
     ) -> Response {
-        self.app
-            .clone()
-            .oneshot(
-                Request::put(format!(
-                    "/api/v1/shows/{show_id}/objects/{kind}/{object_id}"
-                ))
-                .header(
-                    header::AUTHORIZATION,
-                    format!("Bearer {}", self.token),
-                )
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::IF_MATCH, expected_revision.to_string())
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-            )
-            .await
-            .unwrap()
+        seed_show_object(
+            &self.state,
+            &self.token,
+            show_id,
+            kind,
+            object_id,
+            expected_revision,
+            body,
+        )
+        .await
     }
 
     fn history_len(&self) -> usize {

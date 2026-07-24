@@ -167,34 +167,6 @@ describe("LightApiClient server selection and sessions", () => {
 		expect(patchHeaders.get("authorization")).toBe("Bearer token-a");
 	});
 
-	it("uses revision headers for portable show objects", async () => {
-		const fetchMock = vi
-			.fn()
-			.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify({
-						session_id: "session-a",
-						token: "token-a",
-						user: { id: "user-a", name: "Operator", enabled: true },
-					}),
-					{ status: 200, headers: { "content-type": "application/json" } },
-				),
-			)
-			.mockResolvedValueOnce(
-				new Response(JSON.stringify({ revision: 8 }), {
-					status: 200,
-					headers: { "content-type": "application/json" },
-				}),
-			);
-		vi.stubGlobal("fetch", fetchMock);
-		const client = new LightApiClient("http://desk.local");
-		await client.login("Operator");
-		await client.putObject("show-a", "user_layout", "user-a", { desks: [] }, 7);
-		const headers = fetchMock.mock.calls[1][1].headers as Headers;
-		expect(headers.get("if-match")).toBe("7");
-		expect(headers.get("authorization")).toBe("Bearer token-a");
-	});
-
 	it("sends typed show-scoped output-route intents", async () => {
 		const outcome = {
 			request_id: "ignored-by-client",
