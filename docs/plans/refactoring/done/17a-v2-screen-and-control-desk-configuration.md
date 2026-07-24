@@ -35,3 +35,10 @@ npm run test:e2e
 ## Decisions
 
 Inherited from chunk 17. No open decisions.
+
+## Result
+
+Execution inventory separated screen objects from control desks: they use different persisted
+schemas, authorization rules, event families, and page-authority semantics. The work was split into
+17a1 for screen configuration and 17a2 for control-desk settings/page selection. No production
+behavior changed in this planning split.
