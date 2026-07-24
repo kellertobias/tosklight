@@ -103,6 +103,18 @@ instead of inventing a dirty projection. Recovery fixture placement stays inside
 bench, while `show.expect.recoveryRequired()` and `show.expect.recovered()` prove the real
 readiness state, visible recovery actions, and preservation of the damaged file.
 
+Command-line scenarios use `command.type(...)`, `command.execute(...)`,
+`command.clear()`, and `command.expect(...)`; the visible route presses logical desk keys in
+order and executes by clicking the visible `ENT` control. Use `keypad.press([...])` when exact
+key order is itself the contract. Semantic API selection uses `fixture(number, head?)`,
+`fixtureRange(...)`, `group(...)`, `groupRange(...)`, and `dereferencedGroup(...)` through
+`selection.targets/add/remove/range/clear`, with `expect.selection(...)` as the normalized
+ordered oracle. Selection stepping remains `selection.previous/next/all`, while independent
+Highlight power is `highlight.on/off/toggle` with explicit `via.ui/api/osc` ports. Call
+`hardware.connect(alias)` before an OSC port and `hardware.disconnect()` during cleanup.
+Visible Fixture Sheet, Stage, pool, touch, keypad-selection, and OSC-selection adapters remain
+tracked by refactoring chunk 28/05b; do not label the typed API adapter as one of those routes.
+
 The runner exposes separate commands so CI classifies failures clearly:
 
 - `./test e2e-api`

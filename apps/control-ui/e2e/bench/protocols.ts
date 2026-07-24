@@ -182,6 +182,11 @@ export class OscHardware {
       if (this.messages.some((message) => message.address === `/light/${deskAlias}/feedback/page`)) return;
       await new Promise<void>((resolve) => setTimeout(resolve, 25));
     }
+    throw new Error(`Timed out subscribing OSC hardware ${clientId} to desk ${deskAlias}`);
+  }
+
+  async unsubscribe(clientId: string): Promise<void> {
+    await this.send("/light/unsubscribe", [clientId]);
   }
 
   async send(address: string, arguments_: OscArgument[] = []): Promise<void> {

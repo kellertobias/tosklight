@@ -7,6 +7,7 @@ import {
 import type { ControllableDesktopAction } from "../../src/platform/desktop/controllableBrowserDesktopBridge";
 import type { ApiDriver } from "./api";
 import { BrowserClock } from "./clockScenario";
+import { BrowserCommands, BrowserKeypad } from "./commandScenario";
 import type { DeskDriver } from "./desk";
 import { BrowserDesktops } from "./desktopScenario";
 import { BrowserDmx, type DmxUniverseExpectation } from "./dmxScenario";
@@ -15,6 +16,8 @@ import {
 	type FixtureDMXTarget,
 	FixtureDmxAssertions,
 } from "./fixtureDmx";
+import { type SimulatedHardware, simulatedHardware } from "./hardwareScenario";
+import { BrowserHighlight } from "./highlightScenario";
 import type { LightBench, TestShow } from "./lightBench";
 import {
 	BrowserOutputPackets,
@@ -24,6 +27,8 @@ import { BrowserOutput } from "./outputScenario";
 import type { BuiltInPaneType } from "./paneTypes";
 import { builtInLabels } from "./paneTypes";
 import type { DmxProtocol } from "./protocols";
+import type { SelectionTarget } from "./selectionContract";
+import { BrowserSelection } from "./selectionScenario";
 import { BrowserShows } from "./showScenario";
 
 export interface ScreenConfigurationIntent {
@@ -59,6 +64,11 @@ export class BrowserScenarioWorld {
 	readonly screen: BrowserScreens;
 	readonly show: BrowserShows;
 	readonly clock: BrowserClock;
+	readonly command: BrowserCommands;
+	readonly keypad: BrowserKeypad;
+	readonly selection: BrowserSelection;
+	readonly hardware: SimulatedHardware;
+	readonly highlight: BrowserHighlight;
 	readonly dmx: BrowserDmx;
 	readonly output: BrowserOutput;
 	readonly expect: {
@@ -68,6 +78,9 @@ export class BrowserScenarioWorld {
 			universe: number,
 			assertion: OutputPacketAssertion,
 		) => Promise<void>;
+		selection: (
+			...targets: SelectionTarget[]
+		) => ReturnType<BrowserSelection["expectSelection"]>;
 	};
 	readonly expectFixtureDMX: (
 		target: FixtureDMXTarget,
@@ -94,6 +107,11 @@ export class BrowserScenarioWorld {
 		this.screen = new BrowserScreens(page, desk);
 		this.show = new BrowserShows(api, bench, desk, initialShow, page);
 		this.clock = new BrowserClock(bench, desk);
+		this.command = new BrowserCommands(api, desk, page);
+		this.keypad = new BrowserKeypad(desk, page);
+		this.selection = new BrowserSelection(api);
+		this.hardware = simulatedHardware(bench, api);
+		this.highlight = new BrowserHighlight(page, api, this.hardware);
 		this.dmx = new BrowserDmx(api);
 		this.output = new BrowserOutput(api, desk);
 		const outputPackets = new BrowserOutputPackets(bench);
@@ -101,6 +119,7 @@ export class BrowserScenarioWorld {
 			dmx: (universe) => this.dmx.expect(universe),
 			outputPacket: (protocol, universe, assertion) =>
 				outputPackets.expect(protocol, universe, assertion),
+			selection: (...targets) => this.selection.expectSelection(...targets),
 		};
 		const fixtureDmx = new FixtureDmxAssertions(api, undefined, () =>
 			bench.applicationTime(),
