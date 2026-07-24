@@ -34,3 +34,20 @@ npm run test:e2e
 ## Decisions
 
 Inherited from chunk 17. No open decisions.
+
+## Result
+
+- Added a typed, replay-safe v2 control-desk action endpoint with sparse settings updates and
+  explicit existing-only or auto-creating page assignment.
+- Preserved desk authorization, all matching session projections, persisted desk rows, page
+  creation ordering, OSC feedback, and the distinction between explicit-page selection and
+  current-page playback actions.
+- Migrated the control UI and root OSC/virtual-playback scenarios, then removed the v1
+  control-desk settings and page-assignment routes. The v1 page-playback live-action route remains
+  intentionally for chunk 17c.
+- Verified `cargo test -p light-wire` (83 unit plus generated-contract coverage), focused server
+  tests (1 control-desk and 5 page-topology tests), focused client tests (9), `npm run test:unit`
+  (2,004 frontend tests and all Rust workspace tests), focused E2E (53 passed / 2 skipped),
+  `npm run test:e2e` (285 passed / 11 skipped), and `npm run test:architecture`.
+- During final review, removed an unsupported layout-clear flag so the partial v2 update contract
+  continues to match the legacy store's preserve-on-omission behavior.

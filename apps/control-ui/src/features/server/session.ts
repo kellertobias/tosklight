@@ -11,12 +11,7 @@ export function createSessionActions(
 	| "selectControlDesk"
 	| "removeClient"
 > {
-	const {
-		client,
-		setError,
-		setBootstrap,
-		setSession,
-	} = model;
+	const { client, setError, setBootstrap, setSession } = model;
 	return {
 		createUser: async (name) => {
 			try {
@@ -43,7 +38,10 @@ export function createSessionActions(
 		},
 		updateControlDesk: async (desk) => {
 			try {
-				const updated = await client.updateControlDesk(desk);
+				const updated = await client.updateControlDesk(
+					desk,
+					model.session?.desk,
+				);
 				setSession((current) =>
 					current ? { ...current, desk: updated } : current,
 				);

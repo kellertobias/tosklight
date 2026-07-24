@@ -1,6 +1,7 @@
 //! Version 2 transport contracts.
 
 pub mod command_line;
+pub mod control_desk_configuration;
 pub mod cue_deletion;
 pub mod cue_recording;
 pub mod cue_transfer;

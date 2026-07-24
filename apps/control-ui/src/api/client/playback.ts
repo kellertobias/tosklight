@@ -1,4 +1,8 @@
 import type {
+	ControlDeskConfigurationAction,
+	ControlDeskConfigurationActionOutcome,
+	ControlDeskConfigurationActionRequest,
+	ControlDeskConfigurationPatch,
 	PlaybackActionOutcome,
 	PlaybackActionRequest,
 	PlaybackRuntimeIdentity,
@@ -230,33 +234,33 @@ export class PlaybackApiClient {
 		});
 	}
 
-	setPlaybackPage(
+	async setPlaybackPage(
 		deskId: string,
 		page: number,
 		options: PlaybackPageSelectionOptions = {},
 	) {
-		const body =
-			options.existingOnly == null
-				? { page }
-				: { page, existing_only: options.existingOnly };
-		return this.transport.request<{
-			desk_id: string;
-			page: number;
-			event_sequence: number | null;
-			page_creation_event_sequence: number | null;
-		}>(`/api/v1/control-desks/${deskId}/page`, {
-			method: "PUT",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(body),
+		const outcome = await this.controlDeskAction(deskId, {
+			type: "set_page",
+			page,
+			existing_only: options.existingOnly ?? false,
 		});
+		return {
+			desk_id: outcome.desk.id,
+			page: outcome.page ?? page,
+			event_sequence: outcome.event_sequence,
+			page_creation_event_sequence: outcome.page_creation_event_sequence,
+		};
 	}
 
-	updateControlDesk(desk: ControlDesk): Promise<ControlDesk> {
-		return this.transport.request(`/api/v1/control-desks/${desk.id}`, {
-			method: "PUT",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(desk),
+	async updateControlDesk(
+		desk: ControlDesk,
+		previous?: ControlDesk,
+	): Promise<ControlDesk> {
+		const outcome = await this.controlDeskAction(desk.id, {
+			type: "update",
+			patch: controlDeskPatch(previous, desk),
 		});
+		return outcome.desk as ControlDesk;
 	}
 
 	removeClient(deskId: string): Promise<void> {
@@ -273,6 +277,21 @@ export class PlaybackApiClient {
 			action,
 		};
 		return this.transport.request("/api/v2/screens/actions", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(request),
+		});
+	}
+
+	private controlDeskAction(
+		deskId: string,
+		action: ControlDeskConfigurationAction,
+	): Promise<ControlDeskConfigurationActionOutcome> {
+		const request: ControlDeskConfigurationActionRequest = {
+			request_id: crypto.randomUUID(),
+			action,
+		};
+		return this.transport.request(`/api/v2/control-desks/${deskId}/actions`, {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(request),
@@ -327,5 +346,26 @@ function screenPatch(
 					),
 		clear_playback_layout:
 			current.playback_layout != null && next.playback_layout == null,
+	};
+}
+
+function controlDeskPatch(
+	current: ControlDesk | undefined,
+	next: ControlDesk,
+): ControlDeskConfigurationPatch {
+	const changed = <T>(before: T | undefined, after: T) =>
+		before === after ? null : after;
+	return {
+		name: changed(current?.name, next.name),
+		osc_alias: changed(current?.osc_alias, next.osc_alias),
+		columns: changed(current?.columns, next.columns),
+		rows: changed(current?.rows, next.rows),
+		buttons: changed(current?.buttons, next.buttons),
+		playback_layout:
+			next.playback_layout == null ||
+			JSON.stringify(current?.playback_layout) ===
+				JSON.stringify(next.playback_layout)
+				? null
+				: next.playback_layout,
 	};
 }

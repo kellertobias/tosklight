@@ -37,6 +37,14 @@ export type CommandErrorResponse = { error: string, };
 
 export type CommandLineChangedEvent = { desk_id: string, session_id: string, user_id: string, text: string, target: CommandTarget, pristine: boolean, revision: number, source: CommandHttpSource, request_id?: string | null, redacted?: boolean, };
 
+export type ControlDeskConfigurationActionRequest = { request_id: string, action: ControlDeskConfigurationAction, };
+
+export type ControlDeskConfigurationAction = { "type": "update", patch: ControlDeskConfigurationPatch, } | { "type": "set_page", page: number, existing_only: boolean, };
+
+export type ControlDeskConfigurationPatch = { name: string | null, osc_alias: string | null, columns: number | null, rows: number | null, buttons: number | null, playback_layout: RuntimePlaybackSurfaceLayout | null, };
+
+export type ControlDeskConfigurationActionOutcome = { request_id: string, replayed: boolean, desk: RuntimeControlDesk, page: number | null, event_sequence: number | null, page_creation_event_sequence: number | null, };
+
 export type EventCapability = "programmer" | "playback" | "show" | "desk" | "output" | "system";
 
 export type EventClass = "transition" | "projection" | "command_outcome" | "error" | "safety" | "telemetry";

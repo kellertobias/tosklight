@@ -231,7 +231,7 @@ async fn strict_desk_page_selects_one_existing_page_without_creating_another() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let body = json(response).await;
-    assert_eq!(body["desk_id"], desk_id.to_string());
+    assert_eq!(body["desk"]["id"], desk_id.to_string());
     assert_eq!(body["page"], 2);
     assert_eq!(body["event_sequence"], cursor + 1);
     assert!(body["page_creation_event_sequence"].is_null());
@@ -360,15 +360,15 @@ async fn put_desk_page(
     page: u8,
     existing_only: Option<bool>,
 ) -> Response {
-    let mut body = serde_json::json!({"page":page});
-    if let Some(existing_only) = existing_only {
-        body["existing_only"] = serde_json::json!(existing_only);
-    }
+    let body = serde_json::json!({
+        "request_id":Uuid::new_v4().to_string(),
+        "action":{"type":"set_page","page":page,"existing_only":existing_only.unwrap_or(false)}
+    });
     scenario
         .app
         .clone()
         .oneshot(
-            Request::put(format!("/api/v1/control-desks/{desk_id}/page"))
+            Request::post(format!("/api/v2/control-desks/{desk_id}/actions"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
                 .body(Body::from(body.to_string()))
@@ -378,7 +378,7 @@ async fn put_desk_page(
         .unwrap()
 }
 
-fn scenario_desk_id(scenario: &TopologyScenario) -> Uuid {
+pub(super) fn scenario_desk_id(scenario: &TopologyScenario) -> Uuid {
     scenario
         .state
         .sessions
@@ -390,11 +390,15 @@ fn scenario_desk_id(scenario: &TopologyScenario) -> Uuid {
         .id
 }
 
-fn scenario_show_id(scenario: &TopologyScenario) -> light_core::ShowId {
+pub(super) fn scenario_show_id(scenario: &TopologyScenario) -> light_core::ShowId {
     light_core::ShowId(Uuid::parse_str(&scenario.show_id).unwrap())
 }
 
-fn desk_page(scenario: &TopologyScenario, desk_id: Uuid, show_id: light_core::ShowId) -> u8 {
+pub(super) fn desk_page(
+    scenario: &TopologyScenario,
+    desk_id: Uuid,
+    show_id: light_core::ShowId,
+) -> u8 {
     scenario
         .state
         .desk

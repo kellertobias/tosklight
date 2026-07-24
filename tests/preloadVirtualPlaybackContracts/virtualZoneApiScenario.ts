@@ -139,9 +139,12 @@ async function verifyFirstDeskPageAndOsc({
 	bench,
 }: VirtualZoneApiContext) {
 	await api.request(
-		"PUT",
-		`/api/v1/control-desks/${api.session.desk.id}/page`,
-		{ page: 2 },
+		"POST",
+		`/api/v2/control-desks/${api.session.desk.id}/actions`,
+		{
+			request_id: crypto.randomUUID(),
+			action: { type: "set_page", page: 2, existing_only: false },
+		},
 	);
 	for (const number of [71, 72, 73]) await poolAction(api, number, "off");
 	await api.request(
@@ -157,9 +160,12 @@ async function verifyFirstDeskPageAndOsc({
 	expect(await activePlayback(api, 73)).toMatchObject({ enabled: false });
 	expect(await activePlayback(api, 71)).toMatchObject({ enabled: true });
 	await api.request(
-		"PUT",
-		`/api/v1/control-desks/${api.session.desk.id}/page`,
-		{ page: 1 },
+		"POST",
+		`/api/v2/control-desks/${api.session.desk.id}/actions`,
+		{
+			request_id: crypto.randomUUID(),
+			action: { type: "set_page", page: 1, existing_only: false },
+		},
 	);
 	for (const number of [71, 72, 73]) await poolAction(api, number, "off");
 

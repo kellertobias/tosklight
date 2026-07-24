@@ -56,6 +56,8 @@ pub(super) struct AppState {
         Arc<tokio::sync::Mutex<show_object_intents_v2::ShowObjectIntentReplayCache>>,
     pub(super) screen_configuration_replay:
         Arc<tokio::sync::Mutex<screen_configuration_v2::ScreenConfigurationReplayCache>>,
+    pub(super) control_desk_configuration_replay:
+        Arc<tokio::sync::Mutex<control_desk_configuration_v2::ControlDeskConfigurationReplayCache>>,
     pub(super) stage_layout_replay: Arc<Mutex<stage_layout_http::StageLayoutReplayCache>>,
     pub(super) virtual_playback_zones_replay:
         Arc<Mutex<virtual_playback_zones_http::VirtualPlaybackZonesReplayCache>>,

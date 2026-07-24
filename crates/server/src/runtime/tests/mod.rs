@@ -12,6 +12,8 @@ mod active_show_programmer_object_tests;
 mod active_show_route_tests;
 #[path = "command_http_tests.rs"]
 mod command_http_tests;
+#[path = "control_desk_configuration_v2_tests.rs"]
+mod control_desk_configuration_v2_tests;
 #[path = "control_mapping_tests.rs"]
 mod control_mapping_tests;
 #[path = "engine_selection_refresh_tests.rs"]

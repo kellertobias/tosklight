@@ -104,6 +104,7 @@ mod command_playback_addresses;
 mod command_presets;
 mod command_timing;
 mod configuration;
+mod control_desk_configuration_v2;
 mod control_inputs;
 mod cue_speed_commands;
 mod engine_selection_refresh;

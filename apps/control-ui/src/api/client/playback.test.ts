@@ -227,7 +227,9 @@ describe("PlaybackApiClient v2 action boundary", () => {
 
 	it("requires an existing Page for scoped desk selection", async () => {
 		const { client, request } = clientReturning({
-			desk_id: DESK_ID,
+			request_id: "desk-page",
+			replayed: false,
+			desk: deskProjection(),
 			page: 2,
 			event_sequence: 14,
 			page_creation_event_sequence: null,
@@ -236,17 +238,19 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		await client.setPlaybackPage(DESK_ID, 2, { existingOnly: true });
 
 		expect(request).toHaveBeenCalledWith(
-			`/api/v1/control-desks/${DESK_ID}/page`,
+			`/api/v2/control-desks/${DESK_ID}/actions`,
 			expect.objectContaining({
-				method: "PUT",
-				body: JSON.stringify({ page: 2, existing_only: true }),
+				method: "POST",
+				body: expect.stringContaining('"existing_only":true'),
 			}),
 		);
 	});
 
-	it("omits strict Page selection for compatibility callers", async () => {
+	it("allows page creation for non-strict callers", async () => {
 		const { client, request } = clientReturning({
-			desk_id: DESK_ID,
+			request_id: "desk-page-create",
+			replayed: false,
+			desk: deskProjection(),
 			page: 2,
 			event_sequence: 14,
 			page_creation_event_sequence: 13,
@@ -255,9 +259,9 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		await client.setPlaybackPage(DESK_ID, 2);
 
 		expect(request).toHaveBeenCalledWith(
-			`/api/v1/control-desks/${DESK_ID}/page`,
+			`/api/v2/control-desks/${DESK_ID}/actions`,
 			expect.objectContaining({
-				body: JSON.stringify({ page: 2 }),
+				body: expect.stringContaining('"existing_only":false'),
 			}),
 		);
 	});

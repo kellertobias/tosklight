@@ -21,20 +21,20 @@ pub struct RuntimeDeskUser {
     pub enabled: bool,
 }
 
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimePlaybackSurfaceRow {
     pub first_playback_slot: u8,
     pub has_fader: bool,
     pub button_count: u8,
 }
 
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimePlaybackSurfaceLayout {
     pub playbacks_per_row: u8,
     pub rows: Vec<RuntimePlaybackSurfaceRow>,
 }
 
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeControlDesk {
     pub id: Uuid,
     pub name: String,

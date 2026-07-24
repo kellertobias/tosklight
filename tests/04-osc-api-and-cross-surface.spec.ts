@@ -1040,7 +1040,10 @@ async function deskPage(api: ApiDriver, session: Session): Promise<number> {
 }
 
 async function setDeskPage(api: ApiDriver, session: Session, page: number): Promise<void> {
-  await withSession(api, session, () => api.request("PUT", `/api/v1/control-desks/${session.desk.id}/page`, { page }));
+  await withSession(api, session, () => api.request("POST", `/api/v2/control-desks/${session.desk.id}/actions`, {
+    request_id: crypto.randomUUID(),
+    action: { type: "set_page", page, existing_only: false },
+  }));
 }
 
 async function withSession<T>(api: ApiDriver, session: Session, action: () => Promise<T>): Promise<T> {

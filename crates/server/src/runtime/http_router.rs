@@ -11,6 +11,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(speed_group_v2::router())
         .merge(playback_v2::router())
         .merge(playback_topology_http::router())
+        .merge(control_desk_configuration_v2::router())
         .merge(screen_configuration_v2::router())
         .merge(virtual_playback_zones_http::router())
         .merge(programming_update_http::router())
@@ -155,8 +156,6 @@ fn playback_routes() -> Router<AppState> {
             "/api/v1/playback-pool/{number}/{action}",
             post(pool_playback_action).put(pool_playback_action),
         )
-        .route("/api/v1/control-desks/{id}/page", put(update_desk_page))
-        .route("/api/v1/control-desks/{id}", put(update_control_desk))
         .route(
             "/api/v1/control-desks/{id}/page-playbacks/{slot}/{action}",
             post(paged_playback_action).put(paged_playback_action),

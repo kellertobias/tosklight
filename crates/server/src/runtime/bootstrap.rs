@@ -239,6 +239,7 @@ fn build_app_state(
         show_object_replay: Arc::default(),
         show_object_intent_replay: Arc::default(),
         screen_configuration_replay: Arc::default(),
+        control_desk_configuration_replay: Arc::default(),
         stage_layout_replay: Arc::default(),
         virtual_playback_zones_replay: Arc::default(),
         selective_show_import: SelectiveShowImportService::new(active_show_service),

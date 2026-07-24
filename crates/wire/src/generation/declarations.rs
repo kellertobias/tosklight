@@ -1,6 +1,7 @@
 use ts_rs::{Config, TS};
 
 use crate::v2::command_line::*;
+use crate::v2::control_desk_configuration::*;
 use crate::v2::cue_deletion::*;
 use crate::v2::cue_recording::*;
 use crate::v2::cue_transfer::*;
@@ -31,6 +32,7 @@ use crate::v2::virtual_playback_zones::*;
 
 pub(super) fn all(config: &Config) -> Vec<String> {
     let mut declarations = command_line(config);
+    declarations.extend(control_desk_configuration(config));
     declarations.extend(event_subscription(config));
     declarations.extend(programming(config));
     declarations.extend(programming_update(config));
@@ -49,6 +51,15 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(show_library(config));
     declarations.extend(interaction(config));
     declarations
+}
+
+fn control_desk_configuration(config: &Config) -> Vec<String> {
+    vec![
+        ControlDeskConfigurationActionRequest::decl(config),
+        ControlDeskConfigurationAction::decl(config),
+        ControlDeskConfigurationPatch::decl(config),
+        ControlDeskConfigurationActionOutcome::decl(config),
+    ]
 }
 
 fn screen_configuration(config: &Config) -> Vec<String> {
