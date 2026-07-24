@@ -50,8 +50,8 @@ export class HttpVirtualPlaybackZonesTransport
 	async loadSnapshot(scope: VirtualPlaybackZonesScope, signal?: AbortSignal) {
 		validateVirtualPlaybackZonesScope(scope);
 		const response = await this.fetchImplementation(
-			`${this.scopeUrl(scope)}/virtual-playback-exclusion-zones`,
-			{ headers: this.headers(), signal },
+			`${this.baseUrl}/api/v2/virtual-playback-exclusion-zones`,
+			{ headers: this.headers(scope.showId), signal },
 		);
 		return decodeVirtualPlaybackZonesSnapshot(
 			await responseValue(response),
@@ -68,10 +68,10 @@ export class HttpVirtualPlaybackZonesTransport
 	) {
 		validateVirtualPlaybackZonesScope(scope);
 		validateVirtualPlaybackZoneSurfaceId(surfaceId);
-		const headers = this.headers();
+		const headers = this.headers(scope.showId);
 		headers.set("content-type", "application/json");
 		const response = await this.fetchImplementation(
-			`${this.scopeUrl(scope)}/virtual-playback-exclusion-zones/${encodeURIComponent(surfaceId)}/update`,
+			`${this.baseUrl}/api/v2/virtual-playback-exclusion-zones/${encodeURIComponent(surfaceId)}/update`,
 			{
 				method: "POST",
 				headers,
@@ -152,13 +152,10 @@ export class HttpVirtualPlaybackZonesTransport
 		};
 	}
 
-	private scopeUrl(scope: VirtualPlaybackZonesScope) {
-		return `${this.baseUrl}/api/v2/shows/${encodeURIComponent(scope.showId)}`;
-	}
-
-	private headers() {
+	private headers(showId: string) {
 		const headers = new Headers({
 			authorization: `Bearer ${this.options.sessionToken}`,
+			"x-tosk-show": showId,
 		});
 		if (this.options.deskBoundaryToken)
 			headers.set("x-light-desk-token", this.options.deskBoundaryToken);

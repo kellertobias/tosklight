@@ -81,11 +81,7 @@ async fn v2_patch_snapshot_authenticates_and_returns_the_patch_revision_etag() {
     let app = router(state.clone());
     let denied = app
         .clone()
-        .oneshot(
-            Request::get(format!("/api/v2/shows/{}/patch", Uuid::new_v4()))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(Request::get("/api/v2/patch").body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
@@ -101,8 +97,9 @@ async fn v2_patch_snapshot_authenticates_and_returns_the_patch_revision_etag() {
 
     let response = app
         .oneshot(
-            Request::get(format!("/api/v2/shows/{show_id}/patch"))
+            Request::get("/api/v2/patch")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-show", show_id)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -131,8 +128,9 @@ async fn v2_patch_mutation_returns_typed_revision_conflicts() {
 
     let response = app
         .oneshot(
-            Request::post(format!("/api/v2/shows/{show_id}/patch/fixtures"))
+            Request::post("/api/v2/patch/fixtures")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-show", show_id)
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::IF_MATCH, "1")
                 .body(Body::from(valid_patch_request().to_string()))
@@ -537,8 +535,9 @@ fn install_patch_route_profile(state: &AppState) -> (Uuid, Uuid) {
 async fn get_patch(app: &Router, token: &str, show_id: &str) -> Response {
     app.clone()
         .oneshot(
-            Request::get(format!("/api/v2/shows/{show_id}/patch"))
+            Request::get("/api/v2/patch")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-show", show_id)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -553,8 +552,9 @@ async fn post_patch(
     patch_revision: Option<u64>,
     body: serde_json::Value,
 ) -> Response {
-    let mut request = Request::post(format!("/api/v2/shows/{show_id}/patch/fixtures"))
+    let mut request = Request::post("/api/v2/patch/fixtures")
         .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header("x-tosk-show", show_id)
         .header(header::CONTENT_TYPE, "application/json");
     if let Some(patch_revision) = patch_revision {
         request = request.header(header::IF_MATCH, patch_revision.to_string());

@@ -119,13 +119,27 @@ export class ApiDriver {
     return this.session;
   }
 
-  async request<T>(method: string, path: string, body?: unknown, authenticate = true, revision?: number): Promise<T> {
-    const response = await this.response(method, path, body, authenticate, revision);
+  async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    authenticate = true,
+    revision?: number,
+    context?: { showId?: string; deskId?: string },
+  ): Promise<T> {
+    const response = await this.response(method, path, body, authenticate, revision, context);
     if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
   }
 
-  private async response(method: string, path: string, body?: unknown, authenticate = true, revision?: number): Promise<Response> {
+  private async response(
+    method: string,
+    path: string,
+    body?: unknown,
+    authenticate = true,
+    revision?: number,
+    context?: { showId?: string; deskId?: string },
+  ): Promise<Response> {
     const headers: Record<string, string> = {};
     if (body !== undefined) headers["content-type"] = "application/json";
     if (authenticate) {
@@ -136,6 +150,8 @@ export class ApiDriver {
       }
     }
     if (revision !== undefined) headers["if-match"] = String(revision);
+    if (context?.showId) headers["x-tosk-show"] = context.showId;
+    if (context?.deskId) headers["x-tosk-desk"] = context.deskId;
     const response = await fetch(`${this.baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     if (!response.ok) throw new Error(`${method} ${path} returned ${response.status}: ${await response.text()}`);
     return response;

@@ -133,7 +133,11 @@ export async function virtualZoneSnapshot(
 	const showId = await activeShowId(api);
 	return api.request<VirtualZoneSnapshot>(
 		"GET",
-		`/api/v2/shows/${showId}/virtual-playback-exclusion-zones`,
+		"/api/v2/virtual-playback-exclusion-zones",
+		undefined,
+		true,
+		undefined,
+		{ showId },
 	);
 }
 
@@ -146,8 +150,11 @@ export async function saveVirtualZoneSurface(
 	const requestId = crypto.randomUUID();
 	return api.request<VirtualZoneSaveOutcome>(
 		"POST",
-		`/api/v2/shows/${showId}/virtual-playback-exclusion-zones/${encodeURIComponent(surfaceId)}/update`,
+		`/api/v2/virtual-playback-exclusion-zones/${encodeURIComponent(surfaceId)}/update`,
 		{ request_id: requestId, zones },
+		true,
+		undefined,
+		{ showId },
 	);
 }
 

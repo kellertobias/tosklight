@@ -119,7 +119,11 @@ export async function readPatchSnapshot(
 	const resolvedShowId = showId ?? (await activeShowId(api));
 	return api.request<PatchSnapshot>(
 		"GET",
-		`/api/v2/shows/${resolvedShowId}/patch`,
+		"/api/v2/patch",
+		undefined,
+		true,
+		undefined,
+		{ showId: resolvedShowId },
 	);
 }
 
@@ -131,7 +135,7 @@ async function applyPatchFixtures(
 ): Promise<PatchFixturesOutcome> {
 	return api.request<PatchFixturesOutcome>(
 		"POST",
-		`/api/v2/shows/${showId}/patch/fixtures`,
+		"/api/v2/patch/fixtures",
 		{
 			request_id: crypto.randomUUID(),
 			fixtures,
@@ -139,6 +143,7 @@ async function applyPatchFixtures(
 		},
 		true,
 		expectedPatchRevision,
+		{ showId },
 	);
 }
 

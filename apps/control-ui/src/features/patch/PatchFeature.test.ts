@@ -393,11 +393,10 @@ describe("Patch v2 network boundary", () => {
 
 		expect(fetchMock).toHaveBeenCalledOnce();
 		const [url, init] = fetchMock.mock.calls[0];
-		expect(String(url)).toBe(
-			"http://desk.local/api/v2/shows/" + SHOW_ID + "/patch/fixtures",
-		);
+		expect(String(url)).toBe("http://desk.local/api/v2/patch/fixtures");
 		expect(JSON.parse(String(init?.body)).fixtures).toHaveLength(count);
 		expect((init?.headers as Headers).get("if-match")).toBe("7");
+		expect((init?.headers as Headers).get("x-tosk-show")).toBe(SHOW_ID);
 		expect(String(url)).not.toMatch(
 			/\/bootstrap|\/playbacks|\/shows$|\/configuration|\/media-servers|\/fixture-library|\/fixture-profiles/,
 		);

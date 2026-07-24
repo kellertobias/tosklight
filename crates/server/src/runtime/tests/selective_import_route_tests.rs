@@ -17,7 +17,7 @@ async fn v2_selective_import_previews_conflicts_and_applies_one_atomic_revision(
     let denied = app
         .clone()
         .oneshot(
-            Request::get(import_path(target_id, source_id, "catalog"))
+            Request::get(import_path(source_id, "catalog"))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -29,8 +29,9 @@ async fn v2_selective_import_previews_conflicts_and_applies_one_atomic_revision(
     let catalog = app
         .clone()
         .oneshot(
-            Request::get(import_path(target_id, source_id, "catalog"))
+            Request::get(import_path(source_id, "catalog"))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-show", target_id)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -227,8 +228,9 @@ async fn post_import(
     revision: Option<u64>,
     body: serde_json::Value,
 ) -> Response {
-    let mut request = Request::post(import_path(target, source, operation))
+    let mut request = Request::post(import_path(source, operation))
         .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header("x-tosk-show", target)
         .header(header::CONTENT_TYPE, "application/json");
     if let Some(revision) = revision {
         request = request.header(header::IF_MATCH, revision);
@@ -239,8 +241,8 @@ async fn post_import(
         .unwrap()
 }
 
-fn import_path(target: &str, source: &str, operation: &str) -> String {
-    format!("/api/v2/shows/{target}/selective-imports/{source}/{operation}")
+fn import_path(source: &str, operation: &str) -> String {
+    format!("/api/v2/selective-imports/{source}/{operation}")
 }
 
 async fn open_import_target(app: &Router, token: &str, target: &str) {

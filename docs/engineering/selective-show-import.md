@@ -28,17 +28,20 @@ A revision conflict requires a new preview; it is never papered over with a blin
 All routes require an authenticated desk session:
 
 ```text
-GET  /api/v2/shows/{target}/selective-imports/{source}/catalog
-POST /api/v2/shows/{target}/selective-imports/{source}/preview
-POST /api/v2/shows/{target}/selective-imports/{source}/apply
+GET  /api/v2/selective-imports/{source}/catalog
+POST /api/v2/selective-imports/{source}/preview
+POST /api/v2/selective-imports/{source}/apply
 ```
 
-The catalog returns the exact portable source revision and lightweight object labels. Preview is
-side-effect free for the active show and returns both source and target portable-show revisions.
-Apply must repeat both revisions and send the target revision in `If-Match`. The server rejects the
-operation if either show changed after preview. A successful mutation creates one safety backup,
-one portable-show revision, one compiled runtime installation, and one typed
-`selective_import_applied` event. Identical selections are valid no-ops and emit no event.
+The source Show id is the cross-show operand. The target is the loaded Show; the desk UI sends its
+captured id in `X-Tosk-Show` so a concurrent Show switch is rejected rather than importing into the
+wrong target. The catalog returns the exact portable source revision and lightweight object
+labels. Preview is side-effect free for the active show and returns both source and target
+portable-show revisions. Apply must repeat both revisions and send the target revision in
+`If-Match`. The server rejects the operation if either show changed after preview. A successful
+mutation creates one safety backup, one portable-show revision, one compiled runtime installation,
+and one typed `selective_import_applied` event. Identical selections are valid no-ops and emit no
+event.
 
 The checked-in Rust DTOs, TypeScript declarations, and JSON Schemas live under `light-wire`. The
 frontend transport does not accept raw bodies for mutation: it can only send the typed selection,

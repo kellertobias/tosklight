@@ -12,7 +12,7 @@ async fn show_level_route_returns_all_desks_and_publishes_one_replay_safe_event(
     open_topology_show(&app, &token, show_id, None).await;
     let desk_id = authenticated_desk_id(&state, &token);
 
-    let empty = get_zones(&app, &token, show_id).await;
+    let empty = get_zones(&app, &token).await;
     assert_eq!(empty.status(), StatusCode::OK);
     assert_eq!(
         json(empty).await,
@@ -80,7 +80,7 @@ async fn show_level_route_returns_all_desks_and_publishes_one_replay_safe_event(
     )
     .await;
     assert_eq!(second.status(), StatusCode::OK);
-    let snapshot = json(get_zones(&app, &token, show_id).await).await;
+    let snapshot = json(get_zones(&app, &token).await).await;
     assert_eq!(snapshot["desks"][desk_id.to_string()][SURFACE_ID], zones());
     assert_eq!(
         snapshot["desks"][second_desk.id.to_string()]["surface-b"],
@@ -98,7 +98,7 @@ async fn show_level_route_returns_all_desks_and_publishes_one_replay_safe_event(
     assert_eq!(foreign_show.status(), StatusCode::CONFLICT);
     assert_eq!(
         json(foreign_show).await["error"],
-        "requested show is no longer active"
+        "X-Tosk-Show does not match the active show"
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -119,7 +119,7 @@ async fn captured_show_scope_is_rejected_after_active_show_replacement() {
     assert_eq!(stale.status(), StatusCode::CONFLICT);
     assert_eq!(
         json(stale).await["error"],
-        "requested show is no longer active"
+        "X-Tosk-Show does not match the active show"
     );
     {
         let desk = state.desk.lock();
@@ -156,15 +156,13 @@ fn zones() -> serde_json::Value {
     serde_json::json!([{"id":"paired","name":"Paired","slots":[1,2]}])
 }
 
-async fn get_zones(app: &Router, token: &str, show_id: &str) -> Response {
+async fn get_zones(app: &Router, token: &str) -> Response {
     app.clone()
         .oneshot(
-            Request::get(format!(
-                "/api/v2/shows/{show_id}/virtual-playback-exclusion-zones"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap(),
+            Request::get("/api/v2/virtual-playback-exclusion-zones")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
         )
         .await
         .unwrap()
@@ -180,9 +178,10 @@ async fn put_zones(
     app.clone()
         .oneshot(
             Request::post(format!(
-                "/api/v2/shows/{show_id}/virtual-playback-exclusion-zones/{surface_id}/update"
+                "/api/v2/virtual-playback-exclusion-zones/{surface_id}/update"
             ))
             .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header("x-tosk-show", show_id)
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(
                 serde_json::json!({"request_id":request_id,"zones":zones()}).to_string(),

@@ -1,7 +1,7 @@
-use super::{AppState, ServerShowPatchPorts, Session, authenticate, parse_if_match};
+use super::{AppState, ServerShowPatchPorts, Session, ShowContext, authenticate, parse_if_match};
 use axum::{
     Json, Router,
-    extract::{Path, State, rejection::JsonRejection},
+    extract::{State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -12,27 +12,23 @@ use light_application::{
 };
 use light_core::ShowId;
 use light_wire::v2::patch::{PatchErrorResponse, PatchFixturesRequest};
-use uuid::Uuid;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v2/shows/{show_id}/patch", get(patch_snapshot))
-        .route(
-            "/api/v2/shows/{show_id}/patch/fixtures",
-            post(patch_fixtures),
-        )
+        .route("/api/v2/patch", get(patch_snapshot))
+        .route("/api/v2/patch/fixtures", post(patch_fixtures))
 }
 
 async fn patch_snapshot(
     State(state): State<AppState>,
-    Path(show_id): Path<String>,
+    show: ShowContext,
     headers: HeaderMap,
 ) -> Result<Response, PatchHttpError> {
     let session = authenticate(&state, &headers).map_err(PatchHttpError::api)?;
-    let show_id = parse_show_id(&show_id)?;
+    let show_id = show.resolve(&state).map_err(PatchHttpError::api)?;
     let context = http_context(&session);
     let snapshot = run_patch_service(state, move |service, ports| {
-        service.snapshot(&context, ShowId(show_id), ports)
+        service.snapshot(&context, show_id, ports)
     })
     .await?;
     let response = super::show_patch_wire::wire_snapshot(snapshot);
@@ -41,12 +37,12 @@ async fn patch_snapshot(
 
 async fn patch_fixtures(
     State(state): State<AppState>,
-    Path(show_id): Path<String>,
+    show: ShowContext,
     headers: HeaderMap,
     request: Result<Json<PatchFixturesRequest>, JsonRejection>,
 ) -> Result<Response, PatchHttpError> {
     let session = authenticate(&state, &headers).map_err(PatchHttpError::api)?;
-    let show_id = parse_show_id(&show_id)?;
+    let show_id = show.resolve(&state).map_err(PatchHttpError::api)?;
     let expected_patch_revision = parse_if_match(&headers).map_err(PatchHttpError::api)?;
     let Json(request) = request.map_err(|error| PatchHttpError::bad_request(error.body_text()))?;
     let action = patch_action(show_id, &session, expected_patch_revision, request)?;
@@ -72,22 +68,18 @@ where
 }
 
 fn patch_action(
-    show_id: Uuid,
+    show_id: ShowId,
     session: &Session,
     expected_patch_revision: u64,
     request: PatchFixturesRequest,
 ) -> Result<ActionEnvelope<PatchFixturesCommand>, PatchHttpError> {
     let request_id = request.request_id.clone();
-    let command = super::show_patch_wire::application_command(ShowId(show_id), request)
+    let command = super::show_patch_wire::application_command(show_id, request)
         .map_err(PatchHttpError::bad_request)?;
     let context = http_context(session)
         .with_request_id(request_id)
         .with_expected_revision(expected_patch_revision);
     Ok(ActionEnvelope { context, command })
-}
-
-fn parse_show_id(value: &str) -> Result<Uuid, PatchHttpError> {
-    Uuid::parse_str(value).map_err(|_| PatchHttpError::bad_request("show_id must be a UUID"))
 }
 
 fn http_context(session: &Session) -> ActionContext {

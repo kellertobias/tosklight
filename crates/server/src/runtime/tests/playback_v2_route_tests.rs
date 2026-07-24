@@ -2335,19 +2335,18 @@ async fn put_virtual_exclusion_zone(state: &AppState, app: &Router, token: &str,
     let response = app
         .clone()
         .oneshot(
-            Request::post(format!(
-                "/api/v2/shows/{show_id}/virtual-playback-exclusion-zones/v2-route-test/update"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(
-                serde_json::json!({
-                    "request_id": Uuid::new_v4().to_string(),
-                    "zones":[{"id":"v2-route-zone","name":"v2 route zone","slots":slots}]
-                })
-                .to_string(),
-            ))
-            .unwrap(),
+            Request::post("/api/v2/virtual-playback-exclusion-zones/v2-route-test/update")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-show", show_id.to_string())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": Uuid::new_v4().to_string(),
+                        "zones":[{"id":"v2-route-zone","name":"v2 route zone","slots":slots}]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
         )
         .await
         .unwrap();

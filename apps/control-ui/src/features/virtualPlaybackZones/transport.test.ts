@@ -70,11 +70,12 @@ describe("HttpVirtualPlaybackZonesTransport", () => {
 
 		const [url, init] = fetchImplementation.mock.calls[0];
 		expect(url).toBe(
-			`http://127.0.0.1:5000/api/v2/shows/${SHOW_ID}/virtual-playback-exclusion-zones`,
+			"http://127.0.0.1:5000/api/v2/virtual-playback-exclusion-zones",
 		);
 		const headers = new Headers(init?.headers);
 		expect(headers.get("authorization")).toBe("Bearer session-token");
 		expect(headers.get("x-light-desk-token")).toBe("desk-boundary");
+		expect(headers.get("x-tosk-show")).toBe(SHOW_ID);
 	});
 
 	it("saves one exact surface through an authenticated PUT", async () => {
@@ -97,7 +98,7 @@ describe("HttpVirtualPlaybackZonesTransport", () => {
 		).resolves.toMatchObject({ surfaceId: "surface/one", zones: ZONES });
 		const [url, init] = fetchImplementation.mock.calls[0];
 		expect(url).toBe(
-			`http://127.0.0.1:5000/api/v2/shows/${SHOW_ID}/virtual-playback-exclusion-zones/surface%2Fone/update`,
+			"http://127.0.0.1:5000/api/v2/virtual-playback-exclusion-zones/surface%2Fone/update",
 		);
 		expect(init?.method).toBe("POST");
 		expect(JSON.parse(String(init?.body))).toEqual({
@@ -107,6 +108,7 @@ describe("HttpVirtualPlaybackZonesTransport", () => {
 		expect(new Headers(init?.headers).get("authorization")).toBe(
 			"Bearer session-token",
 		);
+		expect(new Headers(init?.headers).get("x-tosk-show")).toBe(SHOW_ID);
 	});
 
 	it("rejects foreign or malformed successful responses", async () => {
@@ -168,9 +170,9 @@ describe("HttpVirtualPlaybackZonesTransport", () => {
 		await expect(
 			transport.saveSurface(SCOPE, "surface-a", ZONES, "request-a"),
 		).rejects.toBeInstanceOf(VirtualPlaybackZonesProtocolError);
-		const [url] = fetchImplementation.mock.calls[0];
-		expect(url).toContain(`/shows/${SHOW_ID}/`);
-		expect(url).not.toContain(`/desks/`);
+		const [url, init] = fetchImplementation.mock.calls[0];
+		expect(url).not.toContain(`/shows/`);
+		expect(new Headers(init?.headers).get("x-tosk-show")).toBe(SHOW_ID);
 	});
 
 	it("reports an HTTP error without accepting its payload", async () => {

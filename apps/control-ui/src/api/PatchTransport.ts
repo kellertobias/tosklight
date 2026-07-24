@@ -45,8 +45,8 @@ export class HttpPatchTransport implements PatchTransport {
 	}
 
 	async snapshot(showId: string) {
-		const response = await this.fetchImplementation(this.patchPath(showId), {
-			headers: this.headers(),
+		const response = await this.fetchImplementation(this.patchPath(), {
+			headers: this.headers(showId),
 		});
 		return decodePatchSnapshot(await this.responseValue(response));
 	}
@@ -56,7 +56,7 @@ export class HttpPatchTransport implements PatchTransport {
 		expectedPatchRevision: number,
 		mutation: PatchMutation,
 	) {
-		const headers = this.headers();
+		const headers = this.headers(showId);
 		headers.set("content-type", "application/json");
 		headers.set("if-match", String(expectedPatchRevision));
 		const request: PatchFixturesRequest = {
@@ -66,7 +66,7 @@ export class HttpPatchTransport implements PatchTransport {
 			placements: (mutation.placements ?? []).map(toWirePlacement),
 		};
 		const response = await this.fetchImplementation(
-			this.patchPath(showId) + "/fixtures",
+			this.patchPath() + "/fixtures",
 			{
 				method: "POST",
 				headers,
@@ -138,18 +138,14 @@ export class HttpPatchTransport implements PatchTransport {
 		};
 	}
 
-	private patchPath(showId: string) {
-		return (
-			this.baseUrl +
-			"/api/v2/shows/" +
-			encodeURIComponent(showId) +
-			"/patch"
-		);
+	private patchPath() {
+		return this.baseUrl + "/api/v2/patch";
 	}
 
-	private headers() {
+	private headers(showId: string) {
 		const headers = new Headers({
 			authorization: "Bearer " + this.options.sessionToken,
+			"x-tosk-show": showId,
 		});
 		if (this.options.deskBoundaryToken)
 			headers.set("x-light-desk-token", this.options.deskBoundaryToken);

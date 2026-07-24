@@ -46,9 +46,11 @@ describe("SelectiveImportApiClient", () => {
 			profileConflictResolutions: [],
 		});
 		expect(wire.request).toHaveBeenLastCalledWith(
-			"/api/v2/shows/target/selective-imports/source/preview",
+			"/api/v2/selective-imports/source/preview",
 			expect.objectContaining({ method: "POST" }),
 		);
+		const previewInit = wire.request.mock.calls.at(-1)?.[1] as RequestInit;
+		expect(new Headers(previewInit.headers).get("x-tosk-show")).toBe("target");
 
 		await client.apply("target", "source", {
 			requestId: "import-front",
@@ -60,6 +62,7 @@ describe("SelectiveImportApiClient", () => {
 		});
 		const init = wire.request.mock.calls.at(-1)?.[1] as RequestInit;
 		expect(new Headers(init.headers).get("if-match")).toBe("9");
+		expect(new Headers(init.headers).get("x-tosk-show")).toBe("target");
 		expect(JSON.parse(String(init.body))).toMatchObject({
 			expected_source_revision: 4,
 			expected_target_revision: 9,

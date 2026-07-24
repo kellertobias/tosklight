@@ -15,8 +15,14 @@ import {
 import type { ClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
 
-function importPath(targetShowId: string, sourceShowId: string) {
-	return `/api/v2/shows/${encodeURIComponent(targetShowId)}/selective-imports/${encodeURIComponent(sourceShowId)}`;
+function importPath(sourceShowId: string) {
+	return `/api/v2/selective-imports/${encodeURIComponent(sourceShowId)}`;
+}
+
+function showHeaders(targetShowId: string, headers?: HeadersInit) {
+	const result = new Headers(headers);
+	result.set("x-tosk-show", targetShowId);
+	return result;
 }
 
 export class SelectiveImportApiClient {
@@ -28,8 +34,8 @@ export class SelectiveImportApiClient {
 		signal?: AbortSignal,
 	): Promise<SelectiveImportCatalog> {
 		return this.transport.request<unknown>(
-			`${importPath(targetShowId, sourceShowId)}/catalog`,
-			{ signal },
+			`${importPath(sourceShowId)}/catalog`,
+			{ signal, headers: showHeaders(targetShowId) },
 		).then(selectiveImportCatalogFromWire);
 	}
 
@@ -39,10 +45,14 @@ export class SelectiveImportApiClient {
 		selection: SelectiveImportSelection,
 		signal?: AbortSignal,
 	): Promise<SelectiveImportPreview> {
-		return this.transport.request<unknown>(
-			`${importPath(targetShowId, sourceShowId)}/preview`,
-			{ ...jsonRequest("POST", selectiveImportSelectionToWire(selection)), signal },
-		).then(selectiveImportPreviewFromWire);
+		const init = jsonRequest("POST", selectiveImportSelectionToWire(selection));
+		return this.transport
+			.request<unknown>(`${importPath(sourceShowId)}/preview`, {
+				...init,
+				headers: showHeaders(targetShowId, init.headers),
+				signal,
+			})
+			.then(selectiveImportPreviewFromWire);
 	}
 
 	apply(
@@ -51,10 +61,10 @@ export class SelectiveImportApiClient {
 		request: SelectiveImportApplyRequest,
 	): Promise<SelectiveImportOutcome> {
 		const init = jsonRequest("POST", selectiveImportApplyToWire(request));
-		const headers = new Headers(init.headers);
+		const headers = showHeaders(targetShowId, init.headers);
 		headers.set("if-match", String(request.expectedTargetRevision));
 		return this.transport.request<unknown>(
-			`${importPath(targetShowId, sourceShowId)}/apply`,
+			`${importPath(sourceShowId)}/apply`,
 			{ ...init, headers },
 		).then(selectiveImportOutcomeFromWire);
 	}

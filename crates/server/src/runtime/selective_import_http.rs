@@ -1,7 +1,7 @@
 //! Authenticated v2 catalog, preview, and apply endpoints for Selective Show Import.
 
 use super::{
-    AppState, ImportSourceSnapshot, ServerSelectiveImportPorts, Session, authenticate,
+    AppState, ImportSourceSnapshot, ServerSelectiveImportPorts, Session, ShowContext, authenticate,
     parse_if_match, selective_import_wire,
 };
 use axum::{
@@ -24,27 +24,29 @@ use uuid::Uuid;
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route(
-            "/api/v2/shows/{target_show_id}/selective-imports/{source_show_id}/catalog",
+            "/api/v2/selective-imports/{source_show_id}/catalog",
             get(source_catalog),
         )
         .route(
-            "/api/v2/shows/{target_show_id}/selective-imports/{source_show_id}/preview",
+            "/api/v2/selective-imports/{source_show_id}/preview",
             post(preview_import),
         )
         .route(
-            "/api/v2/shows/{target_show_id}/selective-imports/{source_show_id}/apply",
+            "/api/v2/selective-imports/{source_show_id}/apply",
             post(apply_import),
         )
 }
 
 async fn source_catalog(
     State(state): State<AppState>,
-    Path((target_show_id, source_show_id)): Path<(String, String)>,
+    show: ShowContext,
+    Path(source_show_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Response, SelectiveImportHttpError> {
     let session = authenticate(&state, &headers).map_err(SelectiveImportHttpError::api)?;
-    let (target_show_id, source_show_id) = parse_show_ids(target_show_id, source_show_id)?;
-    ensure_active_target(&state, target_show_id)?;
+    show.resolve(&state)
+        .map_err(SelectiveImportHttpError::api)?;
+    let source_show_id = parse_source_show_id(source_show_id)?;
     let context = http_context(&session);
     let source = run_catalog(state, move |ports| {
         ports.source_catalog(&context, source_show_id)
@@ -56,12 +58,16 @@ async fn source_catalog(
 
 async fn preview_import(
     State(state): State<AppState>,
-    Path((target_show_id, source_show_id)): Path<(String, String)>,
+    show: ShowContext,
+    Path(source_show_id): Path<String>,
     headers: HeaderMap,
     request: Result<Json<SelectiveImportSelection>, JsonRejection>,
 ) -> Result<Response, SelectiveImportHttpError> {
     let session = authenticate(&state, &headers).map_err(SelectiveImportHttpError::api)?;
-    let (target_show_id, source_show_id) = parse_show_ids(target_show_id, source_show_id)?;
+    let target_show_id = show
+        .resolve(&state)
+        .map_err(SelectiveImportHttpError::api)?;
+    let source_show_id = parse_source_show_id(source_show_id)?;
     let Json(selection) =
         request.map_err(|error| SelectiveImportHttpError::bad(error.body_text()))?;
     let request =
@@ -78,12 +84,16 @@ async fn preview_import(
 
 async fn apply_import(
     State(state): State<AppState>,
-    Path((target_show_id, source_show_id)): Path<(String, String)>,
+    show: ShowContext,
+    Path(source_show_id): Path<String>,
     headers: HeaderMap,
     request: Result<Json<SelectiveImportApplyRequest>, JsonRejection>,
 ) -> Result<Response, SelectiveImportHttpError> {
     let session = authenticate(&state, &headers).map_err(SelectiveImportHttpError::api)?;
-    let (target_show_id, source_show_id) = parse_show_ids(target_show_id, source_show_id)?;
+    let target_show_id = show
+        .resolve(&state)
+        .map_err(SelectiveImportHttpError::api)?;
+    let source_show_id = parse_source_show_id(source_show_id)?;
     let expected_target_revision =
         parse_if_match(&headers).map_err(SelectiveImportHttpError::api)?;
     let Json(request) =
@@ -146,31 +156,10 @@ where
     .map_err(SelectiveImportHttpError::application)
 }
 
-fn ensure_active_target(state: &AppState, target: ShowId) -> Result<(), SelectiveImportHttpError> {
-    if state
-        .active_show
-        .read()
-        .as_ref()
-        .is_some_and(|show| show.id == target)
-    {
-        Ok(())
-    } else {
-        Err(SelectiveImportHttpError::application(ActionError::new(
-            ActionErrorKind::Conflict,
-            "selective import target must be the active show",
-        )))
-    }
-}
-
-fn parse_show_ids(
-    target: String,
-    source: String,
-) -> Result<(ShowId, ShowId), SelectiveImportHttpError> {
-    let target = Uuid::parse_str(&target)
-        .map_err(|_| SelectiveImportHttpError::bad("target_show_id must be a UUID"))?;
+fn parse_source_show_id(source: String) -> Result<ShowId, SelectiveImportHttpError> {
     let source = Uuid::parse_str(&source)
         .map_err(|_| SelectiveImportHttpError::bad("source_show_id must be a UUID"))?;
-    Ok((ShowId(target), ShowId(source)))
+    Ok(ShowId(source))
 }
 
 fn validate_apply_request(
