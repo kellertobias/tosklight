@@ -55,3 +55,16 @@ npm run test:e2e   # full suite gate — preset, topology, speed-group, output s
 None. Do this after 09/10; it is deliberately the mop-up chunk — split it further at
 execution time if any single family (likely topology) turns out large; put the split files
 into `pending/` as `11a-…`, `11b-…` and note the split in the result.
+
+## Result
+
+- Split the verified remaining work into `11a`–`11c` so each authority family can land
+  with focused typed-WS and exactly-once failure tests before the full-suite gate.
+- Corrected the topology premise during execution discovery: playback-topology actions
+  edit persisted Show objects and correctly remain HTTP rule-3 mutations. Actual virtual
+  and touch playback triggers already use the correlated `playback.action` WebSocket
+  frame from the desk UI.
+- `11a` owns typed command-line replacement and selection actions; `11b` owns typed
+  Programmer-adjacent priority, preset, and Preload actions; `11c` owns Speed Group and
+  output-runtime actions. Every split removes client re-send and repairs authoritative
+  state after an outcome-ambiguous WS failure.
