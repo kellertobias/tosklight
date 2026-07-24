@@ -50,3 +50,11 @@ npm run test:e2e   # full suite gate — incl. 04-osc, 34-active-playback-colors
 ## Decisions
 
 None. Depends on 16 (intent-update pattern) and 09/11 (live-control WS) landing first.
+
+## Result
+
+Execution-time caller and persistence-boundary inventory showed three independent route
+families with different failure modes. The work was split into 17a (desk and screen
+configuration), 17b (show playback-slot topology), and 17c (client removal plus live-action
+retirement audit) so each typed contract, migration, absence check, and full gate can land
+separately. No production behavior changed in this planning split.
