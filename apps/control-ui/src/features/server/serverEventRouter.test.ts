@@ -165,6 +165,8 @@ function createHarness(showId = "show-a") {
 		setFixtureProfileWarnings: vi.fn(),
 		setHighlight: vi.fn(),
 		setHighlightError: vi.fn(),
+		beginDeskLoading: vi.fn(() => 3),
+		finishDeskLoading: vi.fn(),
 	} as unknown as ServerState;
 	return {
 		api,
@@ -642,6 +644,11 @@ describe("broad state hydration boundaries", () => {
 			expect(harness.loadShowObjects).toHaveBeenCalledWith("show-b", "user-1"),
 		);
 		expect(harness.loadShowObjects).toHaveBeenCalledOnce();
+		expect(harness.state.beginDeskLoading).toHaveBeenCalledWith(
+			"Loading show Show…",
+			"Installing the show engine snapshot and preparing control surfaces",
+		);
+		expect(harness.state.finishDeskLoading).toHaveBeenCalledWith(3);
 		expect(harness.api.playback.screens).toHaveBeenCalledOnce();
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
 	});

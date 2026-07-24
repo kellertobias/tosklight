@@ -16,6 +16,7 @@ import { SectionNameMap } from "./SectionNameMap";
 import { DebugModal } from "../modals/DebugModal";
 import { CommandChoiceModal } from "../modals/CommandChoiceModal";
 import { UpdateWorkflow } from "../modals/UpdateWorkflow";
+import { DeskLoadingOverlay } from "./DeskLoadingOverlay";
 
 export function AppShell() {
   return <div className="app-shell">
@@ -36,6 +37,7 @@ export function AppShell() {
     <UpdateWorkflow />
     <CommandChoiceModal />
     <ConnectionState />
+    <DeskLoadingOverlay />
     <ShowRecoveryModal />
   </div>;
 }

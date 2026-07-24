@@ -3,8 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDeskConnection } from "../../features/deskConnection/DeskConnectionContext";
 import { useBootstrapReady } from "../../features/deskSnapshot/DeskSnapshotState";
 import { configuredServerUrl } from "../../api/client/serverLocation";
-import appMark from "../../../src-tauri/icons/mark-shadow.svg";
-import { Button, TextField } from "../common";
+import { Button, LoadingSurface, TextField } from "../common";
 import { useDesktopBridge } from "../../platform/desktop";
 
 export function ConnectionState() {
@@ -16,6 +15,7 @@ export function ConnectionState() {
   const [deskToken, setDeskToken] = useState("");
   const [serverUrl, setServerUrl] = useState(configuredServerUrl());
   const [startupGrace, setStartupGrace] = useState(true);
+  const [hasConnected, setHasConnected] = useState(false);
   const isTauri = desktop.available;
   const usesBuiltInServer = useMemo(() => {
     try {
@@ -29,8 +29,11 @@ export function ConnectionState() {
     const timer = window.setTimeout(() => setStartupGrace(false), 10_000);
     return () => window.clearTimeout(timer);
   }, []);
+  useEffect(() => {
+    if (connectionStatus === "connected") setHasConnected(true);
+  }, [connectionStatus]);
   if (connectionStatus === "connected") return null;
-  if (bootstrapReady)
+  if (hasConnected && bootstrapReady)
     return (
       <div className={`connection-banner ${connectionStatus}`} role="status">
         <span className="status-pulse" />
@@ -48,22 +51,26 @@ export function ConnectionState() {
   const boundaryRequired =
     serverError?.toLowerCase().includes("desk boundary token") ?? false;
   const startingBuiltIn = isTauri && usesBuiltInServer && startupGrace && !boundaryRequired;
+  if (!boundaryRequired && (startingBuiltIn || !serverError))
+    return (
+      <LoadingSurface
+        className="connection-cover"
+        showMark
+        title={startingBuiltIn ? "Starting ToskLight" : "Connecting to ToskLight"}
+        detail={startingBuiltIn ? "Starting built-in server…" : "Starting a secure operator session…"}
+        note={startingBuiltIn ? "Preparing the show engine and control surface" : "Waiting for bootstrap, operator session, and desk stores"}
+      />
+    );
   return (
     <div className="connection-cover" role="status">
       <div className="connection-card">
-        <div className="app-mark" role="img" aria-label="ToskLight application">
-          <img src={appMark} alt="" />
-        </div>
-        <span className="status-pulse" />
         <h1>
-          {startingBuiltIn
-            ? "Starting ToskLight"
-            : boundaryRequired
+          {boundaryRequired
             ? "Connect to this desk"
             : "Connecting to ToskLight"}
         </h1>
-        <p>{startingBuiltIn ? "Starting built-in server…" : boundaryRequired ? serverError : usesBuiltInServer ? serverError ?? "Built-in server is unavailable." : serverError ?? "Starting a secure operator session…"}</p>
-        {startingBuiltIn ? <small>Preparing the show engine and control surface</small> : boundaryRequired ? (
+        <p>{boundaryRequired ? serverError : usesBuiltInServer ? serverError ?? "Built-in server is unavailable." : serverError ?? "Starting a secure operator session…"}</p>
+        {boundaryRequired ? (
           <form
             className="connection-form"
             onSubmit={(event) => {
@@ -83,10 +90,8 @@ export function ConnectionState() {
             />
             <div className="connection-form-actions"><Button disabled={!deskToken.trim()}>Connect</Button></div>
           </form>
-        ) : (
-          <small>Retrying automatically</small>
-        )}
-        {isTauri && !startingBuiltIn && (
+        ) : <small>Retrying automatically</small>}
+        {isTauri && (
           <form
             className="connection-form"
             onSubmit={(event) => {

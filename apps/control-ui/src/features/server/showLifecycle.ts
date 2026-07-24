@@ -21,6 +21,22 @@ type ShowCreationActions = Pick<
 
 type ShowOpeningActions = Omit<ShowLifecycleActions, keyof ShowCreationActions>;
 
+const SHOW_LOADING_DETAIL =
+	"Installing the show engine snapshot and preparing control surfaces";
+
+async function whileLoadingShow<T>(
+	model: ServerController,
+	title: string,
+	task: () => Promise<T>,
+): Promise<T> {
+	const operationId = model.beginDeskLoading(title, SHOW_LOADING_DETAIL);
+	try {
+		return await task();
+	} finally {
+		model.finishDeskLoading(operationId);
+	}
+}
+
 export function createShowLifecycleActions(
 	model: ServerController,
 ): ShowLifecycleActions {
@@ -61,8 +77,12 @@ function createShowCreationActions(
 					for (const byte of bytes) binary += String.fromCharCode(byte);
 					created = await api.shows.createShow(name, btoa(binary), false);
 				} else created = await api.shows.createShow(name);
-				if (shouldOpen) await api.shows.openShow(created.id, "hold_current");
-				await refresh();
+				if (shouldOpen)
+					await whileLoadingShow(model, `Loading show ${name}…`, async () => {
+						await api.shows.openShow(created.id, "hold_current");
+						await refresh();
+					});
+				else await refresh();
 				setError(null);
 				return true;
 			} catch (reason) {
@@ -96,9 +116,11 @@ function createShowCreationActions(
 				let name = "New Empty Show";
 				for (let suffix = 2; names.has(name.toLowerCase()); suffix += 1)
 					name = `New Empty Show ${suffix}`;
-				const created = await api.shows.createShow(name);
-				await api.shows.openShow(created.id, "hold_current");
-				await refresh();
+				await whileLoadingShow(model, `Initializing show ${name}…`, async () => {
+					const created = await api.shows.createShow(name);
+					await api.shows.openShow(created.id, "hold_current");
+					await refresh();
+				});
 				setError(null);
 				return true;
 			} catch (reason) {
@@ -130,8 +152,15 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 		},
 		openShow: async (id, transition = "safe_blackout") => {
 			try {
-				await api.shows.openShow(id, transition);
-				await refresh();
+				const showName = shows.find((show) => show.id === id)?.name;
+				await whileLoadingShow(
+					model,
+					showName ? `Loading show ${showName}…` : "Loading show…",
+					async () => {
+						await api.shows.openShow(id, transition);
+						await refresh();
+					},
+				);
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
@@ -139,8 +168,14 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 		},
 		openCleanDefaultShow: async () => {
 			try {
-				await api.shows.openCleanDefaultShow();
-				await refresh();
+				await whileLoadingShow(
+					model,
+					"Loading clean built-in show…",
+					async () => {
+						await api.shows.openCleanDefaultShow();
+						await refresh();
+					},
+				);
 				setError(null);
 				return true;
 			} catch (reason) {
@@ -151,24 +186,26 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 		openShowFile: async (rootId, path, name) => {
 			try {
 				const showName = name.replace(/\.show$/i, "");
-				let entry =
-					rootId === "shows"
-						? shows.find(
-								(show) =>
-									show.name.localeCompare(showName, undefined, {
-										sensitivity: "accent",
-									}) === 0,
-							)
-						: undefined;
-				if (!entry) {
-					const blob = await api.files.fileContent(rootId, path);
-					const bytes = new Uint8Array(await blob.arrayBuffer());
-					let binary = "";
-					for (const byte of bytes) binary += String.fromCharCode(byte);
-					entry = await api.shows.createShow(showName, btoa(binary), false);
-				}
-				await api.shows.openShow(entry.id, "safe_blackout");
-				await refresh();
+				await whileLoadingShow(model, `Loading show ${showName}…`, async () => {
+					let entry =
+						rootId === "shows"
+							? shows.find(
+									(show) =>
+										show.name.localeCompare(showName, undefined, {
+											sensitivity: "accent",
+										}) === 0,
+								)
+							: undefined;
+					if (!entry) {
+						const blob = await api.files.fileContent(rootId, path);
+						const bytes = new Uint8Array(await blob.arrayBuffer());
+						let binary = "";
+						for (const byte of bytes) binary += String.fromCharCode(byte);
+						entry = await api.shows.createShow(showName, btoa(binary), false);
+					}
+					await api.shows.openShow(entry.id, "safe_blackout");
+					await refresh();
+				});
 				setError(null);
 				return true;
 			} catch (reason) {

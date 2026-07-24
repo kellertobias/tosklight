@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ServerRuntime } from "./api/ServerRuntime";
 import { useScreens } from "./features/screens/ScreensContext";
 import { ScreenPlaybackSection } from "./features/screens/ScreenPlaybackSection";
@@ -8,12 +8,16 @@ import { LeftDock } from "./components/shell/LeftDock";
 import { WorkspaceView } from "./components/shell/WorkspaceView";
 import { NativeDragStrip } from "./components/shell/NativeDragStrip";
 import { useScreenWindowPersistence } from "./platform/desktop";
+import { LoadingSurface } from "./components/common";
+import { ConnectionState } from "./components/shell/ConnectionState";
+import { DeskLoadingOverlay } from "./components/shell/DeskLoadingOverlay";
 
 function ScreenSurface({ id }: { id: string }) {
   const server = useScreens();
   const { state, dispatch } = useApp();
   const screen = server.screens?.screens.find((item) => item.id === id);
   const hydrated = useRef(false);
+  const [layoutReady, setLayoutReady] = useState(false);
   const screenRef = useRef(screen);
   const closing = useScreenWindowPersistence(screen, server.saveScreen);
   screenRef.current = screen;
@@ -25,6 +29,7 @@ function ScreenSurface({ id }: { id: string }) {
       activeDeskId: screen.layout.activeDeskId,
     });
     hydrated.current = true;
+    setLayoutReady(true);
   }, [screen, dispatch]);
   useEffect(() => {
     const currentScreen = screenRef.current;
@@ -39,7 +44,15 @@ function ScreenSurface({ id }: { id: string }) {
     }, 600);
     return () => window.clearTimeout(timer);
   }, [state.desks, state.activeDeskId]);
-  if (!screen) return <main className="screen-loading">Loading screen…</main>;
+  if (!screen || !layoutReady)
+    return (
+      <LoadingSurface
+        className="connection-cover"
+        showMark
+        title="Loading screen…"
+        detail="Hydrating the assigned desktop and Playback surface"
+      />
+    );
   return (
     <div className={`screen-shell ${screen.show_dock ? "with-dock" : ""} ${screen.show_playbacks ? "with-playbacks" : ""}`}>
       <NativeDragStrip />
@@ -55,6 +68,8 @@ export function ScreenApp({ id }: { id: string }) {
     <ServerRuntime sessionRole="secondary">
       <AppProvider>
         <ScreenSurface id={id} />
+        <ConnectionState />
+        <DeskLoadingOverlay />
       </AppProvider>
       <DeskLockOverlay />
     </ServerRuntime>

@@ -60,3 +60,56 @@ rather than expanding this one.
 
 Sequence: late in the queue by number, but it only depends on 13 (v2 events) loosely —
 it may be claimed earlier if the boot path is stable; note deviations in the result.
+
+Claimed on 2026-07-24 after Chunk 23 completed; no unresolved decision or
+`.ATTENTION` suffix.
+
+## Result
+
+Completed on 2026-07-24.
+
+### Loading-phase inventory
+
+- **App boot:** the full-screen connection cover disappeared as soon as bootstrap
+  data arrived, although session creation, resource loading, store hydration, and
+  the WebSocket connection were still in progress. The shell could therefore look
+  ready before it was interactive.
+- **Show open/switch:** show lifecycle actions and the matching server event each
+  refreshed the same collections without a shared busy state. Independent catalog,
+  configuration, fixture, and media reads also ran serially.
+- **Window mount:** Screen and Stage windows rendered fallback or empty content
+  while their first scoped layout/data request was still pending.
+- **Reconnect:** the main shell generally retained same-show state, but the
+  full-screen boot cover returned and obscured that valid content.
+
+### Changes
+
+- Added one shared `LoadingSurface` vocabulary and desk-loading overlay, including
+  accessible live status and busy semantics, for the main shell and secondary
+  Screen/Stage windows.
+- Kept the full boot cover until the first real connection completes. After that,
+  reconnects retain the last valid desk and use a compact reconnect banner.
+- Added a tokenized desk-loading controller so overlapping local show actions and
+  server events cannot clear "Loading show …" prematurely. Show open, clean,
+  import, revision, rollback, and show-switching save-as paths now use it.
+- Kept mounted content stable during refreshes, gated a Screen window's initial
+  render on actual layout hydration, coalesced identical in-flight show-object
+  requests, and parallelized independent post-bootstrap reads.
+- Added focused tests for boot/reconnect presentation, the shared overlay,
+  overlapping activity, show lifecycle ordering, and server-event loading.
+
+### Verification
+
+- `npm run test:unit` passed: 281 frontend files and 1,997 frontend tests, plus the
+  Rust unit suites and frontend production build.
+- Focused loading and show-data coverage passed: 6 files and 51 tests.
+- `npm run typecheck` and `node tools/check-source-size.mjs` passed.
+- `npm run test:e2e-ui` reached 103 passed and 5 skipped; its product demo passed.
+- `npm run test:e2e` reached 286 passed and 9 skipped; its product demo passed.
+  Both E2E gates have one repeatable, unrelated failure in
+  `COLOR-RANGE-001`, where conflict repair still reports a conflicting programmer
+  outcome. Follow-up Chunk 26a records that defect rather than expanding this
+  loading-state chunk.
+- `npm run open` rebuilt both desktop applications, launched the current ToskLight
+  bundle, and passed the build script's canonical launchd-server ownership and
+  readiness check.

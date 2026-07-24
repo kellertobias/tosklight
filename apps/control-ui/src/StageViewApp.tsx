@@ -3,6 +3,8 @@ import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
 import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 import { AppProvider } from "./state/AppContext";
 import { StageWindow } from "./windows/StageWindow";
+import { ConnectionState } from "./components/shell/ConnectionState";
+import { DeskLoadingOverlay } from "./components/shell/DeskLoadingOverlay";
 
 /**
  * Dedicated view-only 3D stage window opened from the Show Patch (long-press "Preview Stage").
@@ -25,6 +27,8 @@ export function StageViewApp() {
 							showBeamGuides
 						/>
 					</div>
+					<ConnectionState />
+					<DeskLoadingOverlay />
 				</PatchFeatureBoundary>
 			</AppProvider>
 			<DeskLockOverlay />

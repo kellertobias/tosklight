@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type {
 	CueList,
 	OutputRoute,
@@ -24,62 +24,76 @@ export function useShowObjects(state: ServerState) {
 		setStageLayout,
 		setUnresolvedMvrFixtures,
 	} = state;
+	const inFlight = useRef<{
+		scope: string;
+		promise: Promise<void>;
+	} | null>(null);
 	return useCallback(
-		async (showId: string | null, userId: string | null) => {
-			const request = ++showObjectsRequest.current;
-			showObjectsStore.reset(showId);
-			const scope = deskLayoutScopeKey(showId, userId);
-			setDeskLayoutScope((loaded) => (loaded === scope ? loaded : null));
-			if (!showId) {
+		(showId: string | null, userId: string | null) => {
+			const requestScope = `${showId ?? ""}\u0000${userId ?? ""}`;
+			if (inFlight.current?.scope === requestScope)
+				return inFlight.current.promise;
+			const promise = (async () => {
+				const request = ++showObjectsRequest.current;
+				showObjectsStore.reset(showId);
+				const scope = deskLayoutScopeKey(showId, userId);
+				setDeskLayoutScope((loaded) => (loaded === scope ? loaded : null));
+				if (!showId) {
+					if (request !== showObjectsRequest.current) return;
+					setCueObjects([]);
+					setOutputRoutes([]);
+					setDeskLayout(null);
+					setStageLayout(null);
+					setUnresolvedMvrFixtures([]);
+					setDeskLayoutScope(null);
+					return;
+				}
+				const [cues, routes, layouts, stageLayouts, layers, unresolved] =
+					await Promise.all([
+						api.showObjects.objects<CueList>(showId, "cue_list"),
+						api.showObjects.objects<OutputRoute>(showId, "route"),
+						userId
+							? api.showObjects.objects<StoredDeskLayout>(
+									showId,
+									"user_layout",
+								)
+							: Promise.resolve([]),
+						api.showObjects.objects<StoredStageLayout>(showId, "stage_layout"),
+						api.showObjects.objects<PatchLayer>(showId, "patch_layer"),
+						api.showObjects.objects<Record<string, unknown>>(
+							showId,
+							"unresolved_mvr_fixture",
+						),
+					]);
 				if (request !== showObjectsRequest.current) return;
-				setCueObjects([]);
-				setOutputRoutes([]);
-				setDeskLayout(null);
-				setStageLayout(null);
-				setUnresolvedMvrFixtures([]);
-				setDeskLayoutScope(null);
-				return;
-			}
-			const [
-				cues,
-				routes,
-				layouts,
-				stageLayouts,
-				layers,
-				unresolved,
-			] = await Promise.all([
-				api.showObjects.objects<CueList>(showId, "cue_list"),
-				api.showObjects.objects<OutputRoute>(showId, "route"),
-				userId
-					? api.showObjects.objects<StoredDeskLayout>(showId, "user_layout")
-					: Promise.resolve([]),
-				api.showObjects.objects<StoredStageLayout>(showId, "stage_layout"),
-				api.showObjects.objects<PatchLayer>(showId, "patch_layer"),
-				api.showObjects.objects<Record<string, unknown>>(
-					showId,
-					"unresolved_mvr_fixture",
-				),
-			]);
-			if (request !== showObjectsRequest.current) return;
-			setCueObjects(cues);
-			setOutputRoutes(routes);
-			setDeskLayout(layouts.find((item) => item.id === userId) ?? null);
-			setDeskLayoutScope(scope);
-			setStageLayout(stageLayouts.find((item) => item.id === "main") ?? null);
-			setPatchLayers(
-				layers.length
-					? layers
-					: [
-							{
-								kind: "patch_layer",
-								id: "default",
-								revision: 0,
-								updated_at: "",
-								body: { id: "default", name: "Default", order: 0 },
-							},
-						],
-			);
-			setUnresolvedMvrFixtures(unresolved);
+				setCueObjects(cues);
+				setOutputRoutes(routes);
+				setDeskLayout(layouts.find((item) => item.id === userId) ?? null);
+				setDeskLayoutScope(scope);
+				setStageLayout(
+					stageLayouts.find((item) => item.id === "main") ?? null,
+				);
+				setPatchLayers(
+					layers.length
+						? layers
+						: [
+								{
+									kind: "patch_layer",
+									id: "default",
+									revision: 0,
+									updated_at: "",
+									body: { id: "default", name: "Default", order: 0 },
+								},
+							],
+				);
+				setUnresolvedMvrFixtures(unresolved);
+			})();
+			inFlight.current = { scope: requestScope, promise };
+			const clear = () => {
+				if (inFlight.current?.promise === promise) inFlight.current = null;
+			};
+			void promise.then(clear, clear);
+			return promise;
 		},
 		[
 			api,
@@ -114,17 +128,30 @@ export function useServerRefresh(
 	return useCallback(async () => {
 		const bootstrap = await api.runtime.bootstrap();
 		setBootstrap(bootstrap);
-		setShows(await api.shows.shows());
-		const configuration = await api.desk.configuration();
+		const [
+			shows,
+			configuration,
+			fixtureLibrary,
+			fixtureProfiles,
+			fixtureProfileWarnings,
+			mediaServers,
+		] = await Promise.all([
+			api.shows.shows(),
+			api.desk.configuration(),
+			api.fixtures.fixtureLibrary(),
+			api.fixtures.fixtureProfiles().catch(() => []),
+			api.fixtures.fixtureProfileWarnings().catch(() => []),
+			api.runtime.currentSession
+				? api.mediaOutput.mediaServers()
+				: Promise.resolve(null),
+		]);
+		setShows(shows);
 		setConfiguration(configuration.configuration);
 		setMatter(configuration.matter);
-		setFixtureLibrary(await api.fixtures.fixtureLibrary());
-		setFixtureProfiles(await api.fixtures.fixtureProfiles().catch(() => []));
-		setFixtureProfileWarnings(
-			await api.fixtures.fixtureProfileWarnings().catch(() => []),
-		);
-		if (api.runtime.currentSession)
-			setMediaServers((await api.mediaOutput.mediaServers()).fixtures);
+		setFixtureLibrary(fixtureLibrary);
+		setFixtureProfiles(fixtureProfiles);
+		setFixtureProfileWarnings(fixtureProfileWarnings);
+		if (mediaServers) setMediaServers(mediaServers.fixtures);
 		await loadShowObjects(
 			bootstrap.active_show?.id ?? null,
 			api.runtime.currentSession?.user.id ?? null,

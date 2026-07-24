@@ -39,6 +39,10 @@ export function createShowRevisionActions(
 			}
 		},
 		openShowRevision: async (id, revision) => {
+			const operationId = model.beginDeskLoading(
+				"Loading show revision…",
+				"Creating the revision copy and preparing control surfaces",
+			);
 			try {
 				await api.shows.openShowRevision(id, revision);
 				await refresh();
@@ -47,15 +51,23 @@ export function createShowRevisionActions(
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
 				return false;
+			} finally {
+				model.finishDeskLoading(operationId);
 			}
 		},
 		rollbackShow: async () => {
+			const operationId = model.beginDeskLoading(
+				"Rolling back show…",
+				"Installing the previous show state and preparing control surfaces",
+			);
 			try {
 				await api.shows.rollbackShow();
 				await refresh();
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
+			} finally {
+				model.finishDeskLoading(operationId);
 			}
 		},
 		downloadShow: async (show) => {

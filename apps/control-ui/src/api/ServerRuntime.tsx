@@ -36,6 +36,7 @@ import { ServerDeskBoundaries } from "./ServerDeskBoundaries";
 import { ServerProgrammingProviders } from "./ServerProgrammingProviders";
 import { ServerVisualizationRuntimeBoundary } from "./ServerVisualizationRuntimeBoundary";
 import { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
+import { DeskLoadingStateProvider } from "../features/deskLoading/DeskLoadingState";
 
 export type {
 	CommandChoiceOption,
@@ -388,7 +389,11 @@ export function ServerRuntime({
 											<SelectiveImportProvider source={selectiveImportSource}>
 												<FilesProvider source={fileSource}>
 													<ScreensProvider source={screenSource}>
-														{children}
+														<DeskLoadingStateProvider
+															loading={state.deskLoading}
+														>
+															{children}
+														</DeskLoadingStateProvider>
 													</ScreensProvider>
 												</FilesProvider>
 											</SelectiveImportProvider>

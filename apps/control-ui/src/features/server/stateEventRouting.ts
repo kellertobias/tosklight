@@ -77,30 +77,44 @@ function refreshBootstrap(
 	void state.commandLineWrite.current
 		.catch(() => undefined)
 		.then(() => state.api.runtime.bootstrap())
-		.then((next) => {
+		.then(async (next) => {
 			const current = getState();
-			current.setBootstrap(next);
-			const own = next.active_programmers.find(
-				(programmer) => programmer.session_id === session.session_id,
-			);
-			if (own) {
-				if (requestedEpoch === current.commandLineEpoch.current) {
-					const command =
-						own.command_line?.trim() || current.commandTargetModeRef.current;
-					current.setCommandLineState(command);
-					current.setCommandLinePristine(
-						command === current.commandTargetModeRef.current,
-					);
-				}
-				current.setSelectedFixtures(own.selected ?? []);
-			}
 			const nextShowId = next.active_show?.id ?? null;
-			if (
+			const showChanged =
 				event.kind === "show_opened" ||
 				event.kind === "show_rolled_back" ||
-				previousShowId !== nextShowId
-			)
-				void loadShowObjects(nextShowId, session.user.id);
+				previousShowId !== nextShowId;
+			const loadingOperation = showChanged
+				? current.beginDeskLoading(
+						next.active_show?.name
+							? `Loading show ${next.active_show.name}…`
+							: "Loading show…",
+						"Installing the show engine snapshot and preparing control surfaces",
+					)
+				: null;
+			try {
+				current.setBootstrap(next);
+				const own = next.active_programmers.find(
+					(programmer) => programmer.session_id === session.session_id,
+				);
+				if (own) {
+					if (requestedEpoch === current.commandLineEpoch.current) {
+						const command =
+							own.command_line?.trim() || current.commandTargetModeRef.current;
+						current.setCommandLineState(command);
+						current.setCommandLinePristine(
+							command === current.commandTargetModeRef.current,
+						);
+					}
+					current.setSelectedFixtures(own.selected ?? []);
+				}
+				if (showChanged)
+					await loadShowObjects(nextShowId, session.user.id);
+			} finally {
+				if (loadingOperation != null) {
+					getState().finishDeskLoading(loadingOperation);
+				}
+			}
 		})
 		.catch(() => undefined);
 }

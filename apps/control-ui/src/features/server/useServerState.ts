@@ -16,6 +16,7 @@ import type {
 	VersionedObject,
 } from "../../api/types";
 import type { CommandTargetMode } from "../../controlSurface/commandTarget";
+import { useDeskLoadingController } from "../deskLoading/useDeskLoadingController";
 import type {
 	PendingCommandChoice,
 	StoredDeskLayout,
@@ -33,6 +34,7 @@ export function useServerState() {
 	const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null);
 	const [session, setSession] = useState<SessionResponse | null>(null);
 	const [connectionGeneration, setConnectionGeneration] = useState(0);
+	const deskLoadingController = useDeskLoadingController();
 	const [outputRoutes, setOutputRoutes] = useState<
 		VersionedObject<OutputRoute>[]
 	>([]);
@@ -120,6 +122,7 @@ export function useServerState() {
 		setSession,
 		connectionGeneration,
 		setConnectionGeneration,
+		...deskLoadingController,
 		outputRoutes,
 		setOutputRoutes,
 		patchLayers,
