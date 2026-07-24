@@ -79,6 +79,17 @@ chosen `PaneType`. `npm run test:bench-types` protects those compile-time distin
 Secondary-screen helpers prove the persisted browser intent and controllable desktop-bridge
 request; they do not claim that Playwright opened or captured a native OS window.
 
+Browser scenarios establish show fixtures through the typed catalog exposed by
+`show.use(Show.Empty)`, `show.use(Show.TwelveDimmers)`, `show.use(Show.CompactRig)`, or
+`show.use(Show.DefaultStage)`. Each call copies an immutable canonical input into a uniquely
+identified working show inside that test's temporary data directory; `show.resetWorkingCopy()`
+restores only that scenario's copy. Reusable `defineShow(...)` recipes declare fixture numbers,
+profile names, and Group prerequisites so stale fixtures fail during labelled setup, before the
+first operator action. Filesystem paths, show IDs, and revision plumbing remain internal to the
+bench. Desktops are desk data and must be established with `desktop.use(...)`, not declared as a
+show prerequisite. This fast fixture setup is distinct from testing the operator-facing load
+workflow, which will use the `show.load(...)` intent introduced by the next bench step.
+
 The runner exposes separate commands so CI classifies failures clearly:
 
 - `./test e2e-api`
