@@ -1,5 +1,7 @@
 # 26a — Color-range UI conflicts after Programmer repair
 
+Status: complete.
+
 ## Context
 
 Chunk 24's full UI and E2E gates repeatedly exposed one focused failure outside the loading
@@ -39,3 +41,26 @@ npm run test:e2e -- tests/26-color-special-dialog-alignment.spec.ts
 npm run test:e2e-ui
 npm run test:e2e
 ```
+
+## Outcome
+
+The UI did not encounter a real cross-surface write race. The command facade and event
+transport serialized the same Rust `f32` authority with different JSON number spellings:
+for example, `0.3400000333786011` in the command outcome and `0.34000003` in the event
+projection. Exact JavaScript number comparison treated those projections as divergent,
+requested two unnecessary repairs, and displayed the conflict status. That status changed
+the dialog layout during the pointer gesture, so the final saturation coordinate was wrong.
+
+Projection comparison now recognizes non-integer values with the same `f32` representation
+as equal while revisions, ordering, timing, and other integers remain exact. Store and writer
+tests cover event-first compact values paired with widened command outcomes.
+
+Evidence gathered on 2026-07-24:
+
+- pre-fix reproduction: 4 of 10 UI repetitions failed while all 10 API repetitions passed;
+- post-fix focused unit coverage: 35 tests passed;
+- post-fix focused E2E repetition: 20 passed, covering 10 API and 10 UI repetitions;
+- `npm run test:unit`: all checks passed except the sandbox-blocked CITP loopback tests,
+  which passed separately with local socket access (5 passed);
+- `npm run test:e2e-ui`: 104 passed / 5 skipped;
+- `npm run test:e2e`: 287 passed / 9 skipped.

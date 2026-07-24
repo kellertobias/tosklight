@@ -276,6 +276,30 @@ describe("ProgrammerValuesStore revision and cursor ordering", () => {
 		expect(listener).not.toHaveBeenCalled();
 	});
 
+	it("accepts compact and widened spellings of the same f32 projection", () => {
+		const compact = valuesProjection({
+			revision: 2,
+			fixtureValues: [fixtureValue(0.34000003)],
+		});
+		const store = readyStore(compact);
+		const listener = vi.fn();
+		store.subscribe(listener);
+
+		store.applyProjection(
+			valuesProjection({
+				revision: 2,
+				fixtureValues: [fixtureValue(0.3400000333786011)],
+			}),
+			10,
+		);
+
+		expect(listener).not.toHaveBeenCalled();
+		expect(store.getSnapshot()).toMatchObject({
+			eventSequence: 10,
+			repairRequired: false,
+		});
+	});
+
 	it("rejects same-revision divergence atomically and requests repair", () => {
 		const store = readyStore();
 

@@ -165,6 +165,35 @@ describe("ProgrammerValuesWriter reconciliation", () => {
 		expect(store.getSnapshot().eventSequence).toBe(20);
 	});
 
+	it("settles event-first f32 values when the response uses a widened spelling", async () => {
+		const { store, applyAction, repair, writer } = harness();
+		const response = deferred<ProgrammerValuesActionOutcome>();
+		const eventProjection = valuesProjection({
+			revision: 2,
+			fixtureValues: [fixtureValue(0.34000003, { programmerOrder: 3 })],
+		});
+		const responseProjection = valuesProjection({
+			revision: 2,
+			fixtureValues: [
+				fixtureValue(0.3400000333786011, { programmerOrder: 3 }),
+			],
+		});
+		applyAction.mockReturnValueOnce(response.promise);
+		const pending = writer.setFixtureValue(fixtureInput("f32-spelling", 0.34));
+		await Promise.resolve();
+
+		store.applyProjection(eventProjection, 20);
+		response.resolve(changed("f32-spelling", responseProjection));
+
+		await expect(pending).resolves.toMatchObject({ status: "changed" });
+		expect(repair).not.toHaveBeenCalled();
+		expect(store.getSnapshot()).toMatchObject({
+			eventSequence: 20,
+			pendingRequestIds: [],
+			repairRequired: false,
+		});
+	});
+
 	it("tracks and sends a predicted no-op without cloning projection", async () => {
 		const { store, applyAction, writer } = harness();
 		const projection = store.getSnapshot().projection;

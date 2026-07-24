@@ -139,6 +139,17 @@ function compareGroupValues(left: ProgrammerGroupValue, right: ProgrammerGroupVa
 
 function sameValue(left: unknown, right: unknown): boolean {
 	if (Object.is(left, right)) return true;
+	if (typeof left === "number" && typeof right === "number") {
+		// Programmer normalized, spread, and color components originate as Rust f32 values.
+		// The command facade can serialize the widened JavaScript double while event and snapshot
+		// routes use the compact f32 spelling. Treat those wire spellings as the same authority,
+		// while retaining exact comparison for revisions, ordering, and timing integers.
+		return (
+			!Number.isInteger(left) &&
+			!Number.isInteger(right) &&
+			Math.fround(left) === Math.fround(right)
+		);
+	}
 	if (Array.isArray(left) || Array.isArray(right))
 		return (
 			Array.isArray(left) &&
