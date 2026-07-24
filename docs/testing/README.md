@@ -112,8 +112,12 @@ key order is itself the contract. Semantic API selection uses `fixture(number, h
 ordered oracle. Selection stepping remains `selection.previous/next/all`, while independent
 Highlight power is `highlight.on/off/toggle` with explicit `via.ui/api/osc` ports. Call
 `hardware.connect(alias)` before an OSC port and `hardware.disconnect()` during cleanup.
-Visible Fixture Sheet, Stage, pool, touch, keypad-selection, and OSC-selection adapters remain
-tracked by refactoring chunk 28/05b; do not label the typed API adapter as one of those routes.
+Selection routes now include explicit Fixture Sheet, Stage, Group pool, real touch, keypad, API,
+and subscribed OSC item adapters. Unqualified selection chooses reproducibly between eligible
+API and keypad adapters and records its seed, action index, candidates, and selected route for
+replay. Stage click/Shift-click requires an anchor established through the Stage route. Numeric
+Stage Shift-click ranges and OSC multi-target/range helpers deliberately fail before mutation
+until refactoring chunk 28/05c resolves their ordering and transport findings.
 
 The runner exposes separate commands so CI classifies failures clearly:
 

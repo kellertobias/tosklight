@@ -68,6 +68,11 @@ function hardware() {
 			async () => undefined,
 		),
 		send: vi.fn<SimulatedHardwareEndpoint["send"]>(async () => undefined),
+		mark: vi.fn<SimulatedHardwareEndpoint["mark"]>(() => 0),
+		expectAfter: vi.fn<SimulatedHardwareEndpoint["expectAfter"]>(async () => ({
+			address: "/feedback",
+			arguments: [],
+		})),
 		close: vi.fn<SimulatedHardwareEndpoint["close"]>(async () => undefined),
 	};
 	return {

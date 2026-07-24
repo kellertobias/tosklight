@@ -27,6 +27,7 @@ import { BrowserOutput } from "./outputScenario";
 import type { BuiltInPaneType } from "./paneTypes";
 import { builtInLabels } from "./paneTypes";
 import type { DmxProtocol } from "./protocols";
+import { BrowserRoutedSelection } from "./routedSelectionScenario";
 import type { SelectionTarget } from "./selectionContract";
 import { BrowserSelection } from "./selectionScenario";
 import { BrowserShows } from "./showScenario";
@@ -66,7 +67,7 @@ export class BrowserScenarioWorld {
 	readonly clock: BrowserClock;
 	readonly command: BrowserCommands;
 	readonly keypad: BrowserKeypad;
-	readonly selection: BrowserSelection;
+	readonly selection: BrowserRoutedSelection;
 	readonly hardware: SimulatedHardware;
 	readonly highlight: BrowserHighlight;
 	readonly dmx: BrowserDmx;
@@ -109,8 +110,17 @@ export class BrowserScenarioWorld {
 		this.clock = new BrowserClock(bench, desk);
 		this.command = new BrowserCommands(api, desk, page);
 		this.keypad = new BrowserKeypad(desk, page);
-		this.selection = new BrowserSelection(api);
 		this.hardware = simulatedHardware(bench, api);
+		this.selection = new BrowserRoutedSelection(
+			new BrowserSelection(api),
+			api,
+			this.command,
+			this.keypad,
+			this.hardware,
+			page,
+			desk,
+			`${testInfo.workerIndex}:${testInfo.title}`,
+		);
 		this.highlight = new BrowserHighlight(page, api, this.hardware);
 		this.dmx = new BrowserDmx(api);
 		this.output = new BrowserOutput(api, desk);

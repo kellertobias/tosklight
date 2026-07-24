@@ -25,3 +25,16 @@ Highlight, and simulated-hardware seams landed.
 - `npm --prefix apps/control-ui run typecheck`
 - `npm run test:architecture`
 - `npm run test:e2e`
+
+## Result
+
+- Added semantic Fixture Sheet, Stage, Group pool, touch, keypad, API, and subscribed OSC
+  selection routes over the shared ordered selection oracle.
+- Added seeded unqualified-route choice reports with deterministic replay and pre-mutation
+  rejection for unsupported route/target combinations.
+- Verified real click, Shift-click, double-click, and touch gestures without exposing locators,
+  coordinates, UUIDs, or complete command strings to scenario bodies.
+- Kept Stage numeric Shift-click ranges and OSC multi-target/range selection unavailable until
+  their observed ordering and transport behavior are resolved in chunk 05c.
+- Passed 25 focused adapter tests, three focused browser scenarios, TypeScript typechecking,
+  architecture ratchets, and the full Playwright regression: 303 passed and 9 skipped.

@@ -1,6 +1,6 @@
 import type { ApiDriver } from "./api";
 import type { LightBench } from "./lightBench";
-import type { OscHardware } from "./protocols";
+import type { OscHardware, OscMessage } from "./protocols";
 
 export interface SimulatedHardwareEndpoint {
 	subscribe(clientId: string, deskAlias: string): Promise<void>;
@@ -9,6 +9,8 @@ export interface SimulatedHardwareEndpoint {
 		address: string,
 		arguments_?: Parameters<OscHardware["send"]>[1],
 	): Promise<void>;
+	mark(): number;
+	expectAfter(mark: number, address: string): Promise<OscMessage>;
 	close(): Promise<void>;
 }
 
@@ -81,6 +83,22 @@ export class SimulatedHardware {
 				"Simulated hardware is not connected; call hardware.connect() first",
 			);
 		await this.endpoint.send(address, arguments_);
+	}
+
+	mark(): number {
+		if (!this.endpoint)
+			throw new Error(
+				"Simulated hardware is not connected; call hardware.connect() first",
+			);
+		return this.endpoint.mark();
+	}
+
+	expectAfter(mark: number, address: string): Promise<OscMessage> {
+		if (!this.endpoint)
+			throw new Error(
+				"Simulated hardware is not connected; call hardware.connect() first",
+			);
+		return this.endpoint.expectAfter(mark, address);
 	}
 
 	private async waitForGlobalConnection(): Promise<void> {
