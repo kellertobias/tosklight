@@ -308,6 +308,92 @@ async fn synchronization_conflicts_persistence_warning_and_authority_replacement
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+#[tokio::test]
+async fn typed_speed_group_ws_action_replays_before_lock_and_emits_once() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = authenticate_token(&state, &token).unwrap();
+    let initial = speed_group_snapshot(&app, &token, session.desk.id).await;
+    let mut request = speed_request(
+        "ws-speed-adjust",
+        &initial,
+        serde_json::json!({"type":"adjust_bpm","group":"B","delta_bpm":5.0}),
+    );
+    request["future_transport_hint"] = serde_json::json!(true);
+    let command = || WsCommand {
+        protocol_version: 1,
+        request_id: "ws-speed-adjust".into(),
+        session_id: session.id,
+        expected_revision: None,
+        command: "speed_group.action".into(),
+        payload: request.clone(),
+    };
+    let cursor = state.application_events.latest_sequence();
+    let attempts = persistence_attempts(&state);
+
+    let activation = state.activation_lock.clone().lock_owned().await;
+    let unstable = dispatch_ws_command(&state, &session, command());
+    assert!(!unstable.ok);
+    assert!(
+        unstable
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("active show is changing"))
+    );
+    drop(activation);
+    assert_eq!(persistence_attempts(&state), attempts);
+    assert_eq!(speed_group_events(&state, cursor).len(), 0);
+
+    let first = dispatch_ws_command(&state, &session, command());
+    assert!(first.ok, "{:?}", first.error);
+    let payload = first.payload.unwrap();
+    assert_eq!(payload["status"], "changed");
+    assert_eq!(payload["groups"][0]["group"], "B");
+    assert_eq!(payload["groups"][0]["manual_bpm"], 95.0);
+    assert_eq!(payload["replayed"], false);
+    assert_eq!(persistence_attempts(&state), attempts + 1);
+    assert_eq!(speed_group_events(&state, cursor).len(), 1);
+
+    write_desk_lock(
+        &state,
+        session.desk.id,
+        &DeskLockConfiguration {
+            locked: true,
+            ..DeskLockConfiguration::default()
+        },
+    )
+    .unwrap();
+    let replay = dispatch_ws_command(&state, &session, command());
+    assert!(replay.ok, "{:?}", replay.error);
+    assert_eq!(replay.payload.unwrap()["replayed"], true);
+    assert_eq!(persistence_attempts(&state), attempts + 1);
+    assert_eq!(speed_group_events(&state, cursor).len(), 1);
+
+    let current = speed_group_snapshot(&app, &token, session.desk.id).await;
+    let locked = dispatch_ws_command(
+        &state,
+        &session,
+        WsCommand {
+            protocol_version: 1,
+            request_id: "ws-speed-locked".into(),
+            session_id: session.id,
+            expected_revision: None,
+            command: "speed_group.action".into(),
+            payload: speed_request(
+                "ws-speed-locked",
+                &current,
+                serde_json::json!({"type":"set_bpm","group":"C","bpm":140.0}),
+            ),
+        },
+    );
+    assert!(!locked.ok);
+    assert_eq!(locked.error.as_deref(), Some("desk is locked"));
+    assert_eq!(persistence_attempts(&state), attempts + 1);
+    assert_eq!(speed_group_events(&state, cursor).len(), 1);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
 fn speed_request(
     request_id: &str,
     snapshot: &serde_json::Value,

@@ -19,9 +19,11 @@ export function useSpeedGroupRuntimeBoundaries(state: ServerState) {
 						sessionToken: state.session.token,
 						authenticatedDeskId: state.session.desk.id,
 						deskBoundaryToken: browserDeskBoundaryToken(),
+						applyAction: (_scope, request) =>
+							state.client.speedGroupRuntimeLiveAction(request),
 					})
 				: null,
-		[state.session],
+		[state.client, state.session],
 	);
 	return {
 		speedGroupRuntimeTransport: transport,

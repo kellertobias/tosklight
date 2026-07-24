@@ -48,6 +48,10 @@ export class LightApiClient extends LightClientRuntime {
 	commandHistory = bindClientMethod(this.deskApi, "commandHistory");
 	createUser = bindClientMethod(this.deskApi, "createUser");
 	setDmxOverride = bindClientMethod(this.outputApi, "setDmxOverride");
+	outputRuntimeLiveAction = bindClientMethod(
+		this.outputApi,
+		"outputRuntimeLiveAction",
+	);
 	highlight = bindClientMethod(this.outputApi, "highlight");
 	highlightAction = bindClientMethod(this.outputApi, "highlightAction");
 	setPatchPreviewHighlight = bindClientMethod(
@@ -154,6 +158,10 @@ export class LightApiClient extends LightClientRuntime {
 	speedGroupAction = bindClientMethod(
 		this.configurationApi,
 		"speedGroupAction",
+	);
+	speedGroupRuntimeLiveAction = bindClientMethod(
+		this.configurationApi,
+		"speedGroupRuntimeLiveAction",
 	);
 	shutdown = bindClientMethod(this.configurationApi, "shutdown");
 	deskLock = bindClientMethod(this.configurationApi, "deskLock");

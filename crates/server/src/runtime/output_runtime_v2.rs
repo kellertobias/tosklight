@@ -1,6 +1,7 @@
 //! Authenticated revisioned actions and repair projection for global output runtime.
 
 use super::{AppState, Session, authenticate, output_runtime_service, read_desk_lock};
+use crate::tolerant_json::TolerantJson;
 use axum::{
     Json, Router,
     extract::{Path, State, rejection::JsonRejection},
@@ -27,14 +28,14 @@ async fn output_runtime_action(
     State(state): State<AppState>,
     Path((desk_id, identity)): Path<(String, String)>,
     headers: HeaderMap,
-    request: Result<Json<action_wire::OutputRuntimeActionRequest>, JsonRejection>,
+    request: Result<TolerantJson<action_wire::OutputRuntimeActionRequest>, JsonRejection>,
 ) -> Result<Response, OutputRuntimeHttpError> {
     let session =
         authenticated_desk(&state, &headers, &desk_id).map_err(OutputRuntimeHttpError::api)?;
     parse_identity(&identity).map_err(OutputRuntimeHttpError::api)?;
-    let Json(request) =
+    let TolerantJson(request) =
         request.map_err(|error| OutputRuntimeHttpError::invalid(error.body_text()))?;
-    validate_request_id(&request.request_id)?;
+    validate_request_id(&request.request_id).map_err(OutputRuntimeHttpError::invalid)?;
     let command = output_runtime_service::exact_command(
         request.expected_show_id,
         request.expected_revision,
@@ -131,7 +132,7 @@ fn wire_projection(projection: OutputRuntimeProjection) -> wire::OutputRuntimePr
     }
 }
 
-fn wire_outcome(
+pub(super) fn wire_outcome(
     result: light_application::OutputRuntimeResult,
 ) -> action_wire::OutputRuntimeActionOutcome {
     let outcome = match result.outcome {
@@ -164,11 +165,9 @@ fn wire_outcome(
     }
 }
 
-fn validate_request_id(value: &str) -> Result<(), OutputRuntimeHttpError> {
+pub(super) fn validate_request_id(value: &str) -> Result<(), String> {
     if value.is_empty() || value.len() > 128 || value.bytes().any(|byte| byte.is_ascii_control()) {
-        return Err(OutputRuntimeHttpError::invalid(
-            "request_id must contain 1-128 printable bytes",
-        ));
+        return Err("request_id must contain 1-128 printable bytes".into());
     }
     Ok(())
 }

@@ -15,6 +15,7 @@ use light_wire::v2::{events::EventSnapshotCursor, speed_group as wire};
 use uuid::Uuid;
 
 use super::{AppState, Session, authenticate, speed_group_service};
+use crate::tolerant_json::TolerantJson;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new().route(
@@ -27,12 +28,13 @@ async fn action(
     State(state): State<AppState>,
     Path(desk_id): Path<String>,
     headers: HeaderMap,
-    request: Result<Json<wire::SpeedGroupActionRequest>, JsonRejection>,
+    request: Result<TolerantJson<wire::SpeedGroupActionRequest>, JsonRejection>,
 ) -> Result<Response, SpeedGroupHttpError> {
     let session =
         authenticated_desk(&state, &headers, &desk_id).map_err(SpeedGroupHttpError::api)?;
-    let Json(request) = request.map_err(|error| SpeedGroupHttpError::invalid(error.body_text()))?;
-    validate_request_id(&request.request_id)?;
+    let TolerantJson(request) =
+        request.map_err(|error| SpeedGroupHttpError::invalid(error.body_text()))?;
+    validate_request_id(&request.request_id).map_err(SpeedGroupHttpError::invalid)?;
     let command = speed_group_service::exact_command(
         request.expected_authority_id,
         request.expected_revision,
@@ -82,7 +84,9 @@ fn http_context(session: &Session) -> ActionContext {
     )
 }
 
-fn application_action(action: wire::SpeedGroupAction) -> Result<SpeedGroupAction, super::ApiError> {
+pub(super) fn application_action(
+    action: wire::SpeedGroupAction,
+) -> Result<SpeedGroupAction, super::ApiError> {
     Ok(match action {
         wire::SpeedGroupAction::SetBpm { group, bpm } => SpeedGroupAction::SetBpm {
             group: application_group(group),
@@ -159,7 +163,7 @@ fn wire_group(group: light_application::SpeedGroupId) -> wire::SpeedGroupId {
     }
 }
 
-fn wire_outcome(result: SpeedGroupResult) -> wire::SpeedGroupActionOutcome {
+pub(super) fn wire_outcome(result: SpeedGroupResult) -> wire::SpeedGroupActionOutcome {
     let outcome = match result.outcome {
         SpeedGroupOutcome::Applied => wire::SpeedGroupActionState::Changed {
             event_sequence: result
@@ -191,11 +195,9 @@ fn wire_outcome(result: SpeedGroupResult) -> wire::SpeedGroupActionOutcome {
     }
 }
 
-fn validate_request_id(value: &str) -> Result<(), SpeedGroupHttpError> {
+pub(super) fn validate_request_id(value: &str) -> Result<(), String> {
     if value.is_empty() || value.len() > 128 || value.bytes().any(|byte| byte.is_ascii_control()) {
-        return Err(SpeedGroupHttpError::invalid(
-            "request_id must contain 1-128 printable bytes",
-        ));
+        return Err("request_id must contain 1-128 printable bytes".into());
     }
     Ok(())
 }

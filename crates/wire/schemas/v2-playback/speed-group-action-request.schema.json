@@ -21,7 +21,6 @@
       "minLength": 1
     }
   },
-  "additionalProperties": false,
   "required": [
     "request_id",
     "expected_authority_id",

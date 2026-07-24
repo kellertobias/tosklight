@@ -19,9 +19,11 @@ export function useOutputRuntimeBoundaries(state: ServerState) {
 						sessionToken: state.session.token,
 						authenticatedDeskId: state.session.desk.id,
 						deskBoundaryToken: browserDeskBoundaryToken(),
+						applyAction: (scope, request) =>
+							state.client.outputRuntimeLiveAction(scope.showId, request),
 					})
 				: null,
-		[state.session],
+		[state.client, state.session],
 	);
 	return {
 		outputRuntimeTransport: transport,

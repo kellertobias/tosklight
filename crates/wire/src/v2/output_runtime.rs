@@ -8,7 +8,6 @@ use uuid::Uuid;
 use super::events::OutputRuntimeProjection;
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct OutputRuntimeActionRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
@@ -83,7 +82,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn request_and_nested_outcome_reject_unknown_fields() {
+    fn request_accepts_unknown_fields_and_nested_outcome_remains_strict() {
         assert!(
             serde_json::from_value::<OutputRuntimeActionRequest>(serde_json::json!({
                 "request_id":"output-1",
@@ -92,7 +91,7 @@ mod tests {
                 "grand_master":0.5,
                 "unexpected":true
             }))
-            .is_err()
+            .is_ok()
         );
         assert!(
             serde_json::from_value::<OutputRuntimeActionOutcome>(serde_json::json!({

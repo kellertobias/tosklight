@@ -218,11 +218,90 @@ async fn v2_output_action_is_atomic_revisioned_idempotent_and_strict() {
     .await;
     assert_eq!(empty.status(), StatusCode::BAD_REQUEST);
     assert_eq!(json(empty).await["kind"], "invalid");
-    let mut unknown_request = output_request("output-unknown", &current, Some(0.2), None);
+    let mut unknown_request = output_request("output-unknown", &current, Some(0.45), Some(true));
     unknown_request["unexpected"] = serde_json::json!(true);
     let unknown = post_output(&app, &token, session.desk.id, unknown_request).await;
-    assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(json(unknown).await["kind"], "invalid");
+    assert_eq!(unknown.status(), StatusCode::OK);
+    assert_eq!(json(unknown).await["status"], "no_change");
+    assert_eq!(output_persistence_attempts(&state), attempts + 1);
+    assert_eq!(output_events(&state, cursor).len(), 1);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn typed_output_runtime_ws_action_is_atomic_replay_safe_and_lock_gated() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = authenticate_token(&state, &token).unwrap();
+    let show = create_show(&app, &token, "Typed WS output").await;
+    open_show_for_output_test(&app, &token, &show).await;
+    let initial = output_snapshot(&app, &token, session.desk.id).await;
+    let request = output_request("ws-output-combined", &initial, Some(0.35), Some(true));
+    let command = || WsCommand {
+        protocol_version: 1,
+        request_id: "ws-output-combined".into(),
+        session_id: session.id,
+        expected_revision: None,
+        command: "output_runtime.action".into(),
+        payload: request.clone(),
+    };
+    let cursor = state.application_events.latest_sequence();
+    let attempts = output_persistence_attempts(&state);
+
+    let activation = state.activation_lock.clone().lock_owned().await;
+    let unstable = dispatch_ws_command(&state, &session, command());
+    assert!(!unstable.ok);
+    assert!(
+        unstable
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("active show is changing"))
+    );
+    drop(activation);
+    assert_eq!(output_persistence_attempts(&state), attempts);
+    assert_eq!(output_events(&state, cursor).len(), 0);
+
+    let first = dispatch_ws_command(&state, &session, command());
+    assert!(first.ok, "{:?}", first.error);
+    let payload = first.payload.unwrap();
+    assert_eq!(payload["status"], "changed");
+    assert!((payload["projection"]["grand_master"].as_f64().unwrap() - 0.35).abs() < 0.000_001);
+    assert_eq!(payload["projection"]["blackout"], true);
+    assert_eq!(payload["replayed"], false);
+    assert_eq!(output_persistence_attempts(&state), attempts + 1);
+    assert_eq!(output_events(&state, cursor).len(), 1);
+
+    let replay = dispatch_ws_command(&state, &session, command());
+    assert!(replay.ok, "{:?}", replay.error);
+    assert_eq!(replay.payload.unwrap()["replayed"], true);
+    assert_eq!(output_persistence_attempts(&state), attempts + 1);
+    assert_eq!(output_events(&state, cursor).len(), 1);
+
+    write_desk_lock(
+        &state,
+        session.desk.id,
+        &DeskLockConfiguration {
+            locked: true,
+            ..DeskLockConfiguration::default()
+        },
+    )
+    .unwrap();
+    let current = output_snapshot(&app, &token, session.desk.id).await;
+    let locked = dispatch_ws_command(
+        &state,
+        &session,
+        WsCommand {
+            protocol_version: 1,
+            request_id: "ws-output-locked".into(),
+            session_id: session.id,
+            expected_revision: None,
+            command: "output_runtime.action".into(),
+            payload: output_request("ws-output-locked", &current, Some(0.8), None),
+        },
+    );
+    assert!(!locked.ok);
+    assert_eq!(locked.error.as_deref(), Some("desk is locked"));
     assert_eq!(output_persistence_attempts(&state), attempts + 1);
     assert_eq!(output_events(&state, cursor).len(), 1);
     let _ = std::fs::remove_dir_all(data_dir);

@@ -64,7 +64,6 @@ pub enum SpeedGroupAction {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct SpeedGroupActionRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
@@ -150,16 +149,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn request_and_nested_action_reject_unknown_fields() {
-        assert!(
-            serde_json::from_value::<SpeedGroupActionRequest>(serde_json::json!({
-                "request_id":"speed-1",
-                "expected_authority_id":Uuid::from_u128(1),
-                "expected_revision":2,
-                "action":{"type":"set_bpm","group":"A","bpm":120.5,"extra":true}
-            }))
-            .is_err()
-        );
+    fn request_accepts_unknown_fields_but_nested_action_remains_strict() {
         assert!(
             serde_json::from_value::<SpeedGroupActionRequest>(serde_json::json!({
                 "request_id":"speed-1",
@@ -167,6 +157,15 @@ mod tests {
                 "expected_revision":2,
                 "action":{"type":"set_bpm","group":"A","bpm":120.5},
                 "extra":true
+            }))
+            .is_ok()
+        );
+        assert!(
+            serde_json::from_value::<SpeedGroupActionRequest>(serde_json::json!({
+                "request_id":"speed-1",
+                "expected_authority_id":Uuid::from_u128(1),
+                "expected_revision":2,
+                "action":{"type":"set_bpm","group":"A","bpm":120.5,"extra":true}
             }))
             .is_err()
         );

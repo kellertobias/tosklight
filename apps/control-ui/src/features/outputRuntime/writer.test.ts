@@ -8,7 +8,6 @@ import {
 	changedOutcome,
 	deferred,
 	DESK_ID,
-	noChangeOutcome,
 	OTHER_SHOW_ID,
 	outputProjection,
 	outputSnapshot,
@@ -106,27 +105,23 @@ describe("OutputRuntimeWriter", () => {
 		expect(store.getSnapshot().pendingRequestIds).toEqual([]);
 	});
 
-	it("retries an ambiguous request with the identical body", async () => {
-		const { applyAction, writer } = harness();
-		applyAction
-			.mockRejectedValueOnce(
-				new OutputRuntimeTransportError(
-					"connection reset",
-					"unavailable",
-					0,
-					null,
-					true,
-				),
-			)
-			.mockImplementationOnce(async (_scope, request) =>
-				noChangeOutcome(request.requestId, outputProjection(), true),
-			);
+	it("sends an ambiguous request once and repairs before continuing", async () => {
+		const { applyAction, repair, writer } = harness();
+		applyAction.mockRejectedValueOnce(
+			new OutputRuntimeTransportError(
+				"connection reset",
+				"unavailable",
+				0,
+				null,
+				true,
+			),
+		);
 
 		await expect(
-			writer.setOutput({ grandMaster: 1, requestId: "replay" }),
-		).resolves.toMatchObject({ status: "no_change", replayed: true });
-		expect(applyAction).toHaveBeenCalledTimes(2);
-		expect(applyAction.mock.calls[1]?.[1]).toBe(applyAction.mock.calls[0]?.[1]);
+			writer.setOutput({ grandMaster: 1, requestId: "ambiguous" }),
+		).resolves.toBeNull();
+		expect(applyAction).toHaveBeenCalledOnce();
+		expect(repair).toHaveBeenCalledOnce();
 	});
 
 	it("serializes writes and advances independent revision authority", async () => {
@@ -173,7 +168,7 @@ describe("OutputRuntimeWriter", () => {
 	});
 
 	it("rolls back a definitive rejection", async () => {
-		const { store, applyAction, onError, writer } = harness();
+		const { store, applyAction, repair, onError, writer } = harness();
 		applyAction.mockRejectedValueOnce(
 			new OutputRuntimeTransportError(
 				"invalid output",
@@ -197,6 +192,7 @@ describe("OutputRuntimeWriter", () => {
 		expect(onError).toHaveBeenCalledWith(
 			expect.objectContaining({ message: "invalid output" }),
 		);
+		expect(repair).toHaveBeenCalledOnce();
 	});
 
 	it("repairs the exact snapshot after a typed revision conflict", async () => {

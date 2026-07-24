@@ -9,7 +9,15 @@ import type {
 	SpeedGroupId,
 	SpeedGroupSoundState,
 } from "../types";
-import type { ClientTransport } from "./transport";
+import type {
+	SpeedGroupActionOutcome,
+	SpeedGroupActionRequest,
+} from "../../features/speedGroupRuntime/contracts";
+import {
+	decodeSpeedGroupActionOutcome,
+	encodeSpeedGroupActionRequest,
+} from "../speedGroupRuntimeWire";
+import type { LiveClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
 
 export interface ConfigurationSnapshot {
@@ -32,7 +40,19 @@ export interface DeskLockInput {
 }
 
 export class ConfigurationApiClient {
-	constructor(private readonly transport: ClientTransport) {}
+	constructor(private readonly transport: LiveClientTransport) {}
+
+	async speedGroupRuntimeLiveAction(
+		request: SpeedGroupActionRequest,
+	): Promise<SpeedGroupActionOutcome> {
+		const wireRequest = encodeSpeedGroupActionRequest(request);
+		const value = await this.transport.commandWithRequestId(
+			"speed_group.action",
+			wireRequest,
+			wireRequest.request_id,
+		);
+		return decodeSpeedGroupActionOutcome(value, request);
+	}
 
 	configuration(): Promise<ConfigurationSnapshot> {
 		return this.transport.request("/api/v1/configuration", {}, false);

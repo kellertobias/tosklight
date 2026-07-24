@@ -15,6 +15,8 @@ const LIVE_ABSOLUTE_COMMANDS: &[&str] = &[
     "programmer.values.action",
     "programmer.preload.lifecycle.action",
     "programmer.preload.values.action",
+    "speed_group.action",
+    "output_runtime.action",
     "programmer.command_line.replace",
     "programmer.selection.action",
     "programmer.release",
@@ -89,6 +91,10 @@ fn dispatch_ws_payload(
     context: Option<&light_application::ActionContext>,
 ) -> Result<serde_json::Value, String> {
     match command.command.as_str() {
+        "speed_group.action" => Err("Speed Group action requires the typed action boundary".into()),
+        "output_runtime.action" => {
+            Err("Output runtime action requires the typed action boundary".into())
+        }
         "selection.set" => ws_selection_set(state, session, command),
         "selection.gesture" => ws_selection_gesture(state, session, command),
         "group.select" => ws_group_select(state, session, command),
@@ -198,7 +204,11 @@ fn validate_ws_identity(
     session: &Session,
     command: &WsCommand,
 ) -> Result<(), String> {
-    if read_desk_lock(state, session.desk.id).locked {
+    if !matches!(
+        command.command.as_str(),
+        "speed_group.action" | "output_runtime.action"
+    ) && read_desk_lock(state, session.desk.id).locked
+    {
         return Err("desk is locked".into());
     }
     if command.protocol_version != 1 {
@@ -216,6 +226,24 @@ fn dispatch_validated_ws_command(
     command: &WsCommand,
     live_absolute: bool,
 ) -> WsProgrammingOutput {
+    if matches!(
+        command.command.as_str(),
+        "speed_group.action" | "output_runtime.action"
+    ) {
+        let result = match command.command.as_str() {
+            "speed_group.action" => ws_speed_group_action(state, session, command),
+            "output_runtime.action" => ws_output_runtime_action(state, session, command),
+            _ => unreachable!(),
+        };
+        return match result {
+            Ok(result) => WsProgrammingOutput {
+                response: Ok(result.payload),
+                changes: Vec::new(),
+                replayed: result.replayed,
+            },
+            Err(error) => WsProgrammingOutput::untracked(Err(error)),
+        };
+    }
     if !live_absolute {
         return WsProgrammingOutput::untracked(dispatch_ws_payload(state, session, command, None));
     }

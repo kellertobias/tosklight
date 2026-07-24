@@ -10,7 +10,7 @@ import { assertAction, assertRequestId } from "./projectionValue";
 import type { SpeedGroupRuntimeStore } from "./store";
 import type { SpeedGroupSettlement } from "./storeState";
 import type { SpeedGroupRuntimeTransport } from "./transport";
-import { SpeedGroupProtocolError, SpeedGroupTransportError } from "./transport";
+import { SpeedGroupProtocolError } from "./transport";
 
 interface QueuedSpeedGroupWrite {
 	requestId: string;
@@ -99,7 +99,10 @@ export class SpeedGroupRuntimeWriter implements SpeedGroupRuntimeActions {
 		if (!this.isPending(write.requestId)) return this.abandon(write.requestId);
 		try {
 			const request = this.requestAtCurrentAuthority(write);
-			const outcome = await this.requestWithOneRetry(request);
+			const outcome = await this.options.transport.applyAction(
+				this.options.scope,
+				request,
+			);
 			if (!this.isCurrent()) return this.abandon(write.requestId);
 			this.assertOutcome(request, outcome);
 			if (!(await this.settle(write.requestId, outcome))) return null;
@@ -111,9 +114,7 @@ export class SpeedGroupRuntimeWriter implements SpeedGroupRuntimeActions {
 		} catch (reason) {
 			if (!this.isCurrent()) return this.abandon(write.requestId);
 			const error = asError(reason);
-			const reported = requiresRepair(reason)
-				? await this.repairError(error)
-				: error;
+			const reported = await this.repairError(error);
 			if (!this.isCurrent()) return this.abandon(write.requestId);
 			this.options.store.rollback(
 				write.requestId,
@@ -138,18 +139,6 @@ export class SpeedGroupRuntimeWriter implements SpeedGroupRuntimeActions {
 			expectedGroups: authority.groups,
 			action: write.action,
 		};
-	}
-
-	private async requestWithOneRetry(request: SpeedGroupActionRequest) {
-		try {
-			return await this.options.transport.applyAction(
-				this.options.scope,
-				request,
-			);
-		} catch (reason) {
-			if (!isRetryable(reason) || !this.isCurrent()) throw reason;
-			return this.options.transport.applyAction(this.options.scope, request);
-		}
 	}
 
 	private async settle(requestId: string, outcome: SpeedGroupActionOutcome) {
@@ -245,17 +234,6 @@ export class SpeedGroupRuntimeWriter implements SpeedGroupRuntimeActions {
 
 function sameId(left: string | null, right: string) {
 	return left?.toLowerCase() === right.toLowerCase();
-}
-
-function isRetryable(reason: unknown) {
-	return reason instanceof SpeedGroupTransportError && reason.retryable;
-}
-
-function requiresRepair(reason: unknown) {
-	return (
-		reason instanceof SpeedGroupProtocolError ||
-		(reason instanceof SpeedGroupTransportError && reason.status === 409)
-	);
 }
 
 function asError(reason: unknown) {

@@ -28,6 +28,7 @@ export interface HttpSpeedGroupRuntimeTransportOptions {
 	deskBoundaryToken?: string;
 	fetch?: typeof globalThis.fetch;
 	webSocket?: typeof globalThis.WebSocket;
+	applyAction?: SpeedGroupRuntimeTransport["applyAction"];
 }
 
 /** Dormant desk-authenticated adapter for installation-global manual speeds. */
@@ -59,6 +60,8 @@ export class HttpSpeedGroupRuntimeTransport
 		request: SpeedGroupActionRequest,
 	) {
 		this.validateScope(scope);
+		if (this.options.applyAction)
+			return this.options.applyAction(scope, request);
 		const headers = this.headers();
 		headers.set("content-type", "application/json");
 		const response = await this.fetchRequest(this.speedGroupPath(scope), {

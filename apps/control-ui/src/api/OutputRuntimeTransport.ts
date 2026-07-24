@@ -28,6 +28,7 @@ export interface HttpOutputRuntimeTransportOptions {
 	deskBoundaryToken?: string;
 	fetch?: typeof globalThis.fetch;
 	webSocket?: typeof globalThis.WebSocket;
+	applyAction?: OutputRuntimeTransport["applyAction"];
 }
 
 /** Dormant desk-authenticated adapter for the installation-global output object. */
@@ -60,6 +61,8 @@ export class HttpOutputRuntimeTransport implements OutputRuntimeTransport {
 		request: OutputRuntimeActionRequest,
 	) {
 		this.validateScope(scope);
+		if (this.options.applyAction)
+			return this.options.applyAction(scope, request);
 		const headers = this.headers();
 		headers.set("content-type", "application/json");
 		const response = await this.fetchRequest(this.outputPath(scope), {

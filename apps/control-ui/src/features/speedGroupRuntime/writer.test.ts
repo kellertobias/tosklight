@@ -8,7 +8,6 @@ import {
 	changedOutcome,
 	DESK_ID,
 	deferred,
-	noChangeOutcome,
 	speedGroup,
 	speedSnapshot,
 } from "./testFixtures";
@@ -135,28 +134,21 @@ describe("SpeedGroupRuntimeWriter", () => {
 		expect(store.getSnapshot().pendingRequestIds).toEqual([]);
 	});
 
-	it("retries an ambiguous request with the identical request object", async () => {
-		const { applyAction, writer } = harness();
-		applyAction
-			.mockRejectedValueOnce(
-				new SpeedGroupTransportError(
-					"connection reset",
-					"unavailable",
-					0,
-					null,
-					true,
-				),
-			)
-			.mockImplementationOnce(async (_scope, request) =>
-				noChangeOutcome(request.requestId, [speedGroup("A")], true),
-			);
+	it("sends an ambiguous request once and repairs before continuing", async () => {
+		const { applyAction, repair, writer } = harness();
+		applyAction.mockRejectedValueOnce(
+			new SpeedGroupTransportError(
+				"connection reset",
+				"unavailable",
+				0,
+				null,
+				true,
+			),
+		);
 
-		await expect(writer.setBpm("A", 120, "replay")).resolves.toMatchObject({
-			status: "no_change",
-			replayed: true,
-		});
-		expect(applyAction).toHaveBeenCalledTimes(2);
-		expect(applyAction.mock.calls[1]?.[1]).toBe(applyAction.mock.calls[0]?.[1]);
+		await expect(writer.setBpm("A", 120, "ambiguous")).resolves.toBeNull();
+		expect(applyAction).toHaveBeenCalledOnce();
+		expect(repair).toHaveBeenCalledOnce();
 	});
 
 	it("rolls back definitive failure and repairs a revision conflict", async () => {
@@ -168,6 +160,7 @@ describe("SpeedGroupRuntimeWriter", () => {
 		expect(store.getSnapshot().projection?.groups[0]?.manualBpm).toBe(130);
 		await expect(invalid).resolves.toBeNull();
 		expect(store.getSnapshot().projection?.groups[0]?.manualBpm).toBe(120);
+		expect(repair).toHaveBeenCalledOnce();
 
 		applyAction.mockRejectedValueOnce(
 			new SpeedGroupTransportError(
@@ -182,7 +175,7 @@ describe("SpeedGroupRuntimeWriter", () => {
 			store.installRepairSnapshot(speedSnapshot({ cursor: 20, revision: 2 }));
 		});
 		await expect(writer.setBpm("B", 95, "conflict")).resolves.toBeNull();
-		expect(repair).toHaveBeenCalledOnce();
+		expect(repair).toHaveBeenCalledTimes(2);
 		expect(store.getSnapshot()).toMatchObject({
 			authorityRevision: 2,
 			pendingRequestIds: [],

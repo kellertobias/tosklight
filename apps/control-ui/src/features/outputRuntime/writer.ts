@@ -8,10 +8,7 @@ import type {
 import { assertOutputMutation, assertOutputRequestId } from "./projectionValue";
 import type { OutputRuntimeSettlement, OutputRuntimeStore } from "./store";
 import type { OutputRuntimeTransport } from "./transport";
-import {
-	OutputRuntimeProtocolError,
-	OutputRuntimeTransportError,
-} from "./transport";
+import { OutputRuntimeProtocolError } from "./transport";
 
 interface QueuedOutputWrite {
 	requestId: string;
@@ -98,7 +95,10 @@ export class OutputRuntimeWriter implements OutputRuntimeActions {
 		if (!this.isPending(write.requestId)) return this.abandon(write.requestId);
 		try {
 			const request = this.requestAtCurrentRevision(write);
-			const outcome = await this.requestWithOneRetry(request);
+			const outcome = await this.options.transport.applyAction(
+				this.options.scope,
+				request,
+			);
 			if (!this.isCurrent()) return this.abandon(write.requestId);
 			this.assertOutcome(request, outcome);
 			if (!(await this.settle(write.requestId, outcome))) return null;
@@ -110,9 +110,7 @@ export class OutputRuntimeWriter implements OutputRuntimeActions {
 		} catch (reason) {
 			if (!this.isCurrent()) return this.abandon(write.requestId);
 			const error = asError(reason);
-			const reported = requiresRepair(reason)
-				? await this.repairError(error)
-				: error;
+			const reported = await this.repairError(error);
 			if (!this.isCurrent()) return this.abandon(write.requestId);
 			this.options.store.rollback(
 				write.requestId,
@@ -139,18 +137,6 @@ export class OutputRuntimeWriter implements OutputRuntimeActions {
 			grandMaster: write.grandMaster,
 			blackout: write.blackout,
 		};
-	}
-
-	private async requestWithOneRetry(request: OutputRuntimeActionRequest) {
-		try {
-			return await this.options.transport.applyAction(
-				this.options.scope,
-				request,
-			);
-		} catch (reason) {
-			if (!isRetryable(reason) || !this.isCurrent()) throw reason;
-			return this.options.transport.applyAction(this.options.scope, request);
-		}
 	}
 
 	private async settle(requestId: string, outcome: OutputRuntimeActionOutcome) {
@@ -253,17 +239,6 @@ export class OutputRuntimeWriter implements OutputRuntimeActions {
 
 function sameId(left: string | null, right: string) {
 	return left?.toLowerCase() === right.toLowerCase();
-}
-
-function isRetryable(reason: unknown) {
-	return reason instanceof OutputRuntimeTransportError && reason.retryable;
-}
-
-function requiresRepair(reason: unknown) {
-	return (
-		reason instanceof OutputRuntimeProtocolError ||
-		(reason instanceof OutputRuntimeTransportError && reason.status === 409)
-	);
 }
 
 function asError(reason: unknown) {
