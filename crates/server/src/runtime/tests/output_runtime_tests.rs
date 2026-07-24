@@ -599,16 +599,7 @@ async fn put_master(app: &Router, token: &str, payload: serde_json::Value) -> Re
 async fn open_show_for_output_test(app: &Router, token: &str, show: &serde_json::Value) {
     let response = app
         .clone()
-        .oneshot(
-            Request::post(format!(
-                "/api/v1/shows/{}/open",
-                show["id"].as_str().unwrap()
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(r#"{"transition":"hold_current"}"#))
-            .unwrap(),
-        )
+        .oneshot(open_show_request(token, show["id"].as_str().unwrap()))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);

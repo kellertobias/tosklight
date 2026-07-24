@@ -567,16 +567,7 @@ impl CommandHttpScenario {
         let response = self
             .app
             .clone()
-            .oneshot(
-                Request::post(format!("/api/v1/shows/{show_id}/open"))
-                    .header(
-                        header::AUTHORIZATION,
-                        format!("Bearer {}", self.token),
-                    )
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(r#"{"transition":"hold_current"}"#))
-                    .unwrap(),
-            )
+            .oneshot(open_show_request(&self.token, &show_id))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);

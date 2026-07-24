@@ -50,17 +50,11 @@ async fn clean_default_load_creates_a_pristine_copy_without_replacing_manual_cha
     let (token, _) = login(&app, "Operator").await;
 
     let response = app
-        .oneshot(
-            Request::post("/api/v1/shows/default/open")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"transition":"hold_current"}"#))
-                .unwrap(),
-        )
+        .oneshot(open_default_show_request(&token))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    let opened = json(response).await;
+    let opened = show_action_result(json(response).await, "show");
     assert_eq!(opened["name"], "Default Stage Show Clean Copy");
     let clean_store = ShowStore::open(opened["path"].as_str().unwrap()).unwrap();
     let clean_fixtures = clean_store.objects("patched_fixture").unwrap();

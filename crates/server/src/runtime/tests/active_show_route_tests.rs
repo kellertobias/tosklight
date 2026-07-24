@@ -34,13 +34,7 @@ async fn active_route_put_and_delete_share_the_prepared_application_boundary() {
         .unwrap();
     let opened = app
         .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/open"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(r#"{"transition":"hold_current"}"#))
-                .unwrap(),
-        )
+        .oneshot(open_show_request(&token, &show_id))
         .await
         .unwrap();
     assert_eq!(opened.status(), StatusCode::OK);

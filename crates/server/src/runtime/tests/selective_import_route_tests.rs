@@ -248,13 +248,7 @@ fn import_path(source: &str, operation: &str) -> String {
 async fn open_import_target(app: &Router, token: &str, target: &str) {
     let response = app
         .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{target}/open"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"transition":"hold_current"}"#))
-                .unwrap(),
-        )
+        .oneshot(open_show_request(token, target))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);

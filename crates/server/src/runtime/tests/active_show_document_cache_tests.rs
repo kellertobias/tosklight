@@ -7,13 +7,7 @@ async fn active_show_document_cache_reuses_and_detects_out_of_band_writes() {
     let show_id = show["id"].as_str().unwrap().to_owned();
     let opened = app
         .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/open"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(r#"{"transition":"hold_current"}"#))
-                .unwrap(),
-        )
+        .oneshot(open_show_request(&token, &show_id))
         .await
         .unwrap();
     assert_eq!(opened.status(), StatusCode::OK);

@@ -127,30 +127,7 @@ fn session_routes() -> Router<AppState> {
 }
 
 fn show_routes() -> Router<AppState> {
-    Router::new()
-        .merge(show_library_v2::router())
-        .route("/api/v1/shows", get(list_shows).post(upload_show))
-        .route("/api/v1/shows/default/open", post(open_clean_default_show))
-        .route("/api/v1/shows/rollback", post(rollback_show))
-        .route("/api/v1/shows/{id}/open", post(open_show))
-        .route("/api/v1/shows/{id}/rename", put(rename_show))
-        .route("/api/v1/shows/{id}/download", get(download_show))
-        .route(
-            "/api/v1/shows/{source_id}/overwrite/{destination_id}",
-            post(overwrite_show),
-        )
-        .route(
-            "/api/v1/shows/{id}/revisions",
-            get(list_show_revisions).post(save_show_revision),
-        )
-        .route(
-            "/api/v1/shows/{id}/revisions/{revision}/open",
-            post(open_show_revision),
-        )
-        .route("/api/v1/mvr/imports/preview", post(preview_mvr_import))
-        .route("/api/v1/mvr/imports/{token}/apply", post(apply_mvr_import))
-        .route("/api/v1/shows/{id}/mvr/preview", get(preview_mvr_export))
-        .route("/api/v1/shows/{id}/mvr", get(export_mvr))
+    Router::new().merge(show_library_v2::router())
 }
 
 fn show_object_routes() -> Router<AppState> {

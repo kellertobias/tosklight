@@ -479,13 +479,7 @@ fn patch_backup_count(data_dir: &FsPath) -> usize {
 async fn open_show_for_patch_test(app: &Router, token: &str, show_id: &str) {
     let response = app
         .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/open"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"transition":"hold_current"}"#))
-                .unwrap(),
-        )
+        .oneshot(open_show_request(token, show_id))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);

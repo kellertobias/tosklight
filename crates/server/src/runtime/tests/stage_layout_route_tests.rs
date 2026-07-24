@@ -3,13 +3,7 @@ use super::*;
 async fn open_show(app: &Router, token: &str, show_id: &str) {
     let response = app
         .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/open"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"transition":"hold_current"}"#))
-                .unwrap(),
-        )
+        .oneshot(open_show_request(token, show_id))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
@@ -300,24 +294,22 @@ async fn move_selection_defaults_patched_fixtures_without_any_stored_position() 
     default_show::initialise(&seeded_path).unwrap();
     let upload = app
         .clone()
-        .oneshot(
-            Request::post("/api/v1/shows")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "name": "Seeded stage",
-                        "data_base64": STANDARD.encode(std::fs::read(&seeded_path).unwrap()),
-                        "overwrite": false,
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
+        .oneshot(show_action_request(
+            &token,
+            serde_json::json!({
+                "type": "create",
+                "name": "Seeded stage",
+                "data_base64": STANDARD.encode(std::fs::read(&seeded_path).unwrap()),
+                "overwrite": false,
+            }),
+        ))
         .await
         .unwrap();
-    assert_eq!(upload.status(), StatusCode::CREATED);
-    let show_id = json(upload).await["id"].as_str().unwrap().to_owned();
+    assert_eq!(upload.status(), StatusCode::OK);
+    let show_id = show_action_result(json(upload).await, "show")["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     open_show(&app, &token, &show_id).await;
 
     let fixtures = app

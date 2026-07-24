@@ -35,16 +35,7 @@ impl OperationalScenario {
         let opened = self
             .app
             .clone()
-            .oneshot(
-                Request::post(format!("/api/v1/shows/{}/open", self.first_id))
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .header(
-                        header::AUTHORIZATION,
-                        format!("Bearer {}", self.token),
-                    )
-                    .body(Body::from(r#"{"transition":"hold_current"}"#))
-                    .unwrap(),
-            )
+            .oneshot(open_show_request(&self.token, &self.first_id))
             .await
             .unwrap();
         assert_eq!(opened.status(), StatusCode::OK);
@@ -226,7 +217,7 @@ impl OperationalScenario {
             .app
             .clone()
             .oneshot(
-                Request::get(format!("/api/v1/shows/{}/download", self.first_id))
+                Request::get(format!("/api/v2/shows/{}/download", self.first_id))
                     .header(
                         header::AUTHORIZATION,
                         format!("Bearer {}", self.token),
@@ -249,34 +240,19 @@ impl OperationalScenario {
         let opened = self
             .app
             .clone()
-            .oneshot(
-                Request::post(format!("/api/v1/shows/{second_id}/open"))
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .header(
-                        header::AUTHORIZATION,
-                        format!("Bearer {}", self.token),
-                    )
-                    .body(Body::from(
-                        r#"{"transition":"timed_fade","transition_millis":100}"#,
-                    ))
-                    .unwrap(),
-            )
+            .oneshot(open_show_with_transition_request(
+                &self.token,
+                second_id,
+                "timed_fade",
+                Some(100),
+            ))
             .await
             .unwrap();
         assert_eq!(opened.status(), StatusCode::OK);
         let rollback = self
             .app
             .clone()
-            .oneshot(
-                Request::post("/api/v1/shows/rollback")
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .header(
-                        header::AUTHORIZATION,
-                        format!("Bearer {}", self.token),
-                    )
-                    .body(Body::from(r#"{"transition":"hold_current"}"#))
-                    .unwrap(),
-            )
+            .oneshot(rollback_show_request(&self.token))
             .await
             .unwrap();
         assert_eq!(rollback.status(), StatusCode::OK);

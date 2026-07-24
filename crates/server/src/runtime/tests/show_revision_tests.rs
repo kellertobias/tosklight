@@ -24,13 +24,7 @@ async fn put_revision_layout(
 
 async fn open_named_revision(app: &Router, token: &str, show_id: &str) -> Response {
     app.clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/revisions/1/open"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(r#"{"transition":"hold_current"}"#))
-                .unwrap(),
-        )
+        .oneshot(open_show_revision_request(token, show_id, 1))
         .await
         .unwrap()
 }
@@ -84,17 +78,15 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
     assert_eq!(first.status(), StatusCode::OK);
     let saved = app
         .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/revisions"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(r#"{"name":"Before experiment"}"#))
-                .unwrap(),
-        )
+        .oneshot(save_show_revision_request(
+            &token,
+            show_id,
+            "Before experiment",
+        ))
         .await
         .unwrap();
-    assert_eq!(saved.status(), StatusCode::CREATED);
-    let saved = json(saved).await;
+    assert_eq!(saved.status(), StatusCode::OK);
+    let saved = show_action_result(json(saved).await, "revision");
     assert_eq!(saved["revision"], 1);
     assert_eq!(saved["name"], "Before experiment");
     assert!(saved.get("path").is_none());
@@ -109,7 +101,7 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
     assert_eq!(autosaved.status(), StatusCode::OK);
     let opened = open_named_revision(&app, &token, show_id).await;
     assert_eq!(opened.status(), StatusCode::OK);
-    let copy = json(opened).await;
+    let copy = show_action_result(json(opened).await, "show");
     let copy_id = copy["id"].as_str().unwrap();
     assert_ne!(copy_id, show_id);
     assert!(
@@ -160,7 +152,7 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
 
     let opened_again = open_named_revision(&app, &token, show_id).await;
     assert_eq!(opened_again.status(), StatusCode::OK);
-    let second_copy = json(opened_again).await;
+    let second_copy = show_action_result(json(opened_again).await, "show");
     assert_ne!(second_copy["id"], copy["id"]);
     assert_ne!(second_copy["name"], copy["name"]);
     assert!(second_copy["name"].as_str().unwrap().ends_with("-2"));
@@ -168,15 +160,16 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
 
     let revisions = app
         .clone()
-        .oneshot(
-            Request::get(format!("/api/v1/shows/{show_id}/revisions"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(show_snapshot_request(&token))
         .await
         .unwrap();
-    let revisions = json(revisions).await;
+    let revisions = json(revisions).await["shows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|show| show["id"] == show_id)
+        .unwrap()["revisions"]
+        .clone();
     assert_eq!(revisions.as_array().unwrap().len(), 1);
     assert_eq!(revisions[0]["name"], "Before experiment");
     let _ = std::fs::remove_dir_all(data_dir);

@@ -150,13 +150,7 @@ impl PlaybackObjectScenario {
         let response = self
             .app
             .clone()
-            .oneshot(
-                Request::post(format!("/api/v1/shows/{}/open", self.show_id))
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
-                    .body(Body::from(r#"{"transition":"hold_current"}"#))
-                    .unwrap(),
-            )
+            .oneshot(open_show_request(&self.token, &self.show_id))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);

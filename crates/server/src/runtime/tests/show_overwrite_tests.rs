@@ -1,16 +1,10 @@
 async fn save_show_revision(app: &Router, token: &str, show_id: &str, name: &str) {
     let response = app
         .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/revisions"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(serde_json::json!({"name": name}).to_string()))
-                .unwrap(),
-        )
+        .oneshot(save_show_revision_request(token, show_id, name))
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 fn overwrite_revision_body(path: &str) -> serde_json::Value {
@@ -59,16 +53,13 @@ async fn prepare_overwrite_source(
     assert_eq!(revision_body["marker"], "named snapshot");
     let opened = app
         .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{source_id}/revisions/1/open"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(r#"{"transition":"hold_current"}"#))
-                .unwrap(),
-        )
+        .oneshot(open_show_revision_request(token, &source_id, 1))
         .await
         .unwrap();
-    let copy_id = json(opened).await["id"].as_str().unwrap().to_owned();
+    let copy_id = show_action_result(json(opened).await, "show")["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let copy_edit = app
         .clone()
         .oneshot(
@@ -130,18 +121,11 @@ async fn overwrite_and_verify_destination(
 ) {
     let overwritten = app
         .clone()
-        .oneshot(
-            Request::post(format!(
-                "/api/v1/shows/{copy_id}/overwrite/{destination_id}"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap(),
-        )
+        .oneshot(overwrite_show_request(token, copy_id, destination_id))
         .await
         .unwrap();
     assert_eq!(overwritten.status(), StatusCode::OK);
-    let overwritten = json(overwritten).await;
+    let overwritten = show_action_result(json(overwritten).await, "show");
     assert_eq!(overwritten["id"], destination_id);
     assert_eq!(overwritten["name"], "Destination");
     assert!(overwritten.get("revision_copy").is_none());
@@ -152,20 +136,10 @@ async fn overwrite_and_verify_destination(
     )
     .await;
     assert_eq!(objects[0]["body"]["marker"], "copy edit");
-    let revisions = get_show_json(
-        app,
-        token,
-        format!("/api/v1/shows/{destination_id}/revisions"),
-    )
-    .await;
+    let revisions = show_revision_snapshot(app, token, destination_id).await;
     assert_eq!(revisions.as_array().unwrap().len(), 1);
     assert_eq!(revisions[0]["name"], "Destination baseline");
-    let copy_revisions = get_show_json(
-        app,
-        token,
-        format!("/api/v1/shows/{copy_id}/revisions"),
-    )
-    .await;
+    let copy_revisions = show_revision_snapshot(app, token, copy_id).await;
     assert_eq!(copy_revisions.as_array().unwrap().len(), 1);
     assert_eq!(copy_revisions[0]["name"], "Copy private checkpoint");
 }
@@ -176,7 +150,7 @@ async fn verify_copy_keeps_identity_and_source_reference(
     source_id: &str,
     copy_id: &str,
 ) {
-    let shows = get_show_json(app, token, "/api/v1/shows".into()).await;
+    let shows = get_show_json(app, token, "/api/v2/shows".into()).await["shows"].clone();
     assert!(
         shows
             .as_array()

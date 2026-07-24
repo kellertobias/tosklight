@@ -15,21 +15,7 @@ async fn rest_session_show_and_revision_flow() {
     assert_eq!(response.status(), StatusCode::OK);
     let session = json(response).await;
     let token = session["token"].as_str().unwrap();
-    let response = app
-        .clone()
-        .oneshot(
-            Request::post("/api/v1/shows")
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(
-                    r#"{"name":"Tour","data_base64":null,"overwrite":false}"#,
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
-    let show = json(response).await;
+    let show = create_show(&app, token, "Tour").await;
     let show_id = show["id"].as_str().unwrap();
     let uri = format!("/api/v1/shows/{show_id}/objects/group/front");
     let response = app

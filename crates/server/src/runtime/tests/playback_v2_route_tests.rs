@@ -2137,16 +2137,7 @@ async fn open_playback_test_show(app: &Router, token: &str) {
     let show = create_show(app, token, "Playback v2 show").await;
     let response = app
         .clone()
-        .oneshot(
-            Request::post(format!(
-                "/api/v1/shows/{}/open",
-                show["id"].as_str().unwrap()
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(r#"{"transition":"hold_current"}"#))
-            .unwrap(),
-        )
+        .oneshot(open_show_request(token, show["id"].as_str().unwrap()))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);

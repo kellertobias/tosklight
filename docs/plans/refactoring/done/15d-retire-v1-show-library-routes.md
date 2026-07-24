@@ -30,3 +30,17 @@ npm run test:e2e -- tests/05-virtual-time-persistence-and-recovery.spec.ts
 ## Decisions
 
 Inherited from 15a. No open decisions.
+
+## Result
+
+- Migrated every server route test and shared fixture helper from v1 show lifecycle calls to
+  typed v2 snapshots and semantic actions.
+- Removed the v1 show-library and MVR route registrations and the two list handlers that became
+  unreachable; retained v1 show-object, preset-store, and preload-store routes for later chunks.
+- Added an explicit retirement matrix proving all 15 legacy method/path combinations return 404
+  while an authenticated show-object route remains available.
+- Preserved named revisions, revision-copy provenance, overwrite semantics, rollback, desk-boundary
+  authorization, malformed-upload rejection, downloads, and startup recovery through the v2 path.
+- Verified `cargo test -p light-server --no-default-features` (457 passed, 1 ignored),
+  `npm run test:unit` (277 frontend files, 2,001 frontend tests), and
+  `npm run test:e2e -- tests/05-virtual-time-persistence-and-recovery.spec.ts` (31 passed).

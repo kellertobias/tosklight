@@ -256,13 +256,7 @@ fn values_command(session: &Session, request_id: &str, payload: serde_json::Valu
 async fn open_values_test_show(app: &Router, token: &str) {
     let response = app
         .clone()
-        .oneshot(
-            Request::post("/api/v1/shows/default/open")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"transition":"hold_current"}"#))
-                .unwrap(),
-        )
+        .oneshot(open_default_show_request(token))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);

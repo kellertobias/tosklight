@@ -8,13 +8,7 @@ async fn active_empty_show_rename_preserves_identity_content_and_revisions() {
     let original_path = created["path"].as_str().unwrap().to_owned();
     let opened = app
         .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/open"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(r#"{"transition":"hold_current"}"#))
-                .unwrap(),
-        )
+        .oneshot(open_show_request(&token, show_id))
         .await
         .unwrap();
     assert_eq!(opened.status(), StatusCode::OK);
@@ -41,30 +35,18 @@ async fn active_empty_show_rename_preserves_identity_content_and_revisions() {
     assert_eq!(stored.status(), StatusCode::OK);
     let revision = app
         .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{show_id}/revisions"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(r#"{"name":"Before naming"}"#))
-                .unwrap(),
-        )
+        .oneshot(save_show_revision_request(&token, show_id, "Before naming"))
         .await
         .unwrap();
-    assert_eq!(revision.status(), StatusCode::CREATED);
+    assert_eq!(revision.status(), StatusCode::OK);
 
     let renamed = app
         .clone()
-        .oneshot(
-            Request::put(format!("/api/v1/shows/{show_id}/rename"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(r#"{"name":"Opening Night"}"#))
-                .unwrap(),
-        )
+        .oneshot(rename_show_request(&token, show_id, "Opening Night"))
         .await
         .unwrap();
     assert_eq!(renamed.status(), StatusCode::OK);
-    let renamed = json(renamed).await;
+    let renamed = show_action_result(json(renamed).await, "show");
     assert_eq!(renamed["id"], show_id);
     assert_eq!(renamed["name"], "Opening Night");
     let renamed_path = renamed["path"].as_str().unwrap();
@@ -100,13 +82,7 @@ async fn active_empty_show_rename_preserves_identity_content_and_revisions() {
     let _occupied = create_show(&app, &token, "Occupied").await;
     let collision = app
         .clone()
-        .oneshot(
-            Request::put(format!("/api/v1/shows/{show_id}/rename"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(r#"{"name":"occupied"}"#))
-                .unwrap(),
-        )
+        .oneshot(rename_show_request(&token, show_id, "occupied"))
         .await
         .unwrap();
     assert_eq!(collision.status(), StatusCode::CONFLICT);

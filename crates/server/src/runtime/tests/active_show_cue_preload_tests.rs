@@ -397,13 +397,7 @@ fn seed_cue_preload_show(entry: &ShowEntry, cue_list_id: light_core::CueListId) 
 async fn open_show(app: &Router, token: &str, show_id: light_core::ShowId) {
     let response = app
         .clone()
-        .oneshot(
-            Request::post(format!("/api/v1/shows/{}/open", show_id.0))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(r#"{"transition":"hold_current"}"#))
-                .unwrap(),
-        )
+        .oneshot(open_show_request(token, show_id.0))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);

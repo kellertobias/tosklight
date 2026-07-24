@@ -84,21 +84,12 @@ pub(super) async fn open_topology_show(
     show_id: &str,
     desk_boundary: Option<&str>,
 ) {
-    let mut request = Request::post(format!("/api/v1/shows/{show_id}/open"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, format!("Bearer {token}"));
-    if let Some(value) = desk_boundary {
-        request = request.header("x-light-desk-token", value);
-    }
-    let response = app
-        .clone()
-        .oneshot(
-            request
-                .body(Body::from(r#"{"transition":"hold_current"}"#))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+    let request = open_show_request(token, show_id);
+    let request = match desk_boundary {
+        Some(value) => with_desk_boundary(request, value),
+        None => request,
+    };
+    let response = app.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -162,21 +153,22 @@ pub(super) async fn create_show_with_boundary(
 ) -> serde_json::Value {
     let response = app
         .clone()
-        .oneshot(
-            Request::post("/api/v1/shows")
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header("x-light-desk-token", boundary)
-                .body(Body::from(
-                    serde_json::json!({"name":name,"data_base64":null,"overwrite":false})
-                        .to_string(),
-                ))
-                .unwrap(),
-        )
+        .oneshot(with_desk_boundary(
+            show_action_request(
+                token,
+                serde_json::json!({
+                    "type": "create",
+                    "name": name,
+                    "data_base64": null,
+                    "overwrite": false
+                }),
+            ),
+            boundary,
+        ))
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
-    json(response).await
+    assert_eq!(response.status(), StatusCode::OK);
+    show_action_result(json(response).await, "show")
 }
 
 pub(super) fn configure_request(

@@ -151,20 +151,8 @@ async fn preset_store_endpoint_merges_with_revision_control() {
     let (state, data_dir) = test_state();
     let app = router(state);
     let (token, _) = login(&app, "Operator").await;
-    let created = app
-        .clone()
-        .oneshot(
-            Request::post("/api/v1/shows")
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::from(
-                    r#"{"name":"Preset Test","data_base64":null,"overwrite":false}"#,
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let show_id = json(created).await["id"].as_str().unwrap().to_owned();
+    let created = create_show(&app, &token, "Preset Test").await;
+    let show_id = created["id"].as_str().unwrap().to_owned();
     let fixture = light_core::FixtureId::new();
     let first = light_programmer::Preset {
         name: "Look".into(),

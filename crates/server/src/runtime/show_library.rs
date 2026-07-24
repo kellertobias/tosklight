@@ -1,34 +1,5 @@
 use super::*;
 
-pub(super) async fn list_shows(
-    State(state): State<AppState>,
-) -> Result<Json<Vec<ShowEntry>>, ApiError> {
-    Ok(Json(state.desk.lock().library().map_err(ApiError::store)?))
-}
-pub(super) async fn list_show_revisions(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    headers: HeaderMap,
-) -> Result<Json<Vec<ShowRevision>>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
-    let id = light_core::ShowId(id);
-    if state
-        .desk
-        .lock()
-        .show(id)
-        .map_err(ApiError::store)?
-        .is_none()
-    {
-        return Err(ApiError::not_found("show"));
-    }
-    Ok(Json(
-        state
-            .desk
-            .lock()
-            .show_revisions(id)
-            .map_err(ApiError::store)?,
-    ))
-}
 pub(super) async fn save_show_revision(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
