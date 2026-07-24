@@ -13,7 +13,6 @@ pub struct ProgrammingSelectionActionRequest {
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "action", rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
 pub enum ProgrammingSelectionAction {
     Replace {
         fixtures: Vec<Uuid>,
@@ -38,7 +37,6 @@ pub enum ProgrammingSelectionAction {
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
 pub enum ProgrammingSelectionGestureSource {
     Fixture { fixture_id: Uuid },
     LiveGroup { group_id: String },

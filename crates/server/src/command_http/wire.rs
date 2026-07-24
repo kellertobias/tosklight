@@ -100,7 +100,7 @@ pub(crate) fn wire_choice(choice: ApplicationCueChoice) -> CueMoveCopyChoice {
     }
 }
 
-pub(super) fn command_line_from_state(state: CommandLineState) -> CommandLineResponse {
+pub(crate) fn command_line_from_state(state: CommandLineState) -> CommandLineResponse {
     let text = state.visible_text().to_owned();
     let pending_choice = state
         .pending_choice

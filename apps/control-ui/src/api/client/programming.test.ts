@@ -60,7 +60,14 @@ function decodedInteractionSnapshot() {
 
 function clientReturning(value: unknown) {
 	const request = vi.fn(async (_path: string, _init?: RequestInit) => value);
-	const commandWithRequestId = vi.fn(async () => value);
+	const commandWithRequestId = vi.fn(
+		async (
+			_command: string,
+			_payload: unknown,
+			_requestId: string,
+			_revision?: number,
+		) => value,
+	);
 	const transport = {
 		request,
 		commandWithRequestId,
@@ -131,21 +138,23 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 	});
 
 	it("replaces command text with optimistic concurrency", async () => {
-		const { client, request } = clientReturning(commandLine(5));
+		const { client, commandWithRequestId } = clientReturning(commandLine(5));
 
 		await expect(
 			client.replaceProgrammingCommandLine(DESK_ID, "FIXTURE 8", 4),
 		).resolves.toEqual(decodedCommandLine(5));
-		const [path, init] = request.mock.calls[0];
-		expect(path).toBe(`/api/v2/desks/${DESK_ID}/command-line`);
-		expect(init).toBeDefined();
-		if (!init) throw new Error("expected a command-line request");
-		expect(init.method).toBe("PUT");
-		expect(new Headers(init.headers).get("if-match")).toBe("4");
-		expect(JSON.parse(String(init.body))).toEqual({ text: "FIXTURE 8" });
+		expect(commandWithRequestId).toHaveBeenCalledOnce();
+		const [command, payload, requestId] = commandWithRequestId.mock.calls[0];
+		expect(command).toBe("programmer.command_line.replace");
+		expect(payload).toEqual({
+			request_id: requestId,
+			expected_revision: 4,
+			text: "FIXTURE 8",
+		});
+		expect(requestId).toEqual(expect.any(String));
 	});
 
-	it("posts a typed selection action and validates its authority", async () => {
+	it("sends a typed selection action frame and validates its authority", async () => {
 		const response = {
 			request_id: "selection-1",
 			correlation_id: "33333333-3333-4333-8333-333333333333",
@@ -155,7 +164,7 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 			event_sequence: 13,
 			replayed: false,
 		};
-		const { client, request } = clientReturning(response);
+		const { client, commandWithRequestId } = clientReturning(response);
 
 		await expect(
 			client.applyProgrammingSelection(DESK_ID, {
@@ -173,15 +182,15 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 			eventSequence: 13,
 			warning: null,
 		});
-		const [path, init] = request.mock.calls[0];
-		expect(path).toBe(
-			`/api/v2/desks/${DESK_ID}/programming-selection/actions`,
+		expect(commandWithRequestId).toHaveBeenCalledWith(
+			"programmer.selection.action",
+			{
+				request_id: "selection-1",
+				action: "replace",
+				fixtures: [FIXTURE_ID],
+				expected_revision: 2,
+			},
+			"selection-1",
 		);
-		expect(JSON.parse(String(init?.body))).toEqual({
-			request_id: "selection-1",
-			action: "replace",
-			fixtures: [FIXTURE_ID],
-			expected_revision: 2,
-		});
 	});
 });

@@ -12,6 +12,8 @@ const LIVE_ABSOLUTE_COMMANDS: &[&str] = &[
     "programmer.control_action",
     "programmer.priority",
     "programmer.values.action",
+    "programmer.command_line.replace",
+    "programmer.selection.action",
     "programmer.release",
     "programmer.group.set",
     "programmer.group.release",
@@ -50,6 +52,8 @@ const PROGRAMMING_INTERACTION_COMMANDS: &[&str] = &[
     "programmer.control_action",
     "programmer.priority",
     "programmer.values.action",
+    "programmer.command_line.replace",
+    "programmer.selection.action",
     "programmer.release",
     "programmer.group.set",
     "programmer.group.release",
@@ -89,6 +93,12 @@ fn dispatch_ws_payload(
         }
         "programmer.values.action" => {
             Err("Programmer values require the typed action boundary".into())
+        }
+        "programmer.command_line.replace" => {
+            Err("Command-line replacement requires the typed action boundary".into())
+        }
+        "programmer.selection.action" => {
+            Err("Programmer selection requires the typed action boundary".into())
         }
         "programmer.set" => ws_programmer_set(state, session, command),
         "programmer.set_many" => ws_programmer_set_many(state, session, command),
@@ -202,6 +212,8 @@ fn dispatch_validated_ws_command(
         command.command.as_str(),
         "programmer.priority"
             | "programmer.values.action"
+            | "programmer.command_line.replace"
+            | "programmer.selection.action"
             | "preset.apply"
             | "preload.enter"
             | "preload.go"
@@ -235,6 +247,12 @@ fn dispatch_typed_programming_action(
     let result = match command.command.as_str() {
         "programmer.priority" => ws_programmer_priority(state, session, command, context, ports),
         "programmer.values.action" => ws_programmer_values_action(state, command, context, ports),
+        "programmer.command_line.replace" => {
+            ws_programmer_command_line_replace(state, command, context, ports)
+        }
+        "programmer.selection.action" => {
+            ws_programmer_selection_action(state, command, context, ports)
+        }
         "preset.apply" => ws_preset_apply(state, session, command, context, ports),
         "preload.enter" => ws_preload_enter(state, session, command, context, ports),
         "preload.go" => ws_preload_go(state, session, command, context, ports),

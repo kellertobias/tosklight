@@ -125,6 +125,31 @@ describe("ProgrammingCommandLineWriter", () => {
 		);
 	});
 
+	it("repairs an ambiguous transport failure without resending", async () => {
+		const store = readyStore();
+		const replace = vi.fn().mockRejectedValue(new Error("connection reset"));
+		const loadSnapshot = vi.fn().mockResolvedValue(
+			programmingSnapshot({
+				sequence: 18,
+				command: commandLine(2, "FIXTURE 8"),
+			}),
+		);
+		const writer = new ProgrammingCommandLineWriter({
+			deskId: DESK_ID,
+			store,
+			replace,
+			loadSnapshot,
+		});
+
+		await expect(writer.replace("FIXTURE 8")).resolves.toBe(false);
+
+		expect(replace).toHaveBeenCalledOnce();
+		expect(loadSnapshot).toHaveBeenCalledOnce();
+		expect(store.getSnapshot().commandLine).toEqual(
+			commandLine(2, "FIXTURE 8"),
+		);
+	});
+
 	it("rolls back only a failed write and preserves the later optimistic edit", async () => {
 		const store = readyStore();
 		const firstRequest = deferred<CommandLineProjection>();
@@ -137,7 +162,9 @@ describe("ProgrammingCommandLineWriter", () => {
 			deskId: DESK_ID,
 			store,
 			replace,
-			loadSnapshot: vi.fn(),
+			loadSnapshot: vi.fn().mockResolvedValue(
+				programmingSnapshot({ sequence: 11, command: commandLine(1) }),
+			),
 			onError,
 		});
 
@@ -253,7 +280,7 @@ describe("ProgrammingCommandLineWriter", () => {
 		await expect(failed).resolves.toBe(false);
 		await expect(latest).resolves.toBe(true);
 		await expect(outcome).resolves.toBe("executed");
-		expect(replace).toHaveBeenLastCalledWith(DESK_ID, "FIXTURE 12", 1);
+		expect(replace).toHaveBeenLastCalledWith(DESK_ID, "FIXTURE 12", 3);
 		expect(execute).toHaveBeenCalledOnce();
 	});
 

@@ -115,7 +115,6 @@
               "const": "all"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -128,7 +127,6 @@
               "const": "odd"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -141,7 +139,6 @@
               "const": "even"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -166,7 +163,6 @@
               "const": "every_nth"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "n",
@@ -189,7 +185,6 @@
               "const": "fixture"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "fixture_id"
@@ -206,7 +201,6 @@
               "const": "live_group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group_id"
@@ -223,7 +217,6 @@
               "const": "dereferenced_group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group_id"

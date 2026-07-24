@@ -139,8 +139,12 @@ pub(super) use preload_values_wire::change as preload_values_change;
 pub(super) use programmer_priority_wire::change as priority_change;
 pub(crate) use programming_ports::ServerProgrammingPorts;
 pub(super) use routes::router;
+pub(crate) use routes::validate_command;
+pub(crate) use selection_routes::validate_request as validate_selection_request;
+pub(crate) use selection_wire::{selection_command, selection_response};
 pub(super) use speed_group_action::execute_compatibility as execute_compatibility_speed_group;
 pub(super) use values_wire::{capture_mode_change, values_change, values_command, values_outcome};
+pub(crate) use wire::command_line_from_state;
 pub(super) use wire::wire_choice;
 
 #[cfg(test)]

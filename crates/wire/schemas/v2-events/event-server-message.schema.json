@@ -2255,7 +2255,6 @@
               "const": "all"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -2268,7 +2267,6 @@
               "const": "odd"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -2281,7 +2279,6 @@
               "const": "even"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -2306,7 +2303,6 @@
               "const": "every_nth"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "n",

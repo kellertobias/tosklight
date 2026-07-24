@@ -60,7 +60,6 @@ pub enum ProgrammerSelectionExpression {
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
 pub enum ProgrammerSelectionRule {
     All,
     Odd,

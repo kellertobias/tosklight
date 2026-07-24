@@ -278,31 +278,27 @@ describe("ProgrammingSelectionWriter", () => {
 		expect(store.getSnapshot().pendingCapabilities).toEqual(new Set());
 	});
 
-	it("retries one network failure with the same request ID", async () => {
+	it("repairs one network failure without resending", async () => {
 		const store = readyStore();
-		const apply = vi
-			.fn()
-			.mockRejectedValueOnce(new Error("connection reset"))
-			.mockImplementationOnce(
-				(_deskId: string, request: SelectionActionRequest) =>
-					Promise.resolve(outcome(request, selection(2, [FIXTURE_2]))),
-			);
+		const apply = vi.fn().mockRejectedValueOnce(new Error("connection reset"));
+		const repaired = selection(2, [FIXTURE_2]);
+		const loadSnapshot = vi.fn().mockResolvedValue(
+			programmingSnapshot({ sequence: 32, selected: repaired }),
+		);
 		const writer = new ProgrammingSelectionWriter({
 			deskId: DESK_ID,
 			store,
 			apply,
-			loadSnapshot: vi.fn(),
+			loadSnapshot,
 		});
 
 		await expect(
 			writer.replace({ resolvedFixtures: [FIXTURE_2] }),
-		).resolves.not.toBeNull();
+		).resolves.toBeNull();
 
-		expect(apply).toHaveBeenCalledTimes(2);
-		expect(requestAt(apply, 1)).toBe(requestAt(apply, 0));
-		expect(requestAt(apply, 1).requestId).toBe(
-			requestAt(apply, 0).requestId,
-		);
+		expect(apply).toHaveBeenCalledOnce();
+		expect(loadSnapshot).toHaveBeenCalledOnce();
+		expect(store.getSnapshot().selection).toEqual(repaired);
 	});
 
 	it("invalidates an active write and ignores its late completion after stop", async () => {

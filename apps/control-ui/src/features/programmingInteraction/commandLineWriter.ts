@@ -55,6 +55,7 @@ export class ProgrammingCommandLineWriter {
 	private executionRunning = false;
 	private executionPromise: Promise<CommandLineExecutionResult> | null = null;
 	private drainSucceeded = true;
+	private lastFailureRepaired = false;
 	private stopped = false;
 
 	constructor(options: ProgrammingCommandLineWriterOptions) {
@@ -129,7 +130,12 @@ export class ProgrammingCommandLineWriter {
 				? await this.sendBarrier(barrier)
 				: drained;
 		if (!flushed || this.stopped) {
-			if (!this.stopped) await this.reconcileAfterExecution();
+			if (!this.stopped && !this.lastFailureRepaired)
+				await this.reconcileAfterExecution();
+			else if (!this.stopped) {
+				this.commit(this.executionResetToken);
+				this.executionResetToken = null;
+			}
 			this.discardDeferredWrite(
 				new Error("The command line could not be synchronized"),
 			);
@@ -236,6 +242,7 @@ export class ProgrammingCommandLineWriter {
 
 	private async send(write: QueuedCommandLineWrite) {
 		if (this.stopped || !this.scopeIsCurrent()) return false;
+		this.lastFailureRepaired = false;
 		try {
 			const response = await this.replaceAtCurrentRevision(write.text);
 			if (this.stopped || !this.scopeIsCurrent()) return false;
@@ -267,17 +274,23 @@ export class ProgrammingCommandLineWriter {
 		try {
 			return await this.replaceRequest(this.deskId, text, revision);
 		} catch (reason) {
-			if (!isRevisionConflict(reason)) throw reason;
 			if (this.stopped || !this.scopeIsCurrent()) throw reason;
-			const snapshot = await this.loadSnapshot();
-			if (this.stopped || !this.scopeIsCurrent()) throw reason;
-			if (
-				!this.store.installSnapshot(snapshot, {
-					updateSessionState: false,
-					expectedScope: this.expectedScope(),
-				})
-			)
-				throw new Error("The repaired command line belongs to another desk");
+			try {
+				const snapshot = await this.loadSnapshot();
+				if (this.stopped || !this.scopeIsCurrent()) throw reason;
+				if (
+					!this.store.installSnapshot(snapshot, {
+						updateSessionState: false,
+						expectedScope: this.expectedScope(),
+					})
+				)
+					throw new Error("The repaired command line belongs to another desk");
+				this.lastFailureRepaired = true;
+			} catch (repairReason) {
+				throw new Error(
+					`Command-line repair failed: ${asError(repairReason).message}`,
+				);
+			}
 			// A whole-line replacement cannot be safely rebased over a concurrent OSC
 			// or desk edit. The repaired authority wins; a later explicit local edit may
 			// submit against its revision.
@@ -382,15 +395,6 @@ function normalizeCommandLine(
 		text: pristine ? current.target : text,
 		pristine,
 	};
-}
-
-function isRevisionConflict(reason: unknown) {
-	return (
-		typeof reason === "object" &&
-		reason !== null &&
-		"status" in reason &&
-		(reason as { status?: unknown }).status === 409
-	);
 }
 
 function asError(reason: unknown) {

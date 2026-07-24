@@ -34,6 +34,8 @@ mod playback_v2_route_tests;
 mod playback_ws_action_tests;
 #[path = "programmer_values_ws_action_tests.rs"]
 mod programmer_values_ws_action_tests;
+#[path = "programming_interaction_ws_action_tests.rs"]
+mod programming_interaction_ws_action_tests;
 #[path = "programming_update_route_tests.rs"]
 mod programming_update_route_tests;
 #[path = "selective_import_route_tests.rs"]

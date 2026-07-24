@@ -15,6 +15,7 @@ use light_wire::v2::command_line::{ProgrammingSelectionAction, ProgrammingSelect
 use uuid::Uuid;
 
 use super::super::{ApiError, AppState};
+use crate::tolerant_json::TolerantJson;
 
 const FIXTURE_LIMIT: usize = 10_000;
 const GROUP_ID_LIMIT: usize = 256;
@@ -33,7 +34,7 @@ async fn apply_selection_action(
     State(state): State<AppState>,
     Path(desk_id): Path<Uuid>,
     headers: HeaderMap,
-    Json(input): Json<ProgrammingSelectionActionRequest>,
+    TolerantJson(input): TolerantJson<ProgrammingSelectionActionRequest>,
 ) -> Result<Response, ApiError> {
     validate_request(&input)?;
     let session = authenticate_desk_mutation(&state, &headers, desk_id)?;
@@ -62,7 +63,7 @@ async fn apply_selection_action(
     Ok(Json(selection_response(input.request_id, result)?).into_response())
 }
 
-fn validate_request(input: &ProgrammingSelectionActionRequest) -> Result<(), ApiError> {
+pub(crate) fn validate_request(input: &ProgrammingSelectionActionRequest) -> Result<(), ApiError> {
     validate_request_id(&input.request_id)?;
     match &input.action {
         ProgrammingSelectionAction::Replace { fixtures, .. } if fixtures.len() > FIXTURE_LIMIT => {

@@ -247,7 +247,7 @@ pub(super) fn validate_request_id(request_id: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
-fn validate_command(command: &str) -> Result<(), ApiError> {
+pub(crate) fn validate_command(command: &str) -> Result<(), ApiError> {
     if command.len() > COMMAND_LINE_LIMIT {
         return Err(ApiError::bad_request(
             "command line must not exceed 16384 bytes",

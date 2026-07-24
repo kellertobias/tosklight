@@ -237,7 +237,7 @@ export class ProgrammingSelectionWriter {
 		try {
 			const action = this.actionAtCurrentRevision(write.intent);
 			const request = { requestId: write.requestId, action };
-			const outcome = await this.requestWithOneNetworkRetry(request);
+			const outcome = await this.options.apply(this.options.deskId, request);
 			if (this.stopped || !this.scopeIsCurrent())
 				return null;
 			if (
@@ -280,20 +280,6 @@ export class ProgrammingSelectionWriter {
 			case "gesture":
 			case "apply_rule":
 				return intent;
-		}
-	}
-
-	private async requestWithOneNetworkRetry(request: {
-		requestId: string;
-		action: SelectionAction;
-	}) {
-		try {
-			return await this.options.apply(this.options.deskId, request);
-		} catch (reason) {
-			if (hasHttpStatus(reason)) throw reason;
-			if (this.stopped || !this.scopeIsCurrent())
-				throw reason;
-			return this.options.apply(this.options.deskId, request);
 		}
 	}
 
@@ -350,10 +336,6 @@ function httpStatus(reason: unknown) {
 		return null;
 	const status = (reason as { status?: unknown }).status;
 	return typeof status === "number" ? status : null;
-}
-
-function hasHttpStatus(reason: unknown) {
-	return httpStatus(reason) !== null;
 }
 
 function needsAuthoritativeRepair(reason: unknown) {

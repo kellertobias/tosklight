@@ -38,3 +38,23 @@ npm run test:e2e
 ## Decisions
 
 None. Execute after parent chunk 11.
+
+## Result
+
+Completed on 2026-07-24.
+
+- Added correlated `programmer.command_line.replace` and
+  `programmer.selection.action` frames that reuse the typed programming service,
+  HTTP validation, wire conversion, exact request identity, revision checks, and
+  replay behavior.
+- Moved the authoritative control-UI command-line and semantic selection writers
+  to those WebSocket actions while retaining HTTP and v1 compatibility surfaces.
+- Removed selection mutation retries and made ambiguous command-line or selection
+  failures perform one authoritative programming-interaction repair without
+  resending the mutation.
+- Kept the loose compatibility helpers until the v1 facade retirement chunk; they
+  are no longer used by the authoritative programming-interaction writers.
+- Verified with focused Rust and Vitest coverage, generated-contract checks,
+  TypeScript typechecking, the architecture ratchet, `cargo test -p light-server`
+  (438 passed, 1 ignored), `npm run test:unit` (276 files and 1,997 Vitest tests),
+  and `npm run test:e2e` (285 passed, 11 skipped).

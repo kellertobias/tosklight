@@ -11,7 +11,7 @@ use super::super::ApiError;
 
 const JAVASCRIPT_MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 
-pub(super) fn selection_command(
+pub(crate) fn selection_command(
     action: ProgrammingSelectionAction,
 ) -> Result<ProgrammingCommand, ApiError> {
     Ok(match action {
@@ -45,7 +45,7 @@ pub(super) fn selection_command(
     })
 }
 
-pub(super) fn selection_response(
+pub(crate) fn selection_response(
     request_id: String,
     result: ProgrammingResult,
 ) -> Result<ProgrammingSelectionActionOutcome, ApiError> {

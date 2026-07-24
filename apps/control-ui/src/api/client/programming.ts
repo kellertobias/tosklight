@@ -22,7 +22,6 @@ import {
 } from "../programmingWire";
 import type { GeneratedFixturePresetResult, ProgrammerState } from "../types";
 import type { LiveClientTransport } from "./transport";
-import { jsonRequest } from "./transport";
 
 type SelectionGestureSource =
 	| { type: "fixture"; fixture_id: string }
@@ -42,27 +41,32 @@ export class ProgrammingApiClient {
 	}
 
 	async replaceProgrammingCommandLine(
-		deskId: string,
+		_deskId: string,
 		text: string,
 		expectedRevision: number,
 	): Promise<CommandLineProjection> {
-		const init = jsonRequest("PUT", { text });
-		const headers = new Headers(init.headers);
-		headers.set("if-match", String(expectedRevision));
-		const value = await this.transport.request<unknown>(
-			`/api/v2/desks/${encodeURIComponent(deskId)}/command-line`,
-			{ ...init, headers },
+		const requestId = crypto.randomUUID();
+		const value = await this.transport.commandWithRequestId(
+			"programmer.command_line.replace",
+			{
+				request_id: requestId,
+				expected_revision: expectedRevision,
+				text,
+			},
+			requestId,
 		);
 		return decodeProgrammingCommandLine(value);
 	}
 
 	async applyProgrammingSelection(
-		deskId: string,
+		_deskId: string,
 		request: SelectionActionRequest,
 	): Promise<SelectionActionOutcome> {
-		const value = await this.transport.request<unknown>(
-			`/api/v2/desks/${encodeURIComponent(deskId)}/programming-selection/actions`,
-			jsonRequest("POST", encodeSelectionActionRequest(request)),
+		const wireRequest = encodeSelectionActionRequest(request);
+		const value = await this.transport.commandWithRequestId(
+			"programmer.selection.action",
+			wireRequest,
+			wireRequest.request_id,
 		);
 		return decodeSelectionActionOutcome(value, request.requestId);
 	}

@@ -1,5 +1,109 @@
 use super::*;
 
+pub(super) fn ws_programmer_command_line_replace(
+    state: &AppState,
+    command: &WsCommand,
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> Result<WsTypedProgrammingAction, String> {
+    #[derive(Deserialize)]
+    struct Input {
+        request_id: String,
+        expected_revision: u64,
+        text: String,
+    }
+    let input: Input =
+        serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
+    crate::tolerant_json::log_unknown_value_fields::<Input>(
+        "/api/v1/events programmer.command_line.replace",
+        &command.payload,
+    );
+    if input.request_id != command.request_id {
+        return Err("Command-line payload request_id must match the WebSocket request_id".into());
+    }
+    command_http::validate_command(&input.text).map_err(|error| error.message)?;
+    let result = state
+        .programming
+        .handle(
+            light_application::ActionEnvelope {
+                context: context
+                    .clone()
+                    .with_expected_revision(input.expected_revision),
+                command: light_application::ProgrammingCommand::ReplaceCommandLine {
+                    text: input.text,
+                    expected_revision: input.expected_revision,
+                },
+            },
+            ports,
+        )
+        .map_err(|error| error.message)?;
+    if let light_application::ProgrammingOutcome::Accepted {
+        warning: Some(warning),
+        ..
+    } = &result.outcome
+    {
+        return Err(warning.clone());
+    }
+    let interaction_changed = result.interaction_event_sequence.is_some();
+    let replayed = result.replayed;
+    let payload = serde_json::to_value(command_http::command_line_from_state(result.command_line))
+        .map_err(|error| error.to_string())?;
+    Ok(WsTypedProgrammingAction {
+        payload,
+        interaction_changed,
+        values_changed: false,
+        preload_values_changed: false,
+        preload_queue_changed: false,
+        replayed,
+    })
+}
+
+pub(super) fn ws_programmer_selection_action(
+    state: &AppState,
+    command: &WsCommand,
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> Result<WsTypedProgrammingAction, String> {
+    let request: light_wire::v2::command_line::ProgrammingSelectionActionRequest =
+        serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
+    crate::tolerant_json::log_unknown_value_fields::<
+        light_wire::v2::command_line::ProgrammingSelectionActionRequest,
+    >(
+        "/api/v1/events programmer.selection.action",
+        &command.payload,
+    );
+    if request.request_id != command.request_id {
+        return Err("Selection payload request_id must match the WebSocket request_id".into());
+    }
+    command_http::validate_selection_request(&request).map_err(|error| error.message)?;
+    let request_id = request.request_id;
+    let command = command_http::selection_command(request.action).map_err(|error| error.message)?;
+    let result = state
+        .programming
+        .handle(
+            light_application::ActionEnvelope {
+                context: context.clone(),
+                command,
+            },
+            ports,
+        )
+        .map_err(|error| error.message)?;
+    let interaction_changed = result.interaction_event_sequence.is_some();
+    let replayed = result.replayed;
+    let payload = serde_json::to_value(
+        command_http::selection_response(request_id, result).map_err(|error| error.message)?,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(WsTypedProgrammingAction {
+        payload,
+        interaction_changed,
+        values_changed: false,
+        preload_values_changed: false,
+        preload_queue_changed: false,
+        replayed,
+    })
+}
+
 pub(super) fn ws_programmer_values_action(
     state: &AppState,
     command: &WsCommand,
