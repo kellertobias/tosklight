@@ -104,7 +104,6 @@ pub struct ProgrammingValuesSnapshot {
 
 /// One authenticated, idempotent mutation of normal, recordable Programmer values.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct ProgrammingValuesActionRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
@@ -116,7 +115,7 @@ pub struct ProgrammingValuesActionRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingValuesAction {
     /// Server-side fan-out over an explicitly ordered selection (see
     /// `ProgrammingValueMutation::SetSelection`).
@@ -174,7 +173,7 @@ pub enum ProgrammingValuesAction {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingValueMutation {
     /// Server-side fan-out over an explicitly ordered selection: `Spread` control points
     /// interpolate across the given fixture order; any other value applies uniformly. This is the
@@ -238,7 +237,6 @@ pub struct ProgrammingPickerColor {
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct ProgrammingValueTiming {
     #[serde(default)]
     pub fade: bool,
@@ -329,7 +327,7 @@ mod tests {
     }
 
     #[test]
-    fn actions_reject_fields_outside_the_recordable_values_contract() {
+    fn actions_accept_fields_outside_the_known_recordable_values_contract() {
         let value = serde_json::json!({
             "request_id": "request-1",
             "expected_revision": 0,
@@ -342,7 +340,7 @@ mod tests {
                 "mode": "preload"
             }
         });
-        assert!(serde_json::from_value::<ProgrammingValuesActionRequest>(value).is_err());
+        assert!(serde_json::from_value::<ProgrammingValuesActionRequest>(value).is_ok());
     }
 
     #[test]

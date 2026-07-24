@@ -528,7 +528,7 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
 }
 
 #[tokio::test]
-async fn programmer_values_wire_rejects_transient_or_mode_fields() {
+async fn programmer_values_wire_accepts_unknown_fields_and_validates_known_fields() {
     let scenario = CommandHttpScenario::new().await;
     let fixture = scenario.install_direct_fixture();
     let response = scenario
@@ -536,18 +536,40 @@ async fn programmer_values_wire_rejects_transient_or_mode_fields() {
             "request_id": "forged-preload",
             "expected_revision": 0,
             "expected_capture_mode_revision": 0,
+            "future_root": "accepted",
             "action": {
                 "type": "set_fixture",
                 "fixture_id": fixture.0,
                 "attribute": "intensity",
                 "value": {"kind": "normalized", "value": 0.5},
-                "mode": "preload"
+                "mode": "preload",
+                "timing": {
+                    "fade": false,
+                    "future_timing": true
+                }
             }
+        }))
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = json(response).await;
+    assert_values_changed(&response, "forged-preload", 1, 2);
+    assert_eq!(
+        response["projection"]["fixture_values"][0]["value"]["value"],
+        0.5
+    );
+
+    let response = scenario
+        .values_action(serde_json::json!({
+            "request_id": "wrong-known-field",
+            "expected_revision": "one",
+            "expected_capture_mode_revision": 0,
+            "action": {"type": "clear"}
         }))
         .await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let response = json(response).await;
     assert_eq!(response["kind"], "invalid");
+    assert!(response["error"].as_str().unwrap().contains("expected_revision"));
     assert!(response.get("current_revision").is_none());
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

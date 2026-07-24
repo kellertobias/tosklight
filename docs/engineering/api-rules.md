@@ -72,6 +72,8 @@ per-fixture values.
   types). A mismatch returns a clear 4xx error naming the field — the server never crashes
   on bad input.
 - **Additional/unknown properties are accepted, and logged server-side** — never rejected.
+  Server routes use the shared `TolerantJson<T>` extractor in
+  `crates/server/src/tolerant_json.rs` to log route and field paths without logging values.
   (Existing `deny_unknown_fields` wire types are brought into compliance as they are
   touched.)
 
