@@ -32,3 +32,20 @@ npm run test:e2e
 ## Decisions
 
 Inherited from chunk 16 and api-rules section 7. No open decisions.
+
+## Result
+
+- Added desk- and user-scoped show-recording history for cue, preset, group, and Update
+  operations, while preserving the existing programmer snapshot ordering.
+- Programmer `UND` now reverses each recorded show mutation atomically through the
+  active-show service; cue creation undo includes its new cue list and playback/page
+  topology, and show undo deliberately clears unsafe programmer redo state.
+- Migrated remaining Preset, Preload, Highlight, and Update callers to typed v2 recording
+  services or Programmer `UND`, then removed the public generic object undo and obsolete
+  compatibility store routes.
+- `cargo test -p light-programmer -p light-application -p light-server` passed (92
+  programmer, 398 application, 463 server tests; one server test remains intentionally
+  ignored), `npm run test:e2e-api` passed (86 passed, 1 skipped), and the full
+  `npm run test:e2e` passed (285 passed, 11 skipped). Architecture and source-size
+  ratchets passed. The unit aggregate exposed one unrelated cross-test selection-action
+  flake, which passed immediately in isolation.
