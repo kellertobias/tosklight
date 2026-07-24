@@ -79,7 +79,7 @@ export function registerMatterRestartTest(): void {
 				.configuration.matter_enabled,
 		).toBe(true);
 		expect(
-			(await api.request<any>("GET", "/api/v1/bootstrap", undefined, false))
+			(await api.request<any>("GET", "/api/v2/bootstrap", undefined, false))
 				.active_show.id,
 		).toBe(showA.id);
 		await expect

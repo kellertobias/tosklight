@@ -38,3 +38,15 @@ npm run test:desktop-smoke
 ## Decisions
 
 Inherited from Chunk 14. No open decisions.
+
+## Result
+
+- Migrated production, bench, acceptance, tooling, desktop-smoke, and operator-documentation
+  callers to the typed v2 bootstrap, session, Patch, readiness, and diagnostics contracts.
+- Removed the five v1 runtime route families and legacy broad Patch snapshot while retaining
+  explicit 404 regression coverage for every retired endpoint.
+- Preserved the acceptance bench's fixture-oriented Patch helper by projecting the typed v2
+  snapshot without reintroducing a production compatibility route.
+- Verified server and unit suites, 86 API scenarios, malformed-show recovery, SHOW-005,
+  the full 296-test E2E run (one UDP timing miss passed in focused isolation), and both
+  packaged desktop ownership scenarios.

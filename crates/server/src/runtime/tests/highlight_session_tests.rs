@@ -23,7 +23,7 @@ async fn verify_bootstrapped_step_highlight(
     let bootstrap = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/bootstrap")
+            Request::get("/api/v2/bootstrap")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -286,7 +286,7 @@ async fn same_user_same_desk_highlight_survives_one_session_close_and_clears_wit
     let second_login = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/sessions")
+            Request::post("/api/v2/sessions")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({
@@ -362,7 +362,7 @@ async fn same_user_same_desk_highlight_survives_one_session_close_and_clears_wit
     let first_closed = app
         .clone()
         .oneshot(
-            Request::delete(format!("/api/v1/sessions/{}", first_session.id.0))
+            Request::delete(format!("/api/v2/sessions/{}", first_session.id.0))
                 .header(header::AUTHORIZATION, format!("Bearer {first_token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -394,7 +394,7 @@ async fn same_user_same_desk_highlight_survives_one_session_close_and_clears_wit
     let final_closed = app
         .clone()
         .oneshot(
-            Request::delete(format!("/api/v1/sessions/{}", second_session.id.0))
+            Request::delete(format!("/api/v2/sessions/{}", second_session.id.0))
                 .header(header::AUTHORIZATION, format!("Bearer {second_token}"))
                 .body(Body::empty())
                 .unwrap(),

@@ -98,7 +98,7 @@ test("COMMAND-HISTORY-001 @supplemental-ui › inspection, reuse, dismissal, rec
   const clientId = `command-history-${crypto.randomUUID()}`;
   try {
     await hardware.subscribe(clientId, api.session!.desk.osc_alias);
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(true);
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
     const alias = api.session!.desk.osc_alias;
     await hardware.send(`/light/${alias}/programmer/clear`, [true]);
     for (const action of ["fixture", "digit-1", "at", "digit-3", "digit-5", "enter"])

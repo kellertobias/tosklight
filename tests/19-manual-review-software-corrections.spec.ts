@@ -42,7 +42,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await expect(clone).toHaveCount(0);
     await expect(dockEntry(page, "Programming Desktop")).toBeVisible();
 
-    const bootstrap = await api.request<any>("GET", "/api/v1/bootstrap", undefined, false);
+    const bootstrap = await api.request<any>("GET", "/api/v2/bootstrap", undefined, false);
     expect(api.session).toMatchObject({ session_id: sessionId, desk: physicalDesk });
     expect(bootstrap.desks.find((candidate: any) => candidate.id === physicalDesk.id)).toMatchObject({
       id: physicalDesk.id,
@@ -178,7 +178,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
   // fields visible; on the tested pane it falls back to the compact settings view, hiding the
   // labelled fields this case asserts. Unskip once the full cue-properties layout is built.
   test.skip("MANUAL-019 @ui › the dedicated Cues pane keeps the cue editor visible without a delete action", async ({ api, desk, page }) => {
-    const bootstrap = await api.request<any>("GET", "/api/v1/bootstrap", undefined, false);
+    const bootstrap = await api.request<any>("GET", "/api/v2/bootstrap", undefined, false);
     const cueListId = crypto.randomUUID();
     await api.request("PUT", `/api/v1/shows/${bootstrap.active_show.id}/objects/cue_list/${cueListId}`, {
       id: cueListId,
@@ -220,7 +220,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
   // the DMX pane as a route-editor-free selected-channel monitor, and the Stage scenery model
   // without a separate scene-asset workflow. Unskip as each of those surfaces is built.
   test.skip("MANUAL-019 @ui › Help stays two-column, DMX is a selected-channel monitor, and Stage Add Element opens a chooser", async ({ api, desk, page }) => {
-    const bootstrap = await api.request<any>("GET", "/api/v1/bootstrap", undefined, false);
+    const bootstrap = await api.request<any>("GET", "/api/v2/bootstrap", undefined, false);
     const showId = bootstrap.active_show.id as string;
     await api.request("PUT", `/api/v1/shows/${showId}/objects/route/manual-existing`, {
       protocol: "art_net",
@@ -271,7 +271,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await expect(createdRoute).toHaveCount(0);
 
     await desk.recordStep("DMX MONITOR", "The DMX built-in has no route editor; selecting a patched channel reveals its fixture and raw output controls.");
-    const patch = await api.request<any>("GET", "/api/v1/patch", undefined, false);
+    const patch = await api.patch();
     const patched = patch.fixtures.find((fixture: any) => fixture.universe != null && fixture.address != null);
     expect(patched).toBeTruthy();
     await openBuiltIn(page, "DMX");
@@ -318,7 +318,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
   // opens the chosen indexed show through a safe blackout — is not implemented yet. Unskip
   // once that recovery browser surface exists.
   test.skip("MANUAL-019 @ui › Shows & recovery loads a root-confined .show selection with safe blackout", async ({ api, desk, page }) => {
-    const bootstrap = await api.request<any>("GET", "/api/v1/bootstrap", undefined, false);
+    const bootstrap = await api.request<any>("GET", "/api/v2/bootstrap", undefined, false);
     const source = await fetch(`${api.baseUrl}/api/v1/shows/${bootstrap.active_show.id}/download`, {
       headers: { authorization: `Bearer ${api.session!.token}` },
     });
@@ -348,7 +348,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await load.click();
     expect((await openRequest).postDataJSON()).toEqual({ transition: "safe_blackout" });
     await expect(browser.getByRole("status")).toContainText(`${copyName}.show is now open.`);
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show.id).toBe(copy.id);
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).active_show.id).toBe(copy.id);
   });
 });
 

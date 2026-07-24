@@ -14,7 +14,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 	test("LOCK-001 @ui @api @osc › PIN lock covers every screen and drops every desk input without changing output", async ({ api, bench, desk, page }) => {
 		await desk.open(bench.baseUrl);
 		const pageDeskSession = await desk.session();
-		const otherDeskSession = await api.request<typeof pageDeskSession>("POST", "/api/v1/sessions", {
+		const otherDeskSession = await api.request<typeof pageDeskSession>("POST", "/api/v2/sessions", {
 			username: "Operator",
 			client_id: crypto.randomUUID(),
 		}, false);
@@ -158,7 +158,7 @@ async function commandLine(api: ApiDriver): Promise<string> {
 async function currentDeskAlias(api: ApiDriver): Promise<string> {
 	const deskId = api.session?.desk.id;
 	if (!deskId) throw new Error("Expected an authenticated desk session");
-	const session = await api.request<DeskSessionProjection>("POST", "/api/v1/sessions", {
+	const session = await api.request<DeskSessionProjection>("POST", "/api/v2/sessions", {
 		username: "Operator",
 		desk_id: deskId,
 	}, false);

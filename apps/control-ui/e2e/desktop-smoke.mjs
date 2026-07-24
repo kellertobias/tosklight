@@ -45,8 +45,8 @@ async function ownedServerScenario() {
       const children = await lightServerChildren(appPid);
       return children.length === 1 ? children[0] : undefined;
     }, 15_000, "DESKTOP-001 exact child-server PID");
-    await waitFor(async () => (await fetch(`http://127.0.0.1:${port}/api/v1/readiness`)).ok, 8_000, "DESKTOP-001 app-owned server readiness");
-    const bootstrap = await fetchJson(port, "/api/v1/bootstrap");
+    await waitFor(async () => (await fetch(`http://127.0.0.1:${port}/api/v2/readiness`)).ok, 8_000, "DESKTOP-001 app-owned server readiness");
+    const bootstrap = await fetchJson(port, "/api/v2/bootstrap");
     if (bootstrap.active_show?.name !== "desktop-001") throw new Error(`DESKTOP-001 active show mismatch: ${JSON.stringify(bootstrap.active_show)}`);
     if (!bootstrap.attribute_registry?.some((attribute) => attribute.id === "intensity")) {
       throw new Error("DESKTOP-001 packaged desk did not expose the canonical fixture attribute registry");
@@ -88,12 +88,12 @@ async function independentServerScenario() {
     if (ready.ready !== true) throw new Error(`DESKTOP-002 invalid frontend marker: ${JSON.stringify(ready)}`);
     const appServerChildren = await lightServerChildren(appPid);
     if (appServerChildren.length !== 0) throw new Error(`DESKTOP-002 created an unexpected child server: ${appServerChildren.join(", ")}`);
-    const bootstrap = await fetchJson(port, "/api/v1/bootstrap");
+    const bootstrap = await fetchJson(port, "/api/v2/bootstrap");
     if (bootstrap.active_show?.name !== "desktop-002") throw new Error(`DESKTOP-002 active show mismatch: ${JSON.stringify(bootstrap.active_show)}`);
 
     await waitForExit(desktop.child, 8_000, "DESKTOP-002 app exit");
     if (!pidAlive(independentPid)) throw new Error(`DESKTOP-002 killed independent server PID ${independentPid}`);
-    if (!(await fetch(`http://127.0.0.1:${port}/api/v1/readiness`)).ok) throw new Error("DESKTOP-002 independent readiness failed after app exit");
+    if (!(await fetch(`http://127.0.0.1:${port}/api/v2/readiness`)).ok) throw new Error("DESKTOP-002 independent readiness failed after app exit");
     const created = await authenticated(independent.token, port, "POST", "/api/v1/shows", {
       name: `desktop-002-post-exit-${crypto.randomUUID()}`,
       data_base64: null,
@@ -122,8 +122,8 @@ async function startSeededServer(dataDir, port, showName) {
     "--osc-bind", "127.0.0.1:0",
     "--output-bind-ip", "127.0.0.1",
   ]);
-  await waitFor(async () => (await fetch(`http://127.0.0.1:${port}/api/v1/readiness`)).ok, 15_000, `${showName} seed readiness`);
-  const session = await request(port, "POST", "/api/v1/sessions", { username: "Operator" });
+  await waitFor(async () => (await fetch(`http://127.0.0.1:${port}/api/v2/readiness`)).ok, 15_000, `${showName} seed readiness`);
+  const session = await request(port, "POST", "/api/v2/sessions", { username: "Operator" });
   const show = await authenticated(session.token, port, "POST", "/api/v1/shows", {
     name: showName,
     data_base64: canonical.toString("base64"),
@@ -217,7 +217,7 @@ async function waitForValue(check, timeout, label) {
 
 async function waitForPortClosed(port, timeout, label) {
   await waitFor(async () => {
-    try { await fetch(`http://127.0.0.1:${port}/api/v1/readiness`); return false; }
+    try { await fetch(`http://127.0.0.1:${port}/api/v2/readiness`); return false; }
     catch { return true; }
   }, timeout, label);
 }

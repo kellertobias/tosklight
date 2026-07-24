@@ -91,19 +91,13 @@ pub(super) async fn diagnostics(
         snapshot_revision: state.engine.snapshot().revision,
     }))
 }
-pub(super) async fn bootstrap_v1(
-    State(state): State<AppState>,
-) -> Json<wire::RuntimeBootstrapSnapshot> {
-    Json(bootstrap_snapshot(&state, "v1"))
-}
-
 pub(super) async fn bootstrap_v2(
     State(state): State<AppState>,
 ) -> Json<wire::RuntimeBootstrapSnapshot> {
-    Json(bootstrap_snapshot(&state, "v2"))
+    Json(bootstrap_snapshot(&state))
 }
 
-fn bootstrap_snapshot(state: &AppState, api_version: &str) -> wire::RuntimeBootstrapSnapshot {
+fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
     let (users, desks, client_desks) = {
         let desk = state.desk.lock();
         (
@@ -184,7 +178,7 @@ fn bootstrap_snapshot(state: &AppState, api_version: &str) -> wire::RuntimeBoots
         })
         .collect();
     wire::RuntimeBootstrapSnapshot {
-        api_version: api_version.into(),
+        api_version: "v2".into(),
         attribute_registry: ATTRIBUTE_REGISTRY
             .iter()
             .map(runtime_wire::attribute)
@@ -210,12 +204,6 @@ fn bootstrap_snapshot(state: &AppState, api_version: &str) -> wire::RuntimeBoots
         active_show_error: state.active_show_error.read().clone(),
         hardware_connected: !state.osc_subscribers.lock().is_empty(),
     }
-}
-pub(super) async fn patch_snapshot(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let snapshot = state.engine.snapshot();
-    Json(
-        serde_json::json!({"revision":snapshot.revision,"fixtures":snapshot.fixtures,"routes":snapshot.routes}),
-    )
 }
 pub(super) async fn visualization_snapshot(
     State(state): State<AppState>,

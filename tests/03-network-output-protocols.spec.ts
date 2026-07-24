@@ -411,7 +411,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       await pressCommand(page, "1 AT 25");
     },
     assert: async ({ api, bench }, state, surface) => {
-      const before = await api.request<any>("GET", "/api/v1/diagnostics");
+      const before = await api.request<any>("GET", "/api/v2/diagnostics");
       if (surface === "api") expect(state.valuesEventSequence).not.toBeNull();
       else await expect.poll(async () =>
         (await api.request<any[]>("GET", "/api/v1/audit?after=0"))
@@ -428,7 +428,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       expect((await bench.artnet.nextAfter(healthyMark, "artnet", 1)).slots[0]).toBe(64);
       await new Promise((resolve) => setTimeout(resolve, 75));
       expect(state.failing.packets.slice(failedMark)).toHaveLength(0);
-      const after = await api.request<any>("GET", "/api/v1/diagnostics");
+      const after = await api.request<any>("GET", "/api/v2/diagnostics");
       expect(after.output.send_errors).toBe(before.output.send_errors + 1);
       expect(routeSendErrors(after, state.destination)).toBe(failingErrorsBefore + 1);
       expect(routeSendErrors(after, healthyDestination)).toBe(healthyErrorsBefore);
@@ -440,7 +440,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       const recovered = await state.failing.nextAfter(recoveryMark, "artnet", 11);
       expect(recovered.slots[0]).toBe(64);
       expect(recovered.sequence).not.toBe(0);
-      const recoveredDiagnostics = await api.request<any>("GET", "/api/v1/diagnostics");
+      const recoveredDiagnostics = await api.request<any>("GET", "/api/v2/diagnostics");
       expect(routeSendErrors(recoveredDiagnostics, state.destination)).toBe(failingErrorsBefore + 1);
       await state.failing.close();
     },
@@ -542,7 +542,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
         ["sacn", "multicast", null],
         ["sacn", "unicast", `127.0.0.1:${state.receiver.port}`],
       ]);
-      const diagnostics = await api.request<any>("GET", "/api/v1/diagnostics");
+      const diagnostics = await api.request<any>("GET", "/api/v2/diagnostics");
       expect(diagnostics.output_routes).toEqual(expect.arrayContaining([
         expect.objectContaining({ protocol: "art_net", universe: 201, delivery_mode: "broadcast", destination: "255.255.255.255:6454", enabled: true }),
         expect.objectContaining({ protocol: "art_net", universe: 202, delivery_mode: "unicast", destination: `127.0.0.1:${state.receiver.port}`, enabled: true }),

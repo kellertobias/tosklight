@@ -15,7 +15,7 @@ test("ENCODER-DISPLAY-001 @supplemental-ui › six stable slots mirror physical 
   const hardware = await bench.osc();
   await hardware.subscribe(`encoder-display-${crypto.randomUUID()}`, api.session!.desk.osc_alias);
   try {
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(true);
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
     await page.getByRole("button", { name: "Position" }).click();
     const cards = page.locator(".hardware-encoder-display");
     await expect(cards).toHaveCount(6);
@@ -94,7 +94,7 @@ test("PROG-002 @ui › hardware encoder modal spreads a typed value over the ord
   const hardware = await bench.osc();
   await hardware.subscribe(`encoder-spread-${crypto.randomUUID()}`, api.session!.desk.osc_alias);
   try {
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(true);
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
 
     const dimmer = page.getByRole("button", {
       name: "Encoder 1: Dimmer, 0%",
@@ -144,7 +144,7 @@ test("PROG-002 @ui › hardware encoder modal lands a multi-point intensity spre
   const hardware = await bench.osc();
   await hardware.subscribe(`encoder-multi-point-${crypto.randomUUID()}`, api.session!.desk.osc_alias);
   try {
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(true);
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
 
     await page.getByRole("button", { name: "Encoder 1: Dimmer, 0%", exact: true }).click();
     await typeEncoderModalExpression(page, MULTI_POINT_KEYS);
@@ -175,7 +175,7 @@ test("PROG-002 @ui › hardware encoder modal spreads a multi-point Pan over the
   const hardware = await bench.osc();
   await hardware.subscribe(`encoder-multi-point-pan-${crypto.randomUUID()}`, api.session!.desk.osc_alias);
   try {
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(true);
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
 
     await page.getByRole("button", { name: "Position" }).click();
     await page.getByRole("button", { name: /^Encoder 1: Pan,/ }).click();

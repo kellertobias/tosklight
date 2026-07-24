@@ -153,7 +153,7 @@ OSC scenarios still receive the mandatory `@api` and `@ui` variants for their op
 
 **Detailed procedure:**
 
-1. Create a session with `POST /api/v1/sessions`, retain its bearer token, and GET Group 3 to record its current body and revision.
+1. Create a session with `POST /api/v2/sessions`, retain its bearer token, and GET Group 3 to record its current body and revision.
 2. Repeat the protected GET with no `Authorization` header and then with `Authorization: Bearer invalid`; record both status/body pairs.
 3. PUT one deliberate Group 3 membership change with the valid bearer token and `If-Match: <current-revision>`. Verify success and capture the new revision.
 4. PUT a different body while reusing the old `If-Match` value. Expect a revision conflict.

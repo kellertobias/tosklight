@@ -207,7 +207,7 @@ export async function arrangeMalformedRecovery(
 	await api.login("Operator");
 	const readiness = await api.request<any>(
 		"GET",
-		"/api/v1/readiness",
+		"/api/v2/readiness",
 		undefined,
 		false,
 	);

@@ -611,7 +611,7 @@ async fn login_on_desk(
         .app
         .clone()
         .oneshot(
-            Request::post("/api/v1/sessions")
+            Request::post("/api/v2/sessions")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({"username": username, "desk_id": desk_id}).to_string(),

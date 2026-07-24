@@ -102,7 +102,7 @@ pairedScenario<ColorRangeState>({
   title: "Shift-drag applies an ordered Color range from software and attached hardware",
   arrange: async ({ api, bench }, surface) => {
     const show = await loadCanonicalCopy(api, bench, `color-range-001-${surface}`, "default-stage");
-    const patch = await api.request<any>("GET", "/api/v1/patch", undefined, false);
+    const patch = await api.patch();
     const colorTargets = patch.fixtures.flatMap((fixture: any) => {
       const logicalByIndex = new Map(
         fixture.logical_heads.map((head: any) => [head.head_index, head.fixture_id]),
@@ -172,7 +172,7 @@ pairedScenario<ColorRangeState>({
     const uniformPoint = { hue: 0.35, saturation: 0.6, brightness: 0.85 };
     const uniform = colorProgrammerAssignments(
       state.selected,
-      (await api.request<any>("GET", "/api/v1/patch", undefined, false)).fixtures,
+      (await api.patch()).fixtures,
       state.selected.map(() => uniformPoint),
     );
     const beforeUniform = await batchCommandCount(api);
@@ -214,7 +214,7 @@ pairedScenario<ColorRangeState>({
     try {
       await hardware.subscribe(clientId, api.session!.desk.osc_alias);
       await expect.poll(async () =>
-        (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected,
+        (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected,
       ).toBe(true);
       await openColorDialog(page);
       await hardware.send(`/light/${api.session!.desk.osc_alias}/programmer/shift`, [true]);

@@ -106,7 +106,7 @@ export function registerEmptyShowRestartTest(): void {
 		);
 		const provisionalPath = provisional.path as string;
 		expect(
-			(await api.request<any>("GET", "/api/v1/bootstrap", undefined, false))
+			(await api.request<any>("GET", "/api/v2/bootstrap", undefined, false))
 				.active_show,
 		).toMatchObject({
 			id: provisional.id,
@@ -116,7 +116,7 @@ export function registerEmptyShowRestartTest(): void {
 		await bench.restart();
 		await api.login("Operator");
 		expect(
-			(await api.request<any>("GET", "/api/v1/bootstrap", undefined, false))
+			(await api.request<any>("GET", "/api/v2/bootstrap", undefined, false))
 				.active_show,
 		).toMatchObject({
 			id: provisional.id,
@@ -152,7 +152,7 @@ export function registerEmptyShowRestartTest(): void {
 		await bench.restart();
 		await api.login("Operator");
 		expect(
-			(await api.request<any>("GET", "/api/v1/bootstrap", undefined, false))
+			(await api.request<any>("GET", "/api/v2/bootstrap", undefined, false))
 				.active_show,
 		).toMatchObject({
 			id: provisional.id,
@@ -228,7 +228,7 @@ export function registerShow001ProcessRestartTest(): void {
 
 		const bootstrap = await api.request<any>(
 			"GET",
-			"/api/v1/bootstrap",
+			"/api/v2/bootstrap",
 			undefined,
 			false,
 		);

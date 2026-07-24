@@ -3,7 +3,7 @@ async fn login_to_existing_desk(scenario: &CommandHttpScenario) -> String {
         .app
         .clone()
         .oneshot(
-            Request::post("/api/v1/sessions")
+            Request::post("/api/v2/sessions")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({

@@ -176,7 +176,7 @@ stop_running() {
 wait_for_endpoint() {
   local attempts=0
   while (( attempts < 100 )); do
-    if curl -fsS http://127.0.0.1:5000/api/v1/readiness >/dev/null 2>&1; then return 0; fi
+    if curl -fsS http://127.0.0.1:5000/api/v2/readiness >/dev/null 2>&1; then return 0; fi
     sleep 0.1
     attempts=$((attempts + 1))
   done
@@ -194,7 +194,7 @@ wait_for_launchd_server() {
     if [[ -n "$pid" ]]; then
       command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
       if [[ "$command" == "$TARGET_DIR/debug/light-server --data-dir $DATA_DIR"* ]] && \
-        curl -fsS http://127.0.0.1:5000/api/v1/readiness >/dev/null 2>&1; then
+        curl -fsS http://127.0.0.1:5000/api/v2/readiness >/dev/null 2>&1; then
         return 0
       fi
     fi
@@ -210,7 +210,7 @@ wait_for_server() {
   local pid="$1"
   local attempts=0
   while (( attempts < 100 )); do
-    if curl -fsS http://127.0.0.1:5000/api/v1/readiness >/dev/null 2>&1; then
+    if curl -fsS http://127.0.0.1:5000/api/v2/readiness >/dev/null 2>&1; then
       return 0
     fi
     if ! kill -0 "$pid" 2>/dev/null; then

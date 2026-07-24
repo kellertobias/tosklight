@@ -14,7 +14,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     title: "a dark fixture prepositions for its next lit Cue",
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `mib-001-${surface}`, "default-stage");
-      const patch = await api.request<any>("GET", "/api/v1/patch", undefined, false);
+      const patch = await api.patch();
       for (const fixture of patch.fixtures) {
         expect(fixture.move_in_black_enabled).toBe(true);
         expect(fixture.move_in_black_delay_millis).toBe(0);
@@ -400,7 +400,7 @@ async function activeCueNumber(api: any, cueListId: string): Promise<number | nu
 }
 
 async function mibDiagnostics(api: any): Promise<any[]> {
-  return (await api.request<any>("GET", "/api/v1/diagnostics")).move_in_black;
+  return (await api.request<any>("GET", "/api/v2/diagnostics")).move_in_black;
 }
 
 function mibFor(diagnostics: any[], fixtureId: string, cueListId: string): any {

@@ -63,7 +63,7 @@ The server maintains:
 
 - `desk.sqlite`: desk users, show-library index, active show, server settings, and durable session programmers.
 - `shows/*.show`: portable, versioned SQLite show files.
-- A fixed-deadline 44 Hz render scheduler with health counters exposed by `/api/v1/bootstrap` and `/api/v1/configuration`.
+- A fixed-deadline 44 Hz render scheduler with health counters exposed by `/api/v2/bootstrap` and `/api/v1/configuration`.
 
 ## Code tour for new developers
 

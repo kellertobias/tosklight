@@ -99,7 +99,7 @@ export async function connectHardware(
 	await expect
 		.poll(
 			async () =>
-				(await api.request<any>("GET", "/api/v1/bootstrap", undefined, false))
+				(await api.request<any>("GET", "/api/v2/bootstrap", undefined, false))
 					.hardware_connected,
 		)
 		.toBe(true);
@@ -114,7 +114,7 @@ export async function disconnectHardware(
 	await expect
 		.poll(
 			async () =>
-				(await api.request<any>("GET", "/api/v1/bootstrap", undefined, false))
+				(await api.request<any>("GET", "/api/v2/bootstrap", undefined, false))
 					.hardware_connected,
 		)
 		.toBe(false);

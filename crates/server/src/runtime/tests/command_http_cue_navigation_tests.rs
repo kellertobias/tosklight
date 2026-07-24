@@ -338,7 +338,7 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
         .app
         .clone()
         .oneshot(
-            Request::post("/api/v1/sessions")
+            Request::post("/api/v2/sessions")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({"username":"Operator","desk_id":second_desk.id})

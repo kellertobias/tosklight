@@ -1,4 +1,7 @@
 import type { SoftwareKey } from "../../../shared/programmerKeypad";
+import type { PatchSnapshot as LegacyPatchSnapshot } from "../../src/api/types";
+import { decodePatchSnapshot } from "../../src/api/patchWire";
+import { projectionToPatchedFixture } from "../../src/features/patch/model";
 
 export interface Session { session_id: string; client_id: string; token: string; user: { id: string; name: string }; desk: { id: string; osc_alias: string } }
 export interface CommandResponse<T = unknown> { protocol_version: number; request_id: string; ok: boolean; revision: number; payload?: T; error?: string }
@@ -117,6 +120,34 @@ export class ApiDriver {
   async login(username = "Operator", deskId: string | null = this.session?.desk.id ?? null): Promise<Session> {
     this.session = await this.request<Session>("POST", "/api/v2/sessions", { username, desk_id: deskId }, false);
     return this.session;
+  }
+
+  async patch(): Promise<LegacyPatchSnapshot> {
+    const snapshot = decodePatchSnapshot(
+      await this.request<unknown>("GET", "/api/v2/patch"),
+    );
+    const profiles = new Map(
+      snapshot.profileRevisions.map((profile) => [
+        `${profile.profileId}:${profile.profileRevision}`,
+        profile,
+      ]),
+    );
+    return {
+      revision: snapshot.patchRevision,
+      fixtures: snapshot.fixtures.map((fixture) => {
+        const profile = profiles.get(
+          `${fixture.profileId}:${fixture.profileRevision}`,
+        );
+        if (!profile) {
+          throw new Error(
+            `Patch profile ${fixture.profileId} revision ${fixture.profileRevision} is missing`,
+          );
+        }
+        return projectionToPatchedFixture(fixture, profile, () => null);
+      }),
+      // Output routes remain owned by the output/configuration surface, not the v2 Patch contract.
+      routes: [],
+    };
   }
 
   async request<T>(

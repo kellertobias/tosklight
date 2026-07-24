@@ -140,11 +140,11 @@ For native behavior:
 ```sh
 ./test desktop-smoke
 ./build open
-curl -fsS http://127.0.0.1:5000/api/v1/readiness
+curl -fsS http://127.0.0.1:5000/api/v2/readiness
 ```
 
 After `./build open`, inspect `.artifacts/runtime/light-data/light-server.log`. If readiness is
-healthy but the UI appears stuck, time `/api/v1/readiness` and `/api/v1/bootstrap` separately and
+healthy but the UI appears stuck, time `/api/v2/readiness` and `/api/v2/bootstrap` separately and
 confirm the bundle opened by `build` before changing UI code.
 
 The release-only render-through-encoding benchmark is:

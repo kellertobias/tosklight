@@ -36,21 +36,21 @@ test("HIGHLIGHT-004 @api › ownership conflicts retain same-user sessions, rele
 	const userAFirst = new ApiDriver(api.baseUrl);
 	userAFirst.session = await userAFirst.request(
 		"POST",
-		"/api/v1/sessions",
+		"/api/v2/sessions",
 		{ username: "Highlight A", desk_id: api.session!.desk.id },
 		false,
 	);
 	const userASecond = new ApiDriver(api.baseUrl);
 	userASecond.session = await userASecond.request(
 		"POST",
-		"/api/v1/sessions",
+		"/api/v2/sessions",
 		{ username: "Highlight A", desk_id: api.session!.desk.id },
 		false,
 	);
 	const userB = new ApiDriver(api.baseUrl);
 	userB.session = await userB.request(
 		"POST",
-		"/api/v1/sessions",
+		"/api/v2/sessions",
 		{ username: "Highlight B", desk_id: api.session!.desk.id },
 		false,
 	);
@@ -91,7 +91,7 @@ test("HIGHLIGHT-004 @api › ownership conflicts retain same-user sessions, rele
 	});
 	await userASecond.request(
 		"DELETE",
-		`/api/v1/sessions/${userASecond.session!.session_id}`,
+		`/api/v2/sessions/${userASecond.session!.session_id}`,
 	);
 	expect((await highlightState(userAFirst)).active).toBe(true);
 	await expect(highlightAction(userB, "on")).rejects.toThrow(
@@ -100,7 +100,7 @@ test("HIGHLIGHT-004 @api › ownership conflicts retain same-user sessions, rele
 
 	await userAFirst.request(
 		"DELETE",
-		`/api/v1/sessions/${userAFirst.session!.session_id}`,
+		`/api/v2/sessions/${userAFirst.session!.session_id}`,
 	);
 	await highlightAction(userB, "on");
 	expect(await highlightState(userB)).toMatchObject({
@@ -211,7 +211,7 @@ test("HIGHLIGHT-005 @ui › Highlight errors remain reachable above production c
 						(
 							await api.request<any>(
 								"GET",
-								"/api/v1/bootstrap",
+								"/api/v2/bootstrap",
 								undefined,
 								false,
 							)
@@ -241,7 +241,7 @@ test("HIGHLIGHT-005 @ui › Highlight errors remain reachable above production c
 						(
 							await api.request<any>(
 								"GET",
-								"/api/v1/bootstrap",
+								"/api/v2/bootstrap",
 								undefined,
 								false,
 							)

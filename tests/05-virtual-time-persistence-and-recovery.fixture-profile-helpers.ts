@@ -53,7 +53,7 @@ export async function legacyDimmerDefinition(
 ): Promise<Record<string, any>> {
 	const bootstrap = await api.request<any>(
 		"GET",
-		"/api/v1/bootstrap",
+		"/api/v2/bootstrap",
 		undefined,
 		false,
 	);

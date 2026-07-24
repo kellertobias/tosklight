@@ -129,7 +129,7 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 		});
 		const bootstrap = await api.request<any>(
 			"GET",
-			"/api/v1/bootstrap",
+			"/api/v2/bootstrap",
 			undefined,
 			false,
 		);

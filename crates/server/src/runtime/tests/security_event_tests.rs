@@ -4,7 +4,7 @@ async fn bootstrap_does_not_relock_the_desk_store() {
     let response = tokio::time::timeout(
         Duration::from_secs(1),
         router(state).oneshot(
-            Request::get("/api/v1/bootstrap")
+            Request::get("/api/v2/bootstrap")
                 .body(Body::empty())
                 .unwrap(),
         ),
@@ -41,7 +41,7 @@ async fn unauthenticated_bootstrap_keeps_login_discovery_but_omits_programmers()
     let discovery = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/bootstrap")
+            Request::get("/api/v2/bootstrap")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -64,7 +64,7 @@ async fn unauthenticated_bootstrap_keeps_login_discovery_but_omits_programmers()
     );
     let populated = app
         .oneshot(
-            Request::get("/api/v1/bootstrap")
+            Request::get("/api/v2/bootstrap")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -186,14 +186,14 @@ async fn optional_desk_token_guards_the_api_boundary() {
     let app = router(state);
     let denied = app
         .clone()
-        .oneshot(Request::get("/api/v1/readiness").body(Body::empty()).unwrap())
+        .oneshot(Request::get("/api/v2/readiness").body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
     let allowed = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/readiness")
+            Request::get("/api/v2/readiness")
                 .header("x-light-desk-token", "shared-secret")
                 .body(Body::empty())
                 .unwrap(),
@@ -204,7 +204,7 @@ async fn optional_desk_token_guards_the_api_boundary() {
     let allowed_ws_boundary = app
         .clone()
         .oneshot(
-            Request::get("/api/v1/readiness")
+            Request::get("/api/v2/readiness")
                 .header(
                     header::SEC_WEBSOCKET_PROTOCOL,
                     "light.events.v2, light.desk.b64.c2hhcmVkLXNlY3JldA",

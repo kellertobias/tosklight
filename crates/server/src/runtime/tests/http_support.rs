@@ -7,7 +7,7 @@ async fn login(app: &Router, username: &str) -> (String, String) {
     let response = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/sessions")
+            Request::post("/api/v2/sessions")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({"username":username}).to_string(),

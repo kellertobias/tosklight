@@ -45,7 +45,7 @@ The executable checks for this behavior are split by boundary:
 
 An actual removable-drive cycle remains a deliberate packaged-desktop check because a synthetic mount listing cannot prove that the operating system and packaged application observe real hardware correctly:
 
-1. Run `./build open` and verify `http://127.0.0.1:5000/api/v1/readiness`.
+1. Run `./build open` and verify `http://127.0.0.1:5000/api/v2/readiness`.
 2. Open File Manager and verify the Shows and configured roots.
 3. Attach a removable drive and verify that it appears as a runtime root while Desk configuration remains unchanged.
 4. Browse and read a file, begin an operation involving that drive, then detach it.

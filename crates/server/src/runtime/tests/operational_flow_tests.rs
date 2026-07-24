@@ -52,7 +52,15 @@ impl OperationalScenario {
         let patch = self
             .app
             .clone()
-            .oneshot(Request::get("/api/v1/patch").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::get("/api/v2/patch")
+                    .header(
+                        header::AUTHORIZATION,
+                        format!("Bearer {}", self.token),
+                    )
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(json(patch).await["fixtures"].as_array().unwrap().len(), 1);
@@ -197,7 +205,7 @@ impl OperationalScenario {
     }
 
     async fn verify_service_endpoints(&self) {
-        for path in ["/api/v1/diagnostics", "/api/v1/readiness"] {
+        for path in ["/api/v2/diagnostics", "/api/v2/readiness"] {
             let response = self
                 .app
                 .clone()
@@ -284,7 +292,7 @@ impl OperationalScenario {
             .app
             .clone()
             .oneshot(
-                Request::delete(format!("/api/v1/sessions/{}", self.session_id))
+                Request::delete(format!("/api/v2/sessions/{}", self.session_id))
                     .header(
                         header::AUTHORIZATION,
                         format!("Bearer {}", self.token),

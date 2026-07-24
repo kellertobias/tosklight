@@ -148,7 +148,7 @@ export async function objects<T = Record<string, any>>(
 ): Promise<Array<VersionedObject<T>>> {
 	const bootstrap = await api.request<{ active_show: ShowEntry | null }>(
 		"GET",
-		"/api/v1/bootstrap",
+		"/api/v2/bootstrap",
 		undefined,
 		false,
 	);
@@ -183,7 +183,7 @@ export async function putObject(
 ): Promise<void> {
 	const bootstrap = await api.request<{ active_show: ShowEntry | null }>(
 		"GET",
-		"/api/v1/bootstrap",
+		"/api/v2/bootstrap",
 		undefined,
 		false,
 	);

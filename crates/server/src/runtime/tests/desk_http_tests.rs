@@ -75,7 +75,7 @@ async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
     let second_login = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/sessions")
+            Request::post("/api/v2/sessions")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({"username":"Operator","desk_id":second.id}).to_string(),
@@ -140,7 +140,7 @@ async fn login_reuses_client_desk_when_remembered_desk_is_stale() {
         let app = app.clone();
         async move {
             app.oneshot(
-                    Request::post("/api/v1/sessions")
+                    Request::post("/api/v2/sessions")
                         .header(header::CONTENT_TYPE, "application/json")
                         .body(Body::from(
                             serde_json::json!({"username":"Operator","client_id":client_id,"desk_id":desk_id}).to_string(),

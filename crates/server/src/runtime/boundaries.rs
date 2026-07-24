@@ -106,7 +106,7 @@ pub(super) async fn desk_lock_boundary(
         || is_output_runtime_action_route(request.method(), path)
         || is_speed_group_action_route(request.method(), path)
         || is_cue_deletion_action_route(request.method(), path)
-        || matches!(path, "/api/v1/sessions" | "/api/v2/sessions")
+        || path == "/api/v2/sessions"
         || path.starts_with("/api/v1/desk-lock")
     {
         return next.run(request).await;

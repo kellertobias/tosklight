@@ -493,12 +493,12 @@ async function showNamed(api: ApiDriver, name: string): Promise<ShowEntry> {
 }
 
 async function expectActiveShow(api: ApiDriver, name: string): Promise<void> {
-  const bootstrap = await api.request<{ active_show: ShowEntry | null }>("GET", "/api/v1/bootstrap", undefined, false);
+  const bootstrap = await api.request<{ active_show: ShowEntry | null }>("GET", "/api/v2/bootstrap", undefined, false);
   expect(bootstrap.active_show?.name).toBe(name);
 }
 
 async function activeShowEntry(api: ApiDriver): Promise<ShowEntry> {
-  const bootstrap = await api.request<{ active_show: ShowEntry | null }>("GET", "/api/v1/bootstrap", undefined, false);
+  const bootstrap = await api.request<{ active_show: ShowEntry | null }>("GET", "/api/v2/bootstrap", undefined, false);
   expect(bootstrap.active_show).toBeTruthy();
   return bootstrap.active_show!;
 }

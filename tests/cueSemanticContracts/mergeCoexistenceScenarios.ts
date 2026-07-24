@@ -72,7 +72,7 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		expect(await visualizationAfterTick(api, bench, rgb, "red", 0)).toBe(0.8);
 		expect(await visualizationAfterTick(api, bench, rgb, "red", 0)).toBe(0.8);
 
-		const diagnostics = await api.request<any>("GET", "/api/v1/diagnostics");
+		const diagnostics = await api.request<any>("GET", "/api/v2/diagnostics");
 		expect(
 			diagnostics.active_programmers.filter((programmer: any) =>
 				programmer.values.some(

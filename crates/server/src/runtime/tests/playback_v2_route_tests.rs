@@ -2357,7 +2357,7 @@ async fn login_playback_user_on_desk(app: &Router, username: &str, desk_id: Uuid
     let response = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/sessions")
+            Request::post("/api/v2/sessions")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({"username":username,"desk_id":desk_id}).to_string(),

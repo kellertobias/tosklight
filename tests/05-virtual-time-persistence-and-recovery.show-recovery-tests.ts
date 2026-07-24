@@ -79,7 +79,7 @@ export function registerAtomicRecoveryTests(): void {
 			);
 			expect([oldHash, newHash]).toContain(recoveredHash);
 			expect(
-				(await api.request<any>("GET", "/api/v1/bootstrap", undefined, false))
+				(await api.request<any>("GET", "/api/v2/bootstrap", undefined, false))
 					.active_show_error,
 			).toBeNull();
 			if (fault === "during-temporary-write")
@@ -126,7 +126,7 @@ export function registerMalformedRecoveryScenario(): void {
 						(
 							await api.request<any>(
 								"GET",
-								"/api/v1/bootstrap",
+								"/api/v2/bootstrap",
 								undefined,
 								false,
 							)
@@ -135,7 +135,7 @@ export function registerMalformedRecoveryScenario(): void {
 				.toBe(state.recoveryShowId);
 			const bootstrap = await api.request<any>(
 				"GET",
-				"/api/v1/bootstrap",
+				"/api/v2/bootstrap",
 				undefined,
 				false,
 			);
@@ -207,7 +207,7 @@ export function registerCorruptActiveShowRecoveryTests(): void {
 			await api.login();
 
 			const readinessResponse = await fetch(
-				`${bench.baseUrl}/api/v1/readiness`,
+				`${bench.baseUrl}/api/v2/readiness`,
 			);
 			expect(readinessResponse.ok).toBe(true);
 			const readiness = (await readinessResponse.json()) as any;
@@ -215,7 +215,7 @@ export function registerCorruptActiveShowRecoveryTests(): void {
 			expect(readiness.active_show_error).toBeTruthy();
 			const bootstrap = await api.request<any>(
 				"GET",
-				"/api/v1/bootstrap",
+				"/api/v2/bootstrap",
 				undefined,
 				false,
 			);
@@ -242,7 +242,7 @@ export function registerCorruptActiveShowRecoveryTests(): void {
 				transition: "safe_blackout",
 			});
 			expect(
-				(await api.request<any>("GET", "/api/v1/bootstrap", undefined, false))
+				(await api.request<any>("GET", "/api/v2/bootstrap", undefined, false))
 					.active_show_error,
 			).toBeNull();
 			expect(

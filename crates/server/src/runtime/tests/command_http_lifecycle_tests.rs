@@ -140,7 +140,7 @@ async fn close_session_request(
         .app
         .clone()
         .oneshot(
-            Request::delete(format!("/api/v1/sessions/{}", session_id.0))
+            Request::delete(format!("/api/v2/sessions/{}", session_id.0))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),

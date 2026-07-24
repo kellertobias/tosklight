@@ -94,7 +94,7 @@ export function registerCompatibleProfileMigrationTest(): void {
 		await api.login();
 
 		expect(
-			await api.request<any>("GET", "/api/v1/readiness", undefined, false),
+			await api.request<any>("GET", "/api/v2/readiness", undefined, false),
 		).toMatchObject({ status: "ready", recovery_mode: false });
 		const migrated = (await fixtureProfiles(api)).find(
 			(profile) =>
@@ -188,7 +188,7 @@ export function registerProfileRecoveryTests(): void {
 		await api.login();
 
 		expect(
-			await api.request<any>("GET", "/api/v1/readiness", undefined, false),
+			await api.request<any>("GET", "/api/v2/readiness", undefined, false),
 		).toMatchObject({ status: "ready", recovery_mode: false });
 		const warnings = await fixtureProfileWarnings(api);
 		expect(

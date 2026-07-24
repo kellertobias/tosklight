@@ -11,26 +11,54 @@ async fn get_json(app: &Router, path: &str) -> (StatusCode, serde_json::Value) {
 }
 
 #[tokio::test]
-async fn runtime_v2_readiness_and_bootstrap_match_the_v1_compatibility_routes() {
+async fn runtime_v2_readiness_and_bootstrap_expose_the_current_contract() {
     let (state, data_dir) = test_state();
     let app = router(state);
 
-    let (v1_status, v1_readiness) = get_json(&app, "/api/v1/readiness").await;
-    let (v2_status, v2_readiness) = get_json(&app, "/api/v2/readiness").await;
-    assert_eq!(v1_status, StatusCode::OK);
-    assert_eq!(v2_status, StatusCode::OK);
-    assert_eq!(v2_readiness, v1_readiness);
+    let (status, readiness) = get_json(&app, "/api/v2/readiness").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(readiness["status"], "ready");
 
-    let (v1_status, mut v1_bootstrap) = get_json(&app, "/api/v1/bootstrap").await;
-    let (v2_status, mut v2_bootstrap) = get_json(&app, "/api/v2/bootstrap").await;
-    assert_eq!(v1_status, StatusCode::OK);
-    assert_eq!(v2_status, StatusCode::OK);
-    assert_eq!(v1_bootstrap["api_version"], "v1");
-    assert_eq!(v2_bootstrap["api_version"], "v2");
-    v1_bootstrap["api_version"] = serde_json::Value::Null;
-    v2_bootstrap["api_version"] = serde_json::Value::Null;
-    assert_eq!(v2_bootstrap, v1_bootstrap);
+    let (status, bootstrap) = get_json(&app, "/api/v2/bootstrap").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(bootstrap["api_version"], "v2");
+    assert!(
+        bootstrap["users"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|user| { user["name"] == "Operator" && user["enabled"] == true })
+    );
 
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn retired_v1_runtime_routes_are_not_registered() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    for request in [
+        Request::get("/api/v1/readiness")
+            .body(Body::empty())
+            .unwrap(),
+        Request::get("/api/v1/diagnostics")
+            .body(Body::empty())
+            .unwrap(),
+        Request::get("/api/v1/bootstrap")
+            .body(Body::empty())
+            .unwrap(),
+        Request::get("/api/v1/patch").body(Body::empty()).unwrap(),
+        Request::post("/api/v1/sessions")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(r#"{"username":"Operator"}"#))
+            .unwrap(),
+        Request::delete(format!("/api/v1/sessions/{}", Uuid::new_v4()))
+            .body(Body::empty())
+            .unwrap(),
+    ] {
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -73,16 +101,6 @@ async fn runtime_v2_session_tolerates_unknown_fields_and_can_close_itself() {
         .unwrap();
     assert_eq!(close.status(), StatusCode::NO_CONTENT);
 
-    let legacy = app
-        .oneshot(
-            Request::post("/api/v1/sessions")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(r#"{"username":"Operator"}"#))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(legacy.status(), StatusCode::OK);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -123,17 +141,7 @@ async fn runtime_v2_preserves_diagnostics_auth_and_recovery_reporting() {
     assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
 
     let (token, _) = login(&app, "Operator").await;
-    let v1 = app
-        .clone()
-        .oneshot(
-            Request::get("/api/v1/diagnostics")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let v2 = app
+    let diagnostics = app
         .clone()
         .oneshot(
             Request::get("/api/v2/diagnostics")
@@ -143,9 +151,8 @@ async fn runtime_v2_preserves_diagnostics_auth_and_recovery_reporting() {
         )
         .await
         .unwrap();
-    assert_eq!(v1.status(), StatusCode::OK);
-    assert_eq!(v2.status(), StatusCode::OK);
-    assert_eq!(json(v2).await, json(v1).await);
+    assert_eq!(diagnostics.status(), StatusCode::OK);
+    assert!(json(diagnostics).await["snapshot_revision"].is_number());
 
     let (_, readiness) = get_json(&app, "/api/v2/readiness").await;
     assert_eq!(readiness["recovery_mode"], true);

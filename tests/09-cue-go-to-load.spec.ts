@@ -89,7 +89,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       expect((await playbackState(api)).selected_playback).toBe(2);
 
       const sameDesk = new ApiDriver(api.baseUrl);
-      sameDesk.session = await sameDesk.request("POST", "/api/v1/sessions", { username: "Operator", desk_id: api.session!.desk.id }, false);
+      sameDesk.session = await sameDesk.request("POST", "/api/v2/sessions", { username: "Operator", desk_id: api.session!.desk.id }, false);
       expect((await playbackState(sameDesk)).selected_playback).toBe(2);
 
       await api.request("PUT", "/api/v1/master", { grand_master: 0.5, blackout: false });

@@ -9,7 +9,7 @@ test("WORKFLOW-COLOR-001 @supplemental-ui › Record red and Update amber remain
   const hardware = await bench.osc();
   await hardware.subscribe(`workflow-colors-${crypto.randomUUID()}`, api.session!.desk.osc_alias);
   try {
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(true);
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
     await assertWorkflowThemes(page);
   } finally {
     await hardware.close();

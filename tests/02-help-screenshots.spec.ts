@@ -65,7 +65,7 @@ test("captures help and README screenshots from the default show desk", async ({
   await api.request("POST", "/api/v1/highlight/action", { action: "all" });
 
   await captureWorkflowReference(page);
-  const patch = await api.request<any>("GET", "/api/v1/patch", undefined, false);
+  const patch = await api.patch();
   const selectedDmx = patch.fixtures.find((fixture: any) => fixture.universe === 1 && fixture.address != null)
     ?? patch.fixtures.find((fixture: any) => fixture.universe != null && fixture.address != null);
   if (!selectedDmx) throw new Error("The documentation show has no patched DMX channel");

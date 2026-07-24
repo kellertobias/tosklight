@@ -226,7 +226,7 @@ async function openApprovedRevisionCopy(
 	const copy = (
 		await api.request<RevisionBootstrap>(
 			"GET",
-			"/api/v1/bootstrap",
+			"/api/v2/bootstrap",
 			undefined,
 			false,
 		)
@@ -292,7 +292,7 @@ async function restartAndRenameRevisionCopy(
 				(
 					await api.request<RevisionBootstrap>(
 						"GET",
-						"/api/v1/bootstrap",
+						"/api/v2/bootstrap",
 						undefined,
 						false,
 					)
@@ -321,7 +321,7 @@ async function restartAndRenameRevisionCopy(
 				(
 					await api.request<RevisionBootstrap>(
 						"GET",
-						"/api/v1/bootstrap",
+						"/api/v2/bootstrap",
 						undefined,
 						false,
 					)
@@ -352,7 +352,7 @@ async function restartAndRenameRevisionCopy(
 				(
 					await api.request<RevisionBootstrap>(
 						"GET",
-						"/api/v1/bootstrap",
+						"/api/v2/bootstrap",
 						undefined,
 						false,
 					)
@@ -362,7 +362,7 @@ async function restartAndRenameRevisionCopy(
 	const renamedCopy = (
 		await api.request<RevisionBootstrap>(
 			"GET",
-			"/api/v1/bootstrap",
+			"/api/v2/bootstrap",
 			undefined,
 			false,
 		)
@@ -578,7 +578,7 @@ async function assertRevisionCopy(
 		(
 			await api.request<RevisionBootstrap>(
 				"GET",
-				"/api/v1/bootstrap",
+				"/api/v2/bootstrap",
 				undefined,
 				false,
 			)

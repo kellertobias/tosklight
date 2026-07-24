@@ -94,7 +94,7 @@ async function verifyRestartedVirtualZone(
 	await bench.startServer();
 	api.session = await api.request<Session>(
 		"POST",
-		"/api/v1/sessions",
+		"/api/v2/sessions",
 		{ username: "Operator", desk_id: firstDesk.id },
 		false,
 	);
@@ -199,7 +199,7 @@ async function verifySecondDeskPartitionIsolation(
 ) {
 	const second = await api.request<Session>(
 		"POST",
-		"/api/v1/sessions",
+		"/api/v2/sessions",
 		{ username: "Operator", client_id: crypto.randomUUID() },
 		false,
 	);

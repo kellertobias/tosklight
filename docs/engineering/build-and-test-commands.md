@@ -65,11 +65,11 @@ Open `http://127.0.0.1:5000`. A new desk contains one enabled `Operator` user.
 After `npm run open`:
 
 ```sh
-curl -fsS http://127.0.0.1:5000/api/v1/readiness
+curl -fsS http://127.0.0.1:5000/api/v2/readiness
 ```
 
 Check `.artifacts/runtime/light-data/light-server.log` first for app-owned startup problems. If
-readiness is healthy but the app looks stuck, time `/api/v1/readiness` and `/api/v1/bootstrap`
+readiness is healthy but the app looks stuck, time `/api/v2/readiness` and `/api/v2/bootstrap`
 separately.
 
 **If the app looks stale, verify which bundle the build script actually opened before reworking UI

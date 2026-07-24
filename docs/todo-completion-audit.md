@@ -41,8 +41,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 (cd apps/hardware-controls && npm run build)
 ./build manual
 ./build open
-curl -fsS http://127.0.0.1:5000/api/v1/readiness
-curl -fsS http://127.0.0.1:5000/api/v1/bootstrap
+curl -fsS http://127.0.0.1:5000/api/v2/readiness
+curl -fsS http://127.0.0.1:5000/api/v2/bootstrap
 git diff --check
 ```
 

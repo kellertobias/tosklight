@@ -191,7 +191,7 @@ async fn verify_copy_keeps_identity_and_source_reference(
     )
     .await;
     assert_eq!(copy[0]["body"]["marker"], "copy edit");
-    let bootstrap = get_show_json(app, token, "/api/v1/bootstrap".into()).await;
+    let bootstrap = get_show_json(app, token, "/api/v2/bootstrap".into()).await;
     assert_eq!(bootstrap["active_show"]["id"], copy_id);
     assert_eq!(bootstrap["active_show"]["revision_copy"]["show_id"], source_id);
 }

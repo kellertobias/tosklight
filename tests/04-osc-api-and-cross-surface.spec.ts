@@ -92,7 +92,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       const alias = session.desk.osc_alias;
       try {
         expect(await deskPage(api, session)).toBe(2);
-        expect((await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(true);
+        expect((await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
 
         const mark = hardware.mark();
         await bench.tick(0);
@@ -111,7 +111,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
         await new Promise((resolve) => setTimeout(resolve, 75));
         expect(hardware.messages.slice(quietMark)).toHaveLength(0);
         await hardware.send("/light/unsubscribe", [state.clientId]);
-        await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(false);
+        await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(false);
       } finally {
         await unsubscribeAndClose(hardware, state.clientId);
       }
@@ -175,11 +175,11 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
           .find((command) => command === "GROUP 2 + F3") ?? null).toBe("GROUP 2 + F3");
         await new Promise((resolve) => setTimeout(resolve, 50));
         expect(firstHardware.messages.slice(disconnectedMark)).toHaveLength(0);
-        expect((await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(true);
+        expect((await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
 
         await secondHardware.send("/light/unsubscribe", ["osc-003-b"]);
         await bench.tick(0);
-        await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(false);
+        await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(false);
       } finally {
         await unsubscribeAndClose(firstHardware, "osc-003-a");
         await unsubscribeAndClose(secondHardware, "osc-003-b");
@@ -590,9 +590,9 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await bench.tick(0);
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(a.messages.slice(disconnected)).toHaveLength(0);
-      expect((await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(true);
+      expect((await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
       await b.send("/light/unsubscribe", ["osc-003-b"]);
-      expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(false);
+      expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(false);
     } finally {
       await unsubscribeAndClose(a, "osc-003-a");
       await unsubscribeAndClose(b, "osc-003-b");
@@ -668,7 +668,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 
       await firstHardware.send("/light/unsubscribe", ["osc-005-first"]);
       await secondHardware.send("/light/unsubscribe", ["osc-005-second"]);
-      await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(false);
+      await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(false);
       await secondPage.getByLabel("Command line").fill("");
       await expect(secondPage.getByLabel("Command line")).toHaveValue("FIXTURE");
       await secondPage.getByRole("button", { name: "GRP", exact: true }).click();
@@ -841,7 +841,7 @@ function registerGroupOutputPair(id: string, percent: number, byte: number, titl
 }
 
 async function createSession(api: ApiDriver, clientId: string): Promise<Session> {
-  return api.request<Session>("POST", "/api/v1/sessions", { username: "Operator", client_id: clientId }, false);
+  return api.request<Session>("POST", "/api/v2/sessions", { username: "Operator", client_id: clientId }, false);
 }
 
 async function unsubscribeAndClose(hardware: OscHardware, clientId: string): Promise<void> {

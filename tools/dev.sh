@@ -60,7 +60,7 @@ start_background_server() {
   ( run_server "$reload" ) &
   SERVER_PID=$!
   for _ in {1..600}; do
-    curl -fsS http://127.0.0.1:5000/api/v1/readiness >/dev/null 2>&1 && return 0
+    curl -fsS http://127.0.0.1:5000/api/v2/readiness >/dev/null 2>&1 && return 0
     kill -0 "$SERVER_PID" 2>/dev/null || { echo "error: Light server exited during startup" >&2; exit 1; }
     sleep 0.1
   done

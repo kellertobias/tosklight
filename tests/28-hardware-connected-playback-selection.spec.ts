@@ -182,7 +182,7 @@ function playbackCard(page: Page, slot: number): Locator {
 async function connectHardware(api: ApiDriver, bench: any) {
   const hardware = await bench.osc();
   await hardware.subscribe(`playback-select-${crypto.randomUUID()}`, api.session!.desk.osc_alias);
-  await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(true);
+  await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
   return hardware;
 }
 

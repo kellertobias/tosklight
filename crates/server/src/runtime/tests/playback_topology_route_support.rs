@@ -135,7 +135,7 @@ pub(super) async fn login_on_desk(
     desk_boundary: Option<&str>,
 ) -> serde_json::Value {
     let mut request =
-        Request::post("/api/v1/sessions").header(header::CONTENT_TYPE, "application/json");
+        Request::post("/api/v2/sessions").header(header::CONTENT_TYPE, "application/json");
     if let Some(value) = desk_boundary {
         request = request.header("x-light-desk-token", value);
     }

@@ -5,7 +5,7 @@ async fn rest_session_show_and_revision_flow() {
     let response = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/sessions")
+            Request::post("/api/v2/sessions")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"username":"Operator"}"#))
                 .unwrap(),

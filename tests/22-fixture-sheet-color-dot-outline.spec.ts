@@ -20,7 +20,7 @@ test("FIXTURE-SHEET-001 @bench › resolved-color dots retain their fill and geo
   const clientId = `fixture-sheet-001-${crypto.randomUUID()}`;
   try {
     await hardware.subscribe(clientId, api.session!.desk.osc_alias);
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(true);
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
     await expect(page.locator(".control-section.hardware-connected")).toBeVisible();
     await page.setViewportSize({ width: 1280, height: 720 });
     await assertColorDots(page, "hardware-1280x720", testInfo);

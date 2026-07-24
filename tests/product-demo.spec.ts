@@ -171,9 +171,9 @@ test.skip("@ui narrates the complete Full HD product demo surface in one regress
       "Adding the remaining profiles, washes, blinders and haze while the patch visibly fills.",
       (generatedRig) => seedPlannedDemoProgramming(api, showId, generatedRig),
     );
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/patch", undefined, false)).fixtures.length).toBe(66);
+    await expect.poll(async () => (await api.patch()).fixtures.length).toBe(66);
     await expect(patchWindow.locator(".ui-window-info")).toContainText("66 fixtures");
-    const physicalCount = (await api.request<any>("GET", "/api/v1/patch", undefined, false)).fixtures
+    const physicalCount = (await api.patch()).fixtures
       .reduce((count: number, fixture: any) => count + 1 + (fixture.multipatch?.length ?? 0), 0);
     expect(physicalCount).toBe(114);
     const physicalInstances = (fixtureNumber: number) => {
@@ -228,7 +228,7 @@ test.skip("@ui narrates the complete Full HD product demo surface in one regress
     const saveDialog = page.getByRole("dialog", { name: "Save show" });
     await saveDialog.getByLabel("Show name").fill("Demo Show");
     await desk.click(saveDialog.getByRole("button", { name: "Name Empty Show", exact: true }));
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).active_show?.name).toBe("Demo Show");
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).active_show?.name).toBe("Demo Show");
 
     await desk.click(page.locator(".show-modal").getByRole("button", { name: "Enter Setup", exact: true }));
     await expect(stage).toHaveAttribute("data-beam-guides", "off");

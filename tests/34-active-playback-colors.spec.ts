@@ -27,7 +27,7 @@ test("PLAYBACK-COLOR-001 @supplemental-ui › runtime strengthens configured col
   const hardware = await bench.osc();
   await hardware.subscribe(`playback-colors-${crypto.randomUUID()}`, api.session!.desk.osc_alias);
   try {
-    await expect.poll(async () => (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected).toBe(true);
+    await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected).toBe(true);
     const hardwareCard = page.locator(`.hardware-playback-card[data-playback-slot="${slot}"]`);
     await expect(hardwareCard).toHaveClass(/playback-colored/);
     await expect(hardwareCard).toHaveClass(/running/);

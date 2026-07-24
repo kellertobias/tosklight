@@ -63,7 +63,7 @@ async fn file_input_stays_owned_until_session_close() {
 
     let disconnected = app
         .oneshot(
-            Request::delete(format!("/api/v1/sessions/{session_id}"))
+            Request::delete(format!("/api/v2/sessions/{session_id}"))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -140,7 +140,7 @@ async fn login_to_speed_group_desk(app: &Router, desk_id: Uuid) -> String {
     let response = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/sessions")
+            Request::post("/api/v2/sessions")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({"username":"Operator","desk_id":desk_id}).to_string(),

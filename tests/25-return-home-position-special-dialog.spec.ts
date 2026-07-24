@@ -17,7 +17,7 @@ pairedScenario<ReturnHomeState>({
   title: "Return Home applies per-head Position defaults as one programmer gesture",
   arrange: async ({ api, bench }, surface) => {
     const show = await loadCanonicalCopy(api, bench, `position-home-001-${surface}`, "default-stage");
-    const patch = await api.request<any>("GET", "/api/v1/patch", undefined, false);
+    const patch = await api.patch();
     const targets = patch.fixtures.flatMap((fixture: any) => {
       const logicalByIndex = new Map(
         fixture.logical_heads.map((head: any) => [head.head_index, head.fixture_id]),
@@ -84,7 +84,7 @@ pairedScenario<ReturnHomeState>({
     try {
       await hardware.subscribe(clientId, api.session!.desk.osc_alias);
       await expect.poll(async () =>
-        (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).hardware_connected,
+        (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).hardware_connected,
       ).toBe(true);
       await expect(page.locator(".control-section.hardware-connected")).toBeVisible();
       await page.getByRole("button", { name: "Special Dialog", exact: true }).click();

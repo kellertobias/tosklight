@@ -5,7 +5,7 @@ async fn malformed_show_upload_is_rejected_before_library_insert() {
     let login = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/sessions")
+            Request::post("/api/v2/sessions")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"username":"Operator"}"#))
                 .unwrap(),

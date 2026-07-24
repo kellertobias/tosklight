@@ -81,7 +81,7 @@ export async function pressCommand(page: Page, value: string, visibleValue?: str
 }
 
 export async function activeShowId(api: ApiDriver): Promise<string> {
-  const bootstrap = await api.request<{ active_show: { id: string } | null }>("GET", "/api/v1/bootstrap", undefined, false);
+  const bootstrap = await api.request<{ active_show: { id: string } | null }>("GET", "/api/v2/bootstrap", undefined, false);
   expect(bootstrap.active_show).toBeTruthy();
   return bootstrap.active_show!.id;
 }

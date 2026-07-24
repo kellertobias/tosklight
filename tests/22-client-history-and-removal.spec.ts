@@ -32,7 +32,7 @@ test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
     await expect(api.request("DELETE", `/api/v1/clients/${historical.desk.id}`)).rejects.toThrow(/409.*actively connected/);
     await expect(api.request("DELETE", `/api/v1/clients/${observer.desk.id}`)).rejects.toThrow(/409.*current client/);
 
-    await clientBApi.request("DELETE", `/api/v1/sessions/${sessionB.session_id}`);
+    await clientBApi.request("DELETE", `/api/v2/sessions/${sessionB.session_id}`);
     clients = await clientSummaries(api);
     historical = clients.find((client) => client.client_id === clientB)!;
     expect(historical.connected).toBe(false);
@@ -72,15 +72,15 @@ test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
     expect(clients.find((client) => client.client_id === clientB)?.connected).toBe(true);
     const reconnectedApi = new ApiDriver(bench.baseUrl);
     reconnectedApi.session = reconnected;
-    await reconnectedApi.request("DELETE", `/api/v1/sessions/${reconnected.session_id}`);
+    await reconnectedApi.request("DELETE", `/api/v2/sessions/${reconnected.session_id}`);
 
     const showBefore = await api.request<any>("GET", `/api/v1/shows/${show.id}/objects/group`, undefined, false);
-    const usersBefore = (await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).users;
+    const usersBefore = (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).users;
     await api.request("DELETE", `/api/v1/clients/${historicalDesk.id}`);
     clients = await clientSummaries(api);
     expect(clients.some((client) => client.client_id === clientB)).toBe(false);
     expect(clients.some((client) => client.client_id === api.session!.client_id)).toBe(true);
-    expect((await api.request<any>("GET", "/api/v1/bootstrap", undefined, false)).users).toEqual(usersBefore);
+    expect((await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).users).toEqual(usersBefore);
     expect(await api.request<any>("GET", `/api/v1/shows/${show.id}/objects/group`, undefined, false)).toEqual(showBefore);
 
     const fresh = await createSession(bench.baseUrl, clientB, historicalDesk.id);
@@ -94,7 +94,7 @@ test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
 });
 
 async function createSession(baseUrl: string, clientId: string, deskId: string | null = null): Promise<Session> {
-  const response = await fetch(`${baseUrl}/api/v1/sessions`, {
+  const response = await fetch(`${baseUrl}/api/v2/sessions`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ username: "Operator", client_id: clientId, desk_id: deskId }),
@@ -104,7 +104,7 @@ async function createSession(baseUrl: string, clientId: string, deskId: string |
 }
 
 async function clientSummaries(api: ApiDriver): Promise<ClientSummary[]> {
-  return (await api.request<{ clients: ClientSummary[] }>("GET", "/api/v1/bootstrap", undefined, false)).clients;
+  return (await api.request<{ clients: ClientSummary[] }>("GET", "/api/v2/bootstrap", undefined, false)).clients;
 }
 
 function escapeRegex(value: string): string {
