@@ -358,29 +358,53 @@ describe("LightApiClient show lifecycle contracts", () => {
 			.mockResolvedValueOnce(
 				new Response(
 					JSON.stringify({
-						show_id: "show-a",
-						revision: 1,
-						name: "Before experiment",
-						created_at: "2026-07-14T00:00:00Z",
-					}),
-					{ status: 201, headers: { "content-type": "application/json" } },
-				),
-			)
-			.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify({
-						id: "copy-a",
-						name: "Tour-rev-1-2026-07-17",
-						revision_copy: { show_id: "show-a", revision: 1 },
+						request_id: "save-revision",
+						replayed: false,
+						result: {
+							type: "revision",
+							revision: {
+								show_id: "show-a",
+								revision: 1,
+								name: "Before experiment",
+								created_at: "2026-07-14T00:00:00Z",
+							},
+						},
 					}),
 					{ status: 200, headers: { "content-type": "application/json" } },
 				),
 			)
 			.mockResolvedValueOnce(
-				new Response(JSON.stringify({ id: "show-a", name: "Tour" }), {
-					status: 200,
-					headers: { "content-type": "application/json" },
-				}),
+				new Response(
+					JSON.stringify({
+						request_id: "open-revision",
+						replayed: false,
+						result: {
+							type: "show",
+							show: {
+								id: "copy-a",
+								name: "Tour-rev-1-2026-07-17",
+								revision_copy: { show_id: "show-a", revision: 1 },
+							},
+						},
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						request_id: "overwrite",
+						replayed: false,
+						result: {
+							type: "show",
+							show: { id: "show-a", name: "Tour" },
+						},
+					}),
+					{
+						status: 200,
+						headers: { "content-type": "application/json" },
+					},
+				),
 			);
 		vi.stubGlobal("fetch", fetchMock);
 		const client = new LightApiClient("http://desk.local");
@@ -389,16 +413,23 @@ describe("LightApiClient show lifecycle contracts", () => {
 		await client.openShowRevision("show-a", 1);
 		await client.overwriteShow("copy-a", "show-a");
 		expect(fetchMock.mock.calls[1][0]).toBe(
-			"http://desk.local/api/v1/shows/show-a/revisions",
+			"http://desk.local/api/v2/shows",
 		);
-		expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
-			name: "Before experiment",
-		});
+		expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual(
+			expect.objectContaining({
+				request_id: expect.any(String),
+				action: {
+					type: "save_revision",
+					show_id: "show-a",
+					name: "Before experiment",
+				},
+			}),
+		);
 		expect(fetchMock.mock.calls[2][0]).toBe(
-			"http://desk.local/api/v1/shows/show-a/revisions/1/open",
+			"http://desk.local/api/v2/shows",
 		);
 		expect(fetchMock.mock.calls[3][0]).toBe(
-			"http://desk.local/api/v1/shows/copy-a/overwrite/show-a",
+			"http://desk.local/api/v2/shows",
 		);
 		expect(fetchMock.mock.calls[3][1].method).toBe("POST");
 	});
@@ -416,22 +447,39 @@ describe("LightApiClient show lifecycle contracts", () => {
 				),
 			)
 			.mockResolvedValueOnce(
-				new Response(JSON.stringify({ id: "show-a", name: "Opening Night" }), {
-					status: 200,
-					headers: { "content-type": "application/json" },
-				}),
+				new Response(
+					JSON.stringify({
+						request_id: "rename",
+						replayed: false,
+						result: {
+							type: "show",
+							show: { id: "show-a", name: "Opening Night" },
+						},
+					}),
+					{
+						status: 200,
+						headers: { "content-type": "application/json" },
+					},
+				),
 			);
 		vi.stubGlobal("fetch", fetchMock);
 		const client = new LightApiClient("http://desk.local");
 		await client.login("Operator");
 		await client.renameShow("show-a", "Opening Night");
 		expect(fetchMock.mock.calls[1][0]).toBe(
-			"http://desk.local/api/v1/shows/show-a/rename",
+			"http://desk.local/api/v2/shows",
 		);
-		expect(fetchMock.mock.calls[1][1].method).toBe("PUT");
-		expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
-			name: "Opening Night",
-		});
+		expect(fetchMock.mock.calls[1][1].method).toBe("POST");
+		expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual(
+			expect.objectContaining({
+				request_id: expect.any(String),
+				action: {
+					type: "rename",
+					show_id: "show-a",
+					name: "Opening Night",
+				},
+			}),
+		);
 	});
 });
 

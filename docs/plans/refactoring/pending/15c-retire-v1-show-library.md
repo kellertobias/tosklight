@@ -1,23 +1,24 @@
-# 15b — Migrate show-library callers and retire v1
+# 15c — Migrate remaining show-library callers and retire v1
 
 ## Context
 
-15a provides the typed, replay-safe v2 service while v1 coexists. This landing migrates all
-production, bench, test, tool, and desktop callers and then removes the v1 show-library routes.
+15a added the typed, replay-safe v2 service and 15b migrated the production UI client. Bench,
+root acceptance, desktop smoke, operational tools, and server route tests still use v1 lifecycle
+paths and must move before those routes can be removed.
 
 ## Work
 
-1. Migrate `features/showLifecycle`, Quick Setup, recovery, bench helpers, root tests,
-   desktop smoke, and operational scripts to the v2 show-library contracts.
+1. Migrate bench helpers, root tests, desktop smoke, server route tests, and operational scripts
+   from v1 show-library and MVR routes to the v2 snapshot/actions/blob contracts.
 2. Keep v1 show-object, preset-store, and preload-store routes for chunks 16 and later.
-3. Delete only the v1 show-library and MVR route families and add explicit 404 assertions.
+3. Delete only the v1 show-library and MVR registrations and add explicit 404 assertions.
 4. Run SHOW-005, malformed/legacy recovery, full E2E, desktop smoke, and the manual
    open/rename/overwrite/download/MVR-preview path.
 
 ## Definition of done
 
 - No caller or registration remains for the v1 show-library or MVR routes.
-- Show browser, recovery, overwrite, revisions, downloads, and MVR transfer use v2.
+- Show lifecycle and MVR acceptance coverage exercises v2.
 - Persisted compatibility and startup recovery remain unchanged.
 
 ## Verification
