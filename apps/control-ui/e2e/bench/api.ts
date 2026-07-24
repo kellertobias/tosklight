@@ -127,6 +127,39 @@ export class ApiDriver {
     return snapshot.shows;
   }
 
+  seedShowObject<T = unknown>(
+    showId: string,
+    kind: string,
+    objectId: string,
+    body: T,
+    expectedRevision = 0,
+  ): Promise<{ revision: number; event_sequence: number | null }> {
+    return this.request(
+      "POST",
+      `/api/v2/test/shows/${showId}/objects/${encodeURIComponent(kind)}/${encodeURIComponent(objectId)}`,
+      {
+        expected_revision: expectedRevision,
+        action: { type: "put", body },
+      },
+    );
+  }
+
+  deleteSeededShowObject(
+    showId: string,
+    kind: string,
+    objectId: string,
+    expectedRevision: number,
+  ): Promise<void> {
+    return this.request(
+      "POST",
+      `/api/v2/test/shows/${showId}/objects/${encodeURIComponent(kind)}/${encodeURIComponent(objectId)}`,
+      {
+        expected_revision: expectedRevision,
+        action: { type: "delete" },
+      },
+    );
+  }
+
   createShow<T = any>(input: { name: string; data_base64?: string | null; overwrite?: boolean }): Promise<T> {
     return this.showResult<T>({
       type: "create",

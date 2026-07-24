@@ -419,7 +419,7 @@ async function put(api: ApiDriver, showId: string, kind: string, id: string, bod
   let revision = 0;
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      await api.request("PUT", `/api/v1/shows/${showId}/objects/${kind}/${id}`, body, true, revision);
+      await api.seedShowObject(showId, kind, id, body, revision);
       return;
     } catch (error) {
       const current = error instanceof Error

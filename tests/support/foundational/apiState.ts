@@ -188,11 +188,11 @@ export async function putObject(
 		false,
 	);
 	expect(bootstrap.active_show).toBeTruthy();
-	await api.request(
-		"PUT",
-		`/api/v1/shows/${bootstrap.active_show!.id}/objects/${kind}/${id}`,
+	await api.seedShowObject(
+		bootstrap.active_show!.id,
+		kind,
+		id,
 		body,
-		true,
 		revision,
 	);
 }

@@ -394,7 +394,7 @@ async function objects<T>(api: ApiDriver, showId: string, kind: string): Promise
 }
 
 async function put(api: ApiDriver, showId: string, kind: string, id: string, body: unknown) {
-  await api.request("PUT", `/api/v1/shows/${showId}/objects/${kind}/${id}`, body, true, 0);
+  await api.seedShowObject(showId, kind, id, body);
 }
 
 async function selectFixtures(page: Page, desk: { command(value: string): Promise<void> }, command: string) {

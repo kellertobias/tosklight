@@ -31,3 +31,17 @@ npm run test:e2e
 ## Decisions
 
 Inherited from chunk 16. No open decisions.
+
+## Result
+
+- Added a test-bench-only v2 show-object fixture route whose put/delete actions reuse the
+  production compatibility implementation, including validation, activation, events, backups,
+  and optimistic revisions.
+- Kept the route behind the manual-clock test router and proved the production router returns
+  `404`.
+- Moved shared bench helpers and every root Playwright generic object PUT/DELETE caller to the
+  gated v2 route; retained v1 reads and the separately owned undo compatibility calls.
+- Verified Rust formatting/checks, TypeScript typechecking, architecture checks, all server and
+  unit tests, and all 86 API E2E scenarios. The full E2E run passed 284 scenarios with 11 skips
+  and one unrelated telemetry sampling timeout; that telemetry scenario passed immediately in
+  isolation.

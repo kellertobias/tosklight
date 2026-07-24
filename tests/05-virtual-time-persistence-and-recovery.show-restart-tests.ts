@@ -95,12 +95,11 @@ export function registerEmptyShowRestartTest(): void {
 		await api.openShow(provisional.id, {
 			transition: "hold_current",
 		});
-		await api.request(
-			"PUT",
-			`/api/v1/shows/${provisional.id}/objects/user_layout/empty-show-durability`,
+		await api.seedShowObject(
+			provisional.id,
+			"user_layout",
+			"empty-show-durability",
 			{ marker: "programmed before naming" },
-			true,
-			0,
 		);
 		const provisionalPath = provisional.path as string;
 		expect(

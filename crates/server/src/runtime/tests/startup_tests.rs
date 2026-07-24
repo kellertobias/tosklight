@@ -712,7 +712,9 @@ fn startup_show_object_backup_count(data_dir: &std::path::Path) -> usize {
 #[tokio::test]
 async fn production_router_does_not_expose_test_clock_controls() {
     let (state, data_dir) = test_state();
-    let response = router(state)
+    let app = router(state);
+    let response = app
+        .clone()
         .oneshot(
             Request::post("/api/v1/test/clock/advance")
                 .header(header::CONTENT_TYPE, "application/json")
@@ -722,5 +724,74 @@ async fn production_router_does_not_expose_test_clock_controls() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let response = app
+        .oneshot(
+            Request::post(
+                "/api/v2/test/shows/00000000-0000-4000-8000-000000000001/objects/group/1",
+            )
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"expected_revision":0,"action":{"type":"put","body":{}}}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn test_bench_router_seeds_show_objects_through_the_gated_v2_route() {
+    let clock = Arc::new(ManualClock::new(fixed_test_time()));
+    let (state, data_dir) = test_state_with_clock(clock);
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Test fixture seeding").await;
+    let show_id = show["id"].as_str().unwrap();
+
+    let response = app
+        .oneshot(
+            Request::post(format!(
+                "/api/v2/test/shows/{show_id}/objects/group/1"
+            ))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "expected_revision": 0,
+                    "action": {
+                        "type": "put",
+                        "body": {
+                            "id": "1",
+                            "name": "Seeded Group",
+                            "fixtures": []
+                        }
+                    }
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(json(response).await["revision"], 1);
+
+    let entry = state
+        .desk
+        .lock()
+        .show(light_core::ShowId(Uuid::parse_str(show_id).unwrap()))
+        .unwrap()
+        .unwrap();
+    let group = ShowStore::open(entry.path)
+        .unwrap()
+        .objects("group")
+        .unwrap()
+        .into_iter()
+        .find(|object| object.id == "1")
+        .unwrap();
+    assert_eq!(group.revision, 1);
+    assert_eq!(group.body["name"], "Seeded Group");
     let _ = std::fs::remove_dir_all(data_dir);
 }

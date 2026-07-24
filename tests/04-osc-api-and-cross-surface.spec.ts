@@ -869,22 +869,39 @@ async function subscribeIsolatedHardware(bench: any, state: OscIsolationState): 
 }
 
 async function assertRevisionConflict(api: ApiDriver, state: RevisionConflictState): Promise<void> {
-  const url = `${api.baseUrl}/api/v1/shows/${await activeShowId(api)}/objects/group/3`;
-  const unauthenticated = await fetch(url);
+  const url = `${api.baseUrl}/api/v2/test/shows/${await activeShowId(api)}/objects/group/3`;
+  const body = JSON.stringify({
+    expected_revision: state.originalRevision,
+    action: {
+      type: "put",
+      body: { ...state.originalBody, name: "stale name" },
+    },
+  });
+  const unauthenticated = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+  });
   expect(unauthenticated.status).toBe(401);
   expect(await unauthenticated.json()).toEqual({ error: "missing session token" });
-  const invalid = await fetch(url, { headers: { authorization: "Bearer invalid" } });
+  const invalid = await fetch(url, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer invalid",
+      "content-type": "application/json",
+    },
+    body,
+  });
   expect(invalid.status).toBe(401);
   expect(await invalid.json()).toEqual({ error: "invalid session token" });
 
   const stale = await fetch(url, {
-    method: "PUT",
+    method: "POST",
     headers: {
       authorization: `Bearer ${api.session!.token}`,
       "content-type": "application/json",
-      "if-match": String(state.originalRevision),
     },
-    body: JSON.stringify({ ...state.originalBody, name: "stale name" }),
+    body,
   });
   expect(stale.status).toBe(409);
   expect(await stale.json()).toMatchObject({ error: expect.stringContaining("revision conflict") });

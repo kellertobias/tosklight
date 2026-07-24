@@ -212,6 +212,10 @@ fn with_test_routes(router: Router<AppState>, enabled: bool) -> Router<AppState>
         .route("/api/v1/test/clock/reset", post(reset_test_clock))
         .route("/api/v1/test/clock/advance", post(advance_test_clock))
         .route("/api/v1/test/output/failure", post(set_test_output_failure))
+        .route(
+            "/api/v2/test/shows/{show_id}/objects/{kind}/{object_id}",
+            post(seed_test_show_object),
+        )
 }
 
 fn with_transport_layers(router: Router<AppState>, state: AppState) -> Router {

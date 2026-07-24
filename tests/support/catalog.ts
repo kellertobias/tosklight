@@ -48,10 +48,10 @@ export async function loadCanonicalCopy(api: ApiDriver, bench: any, name: string
   const routes = await api.request<Array<VersionedObject>>("GET", `/api/v1/shows/${copy.id}/objects/route`, undefined, false);
   for (const route of routes) {
     const protocol = route.body.protocol;
-    await api.request("PUT", `/api/v1/shows/${copy.id}/objects/route/${route.id}`, {
+    await api.seedShowObject(copy.id, "route", route.id, {
       ...route.body,
       destination: `127.0.0.1:${protocol === "art_net" ? bench.artnet.port : bench.sacn.port}`,
-    }, true, route.revision);
+    }, route.revision);
   }
   await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
   bench.artnet.reset();
@@ -100,12 +100,33 @@ export async function object<T = Record<string, any>>(api: ApiDriver, kind: stri
 
 export async function putObject(api: ApiDriver, kind: string, id: string, body: unknown, revision = 0): Promise<void> {
   const showId = await activeShowId(api);
-  await api.request("PUT", `/api/v1/shows/${showId}/objects/${kind}/${id}`, body, true, revision);
+  await seedShowObject(api, showId, kind, id, body, revision);
+}
+
+export async function seedShowObject(
+  api: ApiDriver,
+  showId: string,
+  kind: string,
+  id: string,
+  body: unknown,
+  revision = 0,
+): Promise<void> {
+  await api.seedShowObject(showId, kind, id, body, revision);
 }
 
 export async function deleteObject(api: ApiDriver, kind: string, id: string, revision: number): Promise<void> {
   const showId = await activeShowId(api);
-  await api.request("DELETE", `/api/v1/shows/${showId}/objects/${kind}/${id}`, undefined, true, revision);
+  await deleteSeededShowObject(api, showId, kind, id, revision);
+}
+
+export async function deleteSeededShowObject(
+  api: ApiDriver,
+  showId: string,
+  kind: string,
+  id: string,
+  revision: number,
+): Promise<void> {
+  await api.deleteSeededShowObject(showId, kind, id, revision);
 }
 
 export async function programmer(api: ApiDriver): Promise<ProgrammerState> {

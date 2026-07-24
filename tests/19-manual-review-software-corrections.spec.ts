@@ -180,7 +180,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
   test.skip("MANUAL-019 @ui › the dedicated Cues pane keeps the cue editor visible without a delete action", async ({ api, desk, page }) => {
     const bootstrap = await api.request<any>("GET", "/api/v2/bootstrap", undefined, false);
     const cueListId = crypto.randomUUID();
-    await api.request("PUT", `/api/v1/shows/${bootstrap.active_show.id}/objects/cue_list/${cueListId}`, {
+    await api.seedShowObject(bootstrap.active_show.id, "cue_list", cueListId, {
       id: cueListId,
       name: "Manual Review Cuelist",
       priority: 0,
@@ -200,7 +200,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
           phasers: [],
         },
       ],
-    }, true, 0);
+    });
 
     await desk.open(api.baseUrl);
     await desk.recordStep("CUE EDITOR", "The dedicated Cues pane keeps its right-side cue editor visible and deliberately offers no cue-deletion control.");
@@ -222,14 +222,14 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
   test.skip("MANUAL-019 @ui › Help stays two-column, DMX is a selected-channel monitor, and Stage Add Element opens a chooser", async ({ api, desk, page }) => {
     const bootstrap = await api.request<any>("GET", "/api/v2/bootstrap", undefined, false);
     const showId = bootstrap.active_show.id as string;
-    await api.request("PUT", `/api/v1/shows/${showId}/objects/route/manual-existing`, {
+    await api.seedShowObject(showId, "route", "manual-existing", {
       protocol: "art_net",
       logical_universe: 1,
       destination_universe: 101,
       destination: "127.0.0.1:6454",
       enabled: true,
       minimum_slots: 128,
-    }, true, 0);
+    });
     const desktop = await desk.enableControllableDesktop();
     await desk.open(api.baseUrl);
     await expect.poll(() => desktop.actions).toContainEqual({ type: "frontend_ready" });

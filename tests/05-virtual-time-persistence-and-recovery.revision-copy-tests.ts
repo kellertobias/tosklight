@@ -70,14 +70,14 @@ async function arrangeRevisionCopy(
 	const source = await loadCanonicalCopy(api, bench, `show-005-${surface}`);
 	const sourceEntry = await showEntry(api, source.id);
 	const named = await showObject(api, source.id, "group", "4");
-	await api.request(
-		"PUT",
-		`/api/v1/shows/${source.id}/objects/group/4`,
+	await api.seedShowObject(
+		source.id,
+		"group",
+		"4",
 		{
 			...named.body,
 			name: "Named revision state",
 		},
-		true,
 		named.revision,
 	);
 	const saved = await api.saveShowRevision<{ revision: number }>(
@@ -85,14 +85,14 @@ async function arrangeRevisionCopy(
 		"Approved focus",
 	);
 	const latest = await showObject(api, source.id, "group", "4");
-	await api.request(
-		"PUT",
-		`/api/v1/shows/${source.id}/objects/group/4`,
+	await api.seedShowObject(
+		source.id,
+		"group",
+		"4",
 		{
 			...latest.body,
 			name: "Newer autosave state",
 		},
-		true,
 		latest.revision,
 	);
 	const destination = await loadCanonicalCopy(
@@ -102,14 +102,14 @@ async function arrangeRevisionCopy(
 	);
 	const destinationEntry = await showEntry(api, destination.id);
 	const destinationGroup = await showObject(api, destination.id, "group", "4");
-	await api.request(
-		"PUT",
-		`/api/v1/shows/${destination.id}/objects/group/4`,
+	await api.seedShowObject(
+		destination.id,
+		"group",
+		"4",
 		{
 			...destinationGroup.body,
 			name: "destination-before-overwrite",
 		},
-		true,
 		destinationGroup.revision,
 	);
 	const destinationRevision = await api.saveShowRevision<{ revision: number }>(
@@ -163,14 +163,14 @@ async function exerciseRevisionCopyApi(
 	});
 
 	const copyGroup = await showObject(api, copy.id, "group", "4");
-	await api.request(
-		"PUT",
-		`/api/v1/shows/${copy.id}/objects/group/4`,
+	await api.seedShowObject(
+		copy.id,
+		"group",
+		"4",
 		{
 			...copyGroup.body,
 			name: "Copy-only edit",
 		},
-		true,
 		copyGroup.revision,
 	);
 	await api.saveShowRevision(copy.id, "Copy checkpoint");
@@ -248,14 +248,14 @@ async function openApprovedRevisionCopy(
 	);
 
 	const copyGroup = await showObject(api, copy.id, "group", "4");
-	await api.request(
-		"PUT",
-		`/api/v1/shows/${copy.id}/objects/group/4`,
+	await api.seedShowObject(
+		copy.id,
+		"group",
+		"4",
 		{
 			...copyGroup.body,
 			name: "Copy-only edit",
 		},
-		true,
 		copyGroup.revision,
 	);
 	await api.saveShowRevision(copy.id, "Copy checkpoint");

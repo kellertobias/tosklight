@@ -106,27 +106,27 @@ export class LightBench {
     for (const hardware of this.oscHardware) hardware.resetTrace();
     const show = await api.createShow<{ id: string }>({ name });
     const fixtureIds = Array.from({ length: 12 }, () => crypto.randomUUID());
-    await Promise.all(fixtureIds.map((fixtureId, index) => api.request("PUT", `/api/v1/shows/${show.id}/objects/patched_fixture/${fixtureId}`, dimmer(fixtureId, index + 1), true, 0)));
-    await api.request("PUT", `/api/v1/shows/${show.id}/objects/group/1`, {
+    await Promise.all(fixtureIds.map((fixtureId, index) => api.seedShowObject(show.id, "patched_fixture", fixtureId, dimmer(fixtureId, index + 1))));
+    await api.seedShowObject(show.id, "group", "1", {
       id: "1", name: "All Dimmers", fixtures: fixtureIds, derived_from: null, frozen_from: null,
       programming: {}, master: 1, playback_fader: 1,
-    }, true, 0);
-    await api.request("PUT", `/api/v1/shows/${show.id}/objects/group/2`, {
+    });
+    await api.seedShowObject(show.id, "group", "2", {
       id: "2", name: "Odd Dimmers", fixtures: fixtureIds.filter((_, index) => index % 2 === 0),
       derived_from: null, frozen_from: null, programming: {}, master: 1, playback_fader: 2,
-    }, true, 0);
-    await api.request("PUT", `/api/v1/shows/${show.id}/objects/group/3`, {
+    });
+    await api.seedShowObject(show.id, "group", "3", {
       id: "3", name: "Front Dimmers", fixtures: fixtureIds.slice(0, 4),
       derived_from: null, frozen_from: null, programming: {}, master: 1, playback_fader: 3,
-    }, true, 0);
-    await api.request("PUT", `/api/v1/shows/${show.id}/objects/route/artnet`, {
+    });
+    await api.seedShowObject(show.id, "route", "artnet", {
       protocol: "art_net", logical_universe: 1, destination_universe: 1,
       destination: `127.0.0.1:${this.artnet.port}`, enabled: true, minimum_slots: 512,
-    }, true, 0);
-    await api.request("PUT", `/api/v1/shows/${show.id}/objects/route/sacn`, {
+    });
+    await api.seedShowObject(show.id, "route", "sacn", {
       protocol: "sacn", logical_universe: 1, destination_universe: 101,
       destination: `127.0.0.1:${this.sacn.port}`, enabled: true, minimum_slots: 512,
-    }, true, 0);
+    });
     await api.openShow(show.id, { transition: "hold_current" });
     return { id: show.id, fixtureIds, session };
   }

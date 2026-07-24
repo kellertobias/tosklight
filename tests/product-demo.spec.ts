@@ -419,10 +419,10 @@ test.skip("@ui narrates the complete Full HD product demo surface in one regress
 async function downloadCompletedDemoShow(api: ApiDriver, showId: string): Promise<Buffer> {
   for (const route of await demoObjects<any>(api, showId, "route")) {
     const port = route.body.protocol === "sacn" ? 5568 : 6454;
-    await api.request("PUT", `/api/v1/shows/${showId}/objects/route/${route.id}`, {
+    await api.seedShowObject(showId, "route", route.id, {
       ...route.body,
       destination: `127.0.0.1:${port}`,
-    }, true, route.revision);
+    }, route.revision);
   }
   const response = await fetch(`${api.baseUrl}/api/v2/shows/${showId}/download`, {
     headers: { authorization: `Bearer ${api.session?.token}` },

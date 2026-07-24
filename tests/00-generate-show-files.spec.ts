@@ -461,7 +461,7 @@ async function groupBody(api: ApiDriver, showId: string, id: string): Promise<Re
 }
 
 async function put(api: ApiDriver, showId: string, kind: string, id: string, body: unknown, revision = 0): Promise<void> {
-  await api.request("PUT", `/api/v1/shows/${showId}/objects/${kind}/${id}`, body, true, revision);
+  await api.seedShowObject(showId, kind, id, body, revision);
 }
 
 async function updateGroup(api: ApiDriver, showId: string, id: string, update: Record<string, unknown>): Promise<void> {

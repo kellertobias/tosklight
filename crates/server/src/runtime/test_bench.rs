@@ -1,4 +1,5 @@
 use super::*;
+use crate::tolerant_json::TolerantJson;
 
 pub(super) fn fixed_test_time() -> chrono::DateTime<chrono::Utc> {
     chrono::DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z")
@@ -131,4 +132,58 @@ pub(super) async fn set_test_output_failure(
         .ok_or_else(|| ApiError::unavailable("network output is unavailable"))?
         .inject_failure(input.destination, input.enabled);
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub(super) struct TestShowObjectSeedRequest {
+    pub(super) expected_revision: u64,
+    pub(super) action: TestShowObjectSeedAction,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub(super) enum TestShowObjectSeedAction {
+    Put { body: serde_json::Value },
+    Delete,
+}
+
+/// Test-bench-only adapter for seeding portable object fixtures.
+///
+/// The route is registered only when `--test-bench` supplies a manual clock on a loopback
+/// server. It deliberately delegates to the same compatibility implementation until the final
+/// generic-route retirement chunk extracts that implementation into a private service.
+pub(super) async fn seed_test_show_object(
+    State(state): State<AppState>,
+    Path((show_id, kind, object_id)): Path<(Uuid, String, String)>,
+    mut headers: HeaderMap,
+    TolerantJson(request): TolerantJson<TestShowObjectSeedRequest>,
+) -> Result<Response, ApiError> {
+    headers.insert(
+        header::IF_MATCH,
+        request
+            .expected_revision
+            .to_string()
+            .parse()
+            .map_err(|error| {
+                ApiError::bad_request(format!("invalid expected revision: {error}"))
+            })?,
+    );
+    match request.action {
+        TestShowObjectSeedAction::Put { body } => {
+            put_object(
+                State(state),
+                Path((show_id, kind, object_id)),
+                headers,
+                Json(body),
+            )
+            .await
+        }
+        TestShowObjectSeedAction::Delete => {
+            Ok(
+                delete_object(State(state), Path((show_id, kind, object_id)), headers)
+                    .await?
+                    .into_response(),
+            )
+        }
+    }
 }
