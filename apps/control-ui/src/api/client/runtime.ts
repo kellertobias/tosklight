@@ -64,14 +64,14 @@ export class LightClientRuntime {
 	}
 
 	bootstrap(): Promise<BootstrapSnapshot> {
-		return this.request("/api/v1/bootstrap", {}, false);
+		return this.request("/api/v2/bootstrap", {}, false);
 	}
 
 	async login(username: string): Promise<SessionResponse> {
 		const storage = browserStorage();
 		const clientId = this.clientId(storage);
 		const session = await this.request<SessionResponse>(
-			"/api/v1/sessions",
+			"/api/v2/sessions",
 			this.sessionRequest(username, clientId, storage),
 			false,
 		);
@@ -201,7 +201,7 @@ export class LightClientRuntime {
 	}
 
 	private deleteSession(session: SessionResponse): Promise<Response> {
-		return fetch(`${this.baseUrl}/api/v1/sessions/${session.session_id}`, {
+		return fetch(`${this.baseUrl}/api/v2/sessions/${session.session_id}`, {
 			method: "DELETE",
 			keepalive: true,
 			headers: this.boundaryHeaders(

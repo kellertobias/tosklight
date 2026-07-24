@@ -249,7 +249,7 @@ export class LightBench {
     while (Date.now() < deadline) {
       if (this.process?.exitCode !== null) throw new Error(`light-server exited during startup:\n${this.recentLog()}`);
       try {
-        const response = await fetch(`${this.baseUrl}/api/v1/readiness`);
+        const response = await fetch(`${this.baseUrl}/api/v2/readiness`);
         if (response.ok) return;
       } catch { /* startup */ }
       await new Promise<void>((resolve) => setTimeout(resolve, 25));

@@ -91,7 +91,7 @@ describe("LightApiClient server selection and sessions", () => {
 		await client.screens();
 
 		expect(fetchMock.mock.calls[0][0]).toBe(
-			"http://desk.local/api/v1/sessions",
+			"http://desk.local/api/v2/sessions",
 		);
 		expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(
 			expect.objectContaining({
@@ -103,6 +103,68 @@ describe("LightApiClient server selection and sessions", () => {
 		expect(authenticatedHeaders.get("authorization")).toBe(
 			"Bearer secret-token",
 		);
+	});
+
+	it("uses v2 bootstrap, Patch, and session-close runtime contracts", async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify({ api_version: "v2" }), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						session_id: "session-a",
+						client_id: "client-a",
+						token: "token-a",
+						user: { id: "user-a", name: "Operator", enabled: true },
+						desk: { id: "desk-a" },
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						show_id: "00000000-0000-4000-8000-000000000001",
+						show_revision: 4,
+						patch_revision: 3,
+						cursor: { sequence: 9 },
+						fixtures: [],
+						profile_revisions: [],
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
+			)
+			.mockResolvedValueOnce(new Response(null, { status: 204 }));
+		vi.stubGlobal("fetch", fetchMock);
+		const client = new LightApiClient("http://desk.local");
+
+		await expect(client.bootstrap()).resolves.toMatchObject({
+			api_version: "v2",
+		});
+		await client.login("Operator");
+		await expect(client.patch()).resolves.toEqual({
+			showId: "00000000-0000-4000-8000-000000000001",
+			showRevision: 4,
+			patchRevision: 3,
+			cursor: 9,
+			fixtures: [],
+			profileRevisions: [],
+		});
+		await client.closeSession();
+
+		expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+			"http://desk.local/api/v2/bootstrap",
+			"http://desk.local/api/v2/sessions",
+			"http://desk.local/api/v2/patch",
+			"http://desk.local/api/v2/sessions/session-a",
+		]);
+		const patchHeaders = fetchMock.mock.calls[2][1].headers as Headers;
+		expect(patchHeaders.get("authorization")).toBe("Bearer token-a");
 	});
 
 	it("uses revision headers for portable show objects", async () => {

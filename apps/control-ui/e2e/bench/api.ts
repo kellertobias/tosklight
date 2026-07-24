@@ -115,7 +115,7 @@ export class ApiDriver {
   constructor(readonly baseUrl: string) {}
 
   async login(username = "Operator", deskId: string | null = this.session?.desk.id ?? null): Promise<Session> {
-    this.session = await this.request<Session>("POST", "/api/v1/sessions", { username, desk_id: deskId }, false);
+    this.session = await this.request<Session>("POST", "/api/v2/sessions", { username, desk_id: deskId }, false);
     return this.session;
   }
 

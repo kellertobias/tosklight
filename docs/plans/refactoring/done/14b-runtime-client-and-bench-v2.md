@@ -37,3 +37,23 @@ Manual: `npm run open`; verify readiness and a populated Patch view.
 ## Decisions
 
 Inherited from Chunk 14. No open decisions.
+
+## Result
+
+- Moved the production browser runtime to v2 bootstrap, session-create, and session-close routes.
+- Replaced the fixture compatibility read with the existing authenticated v2 Patch snapshot and
+  its typed decoder.
+- Moved shared bench readiness/login and operator-output lifecycle helpers to v2.
+- Added client contract coverage for v2 bootstrap, authentication, decoded Patch, and close.
+
+Verification passed:
+
+```sh
+npm run test:unit
+npm run test:e2e-api
+npm run test:e2e -- tests/00-generate-show-files.spec.ts
+npm run open
+```
+
+The opened desktop runtime reported a v2 bootstrap for the active Demo Show and an authenticated
+Patch snapshot containing 66 fixtures and 14 referenced profiles.

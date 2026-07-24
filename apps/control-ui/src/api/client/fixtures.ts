@@ -1,16 +1,19 @@
 import type {
 	FixtureDefinition,
 	FixtureProfile,
-	PatchSnapshot,
 } from "../types";
+import type { PatchSnapshot } from "../../features/patch/contracts";
+import { decodePatchSnapshot } from "../patchWire";
 import type { ClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
 
 export class FixtureApiClient {
 	constructor(private readonly transport: ClientTransport) {}
 
-	patch(): Promise<PatchSnapshot> {
-		return this.transport.request("/api/v1/patch", {}, false);
+	async patch(): Promise<PatchSnapshot> {
+		return decodePatchSnapshot(
+			await this.transport.request<unknown>("/api/v2/patch"),
+		);
 	}
 
 	fixtureLibrary(): Promise<FixtureDefinition[]> {
