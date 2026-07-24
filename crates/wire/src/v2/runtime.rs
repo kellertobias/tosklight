@@ -55,7 +55,7 @@ pub struct RuntimeSessionResponse {
     pub desk: RuntimeControlDesk,
 }
 
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeRevisionCopySource {
     pub show_id: Uuid,
     pub show_name: String,
@@ -65,7 +65,7 @@ pub struct RuntimeRevisionCopySource {
     pub copied_at: String,
 }
 
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeShowEntry {
     pub id: Uuid,
     pub name: String,

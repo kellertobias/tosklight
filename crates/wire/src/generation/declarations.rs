@@ -22,6 +22,7 @@ use crate::v2::programming::*;
 use crate::v2::programming_update::*;
 use crate::v2::runtime::*;
 use crate::v2::selective_import::*;
+use crate::v2::show_library::*;
 use crate::v2::speed_group::*;
 use crate::v2::stage_layout::*;
 use crate::v2::virtual_playback_zones::*;
@@ -42,8 +43,29 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(runtime(config));
     declarations.extend(virtual_playback_zones(config));
     declarations.extend(selective_import(config));
+    declarations.extend(show_library(config));
     declarations.extend(interaction(config));
     declarations
+}
+
+fn show_library(config: &Config) -> Vec<String> {
+    vec![
+        ShowLibrarySnapshot::decl(config),
+        ShowLibraryEntry::decl(config),
+        ShowLibraryRevision::decl(config),
+        ShowLibraryActionRequest::decl(config),
+        ShowLibraryAction::decl(config),
+        ShowOpenTransition::decl(config),
+        MvrImportDestination::decl(config),
+        MvrImportResolution::decl(config),
+        MvrImportResolutionAction::decl(config),
+        ShowLibraryActionOutcome::decl(config),
+        ShowLibraryActionResult::decl(config),
+        MvrApplyOutcome::decl(config),
+        MvrImportPreview::decl(config),
+        MvrPreviewFixture::decl(config),
+        MvrExportPreview::decl(config),
+    ]
 }
 
 fn runtime(config: &Config) -> Vec<String> {

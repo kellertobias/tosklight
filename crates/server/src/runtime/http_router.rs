@@ -128,6 +128,7 @@ fn session_routes() -> Router<AppState> {
 
 fn show_routes() -> Router<AppState> {
     Router::new()
+        .merge(show_library_v2::router())
         .route("/api/v1/shows", get(list_shows).post(upload_show))
         .route("/api/v1/shows/default/open", post(open_clean_default_show))
         .route("/api/v1/shows/rollback", post(rollback_show))

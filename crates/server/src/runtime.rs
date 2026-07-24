@@ -165,6 +165,7 @@ mod show_compile;
 mod show_compile_migrations;
 mod show_library;
 mod show_library_mutations;
+mod show_library_v2;
 mod show_mutation_backup;
 mod show_open;
 mod show_patch_adapter;

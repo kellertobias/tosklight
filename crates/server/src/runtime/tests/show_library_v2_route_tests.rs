@@ -1,0 +1,152 @@
+use super::*;
+
+async fn post_action(
+    app: &Router,
+    token: &str,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/shows")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    (status, json(response).await)
+}
+
+#[tokio::test]
+async fn show_library_v2_is_typed_tolerant_and_replay_safe() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let create = serde_json::json!({
+        "request_id": "create-tour",
+        "action": {
+            "type": "create",
+            "name": "Tour",
+            "data_base64": null,
+            "overwrite": false,
+            "future_create_hint": true
+        },
+        "future_root_hint": true
+    });
+
+    let (status, first) = post_action(&app, &token, create.clone()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(first["replayed"], false);
+    assert_eq!(first["result"]["type"], "show");
+    assert_eq!(first["result"]["show"]["name"], "Tour");
+    let show_id = first["result"]["show"]["id"].as_str().unwrap();
+
+    let (status, replay) = post_action(&app, &token, create).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(replay["replayed"], true);
+    assert_eq!(replay["result"]["show"]["id"], show_id);
+
+    let (status, conflict) = post_action(
+        &app,
+        &token,
+        serde_json::json!({
+            "request_id": "create-tour",
+            "action": {
+                "type": "create",
+                "name": "Different",
+                "data_base64": null,
+                "overwrite": false
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert!(conflict["error"].as_str().unwrap().contains("request_id"));
+
+    let snapshot = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/shows")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(snapshot.status(), StatusCode::OK);
+    let snapshot = json(snapshot).await;
+    assert_eq!(
+        snapshot["shows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry["id"] == show_id)
+            .count(),
+        1
+    );
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn show_library_v2_revision_retry_does_not_create_a_second_revision() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let (_, created) = post_action(
+        &app,
+        &token,
+        serde_json::json!({
+            "request_id": "create-revision-source",
+            "action": {
+                "type": "create",
+                "name": "Revision Source",
+                "data_base64": null,
+                "overwrite": false
+            }
+        }),
+    )
+    .await;
+    let show_id = created["result"]["show"]["id"].as_str().unwrap();
+    let save = serde_json::json!({
+        "request_id": "save-revision-once",
+        "action": {
+            "type": "save_revision",
+            "show_id": show_id,
+            "name": "Before experiment"
+        }
+    });
+
+    let (status, first) = post_action(&app, &token, save.clone()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(first["result"]["revision"]["revision"], 1);
+    assert_eq!(first["replayed"], false);
+    let (status, replay) = post_action(&app, &token, save).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(replay["result"]["revision"]["revision"], 1);
+    assert_eq!(replay["replayed"], true);
+
+    let snapshot = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/shows")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let snapshot = json(snapshot).await;
+    let show = snapshot["shows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["id"] == show_id)
+        .unwrap();
+    assert_eq!(show["revisions"].as_array().unwrap().len(), 1);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}

@@ -49,6 +49,8 @@ pub(super) struct AppState {
     pub(super) active_show_service: ActiveShowService,
     pub(super) playback_topology: PlaybackTopologyService,
     pub(super) show_patch: ShowPatchService,
+    pub(super) show_library_replay:
+        Arc<tokio::sync::Mutex<show_library_v2::ShowLibraryReplayCache>>,
     pub(super) stage_layout_replay: Arc<Mutex<stage_layout_http::StageLayoutReplayCache>>,
     pub(super) virtual_playback_zones_replay:
         Arc<Mutex<virtual_playback_zones_http::VirtualPlaybackZonesReplayCache>>,

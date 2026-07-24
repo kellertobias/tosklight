@@ -842,6 +842,36 @@ export type SelectiveImportOutcome = { request_id: string, correlation_id: strin
 
 export type SelectiveImportErrorResponse = { error: string, current_revision?: number | null, retryable: boolean, };
 
+export type ShowLibrarySnapshot = { shows: Array<ShowLibraryEntry>, };
+
+export type ShowLibraryEntry = { revisions: Array<ShowLibraryRevision>, id: string, name: string, path: string, revision: number, updated_at: string, revision_copy: RuntimeRevisionCopySource | null, };
+
+export type ShowLibraryRevision = { show_id: string, revision: number, name: string, created_at: string, };
+
+export type ShowLibraryActionRequest = { request_id: string, action: ShowLibraryAction, };
+
+export type ShowLibraryAction = { "type": "create", name: string, data_base64: string | null, overwrite: boolean, } | { "type": "open", show_id: string, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "open_default", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rollback", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rename", show_id: string, name: string, } | { "type": "overwrite", source_show_id: string, destination_show_id: string, } | { "type": "save_revision", show_id: string, name: string, } | { "type": "open_revision", show_id: string, revision: number, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "apply_mvr", token: string, destination: MvrImportDestination, resolutions: Array<MvrImportResolution>, };
+
+export type ShowOpenTransition = "hold_current" | "timed_fade" | "safe_blackout";
+
+export type MvrImportDestination = { "type": "new_show", name: string, open_after_import: boolean, } | { "type": "existing_show", show_id: string, };
+
+export type MvrImportResolution = { fixture_id: string, action: MvrImportResolutionAction, };
+
+export type MvrImportResolutionAction = { "type": "import" } | { "type": "skip" } | { "type": "import_unpatched" } | { "type": "replace" } | { "type": "address", universe: number, address: number, };
+
+export type ShowLibraryActionOutcome = { request_id: string, replayed: boolean, result: ShowLibraryActionResult, };
+
+export type ShowLibraryActionResult = { "type": "show", show: RuntimeShowEntry, } | { "type": "revision", revision: ShowLibraryRevision, } | { "type": "mvr_apply", result: MvrApplyOutcome, };
+
+export type MvrApplyOutcome = { show: RuntimeShowEntry, imported_fixtures: number, unresolved_fixtures: number, imported_scenery: number, opened: boolean, warnings: Array<string>, };
+
+export type MvrImportPreview = { token: string, fixtures: Array<MvrPreviewFixture>, scenery: number, missing_profiles: Array<string>, warnings: Array<string>, address_conflicts: Array<string>, };
+
+export type MvrPreviewFixture = { uuid: string, name: string, gdtf_spec: string, gdtf_mode: string, universe: number | null, address: number | null, matched: boolean, };
+
+export type MvrExportPreview = { fixtures: number, scenery: number, embedded_profiles: number, missing_profiles: Array<string>, omitted: Array<string>, warnings: Array<string>, };
+
 export type ProgrammerSelectionRule = { "type": "all" } | { "type": "odd" } | { "type": "even" } | { "type": "every_nth", n: number, offset: number, };
 
 export type ProgrammerSelectionReference = { "type": "fixture", fixture_id: string, } | { "type": "live_group", group_id: string, } | { "type": "remove_fixture", fixture_id: string, } | { "type": "remove_live_group", group_id: string, };

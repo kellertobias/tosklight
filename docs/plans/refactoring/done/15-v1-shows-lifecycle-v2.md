@@ -48,3 +48,10 @@ Manual: `npm run open` → open, rename, overwrite, download a show; import an M
 ## Decisions
 
 None beyond route naming (follow api-rules; propose in-PR).
+
+## Result
+
+- Split into 15a (typed, replay-safe v2 show-library service with v1 coexistence) and
+  15b (caller migration, v1 retirement, full acceptance/manual verification).
+- The split isolates the new persistence-sensitive server boundary from the broad caller
+  migration so each landing remains independently reversible.
