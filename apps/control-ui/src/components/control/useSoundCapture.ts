@@ -38,52 +38,28 @@ interface SoundCaptureOptions {
 	refreshInputs: () => Promise<void>;
 }
 
+type AnalyzerMap = Map<
+	SpeedGroupId,
+	{ deviceId: string; analyzer: SoundToLightAudioAnalyzer }
+>;
+
 export function shouldPublishSoundObservation(
 	state: SpeedGroupSoundState | undefined,
 ) {
 	return state?.configuration.enabled === true;
 }
 
-export function useSoundCapture({
-	enabled,
-	states,
-	previews,
-	deviceIds,
-	mounted,
-	acceptState,
-	setError,
-	setPermission,
-	refreshInputs,
-}: SoundCaptureOptions) {
+function useSoundObservationPublisher(
+	options: Pick<SoundCaptureOptions, "acceptState" | "mounted" | "setError">,
+) {
+	const { acceptState, mounted, setError } = options;
 	const soundActions = useSoundToLightActions();
 	const serverRef = useRef(soundActions);
 	serverRef.current = soundActions;
-	const statesRef = useRef(states);
-	statesRef.current = states;
-	const [captures, setCaptures] = useState<SoundGroupMap<SoundCaptureStatus>>(
-		{},
-	);
-	const analyzers = useRef(
-		new Map<
-			SpeedGroupId,
-			{ deviceId: string; analyzer: SoundToLightAudioAnalyzer }
-		>(),
-	);
 	const latestObservations = useRef<SoundGroupMap<SoundObservation>>({});
 	const posting = useRef(new Set<SpeedGroupId>());
 	const retryAfter = useRef<SoundGroupMap<number>>({});
-
-	useEffect(
-		() => () => {
-			analyzers.current.forEach(({ analyzer }) => {
-				analyzer.stop();
-			});
-			analyzers.current.clear();
-		},
-		[],
-	);
-
-	const postObservation = useCallback(
+	return useCallback(
 		(group: SpeedGroupId, observation: SoundObservation) => {
 			latestObservations.current[group] = observation;
 			if (
@@ -118,14 +94,37 @@ export function useSoundCapture({
 		},
 		[acceptState, mounted, setError],
 	);
+}
 
+function stopAnalyzers(analyzers: AnalyzerMap) {
+	analyzers.forEach(({ analyzer }) => {
+		analyzer.stop();
+	});
+	analyzers.clear();
+}
+
+function useAnalyzerCaptures(
+	options: Omit<SoundCaptureOptions, "acceptState" | "setError">,
+	postObservation: (group: SpeedGroupId, value: SoundObservation) => void,
+) {
+	const {
+		deviceIds,
+		enabled,
+		mounted,
+		previews,
+		refreshInputs,
+		setPermission,
+		states,
+	} = options;
+	const statesRef = useRef(states);
+	statesRef.current = states;
+	const [captures, setCaptures] = useState<SoundGroupMap<SoundCaptureStatus>>(
+		{},
+	);
+	const analyzers = useRef<AnalyzerMap>(new Map());
 	useEffect(() => {
 		if (!enabled) {
-			analyzers.current.forEach(({ analyzer }) => {
-				analyzer.stop();
-			});
-			analyzers.current.clear();
-			latestObservations.current = {};
+			stopAnalyzers(analyzers.current);
 			setCaptures((current) =>
 				Object.keys(current).length === 0 ? current : {},
 			);
@@ -164,25 +163,30 @@ export function useSoundCapture({
 		setPermission,
 		states,
 	]);
-
+	useEffect(() => () => stopAnalyzers(analyzers.current), []);
 	return captures;
+}
+
+export function useSoundCapture(options: SoundCaptureOptions) {
+	const postObservation = useSoundObservationPublisher(options);
+	return useAnalyzerCaptures(options, postObservation);
 }
 
 interface GroupCaptureContext {
 	saved: SoundToLightConfig | undefined;
 	preview: SoundToLightConfig | undefined;
 	deviceId: string;
-	analyzers: Map<
-		SpeedGroupId,
-		{ deviceId: string; analyzer: SoundToLightAudioAnalyzer }
-	>;
+	analyzers: AnalyzerMap;
 	setCaptures: Dispatch<SetStateAction<SoundGroupMap<SoundCaptureStatus>>>;
 	observe: (observation: SoundObservation) => void;
 	status: (status: SoundCaptureStatus) => void;
 }
 
 /// Starts, retunes, or stops one Speed Group's audio analyzer to match its configuration.
-function reconcileGroupCapture(group: SpeedGroupId, context: GroupCaptureContext) {
+function reconcileGroupCapture(
+	group: SpeedGroupId,
+	context: GroupCaptureContext,
+) {
 	const { saved, preview, deviceId, analyzers, setCaptures } = context;
 	const configuration = preview ?? saved;
 	const shouldCapture = Boolean(
