@@ -106,11 +106,11 @@ fn highlight_scenario() -> HighlightScenario {
                 name: "Master".into(),
                 fixtures: vec![physical],
                 master: 0.5,
-                playback_fader: Some(1),
+                playback_fader: Some(2),
                 ..Default::default()
             }],
             cue_lists: vec![cue_list.clone()],
-            playbacks: vec![test_playback(1, cue_list.id)],
+            playbacks: vec![test_playback(1, cue_list.id), test_group_playback(2, "1")],
             revision: 1,
             ..Default::default()
         })

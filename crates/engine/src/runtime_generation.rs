@@ -1,7 +1,7 @@
 use crate::{EngineSnapshot, ProfileEncodingIndex, ProfileProjectionIndex, profile_head_owner};
 use light_core::{AttributeKey, FixtureId};
 use light_output::OutputRoute;
-use light_playback::PlaybackEngine;
+use light_playback::{PlaybackDefinition, PlaybackEngine, PlaybackTarget};
 use light_programmer::{GroupDefinition, resolve_group};
 use parking_lot::RwLock;
 use std::{
@@ -42,7 +42,7 @@ impl RuntimeGeneration {
     ) -> Self {
         let routes = Arc::from(snapshot.routes.clone());
         let snap_attributes = compile_snap_attributes(&snapshot);
-        let group_masters = GroupMasterIndex::compile(&groups);
+        let group_masters = GroupMasterIndex::compile(&groups, &snapshot.playbacks);
         Self {
             snapshot: Arc::new(snapshot),
             playback: Arc::new(RwLock::new(playback)),
@@ -79,7 +79,7 @@ impl RuntimeGeneration {
             .get_mut(group_id)
             .expect("runtime groups and snapshot groups must stay aligned")
             .master = value;
-        let group_masters = GroupMasterIndex::compile(&groups);
+        let group_masters = GroupMasterIndex::compile(&groups, &current.snapshot.playbacks);
         (
             Arc::new(Self {
                 snapshot: Arc::new(snapshot),
@@ -156,10 +156,20 @@ struct GroupMasterBinding {
 }
 
 impl GroupMasterIndex {
-    fn compile(groups: &HashMap<String, GroupDefinition>) -> Self {
+    fn compile(
+        groups: &HashMap<String, GroupDefinition>,
+        playbacks: &[PlaybackDefinition],
+    ) -> Self {
+        let assigned_groups = playbacks
+            .iter()
+            .filter_map(|playback| match &playback.target {
+                PlaybackTarget::Group { group_id } => Some(group_id.as_str()),
+                _ => None,
+            })
+            .collect::<HashSet<_>>();
         let mut definitions = groups
             .values()
-            .filter(|group| group.playback_fader.is_some())
+            .filter(|group| assigned_groups.contains(group.id.as_str()))
             .collect::<Vec<_>>();
         definitions.sort_by(|left, right| left.id.cmp(&right.id));
         let mut index = Self::default();

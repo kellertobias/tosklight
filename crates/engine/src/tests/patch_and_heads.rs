@@ -149,6 +149,7 @@ fn master_only_group_fader_does_not_scale_child_heads() {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture],
+            playbacks: vec![test_group_playback(1, "master")],
             groups: vec![GroupDefinition {
                 id: "master".into(),
                 name: "Master only".into(),

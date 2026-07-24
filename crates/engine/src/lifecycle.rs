@@ -102,9 +102,10 @@ impl Engine {
         preserve_playback: bool,
     ) {
         let PreparedEngineSnapshot {
-            snapshot,
+            mut snapshot,
             mut runtime,
         } = prepared;
+        self.preserve_group_master_state(&mut snapshot, &mut runtime.groups, preserve_playback);
         self.preserve_playback_state(&snapshot, &mut runtime.playback, preserve_playback);
         self.programmers.refresh_live_selections(&runtime.groups);
         self.generation.store(Arc::new(RuntimeGeneration::new(
@@ -114,6 +115,27 @@ impl Engine {
             runtime.profile_encodings,
             runtime.profile_projections,
         )));
+    }
+
+    fn preserve_group_master_state(
+        &self,
+        snapshot: &mut EngineSnapshot,
+        groups: &mut HashMap<String, GroupDefinition>,
+        preserve: bool,
+    ) {
+        if !preserve {
+            return;
+        }
+        let generation = self.generation.load();
+        for group in &mut snapshot.groups {
+            let Some(current) = generation.groups().get(&group.id) else {
+                continue;
+            };
+            group.master = current.master;
+            if let Some(runtime) = groups.get_mut(&group.id) {
+                runtime.master = current.master;
+            }
+        }
     }
 
     fn preserve_playback_state(

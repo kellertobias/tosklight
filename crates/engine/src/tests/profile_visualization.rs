@@ -70,6 +70,7 @@ fn calibrated_visual_engine() -> (Engine, FixtureId) {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture],
+            playbacks: vec![test_group_playback(1, "front")],
             groups: vec![GroupDefinition {
                 id: "front".into(),
                 name: "Front".into(),

@@ -303,7 +303,11 @@ fn schema_v2_master_reactions_use_only_the_winning_sources_and_scale_once() {
             AttributeValue::Normalized(1.0),
         )],
     );
-    let playbacks = vec![test_playback(1, main.id), test_playback(2, unrelated.id)];
+    let playbacks = vec![
+        test_playback(1, main.id),
+        test_playback(2, unrelated.id),
+        test_group_playback(3, "front"),
+    ];
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {
@@ -315,7 +319,7 @@ fn schema_v2_master_reactions_use_only_the_winning_sources_and_scale_once() {
                 name: "Front".into(),
                 fixtures: vec![fixture_id],
                 master: 0.5,
-                playback_fader: Some(1),
+                playback_fader: Some(3),
                 ..Default::default()
             }],
             revision: 1,

@@ -31,6 +31,7 @@ import {
 	registerPbk006PairedScenario,
 	registerPbk006UiScenario,
 } from "./playbackConfiguration/pbk006";
+import { registerPbk006GroupMasterHtpScenario } from "./playbackConfiguration/pbk006GroupMasterHtp";
 
 const PLAYBACK_CONFIGURATION_SCENARIOS =
 	"docs/testing/07-playback-configuration.md";
@@ -56,4 +57,5 @@ test.describe(PLAYBACK_CONFIGURATION_SCENARIOS, () => {
 	registerPbk006ActionMatrixScenario();
 	registerPbk006UiScenario();
 	registerPbk006OscScenario();
+	registerPbk006GroupMasterHtpScenario();
 });

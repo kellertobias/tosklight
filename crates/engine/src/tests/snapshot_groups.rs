@@ -38,6 +38,7 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
     let snapshot = |members| EngineSnapshot {
         fixtures: vec![first.clone(), second.clone()],
         cue_lists: vec![list.clone()],
+        playbacks: vec![test_group_playback(1, "live")],
         groups: vec![GroupDefinition {
             id: "live".into(),
             name: "Live".into(),

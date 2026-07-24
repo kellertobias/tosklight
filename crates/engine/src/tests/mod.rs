@@ -14,7 +14,9 @@ use light_playback::{
     Cue, CueChange, CueList, CueListMode, IntensityPriorityMode, PlaybackButtonAction,
     PlaybackDefinition, PlaybackFaderMode, PlaybackTarget, RestartMode, WrapMode,
 };
-use light_programmer::{GroupDefinition, ProgrammerRegistry};
+use light_programmer::{
+    DerivedGroup, FrozenGroup, GroupDefinition, ProgrammerRegistry, SelectionRule,
+};
 use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
@@ -193,15 +195,24 @@ fn test_cue_list(name: &str, changes: Vec<CueChange>) -> CueList {
 }
 
 fn test_playback(number: u16, cue_list_id: light_core::CueListId) -> PlaybackDefinition {
+    test_playback_for_target(number, PlaybackTarget::CueList { cue_list_id })
+}
+
+fn test_group_playback(number: u16, group_id: &str) -> PlaybackDefinition {
+    test_playback_for_target(
+        number,
+        PlaybackTarget::Group {
+            group_id: group_id.into(),
+        },
+    )
+}
+
+fn test_playback_for_target(number: u16, target: PlaybackTarget) -> PlaybackDefinition {
     PlaybackDefinition {
         number,
         name: format!("Playback {number}"),
-        target: PlaybackTarget::CueList { cue_list_id },
-        buttons: [
-            PlaybackButtonAction::GoMinus,
-            PlaybackButtonAction::Go,
-            PlaybackButtonAction::Flash,
-        ],
+        buttons: PlaybackDefinition::default_buttons(&target),
+        target,
         button_count: 3,
         fader: PlaybackFaderMode::Master,
         has_fader: true,
