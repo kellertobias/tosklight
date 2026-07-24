@@ -49,17 +49,15 @@ Migrated slices: `playbackRuntime/`, `playbackTopology/`, `patch/`, `programmerV
 `presetRecording/`, `virtualPlaybackZones/`, `selectiveImport/`, `files/`, `screens/`,
 `session/ownership.ts`.
 
-## The legacy hub
+## Composition and shared connection
 
-`src/features/server/` (~55 files) and `src/api/ServerContext.tsx` compose the unmigrated
-capabilities, exposed through `useServer()`.
+`src/api/ServerRuntime.tsx` and `src/features/server/` compose the stable connection, explicit API
+capabilities, and focused providers. There is no production `useServer()` consumer.
+`src/api/ServerContext.ts` is retained only as a contract for legacy test mocks.
 
-`useServerFeatureStores.ts` instantiates the new external stores outside the broad React refresh
-path, so a scoped event does not rerender unrelated global consumers. The split contexts
-(`ServerCoreContext`, `ServerFixtureContext`, `ServerPlaybackContext`, `ServerProgrammingContext`,
-`ServerShowContext`) are the decomposition in progress.
-
-Do not add to this. A new capability gets a feature slice.
+`useServerFeatureStores.ts` instantiates external stores outside broad React render paths, so a
+scoped event does not rerender unrelated consumers. Shared connection infrastructure belongs here;
+new domain authority still gets its own feature slice.
 
 ## Components, windows, state
 
@@ -98,8 +96,8 @@ Do not add to this. A new capability gets a feature slice.
 2. `src/App.tsx`
 3. `src/features/showObjects/{contracts,store,session,transport}.ts`
 4. `src/api/client/transport.ts`
-5. `src/api/ServerContext.tsx` — to recognise the legacy shape
-6. `src/features/server/useServerFeatureStores.ts`
+5. `src/api/ServerRuntime.tsx` — capability composition
+6. `src/features/server/useServerFeatureStores.ts` — shared store activation
 7. `src/components/shell/AppShell.tsx`
 8. `src/windows/WindowRegistry.tsx`
 9. `src/state/appReducer.ts`

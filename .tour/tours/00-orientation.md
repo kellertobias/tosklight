@@ -11,7 +11,7 @@ What ToskLight is, how the layers fit, and the rules that are enforced rather th
 ## Run it
 
 ```sh
-./dev
+npm run dev
 ```
 
 Open `http://127.0.0.1:5000`. A new desk has one enabled `Operator` user.
@@ -76,30 +76,25 @@ See [state lifetimes](glossary:state-lifetimes).
 - Validate the exact interaction path the request describes. An adjacent click handler is not proof.
 - Preserve unrelated changes in a dirty worktree.
 
-## Both architectures are present
+## The current extension shape
 
-You will find two shapes for the same job.
+One vertical capability owns its application service, wire DTOs, server adapter, semantic events,
+frontend projection, and focused tests. No served `/api/v1` route or production `useServer()`
+consumer remains. The contract-only `api/ServerContext.ts` exists for legacy test mocks and is not
+an extension point.
 
-| Converging on this | Being removed |
-| --- | --- |
-| `crates/application/src/<capability>/` | `crates/server/src/runtime/ws_*`, v1 routes |
-| `apps/control-ui/src/features/<capability>/` | `api/ServerContext.tsx`, `features/server/` |
-| typed command + typed event + narrow store | `useServer()`, broad bootstrap refresh, polling |
-
-`useServer()` is a temporary facade scheduled for deletion. Adding a field to it moves backwards.
-
-State: `docs/plans/refactoring-progress.md`. Target: `docs/plans/major-refactoring.md`.
+The summary is `REFACTORING-SUMMARY.md`; living rules are under `docs/engineering/`.
 
 ## Verification
 
 ```sh
-./test architecture
-./test unit
-./test e2e-api
-./test e2e-ui
-./test e2e tests/<focused-spec>.spec.ts
-./test desktop-smoke
-./build open
+npm run test:architecture
+npm run test:unit
+npm run test:e2e-api
+npm run test:e2e-ui
+npm run test:e2e -- tests/<focused-spec>.spec.ts
+npm run test:desktop-smoke
+npm run open
 ```
 
 Use `cargo fmt`, not standalone `rustfmt`. Full reference:
@@ -107,4 +102,5 @@ Use `cargo fmt`, not standalone `rustfmt`. Full reference:
 
 ## Next
 
-One Action End to End, then the component page for your area. Rust by Example if Rust is new.
+One Value: From Desk Input to DMX and Back, then the component page for your area. Rust and Tauri
+for TypeScript Developers if Rust is new.

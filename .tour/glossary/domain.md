@@ -267,3 +267,167 @@ output runtime service with one batched persistence and event publication per co
 Whether the system is actually meeting its configured rate. If it cannot, it must surface
 **actionable overload diagnostics** rather than silently emitting stale or irregular frames.
 Emitting stale frames silently is a bug, not graceful degradation.
+
+## Attribute group
+
+A presentation and control family for semantic attributes, such as Position or Color. It decides
+which controls belong together; it is not a DMX channel range.
+
+## Activation group
+
+A fixture-profile rule describing functions that activate or exclude one another. It is distinct
+from an [attribute group](glossary:attribute-group).
+
+## Split
+
+A patch assignment that places separately addressable parts of one fixture at different DMX
+locations while retaining one show fixture and stable logical-head identities.
+
+## Multipatch
+
+Multiple physical output bindings driven from one semantic show fixture. Programmer and Cues store
+one value; fixture projection fans it out to every bound instance.
+
+## Virtual intensity
+
+A synthesized Intensity attribute for a fixture whose mode has emitters but no physical dimmer
+channel. The engine scales component output while preserving their ratios.
+
+## Profile revision
+
+An immutable Fixture Library version with stable identity and content digest. Patching copies it
+into the show as a [profile snapshot](glossary:profile-snapshot).
+
+## Ordered selection
+
+The [selection](glossary:selection) with stable fixture/logical-head order preserved. Range,
+add/subtract/toggle, and overlapping Group operations must never silently sort it.
+
+## Stored empty group
+
+A real Group object whose ordered membership is empty. It differs from an
+[absent group](glossary:absent-group).
+
+## Absent group
+
+A Group ID with no stored object. Direct addressing is an error; inside a range it follows
+[missing range ID](glossary:missing-range-id) rules.
+
+## Missing range ID
+
+An ID between range endpoints for which no object exists. It is skipped and is not materialized as
+a stored empty object.
+
+## Live Group reference
+
+A stable Group identity retained in selection or stored programming. Recall resolves its current
+ordered membership.
+
+## DEGRP
+
+The dereference/freeze command. It replaces a live Group expression with its current ordered
+fixture/head identities so later membership edits no longer affect it.
+
+## Preset scope and filter
+
+The attribute families and fixtures/heads a Preset owns or applies. They prevent recall or Update
+from writing unrelated Programmer attributes.
+
+## Embedded value
+
+A semantic fixture/head/attribute value stored directly in a Preset or Cue. It does not change
+when its original Group or Preset later changes.
+
+## Live Preset reference
+
+A stable Preset identity retained by stored programming. Recall resolves the current Preset
+content rather than a copied value.
+
+## Undo
+
+A desk-scoped Programmer action reversing Programmer mutations and Record/Update steps. Navigation
+does not enter history, and there is no generic show-wide undo.
+
+## Cue tracking
+
+The rule that a Cue may store only changes while inheriting earlier state. Compilation gives direct
+GOTO and sequential GO the same reconstructed stage.
+
+## Block assert release and off
+
+Explicit Cue/value semantics controlling tracking and ownership. Block stops inheritance, assert
+reclaims a value, release yields ownership, and off removes the active contribution by Playback
+rules.
+
+## GOTO reconstruction
+
+Installing the tracked target-Cue state without requiring intervening Cues to have run.
+
+## Automatic transition
+
+A runtime change triggered by FOLLOW, TIME, Chaser, or another scheduler. It publishes the same
+semantic Playback event as a manual transition.
+
+## Group Master
+
+An assigned Playback limiting intensity for its Group. Overlapping active Group Masters combine by
+HTP before the Grand Master applies once.
+
+## Playback Master
+
+A Playback control governing its own Cuelist runtime. It is not a parent of Group Masters and does
+not modify stored Cue values.
+
+## Speed Group
+
+A named runtime timing control. It scales rate and duration, not semantic intensity values.
+
+## Grand Master
+
+The single global intensity ceiling above resolved Group/Playback levels. Blackout forces its
+effective result to zero.
+
+## Capture mode
+
+The Programmer/Preload policy selecting which value domains an action captures. Preload capture is
+separate authority.
+
+## Per-user versus per-desk state
+
+Programmer values and selection are per user; unfinished command-line, gesture, and page context
+is shared by the desk.
+
+## Shared command line
+
+The one authoritative command line shared by the Tauri app and attached OSC hardware for a desk.
+Different desk aliases remain isolated.
+
+## Semantic attribute value
+
+A typed Intensity, Pan, Tilt, Color, wheel-slot, or other value addressed by fixture/head and
+attribute. It is independent of the fixture's DMX mode until projection.
+
+## Transition
+
+A time-bounded change with delay, fade, MIB, direction, and ownership metadata between source
+values and resolved output.
+
+## DMX frame
+
+The complete byte array for one universe at one scheduler tick, produced after arbitration and
+fixture projection.
+
+## Output route
+
+A portable show definition binding a rendered universe to an Art-Net, sACN, or other destination
+with its enablement and protocol settings.
+
+## Portable show
+
+The lossless `.show` document containing production content. It excludes installation users,
+sessions, screens, and credentials.
+
+## Desk database
+
+`desk.sqlite`, owned by the installation. It stores users, desks, screens, settings, show index,
+and named recovery checkpoints; Save As never copies it.

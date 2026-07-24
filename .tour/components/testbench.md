@@ -17,14 +17,14 @@ Authorities: `docs/testing/README.md` for the acceptance contract and notation,
 
 | Layer | Where | Command |
 | --- | --- | --- |
-| Rust unit and integration | each crate's `tests/` or feature-local modules | `./test unit` |
-| TS unit and component | `apps/control-ui/src/**/*.test.ts(x)`, jsdom and Testing Library | `./test unit` |
-| Type and build gate | `tsc --noEmit && vite build` | `./test unit` |
-| Architecture | `tools/check-architecture.mjs`, `tools/check-source-size.mjs` | `./test architecture` |
-| e2e-api `@api` | root `tests/`, no browser | `./test e2e-api` |
-| e2e-ui `@ui` | root `tests/`, real Chrome | `./test e2e-ui` |
-| e2e-supplemental | `@osc`, `@wire`, `@restart`, `@desktop`, `@bench` | `./test e2e-supplemental` |
-| desktop-smoke | `tests/05-desktop-process-integration.spec.ts` | `./test desktop-smoke` (macOS) |
+| Rust unit and integration | each crate's `tests/` or feature-local modules | `npm run test:unit` |
+| TS unit and component | `apps/control-ui/src/**/*.test.ts(x)`, jsdom and Testing Library | `npm run test:unit` |
+| Type and build gate | `tsc --noEmit && vite build` | `npm run test:unit` |
+| Architecture | `tools/check-architecture.mjs`, `tools/check-source-size.mjs` | `npm run test:architecture` |
+| e2e-api `@api` | root `tests/`, no browser | `npm run test:e2e-api` |
+| e2e-ui `@ui` | root `tests/`, real Chrome | `npm run test:e2e-ui` |
+| e2e-supplemental | `@osc`, `@wire`, `@restart`, `@desktop`, `@bench` | `npm run test:e2e-supplemental` |
+| desktop-smoke | `tests/05-desktop-process-integration.spec.ts` | `npm run test:desktop-smoke` (macOS) |
 
 Start with the smallest relevant check and widen by risk.
 
@@ -108,17 +108,17 @@ ratchet baseline is empty, so any new violation fails immediately. Tighten after
 ## Other commands
 
 ```sh
-./test artifact-paths   # artifact path bindings across bash, node, python
-./test app-icons        # Tauri icon completeness
-./test record           # serial narrated video of the catalog
-./test demo             # product walkthrough; refreshes assets/demo.show
-./test e2e tests/<focused-spec>.spec.ts
+npm run test:artifact-paths   # artifact path bindings across bash, node, python
+npm run test:app-icons        # Tauri icon completeness
+npm run test:record           # serial narrated video of the catalog
+npm run test:demo             # product walkthrough; refreshes assets/demo.show
+npm run test:e2e -- tests/<focused-spec>.spec.ts
 ```
 
 CI: `.github/workflows/test.yml` — `unit` on ubuntu, sharded `e2e` matrix over api/ui/supplemental,
 `desktop-smoke` on macos-14. Manual and release CI run on Forgejo.
 
-`docs/engineering/build-and-test-commands.md` covers every subcommand and what `./test architecture`
+`docs/engineering/build-and-test-commands.md` covers every subcommand and what `npm run test:architecture`
 enforces.
 
 ## Read first

@@ -65,10 +65,10 @@ wire, adapter, event, snapshot, store, view, and tests land together.
     command responses/events by request identity, event cursor, and object revision; ignore stale
     responses; roll back on failure; expose pending and actionable error state.
 12. **Retire the old path.** Migrate production callers and public tests, retain deliberately named
-    compatibility coverage, then remove the feature's v1/string-event/`useServer()` branch. Do not
-    keep both orchestration paths as permanent alternatives.
+    compatibility coverage, then remove any superseded adapter, polling, or broad refresh branch.
+    Do not keep both orchestration paths as permanent alternatives.
 
-Run `./test architecture` throughout. Finish with the focused commands from the
+Run `npm run test:architecture` throughout. Finish with the focused commands from the
 [test map](test-map.md) and the exact operator surfaces named by the acceptance contract.
 
 ## Add an event and view-scoped store to an existing capability

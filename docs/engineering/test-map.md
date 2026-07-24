@@ -6,7 +6,8 @@ gesture, or packaged desktop lifecycle.
 
 The historical pre-migration inventory is [Refactoring test-boundary inventory](refactoring-test-boundaries.md).
 This document is the current routing map. For what each command runs — and what
-`./test architecture` enforces — see [Build and test commands](build-and-test-commands.md).
+`npm run test:architecture` enforces — see
+[Build and test commands](build-and-test-commands.md).
 
 ## Sources of truth
 
@@ -37,9 +38,9 @@ exact OSC address and feedback sequence.
 | Playback/Programmer/render semantics | Owning domain/application tests and a deterministic bench scenario observing authoritative runtime and output | Current-page/explicit-page, timing, Preload, Highlight, HTP/LTP, Cue tracking, or automatic advance changes |
 | Art-Net/sACN/output scheduler | `crates/output/tests/`, engine tests, and focused receiver scenarios under `tests/` | Socket delivery, shutdown, first frame, overload health, or capacity changes |
 | Files/MVR/media | Owning unit/integration tests and focused HTTP/UI acceptance scenario | Confinement, archive portability, CITP/socket behavior, long-running feedback, or desktop picker behavior changes |
-| Tauri/window/process lifecycle | Browser-adapter unit tests first, then `./test desktop-smoke` | Native launch, child-server ownership, additional screens, shutdown, bundle assets, or stale-bundle behavior changes |
-| Manual/help | Markdown review and `./build manual`; screenshot workflow only when intentionally refreshing images | Operator-facing layout or the documented UI changed |
-| Dependency/module boundary | `./test architecture` | Always before committing a structural slice |
+| Tauri/window/process lifecycle | Browser-adapter unit tests first, then `npm run test:desktop-smoke` | Native launch, child-server ownership, additional screens, shutdown, bundle assets, or stale-bundle behavior changes |
+| Manual/help | Markdown review and `npm run manual`; screenshot workflow only when intentionally refreshing images | Operator-facing layout or the documented UI changed |
+| Dependency/module boundary | `npm run test:architecture` | Always before committing a structural slice |
 
 ## Rust test locations
 
@@ -120,10 +121,10 @@ that silently picks API instead of software or OSC.
 Focused Playwright commands from the repository root are:
 
 ```sh
-./test e2e tests/04-osc-api-and-cross-surface.spec.ts --grep 'OSC-002'
-./test e2e-api tests/01-foundational-dimmers-and-groups.spec.ts --grep 'GROUP-004'
-./test e2e-ui tests/01-foundational-dimmers-and-groups.spec.ts --grep 'PROG-001'
-./test e2e-supplemental tests/05-virtual-time-persistence-and-recovery.spec.ts
+npm run test:e2e -- tests/04-osc-api-and-cross-surface.spec.ts --grep 'OSC-002'
+npm run test:e2e-api -- tests/01-foundational-dimmers-and-groups.spec.ts --grep 'GROUP-004'
+npm run test:e2e-ui -- tests/01-foundational-dimmers-and-groups.spec.ts --grep 'PROG-001'
+npm run test:e2e-supplemental -- tests/05-virtual-time-persistence-and-recovery.spec.ts
 ```
 
 Use `cd apps/control-ui && npm run test:e2e -- --list` to confirm test discovery after moving or
@@ -138,12 +139,12 @@ failing application assertion; rerun the same command unrestricted and report bo
 For native behavior:
 
 ```sh
-./test desktop-smoke
-./build open
+npm run test:desktop-smoke
+npm run open
 curl -fsS http://127.0.0.1:5000/api/v2/readiness
 ```
 
-After `./build open`, inspect `.artifacts/runtime/light-data/light-server.log`. If readiness is
+After `npm run open`, inspect `.artifacts/runtime/light-data/light-server.log`. If readiness is
 healthy but the UI appears stuck, time `/api/v2/readiness` and `/api/v2/bootstrap` separately and
 confirm the bundle opened by `build` before changing UI code.
 
@@ -173,14 +174,14 @@ paint. See [Frontend performance baseline](frontend-performance-baseline.md).
 For a normal typed slice:
 
 ```sh
-./test architecture
+npm run test:architecture
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
-./test unit
-./test e2e tests/<focused-spec>.spec.ts --grep '<scenario-id>'
+npm run test:unit
+npm run test:e2e -- tests/<focused-spec>.spec.ts --grep '<scenario-id>'
 ```
 
 Before final release handoff, widen to the applicable unrestricted socket tests, all Playwright
-surfaces, Hardware Controls tests/build, `./test desktop-smoke`, release benchmarks, manual build,
-and `./build open` operator-path verification. Compare failures by stable scenario ID and behavior,
+surfaces, Hardware Controls tests/build, `npm run test:desktop-smoke`, release benchmarks, manual
+build, and `npm run open` operator-path verification. Compare failures by stable scenario ID and behavior,
 not only by raw failure count.

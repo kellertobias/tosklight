@@ -48,7 +48,7 @@ npm run manual     # help asset paths feed the manual pipeline — confirm it st
 
 Decided (2026-07-23): everything moves to v2. No open decisions remain in this chunk.
 
-## Execution
+## Result
 
 Claimed 2026-07-24. The recorded decision is resolved; no maintainer decision is open.
 

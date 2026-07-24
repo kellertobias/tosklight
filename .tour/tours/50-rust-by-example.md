@@ -1,11 +1,11 @@
 ---
 slug: rust-by-example
-title: Rust by Example
+title: "Rust and Tauri for TypeScript Developers"
 components: [engine, backend]
 order: 50
 ---
 
-# Rust by Example
+# Rust and Tauri for TypeScript Developers
 
 The Rust this codebase uses, from the code it runs. Assumes you can read `let`, `fn`, `struct`, and
 `match`. Skips features not used here.
@@ -14,9 +14,13 @@ Two workspace facts first: Rust 2024 edition with `resolver = "3"`, and `unsafe_
 the workspace level plus `#![forbid(unsafe_code)]` in most `lib.rs` files. There is no `unsafe`
 anywhere.
 
+Operator-visible lifecycle behavior is specified in `docs/help/02-installation.md` and exercised by
+`tests/05-desktop-process-integration.spec.ts`. For the complete native application map, cross-link
+this page with the **Tauri Desktop Apps** component guide.
+
 ## 1. Newtypes and a declarative macro
 
-`crates/core/src/lib.rs:17-46`
+`crates/core/src/lib.rs`
 
 ```rust
 pub type Revision = u64;
@@ -58,7 +62,7 @@ The `type` aliases above it read better than `u64` but are not type-safe. Know w
 
 ## 2. Enums carrying data, and serde tagging
 
-`crates/core/src/attributes.rs:273-294`
+`crates/core/src/attributes.rs`
 
 ```rust
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
@@ -80,11 +84,11 @@ Two tagging styles are used:
 
 - **Adjacently tagged** here: `{"kind":"normalized","value":0.5}`, needed because `Normalized(f32)`
   is a newtype variant with no field names.
-- **Internally tagged** across `crates/wire`, e.g. `crates/wire/src/v2/events.rs:36-54` — struct
+- **Internally tagged** across `crates/wire`, e.g. `crates/wire/src/v2/events.rs` — struct
   variants giving a flat `{"type":"subscribe", ...}`, which the TypeScript side reads as a
   discriminated union.
 
-Many wire DTOs add `deny_unknown_fields` (`crates/wire/src/v2/programming.rs:119`), so an unexpected
+Many wire DTOs add `deny_unknown_fields` (`crates/wire/src/v2/programming.rs`), so an unexpected
 field is a rejected request rather than a silently ignored one.
 
 **Try it:** add a variant locally and run `cargo check`. The error list is the exhaustiveness
@@ -92,7 +96,7 @@ guarantee.
 
 ## 3. Option and its combinators
 
-`crates/core/src/attributes.rs:287-294`
+`crates/core/src/attributes.rs`
 
 ```rust
 pub fn normalized(&self) -> Option<f32> {
@@ -107,10 +111,10 @@ Rust has no `null`. Absence is `Option<T>` and the compiler makes you handle it.
 
 | Combinator | Site | Meaning |
 | --- | --- | --- |
-| `.and_then(...)` | `crates/fixture/src/library/package_io.rs:65` | chain another fallible step |
-| `.map_or(0, ...)` | `crates/fixture/src/library/package_io.rs:25` | transform, or a default |
-| `.unwrap_or_else(...)` | `crates/fixture/src/patch.rs:24` | lazily compute a fallback |
-| `.ok_or_else(...)` | `crates/fixture/src/patch_validation.rs:291` | turn `None` into a domain error |
+| `.and_then(...)` | `crates/fixture/src/library/package_io.rs` | chain another fallible step |
+| `.map_or(0, ...)` | `crates/fixture/src/library/package_io.rs` | transform, or a default |
+| `.unwrap_or_else(...)` | `crates/fixture/src/patch.rs` | lazily compute a fallback |
+| `.ok_or_else(...)` | `crates/fixture/src/patch_validation.rs` | turn `None` into a domain error |
 
 `ok_or_else` is where absence becomes failure. The `_or_else` variants take a closure, so the
 fallback is not computed when unused.
@@ -119,7 +123,7 @@ fallback is not computed when unused.
 
 ## 4. Errors: Result, `?`, thiserror
 
-`crates/show/src/error.rs:5-34` shows three patterns in one file:
+`crates/show/src/error.rs` shows three patterns in one file:
 
 ```rust
 #[derive(Debug, Error)]
@@ -140,22 +144,22 @@ Rust has no exceptions. Fallible functions return `Result<T, E>` and `?` propaga
 - Struct variants carry data. `RevisionConflict { expected, current }` is why optimistic concurrency
   works: the caller gets the numbers, not a string.
 
-Same shape at `crates/mvr/src/lib.rs:26-35` and `crates/core/src/lib.rs:48-58`.
+Same shape at `crates/mvr/src/lib.rs` and `crates/core/src/lib.rs`.
 
 ### Conversions between layers
 
 Layer-crossing conversions are hand-written `From` impls, not derived:
 
-- `crates/application/src/timeline/mod.rs:66,77,88` — three error types into one `TimelineError`
-- `crates/application/src/macro_runtime/model.rs:282` — `ActionError` to `MacroError`
-- `crates/application/src/programming/lifecycle_projection.rs:86,94` — domain to projection DTO
+- `crates/application/src/timeline/mod.rs` — three error types into one `TimelineError`
+- `crates/application/src/macro_runtime/model.rs` — `ActionError` to `MacroError`
+- `crates/application/src/programming/lifecycle_projection.rs` — domain to projection DTO
 
 Some convert from a reference: `impl From<&MacroWaitRequest> for MacroWaitState`
-(`crates/application/src/macro_runtime/model.rs:123`) only reads, so it borrows.
+(`crates/application/src/macro_runtime/model.rs`) only reads, so it borrows.
 
 ### assert! vs Result
 
-`crates/application/src/event/bus.rs:41,80-83` uses `assert!` for invariants that indicate a bug,
+`crates/application/src/event/bus.rs` uses `assert!` for invariants that indicate a bug,
 while user and I/O errors return `Result`. Panicking is correct when the alternative is continuing
 with a broken invariant.
 
@@ -163,7 +167,7 @@ with a broken invariant.
 
 ### The minimal lifetime
 
-`crates/programmer/src/command_line/helpers.rs:1`
+`crates/programmer/src/command_line/helpers.rs`
 
 ```rust
 fn strip_prefix_word<'a>(value: &'a str, prefix: &str) -> Option<&'a str>
@@ -175,7 +179,7 @@ inputs and outputs, not how long a variable lives.
 
 ### Borrowed structs
 
-`crates/show/src/show_store.rs:14-25`
+`crates/show/src/show_store.rs`
 
 ```rust
 pub struct AtomicObjectWrite<'a> {
@@ -191,7 +195,7 @@ the anonymous lifetime: there is one, infer it.
 
 ### Cow
 
-`crates/application/src/programming/values_action.rs:66-70`
+`crates/application/src/programming/values_action.rs`
 
 ```rust
 pub fn mutations(&self) -> Cow<'_, [ProgrammingValueMutation]> {
@@ -209,16 +213,16 @@ Two `Cow` sites exist in the workspace. It is not a default choice.
 
 ### impl Trait in argument position
 
-`open(path: impl AsRef<Path>)` (`crates/show/src/show_store.rs:28`), `impl Into<String>` for error
-constructors (`crates/fixture/src/patch_validation.rs:327`), `impl IntoIterator<Item = &'a
-PortablePatchedFixtureRecord>` (`crates/fixture/src/portable_patch/compiler.rs:138`). Caller
+`open(path: impl AsRef<Path>)` (`crates/show/src/show_store.rs`), `impl Into<String>` for error
+constructors (`crates/fixture/src/patch_validation.rs`), `impl IntoIterator<Item = &'a
+PortablePatchedFixtureRecord>` (`crates/fixture/src/portable_patch/compiler.rs`). Caller
 convenience, static dispatch.
 
 ## 6. Traits: dyn, generics, associated types
 
 ### Trait objects
 
-`crates/core/src/clock.rs:16-20`
+`crates/core/src/clock.rs`
 
 ```rust
 pub trait ApplicationClock: Debug + Send + Sync {
@@ -234,13 +238,13 @@ it shareable across threads.
 The doc comment at `:14-15` notes that scheduler deadlines use real `Instant` so a test clock cannot
 distort real-time I/O health measurement — an example of scoping an abstraction.
 
-More `dyn`: `crates/application/src/macro_runtime/host.rs:85-98`, and the boxed closure alias
+More `dyn`: `crates/application/src/macro_runtime/host.rs`, and the boxed closure alias
 `pub type MacroTask = Box<dyn FnOnce() + Send + 'static>;`
-(`crates/application/src/macro_runtime/service.rs:20`).
+(`crates/application/src/macro_runtime/service.rs`).
 
 ### Associated types
 
-`crates/application/src/active_show/ports.rs:33-57`
+`crates/application/src/active_show/ports.rs`
 
 ```rust
 pub trait ActiveShowPorts: Send + Sync {
@@ -259,19 +263,19 @@ pub trait ActiveShowPorts: Send + Sync {
 Each implementor picks its own concrete types, resolved at compile time — no vtable, no boxing.
 
 Also shows default trait methods, a generic method taking a closure, and supertraits:
-`ShowPatchPorts: ActiveShowPorts` (`crates/application/src/show_patch/ports.rs:7`), and the
+`ShowPatchPorts: ActiveShowPorts` (`crates/application/src/show_patch/ports.rs`), and the
 marker-only `ProgrammingGroupActiveShowPorts: ActiveShowPorts {}`
-(`crates/application/src/programming/group_recording.rs:178`).
+(`crates/application/src/programming/group_recording.rs`).
 
 Consumers are generic over the port: `impl<P: SelectiveShowImportPorts> Planner<'_, P>`
-(`crates/application/src/selective_import/plan/conflicts.rs:9`).
+(`crates/application/src/selective_import/plan/conflicts.rs`).
 
 **Choosing:** `dyn` when the implementation set is open or chosen at runtime and the call is not
 hot. Generics when the type is known at compile time and you want it inlined.
 
 ### Associated consts
 
-`crates/application/src/action.rs:79-83` requires a constant, not just methods:
+`crates/application/src/action.rs` requires a constant, not just methods:
 
 ```rust
 pub trait ApplicationCommand: Send + 'static {
@@ -285,7 +289,7 @@ process-wide command enum.
 
 ## 7. Consuming builders and const fn
 
-`crates/application/src/action.rs:67-75, 108-116`
+`crates/application/src/action.rs`
 
 ```rust
 pub fn with_request_id(mut self, id: impl Into<String>) -> Self {
@@ -313,7 +317,7 @@ retryable: matches!(kind, ActionErrorKind::Busy | ActionErrorKind::Unavailable)
 
 ## 8. Typestate
 
-`crates/engine/src/lifecycle.rs:12-21`
+`crates/engine/src/lifecycle.rs`
 
 ```rust
 /// Preparing a snapshot is side-effect free. Installing it consumes this value and cannot fail,
@@ -334,11 +338,11 @@ it. That is why persistence cannot get ahead of the engine and a failed compile 
 half-installed show — see the comment at `:59-62`.
 
 `#[must_use]` makes forgetting to install a warning. The workspace has three, all this pattern:
-here, `crates/engine/src/playback_batch.rs:37`, and `crates/engine/src/contribution_batch.rs:173`.
+here, `crates/engine/src/playback_batch.rs`, and `crates/engine/src/contribution_batch.rs`.
 
 ## 9. Arc, ArcSwap, interior mutability
 
-`crates/engine/src/runtime_generation.rs:12-26`
+`crates/engine/src/runtime_generation.rs`
 
 ```rust
 /// A render retains this value for its complete lifetime, so fixture projection, Playback state,
@@ -359,13 +363,13 @@ not the data. Clone the `Arc`, not the data.
 `Arc<[OutputRoute]>` is a shared slice rather than `Arc<Vec<_>>` — one less pointer hop, built with
 `Arc::from(...)`.
 
-The generation is published through `ArcSwap<RuntimeGeneration>` (`crates/engine/src/engine.rs:19,43`)
+The generation is published through `ArcSwap<RuntimeGeneration>` (`crates/engine/src/engine.rs`)
 and read lock-free on the render path (`:90-94`). Installing a show swaps one pointer, so a render
 that started under revision 41 finishes under revision 41.
 
 ### Interior mutability
 
-`crates/engine/src/engine.rs:18-36` — every mutating method on `Engine` takes `&self`:
+`crates/engine/src/engine.rs` — every mutating method on `Engine` takes `&self`:
 
 | Type | Used for |
 | --- | --- |
@@ -379,21 +383,21 @@ Two details: `speed_groups_bpm: [AtomicU64; 5]` (`:25`) stores f64 bit patterns
 `std::array::from_fn(|_| AtomicBool::new(false))` (`:60`) builds a fixed-size array of non-`Copy`
 values, which `[AtomicBool::new(false); 8]` cannot do.
 
-`crates/programmer/src/registry.rs:10-46` is the counterpart: `#[derive(Clone)]` over 14
+`crates/programmer/src/registry.rs` is the counterpart: `#[derive(Clone)]` over 14
 `Arc<RwLock<…>>` fields, so cloning shares state. `ReentrantMutex` at `:38-44` carries a written
 justification.
 
 ### Two lock families
 
 `std::sync` locks poison on panic and are used with `.expect("… poisoned")` in cold paths
-(`crates/core/src/clock.rs:44,48,56`). `parking_lot` locks do not poison and are faster, used in hot
+(`crates/core/src/clock.rs`). `parking_lot` locks do not poison and are faster, used in hot
 paths.
 
 ## 10. Async
 
 ### Generic over the future
 
-`crates/output/src/scheduler.rs:16-26`
+`crates/output/src/scheduler.rs`
 
 ```rust
 pub async fn run_scheduler<F, Fut>(
@@ -419,7 +423,7 @@ way to deadlock async Rust.
 
 ### async_trait and default methods
 
-`crates/output/src/delivery/driver.rs:10-17`
+`crates/output/src/delivery/driver.rs`
 
 ```rust
 #[async_trait]
@@ -460,13 +464,13 @@ struct EventBusInner { state: Mutex<EventBusState>, changed: watch::Sender<u64> 
 | `:34` | `VecDeque<Arc<EventEnvelope>>` as a replay ring buffer |
 
 Contrast `watch` (latest value, coalescing) with `broadcast`
-(`crates/server/src/runtime/state.rs:29`), where every subscriber gets every message.
+(`crates/server/src/runtime/state.rs`), where every subscriber gets every message.
 
 ## 11. Serde
 
 ### Field attributes
 
-`crates/core/src/attributes.rs:303-323`:
+`crates/core/src/attributes.rs`:
 
 - `#[serde(default)]` for a field added later, so older documents still deserialize.
 - `#[serde(default, skip_serializing_if = "Option::is_none")]` for optional fields, so
@@ -478,8 +482,8 @@ mean different things to an operator.
 ### Custom Deserialize for migration
 
 Hand-written impls accept multiple legacy JSON shapes:
-`crates/fixture/src/profile/channel_model.rs:99-113`, `crates/fixture/src/patch_model.rs:100-126`,
-and `crates/fixture/src/portable_patch/codec.rs:32-45` with a matching custom `Serialize` at
+`crates/fixture/src/profile/channel_model.rs`, `crates/fixture/src/patch_model.rs`,
+and `crates/fixture/src/portable_patch/codec.rs` with a matching custom `Serialize` at
 `:25-27`.
 
 This is where you meet the `'de` lifetime and the `D: Deserializer<'de>` bound. `'de` is the
@@ -488,7 +492,7 @@ borrowed strings.
 
 ### Lossless JSON
 
-`crates/application/src/lossless_json.rs:1-26`
+`crates/application/src/lossless_json.rs`
 
 ```rust
 pub fn merge_typed<T: Serialize>(
@@ -507,13 +511,13 @@ inside, lossless storage outside.
 ### Iterator pipelines
 
 - Nested `flat_map` and `filter_map` with `move` closures —
-  `crates/fixture/src/definition.rs:140-142`. `move` is required because the closures outlive the
+  `crates/fixture/src/definition.rs`. `move` is required because the closures outlive the
   loop.
-- `zip` and `fold` — `crates/fixture/src/encoding.rs:95`, `crates/engine/src/engine.rs:85-87`.
-- `filter_map(Result::ok)` — `crates/fixture/src/library/package_io.rs:49`, discarding errors by
+- `zip` and `fold` — `crates/fixture/src/encoding.rs`, `crates/engine/src/engine.rs`.
+- `filter_map(Result::ok)` — `crates/fixture/src/library/package_io.rs`, discarding errors by
   function reference.
 - Array `.map()`, the inherent method rather than the iterator one —
-  `crates/engine/src/engine.rs:78-84`.
+  `crates/engine/src/engine.rs`.
 
 Iterators are lazy and compile to roughly the loop you would have written.
 
@@ -528,7 +532,7 @@ native-midi = ["dep:midir"]
 
 `dep:` makes the optional dependency non-implicit. Propagated through `crates/engine` and
 `crates/server`; consumers import with `default-features = false`. Usage:
-`crates/control/src/midi.rs:1,5,8,23,29,72`.
+`crates/control/src/midi.rs`.
 
 The reason: portable Linux binaries omit native USB-MIDI because it depends on the target machine's
 ALSA library. See also target-conditional dependencies —
@@ -536,7 +540,7 @@ ALSA library. See also target-conditional dependencies —
 
 ### Const generics
 
-`crates/application/src/programming/group_active_show_tests.rs:313`:
+`crates/application/src/programming/group_active_show_tests.rs`:
 
 ```rust
 fn new<const N: usize>(objects: [(&str, Value); N]) -> Self
@@ -546,22 +550,42 @@ Takes a fixed-size array of any length by value, so call sites need no `vec![]`.
 
 ### Visibility
 
-`pub(crate)` (`crates/engine/src/engine.rs:19-35`), `pub(super)`
-(`crates/server/src/runtime/state.rs:5-43`), and `pub(crate) use` re-export
-(`crates/show/src/lib.rs:33`).
+`pub(crate)` (`crates/engine/src/engine.rs`), `pub(super)`
+(`crates/server/src/runtime/state.rs`), and `pub(crate) use` re-export
+(`crates/show/src/lib.rs`).
 
 `crates/fixture/src/lib.rs` uses blanket `pub use module::*;`, which is convenient but hides the
 public surface. Not a default to copy.
 
 ### Boxing to shrink an enum
 
-`crates/wire/src/v2/events.rs:60`:
+`crates/wire/src/v2/events.rs`:
 
 ```rust
 Event { event: Box<EventEnvelope> }
 ```
 
 An enum is sized by its largest variant, so boxing the big one keeps the others cheap to move.
+
+## 13. Axum and Tauri: the process edges
+
+Axum routers under `crates/server/src/runtime/` are adapters. An extractor is the Rust equivalent
+of validated Express middleware: authenticate, decode a `light-wire` DTO, build `ActionContext`,
+call one service, map the typed result. Router state is dependency injection, not permission to put
+business rules in a handler.
+
+Tauri is a native host around the web UI. `apps/control-ui/src-tauri/src/` owns the main
+application, child-server supervision, windows, and native commands. The browser code depends on
+the `DesktopBridge` contract in `apps/control-ui/src/platform/desktop/types.ts`, so tests provide a
+browser adapter instead of mocking global Tauri internals.
+
+The sibling `apps/hardware-controls/src-tauri/` owns native UDP OSC. It is a second app attached to
+the same desk, not a React pane inside ToskLight.
+
+Rust `Result` maps naturally to a rejected TypeScript promise, but keep the error typed until the
+bridge boundary. Async tasks receive cancellation and an owning lifecycle; dropping a window must
+not orphan a child server, while closing a borrowed secondary window must not destroy the primary
+session.
 
 ## Reading order
 
@@ -576,6 +600,7 @@ An enum is sized by its largest variant, so boxing the big one keeps the others 
 9. `crates/engine/src/runtime_generation.rs` and `engine.rs` — Arc snapshots, ArcSwap
 10. `crates/engine/src/lifecycle.rs` — typestate
 11. `crates/application/src/active_show/ports.rs` — associated-type generics
+12. `apps/control-ui/src-tauri/src/` and `apps/control-ui/src/platform/desktop/` — native bridge
 
 ## Working habits
 
@@ -583,7 +608,7 @@ An enum is sized by its largest variant, so boxing the big one keeps the others 
 cargo fmt                    # not standalone rustfmt
 cargo clippy --workspace
 cargo test --workspace
-./test unit
+npm run test:unit
 ```
 
 Files ≤400 lines and functions ≤20 are goals; ≤1200 and ≤150 are hard limits checked by

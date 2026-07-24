@@ -51,7 +51,7 @@ Release builds serve the embedded copy.
 Frontend: `apps/control-ui/src/windows/HelpWindow.tsx`, `helpMarkdown.ts`,
 `apps/control-ui/src/api/client/help.ts`, `apps/control-ui/src/help.css`.
 
-## ./build manual
+## npm run manual
 
 Provisions a pinned Python venv at `.artifacts/cache/manual-venv` from
 `docs/help/.tooling/requirements.txt` (reportlab, markdown-it-py, pypdf, pdfplumber), then runs:
@@ -92,7 +92,7 @@ and has the expected image count.
 `.forgejo/workflows/manual.yml` builds on PR and main; on `v*` tags it attaches both artifacts via
 `tools/publish_forgejo_manual.py`. PR builds receive no credentials.
 
-## ./test help-screenshots
+## npm run test:help-screenshots
 
 Wipes and regenerates the images, so run it only when refreshing them.
 
@@ -116,9 +116,9 @@ Review screenshot diffs visually and keep them tied to stable, representative op
 
 ```sh
 # edit docs/help/**.md
-./dev                      # debug server serves live help
-./build manual             # PDF and HTML build plus verification
-./test help-screenshots    # only if images need refreshing
+npm run dev                      # debug server serves live help
+npm run manual             # PDF and HTML build plus verification
+npm run test:help-screenshots    # only if images need refreshing
 ```
 
 ## Read first

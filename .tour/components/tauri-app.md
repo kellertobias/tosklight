@@ -61,14 +61,14 @@ second monitor's window cannot tear down the desk. See
 ## Build and run
 
 ```sh
-./dev                 # cargo-run server plus tauri dev with UI hot reload
-./build open          # debug builds of both apps and the server, then open ToskLight
-./build archive       # release bundles; `install` also installs to ~/Applications
-./test desktop-smoke  # macOS packaged-app process integration
-./test app-icons      # required icon set for both apps
+npm run dev                 # cargo-run server plus tauri dev with UI hot reload
+npm run open          # debug builds of both apps and the server, then open ToskLight
+npm run bundle       # release bundles; `install` also installs to ~/Applications
+npm run test:desktop-smoke  # macOS packaged-app process integration
+npm run test:app-icons      # required icon set for both apps
 ```
 
-`./build open` is the required path when operator-visible behaviour changed. It stops old instances,
+`npm run open` is the required path when operator-visible behaviour changed. It stops old instances,
 builds both apps and the server, copies the server binary into
 `ToskLight.app/Contents/MacOS/light-server`, registers the launchd job
 `de.tokenet.tosklight.dev-server`, waits for readiness, and verifies the launchd PID owns that

@@ -54,20 +54,39 @@ command, one service, one event.
 [State lifetimes](glossary:state-lifetimes) — six lifetimes, and seven questions to answer before
 adding a field.
 
-## Both architectures are visible at once
+## The refactored shape
 
-The codebase is mid-refactor. You will find two shapes for the same job.
+No served application route remains under `/api/v1`, and production has no `useServer()` consumer.
+New work follows one vertical capability slice:
 
-| Converging on this | Being removed |
+| Layer | Home |
 | --- | --- |
-| `crates/application/src/<capability>/` | `crates/server/src/runtime/ws_*`, v1 routes |
-| `apps/control-ui/src/features/<capability>/` | `api/ServerContext.tsx`, `features/server/` |
-| typed command + typed event + narrow store | `useServer()`, broad bootstrap refresh, polling |
+| use case and authority | `crates/application/src/<capability>/` |
+| serialized contract | `crates/wire/src/v2/` |
+| adapter/composition | `crates/server/src/runtime/` |
+| frontend projection | `apps/control-ui/src/features/<capability>/` |
+| acceptance | root `tests/` plus feature-local unit tests |
 
 `macro_runtime/`, `timeline/`, `managed_assets/`, and `scheduling/` are extension seams tested with
 fakes. Macros and timecode do not exist as products.
 
-State: `docs/plans/refactoring-progress.md`. Target: `docs/plans/major-refactoring.md`.
+The completed history is under `docs/plans/refactoring/done/`; the durable handoff is
+`REFACTORING-SUMMARY.md`.
+
+## Guided learning paths
+
+| Path | Question |
+| --- | --- |
+| One Value: From Desk Input to DMX and Back | How does one software/OSC value traverse every layer? |
+| Cue Tracking and Goto | How can a direct jump reconstruct the same stage as sequential GO? |
+| Ordered Selection | Why do fixture/head identity, Group emptiness, and DEGRP preserve order? |
+| Value Spreading | Where are multi-point curves validated and sampled? |
+| The Portable Show | How do lossless data, migration, revision, compile, and install stay ordered? |
+| Recording and Live References | What becomes portable when Record or Update runs? |
+| Fixture Semantics | How does an attribute become mode-specific coarse/fine DMX? |
+| Playback Runtime | How do Cues, masters, speed, and arbitration meet? |
+| State Ownership to Pixels | How do snapshots, events, overlays, gaps, and replacement reach React? |
+| Rust and Tauri for TypeScript Developers | Which Rust/native concepts matter in this repository? |
 
 ## Authorities
 
@@ -84,11 +103,11 @@ These outrank this tour. It links into them rather than restating them.
 ## Verification
 
 ```sh
-./test architecture     # dependency direction + source size
-./test unit             # + cargo + vitest + tsc/vite
-./test e2e-api
-./test e2e-ui
-./build open            # required when operator-visible behavior changed
+npm run test:architecture
+npm run test:unit
+npm run test:e2e-api
+npm run test:e2e-ui
+npm run open
 ```
 
 Use `cargo fmt`, not standalone `rustfmt`. `docs/engineering/build-and-test-commands.md` covers
@@ -97,5 +116,12 @@ every subcommand and which check to run for which change.
 ## Maintaining this tour
 
 Tour steps are `@tour <slug>:<order> <Title>` comments in the source, so they move with the code.
-The pages under `.tour/` hold the narrative. Update the component page in the same commit as the
-boundary change.
+The pages under `.tour/` hold the narrative. Validate and export them with:
+
+```sh
+npx --yes "@tobisk/codesafari@1.0.0" validate .
+npx --yes "@tobisk/codesafari@1.0.0" export . --out .artifacts/generated/codesafari
+npm run pages:generate
+```
+
+Update the relevant safari and component page in the same commit as a boundary change.

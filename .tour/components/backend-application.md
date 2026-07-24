@@ -116,7 +116,7 @@ or a branch to a broad refresh path.
 
 ```sh
 cargo fmt
-./test architecture
-./test unit
-./test e2e-api
+npm run test:architecture
+npm run test:unit
+npm run test:e2e-api
 ```

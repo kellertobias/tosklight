@@ -1,8 +1,7 @@
 # Architecture Overview
 
-This is the starting point for engineering work in ToskLight. It describes the architecture that
-is present in the repository, including the remaining migration facades; it is not a picture of a
-future tree in which every v1 caller has already disappeared.
+This is the starting point for engineering work in ToskLight. It describes the architecture
+present in the repository after the major refactor.
 
 Read these companion documents for detail:
 
@@ -31,7 +30,7 @@ flowchart LR
   subgraph SERVER["light-server: composition and adapters"]
     AUTH["Authentication and addressing"]
     V2["Typed v2 HTTP and event adapters"]
-    COMPAT["Temporary v1 / legacy WS adapters"]
+    COMPAT["OSC / integrator / desktop adapters"]
   end
 
   APP["light-application\nuse cases, ports, events"]
@@ -63,7 +62,7 @@ flowchart LR
 Dependencies point from adapters toward application and domain boundaries. `light-wire` is a
 serialization leaf: no application behavior belongs there and no domain or application crate may
 depend on it. The enforced graph and exceptions live in
-`tools/check-architecture.mjs`; run `./test architecture` after changing a boundary.
+`tools/check-architecture.mjs`; run `npm run test:architecture` after changing a boundary.
 
 ## One action, one authority
 
@@ -140,15 +139,16 @@ background input tasks, the output scheduler, cancellation, and graceful shutdow
 Hardware Controls host is `apps/hardware-controls/src-tauri/`. Browser tests use the typed desktop
 adapter under `apps/control-ui/src/platform/desktop/` rather than importing Tauri globally.
 
-## Deliberate transition seams
+## Deliberately retained compatibility seams
 
-The repository still contains REST/WebSocket v1 routes, `apps/control-ui/src/api/ServerContext.tsx`,
-and `apps/control-ui/src/features/server/`. They are migration facades for capabilities without a
-narrow replacement, not extension points. Do not add a new feature to the global context, broad
-`refresh()`, generic show-object mutation, or string event routing. Add a bounded v2 capability and
-migrate its callers vertically, then remove the obsolete facade path.
+No served application route remains under `/api/v1`, and production code has no `useServer()`
+consumer. `apps/control-ui/src/api/ServerContext.ts` is a contract-only export for legacy
+virtual-module test mocks; it is not a runtime provider or extension point.
+`apps/control-ui/src/features/server/` now contains focused capability composition and shared
+connection infrastructure. New work belongs in an owning feature store, typed v2 adapter, and
+semantic event path rather than a broad context, generic show-object mutation, string event route,
+or catch-all refresh.
 
-The current typed slices include command-line HTTP, filtered events, Patch, Playback runtime,
-global Output runtime, active-show object changes, and Selective Show Import. Exact OSC paths,
-aliases, feedback indices, desk sharing, persisted show behavior, and operator-visible layout remain
-compatibility surfaces even while internal v1 HTTP and legacy WebSocket adapters are retired.
+Exact OSC paths, aliases, feedback indices, desk sharing, persisted show behavior, and
+operator-visible layout remain compatibility surfaces. Internal HTTP/WebSocket v2 contracts may
+evolve together with their generated callers.

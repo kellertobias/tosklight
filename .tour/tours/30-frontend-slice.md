@@ -1,14 +1,25 @@
 ---
 slug: frontend-slice
-title: A Frontend Slice in Detail
+title: "State Ownership to Pixels: Snapshots, Events, and Repair"
 components: [control-ui, ui-library]
 order: 40
 ---
 
-# A Frontend Slice in Detail
+# State Ownership to Pixels: Snapshots, Events, and Repair
 
 `apps/control-ui/src/features/showObjects/` is the reference slice. The frontend rules look strict
 until you know what each one prevents, so this page names the failure behind each.
+
+Operator truth is in the pane and workflow chapters under `docs/help/`; the paired UI/API
+scenarios described by `docs/testing/README.md` prove that a visible projection matches server
+authority.
+
+## Six lifetimes before React
+
+Portable show, desk installation, desk interaction, user Programmer, connection/session, and
+transient runtime have different owners. React receives immutable projections of those owners; it
+does not merge them into one browser authority. `docs/engineering/state-ownership.md` is the
+normative matrix.
 
 ## contracts.ts
 
@@ -83,18 +94,23 @@ actionable errors.
 The operator must never be left guessing whether an action was accepted, still running, failed, or
 completed.
 
-## The legacy shape
+## Composition and authority replacement
 
-`apps/control-ui/src/api/ServerContext.tsx` and `features/server/` hold transport, auth,
-reconnection, event routing, cached state, optimistic mutations, errors, and nearly every feature
-command in one context exposed to most of the UI. An event arrives, everything refetches, everything
-rerenders.
+`apps/control-ui/src/api/ServerRuntime.tsx` and `features/server/` compose the stable connection and
+focused capabilities. There is no production `useServer()` consumer. The small
+`api/ServerContext.ts` export exists only for legacy test mocks.
 
-`features/server/useServerFeatureStores.ts` instantiates the new stores outside that path. The split
-contexts (`ServerCoreContext`, `ServerFixtureContext`, `ServerPlaybackContext`,
-`ServerProgrammingContext`, `ServerShowContext`) are the decomposition in progress.
+Show, desk, session, or server replacement increments scope/generation. Sessions stop old
+subscriptions, clear overlays that cannot belong to the new authority, and reject late responses.
+Same-show reconnect keeps the last valid content mounted, shows a compact reconnect banner, repairs
+the cursor, and resumes.
 
-`useServer()` is scheduled for deletion.
+## Loading and errors
+
+The first boot remains covered until connection, resources, stores, and event transport are ready.
+Show switches use one tokenized busy authority so overlapping local actions and server events cannot
+hide "Loading show..." early. Secondary Screen and Stage windows gate their first meaningful render
+on their own scoped hydration. Accepted controls do not move when an error appears.
 
 ## Exercises
 
@@ -103,4 +119,4 @@ contexts (`ServerCoreContext`, `ServerFixtureContext`, `ServerPlaybackContext`,
 2. Move a fader fast. Confirm only the newest pending value per target is in flight.
 3. Edit the same object from two desks and watch the narrow repair.
 4. Drop the WebSocket for ten seconds and watch gap detection and snapshot repair.
-5. Find a pane still on `useServer()` and sketch its migrated slice.
+5. Pick one inactive pane and trace why it performs no hydration, subscription, or polling.

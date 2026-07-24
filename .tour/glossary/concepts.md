@@ -235,14 +235,14 @@ view types are hand-owned, not aliases of wire DTOs.
 
 ## Compatibility adapter
 
-A deliberate temporary shim kept behaviour-compatible while callers migrate — v1 route modules,
-`ws_*` handlers, `ServerContext.tsx`, `features/server/`, `useServer()`.
+A deliberately retained boundary translating an external or host contract into the same
+application service as every other surface. Current examples are the frozen OSC contract,
+integrator HTTP actions, browser/Tauri desktop bridges, and the contract-only `ServerContext` test
+export.
 
-Keep them working; put no new domain rules in them; do not copy their shape. A new capability
-belongs in a feature-local store plus a validated API adapter.
-
-Note that **OSC is not one of these.** Internal APIs and REST/WebSocket v1 may break; exact OSC
-paths, aliases, feedback indices, and desk-sharing semantics may not.
+Put no domain rules in an adapter and do not treat it as an extension point. A new capability
+belongs in a feature-local store plus a validated v2 API adapter. Exact OSC paths, aliases,
+feedback indices, and desk-sharing semantics remain compatibility surfaces.
 
 ## Engine snapshot
 
@@ -304,3 +304,39 @@ timecode scheduling — distinct from wall-clock metadata used for event timesta
 
 Scheduler deadlines use real `Instant`, so a manual test clock cannot distort
 real-time I/O health measurement.
+
+## Candidate
+
+A complete proposed portable-show document assembled before commit. Migration, validation,
+compilation, and runtime preparation run against it so failure cannot partially mutate authority.
+
+## Migration
+
+A versioned transformation of data this build owns. It may canonicalize known fields but preserves
+unknown objects and fields. A write-back is explicit and observable.
+
+## No change
+
+An outcome proving the requested semantic state already exists. It persists nothing, publishes no
+event, advances no mutation revision, and has no fabricated event sequence.
+
+## Idempotency
+
+Retry safety for an edit carrying request identity. Repeating the same payload returns a
+[replay](glossary:replay); reusing the identity for another payload conflicts.
+
+## Typed event
+
+A [domain event](glossary:domain-event) represented by discriminated application and wire types
+rather than a string plus arbitrary JSON.
+
+## Optimistic overlay
+
+The request-keyed pending frontend layer over an authoritative base projection. It reconciles by
+response/event identity and rolls back without rewriting unrelated authority.
+
+## Authority replacement
+
+A server, session, desk, user, or show change invalidating the current projection scope. The
+frontend installs a new snapshot, clears incompatible overlays/subscriptions, and rejects late
+work from the old generation.

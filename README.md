@@ -71,16 +71,18 @@ The repository ships a guided onboarding tour under [`.tour/`](.tour). Start it 
 [CodeSafari](https://github.com/kellertobias/codesafari) — no install required:
 
 ```sh
-npx @tobisk/codesafari dev        # tour viewer at http://localhost:4317
-npx @tobisk/codesafari validate   # check the tour content for problems
-npx @tobisk/codesafari export     # emit a static, offline copy to ./codesafari-site
+npx --yes "@tobisk/codesafari@1.0.0" dev .
+npx --yes "@tobisk/codesafari@1.0.0" validate .
+npx --yes "@tobisk/codesafari@1.0.0" export . --out .artifacts/generated/codesafari
 ```
 
 The viewer opens a read-only IDE: a file tree, a source pane, and a step panel, so you can follow a
 tour and still explore any file. It covers:
 
-- **Tours** — Orientation, One Action End to End, Add a Capability, A Frontend Slice in Detail, and
-  Rust by Example for developers new to Rust.
+- **Tours** — Orientation; One Value from desk input to DMX; Cue Tracking and Goto; Ordered
+  Selection; Value Spreading; the Portable Show; Add a Capability; Recording and Live References;
+  Fixture Semantics; Playback Runtime; State Ownership to Pixels; and Rust/Tauri for TypeScript
+  developers.
 - **Components** — Control UI, UI Library, Tauri apps, Backend/Application, Engine & Output, Help
   Generator, and Testbench.
 - **Glossary** — the operator vocabulary (Cue, Playback, Programmer, patch) and the architecture

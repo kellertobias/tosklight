@@ -1,6 +1,8 @@
 # Architecture Boundaries
 
-This document is the dependency and state-ownership contract for the [major architecture refactor](../plans/major-refactoring.md). It describes rules that new modules must satisfy while the compatibility adapters are still being removed.
+This document is the dependency and state-ownership contract established by the
+[major architecture refactor](../plans/major-refactoring.md). It describes rules every new module
+must satisfy.
 
 Start with the [architecture overview](architecture-overview.md) for the end-to-end system shape,
 then use this document as the enforceable boundary contract.
@@ -28,7 +30,8 @@ control-ui / HTTP / WebSocket / OSC / MIDI / Matter adapters
 - `light-server` is the composition root. Its feature adapters authenticate, decode, normalize, invoke one application use case, and translate the typed result. Business rules do not belong in routers or transport callbacks.
 - Generated TypeScript wire DTOs are transport-boundary types. Frontend feature and view models must not become aliases for serialized DTOs; the API layer validates and maps decoded data before feature code consumes it.
 
-These rules are checked by `./test architecture`. An intentional boundary change must update this contract and the checker in the same commit.
+These rules are checked by `npm run test:architecture`. An intentional boundary change must update
+this contract and the checker in the same commit.
 
 ## Action context
 
@@ -57,4 +60,9 @@ erase data it does not own.
 
 ## Compatibility adapters
 
-REST/WebSocket v1 and current string events remain temporary adapters while their callers migrate. Each compatibility path must call the same application service as its replacement boundary. New use cases are added as bounded application command families and typed events; they are not added to the legacy string command or generic JSON event mechanisms.
+The served REST/WebSocket v1 surface and the broad frontend server facade have been retired.
+Deliberately retained adapters are narrow and named: the frozen OSC contract, HTTP forms for
+integrators, typed browser/desktop bridges, and a contract-only `ServerContext` export used by
+legacy test mocks. Each adapter calls the same application service as every other surface. New use
+cases are added as bounded application command families and typed events; they are never added to
+a generic string command, broad context, or catch-all refresh mechanism.

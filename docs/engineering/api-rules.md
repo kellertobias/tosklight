@@ -120,16 +120,19 @@ per-fixture values.
   cue number/slot at execution time, so both stores succeed as two new cues. Intent-shaped
   writes (rule 3) make this natural — the client never sends "the whole new cuelist".
 
-## 8 — Persistence cadence (maintainer, 2026-07-23)
+## 8 — Persistence cadence (resolved 2026-07-23)
 
-- The active show is authoritative **in memory** on the server; the `.show` file is
-  flushed on a configurable autosave interval (default 30 s), not on every mutation. The
-  interval is an **operator-facing setting** — shown and editable in the desk settings
-  UI, persisted as desk configuration. Losing the last interval on power loss is accepted (WAL +
-  `synchronous=NORMAL` never guaranteed hard durability per-commit anyway).
-- Flush immediately at hard boundaries regardless of interval: show switch/close, named
-  revision save, upload/overwrite, **deliberate application quit**, **leaving the Show
-  Patch** (patch edits are too costly to lose an interval of), and after an idle gap.
-  Automatic backups are taken per flush, not per mutation.
-- Events, revisions, replay windows, and undo operate at **mutation time** in memory —
-  persistence cadence must not change any client-observable ordering.
+- The active show is authoritative **in memory** on the server. Every accepted show mutation also
+  commits its small SQLite WAL transaction before returning; this preserves one revision, undo,
+  event, and disk ordering without a second deferred transaction log.
+- Recovery checkpoints are interval-gated by the operator-facing
+  `autosave_interval_seconds` desk setting (default 30 s, valid 5–3600 s). The first mutation for a
+  show creates a full-file checkpoint; later mutations skip that copy until the interval elapses.
+  Explicit migration, overwrite, and authentication backups remain unconditional.
+- This is the accepted endpoint of the write-behind investigation: the in-memory document removed
+  the full-show load from the mutation path, and interval-gated checkpoints removed the expensive
+  per-mutation file copy. Deferring the remaining WAL commit would make reads and undo require a
+  parallel in-memory persistence system without removing the dominant compile cost.
+- Events, revisions, replay windows, undo, runtime installation, and the WAL commit retain one
+  ordered mutation boundary. See
+  `docs/plans/refactoring/done/02b-c-deferred-show-commits.RESOLVED.md` for the decision record.

@@ -80,8 +80,9 @@ wire. Nothing else.
 | `*View.tsx` / hooks | What mounted views consume |
 | `testFixtures.ts` | Shared test data |
 
-Register it through `features/server/useServerFeatureStores.ts`, outside the broad React refresh
-path.
+Compose its store/session through the owning feature boundary and activate it only for mounted
+views. Shared connection plumbing may be registered through
+`features/server/useServerFeatureStores.ts`; capability authority remains feature-local.
 
 ## Checklist
 
@@ -112,7 +113,7 @@ Contracts:
 - [ ] Wire DTOs regenerated and committed
 - [ ] OSC behaviour unchanged
 - [ ] `pairedScenario` coverage for API and UI
-- [ ] `./test architecture` passes
+- [ ] `npm run test:architecture` passes
 
 ## Anti-patterns
 
@@ -124,4 +125,4 @@ Contracts:
 | Put a rule in a v1 WebSocket handler | Behaviour-frozen compatibility code |
 | Loop a per-item request over N fixtures | Batch commands are one transaction |
 | Extend a shared command enum | Bounded families per capability |
-| Import wire DTOs in a component | Fails `./test architecture` |
+| Import wire DTOs in a component | Fails `npm run test:architecture` |

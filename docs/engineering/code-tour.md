@@ -7,10 +7,11 @@ behind the layout.
 ## Root entry points
 
 - `Cargo.toml` lists every Rust workspace member and shared dependencies.
-- `build` is the supported build/package/manual/desktop entry point. `./build open` builds both
-  Tauri applications and the server, starts the canonical development server, and opens ToskLight.
-- `test` composes architecture, unit, Playwright, screenshot, and desktop-smoke workflows. See the
-  [test map](test-map.md) before choosing a broad command.
+- Root `package.json` is the supported build, test, package, manual, and desktop entry point.
+  `npm run open` builds both Tauri applications and the server, starts the canonical development
+  server, and opens ToskLight.
+- `npm run test:*` composes architecture, unit, Playwright, screenshot, and desktop-smoke
+  workflows. See the [test map](test-map.md) before choosing a broad command.
 - `tools/check-architecture.mjs` enforces Rust dependency direction, the thin server entry point,
   closed Playback ownership, and TypeScript wire-boundary imports.
 - `tools/check-source-size.mjs` applies the source-size ratchet used during the refactor.
@@ -94,9 +95,9 @@ startup/background resources, and `crates/server/src/runtime/http_router.rs` com
 routers. Files named `*_v2.rs`, `*_http.rs`, `*_wire.rs`, and
 `event_transport/adapter.rs` translate between wire DTOs and application commands/events.
 
-Files under `crates/server/src/runtime/ws_*`, v1 route modules, and legacy event helpers are
-compatibility adapters. Keep them behavior-compatible while callers migrate; do not put new domain
-rules in them.
+The v2 event transport also accepts correlated command frames so the desk UI keeps one ordered live
+connection. OSC, integrator HTTP actions, and desktop bridges are deliberate adapters; none owns a
+second copy of domain rules.
 
 ## Control UI
 
@@ -115,10 +116,10 @@ The control UI lives in `apps/control-ui`.
   become an authoritative show or runtime store.
 - `apps/control-ui/src/platform/desktop/` defines `DesktopBridge` plus Tauri and browser adapters.
 
-`apps/control-ui/src/api/ServerContext.tsx` and `apps/control-ui/src/features/server/` still compose
-unmigrated capabilities. Treat them as temporary. A new capability belongs in a feature-local
-store/hook and validated API adapter, not another field on `ServerContextValue` or another broad
-refresh branch.
+`apps/control-ui/src/api/ServerContext.ts` is retained only as a narrow contract for legacy test
+mocks. `apps/control-ui/src/features/server/` composes focused capabilities and shared connection
+infrastructure; it no longer exposes `useServer()`. A new capability belongs in a feature-local
+store/hook and validated API adapter, not a broad context or refresh branch.
 
 The native host is `apps/control-ui/src-tauri/`. It launches and supervises the sibling server,
 owns native windows, and exposes only the typed desktop bridge needed by frontend code.

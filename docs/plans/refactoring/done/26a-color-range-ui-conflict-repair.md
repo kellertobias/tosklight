@@ -42,7 +42,7 @@ npm run test:e2e-ui
 npm run test:e2e
 ```
 
-## Outcome
+## Result
 
 The UI did not encounter a real cross-surface write race. The command facade and event
 transport serialized the same Rust `f32` authority with different JSON number spellings:

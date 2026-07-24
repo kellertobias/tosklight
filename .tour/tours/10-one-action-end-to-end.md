@@ -1,14 +1,16 @@
 ---
 slug: one-action-end-to-end
-title: One Action, End to End
+title: "One Value: From Desk Input to DMX and Back"
 components: [backend, engine, control-ui, programmer]
 order: 20
 ---
 
-# One Action, End to End
+# One Value: From Desk Input to DMX and Back
 
-Follow `GROUP 1 AT 50 ENTER` from a keypress to a DMX byte and back to the screen. Everything else
-in the system is a variation on this path.
+Follow `GROUP 1 AT 50 ENTER` from software or OSC keys to semantic fixture values, a DMX byte, and
+authoritative feedback. Operator truth is in `docs/help/30-Programmer/01-command-line.md` and
+`docs/help/30-Programmer/02-selecting-and-setting-values.md`; CROSS-001, OSC-002, and PROG-002 in
+the root acceptance suite protect the path.
 
 ## 1. The keypress
 
@@ -30,11 +32,15 @@ comes from the server.
 ## 3. The transport
 
 ```
-POST /api/v2/desks/{desk_id}/command-line/keys      one logical key, press or release phase
-POST /api/v2/desks/{desk_id}/command-line/execute   ENTER
+WebSocket /api/v2/events, programmer.command_line.*  production desk UI
+POST /api/v2/command-line/keys                       HTTP/integrator key twin
+POST /api/v2/command-line/execute                    HTTP/integrator ENTER twin
 ```
 
-DTOs come from `apps/control-ui/src/api/generated/light-wire.ts`, which is generated and checked in.
+The established desk WebSocket already owns ordering and desk/session context. HTTP uses the
+optional `X-Tosk-Desk` context header. OSC sends the frozen
+`/light/<desk>/programmer/<action>` address with true/false key phases. DTOs come from
+`apps/control-ui/src/api/generated/light-wire.ts`, which is generated and checked in.
 
 ## 4. The adapter
 
@@ -63,13 +69,17 @@ pub trait ApplicationCommand: Send + 'static {
 
 Each command declares its own result type. There is no process-wide command enum.
 
-## 6. The domain
+## 6. Selection, Groups, and Programmer LTP
 
 `crates/programmer/src/command_line/` parses the accumulated keys.
 `crates/programmer/src/groups.rs` expands Group 1 to its ordered logical heads.
 `crates/programmer/src/values.rs` applies the value under LTP.
 
 None of this knows a WebSocket exists.
+
+A missing Group ID inside a range is skipped; an explicitly stored empty Group remains distinct
+from an absent Group. An unpatched fixture stays in the ordered selection and Programmer, but later
+receives no physical output binding.
 
 ## 7. The outcome
 
@@ -111,6 +121,11 @@ subscriber from stalling a frame.
 against the overlay from step 2, handling either arrival order, because the HTTP outcome and the
 WebSocket event race. If the sequence had a gap, the store repairs from a snapshot.
 
+A revision conflict repairs from authority and lets the deliberate action reapply. A replay returns
+the stored outcome without duplicating the value, history, or event. Compact and widened JSON
+spellings of the same Rust `f32` are compared by their `f32` value, so wire formatting cannot cause
+a false repair.
+
 ## Same command, three surfaces
 
 `tests/support/operator/programmer.ts` drives the same command through:
@@ -129,5 +144,5 @@ Steps 5 to 11 are identical for all three. Only 1 to 4 differ. `pairedScenario` 
 1. Find where `GROUP` becomes `[GRP]`, and where `[GRP][GRP]` becomes DEGRP.
 2. Send the same value twice. Confirm the second returns no-change and publishes nothing.
 3. Kill the WebSocket mid-gesture. Find the gap detection and the snapshot repair.
-4. Find something in `crates/server/src/runtime/ws_*` doing this the old way, and note the
-   difference.
+4. Follow one 16-bit Pan value through the fixture profile's coarse/fine encoding without running
+   the desk.
