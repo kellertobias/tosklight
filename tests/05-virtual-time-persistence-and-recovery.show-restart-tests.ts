@@ -71,9 +71,7 @@ export function registerShow001PairedScenario(): void {
 			});
 			await api.request("POST", "/api/v1/cuelists/1/go", {});
 			await api.executeCommandLine("FIXTURE 12 AT 65");
-			await api.request("POST", `/api/v1/shows/${state.copyId}/revisions`, {
-				name: state.revisionName,
-			});
+			await api.saveShowRevision(state.copyId, state.revisionName);
 		},
 		ui: async ({ api, bench, desk, page }, state) => {
 			await desk.open(bench.baseUrl);
@@ -89,12 +87,12 @@ export function registerEmptyShowRestartTest(): void {
 		api,
 		bench,
 	}) => {
-		const provisional = await api.request<any>("POST", "/api/v1/shows", {
+		const provisional = await api.createShow<any>({
 			name: "New Empty Show",
 			data_base64: null,
 			overwrite: false,
 		});
-		await api.request("POST", `/api/v1/shows/${provisional.id}/open`, {
+		await api.openShow(provisional.id, {
 			transition: "hold_current",
 		});
 		await api.request(
@@ -128,12 +126,9 @@ export function registerEmptyShowRestartTest(): void {
 			marker: "programmed before naming",
 		});
 
-		const renamed = await api.request<any>(
-			"PUT",
-			`/api/v1/shows/${provisional.id}/rename`,
-			{
-				name: "Opening Night",
-			},
+		const renamed = await api.renameShow<any>(
+			provisional.id,
+			"Opening Night",
 		);
 		expect(renamed).toMatchObject({
 			id: provisional.id,
@@ -142,7 +137,7 @@ export function registerEmptyShowRestartTest(): void {
 		expect(renamed.path).toContain("Opening Night.show");
 		await expect(fs.access(provisionalPath)).rejects.toThrow();
 		expect(
-			(await api.request<any[]>("GET", "/api/v1/shows")).filter(
+			(await api.shows<any>()).filter(
 				(show) => show.id === provisional.id,
 			),
 		).toEqual([
@@ -203,10 +198,9 @@ export function registerShow001ProcessRestartTest(): void {
 			blackout: false,
 		});
 		const durableBefore = await programmer(api);
-		const revision = await api.request<any>(
-			"POST",
-			`/api/v1/shows/${copy.id}/revisions`,
-			{ name: "SHOW-001 before restart" },
+		const revision = await api.saveShowRevision<any>(
+			copy.id,
+			"SHOW-001 before restart",
 		);
 		expect(revision.name).toBe("SHOW-001 before restart");
 		const expectedFirstFrame = await bench.tick(0);

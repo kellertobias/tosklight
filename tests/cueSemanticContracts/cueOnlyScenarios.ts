@@ -121,7 +121,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 					(await object<any>(api, "cue_list", installed.id)).body.cues.length,
 			)
 			.toBe(2);
-		await api.request("POST", `/api/v1/shows/${state.showId}/open`, {
+		await api.openShow(state.showId, {
 			transition: "hold_current",
 		});
 		await expect

@@ -104,7 +104,7 @@ export class LightBench {
     this.artnet.reset();
     this.sacn.reset();
     for (const hardware of this.oscHardware) hardware.resetTrace();
-    const show = await api.request<{ id: string }>("POST", "/api/v1/shows", { name, data_base64: null, overwrite: false });
+    const show = await api.createShow<{ id: string }>({ name });
     const fixtureIds = Array.from({ length: 12 }, () => crypto.randomUUID());
     await Promise.all(fixtureIds.map((fixtureId, index) => api.request("PUT", `/api/v1/shows/${show.id}/objects/patched_fixture/${fixtureId}`, dimmer(fixtureId, index + 1), true, 0)));
     await api.request("PUT", `/api/v1/shows/${show.id}/objects/group/1`, {
@@ -127,7 +127,7 @@ export class LightBench {
       protocol: "sacn", logical_universe: 1, destination_universe: 101,
       destination: `127.0.0.1:${this.sacn.port}`, enabled: true, minimum_slots: 512,
     }, true, 0);
-    await api.request("POST", `/api/v1/shows/${show.id}/open`, { transition: "hold_current" });
+    await api.openShow(show.id, { transition: "hold_current" });
     return { id: show.id, fixtureIds, session };
   }
 

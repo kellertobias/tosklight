@@ -59,7 +59,7 @@ export function registerMatterRestartTest(): void {
 				.configuration.matter_enabled,
 		).toBe(true);
 
-		await api.request("POST", `/api/v1/shows/${showA.id}/open`, {
+		await api.openShow(showA.id, {
 			transition: "hold_current",
 		});
 		await expect

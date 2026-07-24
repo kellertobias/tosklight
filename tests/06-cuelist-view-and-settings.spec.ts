@@ -73,7 +73,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       await expect(putObject(api, "cue_list", installed.id, { ...renumbered.body, name: "Stale write" }, edited.revision)).rejects.toThrow(/revision/i);
       expect(JSON.stringify((await object<any>(api, "cue_list", installed.id)).body)).toBe(committedBytes);
 
-      await api.request("POST", `/api/v1/shows/${show.id}/open`, { transition: "hold_current" });
+      await api.openShow(show.id, { transition: "hold_current" });
       const reopened = await object<any>(api, "cue_list", installed.id);
       expect(JSON.stringify(reopened.body)).toBe(committedBytes);
       expect(reopened.body.cues[1]).toMatchObject({
@@ -156,7 +156,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       expect(afterInvalid.body.cues[1]).toEqual(lastValid.body.cues[1]);
       expect((await playbackState(api)).active).toEqual(beforeSelection.active);
 
-      await api.request("POST", `/api/v1/shows/${show.id}/open`, { transition: "hold_current" });
+      await api.openShow(show.id, { transition: "hold_current" });
       await page.reload();
       await expect(page.locator(".connection-cover")).toBeHidden({ timeout: 10_000 });
       await openCuelistFromCurrentDesk(page, installed.name);
@@ -450,7 +450,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await trackingSettings.getByRole("button", { name: "Save", exact: true }).click();
     await expect.poll(async () => (await object<any>(api, "cue_list", legacyTracking.id)).body.wrap_mode).toBe("tracking");
 
-    await api.request("POST", `/api/v1/shows/${show.id}/open`, { transition: "hold_current" });
+    await api.openShow(show.id, { transition: "hold_current" });
     await bench.restart();
     await api.login();
     expect((await object<any>(api, "cue_list", installed.id)).body).toMatchObject({
@@ -900,7 +900,7 @@ async function setControlTiming(api: ApiDriver, speedGroups: number[], sequenceM
 }
 
 async function reopenAndReset(api: ApiDriver, showId: string): Promise<void> {
-  await api.request("POST", `/api/v1/shows/${showId}/open`, { transition: "hold_current" });
+  await api.openShow(showId, { transition: "hold_current" });
   await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
 }
 

@@ -22,8 +22,8 @@ async function setDimmerByTouch(page: Page, value: number) {
 
 test("physical Enter names a persisted empty show without creating a second identity", async ({ page, request }) => {
   const session = await jsonRequest<Session>(request, "post", "/api/v2/sessions", undefined, { username: "Operator" });
-  const base = await jsonRequest<{ id: string }>(request, "post", "/api/v1/shows", session, { name: `Base-${crypto.randomUUID()}`, data_base64: null, overwrite: false });
-  await jsonRequest(request, "post", `/api/v1/shows/${base.id}/open`, session, { transition: "hold_current" });
+  const base = await showAction<{ id: string }>(request, session, { type: "create", name: `Base-${crypto.randomUUID()}`, data_base64: null, overwrite: false });
+  await showAction(request, session, { type: "open", show_id: base.id, transition: "hold_current", transition_millis: null });
   await page.goto("/");
   await waitForConnected(page);
   await page.getByRole("button", { name: "Open show menu" }).click();
@@ -35,7 +35,7 @@ test("physical Enter names a persisted empty show without creating a second iden
   const createdBootstrap = await jsonRequest<{ active_show: { id: string; name: string } | null }>(request, "get", "/api/v2/bootstrap", session);
   const empty = createdBootstrap.active_show!;
   expect(empty.name).toMatch(/^New Empty Show(?: [1-9]\d*)?$/);
-  expect((await jsonRequest<Array<{ id: string; name: string }>>(request, "get", "/api/v1/shows", session)).find((show) => show.id === empty.id)).toMatchObject(empty);
+  expect((await showSnapshot<{ id: string; name: string }>(request, session)).find((show) => show.id === empty.id)).toMatchObject(empty);
   await page.getByRole("button", { name: "Save As", exact: true }).click();
   await page.getByLabel("Show name").click();
   await page.keyboard.type("My Show");
@@ -45,7 +45,7 @@ test("physical Enter names a persisted empty show without creating a second iden
   const bootstrap = await jsonRequest<{ active_show: { id: string; name: string } | null }>(request, "get", "/api/v2/bootstrap", session);
   expect(bootstrap.active_show?.id).toBe(empty.id);
   expect(bootstrap.active_show?.name).toBe("My Show");
-  const shows = await jsonRequest<Array<{ id: string; name: string }>>(request, "get", "/api/v1/shows", session);
+  const shows = await showSnapshot<{ id: string; name: string }>(request, session);
   expect(shows.filter((show) => show.id === empty.id)).toHaveLength(1);
   expect(shows.find((show) => show.id === empty.id)).toMatchObject({ id: empty.id, name: "My Show" });
   expect(shows.some((show) => show.name === empty.name)).toBe(false);
@@ -56,6 +56,19 @@ async function jsonRequest<T>(request: APIRequestContext, method: "get" | "post"
   const response = await request[method](url, { data, headers });
   expect(response.ok(), `${method.toUpperCase()} ${url}: ${await response.text()}`).toBeTruthy();
   return response.status() === 204 ? undefined as T : response.json() as Promise<T>;
+}
+
+async function showSnapshot<T>(request: APIRequestContext, session: Session): Promise<T[]> {
+  return (await jsonRequest<{ shows: T[] }>(request, "get", "/api/v2/shows", session)).shows;
+}
+
+async function showAction<T>(request: APIRequestContext, session: Session, action: Record<string, unknown>): Promise<T> {
+  const outcome = await jsonRequest<{ result: { type: string; show?: T } }>(request, "post", "/api/v2/shows", session, {
+    request_id: crypto.randomUUID(),
+    action,
+  });
+  expect(outcome.result.type).toBe("show");
+  return outcome.result.show as T;
 }
 
 async function waitForDmx(request: APIRequestContext, expected: number) {
@@ -99,7 +112,7 @@ async function registerAuditReceiver(page: Page, session: Session) {
 
 test("touch programmer path is audited and reaches the rendered DMX output", async ({ page, request, desk }) => {
   const setupSession = await jsonRequest<Session>(request, "post", "/api/v2/sessions", undefined, { username: "Operator" });
-  const show = await jsonRequest<{ id: string }>(request, "post", "/api/v1/shows", setupSession, { name: `E2E-${crypto.randomUUID()}`, data_base64: null, overwrite: false });
+  const show = await showAction<{ id: string }>(request, setupSession, { type: "create", name: `E2E-${crypto.randomUUID()}`, data_base64: null, overwrite: false });
   const fixtureIds = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
   for (const [index, fixtureId] of fixtureIds.entries()) await jsonRequest(request, "put", `/api/v1/shows/${show.id}/objects/patched_fixture/dimmer-${index + 1}`, setupSession, {
     fixture_id: fixtureId, fixture_number: index + 1,
@@ -110,7 +123,7 @@ test("touch programmer path is audited and reaches the rendered DMX output", asy
     }, universe: 1, address: index + 1, logical_heads: [],
   });
   await jsonRequest(request, "put", `/api/v1/shows/${show.id}/objects/group/1`, setupSession, { name: "All Dimmers", fixtures: fixtureIds, master: 1, playback_fader: 1 });
-  await jsonRequest(request, "post", `/api/v1/shows/${show.id}/open`, setupSession, { transition: "hold_current" });
+  await showAction(request, setupSession, { type: "open", show_id: show.id, transition: "hold_current", transition_millis: null });
 
   await page.addInitScript((deskId) => {
     sessionStorage.setItem("light.control-desk", deskId);

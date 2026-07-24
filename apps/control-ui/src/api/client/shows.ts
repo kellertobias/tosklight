@@ -37,8 +37,6 @@ export class ShowApiClient {
 	async shows(): Promise<ShowEntry[]> {
 		const snapshot = await this.transport.request<ShowLibrarySnapshot>(
 			"/api/v2/shows",
-			{},
-			false,
 		);
 		return snapshot.shows.map(showEntry);
 	}

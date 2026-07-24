@@ -319,12 +319,12 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
   // once that recovery browser surface exists.
   test.skip("MANUAL-019 @ui › Shows & recovery loads a root-confined .show selection with safe blackout", async ({ api, desk, page }) => {
     const bootstrap = await api.request<any>("GET", "/api/v2/bootstrap", undefined, false);
-    const source = await fetch(`${api.baseUrl}/api/v1/shows/${bootstrap.active_show.id}/download`, {
+    const source = await fetch(`${api.baseUrl}/api/v2/shows/${bootstrap.active_show.id}/download`, {
       headers: { authorization: `Bearer ${api.session!.token}` },
     });
     expect(source.ok).toBe(true);
     const copyName = `Recovery Browser ${crypto.randomUUID()}`;
-    const copy = await api.request<any>("POST", "/api/v1/shows", {
+    const copy = await api.createShow<any>({
       name: copyName,
       data_base64: Buffer.from(await source.arrayBuffer()).toString("base64"),
       overwrite: false,
@@ -344,9 +344,12 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await expect(load).toBeDisabled();
     await browser.getByRole("button", { name: `${copyName}.show, file` }).click();
     await expect(load).toBeEnabled();
-    const openRequest = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith(`/api/v1/shows/${copy.id}/open`));
+    const openRequest = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith("/api/v2/shows") && request.postDataJSON()?.action?.show_id === copy.id);
     await load.click();
-    expect((await openRequest).postDataJSON()).toEqual({ transition: "safe_blackout" });
+    expect((await openRequest).postDataJSON()).toEqual(expect.objectContaining({
+      request_id: expect.any(String),
+      action: expect.objectContaining({ type: "open", show_id: copy.id, transition: "safe_blackout" }),
+    }));
     await expect(browser.getByRole("status")).toContainText(`${copyName}.show is now open.`);
     await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).active_show.id).toBe(copy.id);
   });

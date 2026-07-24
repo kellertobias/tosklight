@@ -424,7 +424,7 @@ async function downloadCompletedDemoShow(api: ApiDriver, showId: string): Promis
       destination: `127.0.0.1:${port}`,
     }, true, route.revision);
   }
-  const response = await fetch(`${api.baseUrl}/api/v1/shows/${showId}/download`, {
+  const response = await fetch(`${api.baseUrl}/api/v2/shows/${showId}/download`, {
     headers: { authorization: `Bearer ${api.session?.token}` },
   });
   expect(response.ok).toBe(true);

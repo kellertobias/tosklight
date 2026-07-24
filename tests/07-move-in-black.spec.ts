@@ -35,7 +35,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       const cueListId = await installMibCuelist(api, enabled.id, disabled.id);
 
       const showId = await activeShowId(api);
-      await api.request("POST", `/api/v1/shows/${showId}/open`, { transition: "hold_current" });
+      await api.openShow(showId, { transition: "hold_current" });
       const restoredEnabled = await object<any>(api, "patched_fixture", enabled.id);
       const restoredDisabled = await object<any>(api, "patched_fixture", disabled.id);
       expect([restoredEnabled.body.move_in_black_enabled, restoredEnabled.body.move_in_black_delay_millis]).toEqual([true, 1_000]);

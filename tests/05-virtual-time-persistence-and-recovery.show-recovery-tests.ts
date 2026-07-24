@@ -34,9 +34,7 @@ export function registerAtomicRecoveryTests(): void {
 				{ ...group.body, name: "Atomic baseline" },
 				group.revision,
 			);
-			await api.request("POST", `/api/v1/shows/${copy.id}/revisions`, {
-				name: "SHOW-002 baseline",
-			});
+			await api.saveShowRevision(copy.id, "SHOW-002 baseline");
 			const entry = await showEntry(api, copy.id);
 			await bench.stopServerGracefully(api.session!.token);
 			const oldBytes = await fs.readFile(entry.path);
@@ -102,7 +100,7 @@ export function registerMalformedRecoveryScenario(): void {
 		arrange: async ({ api, bench }, surface) =>
 			arrangeMalformedRecovery(api, bench, surface),
 		api: async ({ api }, state) => {
-			await api.request("POST", `/api/v1/shows/${state.recoveryShowId}/open`, {
+			await api.openShow(state.recoveryShowId, {
 				transition: "safe_blackout",
 			});
 		},
@@ -229,16 +227,12 @@ export function registerCorruptActiveShowRecoveryTests(): void {
 			).toBe(true);
 			expect(await fileHash(entry.path)).toBe(corruptHash);
 
-			const recovered = await api.request<{ id: string }>(
-				"POST",
-				"/api/v1/shows",
-				{
-					name: `show-003-recovered-${corruption}-${crypto.randomUUID()}`,
-					data_base64: validBytes.toString("base64"),
-					overwrite: false,
-				},
-			);
-			await api.request("POST", `/api/v1/shows/${recovered.id}/open`, {
+			const recovered = await api.createShow<{ id: string }>({
+				name: `show-003-recovered-${corruption}-${crypto.randomUUID()}`,
+				data_base64: validBytes.toString("base64"),
+				overwrite: false,
+			});
+			await api.openShow(recovered.id, {
 				transition: "safe_blackout",
 			});
 			expect(

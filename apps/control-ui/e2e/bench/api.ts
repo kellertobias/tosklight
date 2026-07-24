@@ -122,6 +122,107 @@ export class ApiDriver {
     return this.session;
   }
 
+  async shows<T = any>(): Promise<T[]> {
+    const snapshot = await this.request<{ shows: T[] }>("GET", "/api/v2/shows");
+    return snapshot.shows;
+  }
+
+  createShow<T = any>(input: { name: string; data_base64?: string | null; overwrite?: boolean }): Promise<T> {
+    return this.showResult<T>({
+      type: "create",
+      data_base64: null,
+      overwrite: false,
+      ...input,
+    });
+  }
+
+  openShow<T = any>(
+    showId: string,
+    input: { transition?: string; transition_millis?: number } = {},
+  ): Promise<T> {
+    return this.showResult<T>({
+      type: "open",
+      show_id: showId,
+      transition: "safe_blackout",
+      transition_millis: null,
+      ...input,
+    });
+  }
+
+  openDefaultShow<T = any>(input: { transition?: string; transition_millis?: number } = {}): Promise<T> {
+    return this.showResult<T>({
+      type: "open_default",
+      transition: "safe_blackout",
+      transition_millis: null,
+      ...input,
+    });
+  }
+
+  rollbackShow<T = any>(input: { transition?: string; transition_millis?: number } = {}): Promise<T> {
+    return this.showResult<T>({
+      type: "rollback",
+      transition: "safe_blackout",
+      transition_millis: null,
+      ...input,
+    });
+  }
+
+  renameShow<T = any>(showId: string, name: string): Promise<T> {
+    return this.showResult<T>({ type: "rename", show_id: showId, name });
+  }
+
+  overwriteShow<T = any>(sourceShowId: string, destinationShowId: string): Promise<T> {
+    return this.showResult<T>({
+      type: "overwrite",
+      source_show_id: sourceShowId,
+      destination_show_id: destinationShowId,
+    });
+  }
+
+  async showRevisions<T = any>(showId: string): Promise<T[]> {
+    const shows = await this.shows<Array<{ id: string; revisions: T[] }>[number]>();
+    return shows.find((show) => show.id === showId)?.revisions ?? [];
+  }
+
+  saveShowRevision<T = any>(showId: string, name: string): Promise<T> {
+    return this.revisionResult<T>({ type: "save_revision", show_id: showId, name });
+  }
+
+  openShowRevision<T = any>(
+    showId: string,
+    revision: number,
+    input: { transition?: string; transition_millis?: number } = {},
+  ): Promise<T> {
+    return this.showResult<T>({
+      type: "open_revision",
+      show_id: showId,
+      revision,
+      transition: "safe_blackout",
+      transition_millis: null,
+      ...input,
+    });
+  }
+
+  private async showResult<T>(action: Record<string, unknown>): Promise<T> {
+    const result = await this.showLibraryAction(action);
+    if (result.type !== "show") throw new Error(`Expected show result, received ${result.type}`);
+    return result.show as T;
+  }
+
+  private async revisionResult<T>(action: Record<string, unknown>): Promise<T> {
+    const result = await this.showLibraryAction(action);
+    if (result.type !== "revision") throw new Error(`Expected revision result, received ${result.type}`);
+    return result.revision as T;
+  }
+
+  private async showLibraryAction(action: Record<string, unknown>): Promise<any> {
+    const outcome = await this.request<{ result: any }>("POST", "/api/v2/shows", {
+      request_id: crypto.randomUUID(),
+      action,
+    });
+    return outcome.result;
+  }
+
   async patch(): Promise<LegacyPatchSnapshot> {
     const snapshot = decodePatchSnapshot(
       await this.request<unknown>("GET", "/api/v2/patch"),

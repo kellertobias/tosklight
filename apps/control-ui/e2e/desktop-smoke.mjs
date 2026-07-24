@@ -94,7 +94,8 @@ async function independentServerScenario() {
     await waitForExit(desktop.child, 8_000, "DESKTOP-002 app exit");
     if (!pidAlive(independentPid)) throw new Error(`DESKTOP-002 killed independent server PID ${independentPid}`);
     if (!(await fetch(`http://127.0.0.1:${port}/api/v2/readiness`)).ok) throw new Error("DESKTOP-002 independent readiness failed after app exit");
-    const created = await authenticated(independent.token, port, "POST", "/api/v1/shows", {
+    const created = await showAction(independent.token, port, {
+      type: "create",
       name: `desktop-002-post-exit-${crypto.randomUUID()}`,
       data_base64: null,
       overwrite: false,
@@ -124,12 +125,18 @@ async function startSeededServer(dataDir, port, showName) {
   ]);
   await waitFor(async () => (await fetch(`http://127.0.0.1:${port}/api/v2/readiness`)).ok, 15_000, `${showName} seed readiness`);
   const session = await request(port, "POST", "/api/v2/sessions", { username: "Operator" });
-  const show = await authenticated(session.token, port, "POST", "/api/v1/shows", {
+  const show = await showAction(session.token, port, {
+    type: "create",
     name: showName,
     data_base64: canonical.toString("base64"),
     overwrite: false,
   });
-  await authenticated(session.token, port, "POST", `/api/v1/shows/${show.id}/open`, { transition: "hold_current" });
+  await showAction(session.token, port, {
+    type: "open",
+    show_id: show.id,
+    transition: "hold_current",
+    transition_millis: null,
+  });
   return { ...running, token: session.token, showId: show.id };
 }
 
@@ -183,6 +190,15 @@ async function authenticated(token, port, method, pathname, body) {
   });
   if (!response.ok) throw new Error(`${method} ${pathname} returned ${response.status}: ${await response.text()}`);
   return response.status === 204 ? undefined : response.json();
+}
+
+async function showAction(token, port, action) {
+  const outcome = await authenticated(token, port, "POST", "/api/v2/shows", {
+    request_id: crypto.randomUUID(),
+    action,
+  });
+  if (outcome.result.type !== "show") throw new Error(`Expected show result, received ${outcome.result.type}`);
+  return outcome.result.show;
 }
 
 async function fetchJson(port, pathname) {

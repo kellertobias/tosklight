@@ -164,10 +164,7 @@ export async function assertShow001State(
 				value.attribute === "intensity",
 		)?.value,
 	).toMatchObject({ value: 0.65 });
-	const revisions = await api.request<any[]>(
-		"GET",
-		`/api/v1/shows/${state.copyId}/revisions`,
-	);
+	const revisions = await api.showRevisions<any>(state.copyId);
 	expect(
 		revisions.some((revision) => revision.name === state.revisionName),
 	).toBe(true);
@@ -188,14 +185,14 @@ export async function arrangeMalformedRecovery(
 	const damaged = await loadCanonicalCopy(api, bench, `show-003-${surface}`);
 	const entry = await showEntry(api, damaged.id);
 	const response = await fetch(
-		`${api.baseUrl}/api/v1/shows/${damaged.id}/download`,
+		`${api.baseUrl}/api/v2/shows/${damaged.id}/download`,
 		{
 			headers: { authorization: `Bearer ${api.session?.token}` },
 		},
 	);
 	expect(response.ok).toBe(true);
 	const recoveryShowName = `show-003-valid-${surface}-${crypto.randomUUID()}`;
-	const recovery = await api.request<{ id: string }>("POST", "/api/v1/shows", {
+	const recovery = await api.createShow<{ id: string }>({
 		name: recoveryShowName,
 		data_base64: Buffer.from(await response.arrayBuffer()).toString("base64"),
 		overwrite: false,
@@ -407,7 +404,7 @@ export async function saveNamedRevisionThroughUi(
 	await page.getByRole("button", { name: "Close Show", exact: true }).click();
 }
 export async function showEntry(api: ApiDriver, id: string): Promise<any> {
-	const entries = await api.request<any[]>("GET", "/api/v1/shows");
+	const entries = await api.shows<any>();
 	const entry = entries.find((candidate) => candidate.id === id);
 	expect(entry).toBeDefined();
 	return entry;

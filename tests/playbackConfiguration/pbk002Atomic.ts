@@ -198,7 +198,7 @@ async function verifyLegacyMigration(
 		color: "#20c997",
 	});
 
-	await api.request("POST", `/api/v1/shows/${prepared.showId}/open`, {
+	await api.openShow(prepared.showId, {
 		transition: "hold_current",
 	});
 	for (const assignment of assignments) {

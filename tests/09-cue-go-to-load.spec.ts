@@ -147,7 +147,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 
       await api.executeCommandLine("CUE CUE SET 1 CUE 10");
       expect((await runtime(api, 1)).effective_next_is_loaded).toBe(true);
-      await api.request("POST", `/api/v1/shows/${show.id}/open`, { transition: "hold_current" });
+      await api.openShow(show.id, { transition: "hold_current" });
       expect((await playbackState(api)).active).toHaveLength(0);
       state.completed = true;
     },

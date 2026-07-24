@@ -201,7 +201,7 @@ export async function restartPlaybackRun(
 		await api
 			.request("POST", `/api/v1/cuelists/${number}/off`, {})
 			.catch(() => undefined);
-	await api.request("POST", `/api/v1/shows/${showId}/open`, {
+	await api.openShow(showId, {
 		transition: "hold_current",
 	});
 	await api.request("POST", "/api/v1/test/clock/reset", undefined, false);

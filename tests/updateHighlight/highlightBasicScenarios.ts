@@ -262,7 +262,7 @@ pairedScenario<HighlightSurfaceState>({
 		const deskId = api.session!.desk.id;
 		await api.login("Operator", deskId);
 		state.reconnectRetained = (await highlightState(api)).active;
-		await api.request("POST", `/api/v1/shows/${state.showId}/open`, {
+		await api.openShow(state.showId, {
 			transition: "hold_current",
 		});
 	},
@@ -302,7 +302,7 @@ pairedScenario<HighlightSurfaceState>({
 			timeout: 10_000,
 		});
 		state.reconnectRetained = (await highlightState(api)).active;
-		await api.request("POST", `/api/v1/shows/${state.showId}/open`, {
+		await api.openShow(state.showId, {
 			transition: "hold_current",
 		});
 	},

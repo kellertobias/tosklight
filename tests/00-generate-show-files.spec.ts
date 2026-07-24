@@ -283,10 +283,10 @@ async function createCanonicalShows(api: ApiDriver) {
     fs.readFile(new URL("./fixtures/compact-rig.show", import.meta.url)),
     fs.readFile(new URL("./fixtures/default-stage.show", import.meta.url)),
   ]);
-  const compact = await api.request<ShowEntry>("POST", "/api/v1/shows", {
+  const compact = await api.createShow<ShowEntry>({
     name: `compact-rig-${suffix}`, data_base64: compactBytes.toString("base64"), overwrite: false,
   });
-  const defaultStage = await api.request<ShowEntry>("POST", "/api/v1/shows", {
+  const defaultStage = await api.createShow<ShowEntry>({
     name: `Default Stage Show ${suffix}`, data_base64: defaultStageBytes.toString("base64"), overwrite: false,
   });
   return { compact, defaultStage };
@@ -294,13 +294,13 @@ async function createCanonicalShows(api: ApiDriver) {
 
 async function copyShow(api: ApiDriver, source: ShowEntry, name: string): Promise<ShowEntry> {
   const data_base64 = (await downloadShow(api, source.id)).toString("base64");
-  const copy = await api.request<ShowEntry>("POST", "/api/v1/shows", { name, data_base64, overwrite: false });
+  const copy = await api.createShow<ShowEntry>({ name, data_base64, overwrite: false });
   await openShow(api, copy.id);
   return copy;
 }
 
 async function downloadShow(api: ApiDriver, id: string): Promise<Buffer> {
-  const response = await fetch(`${api.baseUrl}/api/v1/shows/${id}/download`, {
+  const response = await fetch(`${api.baseUrl}/api/v2/shows/${id}/download`, {
     headers: { authorization: `Bearer ${api.session?.token}` },
   });
   expect(response.ok).toBe(true);
@@ -475,19 +475,19 @@ async function createGroup(api: ApiDriver, showId: string, id: string, name: str
 }
 
 async function saveNamedRevision(api: ApiDriver, showId: string, name: string): Promise<{ revision: number }> {
-  return api.request("POST", `/api/v1/shows/${showId}/revisions`, { name });
+  return api.saveShowRevision(showId, name);
 }
 
 async function openNamedRevision(api: ApiDriver, showId: string, revision: number): Promise<ShowEntry> {
-  return api.request("POST", `/api/v1/shows/${showId}/revisions/${revision}/open`, { transition: "hold_current" });
+  return api.openShowRevision(showId, revision, { transition: "hold_current" });
 }
 
 async function openShow(api: ApiDriver, id: string): Promise<void> {
-  await api.request("POST", `/api/v1/shows/${id}/open`, { transition: "hold_current" });
+  await api.openShow(id, { transition: "hold_current" });
 }
 
 async function showNamed(api: ApiDriver, name: string): Promise<ShowEntry> {
-  const show = (await api.request<ShowEntry[]>("GET", "/api/v1/shows", undefined, false)).find((entry) => entry.name === name);
+  const show = (await api.shows<ShowEntry>()).find((entry) => entry.name === name);
   expect(show).toBeDefined();
   return show!;
 }

@@ -30,21 +30,21 @@ export async function loadCanonicalCopy(api: ApiDriver, bench: any, name: string
   bench.sacn.reset();
   await api.login();
   const bytes = await fs.readFile(new URL(`../fixtures/${fixture}.show`, import.meta.url));
-  const canonical = await api.request<{ id: string }>("POST", "/api/v1/shows", {
+  const canonical = await api.createShow<{ id: string }>({
     name: `${fixture}-canonical-${crypto.randomUUID()}`,
     data_base64: bytes.toString("base64"),
     overwrite: false,
   });
-  const response = await fetch(`${api.baseUrl}/api/v1/shows/${canonical.id}/download`, {
+  const response = await fetch(`${api.baseUrl}/api/v2/shows/${canonical.id}/download`, {
     headers: { authorization: `Bearer ${api.session?.token}` },
   });
   expect(response.ok).toBe(true);
-  const copy = await api.request<{ id: string }>("POST", "/api/v1/shows", {
+  const copy = await api.createShow<{ id: string }>({
     name: `${name}-${crypto.randomUUID()}`,
     data_base64: Buffer.from(await response.arrayBuffer()).toString("base64"),
     overwrite: false,
   });
-  await api.request("POST", `/api/v1/shows/${copy.id}/open`, { transition: "hold_current" });
+  await api.openShow(copy.id, { transition: "hold_current" });
   const routes = await api.request<Array<VersionedObject>>("GET", `/api/v1/shows/${copy.id}/objects/route`, undefined, false);
   for (const route of routes) {
     const protocol = route.body.protocol;

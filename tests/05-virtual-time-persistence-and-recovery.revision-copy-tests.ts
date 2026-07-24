@@ -80,10 +80,9 @@ async function arrangeRevisionCopy(
 		true,
 		named.revision,
 	);
-	const saved = await api.request<{ revision: number }>(
-		"POST",
-		`/api/v1/shows/${source.id}/revisions`,
-		{ name: "Approved focus" },
+	const saved = await api.saveShowRevision<{ revision: number }>(
+		source.id,
+		"Approved focus",
 	);
 	const latest = await showObject(api, source.id, "group", "4");
 	await api.request(
@@ -113,12 +112,11 @@ async function arrangeRevisionCopy(
 		true,
 		destinationGroup.revision,
 	);
-	const destinationRevision = await api.request<{ revision: number }>(
-		"POST",
-		`/api/v1/shows/${destination.id}/revisions`,
-		{ name: "Destination checkpoint" },
+	const destinationRevision = await api.saveShowRevision<{ revision: number }>(
+		destination.id,
+		"Destination checkpoint",
 	);
-	await api.request("POST", `/api/v1/shows/${source.id}/open`, {
+	await api.openShow(source.id, {
 		transition: "hold_current",
 	});
 	return {
@@ -135,9 +133,9 @@ async function exerciseRevisionCopyApi(
 	{ api, bench }: ApiBenchContext,
 	state: RevisionCopyState,
 ): Promise<void> {
-	const copy = await api.request<RevisionShow>(
-		"POST",
-		`/api/v1/shows/${state.sourceId}/revisions/${state.savedRevision}/open`,
+	const copy = await api.openShowRevision<RevisionShow>(
+		state.sourceId,
+		state.savedRevision,
 		{ transition: "hold_current" },
 	);
 	expect(copy.id).not.toBe(state.sourceId);
@@ -153,14 +151,14 @@ async function exerciseRevisionCopyApi(
 		revision_name: "Approved focus",
 	});
 
-	const collision = await api.request<RevisionShow>(
-		"POST",
-		`/api/v1/shows/${state.sourceId}/revisions/${state.savedRevision}/open`,
+	const collision = await api.openShowRevision<RevisionShow>(
+		state.sourceId,
+		state.savedRevision,
 		{ transition: "hold_current" },
 	);
 	expect(collision.id).not.toBe(copy.id);
 	expect(collision.name).not.toBe(copy.name);
-	await api.request("POST", `/api/v1/shows/${copy.id}/open`, {
+	await api.openShow(copy.id, {
 		transition: "hold_current",
 	});
 
@@ -175,9 +173,7 @@ async function exerciseRevisionCopyApi(
 		true,
 		copyGroup.revision,
 	);
-	await api.request("POST", `/api/v1/shows/${copy.id}/revisions`, {
-		name: "Copy checkpoint",
-	});
+	await api.saveShowRevision(copy.id, "Copy checkpoint");
 	await bench.stopServerGracefully(api.session!.token);
 	await bench.startServer();
 	await api.login();
@@ -262,9 +258,7 @@ async function openApprovedRevisionCopy(
 		true,
 		copyGroup.revision,
 	);
-	await api.request("POST", `/api/v1/shows/${copy.id}/revisions`, {
-		name: "Copy checkpoint",
-	});
+	await api.saveShowRevision(copy.id, "Copy checkpoint");
 	return { copy, showMenu };
 }
 
@@ -330,10 +324,7 @@ async function restartAndRenameRevisionCopy(
 		.toBe(copy.id);
 	expect(
 		(
-			await api.request<NamedRevision[]>(
-				"GET",
-				`/api/v1/shows/${copy.id}/revisions`,
-			)
+			await api.showRevisions<NamedRevision>(copy.id)
 		).map((entry) => entry.name),
 	).toEqual(["Copy checkpoint"]);
 
@@ -425,10 +416,7 @@ async function overwriteDestinationFromRevisionCopy(
 	expect(destinationAfter.name).toBe(state.destinationName);
 	expect(
 		(
-			await api.request<NamedRevision[]>(
-				"GET",
-				`/api/v1/shows/${state.destinationId}/revisions`,
-			)
+			await api.showRevisions<NamedRevision>(state.destinationId)
 		).map((entry) => [entry.revision, entry.name]),
 	).toEqual([[state.destinationRevision, "Destination checkpoint"]]);
 
@@ -560,18 +548,12 @@ async function assertRevisionCopy(
 	);
 	expect(
 		(
-			await api.request<NamedRevision[]>(
-				"GET",
-				`/api/v1/shows/${state.sourceId}/revisions`,
-			)
+			await api.showRevisions<NamedRevision>(state.sourceId)
 		).map((entry) => entry.name),
 	).toEqual(["Approved focus"]);
 	expect(
 		(
-			await api.request<NamedRevision[]>(
-				"GET",
-				`/api/v1/shows/${state.copyId}/revisions`,
-			)
+			await api.showRevisions<NamedRevision>(state.copyId)
 		).map((entry) => entry.name),
 	).toEqual(state.expectedCopyRevisions);
 	expect(
@@ -586,12 +568,7 @@ async function assertRevisionCopy(
 	).toBe(state.copyId);
 	expect(
 		(
-			await api.request<Array<{ id: string }>>(
-				"GET",
-				"/api/v1/shows",
-				undefined,
-				false,
-			)
+			await api.shows<{ id: string }>()
 		).some((entry) => entry.id === state.copyId),
 	).toBe(true);
 }

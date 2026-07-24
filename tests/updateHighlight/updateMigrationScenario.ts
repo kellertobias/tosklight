@@ -42,9 +42,9 @@ async function prepareLegacyUpdateScenario({
 	bench,
 }: UpdateMigrationContext) {
 	const show = await loadCanonicalCopy(api, bench, "update-002-legacy");
-	const showEntry = (
-		await api.request<any[]>("GET", "/api/v1/shows", undefined, false)
-	).find((entry) => entry.id === show.id);
+	const showEntry = (await api.shows<any>()).find(
+		(entry) => entry.id === show.id,
+	);
 	expect(showEntry).toBeDefined();
 	const fixtures = (await objects<any>(api, "patched_fixture")).slice(0, 4);
 	expect(fixtures).toHaveLength(4);

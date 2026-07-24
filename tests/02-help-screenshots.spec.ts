@@ -117,13 +117,13 @@ const workflowScreenshots = [
 
 async function openSeededDefaultStageShow(api: ApiDriver): Promise<ShowEntry> {
   const bytes = await fs.readFile(new URL("./fixtures/default-stage.show", import.meta.url));
-  const show = await api.request<ShowEntry>("POST", "/api/v1/shows", {
+  const show = await api.createShow<ShowEntry>({
     name: `Docs Default Stage ${crypto.randomUUID()}`,
     data_base64: bytes.toString("base64"),
     overwrite: false,
   });
   await seedScreenshotProgramming(api, show.id);
-  await api.request("POST", `/api/v1/shows/${show.id}/open`, { transition: "hold_current" });
+  await api.openShow(show.id, { transition: "hold_current" });
   return show;
 }
 

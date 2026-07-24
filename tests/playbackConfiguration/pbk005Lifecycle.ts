@@ -250,7 +250,7 @@ async function verifySwapProtection(
 	const afterSwap = logicalUniverse(await bench.tick(0));
 	expect(afterSwap[3]).toBeGreaterThan(0);
 	expect(afterSwap[4]).toBeGreaterThan(0);
-	await api.request("POST", `/api/v1/shows/${prepared.showId}/open`, {
+	await api.openShow(prepared.showId, {
 		transition: "hold_current",
 	});
 	expect((await playbackAt(api, 1, 4)).body.protect_from_swap).toBe(true);

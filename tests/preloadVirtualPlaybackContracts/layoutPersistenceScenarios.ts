@@ -133,11 +133,9 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 			undefined,
 			false,
 		);
-		await api.request(
-			"POST",
-			`/api/v1/shows/${bootstrap.active_show.id}/open`,
-			{ transition: "hold_current" },
-		);
+		await api.openShow(bootstrap.active_show.id, {
+			transition: "hold_current",
+		});
 	},
 	ui: async ({ api, bench, desk, page }, state) => {
 		await desk.open(bench.baseUrl);
