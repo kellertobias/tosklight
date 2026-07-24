@@ -62,7 +62,7 @@ target/debug/light-server \
 fixture_server_pid=$!
 ```
 
-Poll `/api/v1/readiness`, then fetch `/api/v1/fixture-profiles`. Assert the exact manufacturer/name, mode names and footprints, stable IDs, `reserved_source: null`, and required asset data URLs. Exercise package export and re-import through the authenticated REST endpoints or Rust codec, comparing normalized profiles and stable IDs.
+Poll `/api/v2/readiness`, then fetch `/api/v2/fixture-library/profiles`. Assert the exact manufacturer/name, mode names and footprints, stable IDs, `reserved_source: null`, and required asset data URLs. Exercise package export and re-import through the authenticated v2 fixture-library endpoints or Rust codec, comparing normalized profiles and stable IDs.
 
 Stop and restart the isolated server against the same temporary data directory and confirm IDs and revisions are unchanged. Terminate only the recorded PID and remove only the recorded temporary directory. Do not run `npm run open` unless desktop packaging itself is in scope. When shipped-library help changes, also run `npm run manual`.
 

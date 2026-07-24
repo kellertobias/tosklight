@@ -17,7 +17,6 @@ async fn rest_session_show_and_revision_flow() {
     let token = session["token"].as_str().unwrap();
     let show = create_show(&app, token, "Tour").await;
     let show_id = show["id"].as_str().unwrap();
-    let uri = format!("/api/v1/shows/{show_id}/objects/group/front");
     let response = seed_show_object(
         &state,
         token,
@@ -34,44 +33,41 @@ async fn rest_session_show_and_revision_flow() {
         seed_show_object(&state, token, show_id, "group", "front", 0, serde_json::json!({}))
             .await;
     assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    let opened = app
+        .clone()
+        .oneshot(open_show_request(token, show_id))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
     let objects = app
         .clone()
-        .oneshot(
-            Request::get(format!("/api/v1/shows/{show_id}/objects/group"))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(v2_show_object_get(token, show_id, "group", None))
         .await
         .unwrap();
     assert_eq!(objects.status(), StatusCode::OK);
-    assert_eq!(objects.headers()[header::ETAG], "\"2\"");
-    assert_eq!(json(objects).await.as_array().unwrap().len(), 1);
+    let objects = json(objects).await;
+    assert_eq!(objects["show_revision"], 2);
+    assert_eq!(objects["objects"].as_array().unwrap().len(), 1);
     let exact = app
         .clone()
         .oneshot(
-            Request::get(&uri)
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
+            v2_show_object_get(token, show_id, "group", Some("front")),
         )
         .await
         .unwrap();
     assert_eq!(exact.status(), StatusCode::OK);
-    assert_eq!(exact.headers()["x-light-show-revision"], "\"2\"");
+    assert_eq!(json(exact).await["show_revision"], 2);
     let missing = app
         .clone()
         .oneshot(
-            Request::get(format!(
-                "/api/v1/shows/{show_id}/objects/group/missing"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap(),
+            v2_show_object_get(token, show_id, "group", Some("missing")),
         )
         .await
         .unwrap();
-    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
-    assert_eq!(missing.headers()["x-light-show-revision"], "\"2\"");
+    assert_eq!(missing.status(), StatusCode::OK);
+    let missing = json(missing).await;
+    assert_eq!(missing["show_revision"], 2);
+    assert!(missing["object"].is_null());
     assert!(
         std::fs::read_dir(data_dir.join("backups"))
             .unwrap()
@@ -136,6 +132,12 @@ async fn exact_non_group_read_does_not_deserialize_its_collection() {
         .unwrap();
     let expected_show_revision = store.portable_revision().unwrap().value();
     drop(store);
+    let opened = app
+        .clone()
+        .oneshot(open_show_request(&token, show_id))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
     let connection = rusqlite::Connection::open(&entry.path).unwrap();
     connection
         .execute(
@@ -147,39 +149,32 @@ async fn exact_non_group_read_does_not_deserialize_its_collection() {
 
     let response = app
         .clone()
-        .oneshot(
-            Request::get(format!(
-                "/api/v1/shows/{show_id}/objects/future/wanted"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap(),
-        )
+        .oneshot(v2_show_object_get(
+            &token,
+            show_id,
+            "future",
+            Some("wanted"),
+        ))
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
+    let response = json(response).await;
+    assert_eq!(response["show_revision"], expected_show_revision);
     assert_eq!(
-        response.headers()["x-light-show-revision"],
-        format!("\"{expected_show_revision}\"")
+        response["object"]["body"],
+        serde_json::json!({"value": 1})
     );
-    assert_eq!(json(response).await["body"], serde_json::json!({"value": 1}));
     let missing = app
         .oneshot(
-            Request::get(format!(
-                "/api/v1/shows/{show_id}/objects/future/missing"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap(),
+            v2_show_object_get(&token, show_id, "future", Some("missing")),
         )
         .await
         .unwrap();
-    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
-    assert_eq!(
-        missing.headers()["x-light-show-revision"],
-        format!("\"{expected_show_revision}\"")
-    );
+    assert_eq!(missing.status(), StatusCode::OK);
+    let missing = json(missing).await;
+    assert_eq!(missing["show_revision"], expected_show_revision);
+    assert!(missing["object"].is_null());
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -224,19 +219,23 @@ async fn exact_group_read_keeps_derived_membership_materialization() {
         .unwrap();
     drop(store);
 
+    let opened = app
+        .clone()
+        .oneshot(open_show_request(&token, show_id))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
     let response = app
         .oneshot(
-            Request::get(format!(
-                "/api/v1/shows/{show_id}/objects/group/derived"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap(),
+            v2_show_object_get(&token, show_id, "group", Some("derived")),
         )
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(json(response).await["body"]["fixtures"], serde_json::json!(fixtures));
+    assert_eq!(
+        json(response).await["object"]["body"]["fixtures"],
+        serde_json::json!(fixtures)
+    );
     let _ = std::fs::remove_dir_all(data_dir);
 }

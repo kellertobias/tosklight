@@ -284,11 +284,9 @@ export async function migrationSnapshot(
 	cueListId?: string,
 ): Promise<any> {
 	if (migration === "fixture-number") {
-		const fixtures = await api.request<any[]>(
-			"GET",
-			`/api/v1/shows/${await activeShowId(api)}/objects/patched_fixture`,
-			undefined,
-			false,
+		const fixtures = await api.showObjects<any>(
+			await activeShowId(api),
+			"patched_fixture",
 		);
 		return fixtures
 			.map((fixture) => ({
@@ -305,11 +303,9 @@ export async function migrationSnapshot(
 	if (migration === "route-defaults")
 		return object<any>(api, "route", "artnet");
 	if (migration === "virtual-dimmer-metadata") {
-		const fixtures = await api.request<any[]>(
-			"GET",
-			`/api/v1/shows/${await activeShowId(api)}/objects/patched_fixture`,
-			undefined,
-			false,
+		const fixtures = await api.showObjects<any>(
+			await activeShowId(api),
+			"patched_fixture",
 		);
 		return fixtures.find((fixture) => fixture.body.fixture_number === 21);
 	}
@@ -416,15 +412,21 @@ export async function showObject(
 	kind: string,
 	id: string,
 ): Promise<any> {
-	const entries = await api.request<any[]>(
-		"GET",
-		`/api/v1/shows/${showId}/objects/${kind}`,
-		undefined,
-		false,
-	);
-	const entry = entries.find((candidate) => candidate.id === id);
-	expect(entry).toBeDefined();
-	return entry;
+	const activeShowId = (
+		await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)
+	).active_show?.id;
+	if (activeShowId !== showId) {
+		await api.openShow(showId, { transition: "hold_current" });
+	}
+	try {
+		const entry = await api.showObject<any>(showId, kind, id);
+		expect(entry).toBeDefined();
+		return entry;
+	} finally {
+		if (activeShowId && activeShowId !== showId) {
+			await api.openShow(activeShowId, { transition: "hold_current" });
+		}
+	}
 }
 
 export function escapeRegex(value: string): string {

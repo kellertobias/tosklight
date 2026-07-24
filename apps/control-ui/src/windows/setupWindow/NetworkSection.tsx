@@ -66,7 +66,7 @@ export function NetworkSection({
 					<small>Active REST and WebSocket server</small>
 				</section>
 				<section>
-					<b>REST /api/v1</b>
+					<b>REST /api/v2</b>
 					<small>Initial and coarse-grained state</small>
 				</section>
 				<section>

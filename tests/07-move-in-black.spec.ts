@@ -132,7 +132,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     const mibCueListId = await installMibCuelist(api, enabled.id, comparison.id);
     const blockerCueListId = await installIntensityBlocker(api, enabled.id);
 
-    await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
+    await api.request("POST", "/api/v2/test/clock/reset", undefined, false);
     await api.cueListPlaybackAction(mibCueListId, "release", {});
     await api.cueListPlaybackAction(blockerCueListId, "release", {});
     await api.playbackNumberAction(1, "off", {});
@@ -203,7 +203,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     const withDarkChain = { ...initial.body, cues: [...initial.body.cues.slice(0, 2), extraDarkCue, initial.body.cues[2]] };
     await putObject(api, "cue_list", cueListId, withDarkChain, initial.revision);
 
-    await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
+    await api.request("POST", "/api/v2/test/clock/reset", undefined, false);
     await api.playbackNumberAction(1, "go", {});
     await api.playbackNumberAction(1, "go", {});
     await bench.tick(2_000);
@@ -342,7 +342,7 @@ async function runExactTiming(
     await api.playbackNumberAction(1, "go", {});
   },
 ) {
-  await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
+  await api.request("POST", "/api/v2/test/clock/reset", undefined, false);
   await api.cueListPlaybackAction(state.cueListId, "release", {});
   await api.playbackNumberAction(1, "off", {});
   await triggerGo(1);

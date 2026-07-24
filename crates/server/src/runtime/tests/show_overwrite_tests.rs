@@ -129,13 +129,27 @@ async fn overwrite_and_verify_destination(
     assert_eq!(overwritten["id"], destination_id);
     assert_eq!(overwritten["name"], "Destination");
     assert!(overwritten.get("revision_copy").is_none());
-    let objects = get_show_json(
-        app,
-        token,
-        format!("/api/v1/shows/{destination_id}/objects/user_layout"),
-    )
-    .await;
-    assert_eq!(objects[0]["body"]["marker"], "copy edit");
+    let opened = app
+        .clone()
+        .oneshot(open_show_request(token, destination_id))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
+    let objects = app
+        .clone()
+        .oneshot(v2_show_object_get(
+            token,
+            destination_id,
+            "user_layout",
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(objects.status(), StatusCode::OK);
+    assert_eq!(
+        json(objects).await["objects"][0]["body"]["marker"],
+        "copy edit"
+    );
     let revisions = show_revision_snapshot(app, token, destination_id).await;
     assert_eq!(revisions.as_array().unwrap().len(), 1);
     assert_eq!(revisions[0]["name"], "Destination baseline");
@@ -158,13 +172,21 @@ async fn verify_copy_keeps_identity_and_source_reference(
             .iter()
             .any(|show| show["id"] == copy_id)
     );
-    let copy = get_show_json(
-        app,
-        token,
-        format!("/api/v1/shows/{copy_id}/objects/user_layout"),
-    )
-    .await;
-    assert_eq!(copy[0]["body"]["marker"], "copy edit");
+    let opened = app
+        .clone()
+        .oneshot(open_show_request(token, copy_id))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
+    let copy = app
+        .clone()
+        .oneshot(v2_show_object_get(token, copy_id, "user_layout", None))
+        .await
+        .unwrap();
+    assert_eq!(
+        json(copy).await["objects"][0]["body"]["marker"],
+        "copy edit"
+    );
     let bootstrap = get_show_json(app, token, "/api/v2/bootstrap".into()).await;
     assert_eq!(bootstrap["active_show"]["id"], copy_id);
     assert_eq!(bootstrap["active_show"]["revision_copy"]["show_id"], source_id);

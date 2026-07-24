@@ -120,7 +120,7 @@ export function registerZeroTickScenario(): void {
 				(
 					await api.request<{ now: string }>(
 						"POST",
-						"/api/v1/test/clock/reset",
+						"/api/v2/test/clock/reset",
 						undefined,
 						false,
 					)

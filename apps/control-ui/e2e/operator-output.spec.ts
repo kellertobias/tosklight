@@ -89,10 +89,10 @@ async function seedObject(
 }
 
 async function waitForDmx(request: APIRequestContext, expected: number) {
-  const settle = await request.post("/api/v1/test/clock/advance", { data: { millis: 3_000 } });
+  const settle = await request.post("/api/v2/test/clock/advance", { data: { millis: 3_000 } });
   expect(settle.ok(), `manual fade settle: ${await settle.text()}`).toBeTruthy();
   await expect.poll(async () => {
-    const tick = await request.post("/api/v1/test/clock/advance", { data: { milliseconds: 0 } });
+    const tick = await request.post("/api/v2/test/clock/advance", { data: { milliseconds: 0 } });
     expect(tick.ok(), `manual output tick: ${await tick.text()}`).toBeTruthy();
     const snapshot = await jsonRequest<{ universes: Array<{ universe: number; slots: number[] }> }>(request, "get", "/api/v2/output/dmx");
     return snapshot.universes.find((universe) => universe.universe === 1)?.slots[0];

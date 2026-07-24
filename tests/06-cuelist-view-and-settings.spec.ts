@@ -906,7 +906,7 @@ async function setControlTiming(api: ApiDriver, speedGroups: number[], sequenceM
 
 async function reopenAndReset(api: ApiDriver, showId: string): Promise<void> {
   await api.openShow(showId, { transition: "hold_current" });
-  await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
+  await api.request("POST", "/api/v2/test/clock/reset", undefined, false);
 }
 
 function timingBytes(body: any): string {

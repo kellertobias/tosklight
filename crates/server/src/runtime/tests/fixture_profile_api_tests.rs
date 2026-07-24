@@ -412,28 +412,5 @@ async fn fixture_library_v2_is_replay_safe_and_preserves_package_and_gdtf_bytes(
         assert!(json(response).await[field].is_array());
     }
 
-    for (method, path) in [
-        ("GET", "/api/v1/fixture-library"),
-        ("PUT", "/api/v1/fixture-library"),
-        ("DELETE", "/api/v1/fixture-library/00000000-0000-0000-0000-000000000001/1"),
-        ("GET", "/api/v1/fixture-profiles"),
-        ("PUT", "/api/v1/fixture-profiles"),
-        ("GET", "/api/v1/fixture-profiles/warnings"),
-        ("GET", "/api/v1/fixture-profiles/00000000-0000-0000-0000-000000000001/revisions"),
-        ("DELETE", "/api/v1/fixture-profiles/00000000-0000-0000-0000-000000000001/1"),
-        ("GET", "/api/v1/fixture-profiles/00000000-0000-0000-0000-000000000001/1/package"),
-        ("POST", "/api/v1/fixture-packages/import"),
-        ("PUT", "/api/v1/fixture-profiles/00000000-0000-0000-0000-000000000001/1/source-gdtf"),
-    ] {
-        let request = Request::builder()
-            .method(method)
-            .uri(path)
-            .body(Body::empty())
-            .unwrap();
-        assert_eq!(
-            app.clone().oneshot(request).await.unwrap().status(),
-            StatusCode::NOT_FOUND
-        );
-    }
     let _ = std::fs::remove_dir_all(data_dir);
 }

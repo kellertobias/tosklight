@@ -25,7 +25,7 @@ OSC scenarios still receive the mandatory `@api` and `@ui` variants for their op
 2. Send `/light/subscribe` with OSC arguments `("osc-001-a", "main", <feedback-port>)` from the command socket.
 3. Wait for `/light/main/feedback/page`; this is evidence that subscription succeeded and identifies the exact desk alias used for all later addresses.
 4. Record the feedback-message mark after the initial subscription burst.
-5. Call `POST /api/v1/test/clock/advance` with `{"millis":0}` exactly once.
+5. Call `POST /api/v2/test/clock/advance` with `{"millis":0}` exactly once.
 6. Collect messages after the mark and verify one complete feedback cycle. Then leave virtual time unchanged for a bounded wall-time window and prove no unsolicited periodic cycle arrives.
 
 **Assertions:** Hardware-connected state becomes true. The client receives a complete feedback burst containing the current page, command line, programmer keys, faders, buttons, and playback state. No periodic feedback arrives between manual ticks.

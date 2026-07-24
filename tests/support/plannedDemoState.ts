@@ -301,7 +301,7 @@ export async function seedPlannedDemoRoutes(api: ApiDriver, showId: string, artn
 }
 
 export async function demoObjects<T = Record<string, any>>(api: ApiDriver, showId: string, kind: string): Promise<Array<VersionedObject<T>>> {
-  return api.request<Array<VersionedObject<T>>>("GET", `/api/v1/shows/${showId}/objects/${kind}`, undefined, false);
+  return api.showObjects<T>(showId, kind);
 }
 
 function fixtureBody(input: FixtureInput, existing?: PatchedFixture): PatchedFixture {

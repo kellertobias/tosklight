@@ -47,11 +47,9 @@ export async function legacyDimmerDefinition(
 		undefined,
 		false,
 	);
-	const fixtures = await api.request<any[]>(
-		"GET",
-		`/api/v1/shows/${bootstrap.active_show.id}/objects/patched_fixture`,
-		undefined,
-		false,
+	const fixtures = await api.showObjects<any>(
+		bootstrap.active_show.id,
+		"patched_fixture",
 	);
 	const source = fixtures.find(
 		(entry) => entry.body?.definition?.heads?.[0]?.parameters?.[0],

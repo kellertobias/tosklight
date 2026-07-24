@@ -398,7 +398,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
         destination,
         enabled: true,
       });
-      await api.request("POST", "/api/v1/test/output/failure", { destination, enabled: true }, false);
+      await api.request("POST", "/api/v2/test/output/failure", { destination, enabled: true }, false);
       return { failing, destination, showId: show.id, valuesEventSequence: null };
     },
     api: async ({ api }, state) => {
@@ -434,7 +434,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       expect(routeSendErrors(after, healthyDestination)).toBe(healthyErrorsBefore);
       expect(await api.request<any[]>("GET", `/api/v2/audit?after=${auditRevision}`)).toEqual([]);
 
-      await api.request("POST", "/api/v1/test/output/failure", { destination: state.destination, enabled: false }, false);
+      await api.request("POST", "/api/v2/test/output/failure", { destination: state.destination, enabled: false }, false);
       const recoveryMark = state.failing.mark();
       await bench.tick(0);
       const recovered = await state.failing.nextAfter(recoveryMark, "artnet", 11);

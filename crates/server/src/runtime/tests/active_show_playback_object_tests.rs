@@ -123,29 +123,6 @@ async fn clearing_a_slot_removes_the_pool_playback_from_every_page_atomically() 
     scenario.cleanup();
 }
 
-#[tokio::test]
-async fn v1_playback_page_slot_mutations_are_absent() {
-    let scenario = PlaybackObjectScenario::new("Retired slot routes").await;
-    for request in [
-        Request::put("/api/v1/playback-pages/1/slots/1"),
-        Request::delete("/api/v1/playback-pages/1/slots/1"),
-    ] {
-        let response = scenario
-            .app
-            .clone()
-            .oneshot(
-                request
-                    .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
-    scenario.cleanup();
-}
-
 struct PlaybackObjectScenario {
     state: AppState,
     app: Router,

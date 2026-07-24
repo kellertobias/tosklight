@@ -251,18 +251,27 @@ function cueDeletionFetch(options: FetchOptions = {}) {
 		if (url.includes("playback-runtime/snapshot"))
 			return json(options.active ?? playbackRuntime());
 		if (url.endsWith("/objects/playback"))
-			return json(options.playbackObjects ?? [playbackObject()], 200, {
-				etag: `"${options.playbackShowRevision ?? 7}"`,
+			return json({
+				show_id: SHOW_ID,
+				show_revision: options.playbackShowRevision ?? 7,
+				kind: "playback",
+				objects: options.playbackObjects ?? [playbackObject()],
 			});
 		if (url.endsWith("/objects/cue_list")) {
 			options.onCueLists?.();
-			return json(options.cueListObjects ?? [cueListObject()], 200, {
-				etag: `"${options.cueListShowRevision ?? 7}"`,
+			return json({
+				show_id: SHOW_ID,
+				show_revision: options.cueListShowRevision ?? 7,
+				kind: "cue_list",
+				objects: options.cueListObjects ?? [cueListObject()],
 			});
 		}
 		if (url.endsWith("/objects/playback_page"))
-			return json(options.pageObjects ?? [pageObject()], 200, {
-				etag: `"${options.pageShowRevision ?? 7}"`,
+			return json({
+				show_id: SHOW_ID,
+				show_revision: options.pageShowRevision ?? 7,
+				kind: "playback_page",
+				objects: options.pageObjects ?? [pageObject()],
 			});
 		if (url.endsWith("/cues/delete")) {
 			options.onAction?.();
@@ -287,10 +296,10 @@ function assertNarrowCalls(
 	const urls = fetchMock.mock.calls.map(([input]) => String(input));
 	expect(urls).toEqual([
 		"http://desk.local/api/v2/playback-runtime/snapshot",
-		`http://desk.local/api/v1/shows/${SHOW_ID}/objects/playback`,
-		`http://desk.local/api/v1/shows/${SHOW_ID}/objects/cue_list`,
+		"http://desk.local/api/v2/objects/playback",
+		"http://desk.local/api/v2/objects/cue_list",
 		...(withPage
-			? [`http://desk.local/api/v1/shows/${SHOW_ID}/objects/playback_page`]
+			? ["http://desk.local/api/v2/objects/playback_page"]
 			: []),
 		"http://desk.local/api/v2/cues/delete",
 	]);

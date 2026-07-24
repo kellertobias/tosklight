@@ -200,30 +200,6 @@ async fn volatile_output_controls_use_correlated_websocket_frames() {
 }
 
 #[tokio::test]
-async fn retired_v1_media_output_and_highlight_routes_are_absent() {
-    let (state, data_dir) = test_state();
-    let app = router(state);
-    for request in [
-        Request::get("/api/v1/visualization"),
-        Request::get("/api/v1/media"),
-        Request::get("/api/v1/media/00000000-0000-4000-8000-000000000001/preview/0"),
-        Request::get("/api/v1/dmx"),
-        Request::put("/api/v1/dmx/override"),
-        Request::get("/api/v1/highlight"),
-        Request::post("/api/v1/highlight/action"),
-        Request::put("/api/v1/patch-preview-highlight"),
-    ] {
-        let response = app
-            .clone()
-            .oneshot(request.body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
-    let _ = std::fs::remove_dir_all(data_dir);
-}
-
-#[tokio::test]
 async fn v2_output_action_is_atomic_revisioned_idempotent_and_strict() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

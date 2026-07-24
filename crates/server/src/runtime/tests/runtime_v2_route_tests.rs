@@ -34,35 +34,6 @@ async fn runtime_v2_readiness_and_bootstrap_expose_the_current_contract() {
 }
 
 #[tokio::test]
-async fn retired_v1_runtime_routes_are_not_registered() {
-    let (state, data_dir) = test_state();
-    let app = router(state);
-    for request in [
-        Request::get("/api/v1/readiness")
-            .body(Body::empty())
-            .unwrap(),
-        Request::get("/api/v1/diagnostics")
-            .body(Body::empty())
-            .unwrap(),
-        Request::get("/api/v1/bootstrap")
-            .body(Body::empty())
-            .unwrap(),
-        Request::get("/api/v1/patch").body(Body::empty()).unwrap(),
-        Request::post("/api/v1/sessions")
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(r#"{"username":"Operator"}"#))
-            .unwrap(),
-        Request::delete(format!("/api/v1/sessions/{}", Uuid::new_v4()))
-            .body(Body::empty())
-            .unwrap(),
-    ] {
-        let response = app.clone().oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
-    let _ = std::fs::remove_dir_all(data_dir);
-}
-
-#[tokio::test]
 async fn runtime_v2_session_tolerates_unknown_fields_and_can_close_itself() {
     let (state, data_dir) = test_state();
     let app = router(state);

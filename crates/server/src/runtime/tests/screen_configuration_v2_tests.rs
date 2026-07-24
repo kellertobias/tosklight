@@ -143,23 +143,6 @@ async fn screen_configuration_v2_is_sparse_replay_safe_tolerant_and_retires_v1()
     assert_eq!(snapshot["screens"][0]["name"], "Renamed");
     assert_eq!(snapshot["active_pages"][screen_id.to_string()], 1);
 
-    for request in [
-        Request::get("/api/v1/screens").body(Body::empty()).unwrap(),
-        Request::put(format!("/api/v1/screens/{screen_id}"))
-            .body(Body::empty())
-            .unwrap(),
-        Request::delete(format!("/api/v1/screens/{screen_id}"))
-            .body(Body::empty())
-            .unwrap(),
-        Request::put(format!("/api/v1/screens/{screen_id}/page"))
-            .body(Body::empty())
-            .unwrap(),
-    ] {
-        assert_eq!(
-            app.clone().oneshot(request).await.unwrap().status(),
-            StatusCode::NOT_FOUND
-        );
-    }
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

@@ -25,7 +25,7 @@ export interface ProgrammerState {
 }
 
 export async function loadCanonicalCopy(api: ApiDriver, bench: any, name: string, fixture: "compact-rig" | "default-stage" = "compact-rig") {
-  await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
+  await api.request("POST", "/api/v2/test/clock/reset", undefined, false);
   bench.artnet.reset();
   bench.sacn.reset();
   await api.login();
@@ -45,7 +45,7 @@ export async function loadCanonicalCopy(api: ApiDriver, bench: any, name: string
     overwrite: false,
   });
   await api.openShow(copy.id, { transition: "hold_current" });
-  const routes = await api.request<Array<VersionedObject>>("GET", `/api/v1/shows/${copy.id}/objects/route`, undefined, false);
+  const routes = await api.showObjects(copy.id, "route");
   for (const route of routes) {
     const protocol = route.body.protocol;
     await api.seedShowObject(copy.id, "route", route.id, {
@@ -53,7 +53,7 @@ export async function loadCanonicalCopy(api: ApiDriver, bench: any, name: string
       destination: `127.0.0.1:${protocol === "art_net" ? bench.artnet.port : bench.sacn.port}`,
     }, route.revision);
   }
-  await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
+  await api.request("POST", "/api/v2/test/clock/reset", undefined, false);
   bench.artnet.reset();
   bench.sacn.reset();
   await api.login();
@@ -88,7 +88,7 @@ export async function activeShowId(api: ApiDriver): Promise<string> {
 
 export async function objects<T = Record<string, any>>(api: ApiDriver, kind: string): Promise<Array<VersionedObject<T>>> {
   const showId = await activeShowId(api);
-  const result = await api.request<Array<VersionedObject<T>>>("GET", `/api/v1/shows/${showId}/objects/${kind}`, undefined, false);
+  const result = await api.showObjects<T>(showId, kind);
   return result.sort((left, right) => left.id.localeCompare(right.id, undefined, { numeric: true }));
 }
 

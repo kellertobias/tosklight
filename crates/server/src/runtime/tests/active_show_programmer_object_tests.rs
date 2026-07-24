@@ -1,34 +1,6 @@
 use super::*;
 
 #[tokio::test]
-async fn retired_object_undo_preset_store_and_preload_store_routes_are_absent() {
-    let (state, data_dir) = test_state();
-    let app = router(state);
-    let (token, _) = login(&app, "Operator").await;
-    let show = create_show(&app, &token, "Retired recording compatibility routes").await;
-    let show_id = show["id"].as_str().unwrap();
-    for path in [
-        format!("/api/v1/shows/{show_id}/objects/group/1/undo"),
-        format!("/api/v1/shows/{show_id}/presets/1/store"),
-        format!("/api/v1/shows/{show_id}/preload/store"),
-    ] {
-        let response = app
-            .clone()
-            .oneshot(
-                Request::post(path)
-                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from("{}"))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
-    let _ = std::fs::remove_dir_all(data_dir);
-}
-
-#[tokio::test]
 async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

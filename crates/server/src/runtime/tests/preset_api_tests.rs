@@ -94,41 +94,37 @@ async fn preset_object_api_uses_family_scoped_numbers() {
         )
         .unwrap();
 
+    let opened = app
+        .clone()
+        .oneshot(open_show_request(&token, show_id))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
     let listed = app
         .clone()
-        .oneshot(
-            Request::get(format!("/api/v1/shows/{show_id}/objects/preset"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(v2_show_object_get(&token, show_id, "preset", None))
         .await
         .unwrap();
     assert_eq!(listed.status(), StatusCode::OK);
     let listed = json(listed).await;
-    assert_eq!(listed.as_array().unwrap().len(), 3);
+    let objects = listed["objects"].as_array().unwrap();
+    assert_eq!(objects.len(), 3);
     assert!(
-        listed
-            .as_array()
-            .unwrap()
+        objects
             .iter()
             .any(|object| object["id"] == "2.1"
                 && object["body"]["family"] == "Color"
                 && object["body"]["number"] == 1)
     );
     assert!(
-        listed
-            .as_array()
-            .unwrap()
+        objects
             .iter()
             .any(|object| object["id"] == "7"
                 && object["body"]["family"] == "Color"
                 && object["body"]["number"] == 7)
     );
     assert!(
-        listed
-            .as_array()
-            .unwrap()
+        objects
             .iter()
             .any(|object| object["id"] == "3.1"
                 && object["body"]["family"] == "Position"
@@ -205,33 +201,23 @@ async fn typed_recording_persists_default_family_preset_under_its_bare_address()
 
     let listed = app
         .clone()
-        .oneshot(
-            Request::get(format!("/api/v1/shows/{show_id}/objects/preset"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(v2_show_object_get(&token, show_id, "preset", None))
         .await
         .unwrap();
     assert_eq!(listed.status(), StatusCode::OK);
     let listed = json(listed).await;
-    let objects = listed.as_array().unwrap();
+    let objects = listed["objects"].as_array().unwrap();
     assert_eq!(objects.len(), 1);
     assert_eq!(objects[0]["id"], "197");
     assert_eq!(objects[0]["body"]["family"], "Mixed");
     assert!(objects[0]["body"]["values"][&fixture_key]["pan"].is_object());
 
     let fetched = app
-        .oneshot(
-            Request::get(format!("/api/v1/shows/{show_id}/objects/preset/197"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(v2_show_object_get(&token, show_id, "preset", Some("197")))
         .await
         .unwrap();
     assert_eq!(fetched.status(), StatusCode::OK);
-    assert_eq!(json(fetched).await["id"], "197");
+    assert_eq!(json(fetched).await["object"]["id"], "197");
 
     let _ = std::fs::remove_dir_all(data_dir);
 }

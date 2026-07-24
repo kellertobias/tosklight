@@ -74,7 +74,7 @@ test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
     reconnectedApi.session = reconnected;
     await reconnectedApi.request("DELETE", `/api/v2/sessions/${reconnected.session_id}`);
 
-    const showBefore = await api.request<any>("GET", `/api/v1/shows/${show.id}/objects/group`, undefined, false);
+    const showBefore = await api.showObjects(show.id, "group");
     const usersBefore = (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).users;
     const removalRequestId = crypto.randomUUID();
     const removed = await removeClient(api, historicalDesk.id, removalRequestId);
@@ -94,7 +94,7 @@ test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
     expect(clients.some((client) => client.client_id === clientB)).toBe(false);
     expect(clients.some((client) => client.client_id === api.session!.client_id)).toBe(true);
     expect((await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).users).toEqual(usersBefore);
-    expect(await api.request<any>("GET", `/api/v1/shows/${show.id}/objects/group`, undefined, false)).toEqual(showBefore);
+    expect(await api.showObjects(show.id, "group")).toEqual(showBefore);
 
     const fresh = await createSession(bench.baseUrl, clientB, historicalDesk.id);
     expect(fresh.desk.id).not.toBe(historicalDesk.id);
@@ -104,7 +104,6 @@ test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
     expect(afterReRegistration.filter((client) => client.client_id === clientB)).toHaveLength(1);
     expect(afterReRegistration.find((client) => client.client_id === clientB)?.desk.id).toBe(fresh.desk.id);
 
-    await expect(api.request("DELETE", `/api/v1/clients/${fresh.desk.id}`)).rejects.toThrow(/404/);
   });
 });
 

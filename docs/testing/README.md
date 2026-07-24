@@ -101,7 +101,7 @@ The catalog also includes the more detailed narrated walkthrough at `.artifacts/
 
 - OSC packets sent by the simulated physical controller and decoded feedback returned by the subscribed desk alias;
 - the desk-local command line after each UI or OSC button press;
-- logical DMX values from `/api/v1/dmx`; and
+- logical DMX values from `/api/v2/output/dmx`; and
 - the actual UDP values received from the configured Art-Net and sACN outputs.
 
 The recording run is intentionally slower than the normal suite: browser actions default to a 250 ms delay and narrated checkpoints remain visible for 1,200 ms. Override those defaults with `LIGHT_VISUAL_SLOW_MO=<milliseconds>` and `LIGHT_VISUAL_STEP_PAUSE=<milliseconds>` when a still slower inspection copy is useful. API-only cases have no browser surface and therefore add assertions but no video clip; their paired UI cases show the corresponding application workflow. Recordings are supplementary evidence. The normal Playwright assertions remain authoritative because video timing and encoding are not used as synchronization or pass criteria.

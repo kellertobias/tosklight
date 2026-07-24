@@ -63,6 +63,22 @@ npm run open   # real desk boot; curl -fsS http://127.0.0.1:5000/api/v1/readines
 None — 14 and 21 are decided (full v2 moves). This chunk cannot be claimed before
 13–21 are done.
 
+## Execution
+
+Claimed 2026-07-24 after chunks 13–21 were confirmed in `done/`. No maintainer
+decision is open.
+
+## Result
+
+Split after current-tree discovery into two independently verifiable chunks:
+
+- 22a owns the final v1 show-object reads, test-gated routes, callers, and documentation sweep.
+- 22b owns the provider/client facade teardown, stable connection lifecycle, source-size
+  retirement, and product-demo acceptance.
+
+This keeps a mechanical public-route retirement separate from the frontend lifecycle
+rearchitecture while preserving the original definition of done across the two child chunks.
+
 ## Known bug to fix here: product-demo black screen on Show Patch (diagnosed 2026-07-23)
 
 The `product-demo` e2e run fails (and is `test.skip`ped until this chunk) because of a

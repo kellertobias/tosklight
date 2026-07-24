@@ -25,15 +25,19 @@ async fn open_named_revision(app: &Router, token: &str, show_id: &str) -> Respon
 }
 
 async fn revision_layout(app: &Router, token: &str, show_id: &str) -> Response {
+    let opened = app
+        .clone()
+        .oneshot(open_show_request(token, show_id))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
     app.clone()
-        .oneshot(
-            Request::get(format!(
-                "/api/v1/shows/{show_id}/objects/user_layout"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap(),
-        )
+        .oneshot(v2_show_object_get(
+            token,
+            show_id,
+            "user_layout",
+            None,
+        ))
         .await
         .unwrap()
 }
@@ -131,17 +135,20 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
     let original_objects = revision_layout(&app, &token, show_id).await;
     assert_eq!(original_objects.status(), StatusCode::OK);
     let original_objects = json(original_objects).await;
-    assert_eq!(original_objects[0]["body"]["marker"], "autosave");
+    assert_eq!(
+        original_objects["objects"][0]["body"]["marker"],
+        "autosave"
+    );
     let copy_objects = revision_layout(&app, &token, copy_id).await;
     assert_eq!(copy_objects.status(), StatusCode::OK);
     let copy_objects = json(copy_objects).await;
-    assert_eq!(copy_objects[0]["body"]["marker"], "manual");
+    assert_eq!(copy_objects["objects"][0]["body"]["marker"], "manual");
 
     let copy_edit = put_revision_layout(&state, &token, copy_id, 1, "copy edit").await;
     assert_eq!(copy_edit.status(), StatusCode::OK);
     let original_after_copy_edit = revision_layout(&app, &token, show_id).await;
     assert_eq!(
-        json(original_after_copy_edit).await[0]["body"]["marker"],
+        json(original_after_copy_edit).await["objects"][0]["body"]["marker"],
         "autosave"
     );
 

@@ -79,11 +79,6 @@ fn show_object_routes() -> Router<AppState> {
     Router::new()
         .merge(show_object_intents_v2::router())
         .merge(show_objects_v2::router())
-        .route("/api/v1/shows/{id}/objects/{kind}", get(list_objects))
-        .route(
-            "/api/v1/shows/{id}/objects/{kind}/{object_id}",
-            get(get_object),
-        )
 }
 
 fn programmer_and_update_routes() -> Router<AppState> {
@@ -95,9 +90,9 @@ fn with_test_routes(router: Router<AppState>, enabled: bool) -> Router<AppState>
         return router;
     }
     router
-        .route("/api/v1/test/clock/reset", post(reset_test_clock))
-        .route("/api/v1/test/clock/advance", post(advance_test_clock))
-        .route("/api/v1/test/output/failure", post(set_test_output_failure))
+        .route("/api/v2/test/clock/reset", post(reset_test_clock))
+        .route("/api/v2/test/clock/advance", post(advance_test_clock))
+        .route("/api/v2/test/output/failure", post(set_test_output_failure))
         .route(
             "/api/v2/test/shows/{show_id}/objects/{kind}/{object_id}",
             post(seed_test_show_object),

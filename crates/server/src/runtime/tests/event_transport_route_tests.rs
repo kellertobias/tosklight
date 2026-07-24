@@ -28,16 +28,6 @@ async fn v2_socket_protocol_uses_live_auth_and_the_broad_snapshot_is_removed() {
         .await
         .unwrap();
     assert_eq!(removed.status(), StatusCode::NOT_FOUND);
-    let removed_v1 = router(state.clone())
-        .oneshot(
-            Request::get("/api/v1/events")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(removed_v1.status(), StatusCode::NOT_FOUND);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

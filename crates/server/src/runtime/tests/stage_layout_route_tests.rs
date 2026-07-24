@@ -32,16 +32,16 @@ async fn seed_stage_layout(
 async fn read_stage_layout(app: &Router, token: &str, show_id: &str) -> serde_json::Value {
     let response = app
         .clone()
-        .oneshot(
-            Request::get(format!("/api/v1/shows/{show_id}/objects/stage_layout/main"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(v2_show_object_get(
+            token,
+            show_id,
+            "stage_layout",
+            Some("main"),
+        ))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    json(response).await
+    json(response).await["object"].clone()
 }
 
 async fn post_stage_layout_action(app: &Router, token: &str, body: &serde_json::Value) -> Response {
@@ -312,16 +312,16 @@ async fn move_selection_defaults_patched_fixtures_without_any_stored_position() 
 
     let fixtures = app
         .clone()
-        .oneshot(
-            Request::get(format!("/api/v1/shows/{show_id}/objects/patched_fixture"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(v2_show_object_get(
+            &token,
+            &show_id,
+            "patched_fixture",
+            None,
+        ))
         .await
         .unwrap();
     let fixtures = json(fixtures).await;
-    let patched: Vec<Uuid> = fixtures
+    let patched: Vec<Uuid> = fixtures["objects"]
         .as_array()
         .unwrap()
         .iter()

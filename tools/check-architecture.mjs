@@ -195,7 +195,7 @@ const legacyPlaybackPatterns = [
   ["state.playbacks", /\bstate\s*\.\s*playbacks\b/u],
   ["setPlaybacks", /\bsetPlaybacks\b/u],
   ["client.playbacks()", /\bclient\s*\.\s*playbacks\s*\(/u],
-  ["the broad /api/v1/playbacks endpoint", /["'`]\/api\/v1\/playbacks(?:[/?"'`])/u],
+  ["a retired /api/v1 endpoint", /["'`]\/api\/v1(?:[/?"'`])/u],
   ["the legacy useGroups helper", /\buseGroups\b/u],
 ];
 

@@ -54,16 +54,19 @@ async fn active_empty_show_rename_preserves_identity_content_and_revisions() {
 
     let objects = app
         .clone()
-        .oneshot(
-            Request::get(format!("/api/v1/shows/{show_id}/objects/user_layout"))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(v2_show_object_get(
+            &token,
+            show_id,
+            "user_layout",
+            None,
+        ))
         .await
         .unwrap();
     assert_eq!(objects.status(), StatusCode::OK);
-    assert_eq!(json(objects).await[0]["body"]["marker"], "before naming");
+    assert_eq!(
+        json(objects).await["objects"][0]["body"]["marker"],
+        "before naming"
+    );
     let revisions = state
         .desk
         .lock()

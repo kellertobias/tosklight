@@ -98,7 +98,7 @@ export class LightBench {
 
   async createTwelveDimmerShow(name = `E2E-${crypto.randomUUID()}`): Promise<TestShow> {
     const api = new ApiDriver(this.baseUrl);
-    await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
+    await api.request("POST", "/api/v2/test/clock/reset", undefined, false);
     const session = await api.login();
     this.lastVirtualNow = "2020-01-01T00:00:00Z";
     this.artnet.reset();
@@ -132,7 +132,7 @@ export class LightBench {
   }
 
   async tick(millis = 0): Promise<{ now: string; packets_sent: number; universes: Array<{ universe: number; slots: number[] }> }> {
-    const response = await fetch(`${this.baseUrl}/api/v1/test/clock/advance`, {
+    const response = await fetch(`${this.baseUrl}/api/v2/test/clock/advance`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ millis }), signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) throw new Error(`Test clock advance failed: ${await response.text()}`);

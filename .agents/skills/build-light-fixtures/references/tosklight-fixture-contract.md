@@ -49,7 +49,7 @@ Represent documented unused slots as static channels. Mark unknown facts unknown
 
 - Validate every archive with `cargo run -p light-fixture --bin fixture-package -- validate assets/fixture-library/*.toskfixture`; write/export round trips must retain normalized content and stable IDs.
 - Assert exact profile/mode inventory, slot coverage, resolution bytes, logical heads, safe/Highlight values, and GLB/icon presence where required.
-- Start `light-server` with `--fixture-package-dir "$PWD/assets/fixture-library"` and verify `/api/v1/fixture-profiles` plus `/api/v1/fixture-library`.
+- Start `light-server` with `--fixture-package-dir "$PWD/assets/fixture-library"` and verify `/api/v2/fixture-library/profiles` plus the typed actions at `/api/v2/fixture-library`.
 - Start twice against the same temporary data directory to prove idempotence.
 - Verify a later operator revision is not overwritten by a changed startup package.
 

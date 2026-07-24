@@ -2,6 +2,24 @@
 
 use super::*;
 
+fn v2_show_object_get(
+    token: &str,
+    show_id: &str,
+    kind: &str,
+    object_id: Option<&str>,
+) -> Request<Body> {
+    let mut path = format!("/api/v2/objects/{kind}");
+    if let Some(object_id) = object_id {
+        path.push('/');
+        path.push_str(object_id);
+    }
+    Request::get(path)
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header("x-tosk-show", show_id)
+        .body(Body::empty())
+        .unwrap()
+}
+
 #[path = "active_show_cue_preload_tests.rs"]
 mod active_show_cue_preload_tests;
 #[path = "active_show_playback_object_tests.rs"]

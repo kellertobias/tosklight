@@ -601,15 +601,12 @@ async fn command_keyboard_osc_and_websocket_group_recording_converge_on_typed_ca
         let object = scenario
             .app
             .clone()
-            .oneshot(
-                Request::get(format!("/api/v1/shows/{show_id}/objects/group/{id}"))
-                    .header(
-                        header::AUTHORIZATION,
-                        format!("Bearer {}", scenario.token),
-                    )
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(v2_show_object_get(
+                &scenario.token,
+                &show_id,
+                "group",
+                Some(id),
+            ))
             .await
             .unwrap();
         assert_eq!(object.status(), StatusCode::OK, "Group {id} was not stored");

@@ -77,12 +77,12 @@ readiness endpoint.
 After launch:
 
 ```sh
-curl -fsS http://127.0.0.1:5000/api/v1/readiness
+curl -fsS http://127.0.0.1:5000/api/v2/readiness
 ```
 
 Check `.artifacts/runtime/light-data/light-server.log` first for startup problems. If readiness is
-healthy but the app looks stuck, time `/api/v1/readiness`, `/api/v1/health`, and
-`/api/v1/bootstrap` separately.
+healthy but the app looks stuck, time `/api/v2/readiness` and
+`/api/v2/bootstrap` separately.
 
 If the app looks stale, verify which bundle the build script opened before reworking UI code.
 

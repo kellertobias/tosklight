@@ -171,12 +171,20 @@ function topologyFetch(outcome: unknown, options: FetchOptions = {}) {
 		if (url.includes("playback-runtime/snapshot"))
 			return json(options.active ?? playbackRuntime());
 		if (url.includes("/objects/playback_page/1"))
-			return json(options.page ?? pageSnapshot(), 200, {
-				"x-light-show-revision": `"${options.pageShowRevision ?? 7}"`,
+			return json({
+				show_id: SHOW_ID,
+				show_revision: options.pageShowRevision ?? 7,
+				kind: "playback_page",
+				object_id: "1",
+				object: options.page ?? pageSnapshot(),
 			});
 		if (url.includes("/objects/playback/1"))
-			return json(playbackSnapshot(), 200, {
-				"x-light-show-revision": `"${options.playbackShowRevision ?? 7}"`,
+			return json({
+				show_id: SHOW_ID,
+				show_revision: options.playbackShowRevision ?? 7,
+				kind: "playback",
+				object_id: "1",
+				object: playbackSnapshot(),
 			});
 		if (url.includes("/playback-topology/actions"))
 			return json(outcome, options.actionStatus ?? 200, {
@@ -190,8 +198,8 @@ function assertNarrowCalls(fetchMock: ReturnType<typeof topologyFetch>) {
 	const urls = fetchMock.mock.calls.map(([input]) => String(input));
 	expect(urls).toEqual([
 		"http://desk.local/api/v2/playback-runtime/snapshot",
-		`http://desk.local/api/v1/shows/${SHOW_ID}/objects/playback_page/1`,
-		`http://desk.local/api/v1/shows/${SHOW_ID}/objects/playback/1`,
+		"http://desk.local/api/v2/objects/playback_page/1",
+		"http://desk.local/api/v2/objects/playback/1",
 		"http://desk.local/api/v2/playback-topology/actions",
 	]);
 	expect(urls.some((url) => /bootstrap|\/playbacks|programmers/.test(url))).toBe(

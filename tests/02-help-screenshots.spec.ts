@@ -390,7 +390,7 @@ function playback(number: number, name: string, target: Record<string, unknown>,
 }
 
 async function objects<T>(api: ApiDriver, showId: string, kind: string): Promise<Array<VersionedObject<T>>> {
-  return api.request<Array<VersionedObject<T>>>("GET", `/api/v1/shows/${showId}/objects/${kind}`, undefined, false);
+  return api.showObjects<T>(showId, kind);
 }
 
 async function put(api: ApiDriver, showId: string, kind: string, id: string, body: unknown) {

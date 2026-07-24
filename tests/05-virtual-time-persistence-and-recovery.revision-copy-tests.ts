@@ -13,6 +13,7 @@ import {
 	readSql,
 	showEntry,
 	showObject,
+	sqlString,
 } from "./05-virtual-time-persistence-and-recovery.show-helpers";
 import { loadCanonicalCopy } from "./support/catalog";
 
@@ -293,9 +294,9 @@ async function restartAndRenameRevisionCopy(
 				).active_show.id,
 		)
 		.toBe(copy.id);
-	expect((await showObject(api, copy.id, "group", "4")).body.name).toBe(
-		"Copy-only edit",
-	);
+	expect(
+		(await downloadedShowObject(api, bench, copy.id, "group", "4")).body.name,
+	).toBe("Copy-only edit");
 
 	await bench.stopServerGracefully(api.session!.token);
 	await bench.startServer();
@@ -386,7 +387,15 @@ async function overwriteDestinationFromRevisionCopy(
 	);
 	await confirmation.getByRole("button", { name: "Cancel" }).click();
 	expect(
-		(await showObject(api, state.destinationId, "group", "4")).body.name,
+		(
+			await downloadedShowObject(
+				api,
+				bench,
+				state.destinationId,
+				"group",
+				"4",
+			)
+		).body.name,
 	).toBe("destination-before-overwrite");
 
 	await page.getByRole("button", { name: "Save As", exact: true }).click();
@@ -409,7 +418,15 @@ async function overwriteDestinationFromRevisionCopy(
 	await expect
 		.poll(
 			async () =>
-				(await showObject(api, state.destinationId, "group", "4")).body.name,
+				(
+					await downloadedShowObject(
+						api,
+						bench,
+						state.destinationId,
+						"group",
+						"4",
+					)
+				).body.name,
 		)
 		.toBe("Copy-only edit");
 	const destinationAfter = await showEntry(api, state.destinationId);
@@ -446,16 +463,17 @@ async function overwriteDestinationFromRevisionCopy(
 			"SELECT json_extract(body_json,'$.name')||'|'||revision FROM objects WHERE kind='group' AND id='4'",
 		),
 	).toMatch(/^destination-before-overwrite\|\d+$/);
-	expect((await showObject(api, state.sourceId, "group", "4")).body.name).toBe(
-		"Newer autosave state",
-	);
-	expect((await showObject(api, copy.id, "group", "4")).body.name).toBe(
-		"Copy-only edit",
-	);
+	expect(
+		(await downloadedShowObject(api, bench, state.sourceId, "group", "4"))
+			.body.name,
+	).toBe("Newer autosave state");
+	expect(
+		(await downloadedShowObject(api, bench, copy.id, "group", "4")).body.name,
+	).toBe("Copy-only edit");
 }
 
 async function overwriteOriginalFromRevisionCopy(
-	{ api, page }: UiContext,
+	{ api, bench, page }: UiContext,
 	state: RevisionCopyState,
 	renamedCopy: RevisionShow,
 ): Promise<void> {
@@ -480,9 +498,10 @@ async function overwriteOriginalFromRevisionCopy(
 		"identity and named revisions are preserved",
 	);
 	await confirmation.getByRole("button", { name: "Cancel" }).click();
-	expect((await showObject(api, state.sourceId, "group", "4")).body.name).toBe(
-		"Newer autosave state",
-	);
+	expect(
+		(await downloadedShowObject(api, bench, state.sourceId, "group", "4"))
+			.body.name,
+	).toBe("Newer autosave state");
 
 	await page
 		.getByRole("dialog", { name: "Show", exact: true })
@@ -503,7 +522,15 @@ async function overwriteOriginalFromRevisionCopy(
 	await expect
 		.poll(
 			async () =>
-				(await showObject(api, state.sourceId, "group", "4")).body.name,
+				(
+					await downloadedShowObject(
+						api,
+						bench,
+						state.sourceId,
+						"group",
+						"4",
+					)
+				).body.name,
 		)
 		.toBe("Copy-only edit");
 
@@ -512,6 +539,32 @@ async function overwriteOriginalFromRevisionCopy(
 	state.expectedSourceName = "Copy-only edit";
 	state.expectedCopyName = "Copy-only edit";
 	state.expectedCopyRevisions = [];
+}
+
+async function downloadedShowObject(
+	api: ApiDriver,
+	bench: LightBench,
+	showId: string,
+	kind: string,
+	id: string,
+): Promise<any> {
+	const response = await fetch(
+		`${api.baseUrl}/api/v2/shows/${encodeURIComponent(showId)}/download`,
+		{ headers: { authorization: `Bearer ${api.session?.token}` } },
+	);
+	expect(response.ok).toBe(true);
+	const inspectionPath = `${bench.dataDir}/show-object-inspection-${crypto.randomUUID()}.show`;
+	await fs.writeFile(inspectionPath, Buffer.from(await response.arrayBuffer()));
+	try {
+		const row = await readSql(
+			inspectionPath,
+			`SELECT json_object('id',id,'revision',revision,'body',json(body_json)) FROM objects WHERE kind=${sqlString(kind)} AND id=${sqlString(id)}`,
+		);
+		expect(row).not.toBe("");
+		return JSON.parse(row);
+	} finally {
+		await fs.rm(inspectionPath, { force: true });
+	}
 }
 
 async function exerciseRevisionCopyUi(

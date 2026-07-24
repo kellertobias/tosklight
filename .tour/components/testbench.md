@@ -46,7 +46,7 @@ oracle, each on its own fresh show. That is how surface parity is proven rather 
 
 | File | Provides |
 | --- | --- |
-| `lightBench.ts` | Per-worker temp data dir, free TCP/UDP port allocation, spawns `light-server`, `restart()`, graceful shutdown via `POST /api/v1/shutdown`, abrupt SIGKILL, Art-Net and sACN receivers, OSC hardware factory, virtual clock cursor, `createTwelveDimmerShow()`, failure artifacts |
+| `lightBench.ts` | Per-worker temp data dir, free TCP/UDP port allocation, spawns `light-server`, `restart()`, graceful shutdown via `POST /api/v2/shutdown`, abrupt SIGKILL, Art-Net and sACN receivers, OSC hardware factory, virtual clock cursor, `createTwelveDimmerShow()`, failure artifacts |
 | `api.ts` | `ApiDriver`: login, revision and ETag validation, `getCommandLine`, `replaceCommandLine`, `sendCommandKey`, `executeCommandLine`, typed `command<T>()` over the versioned command WebSocket |
 | `desk.ts` | `DeskDriver`: browser desk facade. `open(baseUrl)` waits out the connection cover and banner and pins the desk alias. Also the recording and narration overlay |
 | `protocols.ts` | `DmxReceiver` (`bind()`, `nextAfter(mark, "artnet"\|"sacn", universe)`), `OscHardware` (`connect`, `subscribe`, `send`, `mark()`, `expectAfter`), `encodeOscMessage` |

@@ -99,7 +99,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     // The root/path association belongs to persisted pane configuration,
     // while the editor text itself remains authoritative in the normal file.
     await expect.poll(async () => {
-      const layouts = await api.request<any[]>("GET", `/api/v1/shows/${show.id}/objects/user_layout`);
+      const layouts = await api.showObjects<any>(show.id, "user_layout");
       return layouts.flatMap((layout) => layout.body.desks)
         .flatMap((configuredDesk: any) => configuredDesk.panes)
         .filter((pane: any) => pane.kind === "text_editor" && pane.textFileRoot === "shows" && pane.textFilePath === renamedName)
@@ -171,7 +171,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     await expect(editor.getByText("This pane is configured read-only.", { exact: false })).toBeVisible();
 
     await expect.poll(async () => {
-      const layouts = await api.request<any[]>("GET", `/api/v1/shows/${show.id}/objects/user_layout`);
+      const layouts = await api.showObjects<any>(show.id, "user_layout");
       return layouts.flatMap((layout) => layout.body.desks)
         .flatMap((configuredDesk: any) => configuredDesk.panes)
         .find((pane: any) => pane.kind === "text_editor" && pane.textFilePath === name);

@@ -195,7 +195,7 @@ export async function restartPlaybackRun(
 	await api.openShow(showId, {
 		transition: "hold_current",
 	});
-	await api.request("POST", "/api/v1/test/clock/reset", undefined, false);
+	await api.request("POST", "/api/v2/test/clock/reset", undefined, false);
 	for (const number of numbers)
 		await api.playbackNumberAction(number, "go", {});
 }

@@ -41,7 +41,7 @@ describe("Preset recall acceptance intent", () => {
 		);
 		expect(calls.map((call) => call.url)).toEqual(
 			expect.arrayContaining([
-				`http://desk.local/api/v1/shows/${SHOW_ID}/objects/preset/2.1`,
+				"http://desk.local/api/v2/objects/preset/2.1",
 				`http://desk.local/api/v2/users/${USER_ID}/programmer-values/snapshot`,
 				`http://desk.local/api/v2/users/${USER_ID}/programmer-capture-mode/snapshot`,
 				"http://desk.local/api/v2/programming-interaction/snapshot",
@@ -68,14 +68,16 @@ describe("Preset recall acceptance intent", () => {
 			async (input: RequestInfo | URL, init?: RequestInit) => {
 				const response = responseFor(String(input), init);
 				if (String(input).includes("/objects/preset/"))
-					return json(
-						{
+					return json({
+						show_id: SHOW_ID,
+						show_revision: 12,
+						kind: "preset",
+						object_id: "2.1",
+						object: {
 							...presetObject(),
 							body: { ...presetBody(), family: "Beam" },
 						},
-						200,
-						{ "x-light-show-revision": '"12"' },
-					);
+					});
 				return response;
 			},
 		);
@@ -147,7 +149,13 @@ function api() {
 
 function responseFor(url: string, init?: RequestInit) {
 	if (url.includes("/objects/preset/"))
-		return json(presetObject(), 200, { "x-light-show-revision": '"12"' });
+		return json({
+			show_id: SHOW_ID,
+			show_revision: 12,
+			kind: "preset",
+			object_id: "2.1",
+			object: presetObject(),
+		});
 	if (url.includes("programmer-values/snapshot"))
 		return json(valuesSnapshot(), 200);
 	if (url.includes("programmer-capture-mode/snapshot"))

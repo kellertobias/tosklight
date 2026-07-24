@@ -716,7 +716,7 @@ async fn production_router_does_not_expose_test_clock_controls() {
     let response = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/test/clock/advance")
+            Request::post("/api/v2/test/clock/advance")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"millis":0}"#))
                 .unwrap(),

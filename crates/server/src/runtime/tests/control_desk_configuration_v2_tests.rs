@@ -102,25 +102,6 @@ async fn control_desk_v2_is_sparse_replay_safe_authorized_and_retires_v1() {
         page_event
     );
 
-    for request in [
-        Request::put(format!("/api/v1/control-desks/{desk_id}"))
-            .body(Body::empty())
-            .unwrap(),
-        Request::put(format!("/api/v1/control-desks/{desk_id}/page"))
-            .body(Body::empty())
-            .unwrap(),
-    ] {
-        assert_eq!(
-            scenario
-                .app
-                .clone()
-                .oneshot(request)
-                .await
-                .unwrap()
-                .status(),
-            StatusCode::NOT_FOUND
-        );
-    }
     scenario.cleanup();
 }
 

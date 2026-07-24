@@ -153,12 +153,7 @@ export async function objects<T = Record<string, any>>(
 		false,
 	);
 	expect(bootstrap.active_show).toBeTruthy();
-	const result = await api.request<Array<VersionedObject<T>>>(
-		"GET",
-		`/api/v1/shows/${bootstrap.active_show!.id}/objects/${kind}`,
-		undefined,
-		false,
-	);
+	const result = await api.showObjects<T>(bootstrap.active_show!.id, kind);
 	return result.sort((left, right) =>
 		left.id.localeCompare(right.id, undefined, { numeric: true }),
 	);

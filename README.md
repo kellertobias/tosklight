@@ -63,7 +63,7 @@ The server maintains:
 
 - `desk.sqlite`: desk users, show-library index, active show, server settings, and durable session programmers.
 - `shows/*.show`: portable, versioned SQLite show files.
-- A fixed-deadline 44 Hz render scheduler with health counters exposed by `/api/v2/bootstrap` and `/api/v1/configuration`.
+- A fixed-deadline 44 Hz render scheduler with health counters exposed by `/api/v2/bootstrap`.
 
 ## Code tour for new developers
 
@@ -92,8 +92,8 @@ into it rather than restating it.
 
 ## API model
 
-- REST under `/api/v1` provides sessions, bootstrap snapshots, show upload/download/open, revisioned show objects, patch inspection, programmer management, playback actions, and diagnostics.
-- `/api/v1/media` exposes authenticated CITP media-server status, bounded thumbnail retrieval, and
+- Typed REST under `/api/v2` provides sessions, bootstrap snapshots, show upload/download/open, revisioned show objects, patch inspection, programmer management, playback actions, and diagnostics.
+- `/api/v2/media-servers` exposes authenticated CITP media-server status, bounded thumbnail retrieval, and
   live-preview snapshots for fixture profiles that explicitly support direct IP control.
 - Mutating versioned objects require `If-Match: <revision>` and return an `ETag`. Revision zero creates an object; stale revisions return HTTP 409.
 - WebSocket `/api/v2/events` publishes ordered filtered changes and accepts versioned, request-ID-bearing typed commands after subscription. REST remains the authoritative snapshot/recovery path after an event gap.

@@ -1,45 +1,6 @@
 use super::*;
 
 #[tokio::test]
-async fn retired_v1_playback_read_and_action_routes_are_absent() {
-    let (state, data_dir) = test_state();
-    let app = router(state);
-    let cue_list_id = Uuid::new_v4();
-    let desk_id = Uuid::new_v4();
-    for request in [
-        Request::get("/api/v1/playbacks")
-            .body(Body::empty())
-            .unwrap(),
-        Request::get("/api/v1/cuelists/1")
-            .body(Body::empty())
-            .unwrap(),
-        Request::get("/api/v1/playback-pool/1")
-            .body(Body::empty())
-            .unwrap(),
-        Request::post(format!("/api/v1/playbacks/{cue_list_id}/go"))
-            .body(Body::empty())
-            .unwrap(),
-        Request::post("/api/v1/cuelists/1/go")
-            .body(Body::empty())
-            .unwrap(),
-        Request::post("/api/v1/playback-pool/1/go")
-            .body(Body::empty())
-            .unwrap(),
-        Request::post(format!(
-            "/api/v1/control-desks/{desk_id}/page-playbacks/1/go"
-        ))
-        .body(Body::empty())
-        .unwrap(),
-    ] {
-        assert_eq!(
-            app.clone().oneshot(request).await.unwrap().status(),
-            StatusCode::NOT_FOUND
-        );
-    }
-    let _ = std::fs::remove_dir_all(data_dir);
-}
-
-#[tokio::test]
 async fn v2_playback_overview_is_authenticated_and_keeps_desk_scope() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

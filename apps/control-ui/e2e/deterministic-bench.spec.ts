@@ -69,7 +69,7 @@ test("OSC-002 @osc › hardware command matches the paired API and UI contract",
 });
 
 test("BENCH-001 @bench › test clock rejects invalid advances", async ({ bench }) => {
-  const response = await fetch(`${bench.baseUrl}/api/v1/test/clock/advance`, {
+  const response = await fetch(`${bench.baseUrl}/api/v2/test/clock/advance`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ millis: -1 }),
   });
   expect(response.status).toBe(400);

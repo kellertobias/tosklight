@@ -5,70 +5,6 @@ mod output_routes;
 
 pub(super) use output_routes::*;
 
-pub(super) async fn list_objects(
-    State(state): State<AppState>,
-    Path((id, kind)): Path<(Uuid, String)>,
-) -> Result<Response, ApiError> {
-    let entry = state
-        .desk
-        .lock()
-        .show(light_core::ShowId(id))
-        .map_err(ApiError::store)?
-        .ok_or_else(|| ApiError::not_found("show"))?;
-    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
-    let (show_revision, mut objects) = store
-        .objects_with_portable_revision(&kind)
-        .map_err(ApiError::store)?;
-    if kind == "group" {
-        materialize_derived_group_memberships(&mut objects);
-    }
-    if kind == "preset" {
-        materialize_preset_addresses(&mut objects)?;
-    }
-    if kind == "patched_fixture" {
-        materialize_patched_fixture_definitions(&entry, &mut objects)?;
-    }
-    Ok((
-        [(header::ETAG, format!("\"{}\"", show_revision.value()))],
-        Json(objects),
-    )
-        .into_response())
-}
-pub(super) async fn get_object(
-    State(state): State<AppState>,
-    Path((id, kind, object_id)): Path<(Uuid, String, String)>,
-    headers: HeaderMap,
-) -> Result<Response, ApiError> {
-    let _session = authenticate(&state, &headers)?;
-    let entry = state
-        .desk
-        .lock()
-        .show(light_core::ShowId(id))
-        .map_err(ApiError::store)?
-        .ok_or_else(|| ApiError::not_found("show"))?;
-    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
-    let (show_revision, object) = exact_object_snapshot(&store, &kind, &object_id)?;
-    let Some(mut object) = object else {
-        let mut response = ApiError::not_found("show object").into_response();
-        insert_show_revision_header(&mut response, show_revision.value())?;
-        return Ok(response);
-    };
-    if kind == "patched_fixture" {
-        materialize_patched_fixture_definitions(&entry, std::slice::from_mut(&mut object))?;
-    }
-    Ok((
-        [
-            (header::ETAG, format!("\"{}\"", object.revision)),
-            (
-                header::HeaderName::from_static("x-light-show-revision"),
-                format!("\"{}\"", show_revision.value()),
-            ),
-        ],
-        Json(object),
-    )
-        .into_response())
-}
-
 pub(super) fn exact_object_snapshot(
     store: &ShowStore,
     kind: &str,
@@ -99,19 +35,6 @@ pub(super) fn exact_object_snapshot(
         materialize_preset_addresses(std::slice::from_mut(object))?;
     }
     Ok((revision, object))
-}
-
-fn insert_show_revision_header(
-    response: &mut Response,
-    revision: light_core::Revision,
-) -> Result<(), ApiError> {
-    let value = format!("\"{revision}\"")
-        .parse()
-        .map_err(|error| ApiError::internal(format!("invalid Show revision header: {error}")))?;
-    response
-        .headers_mut()
-        .insert("x-light-show-revision", value);
-    Ok(())
 }
 
 pub(super) fn materialize_derived_group_memberships(objects: &mut [light_show::VersionedObject]) {

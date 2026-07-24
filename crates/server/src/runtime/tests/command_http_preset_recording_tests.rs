@@ -177,15 +177,12 @@ async fn plain_preset_and_group_record_commands_use_typed_capabilities() {
     let object = scenario
         .app
         .clone()
-        .oneshot(
-            Request::get(format!("/api/v1/shows/{show_id}/objects/preset/8"))
-                .header(
-                    header::AUTHORIZATION,
-                    format!("Bearer {}", scenario.token),
-                )
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(v2_show_object_get(
+            &scenario.token,
+            &show_id,
+            "preset",
+            Some("8"),
+        ))
         .await
         .unwrap();
     assert_eq!(object.status(), StatusCode::OK);
@@ -239,21 +236,21 @@ async fn osc_record_key_sequence_commits_through_the_typed_preset_capability() {
     let object = scenario
         .app
         .clone()
-        .oneshot(
-            Request::get(format!("/api/v1/shows/{show_id}/objects/preset/9"))
-                .header(
-                    header::AUTHORIZATION,
-                    format!("Bearer {}", scenario.token),
-                )
-                .body(Body::empty())
-                .unwrap(),
-        )
+        .oneshot(v2_show_object_get(
+            &scenario.token,
+            &show_id,
+            "preset",
+            Some("9"),
+        ))
         .await
         .unwrap();
     assert_eq!(object.status(), StatusCode::OK);
     let body = json(object).await;
-    assert_eq!(body["body"]["number"], 9);
-    assert_eq!(body["body"]["values"].as_object().unwrap().len(), 1);
+    assert_eq!(body["object"]["body"]["number"], 9);
+    assert_eq!(
+        body["object"]["body"]["values"].as_object().unwrap().len(),
+        1
+    );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

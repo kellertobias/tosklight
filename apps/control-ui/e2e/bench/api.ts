@@ -143,6 +143,41 @@ export class ApiDriver {
     return snapshot.shows;
   }
 
+  async showObjects<T = Record<string, unknown>>(
+    showId: string,
+    kind: string,
+  ): Promise<Array<{ id: string; body: T; revision: number }>> {
+    const snapshot = await this.request<{
+      objects: Array<{ id: string; body: T; revision: number }>;
+    }>(
+      "GET",
+      `/api/v2/objects/${encodeURIComponent(kind)}`,
+      undefined,
+      true,
+      undefined,
+      { showId },
+    );
+    return snapshot.objects;
+  }
+
+  async showObject<T = Record<string, unknown>>(
+    showId: string,
+    kind: string,
+    id: string,
+  ): Promise<{ id: string; body: T; revision: number } | null> {
+    const snapshot = await this.request<{
+      object: { id: string; body: T; revision: number } | null;
+    }>(
+      "GET",
+      `/api/v2/objects/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
+      undefined,
+      true,
+      undefined,
+      { showId },
+    );
+    return snapshot.object;
+  }
+
   seedShowObject<T = unknown>(
     showId: string,
     kind: string,
