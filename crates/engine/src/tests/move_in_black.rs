@@ -20,13 +20,13 @@ fn hazardous_fixture_defaults_to_immediate_safe_on_control_loss() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
-            cue_lists: vec![],
-            playbacks: vec![],
-            playback_pages: vec![],
-            routes: vec![],
-            control_mappings: vec![],
-            groups: vec![],
+            fixtures: vec![fixture].into(),
+            cue_lists: vec![].into(),
+            playbacks: vec![].into(),
+            playback_pages: vec![].into(),
+            routes: vec![].into(),
+            control_mappings: vec![].into(),
+            groups: vec![].into(),
             revision: 1,
         })
         .unwrap();
@@ -241,8 +241,8 @@ fn move_in_black_obeys_same_priority_ltp_and_numeric_priority() {
     newer_playback.target = PlaybackTarget::CueList {
         cue_list_id: newer_list.id,
     };
-    snapshot.cue_lists.push(newer_list);
-    snapshot.playbacks.push(newer_playback);
+    Arc::make_mut(&mut snapshot.cue_lists).push(newer_list);
+    Arc::make_mut(&mut snapshot.playbacks).push(newer_playback);
 
     let engine = Engine::new(programmers);
     engine.replace_snapshot(snapshot.clone()).unwrap();
@@ -256,7 +256,7 @@ fn move_in_black_obeys_same_priority_ltp_and_numeric_priority() {
     clock.set(started + ChronoDuration::milliseconds(5_000));
     engine.resolved_values();
 
-    snapshot.cue_lists[1].cues[2]
+    Arc::make_mut(&mut snapshot.cue_lists)[1].cues[2]
         .changes
         .iter_mut()
         .find(|change| change.attribute == AttributeKey("pan".into()))
@@ -273,7 +273,7 @@ fn move_in_black_obeys_same_priority_ltp_and_numeric_priority() {
         "the recalculated same-priority MIB target is the newer LTP source"
     );
 
-    snapshot.cue_lists[0].priority = 20;
+    Arc::make_mut(&mut snapshot.cue_lists)[0].priority = 20;
     snapshot.revision += 1;
     engine.replace_snapshot(snapshot).unwrap();
     let values = engine.resolved_values();

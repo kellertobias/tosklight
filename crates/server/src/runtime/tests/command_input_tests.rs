@@ -198,7 +198,7 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures,
+            fixtures: fixtures.into(),
             revision: 1,
             ..EngineSnapshot::default()
         })

@@ -37,7 +37,9 @@ impl ActiveShowService {
         ports.run_active_show_lifecycle(&envelope.context, envelope.command.show_id, || {
             let _ordered = self.operation.lock();
             let mut unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
-            let prepared = prepare_route_mutation(unit.document(), &envelope.command)?;
+            let previous = ports.normalized_active_snapshot();
+            let prepared =
+                prepare_route_mutation(unit.document(), &envelope.command, previous.as_deref())?;
             let runtime = ports.prepare_runtime(prepared.snapshot)?;
             unit.backup(&backup_identity(
                 &envelope.context,
@@ -88,7 +90,9 @@ impl ActiveShowService {
         ports.run_active_show_lifecycle(&envelope.context, envelope.command.show_id, || {
             let _ordered = self.operation.lock();
             let unit = ports.begin_active_show(&envelope.context, envelope.command.show_id)?;
-            let prepared = prepare_object_mutation(unit.document(), &envelope.command)?;
+            let previous = ports.normalized_active_snapshot();
+            let prepared =
+                prepare_object_mutation(unit.document(), &envelope.command, previous.as_deref())?;
             let committed = self.commit_object_changes(
                 &envelope.context,
                 envelope.command.show_id,

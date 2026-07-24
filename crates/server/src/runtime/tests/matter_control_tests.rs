@@ -347,7 +347,7 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
                 name: "Front".into(),
                 master: 1.0,
                 ..Default::default()
-            }],
+            }].into(),
             playbacks: vec![
                 definition(
                     1,
@@ -376,12 +376,12 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
                     light_playback::PlaybackTarget::GrandMaster,
                     light_playback::PlaybackFaderMode::Master,
                 ),
-            ],
+            ].into(),
             playback_pages: vec![light_playback::PlaybackPage {
                 number: 1,
                 name: "Matter".into(),
                 slots: HashMap::from([(1, 1), (2, 2), (3, 3), (4, 4), (5, 5)]),
-            }],
+            }].into(),
             ..Default::default()
         })
         .unwrap();

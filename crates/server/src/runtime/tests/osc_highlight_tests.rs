@@ -236,7 +236,7 @@ async fn authenticated_osc_highlight_adapter_feedback_dedupe_and_reconnect_are_a
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures,
+            fixtures: fixtures.into(),
             ..EngineSnapshot::default()
         })
         .unwrap();

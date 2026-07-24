@@ -27,7 +27,12 @@ fn main() {
         "{}",
         serde_json::to_string_pretty(&report).expect("benchmark report is serializable")
     );
-    if report.required_floor_met == Some(false) {
+    if report.required_floor_met == Some(false)
+        || report
+            .show_mutation
+            .as_ref()
+            .is_some_and(|result| !result.gate_met)
+    {
         std::process::exit(1);
     }
 }

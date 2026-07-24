@@ -1,5 +1,8 @@
 use super::{MutateOutputRouteCommand, OutputRouteMutation};
-use crate::{ActionError, ActionErrorKind, prepare_show_candidate};
+use crate::{
+    ActionError, ActionErrorKind, prepare_show_candidate,
+    show_compiler::prepare_normalized_show_candidate_incremental,
+};
 use light_core::Revision;
 use light_output::OutputRoute;
 use light_show::{PortableShowDocument, PortableShowObject, PortableShowTransaction};
@@ -17,6 +20,7 @@ pub(super) struct PreparedRouteMutation {
 pub(super) fn prepare_route_mutation(
     document: &PortableShowDocument,
     command: &MutateOutputRouteCommand,
+    previous: Option<&light_engine::EngineSnapshot>,
 ) -> Result<PreparedRouteMutation, ActionError> {
     validate_active_show(document, command)?;
     let existing = document.object("route", &command.route_id);
@@ -45,7 +49,13 @@ pub(super) fn prepare_route_mutation(
         }
     };
 
-    let prepared = prepare_show_candidate(document, transaction)?;
+    let prepared = if let Some(previous) =
+        previous.filter(|snapshot| snapshot.revision == document.revision().value())
+    {
+        prepare_normalized_show_candidate_incremental(document, transaction, previous)?
+    } else {
+        prepare_show_candidate(document, transaction)?
+    };
     let (transaction, snapshot) = prepared.into_parts();
     Ok(PreparedRouteMutation {
         transaction,

@@ -83,7 +83,7 @@ fn restore_output_group_masters(state: &AppState, runtime: &PersistedOutputRunti
         return;
     }
     let mut snapshot = (*state.engine.snapshot()).clone();
-    for group in &mut snapshot.groups {
+    for group in Arc::make_mut(&mut snapshot.groups) {
         if let Some(master) = runtime.group_masters.get(&group.id) {
             group.master = *master;
         }

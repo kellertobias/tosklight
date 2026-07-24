@@ -112,7 +112,7 @@ cargo test --workspace --no-fail-fast
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run --release -p light-server --bin light-benchmark --no-default-features -- \
   --profile all --protocol artnet --transport encode-only --seconds 5 \
-  --hardware-label "machine model, CPU, RAM and power mode"
+  --mutation-gate --hardware-label "machine model, CPU, RAM and power mode"
 cd apps/control-ui && npm run typecheck && npm test -- --run && npm run build && npm run test:e2e
 ```
 
@@ -132,6 +132,10 @@ an unspecified future sampler. The JSON explicitly identifies unavailable CPU, a
 sub-render phase, production socket, and sound-to-light measurements; do not infer those values from
 total latency. Run it on each target, including Raspberry Pi-class hardware, before choosing that
 desk's configured universe ceiling, and retain the JSON with the exact hardware label.
+`--mutation-gate` additionally measures a cue edit through candidate compilation, runtime
+preparation, and generation installation against paired 120- and 1,200-fixture projections; it
+fails when untouched projections are rebuilt, the result diverges from the full compiler, or p95
+latency scales with fixture count.
 
 ## Implementation status
 

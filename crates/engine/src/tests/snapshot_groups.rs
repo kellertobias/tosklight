@@ -36,9 +36,9 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
     };
     let engine = Engine::new(programmers);
     let snapshot = |members| EngineSnapshot {
-        fixtures: vec![first.clone(), second.clone()],
-        cue_lists: vec![list.clone()],
-        playbacks: vec![test_group_playback(1, "live")],
+        fixtures: vec![first.clone(), second.clone()].into(),
+        cue_lists: vec![list.clone()].into(),
+        playbacks: vec![test_group_playback(1, "live")].into(),
         groups: vec![GroupDefinition {
             id: "live".into(),
             name: "Live".into(),
@@ -46,7 +46,8 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
             master: 0.5,
             playback_fader: Some(1),
             ..Default::default()
-        }],
+        }]
+        .into(),
         ..Default::default()
     };
     engine
@@ -109,13 +110,13 @@ fn unpatched_group_member_keeps_programming_but_outputs_no_dmx() {
         ..Default::default()
     };
     let snapshot = |unpatched_fixture: PatchedFixture| EngineSnapshot {
-        fixtures: vec![patched.clone(), unpatched_fixture],
-        cue_lists: vec![],
-        playbacks: vec![],
-        playback_pages: vec![],
-        routes: vec![],
-        control_mappings: vec![],
-        groups: vec![group.clone()],
+        fixtures: vec![patched.clone(), unpatched_fixture].into(),
+        cue_lists: vec![].into(),
+        playbacks: vec![].into(),
+        playback_pages: vec![].into(),
+        routes: vec![].into(),
+        control_mappings: vec![].into(),
+        groups: vec![group.clone()].into(),
         revision: 1,
     };
     let engine = Engine::new(programmers);

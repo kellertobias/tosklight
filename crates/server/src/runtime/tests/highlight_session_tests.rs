@@ -105,13 +105,13 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures,
+            fixtures: fixtures.into(),
             groups: vec![light_programmer::GroupDefinition {
                 id: "1".into(),
                 name: "Live step source".into(),
                 fixtures: fixture_ids.clone(),
                 ..Default::default()
-            }],
+            }].into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
@@ -190,7 +190,8 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
     );
 
     let mut snapshot = (*state.engine.snapshot()).clone();
-    snapshot.groups[0].fixtures = vec![fixture_ids[2], fixture_ids[1]];
+    std::sync::Arc::make_mut(&mut snapshot.groups)[0].fixtures =
+        vec![fixture_ids[2], fixture_ids[1]];
     state.engine.replace_snapshot(snapshot).unwrap();
     let restored = post_highlight_action(&app, &token, "all").await;
     assert_eq!(restored["active"], true);
@@ -242,7 +243,7 @@ async fn rest_highlight_status_publishes_only_an_authoritative_selection_repair(
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures,
+            fixtures: fixtures.into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
@@ -250,7 +251,7 @@ async fn rest_highlight_status_publishes_only_an_authoritative_selection_repair(
     post_highlight_action(&app, &token, "next").await;
 
     let mut snapshot = (*state.engine.snapshot()).clone();
-    snapshot.fixtures.remove(0);
+    std::sync::Arc::make_mut(&mut snapshot.fixtures).remove(0);
     state.engine.replace_snapshot(snapshot).unwrap();
     write_desk_lock(
         &state,
@@ -344,7 +345,7 @@ async fn same_user_same_desk_highlight_survives_one_session_close_and_clears_wit
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures,
+            fixtures: fixtures.into(),
             ..EngineSnapshot::default()
         })
         .unwrap();

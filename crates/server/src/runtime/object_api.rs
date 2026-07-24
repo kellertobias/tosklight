@@ -97,7 +97,8 @@ pub(super) fn materialize_patched_fixture_definitions(
     let snapshot = load_engine_snapshot(entry).map_err(ApiError::internal)?;
     let mut resolved: HashMap<String, light_fixture::PatchedFixture> = snapshot
         .fixtures
-        .into_iter()
+        .iter()
+        .cloned()
         .map(|fixture| (fixture.fixture_id.0.to_string(), fixture))
         .collect();
     for object in objects {

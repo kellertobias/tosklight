@@ -150,7 +150,7 @@ fn add_group_contributions(
     groups: &HashMap<String, GroupDefinition>,
     now: DateTime<Utc>,
 ) {
-    for group in &snapshot.groups {
+    for group in snapshot.groups.iter() {
         let fixtures = resolve_group(&group.id, groups).unwrap_or_default();
         for fixture_id in fixtures {
             for (attribute, value) in &group.programming {

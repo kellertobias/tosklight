@@ -6,8 +6,8 @@ async fn install_lifecycle_show(
     let fixture = schema_v2_direct_fixture().0;
     let fixture_id = fixture.fixture_id;
     let mut snapshot = preload_atomicity_test_snapshot();
-    snapshot.fixtures = vec![fixture];
-    snapshot.groups[0].fixtures = vec![fixture_id];
+    snapshot.fixtures = vec![fixture].into();
+    std::sync::Arc::make_mut(&mut snapshot.groups)[0].fixtures = vec![fixture_id];
     snapshot.revision = 9_001;
     scenario.state.engine.replace_snapshot(snapshot).unwrap();
     let show = scenario.state.active_show.read().clone().unwrap();

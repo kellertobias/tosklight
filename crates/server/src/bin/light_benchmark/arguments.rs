@@ -55,6 +55,7 @@ pub struct Arguments {
     pub seconds: u64,
     pub warmup_seconds: u64,
     pub hardware_label: Option<String>,
+    pub mutation_gate: bool,
 }
 
 pub enum ParseOutcome {
@@ -119,6 +120,7 @@ impl Default for Arguments {
             seconds: DEFAULT_SECONDS,
             warmup_seconds: DEFAULT_WARMUP_SECONDS,
             hardware_label: None,
+            mutation_gate: false,
         }
     }
 }
@@ -161,6 +163,7 @@ impl Arguments {
                     }
                     parsed.hardware_label = Some(label);
                 }
+                "--mutation-gate" => parsed.mutation_gate = true,
                 "--help" | "-h" => return Ok(ParseOutcome::Help),
                 _ => return Err(format!("unknown argument: {argument}")),
             }
@@ -179,8 +182,9 @@ impl Arguments {
            --transport encode-only|loopback\n\
            --seconds N                 Measurement duration, 1-300 (default: 5)\n\
            --warmup-seconds N          Unpaced warmup duration, 0-60 (default: 1)\n\
-           --hardware-label TEXT       Reference-machine description included in JSON\n\
-           -h, --help\n"
+          --hardware-label TEXT       Reference-machine description included in JSON\n\
+          --mutation-gate             Run the large-show incremental mutation gate\n\
+          -h, --help\n"
     }
 }
 
@@ -257,6 +261,7 @@ mod tests {
             "2",
             "--hardware-label",
             "Test host",
+            "--mutation-gate",
         ]);
         assert_eq!(arguments.profiles, vec![BenchmarkProfile::HardFloor]);
         assert_eq!(arguments.protocol, ProtocolSelection::Both);
@@ -264,6 +269,7 @@ mod tests {
         assert_eq!(arguments.seconds, 7);
         assert_eq!(arguments.warmup_seconds, 2);
         assert_eq!(arguments.hardware_label.as_deref(), Some("Test host"));
+        assert!(arguments.mutation_gate);
     }
 
     #[test]

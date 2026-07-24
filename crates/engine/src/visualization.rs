@@ -44,7 +44,7 @@ impl Engine {
         let group_master_flashes = self.group_master_flashes.read();
         let highlighted_fixtures = self.highlighted_fixtures.read();
         let mut projected = HashMap::new();
-        for fixture in &snapshot.fixtures {
+        for fixture in snapshot.fixtures.iter() {
             let Some(profile) = fixture.definition.profile_snapshot.as_deref() else {
                 continue;
             };

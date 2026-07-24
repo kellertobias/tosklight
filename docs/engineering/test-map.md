@@ -152,7 +152,7 @@ The release-only render-through-encoding benchmark is:
 ```sh
 cargo run --release -p light-server --bin light-benchmark -- \
   --profile all --protocol both --transport encode-only \
-  --hardware-label 'describe CPU, memory, OS, and power mode'
+  --mutation-gate --hardware-label 'describe CPU, memory, OS, and power mode'
 ```
 
 Use `--transport loopback` for separate UDP-send measurements. Preserve the JSON report: it records
@@ -160,6 +160,9 @@ the 32-universe/100 Hz floor, 64-universe/120 Hz target, 4/8-universe low-power 
 deadline misses, encoded bytes, contribution coverage, and explicitly unmeasured items. Do not
 convert “not measured” CPU, allocation, sound-analysis, or production socket delivery into an
 implicit pass.
+The mutation gate is a release-mode CI check over candidate compilation, engine preparation, and
+generation installation. It compares 120- and 1,200-fixture snapshots, asserts structural sharing
+and full-compiler equivalence, and rejects size-dependent or over-5 ms p95 cue mutations.
 
 Frontend performance evidence must cover the full input-to-visible-update path and record request
 count, payload bytes, mutation response, event arrival, snapshot repair, store update, and visible

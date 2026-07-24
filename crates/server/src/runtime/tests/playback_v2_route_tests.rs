@@ -660,7 +660,8 @@ async fn v2_current_page_and_explicit_page_addresses_resolve_independently() {
             name: "Explicit".into(),
             slots: HashMap::from([(1, 2)]),
         },
-    ];
+    ]
+    .into();
     state.engine.replace_snapshot(snapshot).unwrap();
 
     let current = post_action(
@@ -2179,7 +2180,7 @@ fn install_virtual_playback_test_state(state: &AppState, desk_id: Uuid) {
     install_playback_test_state(state);
     let cue_list_id = state.engine.snapshot().cue_lists[0].id;
     let mut snapshot = (*state.engine.snapshot()).clone();
-    snapshot.playbacks.push(playback_test_definition(
+    std::sync::Arc::make_mut(&mut snapshot.playbacks).push(playback_test_definition(
         3,
         light_playback::PlaybackTarget::CueList { cue_list_id },
     ));
@@ -2187,7 +2188,8 @@ fn install_virtual_playback_test_state(state: &AppState, desk_id: Uuid) {
         number: 1,
         name: "Virtual".into(),
         slots: HashMap::from([(1, 1), (2, 3)]),
-    }];
+    }]
+    .into();
     state.engine.replace_snapshot(snapshot).unwrap();
     let store = VirtualPlaybackExclusionStore::from([(
         desk_id.to_string(),
@@ -2256,7 +2258,7 @@ fn install_playback_test_state(state: &AppState) -> light_core::FixtureId {
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            cue_lists: vec![cue_list],
+            cue_lists: vec![cue_list].into(),
             playbacks: vec![
                 playback_test_definition(
                     1,
@@ -2268,14 +2270,16 @@ fn install_playback_test_state(state: &AppState) -> light_core::FixtureId {
                         group_id: "front".into(),
                     },
                 ),
-            ],
+            ]
+            .into(),
             groups: vec![light_programmer::GroupDefinition {
                 id: "front".into(),
                 name: "Front".into(),
                 fixtures: vec![fixture],
                 master: 0.75,
                 ..light_programmer::GroupDefinition::default()
-            }],
+            }]
+            .into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
@@ -2285,13 +2289,13 @@ fn install_playback_test_state(state: &AppState) -> light_core::FixtureId {
 fn install_group_runtime_test_state(state: &AppState) {
     install_playback_test_state(state);
     let mut snapshot = (*state.engine.snapshot()).clone();
-    snapshot
-        .groups
+    let groups = std::sync::Arc::make_mut(&mut snapshot.groups);
+    groups
         .iter_mut()
         .find(|group| group.id == "front")
         .unwrap()
         .playback_fader = Some(2);
-    snapshot.groups.push(light_programmer::GroupDefinition {
+    groups.push(light_programmer::GroupDefinition {
         id: "side".into(),
         name: "Side".into(),
         master: 0.6,
@@ -2302,8 +2306,7 @@ fn install_group_runtime_test_state(state: &AppState) {
 
 fn set_group_playback_assignment(state: &AppState, group_id: &str, playback: Option<u8>) {
     let mut snapshot = (*state.engine.snapshot()).clone();
-    snapshot
-        .groups
+    std::sync::Arc::make_mut(&mut snapshot.groups)
         .iter_mut()
         .find(|group| group.id == group_id)
         .unwrap()
@@ -2323,17 +2326,18 @@ fn install_virtual_exclusion_test_state(state: &AppState) {
             definition.auto_off = false;
             definition
         })
-        .collect();
+        .collect::<Vec<_>>();
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            cue_lists: vec![cue_list],
-            playbacks,
+            cue_lists: vec![cue_list].into(),
+            playbacks: playbacks.into(),
             playback_pages: vec![light_playback::PlaybackPage {
                 number: 1,
                 name: "Main".into(),
                 slots: std::collections::HashMap::from([(1, 1), (2, 2), (3, 3), (4, 4)]),
-            }],
+            }]
+            .into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
@@ -2373,8 +2377,8 @@ fn install_auto_off_test_state(state: &AppState) {
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            cue_lists: vec![first, second],
-            playbacks: vec![first_definition, second_definition],
+            cue_lists: vec![first, second].into(),
+            playbacks: vec![first_definition, second_definition].into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
@@ -2386,8 +2390,7 @@ fn update_virtual_definition(
     update: impl FnOnce(&mut light_playback::PlaybackDefinition),
 ) {
     let mut snapshot = (*state.engine.snapshot()).clone();
-    let definition = snapshot
-        .playbacks
+    let definition = std::sync::Arc::make_mut(&mut snapshot.playbacks)
         .iter_mut()
         .find(|definition| definition.number == number)
         .unwrap();
@@ -2397,7 +2400,7 @@ fn update_virtual_definition(
 
 fn add_explicit_virtual_page(state: &AppState) {
     let mut snapshot = (*state.engine.snapshot()).clone();
-    snapshot.playback_pages.push(light_playback::PlaybackPage {
+    std::sync::Arc::make_mut(&mut snapshot.playback_pages).push(light_playback::PlaybackPage {
         number: 2,
         name: "Explicit".into(),
         slots: std::collections::HashMap::from([(1, 1)]),

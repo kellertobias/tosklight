@@ -35,23 +35,61 @@ pub(crate) enum GroupMasterGenerationUpdate {
 impl RuntimeGeneration {
     pub(crate) fn new(
         snapshot: EngineSnapshot,
-        playback: PlaybackEngine,
-        groups: HashMap<String, GroupDefinition>,
-        profile_encodings: ProfileEncodingIndex,
-        profile_projections: ProfileProjectionIndex,
+        playback: Arc<RwLock<PlaybackEngine>>,
+        groups: Arc<HashMap<String, GroupDefinition>>,
+        profile_encodings: Arc<ProfileEncodingIndex>,
+        profile_projections: Arc<ProfileProjectionIndex>,
     ) -> Self {
-        let routes = Arc::from(snapshot.routes.clone());
+        let routes = Arc::from(snapshot.routes.as_slice());
         let snap_attributes = compile_snap_attributes(&snapshot);
         let group_masters = GroupMasterIndex::compile(&groups, &snapshot.playbacks);
         Self {
             snapshot: Arc::new(snapshot),
-            playback: Arc::new(RwLock::new(playback)),
-            groups: Arc::new(groups),
+            playback,
+            groups,
             routes,
             snap_attributes: Arc::new(snap_attributes),
             group_masters: Arc::new(group_masters),
-            profile_encodings: Arc::new(profile_encodings),
-            profile_projections: Arc::new(profile_projections),
+            profile_encodings,
+            profile_projections,
+        }
+    }
+
+    pub(crate) fn replacing(
+        current: &Arc<Self>,
+        snapshot: EngineSnapshot,
+        playback: Arc<RwLock<PlaybackEngine>>,
+        groups: Arc<HashMap<String, GroupDefinition>>,
+        profile_encodings: Arc<ProfileEncodingIndex>,
+        profile_projections: Arc<ProfileProjectionIndex>,
+    ) -> Self {
+        let fixtures_changed = !Arc::ptr_eq(&snapshot.fixtures, &current.snapshot.fixtures);
+        let playbacks_changed = !Arc::ptr_eq(&snapshot.playbacks, &current.snapshot.playbacks);
+        let groups_changed = !Arc::ptr_eq(&snapshot.groups, &current.snapshot.groups);
+        let routes = if Arc::ptr_eq(&snapshot.routes, &current.snapshot.routes) {
+            Arc::clone(&current.routes)
+        } else {
+            Arc::from(snapshot.routes.as_slice())
+        };
+        let snap_attributes = if fixtures_changed {
+            Arc::new(compile_snap_attributes(&snapshot))
+        } else {
+            Arc::clone(&current.snap_attributes)
+        };
+        let group_masters = if playbacks_changed || groups_changed {
+            Arc::new(GroupMasterIndex::compile(&groups, &snapshot.playbacks))
+        } else {
+            Arc::clone(&current.group_masters)
+        };
+        Self {
+            snapshot: Arc::new(snapshot),
+            playback,
+            groups,
+            routes,
+            snap_attributes,
+            group_masters,
+            profile_encodings,
+            profile_projections,
         }
     }
 
@@ -68,8 +106,7 @@ impl RuntimeGeneration {
         }
 
         let mut snapshot = (*current.snapshot).clone();
-        snapshot
-            .groups
+        Arc::make_mut(&mut snapshot.groups)
             .iter_mut()
             .find(|group| group.id == group_id)
             .expect("runtime groups and snapshot groups must stay aligned")
@@ -107,8 +144,24 @@ impl RuntimeGeneration {
         &self.playback
     }
 
+    pub(crate) fn playback_arc(&self) -> Arc<RwLock<PlaybackEngine>> {
+        Arc::clone(&self.playback)
+    }
+
     pub(crate) fn groups(&self) -> &HashMap<String, GroupDefinition> {
         &self.groups
+    }
+
+    pub(crate) fn groups_arc(&self) -> Arc<HashMap<String, GroupDefinition>> {
+        Arc::clone(&self.groups)
+    }
+
+    pub(crate) fn profile_encodings_arc(&self) -> Arc<ProfileEncodingIndex> {
+        Arc::clone(&self.profile_encodings)
+    }
+
+    pub(crate) fn profile_projections_arc(&self) -> Arc<ProfileProjectionIndex> {
+        Arc::clone(&self.profile_projections)
     }
 
     pub(crate) fn routes(&self) -> Arc<[OutputRoute]> {
@@ -212,7 +265,7 @@ impl GroupMasterIndex {
 
 fn compile_snap_attributes(snapshot: &EngineSnapshot) -> HashMap<FixtureId, HashSet<AttributeKey>> {
     let mut attributes = HashMap::<FixtureId, HashSet<AttributeKey>>::new();
-    for fixture in &snapshot.fixtures {
+    for fixture in snapshot.fixtures.iter() {
         let Some(mode) = crate::fixture::profile_mode(fixture) else {
             continue;
         };

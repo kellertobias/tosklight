@@ -77,11 +77,11 @@ fn preload_atomicity_test_snapshot() -> EngineSnapshot {
             id: "front".into(),
             name: "Front".into(),
             ..Default::default()
-        }],
+        }].into(),
         cue_lists: vec![
             cue_list(first_cue_list_id, "Atomic Preload A"),
             cue_list(second_cue_list_id, "Atomic Preload B"),
-        ],
+        ].into(),
         playbacks: vec![
             playback(
                 1,
@@ -101,12 +101,12 @@ fn preload_atomicity_test_snapshot() -> EngineSnapshot {
                     group_id: "front".into(),
                 },
             ),
-        ],
+        ].into(),
         playback_pages: vec![light_playback::PlaybackPage {
             number: 1,
             name: "Preload".into(),
             slots: HashMap::from([(1, 1), (2, 2)]),
-        }],
+        }].into(),
         ..Default::default()
     }
 }
@@ -114,21 +114,22 @@ fn preload_atomicity_test_snapshot() -> EngineSnapshot {
 fn preload_auto_off_test_snapshot() -> EngineSnapshot {
     let fixture = light_core::FixtureId::new();
     let mut snapshot = preload_atomicity_test_snapshot();
-    snapshot.cue_lists[0].cues[0]
+    let cue_lists = std::sync::Arc::make_mut(&mut snapshot.cue_lists);
+    cue_lists[0].cues[0]
         .changes
         .push(light_playback::CueChange::set(
             fixture,
             light_core::AttributeKey("pan".into()),
             light_core::AttributeValue::Normalized(0.2),
         ));
-    snapshot.cue_lists[1].cues[0]
+    cue_lists[1].cues[0]
         .changes
         .push(light_playback::CueChange::set(
             fixture,
             light_core::AttributeKey("pan".into()),
             light_core::AttributeValue::Normalized(0.8),
         ));
-    snapshot.playbacks[0].auto_off = true;
+    std::sync::Arc::make_mut(&mut snapshot.playbacks)[0].auto_off = true;
     snapshot
 }
 
@@ -170,8 +171,8 @@ fn matter_test_snapshot() -> EngineSnapshot {
         presentation_image: None,
     };
     EngineSnapshot {
-        cue_lists: vec![cue_list],
-        playbacks: vec![definition(25, true), definition(26, false)],
+        cue_lists: vec![cue_list].into(),
+        playbacks: vec![definition(25, true), definition(26, false)].into(),
         playback_pages: vec![
             light_playback::PlaybackPage {
                 number: 1,
@@ -183,7 +184,7 @@ fn matter_test_snapshot() -> EngineSnapshot {
                 name: "Matter".into(),
                 slots: HashMap::from([(7, 25)]),
             },
-        ],
+        ].into(),
         ..Default::default()
     }
 }
@@ -598,7 +599,7 @@ fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
     };
     state.programmers.start(session.id, user.id);
     let mut snapshot = preload_atomicity_test_snapshot();
-    snapshot.playback_pages.push(light_playback::PlaybackPage {
+    std::sync::Arc::make_mut(&mut snapshot.playback_pages).push(light_playback::PlaybackPage {
         number: 2,
         name: "Explicit".into(),
         slots: HashMap::from([(1, 1)]),

@@ -42,13 +42,13 @@ impl CommandHttpScenario {
         self.state
             .engine
             .replace_snapshot(EngineSnapshot {
-                fixtures: vec![fixture],
+                fixtures: vec![fixture].into(),
                 groups: vec![light_programmer::GroupDefinition {
                     id: "1".into(),
                     name: "Group 1".into(),
                     fixtures: vec![fixture_id],
                     ..Default::default()
-                }],
+                }].into(),
                 revision: 1,
                 ..EngineSnapshot::default()
             })

@@ -5,6 +5,7 @@ use light_engine::EngineSnapshot;
 use light_show::{
     PortableShowCommit, PortableShowDocument, PortableShowObjectUndo, PortableShowTransaction,
 };
+use std::sync::Arc;
 
 /// One already-open active-show mutation boundary.
 pub trait ActiveShowUnitOfWork {
@@ -70,6 +71,12 @@ pub trait ActiveShowPorts: Send + Sync {
         &self,
         snapshot: EngineSnapshot,
     ) -> Result<Self::PreparedRuntime, ActionError>;
+
+    /// Returns the runtime projection of the normalized active document, when the adapter can
+    /// prove that identity. Generic adapters may omit it and retain the full migration oracle.
+    fn normalized_active_snapshot(&self) -> Option<Arc<EngineSnapshot>> {
+        None
+    }
 
     /// Installation is deliberately infallible: every fallible step precedes persistence.
     fn install_runtime(&self, context: &ActionContext, prepared: Self::PreparedRuntime);

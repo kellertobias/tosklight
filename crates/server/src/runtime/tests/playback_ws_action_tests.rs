@@ -151,7 +151,7 @@ fn install_playback(state: &AppState) {
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            cue_lists: vec![cue_list],
+            cue_lists: vec![cue_list].into(),
             playbacks: vec![light_playback::PlaybackDefinition {
                 number: 1,
                 name: "Playback 1".into(),
@@ -168,7 +168,8 @@ fn install_playback(state: &AppState) {
                 presentation_icon: None,
                 presentation_image: None,
                 target,
-            }],
+            }]
+            .into(),
             ..EngineSnapshot::default()
         })
         .unwrap();

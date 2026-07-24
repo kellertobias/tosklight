@@ -45,13 +45,13 @@ fn cue_selection_snapshot(list_id: light_core::CueListId) -> EngineSnapshot {
         presentation_image: None,
     };
     EngineSnapshot {
-        cue_lists: vec![list],
-        playbacks: vec![definition(1), definition(2)],
+        cue_lists: vec![list].into(),
+        playbacks: vec![definition(1), definition(2)].into(),
         playback_pages: vec![light_playback::PlaybackPage {
             number: 4,
             name: "Page 4".into(),
             slots: HashMap::from([(7, 2)]),
-        }],
+        }].into(),
         ..Default::default()
     }
 }
@@ -368,7 +368,7 @@ fn authoritative_selection_surfaces_expand_a_multi_head_parent_to_child_rows() {
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             ..EngineSnapshot::default()
         })
         .unwrap();

@@ -11,28 +11,44 @@ use thiserror::Error;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct EngineSnapshot {
-    pub fixtures: Vec<PatchedFixture>,
-    pub cue_lists: Vec<CueList>,
+    pub fixtures: Arc<Vec<PatchedFixture>>,
+    pub cue_lists: Arc<Vec<CueList>>,
     #[serde(default)]
-    pub playbacks: Vec<PlaybackDefinition>,
+    pub playbacks: Arc<Vec<PlaybackDefinition>>,
     #[serde(default)]
-    pub playback_pages: Vec<PlaybackPage>,
-    pub routes: Vec<OutputRoute>,
-    pub control_mappings: Vec<light_control::ControlMapping>,
+    pub playback_pages: Arc<Vec<PlaybackPage>>,
+    pub routes: Arc<Vec<OutputRoute>>,
+    pub control_mappings: Arc<Vec<light_control::ControlMapping>>,
     #[serde(default)]
-    pub groups: Vec<GroupDefinition>,
+    pub groups: Arc<Vec<GroupDefinition>>,
     pub revision: u64,
 }
 
 impl EngineSnapshot {
     pub fn validate(&self) -> Result<(), EngineError> {
-        validate_patch(&self.fixtures)?;
+        self.validate_changed(None)
+    }
+
+    pub(crate) fn validate_changed(&self, previous: Option<&Self>) -> Result<(), EngineError> {
+        if previous.is_none_or(|previous| !Arc::ptr_eq(&self.fixtures, &previous.fixtures)) {
+            validate_patch(&self.fixtures)?;
+        }
+        let groups_changed =
+            previous.is_none_or(|previous| !Arc::ptr_eq(&self.groups, &previous.groups));
+        let cue_lists_changed =
+            previous.is_none_or(|previous| !Arc::ptr_eq(&self.cue_lists, &previous.cue_lists));
+        let playbacks_changed =
+            previous.is_none_or(|previous| !Arc::ptr_eq(&self.playbacks, &previous.playbacks));
+        let pages_changed = previous
+            .is_none_or(|previous| !Arc::ptr_eq(&self.playback_pages, &previous.playback_pages));
+        let routes_changed =
+            previous.is_none_or(|previous| !Arc::ptr_eq(&self.routes, &previous.routes));
         let groups = self
             .groups
             .iter()
             .map(|group| (group.id.clone(), group.clone()))
             .collect::<HashMap<_, _>>();
-        for group in &self.groups {
+        for group in self.groups.iter().filter(|_| groups_changed) {
             if let Some(derived) = &group.derived_from {
                 derived.rule.validate().map_err(EngineError::Invalid)?;
             }
@@ -44,13 +60,18 @@ impl EngineSnapshot {
             }
             resolve_group(&group.id, &groups).map_err(EngineError::Invalid)?;
         }
-        for cue_list in &self.cue_lists {
+        for cue_list in self.cue_lists.iter().filter(|_| cue_lists_changed) {
             cue_list.validate().map_err(EngineError::Invalid)?;
         }
         let mut playback_numbers = std::collections::HashSet::new();
-        for playback in &self.playbacks {
+        let validate_playbacks = playbacks_changed || cue_lists_changed || groups_changed;
+        for playback in self.playbacks.iter() {
+            let unique_number = playback_numbers.insert(playback.number);
+            if !validate_playbacks {
+                continue;
+            }
             playback.validate().map_err(EngineError::Invalid)?;
-            if !playback_numbers.insert(playback.number) {
+            if !unique_number {
                 return Err(EngineError::Invalid("duplicate playback number".into()));
             }
             match &playback.target {
@@ -71,7 +92,11 @@ impl EngineSnapshot {
                 _ => {}
             }
         }
-        for page in &self.playback_pages {
+        for page in self
+            .playback_pages
+            .iter()
+            .filter(|_| pages_changed || playbacks_changed)
+        {
             page.validate().map_err(EngineError::Invalid)?;
             if page
                 .slots
@@ -83,7 +108,7 @@ impl EngineSnapshot {
                 ));
             }
         }
-        for route in &self.routes {
+        for route in self.routes.iter().filter(|_| routes_changed) {
             if route.destination_universe == 0 || route.logical_universe == 0 {
                 return Err(EngineError::Invalid(
                     "universe zero is not valid for show routes".into(),

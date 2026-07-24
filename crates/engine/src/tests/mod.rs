@@ -323,13 +323,13 @@ fn mib_snapshot(fixtures: Vec<PatchedFixture>, fixture_ids: &[FixtureId]) -> Eng
         presentation_image: None,
     };
     EngineSnapshot {
-        fixtures,
-        cue_lists: vec![cue_list],
-        playbacks: vec![playback],
-        playback_pages: vec![],
-        routes: vec![],
-        control_mappings: vec![],
-        groups: vec![],
+        fixtures: fixtures.into(),
+        cue_lists: vec![cue_list].into(),
+        playbacks: vec![playback].into(),
+        playback_pages: vec![].into(),
+        routes: vec![].into(),
+        control_mappings: vec![].into(),
+        groups: vec![].into(),
         revision: 1,
     }
 }

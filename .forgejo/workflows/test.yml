@@ -45,12 +45,24 @@ jobs:
           name: playwright-${{ matrix.artifact }}
           path: .artifacts/test/results
 
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+      - uses: https://github.com/dtolnay/rust-toolchain@stable
+      - name: Large-show mutation gate
+        run: >-
+          cargo run --release -p light-server --bin light-benchmark --no-default-features --
+          --profile low-power-4 --protocol artnet --transport encode-only
+          --seconds 1 --warmup-seconds 0 --mutation-gate
+          --hardware-label "Forgejo CI"
+
   # Semantic release lives here, not on the GitHub mirror: the tag is only created once
   # the authoritative suite has passed on main. semantic-release analyzes the commits,
   # bumps every manifest via tools/set-version.mjs, commits the changelog and lockfile,
   # and pushes a v* tag. The GitHub mirror reacts to that tag to build and deploy.
   release:
-    needs: [unit, e2e]
+    needs: [unit, e2e, benchmark]
     if: forgejo.ref == 'refs/heads/main' && forgejo.event_name == 'push'
     runs-on: ubuntu-latest
     steps:

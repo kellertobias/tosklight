@@ -315,7 +315,7 @@ fn cue_addresses_use_cue_for_pool_and_page_playbacks() {
             number: 4,
             name: "Page 4".into(),
             slots: HashMap::from([(7, 25)]),
-        }],
+        }].into(),
         ..Default::default()
     };
     let pool = ["SET", "25", "CUE", "2", ".", "5"].map(String::from);
@@ -357,7 +357,7 @@ fn update_addresses_keep_current_page_and_explicit_page_distinct() {
                 name: "Page 4".into(),
                 slots: HashMap::from([(7, 25)]),
             },
-        ],
+        ].into(),
         ..Default::default()
     };
     let current = ["SET", "7", "CUE", "2", ".", "5"].map(String::from);

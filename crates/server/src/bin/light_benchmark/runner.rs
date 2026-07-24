@@ -34,6 +34,10 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
         scenarios.push(run_scenario(arguments, config)?);
     }
     let required_floor_met = required_floor_result(&scenarios);
+    let show_mutation = arguments
+        .mutation_gate
+        .then(crate::light_benchmark::mutation::run)
+        .transpose()?;
     Ok(BenchmarkReport {
         schema_version: 2,
         benchmark: "tosklight_render_to_protocol_encoding_pipeline",
@@ -49,6 +53,7 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
         scenarios,
         measurement_coverage: coverage(arguments.transport),
         required_floor_met,
+        show_mutation,
     })
 }
 

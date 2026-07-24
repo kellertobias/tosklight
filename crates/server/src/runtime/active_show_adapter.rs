@@ -353,6 +353,10 @@ impl ActiveShowPorts for ServerActiveShowPorts {
             .map_err(|error| engine_error(error, Some(revision)))
     }
 
+    fn normalized_active_snapshot(&self) -> Option<Arc<EngineSnapshot>> {
+        Some(self.state.engine.snapshot())
+    }
+
     fn install_runtime(&self, context: &ActionContext, prepared: Self::PreparedRuntime) {
         install_prepared_snapshot_with_selection_refresh(
             &self.state,

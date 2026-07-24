@@ -34,7 +34,7 @@ fn direct_cuelist_action_projection_is_not_replaced_by_assigned_playbacks() {
     assert_eq!(direct.current_cue().map(|cue| cue.number), Some(1.0));
 
     let snapshot = EngineSnapshot {
-        playbacks: vec![first, second],
+        playbacks: vec![first, second].into(),
         ..EngineSnapshot::default()
     };
     let mut repair = Vec::new();

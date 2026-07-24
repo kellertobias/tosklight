@@ -23,7 +23,7 @@ pub(crate) type ColorAttributeIndex = HashMap<FixtureId, Vec<&'static str>>;
 pub(crate) fn color_attribute_index(state: &AppState) -> ColorAttributeIndex {
     let snapshot = state.engine.snapshot();
     let mut index = ColorAttributeIndex::new();
-    for fixture in &snapshot.fixtures {
+    for fixture in snapshot.fixtures.iter() {
         index.insert(
             fixture.fixture_id,
             supported_channels(&fixture.definition, |head| head.shared),

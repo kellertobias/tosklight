@@ -24,12 +24,14 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
     snapshot.playbacks = vec![
         definition(27, light_playback::PlaybackFaderMode::Temp, false),
         definition(28, light_playback::PlaybackFaderMode::XFade, false),
-    ];
+    ]
+    .into();
     snapshot.playback_pages = vec![light_playback::PlaybackPage {
         number: 3,
         name: "Matter".into(),
         slots: HashMap::from([(1, 27), (2, 28)]),
-    }];
+    }]
+    .into();
     state.engine.replace_snapshot(snapshot).unwrap();
 
     let faderless_xfade = state

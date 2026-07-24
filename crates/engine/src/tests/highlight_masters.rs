@@ -46,7 +46,7 @@ fn transient_highlight_wins_over_group_master_while_grand_master_and_blackout_wi
     second.multipatch.clear();
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture_template, second],
+            fixtures: vec![fixture_template, second].into(),
             revision: 2,
             ..Default::default()
         })
@@ -100,7 +100,7 @@ fn highlight_scenario() -> HighlightScenario {
     let engine = Engine::new(programmers.clone());
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             groups: vec![GroupDefinition {
                 id: "1".into(),
                 name: "Master".into(),
@@ -108,9 +108,10 @@ fn highlight_scenario() -> HighlightScenario {
                 master: 0.5,
                 playback_fader: Some(2),
                 ..Default::default()
-            }],
-            cue_lists: vec![cue_list.clone()],
-            playbacks: vec![test_playback(1, cue_list.id), test_group_playback(2, "1")],
+            }]
+            .into(),
+            cue_lists: vec![cue_list.clone()].into(),
+            playbacks: vec![test_playback(1, cue_list.id), test_group_playback(2, "1")].into(),
             revision: 1,
             ..Default::default()
         })

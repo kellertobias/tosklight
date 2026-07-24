@@ -79,7 +79,7 @@ async fn running_chaser_wakes_only_its_narrow_subscriber() {
     let cue_list_id = cue_list.id;
     engine
         .replace_snapshot(EngineSnapshot {
-            cue_lists: vec![cue_list],
+            cue_lists: vec![cue_list].into(),
             ..EngineSnapshot::default()
         })
         .unwrap();

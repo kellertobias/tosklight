@@ -24,13 +24,14 @@ fn group_ltp_uses_operator_edit_time_not_render_time() {
     let engine = Engine::new(programmers.clone());
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             groups: vec![GroupDefinition {
                 id: "position".into(),
                 name: "Position".into(),
                 fixtures: vec![logical],
                 ..Default::default()
-            }],
+            }]
+            .into(),
             ..Default::default()
         })
         .unwrap();
@@ -79,13 +80,14 @@ fn programmer_intensity_is_ltp_within_one_programmer_and_htp_between_programmers
     let engine = Engine::new(programmers.clone());
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             groups: vec![GroupDefinition {
                 id: "wash".into(),
                 name: "Wash".into(),
                 fixtures: vec![logical],
                 ..Default::default()
-            }],
+            }]
+            .into(),
             ..Default::default()
         })
         .unwrap();
@@ -129,8 +131,8 @@ fn empty_group_programming_becomes_effective_when_members_are_added() {
     };
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture.clone()],
-            groups: vec![group.clone()],
+            fixtures: vec![fixture.clone()].into(),
+            groups: vec![group.clone()].into(),
             revision: 1,
             ..Default::default()
         })
@@ -141,11 +143,12 @@ fn empty_group_programming_becomes_effective_when_members_are_added() {
     );
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             groups: vec![GroupDefinition {
                 fixtures: vec![logical],
                 ..group
-            }],
+            }]
+            .into(),
             revision: 2,
             ..Default::default()
         })
@@ -192,8 +195,8 @@ fn session_group_programmer_remains_live_across_membership_changes() {
     };
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture.clone()],
-            groups: vec![group.clone()],
+            fixtures: vec![fixture.clone()].into(),
+            groups: vec![group.clone()].into(),
             revision: 1,
             ..Default::default()
         })
@@ -204,11 +207,12 @@ fn session_group_programmer_remains_live_across_membership_changes() {
     );
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             groups: vec![GroupDefinition {
                 fixtures: vec![logical],
                 ..group
-            }],
+            }]
+            .into(),
             revision: 2,
             ..Default::default()
         })
@@ -259,8 +263,8 @@ fn explicit_cue_change_wins_when_group_expansion_targets_same_attribute() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
-            cue_lists: vec![cue_list],
+            fixtures: vec![fixture].into(),
+            cue_lists: vec![cue_list].into(),
             groups: vec![GroupDefinition {
                 id: "group".into(),
                 name: "Group".into(),
@@ -272,7 +276,8 @@ fn explicit_cue_change_wins_when_group_expansion_targets_same_attribute() {
                 frozen_from: None,
                 color: None,
                 icon: None,
-            }],
+            }]
+            .into(),
             revision: 1,
             ..Default::default()
         })

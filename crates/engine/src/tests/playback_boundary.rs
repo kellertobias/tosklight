@@ -126,7 +126,9 @@ fn activation_provenance_is_atomic_stable_on_noop_and_cleared_on_release() {
 
     let mut replacement = (*engine.snapshot()).clone();
     replacement.revision += 1;
-    replacement.cue_lists[0].cues.push(Cue::new(2.0));
+    Arc::make_mut(&mut replacement.cue_lists)[0]
+        .cues
+        .push(Cue::new(2.0));
     engine.replace_snapshot(replacement).unwrap();
     engine
         .execute_pool_playback_with_activation(1, PoolPlaybackAction::Go, &[], Some(second))
@@ -662,8 +664,8 @@ fn peer_only_auto_off_engine() -> (Engine, Arc<ManualClock>) {
     let engine = Engine::new(ProgrammerRegistry::with_clock(clock.clone()));
     engine
         .replace_snapshot(EngineSnapshot {
-            cue_lists: vec![low, high],
-            playbacks: vec![low_definition, high_definition],
+            cue_lists: vec![low, high].into(),
+            playbacks: vec![low_definition, high_definition].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -673,7 +675,7 @@ fn peer_only_auto_off_engine() -> (Engine, Arc<ManualClock>) {
     execute_pool(&engine, 2, PoolPlaybackAction::On);
     let mut replacement = (*engine.snapshot()).clone();
     replacement.revision += 1;
-    replacement.playbacks[0].auto_off = true;
+    Arc::make_mut(&mut replacement.playbacks)[0].auto_off = true;
     engine.replace_snapshot(replacement).unwrap();
     (engine, clock)
 }
@@ -687,12 +689,12 @@ fn playback_engine_with_numbers(numbers: &[u16]) -> Engine {
     let playbacks = numbers
         .iter()
         .map(|number| test_playback(*number, cue_list.id))
-        .collect();
+        .collect::<Vec<_>>();
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {
-            cue_lists: vec![cue_list],
-            playbacks,
+            cue_lists: vec![cue_list].into(),
+            playbacks: playbacks.into(),
             revision: 1,
             ..EngineSnapshot::default()
         })

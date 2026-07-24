@@ -8,8 +8,8 @@ fn mapped_cue_action_uses_playback_service_and_publishes_one_midi_event() {
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            cue_lists: vec![cue_list],
-            control_mappings: vec![midi_mapping(ControlAction::CueGo { cue_list_id })],
+            cue_lists: vec![cue_list].into(),
+            control_mappings: vec![midi_mapping(ControlAction::CueGo { cue_list_id })].into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
@@ -69,7 +69,8 @@ fn mapped_global_output_respects_the_osc_desk_alias_lock() {
                     },
                     action: ControlAction::GrandMaster { level: 0.35 },
                 },
-            ],
+            ]
+            .into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
@@ -122,7 +123,8 @@ fn configured_grand_master_playback_keeps_playback_and_output_events() {
             playbacks: vec![mapped_test_playback(
                 7,
                 light_playback::PlaybackTarget::GrandMaster,
-            )],
+            )]
+            .into(),
             ..EngineSnapshot::default()
         })
         .unwrap();

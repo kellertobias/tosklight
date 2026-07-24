@@ -10,7 +10,7 @@ fn programmer_fade_starts_from_resolved_playback_underlay_and_release_reveals_it
     programmers.start(session, UserId::new());
     let (fixture, logical) = fixture();
     let mut snapshot = mib_snapshot(vec![fixture], &[logical]);
-    snapshot.cue_lists[0].cues[0]
+    Arc::make_mut(&mut snapshot.cue_lists)[0].cues[0]
         .changes
         .iter_mut()
         .find(|change| change.attribute.is_intensity())
@@ -56,7 +56,7 @@ fn overlapping_preload_group_fades_keep_edit_order_at_one_commit_timestamp() {
     engine.set_control_timing([120.0; 5], 3_000, 0);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             groups: vec![
                 GroupDefinition {
                     id: "1".into(),
@@ -70,7 +70,8 @@ fn overlapping_preload_group_fades_keep_edit_order_at_one_commit_timestamp() {
                     fixtures: vec![logical],
                     ..Default::default()
                 },
-            ],
+            ]
+            .into(),
             revision: 1,
             ..Default::default()
         })

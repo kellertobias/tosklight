@@ -1,5 +1,6 @@
 use super::{
-    compile_show_candidate, invalid_candidate,
+    ShowCompileDirty, compile_show_candidate, compile_show_candidate_incremental,
+    invalid_candidate,
     migrations::{stage_candidate_migrations, stage_candidate_migrations_preserving_object},
 };
 use crate::ActionError;
@@ -24,6 +25,44 @@ impl PreparedShowCandidate {
     pub fn into_parts(self) -> (PortableShowTransaction, EngineSnapshot) {
         (self.transaction, self.snapshot)
     }
+}
+
+/// Prepares a mutation against the already-normalized active document and structurally shares
+/// every unaffected runtime projection.
+///
+/// The show-open path remains the full compatibility oracle. This path rechecks only objects
+/// touched by the transaction, so legacy bodies accepted through an API mutation are normalized
+/// without sweeping the rest of an already-normalized document.
+pub fn prepare_normalized_show_candidate_incremental(
+    document: &PortableShowDocument,
+    mut transaction: PortableShowTransaction,
+    previous: &EngineSnapshot,
+) -> Result<PreparedShowCandidate, ActionError> {
+    super::migrations::stage_touched_object_migrations(document, &mut transaction)?;
+    let mut dirty = ShowCompileDirty {
+        fixtures: transaction.patch_changed() || transaction.fixture_profile_revisions_changed(),
+        ..ShowCompileDirty::default()
+    };
+    for kind in transaction.changed_object_kinds() {
+        match kind {
+            "patched_fixture" => dirty.fixtures = true,
+            "cue_list" => dirty.cue_lists = true,
+            "playback" => dirty.playbacks = true,
+            "playback_page" => dirty.playback_pages = true,
+            "route" => dirty.routes = true,
+            "control_mapping" => dirty.control_mappings = true,
+            "group" => dirty.groups = true,
+            _ => {}
+        }
+    }
+    let candidate = document
+        .candidate(&transaction)
+        .map_err(|error| invalid_candidate(format!("invalid portable show candidate: {error}")))?;
+    let snapshot = compile_show_candidate_incremental(candidate, previous, dirty)?;
+    Ok(PreparedShowCandidate {
+        transaction,
+        snapshot,
+    })
 }
 
 /// Stages compatibility migrations and compiles the resulting candidate without persistence or

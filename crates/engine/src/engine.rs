@@ -42,10 +42,10 @@ impl Engine {
         Self {
             generation: ArcSwap::from_pointee(RuntimeGeneration::new(
                 EngineSnapshot::default(),
-                playback,
-                HashMap::new(),
-                ProfileEncodingIndex::default(),
-                ProfileProjectionIndex::default(),
+                Arc::new(RwLock::new(playback)),
+                Arc::new(HashMap::new()),
+                Arc::new(ProfileEncodingIndex::default()),
+                Arc::new(ProfileProjectionIndex::default()),
             )),
             programmers,
             timecode_frame: AtomicU64::new(u64::MAX),

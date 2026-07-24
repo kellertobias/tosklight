@@ -164,6 +164,26 @@ impl PortableShowTransaction {
             + self.profile_revisions.len()
             + usize::from(self.patch_changed)
     }
+
+    /// Storage kinds whose current objects are written or deleted by this transaction.
+    pub fn changed_object_kinds(&self) -> impl Iterator<Item = &str> {
+        self.writes
+            .keys()
+            .map(PortableShowObjectKey::kind)
+            .chain(self.deletes.iter().map(PortableShowObjectKey::kind))
+    }
+
+    pub fn changed_object_keys(&self) -> impl Iterator<Item = &PortableShowObjectKey> {
+        self.writes.keys().chain(self.deletes.iter())
+    }
+
+    pub const fn patch_changed(&self) -> bool {
+        self.patch_changed
+    }
+
+    pub fn fixture_profile_revisions_changed(&self) -> bool {
+        !self.profile_revisions.is_empty()
+    }
 }
 
 impl PortableShowDocument {

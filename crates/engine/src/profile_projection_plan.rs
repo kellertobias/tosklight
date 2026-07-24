@@ -28,7 +28,7 @@ pub(crate) struct ProfileHeadPlan {
 impl ProfileProjectionIndex {
     pub(crate) fn compile(snapshot: &EngineSnapshot) -> Result<Self, EngineError> {
         let mut fixtures = HashMap::new();
-        for fixture in &snapshot.fixtures {
+        for fixture in snapshot.fixtures.iter() {
             let Some(mode) = profile_mode(fixture) else {
                 continue;
             };

@@ -39,7 +39,7 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
@@ -238,7 +238,7 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             ..EngineSnapshot::default()
         })
         .unwrap();

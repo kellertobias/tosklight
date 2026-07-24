@@ -128,7 +128,7 @@ fn sampled_value_is_the_underlay_for_an_ordinary_programmer_fade() {
     let engine = Engine::new(programmers.clone());
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -169,9 +169,9 @@ fn playback_sample_applies_its_master_to_intensity_and_non_intensity_output() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
-            cue_lists: vec![cue_list],
-            playbacks: vec![playback],
+            fixtures: vec![fixture].into(),
+            cue_lists: vec![cue_list].into(),
+            playbacks: vec![playback].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -235,9 +235,9 @@ fn sampled_playback_intensity_is_mastered_before_htp_arbitration() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
-            cue_lists: vec![sampled_list, competing_list],
-            playbacks: vec![sampled_playback, competing_playback],
+            fixtures: vec![fixture].into(),
+            cue_lists: vec![sampled_list, competing_list].into(),
+            playbacks: vec![sampled_playback, competing_playback].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -290,9 +290,9 @@ fn a_sample_replaces_only_its_independent_playback() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
-            cue_lists: vec![sampled_list, independent_list],
-            playbacks: vec![sampled_playback, independent_playback],
+            fixtures: vec![fixture].into(),
+            cue_lists: vec![sampled_list, independent_list].into(),
+            playbacks: vec![sampled_playback, independent_playback].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -346,7 +346,7 @@ fn live_programmer_sample_does_not_replace_the_same_programmers_preload() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -392,7 +392,7 @@ fn replacing_newer_live_programmer_keeps_older_preload_as_an_htp_competitor() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -442,7 +442,7 @@ fn transient_sample_replaces_only_the_named_transient_action() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -620,8 +620,8 @@ fn playback_cue_projection(
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
-            cue_lists: vec![cue_list.clone()],
+            fixtures: vec![fixture].into(),
+            cue_lists: vec![cue_list.clone()].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -660,7 +660,7 @@ fn source_engine(started: DateTime<Utc>) -> (Engine, ProgrammerRegistry, Session
     let engine = Engine::new(programmers.clone());
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -684,12 +684,12 @@ fn grouped_source_engine(
             fixtures: vec![fixture_id],
             ..Default::default()
         })
-        .collect();
+        .collect::<Vec<_>>();
     let engine = Engine::new(programmers.clone());
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
-            groups,
+            fixtures: vec![fixture].into(),
+            groups: groups.into(),
             revision: 1,
             ..EngineSnapshot::default()
         })

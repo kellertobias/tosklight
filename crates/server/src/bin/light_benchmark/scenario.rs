@@ -67,11 +67,11 @@ impl BenchmarkScenario {
         let engine = Engine::new(programmers.clone());
         engine
             .replace_snapshot(EngineSnapshot {
-                fixtures,
-                cue_lists: vec![cue_list],
-                playbacks: vec![playback],
-                routes,
-                groups: vec![group],
+                fixtures: fixtures.into(),
+                cue_lists: vec![cue_list].into(),
+                playbacks: vec![playback].into(),
+                routes: routes.into(),
+                groups: vec![group].into(),
                 revision: 1,
                 ..Default::default()
             })

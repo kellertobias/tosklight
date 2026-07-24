@@ -35,13 +35,13 @@ fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
-            cue_lists: vec![],
-            playbacks: vec![],
-            playback_pages: vec![],
-            routes: vec![],
-            control_mappings: vec![],
-            groups: vec![],
+            fixtures: vec![fixture].into(),
+            cue_lists: vec![].into(),
+            playbacks: vec![].into(),
+            playback_pages: vec![].into(),
+            routes: vec![].into(),
+            control_mappings: vec![].into(),
+            groups: vec![].into(),
             revision: 1,
         })
         .unwrap();
@@ -72,13 +72,13 @@ fn logical_head_programmer_value_renders_to_physical_patch() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
-            cue_lists: vec![],
-            playbacks: vec![],
-            playback_pages: vec![],
-            routes: vec![],
-            control_mappings: vec![],
-            groups: vec![],
+            fixtures: vec![fixture].into(),
+            cue_lists: vec![].into(),
+            playbacks: vec![].into(),
+            playback_pages: vec![].into(),
+            routes: vec![].into(),
+            control_mappings: vec![].into(),
+            groups: vec![].into(),
             revision: 7,
         })
         .unwrap();
@@ -108,7 +108,7 @@ fn parent_programmer_value_does_not_fan_out_to_child_heads() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             ..Default::default()
         })
         .unwrap();
@@ -148,8 +148,8 @@ fn master_only_group_fader_does_not_scale_child_heads() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
-            playbacks: vec![test_group_playback(1, "master")],
+            fixtures: vec![fixture].into(),
+            playbacks: vec![test_group_playback(1, "master")].into(),
             groups: vec![GroupDefinition {
                 id: "master".into(),
                 name: "Master only".into(),
@@ -157,7 +157,8 @@ fn master_only_group_fader_does_not_scale_child_heads() {
                 master: 0.5,
                 playback_fader: Some(1),
                 ..Default::default()
-            }],
+            }]
+            .into(),
             ..Default::default()
         })
         .unwrap();

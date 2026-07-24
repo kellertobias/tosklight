@@ -39,7 +39,7 @@ fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
             name: "Group 1".into(),
             fixtures: members,
             ..Default::default()
-        }],
+        }].into(),
         ..Default::default()
     };
     state
@@ -128,7 +128,8 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
             fixtures: fixtures[4..8].to_vec(),
             ..Default::default()
         },
-    ];
+    ]
+    .into();
     state.engine.replace_snapshot(snapshot.clone()).unwrap();
 
     assert_eq!(
@@ -154,7 +155,8 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
         }
     );
 
-    snapshot.groups[1].fixtures = vec![fixtures[8], fixtures[4]];
+    std::sync::Arc::make_mut(&mut snapshot.groups)[1].fixtures =
+        vec![fixtures[8], fixtures[4]];
     state.engine.replace_snapshot(snapshot).unwrap();
     assert_eq!(
         state.programmers.get(session.id).unwrap().selected,
@@ -195,7 +197,7 @@ fn set_group_requests_properties_only_for_the_originating_desk() {
                 id: "4".into(),
                 name: "Center Spot".into(),
                 ..Default::default()
-            }],
+            }].into(),
             ..Default::default()
         })
         .unwrap();
@@ -387,7 +389,7 @@ fn multi_point_spread_with_more_points_than_selection_is_rejected_without_mutati
                 name: "Group 1".into(),
                 fixtures: vec![first, second],
                 ..Default::default()
-            }],
+            }].into(),
             ..Default::default()
         })
         .unwrap();

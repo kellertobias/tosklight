@@ -701,7 +701,7 @@ async fn color_range_resolves_rgb_and_cmy_channels_server_side_in_selection_orde
         .state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![rgb_first, cmy_middle, rgb_last],
+            fixtures: vec![rgb_first, cmy_middle, rgb_last].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -759,7 +759,7 @@ async fn color_range_supports_a_full_revolution_back_to_the_start_color() {
         .state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures,
+            fixtures: fixtures.into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -803,7 +803,7 @@ async fn color_range_rejects_out_of_range_payloads_without_mutation() {
         .state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -847,7 +847,7 @@ async fn set_selection_resolves_the_spread_server_side_in_selection_order() {
         .state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures,
+            fixtures: fixtures.into(),
             revision: 1,
             ..EngineSnapshot::default()
         })

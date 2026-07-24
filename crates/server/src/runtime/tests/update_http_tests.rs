@@ -255,7 +255,8 @@ fn armed_hardware_playback_touch_requests_update_without_operating_playback() {
         .programmers
         .set_command_line(session.id, "UPDATE ".into());
     let mut snapshot = matter_test_snapshot();
-    snapshot.playbacks[0].buttons[0] = light_playback::PlaybackButtonAction::Go;
+    std::sync::Arc::make_mut(&mut snapshot.playbacks)[0].buttons[0] =
+        light_playback::PlaybackButtonAction::Go;
     state.engine.replace_snapshot(snapshot).unwrap();
     let source: SocketAddr = "127.0.0.1:19021".parse().unwrap();
     state.osc_subscribers.lock().insert(

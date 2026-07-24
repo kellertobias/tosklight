@@ -46,13 +46,14 @@ fn live_group_spread_re_resolves_after_membership_add_remove_and_reorder() {
     let (patched, logical) = dimmer_rig(6);
     let engine = Engine::new(programmers);
     let snapshot = |members: Vec<FixtureId>, revision| EngineSnapshot {
-        fixtures: patched.clone(),
+        fixtures: patched.clone().into(),
         groups: vec![GroupDefinition {
             id: "wave".into(),
             name: "Wave".into(),
             fixtures: members,
             ..Default::default()
-        }],
+        }]
+        .into(),
         revision,
         ..Default::default()
     };
@@ -126,14 +127,15 @@ fn cue_group_spread_re_resolves_against_current_membership_on_recall() {
     };
     let engine = Engine::new(programmers);
     let snapshot = |members: Vec<FixtureId>, revision| EngineSnapshot {
-        fixtures: patched.clone(),
-        cue_lists: vec![list.clone()],
+        fixtures: patched.clone().into(),
+        cue_lists: vec![list.clone()].into(),
         groups: vec![GroupDefinition {
             id: "wave".into(),
             name: "Wave".into(),
             fixtures: members,
             ..Default::default()
-        }],
+        }]
+        .into(),
         revision,
         ..Default::default()
     };

@@ -132,7 +132,7 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..Default::default()
         })
@@ -164,7 +164,7 @@ fn schema_v2_snap_bypasses_programmer_fades_but_keeps_non_snap_timing() {
     engine.set_control_timing([120.0; 5], 1_000, 0);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..Default::default()
         })
@@ -259,7 +259,7 @@ fn schema_v2_snap_bypasses_move_in_black_and_signal_loss_fades() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..Default::default()
         })
@@ -311,9 +311,9 @@ fn schema_v2_master_reactions_use_only_the_winning_sources_and_scale_once() {
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
-            cue_lists: vec![main, unrelated],
-            playbacks,
+            fixtures: vec![fixture].into(),
+            cue_lists: vec![main, unrelated].into(),
+            playbacks: playbacks.into(),
             groups: vec![GroupDefinition {
                 id: "front".into(),
                 name: "Front".into(),
@@ -321,7 +321,8 @@ fn schema_v2_master_reactions_use_only_the_winning_sources_and_scale_once() {
                 master: 0.5,
                 playback_fader: Some(3),
                 ..Default::default()
-            }],
+            }]
+            .into(),
             revision: 1,
             ..Default::default()
         })
@@ -361,7 +362,7 @@ fn inverted_intensity_masters_and_blackout_move_to_physical_off() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..Default::default()
         })
@@ -439,7 +440,7 @@ fn virtual_dimmer_intensity_multiplies_reacting_channels_one_way() {
     let engine = Engine::new(programmers);
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..Default::default()
         })

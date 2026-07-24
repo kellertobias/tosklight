@@ -28,7 +28,7 @@ pub(super) fn generated_profile_presets(
     selected: &HashSet<light_core::FixtureId>,
 ) -> Result<Vec<GeneratedProfilePreset>, String> {
     let mut generated = BTreeMap::<(String, String), GeneratedProfilePreset>::new();
-    for fixture in &snapshot.fixtures {
+    for fixture in snapshot.fixtures.iter() {
         let physical_selected = selected.contains(&fixture.fixture_id);
         if !physical_selected
             && !fixture

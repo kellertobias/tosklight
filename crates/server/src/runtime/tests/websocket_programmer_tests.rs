@@ -6,7 +6,7 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -197,7 +197,7 @@ async fn group_master_set_never_replaces_a_snapshot_during_show_activation() {
                 id: "front".into(),
                 master: 1.0,
                 ..Default::default()
-            }],
+            }].into(),
             ..Default::default()
         })
         .unwrap();
@@ -493,7 +493,7 @@ async fn transient_control_retriggers_emit_compatibility_only_and_repeated_relea
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
@@ -559,7 +559,7 @@ async fn direct_programmer_writes_resolve_configured_fade_for_recording() {
                 id: "1".into(),
                 name: "Front".into(),
                 ..Default::default()
-            }],
+            }].into(),
             ..Default::default()
         })
         .unwrap();

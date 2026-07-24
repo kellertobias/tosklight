@@ -4,6 +4,7 @@ use crate::{
 };
 use light_playback::{Cue, CueChange, CueList, GroupCueChange, PlaybackEngine};
 use light_programmer::{GroupDefinition, resolve_group};
+use parking_lot::RwLock;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, atomic::Ordering},
@@ -22,10 +23,10 @@ pub struct PreparedEngineSnapshot {
 
 #[derive(Debug)]
 struct PreparedRuntime {
-    playback: PlaybackEngine,
-    groups: HashMap<String, GroupDefinition>,
-    profile_encodings: ProfileEncodingIndex,
-    profile_projections: ProfileProjectionIndex,
+    playback: Arc<RwLock<PlaybackEngine>>,
+    groups: Arc<HashMap<String, GroupDefinition>>,
+    profile_encodings: Arc<ProfileEncodingIndex>,
+    profile_projections: Arc<ProfileProjectionIndex>,
 }
 
 impl PreparedEngineSnapshot {
@@ -84,10 +85,30 @@ impl Engine {
     }
 
     fn prepare_runtime(&self, snapshot: &EngineSnapshot) -> Result<PreparedRuntime, EngineError> {
-        snapshot.validate()?;
-        let profile_encodings = ProfileEncodingIndex::compile(snapshot)?;
-        let profile_projections = ProfileProjectionIndex::compile(snapshot)?;
-        let (playback, groups) = self.compile_playback(snapshot)?;
+        let current = self.generation.load();
+        let previous = current.snapshot();
+        snapshot.validate_changed(Some(previous))?;
+        let fixtures_changed = !Arc::ptr_eq(&snapshot.fixtures, &previous.fixtures);
+        let playback_changed = !Arc::ptr_eq(&snapshot.cue_lists, &previous.cue_lists)
+            || !Arc::ptr_eq(&snapshot.playbacks, &previous.playbacks)
+            || !Arc::ptr_eq(&snapshot.groups, &previous.groups);
+        let (profile_encodings, profile_projections) = if fixtures_changed {
+            (
+                Arc::new(ProfileEncodingIndex::compile(snapshot)?),
+                Arc::new(ProfileProjectionIndex::compile(snapshot)?),
+            )
+        } else {
+            (
+                current.profile_encodings_arc(),
+                current.profile_projections_arc(),
+            )
+        };
+        let (playback, groups) = if playback_changed {
+            let (playback, groups) = self.compile_playback(snapshot)?;
+            (Arc::new(RwLock::new(playback)), Arc::new(groups))
+        } else {
+            (current.playback_arc(), current.groups_arc())
+        };
         Ok(PreparedRuntime {
             playback,
             groups,
@@ -105,10 +126,28 @@ impl Engine {
             mut snapshot,
             mut runtime,
         } = prepared;
-        self.preserve_group_master_state(&mut snapshot, &mut runtime.groups, preserve_playback);
-        self.preserve_playback_state(&snapshot, &mut runtime.playback, preserve_playback);
-        self.programmers.refresh_live_selections(&runtime.groups);
-        self.generation.store(Arc::new(RuntimeGeneration::new(
+        let current = self.generation.load_full();
+        let groups_changed = !Arc::ptr_eq(&snapshot.groups, &current.snapshot().groups);
+        if groups_changed {
+            self.preserve_group_master_state(
+                &current,
+                &mut snapshot,
+                Arc::make_mut(&mut runtime.groups),
+                preserve_playback,
+            );
+            self.programmers.refresh_live_selections(&runtime.groups);
+        }
+        let current_playback = current.playback_arc();
+        if !Arc::ptr_eq(&runtime.playback, &current_playback) {
+            self.preserve_playback_state(
+                &current,
+                &snapshot,
+                &mut runtime.playback.write(),
+                preserve_playback,
+            );
+        }
+        self.generation.store(Arc::new(RuntimeGeneration::replacing(
+            &current,
             snapshot,
             runtime.playback,
             runtime.groups,
@@ -119,6 +158,7 @@ impl Engine {
 
     fn preserve_group_master_state(
         &self,
+        generation: &Arc<RuntimeGeneration>,
         snapshot: &mut EngineSnapshot,
         groups: &mut HashMap<String, GroupDefinition>,
         preserve: bool,
@@ -126,8 +166,7 @@ impl Engine {
         if !preserve {
             return;
         }
-        let generation = self.generation.load();
-        for group in &mut snapshot.groups {
+        for group in Arc::make_mut(&mut snapshot.groups) {
             let Some(current) = generation.groups().get(&group.id) else {
                 continue;
             };
@@ -140,6 +179,7 @@ impl Engine {
 
     fn preserve_playback_state(
         &self,
+        generation: &Arc<RuntimeGeneration>,
         snapshot: &EngineSnapshot,
         playback: &mut PlaybackEngine,
         preserve_playback: bool,
@@ -148,7 +188,6 @@ impl Engine {
             return;
         }
         let (active, dynamics_paused_at) = {
-            let generation = self.generation.load();
             let current = generation.playback().read();
             (
                 current.active_for_snapshot(&snapshot.cue_lists, self.clock.now()),
@@ -165,7 +204,7 @@ impl Engine {
     ) -> Result<(PlaybackEngine, HashMap<String, GroupDefinition>), EngineError> {
         let groups = snapshot_groups(snapshot);
         let mut playback = self.playback_for_current_controls();
-        for source in &snapshot.cue_lists {
+        for source in snapshot.cue_lists.iter() {
             let cue_list = expand_group_references(source, &groups);
             playback.register(cue_list).map_err(EngineError::Invalid)?;
         }
@@ -291,7 +330,7 @@ fn register_playback_definitions(
     playback: &mut PlaybackEngine,
     snapshot: &EngineSnapshot,
 ) -> Result<(), EngineError> {
-    for definition in &snapshot.playbacks {
+    for definition in snapshot.playbacks.iter() {
         playback
             .register_definition(definition.clone())
             .map_err(EngineError::Invalid)?;

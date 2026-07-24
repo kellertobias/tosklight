@@ -17,7 +17,9 @@ pub(super) fn collect(
         .collect()
 }
 
-fn migrate(object: PortableShowCandidateObject<'_>) -> Result<Option<ObjectUpdate>, ActionError> {
+pub(super) fn migrate(
+    object: PortableShowCandidateObject<'_>,
+) -> Result<Option<ObjectUpdate>, ActionError> {
     let migrated = match object.key().kind() {
         "cue_list" => migrate_cue_list(object)?,
         "group" => migrate_group(object)?,

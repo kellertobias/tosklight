@@ -112,7 +112,7 @@ fn fixture_highlight_override_renders_an_individual_blue_identification_look() {
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..Default::default()
         })
@@ -143,7 +143,7 @@ fn fixture_without_intensity_uses_its_configured_non_intensity_highlight_look() 
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..Default::default()
         })
@@ -246,7 +246,7 @@ fn selected_logical_head_highlights_independently_while_parent_identifies_all_he
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..Default::default()
         })
@@ -281,7 +281,7 @@ fn hazardous_blackout_safe_raw_value_wins_over_non_intensity_highlight() {
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {
-            fixtures: vec![fixture],
+            fixtures: vec![fixture].into(),
             revision: 1,
             ..Default::default()
         })

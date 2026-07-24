@@ -36,7 +36,7 @@ impl Engine {
         let highlighted_fixtures = self.highlighted_fixtures.read();
         let mut universes = HashMap::new();
         let mut patched_slots: HashMap<Universe, u16> = HashMap::new();
-        for fixture in &snapshot.fixtures {
+        for fixture in snapshot.fixtures.iter() {
             if fixture.definition.schema_version == light_fixture::FIXTURE_PROFILE_SCHEMA_VERSION {
                 let profile = fixture
                     .definition

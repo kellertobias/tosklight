@@ -329,7 +329,7 @@ fn apply_output_runtime(engine: &Engine, runtime: &PersistedOutputRuntime) {
 
 fn apply_group_masters(engine: &Engine, runtime: &PersistedOutputRuntime) {
     let mut snapshot = (*engine.snapshot()).clone();
-    for group in &mut snapshot.groups {
+    for group in Arc::make_mut(&mut snapshot.groups) {
         if let Some(master) = runtime.group_masters.get(&group.id) {
             group.master = *master;
         }

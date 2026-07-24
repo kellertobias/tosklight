@@ -646,15 +646,16 @@ fn restored_exclusion_snapshot(cue_list_id: light_core::CueListId) -> EngineSnap
     };
     EngineSnapshot {
         revision: 7,
-        cue_lists: vec![cue_list],
+        cue_lists: vec![cue_list].into(),
         playbacks: (1..=4)
             .map(|number| restored_exclusion_playback(number, cue_list_id))
-            .collect(),
+            .collect::<Vec<_>>()
+            .into(),
         playback_pages: vec![light_playback::PlaybackPage {
             number: 1,
             name: "Page 1".into(),
             slots: HashMap::from([(1, 1), (2, 2), (3, 3), (4, 4)]),
-        }],
+        }].into(),
         ..EngineSnapshot::default()
     }
 }

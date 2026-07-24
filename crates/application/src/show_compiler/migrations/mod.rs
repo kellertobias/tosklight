@@ -20,6 +20,32 @@ pub(crate) fn stage_candidate_migrations(
     stage_candidate_migrations_preserving(document, transaction, None)
 }
 
+/// Stages compatibility normalization only for objects explicitly touched by a transaction.
+///
+/// The active document has already passed the full show-open migration oracle. Rechecking the
+/// changed object bodies preserves legacy-input compatibility without sweeping unrelated objects.
+pub(super) fn stage_touched_object_migrations(
+    document: &PortableShowDocument,
+    transaction: &mut PortableShowTransaction,
+) -> Result<(), ActionError> {
+    let keys = transaction
+        .changed_object_keys()
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut staged = transaction.clone();
+    let updates = {
+        let candidate = candidate(document, &staged)?;
+        keys.iter()
+            .filter_map(|key| candidate.object(key.kind(), key.id()))
+            .filter_map(|object| objects::migrate(object).transpose())
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    stage_updates(&mut staged, updates, None);
+    candidate(document, &staged)?;
+    *transaction = staged;
+    Ok(())
+}
+
 pub(crate) fn stage_candidate_migrations_preserving_object(
     document: &PortableShowDocument,
     transaction: &mut PortableShowTransaction,

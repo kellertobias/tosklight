@@ -11,7 +11,8 @@ fn invalid_snapshot_preparation_does_not_change_live_state() {
             name: "Invalid".into(),
             master: 2.0,
             ..GroupDefinition::default()
-        }],
+        }]
+        .into(),
         revision: 2,
         ..EngineSnapshot::default()
     };
@@ -80,8 +81,8 @@ fn playback_snapshot(
     revision: u64,
 ) -> EngineSnapshot {
     EngineSnapshot {
-        cue_lists: vec![cue_list.clone()],
-        playbacks: vec![playback.clone()],
+        cue_lists: vec![cue_list.clone()].into(),
+        playbacks: vec![playback.clone()].into(),
         revision,
         ..EngineSnapshot::default()
     }
@@ -126,7 +127,8 @@ fn snapshot_with_route(revision: u64, destination_universe: u16) -> EngineSnapsh
             destination: None,
             enabled: true,
             minimum_slots: light_output::DMX_SLOTS as u16,
-        }],
+        }]
+        .into(),
         revision,
         ..EngineSnapshot::default()
     }

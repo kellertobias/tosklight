@@ -22,7 +22,7 @@ fn render_returns_automatic_transitions_after_releasing_playback_state() {
     let id = cue_list.id;
     engine
         .replace_snapshot(EngineSnapshot {
-            cue_lists: vec![cue_list],
+            cue_lists: vec![cue_list].into(),
             ..EngineSnapshot::default()
         })
         .unwrap();

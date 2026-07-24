@@ -2,7 +2,10 @@ use super::{
     ActiveShowObjectChange, ActiveShowObjectKind, ActiveShowObjectMutation,
     ActiveShowObjectMutationKind, MutateActiveShowObjectsCommand,
 };
-use crate::{ActionError, ActionErrorKind, lossless_json, prepare_show_candidate};
+use crate::{
+    ActionError, ActionErrorKind, lossless_json, prepare_show_candidate,
+    show_compiler::prepare_normalized_show_candidate_incremental,
+};
 use light_core::Revision;
 use light_playback::{CueList, PlaybackDefinition, PlaybackPage};
 use light_programmer::{GroupDefinition, Preset};
@@ -19,6 +22,7 @@ pub(super) struct PreparedObjectChanges {
 pub(super) fn prepare_object_mutation(
     document: &PortableShowDocument,
     command: &MutateActiveShowObjectsCommand,
+    previous: Option<&light_engine::EngineSnapshot>,
 ) -> Result<PreparedObjectChanges, ActionError> {
     validate_command(document, command)?;
     let mut transaction = document.transaction();
@@ -28,7 +32,13 @@ pub(super) fn prepare_object_mutation(
         validate_object_revision(existing, mutation)?;
         changes.push(apply_mutation(&mut transaction, existing, mutation)?);
     }
-    let prepared = prepare_show_candidate(document, transaction)?;
+    let prepared = if let Some(previous) =
+        previous.filter(|snapshot| snapshot.revision == document.revision().value())
+    {
+        prepare_normalized_show_candidate_incremental(document, transaction, previous)?
+    } else {
+        prepare_show_candidate(document, transaction)?
+    };
     let (transaction, snapshot) = prepared.into_parts();
     Ok(PreparedObjectChanges {
         transaction,

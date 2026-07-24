@@ -50,13 +50,13 @@ fn update_undo_snapshot(
         presentation_image: None,
     };
     let snapshot = EngineSnapshot {
-        cue_lists: vec![cue_list.clone()],
-        playbacks: vec![playback],
+        cue_lists: vec![cue_list.clone()].into(),
+        playbacks: vec![playback].into(),
         playback_pages: vec![light_playback::PlaybackPage {
             number: 1,
             name: "Main".into(),
             slots: HashMap::from([(7, 7)]),
-        }],
+        }].into(),
         ..EngineSnapshot::default()
     };
     (cue_list, snapshot)
@@ -88,7 +88,7 @@ fn command_line_update_enter_applies_the_configured_group_default_directly() {
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            groups: vec![group.clone()],
+            groups: vec![group.clone()].into(),
             ..Default::default()
         })
         .unwrap();

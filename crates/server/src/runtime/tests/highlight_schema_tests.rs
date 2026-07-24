@@ -133,7 +133,7 @@ async fn patch_preview_highlight_is_default_off_scoped_and_released() {
     state
         .engine
         .replace_snapshot(EngineSnapshot {
-            fixtures,
+            fixtures: fixtures.into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
@@ -288,7 +288,7 @@ fn schema_v2_direct_actions_are_channel_atomic_and_presets_are_opt_in_semantic_v
     let (fixture, action_id, channel_ids) = schema_v2_direct_fixture();
     let fixture_id = fixture.fixture_id;
     let snapshot = EngineSnapshot {
-        fixtures: vec![fixture],
+        fixtures: vec![fixture].into(),
         ..EngineSnapshot::default()
     };
     let (assignments, duration, kind) =
@@ -314,7 +314,7 @@ fn schema_v2_direct_actions_are_channel_atomic_and_presets_are_opt_in_semantic_v
     );
 
     let mut timed_snapshot = snapshot.clone();
-    let timed_action = &mut timed_snapshot.fixtures[0]
+    let timed_action = &mut std::sync::Arc::make_mut(&mut timed_snapshot.fixtures)[0]
         .definition
         .profile_snapshot
         .as_mut()

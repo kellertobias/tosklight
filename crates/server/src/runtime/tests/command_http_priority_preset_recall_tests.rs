@@ -193,7 +193,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
                 id: "5".into(),
                 fixtures: vec![selected[1]],
                 ..Default::default()
-            }],
+            }].into(),
             revision: engine_revision + 1,
             ..EngineSnapshot::default()
         })
