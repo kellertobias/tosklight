@@ -1,4 +1,4 @@
-import type { StagePosition3d } from "../../api/ServerContext";
+import type { StagePosition3d } from "../../features/server/contracts";
 import type {
 	AttributeValue,
 	PatchedFixture,

@@ -13,7 +13,7 @@ import type { ServerState } from "./useServerState";
 
 export function useShowObjects(state: ServerState) {
 	const {
-		client,
+		api,
 		showObjectsStore,
 		showObjectsRequest,
 		setCueObjects,
@@ -48,14 +48,14 @@ export function useShowObjects(state: ServerState) {
 				layers,
 				unresolved,
 			] = await Promise.all([
-				client.objects<CueList>(showId, "cue_list"),
-				client.objects<OutputRoute>(showId, "route"),
+				api.showObjects.objects<CueList>(showId, "cue_list"),
+				api.showObjects.objects<OutputRoute>(showId, "route"),
 				userId
-					? client.objects<StoredDeskLayout>(showId, "user_layout")
+					? api.showObjects.objects<StoredDeskLayout>(showId, "user_layout")
 					: Promise.resolve([]),
-				client.objects<StoredStageLayout>(showId, "stage_layout"),
-				client.objects<PatchLayer>(showId, "patch_layer"),
-				client.objects<Record<string, unknown>>(
+				api.showObjects.objects<StoredStageLayout>(showId, "stage_layout"),
+				api.showObjects.objects<PatchLayer>(showId, "patch_layer"),
+				api.showObjects.objects<Record<string, unknown>>(
 					showId,
 					"unresolved_mvr_fixture",
 				),
@@ -82,7 +82,7 @@ export function useShowObjects(state: ServerState) {
 			setUnresolvedMvrFixtures(unresolved);
 		},
 		[
-			client,
+			api,
 			showObjectsStore,
 			showObjectsRequest,
 			setCueObjects,
@@ -101,7 +101,7 @@ export function useServerRefresh(
 	loadShowObjects: ReturnType<typeof useShowObjects>,
 ) {
 	const {
-		client,
+		api,
 		setBootstrap,
 		setConfiguration,
 		setFixtureLibrary,
@@ -112,25 +112,25 @@ export function useServerRefresh(
 		setShows,
 	} = state;
 	return useCallback(async () => {
-		const bootstrap = await client.bootstrap();
+		const bootstrap = await api.runtime.bootstrap();
 		setBootstrap(bootstrap);
-		setShows(await client.shows());
-		const configuration = await client.configuration();
+		setShows(await api.shows.shows());
+		const configuration = await api.desk.configuration();
 		setConfiguration(configuration.configuration);
 		setMatter(configuration.matter);
-		setFixtureLibrary(await client.fixtureLibrary());
-		setFixtureProfiles(await client.fixtureProfiles().catch(() => []));
+		setFixtureLibrary(await api.fixtures.fixtureLibrary());
+		setFixtureProfiles(await api.fixtures.fixtureProfiles().catch(() => []));
 		setFixtureProfileWarnings(
-			await client.fixtureProfileWarnings().catch(() => []),
+			await api.fixtures.fixtureProfileWarnings().catch(() => []),
 		);
-		if (client.currentSession)
-			setMediaServers((await client.mediaServers()).fixtures);
+		if (api.runtime.currentSession)
+			setMediaServers((await api.mediaOutput.mediaServers()).fixtures);
 		await loadShowObjects(
 			bootstrap.active_show?.id ?? null,
-			client.currentSession?.user.id ?? null,
+			api.runtime.currentSession?.user.id ?? null,
 		);
 	}, [
-		client,
+		api,
 		loadShowObjects,
 		setBootstrap,
 		setConfiguration,

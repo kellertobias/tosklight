@@ -1,8 +1,8 @@
-import type { LightApiClient } from "../../api/LightApiClient";
+import type { LightApi } from "../../api/client/api";
 import type { FileCapabilities } from "./types";
 
 interface FileActionDependencies {
-	client: LightApiClient;
+	api: LightApi;
 	fileRoots: FileCapabilities["fileRoots"];
 	fileEntries: FileCapabilities["fileEntries"];
 }
@@ -10,23 +10,23 @@ interface FileActionDependencies {
 export function createFileActions(
 	model: FileActionDependencies,
 ): FileCapabilities {
-	const { client, fileRoots, fileEntries } = model;
+	const { api, fileRoots, fileEntries } = model;
 	return {
 		fileRoots,
 		fileEntries,
-		fileMetadata: (root, path) => client.fileMetadata(root, path),
-		readFileNote: (root, path) => client.readFileNote(root, path),
-		saveFileNote: (root, path, note) => client.saveFileNote(root, path, note),
-		readTextFile: (root, path) => client.readTextFile(root, path),
+		fileMetadata: (root, path) => api.files.fileMetadata(root, path),
+		readFileNote: (root, path) => api.files.readFileNote(root, path),
+		saveFileNote: (root, path, note) => api.files.saveFileNote(root, path, note),
+		readTextFile: (root, path) => api.files.readTextFile(root, path),
 		saveTextFile: (root, path, text, revision) =>
-			client.saveTextFile(root, path, text, revision),
-		fileOperation: (root, input) => client.fileOperation(root, input),
-		fileContent: (root, path) => client.fileContent(root, path),
-		fileStreamUrl: (root, path) => client.fileStreamUrl(root, path),
+			api.files.saveTextFile(root, path, text, revision),
+		fileOperation: (root, input) => api.files.fileOperation(root, input),
+		fileContent: (root, path) => api.files.fileContent(root, path),
+		fileStreamUrl: (root, path) => api.files.fileStreamUrl(root, path),
 		fileThumbnail: (root, path, maxSize) =>
-			client.fileThumbnail(root, path, maxSize),
+			api.files.fileThumbnail(root, path, maxSize),
 		claimFileInput: (instanceId, action, origin) =>
-			client.claimFileInput(instanceId, action, origin),
-		releaseFileInput: (instanceId) => client.releaseFileInput(instanceId),
+			api.files.claimFileInput(instanceId, action, origin),
+		releaseFileInput: (instanceId) => api.files.releaseFileInput(instanceId),
 	};
 }

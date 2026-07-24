@@ -1,12 +1,13 @@
 import { useConnectionStatus } from "./features/shellStatus/ShellStatusState";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { DmxSnapshot } from "./api/types";
-import { ServerProvider } from "./api/ServerContext";
+import { ServerRuntime } from "./api/ServerRuntime";
 import { useDmxDiagnostics } from "./features/dmxDiagnostics/DmxDiagnosticsContext";
 import { NumericPad } from "./components/control/NumericPad";
 import { AppShell } from "./components/shell/AppShell";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
 import { DemoPlaybackControls } from "./features/productDemo/DemoPlaybackControls";
+import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 import { AppProvider, useApp } from "./state/AppContext";
 import { StageWindow } from "./windows/StageWindow";
 import { DEFAULT_STAGE_CAMERA_3D } from "./windows/Stage3dCanvas";
@@ -134,10 +135,12 @@ function ProductDemoSurface() {
 }
 
 export function ProductDemoApp() {
-  return <ServerProvider>
+  return <ServerRuntime>
     <AppProvider>
-      <ProductDemoSurface />
+      <PatchFeatureBoundary>
+        <ProductDemoSurface />
+      </PatchFeatureBoundary>
     </AppProvider>
     <DeskLockOverlay />
-  </ServerProvider>;
+  </ServerRuntime>;
 }

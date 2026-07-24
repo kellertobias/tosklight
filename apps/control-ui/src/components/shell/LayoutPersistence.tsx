@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { deskLayoutScopeKey } from "../../api/ServerContext";
+import { deskLayoutScopeKey } from "../../features/server/contracts";
 import { useDeskConnection } from "../../features/deskConnection/DeskConnectionContext";
 import {
 	useActiveShowId,

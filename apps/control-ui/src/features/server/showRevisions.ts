@@ -1,21 +1,21 @@
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 export function createShowRevisionActions(
 	model: ServerController,
 ): Pick<
-	ServerContextValue,
+	ServerCapabilities,
 	| "listShowRevisions"
 	| "saveShowRevision"
 	| "openShowRevision"
 	| "rollbackShow"
 	| "downloadShow"
 > {
-	const { client, setError, bootstrap, refresh } = model;
+	const { api, setError, bootstrap, refresh } = model;
 	return {
 		listShowRevisions: async (id) => {
 			try {
-				const revisions = await client.showRevisions(id);
+				const revisions = await api.shows.showRevisions(id);
 				setError(null);
 				return revisions;
 			} catch (reason) {
@@ -27,7 +27,7 @@ export function createShowRevisionActions(
 			try {
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before saving a named revision");
-				const revision = await client.saveShowRevision(
+				const revision = await api.shows.saveShowRevision(
 					bootstrap.active_show.id,
 					name,
 				);
@@ -40,7 +40,7 @@ export function createShowRevisionActions(
 		},
 		openShowRevision: async (id, revision) => {
 			try {
-				await client.openShowRevision(id, revision);
+				await api.shows.openShowRevision(id, revision);
 				await refresh();
 				setError(null);
 				return true;
@@ -51,7 +51,7 @@ export function createShowRevisionActions(
 		},
 		rollbackShow: async () => {
 			try {
-				await client.rollbackShow();
+				await api.shows.rollbackShow();
 				await refresh();
 				setError(null);
 			} catch (reason) {
@@ -60,7 +60,7 @@ export function createShowRevisionActions(
 		},
 		downloadShow: async (show) => {
 			try {
-				const blob = await client.downloadShow(show.id);
+				const blob = await api.shows.downloadShow(show.id);
 				const url = URL.createObjectURL(blob);
 				const anchor = document.createElement("a");
 				anchor.href = url;

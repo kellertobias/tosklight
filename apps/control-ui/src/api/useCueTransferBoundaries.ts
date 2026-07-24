@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type { ServerState } from "../features/server/useServerState";
 import { HttpCueTransferTransport } from "./CueTransferTransport";
 import { createFeatureErrorGroup } from "./featureErrorReporting";
-import { configuredServerUrl } from "./LightApiClient";
+import { configuredServerUrl } from "./client/serverLocation";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 
 export function useCueTransferBoundaries(state: ServerState) {

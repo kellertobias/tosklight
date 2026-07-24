@@ -17,6 +17,7 @@ import type { PatchPlacement } from "./contracts";
 import { PatchSession } from "./session";
 import type { PatchStore, PatchStoreSnapshot } from "./store";
 import type { PatchTransport } from "./transport";
+import { PATCH_OBJECT_CHANGED_EVENT } from "./externalRepair";
 
 export interface PatchedFixtureResult {
 	fixtureId: string;
@@ -181,6 +182,16 @@ export function usePatchView(enabled = true): void {
 	useEffect(() => {
 		if (!session || !enabled) return;
 		return session.activate();
+	}, [enabled, session]);
+	useEffect(() => {
+		if (!session || !enabled) return;
+		const repair = (event: Event) => {
+			const detail = (event as CustomEvent<{ showId?: string }>).detail;
+			if (detail?.showId === session.store.getSnapshot().showId)
+				void session.refresh().catch(() => undefined);
+		};
+		window.addEventListener(PATCH_OBJECT_CHANGED_EVENT, repair);
+		return () => window.removeEventListener(PATCH_OBJECT_CHANGED_EVENT, repair);
 	}, [enabled, session]);
 }
 

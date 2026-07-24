@@ -14,7 +14,7 @@ import type { CommandExecutionRequest } from "../features/programmingInteraction
 import { ProgrammingInteractionViewProvider } from "../features/programmingInteraction/ProgrammingInteractionView";
 import { GroupManagementProvider } from "../features/groupManagement/GroupManagementProvider";
 import { ProgrammingUpdateProvider } from "../features/programmingUpdate/ProgrammingUpdateProvider";
-import type { ServerContextValue } from "../features/server/ServerContextValue";
+import type { ServerCapabilities } from "../features/server/capabilityContracts";
 import { useSelectedGroupMembership } from "../features/server/useSelectedGroupMembership";
 import type { useServerState } from "../features/server/useServerState";
 import { usePortableGroups } from "../features/showObjects/ShowObjectsState";
@@ -25,7 +25,7 @@ import type { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
 interface ServerProgrammingProvidersProps {
 	state: ReturnType<typeof useServerState>;
 	boundaries: ReturnType<typeof useServerFeatureBoundaries>;
-	value: ServerContextValue;
+	value: ServerCapabilities;
 }
 
 function SelectedGroupMembershipSync({
@@ -76,7 +76,7 @@ function PresetRecallBoundary({
 	);
 }
 
-function useCommandExecution(value: ServerContextValue) {
+function useCommandExecution(value: ServerCapabilities) {
 	return useCallback(
 		({ command, target, pristine }: CommandExecutionRequest) =>
 			value.executeCommandLine(command, { target, pristine }),
@@ -221,6 +221,24 @@ function PreloadProgrammingProviders({
 	}
 >) {
 	const executeCommand = useCommandExecution(value);
+	const replaceCommandLine = useCallback(
+		(deskId: string, text: string, expectedRevision: number) =>
+			state.api.programming.replaceProgrammingCommandLine(
+				deskId,
+				text,
+				expectedRevision,
+			),
+		[state.api],
+	);
+	const applySelection = useCallback(
+		(
+			deskId: string,
+			request: Parameters<
+				typeof state.api.programming.applyProgrammingSelection
+			>[1],
+		) => state.api.programming.applyProgrammingSelection(deskId, request),
+		[state.api],
+	);
 	return (
 		<ProgrammerPreloadValuesViewProvider
 			showId={showId}
@@ -251,9 +269,9 @@ function PreloadProgrammingProviders({
 					store={state.programmingInteractionStore}
 					transport={boundaries.programmingTransport}
 					loadSnapshot={boundaries.loadProgrammingInteractionSnapshot}
-					replaceCommandLine={state.client.replaceProgrammingCommandLine}
+					replaceCommandLine={replaceCommandLine}
 					executeCommand={executeCommand}
-					applySelection={state.client.applyProgrammingSelection}
+					applySelection={applySelection}
 					onSessionError={boundaries.reportProgrammingSessionError}
 					onMutationError={boundaries.reportProgrammingMutationError}
 				>

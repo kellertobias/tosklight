@@ -20,9 +20,9 @@ import {
 import { useShowObjectKindsView } from "../features/showObjects/ShowObjectsView";
 import type { ShowObjectsEventObserver } from "../features/showObjects/transport";
 import { PlaybackApiClient } from "./client/playback";
-import { LightApiClient } from "./LightApiClient";
+import { LightClientRuntime } from "./client/runtime";
 import { useBootstrapSnapshot } from "../features/deskSnapshot/DeskSnapshotState";
-import { ServerProvider } from "./ServerContext";
+import { ServerRuntime } from "./ServerRuntime";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -207,11 +207,11 @@ function CueValuesProbe() {
 
 function Harness({ showCueValues }: { showCueValues: boolean }) {
 	return (
-		<ServerProvider>
+		<ServerRuntime>
 			<UnrelatedServerConsumer />
 			<RecordCueButton />
 			{showCueValues ? <CueValuesProbe /> : null}
-		</ServerProvider>
+		</ServerRuntime>
 	);
 }
 
@@ -285,14 +285,14 @@ function objectsFor(kind: ShowObjectKind, revision: number, label: string) {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("ServerProvider Cue recording boundary", () => {
+describe("ServerRuntime Cue recording boundary", () => {
 	it("stays dormant until a Cue view mounts and isolates three-object outcomes and events", async () => {
 		boundaries.loadCollection.mockReset();
 		boundaries.loadObjectSnapshot.mockReset();
 		boundaries.loadObject.mockReset();
 		boundaries.recordCue.mockReset();
 		boundaries.subscribeShowObjects.mockReset();
-		const broadBootstrap = vi.spyOn(LightApiClient.prototype, "bootstrap");
+		const broadBootstrap = vi.spyOn(LightClientRuntime.prototype, "bootstrap");
 		const unrelatedScreens = vi.spyOn(PlaybackApiClient.prototype, "screens");
 		let observer: ShowObjectsEventObserver | null = null;
 		boundaries.loadCollection.mockImplementation(

@@ -1,11 +1,11 @@
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 export function createHighlightActions(
 	model: ServerController,
-): Pick<ServerContextValue, "highlightAction" | "setPatchPreviewHighlight"> {
+): Pick<ServerCapabilities, "highlightAction" | "setPatchPreviewHighlight"> {
 	const {
-		client,
+		api,
 		setError,
 		highlight,
 		setHighlight,
@@ -21,7 +21,7 @@ export function createHighlightActions(
 			highlightErrorSticky.current = false;
 			setHighlightError(null);
 			try {
-				const write = client.highlightAction(action);
+				const write = api.mediaOutput.highlightAction(action);
 				highlightWrite.current = write.catch(() => undefined);
 				const next = await write;
 				if (request === highlightEpoch.current) {
@@ -54,7 +54,7 @@ export function createHighlightActions(
 		setPatchPreviewHighlight: async (active, fixtureIds = []) => {
 			try {
 				const write = patchPreviewWrite.current.then(() =>
-					client.setPatchPreviewHighlight(active, fixtureIds),
+					api.mediaOutput.setPatchPreviewHighlight(active, fixtureIds),
 				);
 				patchPreviewWrite.current = write.catch(() => undefined);
 				const result = await write;

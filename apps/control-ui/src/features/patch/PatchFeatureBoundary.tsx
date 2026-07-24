@@ -1,5 +1,5 @@
 import { type PropsWithChildren, useMemo } from "react";
-import { configuredServerUrl } from "../../api/LightApiClient";
+import { configuredServerUrl } from "../../api/client/serverLocation";
 import {
 	browserDeskBoundaryToken,
 	HttpPatchTransport,

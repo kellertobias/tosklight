@@ -1,26 +1,26 @@
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 export function createSessionActions(
 	model: ServerController,
 ): Pick<
-	ServerContextValue,
+	ServerCapabilities,
 	| "createUser"
 	| "changeUser"
 	| "updateControlDesk"
 	| "selectControlDesk"
 	| "removeClient"
 > {
-	const { client, setError, setBootstrap, setSession } = model;
+	const { api, setError, setBootstrap, setSession } = model;
 	return {
 		createUser: async (name) => {
 			try {
 				if (model.sessionRole !== "primary")
 					throw new Error("Only the primary screen can change the desk user");
 				setError(null);
-				const user = await client.createUser(name);
-				setBootstrap(await client.bootstrap());
-				await client.closeSession();
+				const user = await api.desk.createUser(name);
+				setBootstrap(await api.runtime.bootstrap());
+				await api.runtime.closeSession();
 				localStorage.setItem("light.operator", user.name);
 				window.location.reload();
 			} catch (caught) {
@@ -33,19 +33,19 @@ export function createSessionActions(
 				return;
 			}
 			localStorage.setItem("light.operator", user.name);
-			await client.closeSession();
+			await api.runtime.closeSession();
 			window.location.reload();
 		},
 		updateControlDesk: async (desk) => {
 			try {
-				const updated = await client.updateControlDesk(
+				const updated = await api.playback.updateControlDesk(
 					desk,
 					model.session?.desk,
 				);
 				setSession((current) =>
 					current ? { ...current, desk: updated } : current,
 				);
-				setBootstrap(await client.bootstrap());
+				setBootstrap(await api.runtime.bootstrap());
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
@@ -57,8 +57,8 @@ export function createSessionActions(
 		},
 		removeClient: async (deskId) => {
 			try {
-				await client.removeClient(deskId);
-				setBootstrap(await client.bootstrap());
+				await api.playback.removeClient(deskId);
+				setBootstrap(await api.runtime.bootstrap());
 				setError(null);
 				return true;
 			} catch (reason) {

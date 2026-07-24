@@ -7,9 +7,9 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("Programmer lifecycle system actions", () => {
 	it("clears through scoped events without reloading bootstrap", async () => {
-		const client = {
-			clearProgrammer: vi.fn().mockResolvedValue(undefined),
-			bootstrap: vi.fn(),
+		const api = {
+			desk: { clearProgrammer: vi.fn().mockResolvedValue(undefined) },
+			runtime: { bootstrap: vi.fn() },
 		};
 		const setSelectedFixtures = vi.fn();
 		const setSelectedGroupId = vi.fn();
@@ -17,7 +17,7 @@ describe("Programmer lifecycle system actions", () => {
 		const setCommandLinePristine = vi.fn();
 		const setError = vi.fn();
 		const actions = createSystemActions({
-			client,
+			api,
 			setError,
 			bootstrap: null,
 			session: { session_id: "session-a" },
@@ -31,8 +31,8 @@ describe("Programmer lifecycle system actions", () => {
 
 		await actions.clearProgrammer("session-a");
 
-		expect(client.clearProgrammer).toHaveBeenCalledWith("session-a");
-		expect(client.bootstrap).not.toHaveBeenCalled();
+		expect(api.desk.clearProgrammer).toHaveBeenCalledWith("session-a");
+		expect(api.runtime.bootstrap).not.toHaveBeenCalled();
 		expect(setSelectedFixtures).toHaveBeenCalledWith([]);
 		expect(setSelectedGroupId).toHaveBeenCalledWith(null);
 		expect(setCommandLineState).toHaveBeenCalledWith("FIXTURE");
@@ -64,7 +64,10 @@ describe("paperwork export", () => {
 		const download = mockDownload();
 		const setError = vi.fn();
 		const model = systemModel({
-			client: { objects, patch: vi.fn(async () => ({ fixtures: ["fixture-a"] })) },
+			api: {
+				showObjects: { objects },
+				fixtures: { patch: vi.fn(async () => ({ fixtures: ["fixture-a"] })) },
+			},
 			setError,
 			bootstrap: { active_show: { id: "show-a", name: "Tour" } },
 		});
@@ -104,7 +107,7 @@ describe("paperwork export", () => {
 		const objects = vi.fn();
 		const download = mockDownload();
 		const model = systemModel({
-			client: { objects },
+			api: { showObjects: { objects } },
 			bootstrap: null,
 		});
 
@@ -129,7 +132,7 @@ describe("paperwork export", () => {
 		const download = mockDownload();
 		const setError = vi.fn();
 		const model = systemModel({
-			client: { objects },
+			api: { showObjects: { objects } },
 			setError,
 			bootstrap: { active_show: { id: "show-a", name: "Tour" } },
 		});
@@ -146,7 +149,10 @@ describe("paperwork export", () => {
 
 function systemModel(overrides: Record<string, unknown>) {
 	return {
-		client: {},
+		api: {
+			showObjects: {},
+			fixtures: { patch: vi.fn(async () => ({ fixtures: [] })) },
+		},
 		setError: vi.fn(),
 		bootstrap: null,
 		session: null,

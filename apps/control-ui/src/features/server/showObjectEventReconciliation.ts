@@ -8,6 +8,7 @@ import type {
 } from "../../api/types";
 import type { StoredDeskLayout, StoredStageLayout } from "./contracts";
 import type { ServerState } from "./useServerState";
+import { publishPatchObjectChanged } from "../patch/externalRepair";
 
 type ServerStateSource = () => ServerState;
 
@@ -264,7 +265,7 @@ function enqueueRouteProjection(
 		key: projectionKey(change, "routes"),
 		sequence: change.sequence,
 		run: async (isCurrent) => {
-			const routes = await getState().client.objects<OutputRoute>(
+			const routes = await getState().api.showObjects.objects<OutputRoute>(
 				change.showId,
 				"route",
 			);
@@ -289,8 +290,13 @@ export function createShowObjectEventReconciler(
 			enqueueRouteProjection(queue, getState, change);
 			return;
 		}
-		// Patch fixtures are owned by the scoped Patch authority and its own delta stream.
-		if (change.kind === "patched_fixture") return;
+		if (change.kind === "patched_fixture") {
+			// The normal Patch action emits its own typed delta. Generic v2 object
+			// mutations (notably the test/demo seeding boundary) emit only this
+			// object event, so ask the scoped Patch owner to repair from snapshot.
+			publishPatchObjectChanged(change.showId);
+			return;
+		}
 		if (!isSingleObjectKind(change.kind)) return;
 		queue.enqueue({
 			key: objectKey(change),
@@ -298,7 +304,7 @@ export function createShowObjectEventReconciler(
 			run: async (isCurrent) => {
 				const object = change.deleted
 					? null
-					: await getState().client.object<unknown>(
+					: await getState().api.showObjects.object<unknown>(
 							change.showId,
 							change.kind,
 							change.id,

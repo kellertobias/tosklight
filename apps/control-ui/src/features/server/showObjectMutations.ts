@@ -8,7 +8,7 @@ import type { ServerController } from "./model";
 
 type MutationModel = Pick<
 	ServerController,
-	"client" | "setError" | "showObjectsStore"
+	"api" | "setError" | "showObjectsStore"
 >;
 
 export async function runOptimisticShowObjectMutation<
@@ -53,7 +53,7 @@ export async function reconcileShowObject<K extends ShowObjectKind>(
 	minimumEventSequence?: number | null,
 ) {
 	try {
-		const object = await model.client.object<ShowObjectBodies[K]>(
+		const object = await model.api.showObjects.object<ShowObjectBodies[K]>(
 			showId,
 			kind,
 			objectId,

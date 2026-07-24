@@ -2,7 +2,7 @@ import { useConnectionStatus, useServerError } from "../../features/shellStatus/
 import { useEffect, useMemo, useState } from "react";
 import { useDeskConnection } from "../../features/deskConnection/DeskConnectionContext";
 import { useBootstrapReady } from "../../features/deskSnapshot/DeskSnapshotState";
-import { configuredServerUrl } from "../../api/LightApiClient";
+import { configuredServerUrl } from "../../api/client/serverLocation";
 import appMark from "../../../src-tauri/icons/mark-shadow.svg";
 import { Button, TextField } from "../common";
 import { useDesktopBridge } from "../../platform/desktop";

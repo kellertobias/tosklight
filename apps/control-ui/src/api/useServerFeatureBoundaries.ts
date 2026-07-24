@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef } from "react";
 import type { ServerState } from "../features/server/useServerState";
 import type { ShowObjectKind } from "../features/showObjects/contracts";
 import { createFeatureErrorGroup } from "./featureErrorReporting";
-import { configuredServerUrl } from "./LightApiClient";
+import { configuredServerUrl } from "./client/serverLocation";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { WebSocketPlaybackEventTransport } from "./PlaybackEventTransport";
 import { WebSocketProgrammingEventTransport } from "./ProgrammingEventTransport";
@@ -99,18 +99,18 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	const loadPlaybackSnapshot = useCallback(
 		(identities: PlaybackRuntimeIdentity[]) => {
 			if (!state.session) throw new Error("Playback session is unavailable");
-			return state.client.playbackRuntimeSnapshot(
+			return state.api.playback.playbackRuntimeSnapshot(
 				state.session.desk.id,
 				identities,
 			);
 		},
-		[state.client, state.session],
+		[state.api, state.session],
 	);
 	const loadProgrammingInteractionSnapshot = useCallback(() => {
 		if (!state.session)
 			throw new Error("Programming interaction session is unavailable");
-		return state.client.programmingInteractionSnapshot(state.session.desk.id);
-	}, [state.client, state.session]);
+		return state.api.programming.programmingInteractionSnapshot(state.session.desk.id);
+	}, [state.api, state.session]);
 	const loadShowObjectCollection = useCallback(
 		(showId: string, kind: ShowObjectKind) => {
 			if (!showObjectSnapshotTransport)

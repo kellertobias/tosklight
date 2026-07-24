@@ -3,7 +3,7 @@ import type { ServerState } from "./useServerState";
 
 export function useCommandLineController(state: ServerState) {
 	const {
-		client,
+		api,
 		commandLineEpoch,
 		commandLineWrite,
 		commandTargetModeRef,
@@ -16,11 +16,11 @@ export function useCommandLineController(state: ServerState) {
 		(value: string) => {
 			const write = commandLineWrite.current
 				.catch(() => undefined)
-				.then(() => client.setCommandLine(value));
+				.then(() => api.programming.setCommandLine(value));
 			commandLineWrite.current = write;
 			return write;
 		},
-		[client, commandLineWrite],
+		[api, commandLineWrite],
 	);
 	const setCommandLine = useCallback(
 		(value: string, pristine = false) => {

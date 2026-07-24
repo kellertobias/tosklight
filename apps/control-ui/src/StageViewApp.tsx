@@ -1,4 +1,4 @@
-import { ServerProvider } from "./api/ServerContext";
+import { ServerRuntime } from "./api/ServerRuntime";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
 import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 import { AppProvider } from "./state/AppContext";
@@ -11,7 +11,7 @@ import { StageWindow } from "./windows/StageWindow";
  */
 export function StageViewApp() {
 	return (
-		<ServerProvider sessionRole="secondary">
+		<ServerRuntime sessionRole="secondary">
 			<AppProvider>
 				<PatchFeatureBoundary>
 					<div className="stage-view-shell">
@@ -28,6 +28,6 @@ export function StageViewApp() {
 				</PatchFeatureBoundary>
 			</AppProvider>
 			<DeskLockOverlay />
-		</ServerProvider>
+		</ServerRuntime>
 	);
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { HelpCatalog, HelpCatalogEntry, HelpTopic } from "../api/types";
-import { LightApiClient } from "../api/LightApiClient";
+import { createLightApi } from "../api/client/api";
 import type { WindowProps } from "./windowTypes";
 import { prepareHelpMarkdown, safeHelpUrl } from "./helpMarkdown";
 import { WindowHeader, WindowScrollArea } from "../components/window-kit";
@@ -86,7 +86,7 @@ export function HelpNavigation({
 }
 
 export function HelpWindow({ compact }: WindowProps) {
-  const client = useMemo(() => new LightApiClient(), []);
+  const client = useMemo(() => createLightApi().help, []);
   const [catalog, setCatalog] = useState<HelpCatalog | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());

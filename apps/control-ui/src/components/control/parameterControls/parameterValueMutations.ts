@@ -68,6 +68,18 @@ export function setParameterRangeMutations(
 			value: points,
 		});
 	if (projection.selectedFixtureIds.length === 0) return [];
+	if (projection.programmerValuesRoute === "preload") {
+		const timing = parameterValueTiming(projection.programmerFadeMillis);
+		return resolveSpread(points, projection.selectedFixtureIds.length).map(
+			(value, index): ProgrammerValuesMutation => ({
+				action: "set_fixture",
+				fixtureId: projection.selectedFixtureIds[index] as string,
+				attribute,
+				value: { kind: "normalized", value },
+				timing,
+			}),
+		);
+	}
 	// The server resolves the per-fixture interpolation across the ordered selection.
 	return [
 		{
@@ -202,4 +214,45 @@ export function parameterMutationKey(
 
 function normalizePercentage(value: number) {
 	return Math.max(0, Math.min(100, value)) / 100;
+}
+
+/** Mirrors the core anchor rule for the Preload protocol's fixture-only writes. */
+function resolveSpread(points: readonly number[], count: number) {
+	if (count === 0) return [];
+	const first = points[0] ?? 0;
+	if (points.length <= 1 || count === 1)
+		return Array.from({ length: count }, () => first);
+	if (points.length > count)
+		return Array.from({ length: count }, (_, index) => {
+			const position = (index * (points.length - 1)) / (count - 1);
+			const left = Math.floor(position);
+			const right = Math.ceil(position);
+			return (points[left] ?? first) +
+				((points[right] ?? first) - (points[left] ?? first)) *
+					(position - left);
+		});
+	const anchors: Array<[number, number]> = [];
+	const denominator = points.length - 1;
+	for (let point = 0; point < points.length; point++) {
+		const numerator = point * (count - 1);
+		const item = Math.floor(numerator / denominator);
+		const remainder = numerator % denominator;
+		const value = points[point] ?? first;
+		if (remainder === 0) anchors.push([item, value]);
+		else if (remainder * 2 === denominator)
+			anchors.push([item, value], [item + 1, value]);
+		else anchors.push([item + (remainder * 2 > denominator ? 1 : 0), value]);
+	}
+	const resolved = Array.from({ length: count }, () => 0);
+	for (let index = 0; index + 1 < anchors.length; index++) {
+		const [leftItem, leftValue] = anchors[index] as [number, number];
+		const [rightItem, rightValue] = anchors[index + 1] as [number, number];
+		resolved[leftItem] = leftValue;
+		resolved[rightItem] = rightValue;
+		const span = Math.max(0, rightItem - leftItem);
+		for (let step = 1; step < span; step++)
+			resolved[leftItem + step] =
+				(leftValue * (span - step) + rightValue * step) / span;
+	}
+	return resolved;
 }

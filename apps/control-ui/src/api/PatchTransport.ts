@@ -214,7 +214,7 @@ export function browserDeskBoundaryToken(): string {
 	return storage?.getItem("light.desk-token")?.trim() ?? "";
 }
 
-function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
+export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 	return {
 		fixture_id: fixture.fixtureId,
 		fixture_number: fixture.fixtureNumber,

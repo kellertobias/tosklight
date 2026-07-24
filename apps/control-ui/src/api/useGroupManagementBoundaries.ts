@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type { ServerState } from "../features/server/useServerState";
 import { createFeatureErrorGroup } from "./featureErrorReporting";
 import { HttpGroupManagementTransport } from "./GroupManagementTransport";
-import { configuredServerUrl } from "./LightApiClient";
+import { configuredServerUrl } from "./client/serverLocation";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 
 export function useGroupManagementBoundaries(state: ServerState) {

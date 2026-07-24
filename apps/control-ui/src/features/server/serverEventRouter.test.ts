@@ -86,8 +86,31 @@ function createHarness(showId = "show-a") {
 			return Reflect.get(target, property, receiver);
 		},
 	});
+	const api = {
+		runtime: { bootstrap: client.bootstrap },
+		desk: {
+			configuration: client.configuration,
+			programmers: client.programmers,
+		},
+		fixtures: {
+			patch: client.patch,
+			fixtureLibrary: client.fixtureLibrary,
+			fixtureProfiles: client.fixtureProfiles,
+			fixtureProfileWarnings: client.fixtureProfileWarnings,
+		},
+		mediaOutput: {
+			highlight: client.highlight,
+			mediaServers: client.mediaServers,
+		},
+		playback: { screens: client.screens },
+		showObjects: {
+			object: client.object,
+			objects: client.objects,
+		},
+		shows: { shows: client.shows },
+	};
 	const state = {
-		client,
+		api,
 		bootstrap: bootstrap(showId),
 		cueObjects: [],
 		outputRoutes: [],
@@ -144,7 +167,7 @@ function createHarness(showId = "show-a") {
 		setHighlightError: vi.fn(),
 	} as unknown as ServerState;
 	return {
-		client,
+		api,
 		loadShowObjects,
 		state,
 		unexpectedLegacyPlaybackRead,
@@ -238,13 +261,13 @@ describe("show object event reconciliation", () => {
 		const harness = createHarness();
 		harness.route(showObjectEvent(kind, id));
 		await vi.waitFor(() =>
-			expect(harness.client.object).toHaveBeenCalledOnce(),
+			expect(harness.api.showObjects.object).toHaveBeenCalledOnce(),
 		);
-		expect(harness.client.object).toHaveBeenCalledWith("show-a", kind, id);
+		expect(harness.api.showObjects.object).toHaveBeenCalledWith("show-a", kind, id);
 		expect(harness.state[setter]).toHaveBeenCalledOnce();
-		expect(harness.client.patch).not.toHaveBeenCalled();
+		expect(harness.api.fixtures.patch).not.toHaveBeenCalled();
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
-		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
 
@@ -259,15 +282,15 @@ describe("show object event reconciliation", () => {
 			enabled: true,
 			minimum_slots: 0,
 		});
-		harness.client.objects.mockResolvedValueOnce([route]);
+		harness.api.showObjects.objects.mockResolvedValueOnce([route]);
 		harness.route(showObjectEvent("route", "route-1"));
 		await vi.waitFor(() =>
-			expect(harness.client.objects).toHaveBeenCalledOnce(),
+			expect(harness.api.showObjects.objects).toHaveBeenCalledOnce(),
 		);
-		expect(harness.client.objects).toHaveBeenCalledWith("show-a", "route");
+		expect(harness.api.showObjects.objects).toHaveBeenCalledWith("show-a", "route");
 		expect(harness.state.outputRoutes).toEqual([route]);
-		expect(harness.client.object).not.toHaveBeenCalled();
-		expect(harness.client.patch).not.toHaveBeenCalled();
+		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
+		expect(harness.api.fixtures.patch).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
 
@@ -275,9 +298,9 @@ describe("show object event reconciliation", () => {
 		const harness = createHarness();
 		harness.route(showObjectEvent("patched_fixture", "fixture-1"));
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(harness.client.patch).not.toHaveBeenCalled();
-		expect(harness.client.object).not.toHaveBeenCalled();
-		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+		expect(harness.api.fixtures.patch).not.toHaveBeenCalled();
+		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
 
@@ -289,9 +312,9 @@ describe("show object event reconciliation", () => {
 			await Promise.resolve();
 			await Promise.resolve();
 			expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
-			expect(harness.client.object).not.toHaveBeenCalled();
-			expect(harness.client.objects).not.toHaveBeenCalled();
-			expect(harness.client.bootstrap).not.toHaveBeenCalled();
+			expect(harness.api.showObjects.object).not.toHaveBeenCalled();
+			expect(harness.api.showObjects.objects).not.toHaveBeenCalled();
+			expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 			expect(harness.loadShowObjects).not.toHaveBeenCalled();
 		},
 	);
@@ -310,8 +333,8 @@ describe("show object event reconciliation", () => {
 		harness.route(showObjectEvent("user_layout", "user-2", 1, 4));
 		await Promise.resolve();
 		await Promise.resolve();
-		expect(harness.client.object).not.toHaveBeenCalled();
-		expect(harness.client.patch).not.toHaveBeenCalled();
+		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
+		expect(harness.api.fixtures.patch).not.toHaveBeenCalled();
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
@@ -333,9 +356,9 @@ describe("show object event reconciliation", () => {
 		);
 		await Promise.resolve();
 		await Promise.resolve();
-		expect(harness.client.object).not.toHaveBeenCalled();
-		expect(harness.client.objects).not.toHaveBeenCalled();
-		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
+		expect(harness.api.showObjects.objects).not.toHaveBeenCalled();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
 
@@ -357,8 +380,8 @@ describe("show object event reconciliation", () => {
 		await vi.waitFor(() =>
 			expect(harness.state.setOutputRoutes).toHaveBeenCalledOnce(),
 		);
-		expect(harness.client.object).not.toHaveBeenCalled();
-		expect(harness.client.objects).toHaveBeenCalledWith("show-a", "route");
+		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
+		expect(harness.api.showObjects.objects).toHaveBeenCalledWith("show-a", "route");
 		expect(harness.state.outputRoutes).toEqual([]);
 	});
 
@@ -369,18 +392,18 @@ describe("show object event reconciliation", () => {
 			showObjectEvent("cue_list", "cue-list-1", 5, 10, { deleted: true }),
 		);
 		await vi.waitFor(() => expect(harness.state.cueObjects).toEqual([]));
-		expect(harness.client.object).not.toHaveBeenCalled();
-		expect(harness.client.objects).not.toHaveBeenCalled();
+		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
+		expect(harness.api.showObjects.objects).not.toHaveBeenCalled();
 	});
 
 	it("does not install an object response older than the announced revision", async () => {
 		const harness = createHarness();
-		harness.client.object.mockResolvedValueOnce(
+		harness.api.showObjects.object.mockResolvedValueOnce(
 			object("cue_list", "cue-list-1", 4),
 		);
 		harness.route(showObjectEvent("cue_list", "cue-list-1", 5, 10));
 		await vi.waitFor(() =>
-			expect(harness.client.object).toHaveBeenCalledOnce(),
+			expect(harness.api.showObjects.object).toHaveBeenCalledOnce(),
 		);
 		await Promise.resolve();
 		expect(harness.state.cueObjects).toEqual([]);
@@ -392,7 +415,7 @@ describe("show object event reconciliation", () => {
 		harness.route(showObjectEvent("cue_list", "cue-list-1", 2, 2));
 		harness.route(showObjectEvent("cue_list", "cue-list-1", 3, 3));
 		await vi.waitFor(() => expect(harness.state.cueObjects).toHaveLength(1));
-		expect(harness.client.object).toHaveBeenCalledOnce();
+		expect(harness.api.showObjects.object).toHaveBeenCalledOnce();
 		expect(harness.state.cueObjects[0].revision).toBe(3);
 	});
 
@@ -406,19 +429,19 @@ describe("show object event reconciliation", () => {
 				resolveFirst = resolve;
 			},
 		);
-		harness.client.object
+		harness.api.showObjects.object
 			.mockImplementationOnce(() => first)
 			.mockResolvedValueOnce(
 				object("cue_list", "cue-list-1", 2, { name: "new" }),
 			);
 		harness.route(showObjectEvent("cue_list", "cue-list-1", 1, 1));
 		await vi.waitFor(() =>
-			expect(harness.client.object).toHaveBeenCalledOnce(),
+			expect(harness.api.showObjects.object).toHaveBeenCalledOnce(),
 		);
 		harness.route(showObjectEvent("cue_list", "cue-list-1", 2, 2));
 		resolveFirst(object("cue_list", "cue-list-1", 1, { name: "old" }));
 		await vi.waitFor(() =>
-			expect(harness.client.object).toHaveBeenCalledTimes(2),
+			expect(harness.api.showObjects.object).toHaveBeenCalledTimes(2),
 		);
 		await vi.waitFor(() =>
 			expect(harness.state.cueObjects[0]?.revision).toBe(2),
@@ -433,7 +456,7 @@ describe("show object event reconciliation", () => {
 		harness.state.cueObjects = [
 			object("cue_list", "cue-list-1", 9, { name: "old" }),
 		] as never;
-		harness.client.object.mockResolvedValueOnce(
+		harness.api.showObjects.object.mockResolvedValueOnce(
 			object("cue_list", "cue-list-1", 1, { name: "new" }),
 		);
 		harness.route(
@@ -443,7 +466,7 @@ describe("show object event reconciliation", () => {
 		await vi.waitFor(() =>
 			expect(harness.state.cueObjects[0]?.revision).toBe(1),
 		);
-		expect(harness.client.object).toHaveBeenCalledOnce();
+		expect(harness.api.showObjects.object).toHaveBeenCalledOnce();
 	});
 
 	it("routes legacy stored Cue values to one affected resource", async () => {
@@ -456,9 +479,9 @@ describe("show object event reconciliation", () => {
 			),
 		);
 		await vi.waitFor(() =>
-			expect(harness.client.object).toHaveBeenCalledOnce(),
+			expect(harness.api.showObjects.object).toHaveBeenCalledOnce(),
 		);
-		expect(harness.client.object).toHaveBeenCalledWith(
+		expect(harness.api.showObjects.object).toHaveBeenCalledWith(
 			"show-a",
 			"cue_list",
 			"cue-list-1",
@@ -483,7 +506,7 @@ describe("broad state hydration boundaries", () => {
 		);
 		await Promise.resolve();
 		await Promise.resolve();
-		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 	});
 
 	it("does not hydrate serially unrepresentable transient controls", async () => {
@@ -493,7 +516,7 @@ describe("broad state hydration boundaries", () => {
 		);
 		await Promise.resolve();
 		await Promise.resolve();
-		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 	});
 
 	it("leaves same-user peer-desk value changes to the shared scoped store", async () => {
@@ -508,7 +531,7 @@ describe("broad state hydration boundaries", () => {
 		);
 		await Promise.resolve();
 		await Promise.resolve();
-		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 	});
 
 	it("leaves an own queue transition with interaction to both scoped stores", async () => {
@@ -522,7 +545,7 @@ describe("broad state hydration boundaries", () => {
 		);
 		await Promise.resolve();
 		await Promise.resolve();
-		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 	});
 
 	it("leaves categorized command-line edits to the scoped interaction store", async () => {
@@ -539,8 +562,8 @@ describe("broad state hydration boundaries", () => {
 		);
 		await Promise.resolve();
 		await Promise.resolve();
-		expect(harness.client.bootstrap).not.toHaveBeenCalled();
-		expect(harness.client.programmers).not.toHaveBeenCalled();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
+		expect(harness.api.desk.programmers).not.toHaveBeenCalled();
 	});
 
 	it("retains compatibility hydration for uncategorized Programmer changes", async () => {
@@ -556,7 +579,7 @@ describe("broad state hydration boundaries", () => {
 			),
 		);
 		await vi.waitFor(() =>
-			expect(harness.client.bootstrap).toHaveBeenCalledOnce(),
+			expect(harness.api.runtime.bootstrap).toHaveBeenCalledOnce(),
 		);
 	});
 
@@ -574,7 +597,7 @@ describe("broad state hydration boundaries", () => {
 		const harness = createHarness();
 		harness.route(event("programmer_changed", payload));
 		await vi.waitFor(() =>
-			expect(harness.client.bootstrap).toHaveBeenCalledOnce(),
+			expect(harness.api.runtime.bootstrap).toHaveBeenCalledOnce(),
 		);
 	});
 
@@ -594,7 +617,7 @@ describe("broad state hydration boundaries", () => {
 		);
 
 		await vi.waitFor(() =>
-			expect(harness.client.bootstrap).toHaveBeenCalledOnce(),
+			expect(harness.api.runtime.bootstrap).toHaveBeenCalledOnce(),
 		);
 	});
 
@@ -605,30 +628,30 @@ describe("broad state hydration boundaries", () => {
 		const harness = createHarness();
 		harness.route(event(kind, {}, 1));
 		await vi.waitFor(() =>
-			expect(harness.client.bootstrap).toHaveBeenCalledOnce(),
+			expect(harness.api.runtime.bootstrap).toHaveBeenCalledOnce(),
 		);
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
-		expect(harness.client.objects).not.toHaveBeenCalled();
+		expect(harness.api.showObjects.objects).not.toHaveBeenCalled();
 	});
 
 	it("retains a full show-object load when a show opens", async () => {
 		const harness = createHarness("show-a");
-		harness.client.bootstrap.mockResolvedValueOnce(bootstrap("show-b"));
+		harness.api.runtime.bootstrap.mockResolvedValueOnce(bootstrap("show-b"));
 		harness.route(event("show_opened", { show_id: "show-b" }, 1));
 		await vi.waitFor(() =>
 			expect(harness.loadShowObjects).toHaveBeenCalledWith("show-b", "user-1"),
 		);
 		expect(harness.loadShowObjects).toHaveBeenCalledOnce();
-		expect(harness.client.screens).toHaveBeenCalledOnce();
+		expect(harness.api.playback.screens).toHaveBeenCalledOnce();
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
 	});
 
 	it("refreshes only Screens for a Playback Page desk event", async () => {
 		const harness = createHarness();
 		harness.route(event("playback_page_changed", { page: 2 }, 1));
-		await vi.waitFor(() => expect(harness.client.screens).toHaveBeenCalledOnce());
+		await vi.waitFor(() => expect(harness.api.playback.screens).toHaveBeenCalledOnce());
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
-		expect(harness.client.bootstrap).not.toHaveBeenCalled();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
 });

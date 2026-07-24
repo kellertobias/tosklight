@@ -2,7 +2,7 @@ import { useConnectionStatus } from "./features/shellStatus/ShellStatusState";
 import { AppProvider } from "./state/AppContext";
 import { AppShell } from "./components/shell/AppShell";
 import { QuitConfirmOverlay } from "./components/modals/QuitConfirmOverlay";
-import { ServerProvider } from "./api/ServerContext";
+import { ServerRuntime } from "./api/ServerRuntime";
 import { useBootstrapSnapshot } from "./features/deskSnapshot/DeskSnapshotState";
 import { useEffect } from "react";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
@@ -24,7 +24,7 @@ function DesktopReady() {
 
 export function App() {
 	return (
-		<ServerProvider>
+		<ServerRuntime>
 			<DesktopReady />
 			<AppProvider>
 				<PatchFeatureBoundary>
@@ -34,6 +34,6 @@ export function App() {
 				</PatchFeatureBoundary>
 			</AppProvider>
 			<DeskLockOverlay />
-		</ServerProvider>
+		</ServerRuntime>
 	);
 }

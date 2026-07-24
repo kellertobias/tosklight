@@ -1,11 +1,11 @@
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 export function createMediaActions(
 	model: ServerController,
-): Pick<ServerContextValue, "refreshMediaPreview" | "refreshMediaThumbnails"> {
+): Pick<ServerCapabilities, "refreshMediaPreview" | "refreshMediaThumbnails"> {
 	const {
-		client,
+		api,
 		setError,
 		mediaServers,
 		setMediaServers,
@@ -15,8 +15,8 @@ export function createMediaActions(
 	return {
 		refreshMediaPreview: async (fixtureId, source = 0) => {
 			try {
-				await client.refreshMediaPreview(fixtureId, source);
-				const blob = await client.mediaPreview(fixtureId, source);
+				await api.mediaOutput.refreshMediaPreview(fixtureId, source);
+				const blob = await api.mediaOutput.mediaPreview(fixtureId, source);
 				const url = URL.createObjectURL(blob);
 				setMediaPreviewUrls((current) => {
 					const previous = current[fixtureId];
@@ -25,13 +25,13 @@ export function createMediaActions(
 					mediaPreviewUrlsRef.current = next;
 					return next;
 				});
-				setMediaServers((await client.mediaServers()).fixtures);
+				setMediaServers((await api.mediaOutput.mediaServers()).fixtures);
 				setError(null);
 				return true;
 			} catch (reason) {
 				setMediaServers(
 					(
-						await client
+						await api.mediaOutput
 							.mediaServers()
 							.catch(() => ({ fixtures: mediaServers }))
 					).fixtures,
@@ -42,13 +42,13 @@ export function createMediaActions(
 		},
 		refreshMediaThumbnails: async (fixtureId, elements) => {
 			try {
-				await client.refreshMediaThumbnails(fixtureId, elements);
-				setMediaServers((await client.mediaServers()).fixtures);
+				await api.mediaOutput.refreshMediaThumbnails(fixtureId, elements);
+				setMediaServers((await api.mediaOutput.mediaServers()).fixtures);
 				setError(null);
 			} catch (reason) {
 				setMediaServers(
 					(
-						await client
+						await api.mediaOutput
 							.mediaServers()
 							.catch(() => ({ fixtures: mediaServers }))
 					).fixtures,

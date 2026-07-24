@@ -1,13 +1,13 @@
 import { useCallback, useMemo, useRef } from "react";
 import type { ServerState } from "../features/server/useServerState";
 import { HttpVirtualPlaybackZonesTransport } from "../features/virtualPlaybackZones/transport";
-import { configuredServerUrl } from "./LightApiClient";
+import { configuredServerUrl } from "./client/serverLocation";
 import { HttpPlaybackTopologyTransport } from "./PlaybackTopologyTransport";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 
 export function usePlaybackTopologyBoundaries(state: ServerState) {
-	const playbackClientRef = useRef(state.client);
-	playbackClientRef.current = state.client;
+	const playbackClientRef = useRef(state.api.playback);
+	playbackClientRef.current = state.api.playback;
 	const serverUrl = configuredServerUrl();
 	const options = useMemo(
 		() =>
@@ -44,7 +44,9 @@ export function usePlaybackTopologyBoundaries(state: ServerState) {
 		(
 			_show: string,
 			_desk: string,
-			request: Parameters<ServerState["client"]["playbackRuntimeAction"]>[2],
+			request: Parameters<
+				ServerState["api"]["playback"]["playbackRuntimeAction"]
+			>[2],
 		) => playbackClientRef.current.playbackRuntimeLiveAction(request),
 		[],
 	);

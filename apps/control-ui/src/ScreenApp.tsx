@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { ServerProvider } from "./api/ServerContext";
+import { ServerRuntime } from "./api/ServerRuntime";
 import { useScreens } from "./features/screens/ScreensContext";
 import { ScreenPlaybackSection } from "./features/screens/ScreenPlaybackSection";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
@@ -52,11 +52,11 @@ function ScreenSurface({ id }: { id: string }) {
 
 export function ScreenApp({ id }: { id: string }) {
   return (
-    <ServerProvider sessionRole="secondary">
+    <ServerRuntime sessionRole="secondary">
       <AppProvider>
         <ScreenSurface id={id} />
       </AppProvider>
       <DeskLockOverlay />
-    </ServerProvider>
+    </ServerRuntime>
   );
 }

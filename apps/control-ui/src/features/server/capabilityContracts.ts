@@ -4,7 +4,7 @@ import type { ServerPlaybackContext } from "./ServerPlaybackContext";
 import type { ServerProgrammingContext } from "./ServerProgrammingContext";
 import type { ServerShowContext } from "./ServerShowContext";
 
-export type ServerContextValue = ServerCoreContext &
+export type ServerCapabilities = ServerCoreContext &
 	ServerProgrammingContext &
 	ServerPlaybackContext &
 	ServerShowContext &

@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import type { ServerState } from "../features/server/useServerState";
 import { createFeatureErrorGroup } from "./featureErrorReporting";
-import { configuredServerUrl } from "./LightApiClient";
+import { configuredServerUrl } from "./client/serverLocation";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { HttpProgrammerCaptureModeTransport } from "./ProgrammerCaptureModeTransport";
 import { HttpProgrammerPreloadPlaybackQueueTransport } from "./ProgrammerPreloadPlaybackQueueTransport";
@@ -108,9 +108,9 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 		) => {
 			if (!state.session)
 				throw new Error("Programmer values session is unavailable");
-			return state.client.programmerValuesLiveAction(scope.userId, request);
+			return state.api.programming.programmerValuesLiveAction(scope.userId, request);
 		},
-		[state.client, state.session],
+		[state.api, state.session],
 	);
 	const applyProgrammerPreloadValuesAction = useCallback(
 		(
@@ -121,12 +121,12 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 		) => {
 			if (!state.session)
 				throw new Error("Programmer Preload values session is unavailable");
-			return state.client.programmerPreloadValuesLiveAction(
+			return state.api.programming.programmerPreloadValuesLiveAction(
 				scope.userId,
 				request,
 			);
 		},
-		[state.client, state.session],
+		[state.api, state.session],
 	);
 	return {
 		programmerValuesTransport,

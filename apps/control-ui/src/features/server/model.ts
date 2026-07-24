@@ -13,6 +13,6 @@ export type ServerController = ServerState & {
 	resetCommandLine: () => void;
 	dismissCommandChoice: () => void;
 	cancelCommandChoice: () => void;
-	fileRoots: ServerState["client"]["fileRoots"];
-	fileEntries: ServerState["client"]["fileEntries"];
+	fileRoots: ServerState["api"]["files"]["fileRoots"];
+	fileEntries: ServerState["api"]["files"]["fileEntries"];
 };

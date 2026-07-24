@@ -54,7 +54,27 @@ function createHarness() {
 		},
 	});
 	const state = {
-		client,
+		api: {
+			runtime: {
+				bootstrap: client.bootstrap,
+				login: client.login,
+			},
+			desk: {
+				commandHistory: client.commandHistory,
+				configuration: client.configuration,
+				deskLock: client.deskLock,
+				programmers: client.programmers,
+			},
+			fixtures: {
+				fixtureLibrary: client.fixtureLibrary,
+				fixtureProfiles: client.fixtureProfiles,
+				fixtureProfileWarnings: client.fixtureProfileWarnings,
+				patch: client.patch,
+			},
+			mediaOutput: { mediaServers: client.mediaServers },
+			playback: { screens: client.screens },
+			shows: { shows: client.shows },
+		},
 		commandTargetModeRef: { current: "FIXTURE" },
 		setBootstrap: vi.fn(),
 		setSession: vi.fn(),

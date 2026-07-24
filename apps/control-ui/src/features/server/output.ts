@@ -1,24 +1,24 @@
 import type { OutputRoute } from "../../api/types";
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 export function createOutputActions(
 	model: ServerController,
 ): Pick<
-	ServerContextValue,
+	ServerCapabilities,
 	| "readDmx"
 	| "readVisualization"
 	| "setDmxOverride"
 	| "saveOutputRoute"
 	| "deleteOutputRoute"
 > {
-	const { client, setError, bootstrap, setOutputRoutes } = model;
+	const { api, setError, bootstrap, setOutputRoutes } = model;
 	return {
-		readDmx: () => client.dmx(),
-		readVisualization: (preload = false) => client.visualization(preload),
+		readDmx: () => api.mediaOutput.dmx(),
+		readVisualization: (preload = false) => api.mediaOutput.visualization(preload),
 		setDmxOverride: async (universe, address, rawValue) => {
 			try {
-				await client.setDmxOverride(universe, address, rawValue);
+				await api.mediaOutput.setDmxOverride(universe, address, rawValue);
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
@@ -27,14 +27,14 @@ export function createOutputActions(
 		saveOutputRoute: async (id, route, revision) => {
 			if (!bootstrap?.active_show) return false;
 			try {
-				await client.saveOutputRoute(
+				await api.showObjects.saveOutputRoute(
 					bootstrap.active_show.id,
 					id,
 					route,
 					revision,
 				);
 				setOutputRoutes(
-					await client.objects<OutputRoute>(bootstrap.active_show.id, "route"),
+					await api.showObjects.objects<OutputRoute>(bootstrap.active_show.id, "route"),
 				);
 				setError(null);
 				return true;
@@ -46,13 +46,13 @@ export function createOutputActions(
 		deleteOutputRoute: async (id, revision) => {
 			if (!bootstrap?.active_show) return false;
 			try {
-				await client.deleteOutputRoute(
+				await api.showObjects.deleteOutputRoute(
 					bootstrap.active_show.id,
 					id,
 					revision,
 				);
 				setOutputRoutes(
-					await client.objects<OutputRoute>(bootstrap.active_show.id, "route"),
+					await api.showObjects.objects<OutputRoute>(bootstrap.active_show.id, "route"),
 				);
 				setError(null);
 				return true;

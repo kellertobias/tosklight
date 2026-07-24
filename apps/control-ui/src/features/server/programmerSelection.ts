@@ -1,14 +1,14 @@
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 export function createProgrammerSelectionActions(
 	model: ServerController,
 ): Pick<
-	ServerContextValue,
+	ServerCapabilities,
 	"undoProgrammer" | "setSelection" | "selectionGesture"
 > {
 	const {
-		client,
+		api,
 		setError,
 		selectedFixtures,
 		setSelectedFixtures,
@@ -19,7 +19,7 @@ export function createProgrammerSelectionActions(
 	return {
 		undoProgrammer: async () => {
 			try {
-				await client.undoProgrammer();
+				await api.programming.undoProgrammer();
 				await refresh();
 				setError(null);
 			} catch (reason) {
@@ -31,7 +31,7 @@ export function createProgrammerSelectionActions(
 			setSelectedFixtures(fixtures);
 			setSelectedGroupId(null);
 			try {
-				await client.setSelection(fixtures);
+				await api.programming.setSelection(fixtures);
 				setError(null);
 			} catch (reason) {
 				setSelectedFixtures(previous);
@@ -42,7 +42,7 @@ export function createProgrammerSelectionActions(
 			const previousFixtures = selectedFixtures;
 			const previousGroup = selectedGroupId;
 			try {
-				const result = (await client.selectionGesture(source, remove)) as {
+				const result = (await api.programming.selectionGesture(source, remove)) as {
 					programmer?: {
 						selected?: string[];
 						selection_expression?: {

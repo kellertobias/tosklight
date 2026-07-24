@@ -1,9 +1,9 @@
-import type { LightApiClient } from "../../api/LightApiClient";
+import type { LightApi } from "../../api/client/api";
 import type { ScreenSnapshot } from "../../api/types";
 import type { ScreenCapabilities } from "./types";
 
 interface ScreenActionDependencies {
-	client: LightApiClient;
+	api: LightApi;
 	setError: (error: string | null) => void;
 	setScreens: (screens: ScreenSnapshot | null) => void;
 }
@@ -11,12 +11,12 @@ interface ScreenActionDependencies {
 export function createScreenActions(
 	model: ScreenActionDependencies,
 ): Omit<ScreenCapabilities, "screens"> {
-	const { client, setError, setScreens } = model;
+	const { api, setError, setScreens } = model;
 	return {
 		saveScreen: async (screen) => {
 			try {
-				await client.putScreen(screen);
-				setScreens(await client.screens());
+				await api.playback.putScreen(screen);
+				setScreens(await api.playback.screens());
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
@@ -24,8 +24,8 @@ export function createScreenActions(
 		},
 		deleteScreen: async (id) => {
 			try {
-				await client.deleteScreen(id);
-				setScreens(await client.screens());
+				await api.playback.deleteScreen(id);
+				setScreens(await api.playback.screens());
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
@@ -33,8 +33,8 @@ export function createScreenActions(
 		},
 		setScreenPage: async (id, page) => {
 			try {
-				await client.setScreenPage(id, page);
-				setScreens(await client.screens());
+				await api.playback.setScreenPage(id, page);
+				setScreens(await api.playback.screens());
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));

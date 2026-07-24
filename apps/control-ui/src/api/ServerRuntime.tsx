@@ -14,7 +14,7 @@ import { SoundToLightProvider } from "../features/soundToLight/SoundToLightConte
 import { FilesProvider } from "../features/files/FilesContext";
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import { SelectiveImportProvider } from "../features/selectiveImport/SelectiveImportContext";
-import { composeServerContextValue } from "../features/server/composeServerContextValue";
+import { createServerCapabilities } from "../features/server/createServerCapabilities";
 import { useCommandLineController } from "../features/server/useCommandLineController";
 import { useFileAccess } from "../features/server/useFileAccess";
 import { useServerConnection } from "../features/server/useServerConnection";
@@ -49,11 +49,25 @@ export {
 	deskLayoutScopeKey,
 } from "../features/server/contracts";
 
+function ServerConnectionOwner({
+	children,
+	state,
+	loadShowObjects,
+	sessionRole,
+}: PropsWithChildren<{
+	state: ReturnType<typeof useServerState>;
+	loadShowObjects: ReturnType<typeof useShowObjects>;
+	sessionRole: SessionRole;
+}>) {
+	const sessionHandoff = useSessionHandoff();
+	useServerConnection(state, loadShowObjects, sessionRole, sessionHandoff);
+	return children;
+}
 
-/** Data-shaped provider sources, extracted from ServerProvider for size. */
+/** Data-shaped provider sources, extracted from ServerRuntime for size. */
 function useProviderDataSources(
 	state: ReturnType<typeof useServerState>,
-	value: ReturnType<typeof composeServerContextValue>,
+	value: ReturnType<typeof createServerCapabilities>,
 	refresh: ReturnType<typeof useServerRefresh>,
 ) {
 	const fileSource = {
@@ -197,8 +211,8 @@ function useProviderDataSources(
 	};
 }
 
-/** Action-shaped provider sources, extracted from ServerProvider for size. */
-function useProviderActionSources(value: ReturnType<typeof composeServerContextValue>) {
+/** Action-shaped provider sources, extracted from ServerRuntime for size. */
+function useProviderActionSources(value: ReturnType<typeof createServerCapabilities>) {
 	const highlightActions = useMemo(
 		() => ({
 			highlightAction: value.highlightAction,
@@ -270,7 +284,7 @@ function useProviderActionSources(value: ReturnType<typeof composeServerContextV
 	return { highlightActions, programmerActions, dmxDiagnostics, soundToLightActions, shellStatusActions };
 }
 
-export function ServerProvider({
+export function ServerRuntime({
 	children,
 	sessionRole = "primary",
 }: PropsWithChildren<{ sessionRole?: SessionRole }>) {
@@ -278,8 +292,6 @@ export function ServerProvider({
 	useServerPolling(state);
 	const loadShowObjects = useShowObjects(state);
 	const refresh = useServerRefresh(state, loadShowObjects);
-	const sessionHandoff = useSessionHandoff();
-	useServerConnection(state, loadShowObjects, sessionRole, sessionHandoff);
 	const commandLine = useCommandLineController(state);
 	const fileAccess = useFileAccess(state);
 	const boundaries = useServerFeatureBoundaries(state);
@@ -291,21 +303,26 @@ export function ServerProvider({
 		loadShowObjects,
 		refresh,
 	};
-	const value = composeServerContextValue(model);
+	const value = createServerCapabilities(model);
 	const {
 		fileSource, screenSource, showLifecycle,
 		deskConnection, fixtureLibraryState, mediaServersState,
 	} = useProviderDataSources(state, value, refresh);
 	const selectiveImportSource = {
-		catalog: state.client.selectiveImportCatalog,
-		preview: state.client.previewSelectiveImport,
-		apply: state.client.applySelectiveImport,
+		catalog: state.api.selectiveImport.catalog.bind(state.api.selectiveImport),
+		preview: state.api.selectiveImport.preview.bind(state.api.selectiveImport),
+		apply: state.api.selectiveImport.apply.bind(state.api.selectiveImport),
 		refreshCompatibilityState: refresh,
 		reportError: state.setError,
 	};
 	const { highlightActions, programmerActions, dmxDiagnostics, soundToLightActions, shellStatusActions } =
 		useProviderActionSources(value);
 	return (
+		<ServerConnectionOwner
+			state={state}
+			loadShowObjects={loadShowObjects}
+			sessionRole={sessionRole}
+		>
 		<HighlightStateProvider store={state.highlightStore}>
 			<HighlightActionsProvider actions={highlightActions}>
 			<ProgrammerActionsProvider actions={programmerActions}>
@@ -394,5 +411,6 @@ export function ServerProvider({
 			</ProgrammerActionsProvider>
 			</HighlightActionsProvider>
 		</HighlightStateProvider>
+		</ServerConnectionOwner>
 	);
 }

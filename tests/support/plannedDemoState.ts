@@ -1,7 +1,9 @@
 import fs from "node:fs/promises";
 import type { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
 import type { FixtureDefinition, FixtureProfile, PatchedFixture } from "../../apps/control-ui/src/api/types";
+import { toWireFixture } from "../../apps/control-ui/src/api/PatchTransport";
 import { fixtureDefinitionsFromProfiles } from "../../apps/control-ui/src/components/setup/fixtureProfileModel";
+import { patchedFixtureCandidate } from "../../apps/control-ui/src/features/patch/model";
 
 interface VersionedObject<T = Record<string, any>> {
   id: string;
@@ -175,22 +177,40 @@ export async function seedPlannedDemoPatch(
   inputs.push({ phase: "remaining", number: 998, name: "Haze Left", definition: hazer, layerId: layers.Floor, x: -3.5, y: 3.7, z: .2 });
   inputs.push({ phase: "remaining", number: 999, name: "Haze Right", definition: hazer, layerId: layers.Floor, x: 3.5, y: 3.7, z: .2 });
 
+  const existingFixtures = await demoObjects<PatchedFixture>(
+    api,
+    showId,
+    "patched_fixture",
+  );
   const existingByNumber = new Map(
-    (await demoObjects<PatchedFixture>(api, showId, "patched_fixture"))
+    existingFixtures
       .flatMap((item) => item.body.fixture_number != null
         ? [[item.body.fixture_number, item.body] as const]
         : item.body.virtual_fixture_number != null
           ? [[10_000 + item.body.virtual_fixture_number, item.body] as const]
           : []),
   );
+  const existingDefinitions = new Map(
+    existingFixtures.map(({ body }) => [
+      `${body.definition.profile_id}:${body.definition.profile_revision}`,
+      body.definition,
+    ]),
+  );
   const fixtures: Record<number, PatchedFixture> = {};
   const selectedPhases = new Set(phases);
   const selectedLayers = selectedLayerIds ? new Set(selectedLayerIds) : null;
   for (const input of inputs) {
-    const fixture = fixtureBody(input, existingByNumber.get(input.number));
+    const existing = existingByNumber.get(input.number);
+    const definition = existingDefinitions.get(
+      `${input.definition.profile_id}:${input.definition.profile_revision}`,
+    );
+    const fixture = fixtureBody(
+      definition ? { ...input, definition } : input,
+      existing,
+    );
     fixtures[input.number] = fixture;
     if (selectedPhases.has(input.phase) && (!selectedLayers || selectedLayers.has(input.layerId))) {
-      await put(api, showId, "patched_fixture", fixture.fixture_id, fixture);
+      await putPatchedFixture(api, showId, fixture);
     }
   }
   return {
@@ -317,7 +337,10 @@ function fixtureBody(input: FixtureInput, existing?: PatchedFixture): PatchedFix
     fixture_number: visualOnly ? null : input.number,
     virtual_fixture_number: visualOnly ? input.number - 10_000 : null,
     name: input.name,
-    definition: input.definition,
+    // Preserve the server-materialized profile snapshot for fixtures that the
+    // narrated UI phase already created. Rebuilding the same logical profile
+    // from the library projection can produce a different canonical digest.
+    definition: existing?.definition ?? input.definition,
     universe: primary?.universe ?? null,
     address: primary?.address ?? null,
     split_patches: ownerPatch,
@@ -423,4 +446,25 @@ async function put(api: ApiDriver, showId: string, kind: string, id: string, bod
     }
   }
   throw new Error(`Could not write demo ${kind} ${id} after repeated revision conflicts`);
+}
+
+async function putPatchedFixture(
+  api: ApiDriver,
+  showId: string,
+  fixture: PatchedFixture,
+) {
+  const patch = await api.patch();
+  await api.request(
+    "POST",
+    "/api/v2/patch/fixtures",
+    {
+      request_id: crypto.randomUUID(),
+      fixtures: [toWireFixture(patchedFixtureCandidate(fixture).input)],
+      remove_fixture_ids: [],
+      placements: [],
+    },
+    true,
+    patch.revision,
+    { showId },
+  );
 }

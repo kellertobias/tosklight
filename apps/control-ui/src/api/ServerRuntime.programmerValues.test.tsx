@@ -6,9 +6,9 @@ import {
 	useProgrammerValuesActions,
 	useProgrammerValuesView,
 } from "../features/programmerValues/ProgrammerValuesView";
-import { LightApiClient } from "./LightApiClient";
+import { LightClientRuntime } from "./client/runtime";
 import { useBootstrapSnapshot } from "../features/deskSnapshot/DeskSnapshotState";
-import { ServerProvider } from "./ServerContext";
+import { ServerRuntime } from "./ServerRuntime";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -173,13 +173,13 @@ function Harness({
 	showQueue?: boolean;
 }) {
 	return (
-		<ServerProvider>
+		<ServerRuntime>
 			<UnrelatedServerConsumer />
 			<ActionProbe />
 			{showValues ? <ValuesProbe /> : null}
 			{showLifecycle ? <LifecycleProbe /> : null}
 			{showQueue ? <QueueProbe /> : null}
-		</ServerProvider>
+		</ServerRuntime>
 	);
 }
 
@@ -229,14 +229,14 @@ function queueProjection(revision: number) {
 	};
 }
 
-describe("ServerProvider Programmer values boundary", () => {
+describe("ServerRuntime Programmer values boundary", () => {
 	it("is dormant until a values view mounts and isolates unrelated renders", async () => {
 		boundaries.loadValues.mockReset();
 		boundaries.applyValues.mockReset();
 		boundaries.subscribeValues.mockReset();
 		boundaries.loadCaptureMode.mockReset();
 		boundaries.subscribeCaptureMode.mockReset();
-		const broadBootstrap = vi.spyOn(LightApiClient.prototype, "bootstrap");
+		const broadBootstrap = vi.spyOn(LightClientRuntime.prototype, "bootstrap");
 		let observer: { message(value: unknown): void } | null = null;
 		boundaries.loadValues.mockResolvedValue({
 			cursor: 10,
@@ -294,7 +294,7 @@ describe("ServerProvider Programmer values boundary", () => {
 	it("keeps the aggregate lifecycle dormant and outside global context renders", async () => {
 		boundaries.loadLifecycle.mockReset();
 		boundaries.subscribeLifecycle.mockReset();
-		const broadBootstrap = vi.spyOn(LightApiClient.prototype, "bootstrap");
+		const broadBootstrap = vi.spyOn(LightClientRuntime.prototype, "bootstrap");
 		let observer: { message(value: unknown): void } | null = null;
 		boundaries.loadLifecycle.mockResolvedValue({
 			cursor: 20,
@@ -352,7 +352,7 @@ describe("ServerProvider Programmer values boundary", () => {
 	it("keeps the exact-user Preload playback queue dormant and locally reactive", async () => {
 		boundaries.loadQueue.mockReset();
 		boundaries.subscribeQueue.mockReset();
-		const broadBootstrap = vi.spyOn(LightApiClient.prototype, "bootstrap");
+		const broadBootstrap = vi.spyOn(LightClientRuntime.prototype, "bootstrap");
 		let observer: { message(value: unknown): void } | null = null;
 		boundaries.loadQueue.mockResolvedValue({
 			cursor: 30,

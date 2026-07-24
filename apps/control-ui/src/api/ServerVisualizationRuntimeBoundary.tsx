@@ -1,7 +1,7 @@
 import { type PropsWithChildren, useMemo } from "react";
 import type { ServerState } from "../features/server/useServerState";
 import { VisualizationRuntimeProvider } from "../features/visualizationRuntime/VisualizationRuntimeView";
-import { configuredServerUrl } from "./LightApiClient";
+import { configuredServerUrl } from "./client/serverLocation";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { HttpVisualizationRuntimeTransport } from "./VisualizationRuntimeTransport";
 

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ServerState } from "../features/server/useServerState";
 import { useOutputRuntimeBoundaries } from "./useOutputRuntimeBoundaries";
 
-vi.mock("./LightApiClient", () => ({
+vi.mock("./client/serverLocation", () => ({
 	configuredServerUrl: () => "http://127.0.0.1:5000",
 }));
 vi.mock("./PatchTransport", () => ({ browserDeskBoundaryToken: () => "" }));

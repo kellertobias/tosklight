@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { LightApiClient } from "../../api/LightApiClient";
+import { createLightApi } from "../../api/client/api";
 import type {
 	BootstrapSnapshot,
 	CommandHistoryEntry,
@@ -27,7 +27,7 @@ import { useServerFeatureStores } from "./useServerFeatureStores";
 import { useShowObjectsState } from "./useShowObjectsState";
 
 export function useServerState() {
-	const client = useRef(new LightApiClient()).current;
+	const api = useRef(createLightApi()).current;
 	const [status, setStatus] = useState<ConnectionStatus>("connecting");
 	const [error, setError] = useState<string | null>(null);
 	const [bootstrap, setBootstrap] = useState<BootstrapSnapshot | null>(null);
@@ -109,7 +109,7 @@ export function useServerState() {
 		stageLayoutStore.install(stageLayout);
 	}, [stageLayout, stageLayoutStore]);
 	return {
-		client,
+		api,
 		status,
 		setStatus,
 		error,

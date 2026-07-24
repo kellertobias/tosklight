@@ -135,9 +135,13 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 			.click();
 		state.pending = preloadCombinedObservation(await programmer(api));
 		await page.getByRole("button", { name: /^PRELOAD GO\b/ }).click();
-		state.applicationTimestamp = (await programmer(api)).preload_group_active[
-			"1"
-		].intensity.changed_at;
+		await expect
+			.poll(async () => {
+				const active = (await programmer(api)).preload_group_active["1"];
+				state.applicationTimestamp = active?.intensity.changed_at ?? "";
+				return state.applicationTimestamp;
+			})
+			.not.toBe("");
 		await bench.tick(1_500);
 		await longPressPreload(page);
 	},
@@ -349,6 +353,9 @@ const preload006UiSupplement = async ({
 		"Publish the temporary programmer and both real playbacks at one application timestamp.",
 	);
 	await page.getByRole("button", { name: /^PRELOAD GO\b/ }).click();
+	await expect
+		.poll(async () => (await activePlayback(api, 63))?.enabled)
+		.toBe(true);
 	await bench.tick(1_500);
 	const state = await playbacks(api);
 	const physical = state.active.find(

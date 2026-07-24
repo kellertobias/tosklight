@@ -20,12 +20,12 @@ function useMediaPreviewCleanup(state: ServerState) {
 }
 
 function useDeskLockPolling(state: ServerState) {
-	const { client, session, deskLockStore } = state;
+	const { api, session, deskLockStore } = state;
 	useEffect(() => {
 		if (!session) return;
 		let cancelled = false;
 		const refresh = () =>
-			void client
+			void api.desk
 				.deskLock()
 				.then((value) => !cancelled && deskLockStore.install(value))
 				.catch(() => undefined);
@@ -35,12 +35,12 @@ function useDeskLockPolling(state: ServerState) {
 			cancelled = true;
 			window.clearInterval(timer);
 		};
-	}, [client, session, deskLockStore]);
+	}, [api, session, deskLockStore]);
 }
 
 function useHighlightPolling(state: ServerState) {
 	const {
-		client,
+		api,
 		session,
 		highlightEpoch,
 		highlightErrorSticky,
@@ -61,7 +61,7 @@ function useHighlightPolling(state: ServerState) {
 			const request = ++highlightEpoch.current;
 			void highlightWrite.current
 				.catch(() => undefined)
-				.then(() => client.highlight())
+				.then(() => api.mediaOutput.highlight())
 				.then((next) => {
 					if (cancelled || request !== highlightEpoch.current) return;
 					setHighlight((current) => retainEquivalent(current, next));
@@ -81,7 +81,7 @@ function useHighlightPolling(state: ServerState) {
 			window.clearInterval(timer);
 		};
 	}, [
-		client,
+		api,
 		session,
 		highlightEpoch,
 		highlightErrorSticky,
@@ -92,12 +92,12 @@ function useHighlightPolling(state: ServerState) {
 }
 
 function useMatterPolling(state: ServerState) {
-	const { client, configuration, session, setMatter } = state;
+	const { api, configuration, session, setMatter } = state;
 	useEffect(() => {
 		if (!session || !configuration?.matter_enabled) return;
 		let cancelled = false;
 		const poll = () =>
-			void client
+			void api.desk
 				.matterStatus()
 				.then(
 					(next) =>
@@ -111,7 +111,7 @@ function useMatterPolling(state: ServerState) {
 			cancelled = true;
 			window.clearInterval(timer);
 		};
-	}, [client, configuration?.matter_enabled, session, setMatter]);
+	}, [api, configuration?.matter_enabled, session, setMatter]);
 }
 
 export function useServerPolling(state: ServerState) {

@@ -1,12 +1,12 @@
 import { ApiRequestError } from "../../api/ApiRequestError";
 import type { PatchLayer, VersionedObject } from "../../api/types";
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 export function createPatchActions(
 	model: ServerController,
-): Pick<ServerContextValue, "savePatchLayer"> {
-	const { client, setError, bootstrap, patchLayers, setPatchLayers } = model;
+): Pick<ServerCapabilities, "savePatchLayer"> {
+	const { api, setError, bootstrap, patchLayers, setPatchLayers } = model;
 	return {
 		savePatchLayer: async (layer) => {
 			try {
@@ -15,7 +15,7 @@ export function createPatchActions(
 				const existing = patchLayers.find((item) => item.id === layer.id);
 				let outcome;
 				try {
-					outcome = await client.savePatchLayer(
+					outcome = await api.showObjects.savePatchLayer(
 						bootstrap.active_show.id,
 						layer,
 						existing?.revision ?? 0,
@@ -23,12 +23,12 @@ export function createPatchActions(
 				} catch (reason) {
 					if (!(reason instanceof ApiRequestError) || reason.status !== 409)
 						throw reason;
-					const current = await client.objectOrNull<PatchLayer>(
+					const current = await api.showObjects.objectOrNull<PatchLayer>(
 						bootstrap.active_show.id,
 						"patch_layer",
 						layer.id,
 					);
-					outcome = await client.savePatchLayer(
+					outcome = await api.showObjects.savePatchLayer(
 						bootstrap.active_show.id,
 						layer,
 						current?.revision ?? 0,

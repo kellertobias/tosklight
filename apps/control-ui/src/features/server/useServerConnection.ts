@@ -12,10 +12,14 @@ export function useServerConnection(
 	role: SessionRole,
 	handoff: SessionHandoff,
 ) {
-	const { client, setError, setStatus } = state;
+	const { api, setError, setStatus } = state;
 	const stateRef = useRef(state);
+	const loadShowObjectsRef = useRef(loadShowObjects);
+	const handoffRef = useRef(handoff);
 	const attemptGeneration = useRef(0);
 	stateRef.current = state;
+	loadShowObjectsRef.current = loadShowObjects;
+	handoffRef.current = handoff;
 	useEffect(() => {
 		let cancelled = false;
 		let unsubscribe = () => {};
@@ -28,13 +32,16 @@ export function useServerConnection(
 		};
 		const start = async () => {
 			const generation = ++attemptGeneration.current;
-			handoff.release(generation, client.currentSession?.session_id ?? null);
+			handoffRef.current.release(
+				generation,
+				api.runtime.currentSession?.session_id ?? null,
+			);
 			try {
 				unsubscribe();
-				client.disconnectEvents();
+				api.runtime.disconnectEvents();
 				const session = await bootstrapConnection(
 					stateRef.current,
-					loadShowObjects,
+					loadShowObjectsRef.current,
 					() => cancelled || generation !== attemptGeneration.current,
 					role,
 				);
@@ -44,19 +51,22 @@ export function useServerConnection(
 					generation !== attemptGeneration.current
 				)
 					return;
-				handoff.capture(generation, session);
-				unsubscribe = client.onEvent(
+				handoffRef.current.capture(generation, session);
+				unsubscribe = api.runtime.onEvent(
 					createServerEventRouter(
 						() => stateRef.current,
 						session,
-						loadShowObjects,
+						loadShowObjectsRef.current,
 					),
 				);
-				await client.connectEvents(retry);
+				await api.runtime.connectEvents(retry);
 				if (!cancelled) setStatus("connected");
 			} catch (reason) {
 				if (cancelled) return;
-				handoff.release(generation, client.currentSession?.session_id ?? null);
+				handoffRef.current.release(
+					generation,
+					api.runtime.currentSession?.session_id ?? null,
+				);
 				setError(reason instanceof Error ? reason.message : String(reason));
 				setStatus(reason instanceof TypeError ? "offline" : "error");
 				retry();
@@ -66,11 +76,14 @@ export function useServerConnection(
 		return () => {
 			cancelled = true;
 			const generation = ++attemptGeneration.current;
-			handoff.release(generation, client.currentSession?.session_id ?? null);
+			handoffRef.current.release(
+				generation,
+				api.runtime.currentSession?.session_id ?? null,
+			);
 			window.clearTimeout(retryTimer);
 			unsubscribe();
-			client.disconnectEvents();
-			closeOwnedSession(role, () => void client.closeSession());
+			api.runtime.disconnectEvents();
+			closeOwnedSession(role, () => void api.runtime.closeSession());
 		};
-	}, [client, handoff, loadShowObjects, role, setError, setStatus]);
+	}, [api, role, setError, setStatus]);
 }

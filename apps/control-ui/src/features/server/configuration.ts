@@ -1,21 +1,21 @@
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 export function createConfigurationActions(
 	model: ServerController,
 ): Pick<
-	ServerContextValue,
+	ServerCapabilities,
 	| "speedGroup"
 	| "updateSpeedGroup"
 	| "observeSpeedGroup"
 	| "speedGroupAction"
 > {
-	const { client, setError } = model;
+	const { api, setError } = model;
 	return {
-		speedGroup: (group) => client.speedGroup(group),
+		speedGroup: (group) => api.desk.speedGroup(group),
 		updateSpeedGroup: async (group, next) => {
 			try {
-				const result = await client.updateSpeedGroup(group, next);
+				const result = await api.desk.updateSpeedGroup(group, next);
 				setError(null);
 				return result;
 			} catch (reason) {
@@ -24,10 +24,10 @@ export function createConfigurationActions(
 			}
 		},
 		observeSpeedGroup: (group, observation) =>
-			client.observeSpeedGroup(group, observation),
+			api.desk.observeSpeedGroup(group, observation),
 		speedGroupAction: async (group, input) => {
 			try {
-				const result = await client.speedGroupAction(group, input);
+				const result = await api.desk.speedGroupAction(group, input);
 				setError(null);
 				return result;
 			} catch (reason) {

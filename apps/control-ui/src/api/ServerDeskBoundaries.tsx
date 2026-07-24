@@ -27,6 +27,26 @@ export function ServerDeskBoundaries({
 		},
 		[state.setConfiguration, state.setMatter],
 	);
+	const configureDeskLock = useCallback(
+		(...args: Parameters<typeof state.api.desk.configureDeskLock>) =>
+			state.api.desk.configureDeskLock(...args),
+		[state.api],
+	);
+	const lockDesk = useCallback(
+		(...args: Parameters<typeof state.api.desk.lockDesk>) =>
+			state.api.desk.lockDesk(...args),
+		[state.api],
+	);
+	const unlockDesk = useCallback(
+		(...args: Parameters<typeof state.api.desk.unlockDesk>) =>
+			state.api.desk.unlockDesk(...args),
+		[state.api],
+	);
+	const updateConfiguration = useCallback(
+		(...args: Parameters<typeof state.api.desk.updateConfiguration>) =>
+			state.api.desk.updateConfiguration(...args),
+		[state.api],
+	);
 	return (
 		<DeskSnapshotStateProvider store={state.deskSnapshotStore}>
 		<CommandHistoryStateProvider store={state.commandHistoryStore}>
@@ -34,15 +54,15 @@ export function ServerDeskBoundaries({
 		<DeskLockStateProvider store={state.deskLockStore}>
 		<DeskLockActionsProvider
 			store={state.deskLockStore}
-			configure={state.client.configureDeskLock}
-			lock={state.client.lockDesk}
-			unlock={state.client.unlockDesk}
+			configure={configureDeskLock}
+			lock={lockDesk}
+			unlock={unlockDesk}
 			onError={state.setError}
 		>
 		<ConfigurationStateProvider store={state.configurationStore}>
 			<ConfigurationActionsProvider
 				store={state.configurationStore}
-				updateConfiguration={state.client.updateConfiguration}
+				updateConfiguration={updateConfiguration}
 				onApplied={applyConfigurationUpdate}
 				onError={state.setError}
 			>

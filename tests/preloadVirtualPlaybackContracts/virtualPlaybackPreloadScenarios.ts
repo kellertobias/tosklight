@@ -129,7 +129,13 @@ const preload004Scenario: PairedScenario<PreloadVirtualPairState> = {
 			.click();
 		state.pendingActions = playbackPendingObservation(await programmer(api));
 		await page.getByRole("button", { name: /^PRELOAD GO\b/ }).click();
-		state.applicationTimestamp = (await activePlayback(api, 44))?.activated_at;
+		await expect
+			.poll(async () => {
+				state.applicationTimestamp =
+					(await activePlayback(api, 44))?.activated_at;
+				return state.applicationTimestamp ?? "";
+			})
+			.not.toBe("");
 		await bench.tick(2_500);
 		await longPressPreload(page);
 	},
@@ -359,6 +365,11 @@ const preload004UiSupplement = async ({
 	expect(await activePlayback(api, 45)).toBeUndefined();
 	expect(await activePlayback(api, 46)).toMatchObject({ enabled: true });
 	await page.getByRole("button", { name: /^PRELOAD GO\b/ }).click();
+	await expect
+		.poll(
+			async () => (await programmer(api)).preload_playback_pending.length,
+		)
+		.toBe(0);
 	await bench.tick(2_500);
 	expect(await activePlayback(api, 44)).toMatchObject({ enabled: true });
 	expect(await activePlayback(api, 45)).toMatchObject({ enabled: true });

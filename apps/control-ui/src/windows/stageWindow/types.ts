@@ -1,4 +1,4 @@
-import type { StagePosition3d } from "../../api/ServerContext";
+import type { StagePosition3d } from "../../features/server/contracts";
 import type { PatchedFixture } from "../../api/types";
 import type { StageMode, StageView } from "../../types";
 import type { WindowProps } from "../windowTypes";

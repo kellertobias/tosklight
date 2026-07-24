@@ -141,6 +141,24 @@ describe("PlaybackRuntimeSession", () => {
 		expect(harness.store.getSnapshot().desk?.active_page).toBe(3);
 	});
 
+	it("refreshes an already-mounted desk authority before guarded mutations", async () => {
+		const harness = createHarness();
+		harness.session.activateDesk();
+		await settle();
+		harness.loadSnapshot.mockResolvedValueOnce({
+			...playbackSnapshot([], 19),
+			desk: {
+				...deskProjection(2),
+				scope: { show_id: SHOW_ID, show_revision: 7 },
+			},
+		});
+
+		await harness.session.refreshAuthority();
+
+		expect(harness.loadSnapshot).toHaveBeenCalledTimes(2);
+		expect(harness.store.getSnapshot().showRevision).toBe(7);
+	});
+
 	it("keeps one desk subscription while duplicate consumers mount and release", async () => {
 		const harness = createHarness();
 		const releaseFirst = harness.session.activateDesk();

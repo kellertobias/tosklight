@@ -1,20 +1,20 @@
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 export function createMvrActions(
 	model: ServerController,
 ): Pick<
-	ServerContextValue,
+	ServerCapabilities,
 	"previewMvr" | "applyMvr" | "previewMvrExport" | "downloadMvr"
 > {
-	const { client, setError, setShows, refresh } = model;
+	const { api, setError, setShows, refresh } = model;
 	return {
-		previewMvr: (file, showId) => client.previewMvr(file, showId),
+		previewMvr: (file, showId) => api.shows.previewMvr(file, showId),
 		applyMvr: async (token, input) => {
 			try {
-				const result = await client.applyMvr(token, input);
+				const result = await api.shows.applyMvr(token, input);
 				await refresh();
-				setShows(await client.shows());
+				setShows(await api.shows.shows());
 				setError(null);
 				return result;
 			} catch (reason) {
@@ -22,10 +22,10 @@ export function createMvrActions(
 				throw reason;
 			}
 		},
-		previewMvrExport: (showId) => client.mvrExportPreview(showId),
+		previewMvrExport: (showId) => api.shows.mvrExportPreview(showId),
 		downloadMvr: async (show) => {
 			try {
-				const blob = await client.downloadMvr(show.id);
+				const blob = await api.shows.downloadMvr(show.id);
 				const url = URL.createObjectURL(blob);
 				const anchor = document.createElement("a");
 				anchor.href = url;

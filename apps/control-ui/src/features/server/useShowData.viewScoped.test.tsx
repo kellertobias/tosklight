@@ -10,7 +10,7 @@ describe("useShowObjects", () => {
 	it("leaves Group and Preset hydration to active view sessions", async () => {
 		const objects = vi.fn().mockResolvedValue([]);
 		const state = {
-			client: { objects },
+			api: { showObjects: { objects } },
 			showObjectsStore: new ShowObjectsStore(),
 			showObjectsRequest: { current: 0 },
 			setCueObjects: vi.fn(),

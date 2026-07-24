@@ -77,6 +77,26 @@ describe("parameter value mutation builders", () => {
 				timing: { fade: true, fadeMillis: 1_250, delayMillis: null },
 			},
 		]);
+		expect(
+			setParameterRangeMutations(
+				projection({
+					programmerValuesRoute: "preload",
+					selectedFixtureIds: ["fixture-4", "fixture-3", "fixture-2", "fixture-1"],
+				}),
+				"pan",
+				[0, 100, 0],
+			),
+		).toEqual(
+			["fixture-4", "fixture-3", "fixture-2", "fixture-1"].map(
+				(fixtureId, index) => ({
+					action: "set_fixture",
+					fixtureId,
+					attribute: "pan",
+					value: { kind: "normalized", value: [0, 1, 1, 0][index] },
+					timing: { fade: true, fadeMillis: 1_250, delayMillis: null },
+				}),
+			),
+		);
 	});
 
 	it("releases only selected scoped values while preserving selection order", () => {

@@ -20,7 +20,13 @@ import { createShowRevisionActions } from "./showRevisions";
 import { createServerSnapshotValue } from "./snapshot";
 import { createSystemActions } from "./system";
 
-export function composeServerContextValue(model: ServerController) {
+/**
+ * Projects the runtime controller into UI-facing capabilities.
+ *
+ * This is an internal adapter, not a React context or an HTTP client facade;
+ * focused providers consume only the slices they own.
+ */
+export function createServerCapabilities(model: ServerController) {
 	return {
 		...createServerSnapshotValue(model),
 		...createFileActions(model),

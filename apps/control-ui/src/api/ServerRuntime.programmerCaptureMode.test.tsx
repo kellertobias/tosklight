@@ -5,9 +5,9 @@ import {
 	useProgrammerCaptureModeView,
 } from "../features/programmerCaptureMode/ProgrammerCaptureModeView";
 import type { ProgrammerCaptureModeEventObserver } from "../features/programmerCaptureMode/transport";
-import { LightApiClient } from "./LightApiClient";
+import { LightClientRuntime } from "./client/runtime";
 import { useBootstrapSnapshot } from "../features/deskSnapshot/DeskSnapshotState";
-import { ServerProvider } from "./ServerContext";
+import { ServerRuntime } from "./ServerRuntime";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -138,11 +138,11 @@ function CaptureModeProbe() {
 
 function Harness({ showCaptureMode }: { showCaptureMode: boolean }) {
 	return (
-		<ServerProvider>
+		<ServerRuntime>
 			<UnrelatedServerConsumer />
 			<CaptureModeStatusProbe />
 			{showCaptureMode ? <CaptureModeProbe /> : null}
-		</ServerProvider>
+		</ServerRuntime>
 	);
 }
 
@@ -156,11 +156,11 @@ function projection(revision: number) {
 	};
 }
 
-describe("ServerProvider Programmer capture-mode boundary", () => {
+describe("ServerRuntime Programmer capture-mode boundary", () => {
 	it("is dormant until an explicit view mounts and isolates context consumers", async () => {
 		boundaries.loadCaptureMode.mockReset();
 		boundaries.subscribeCaptureMode.mockReset();
-		const broadBootstrap = vi.spyOn(LightApiClient.prototype, "bootstrap");
+		const broadBootstrap = vi.spyOn(LightClientRuntime.prototype, "bootstrap");
 		let observer: ProgrammerCaptureModeEventObserver | null = null;
 		boundaries.loadCaptureMode.mockResolvedValue({
 			cursor: 10,

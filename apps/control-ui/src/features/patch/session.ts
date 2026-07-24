@@ -103,6 +103,10 @@ export class PatchSession {
 		this.store.deactivate();
 	}
 
+	refresh(): Promise<void> {
+		return this.repair();
+	}
+
 	patchFixtures(
 		candidates: readonly PatchFixtureCandidate[],
 		removeFixtureIds: readonly string[] = [],

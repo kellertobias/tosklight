@@ -1,4 +1,4 @@
-import type { LightApiClient } from "../../api/LightApiClient";
+import type { LightApi } from "../../api/client/api";
 import type {
 	BootstrapSnapshot,
 	DeskUser,
@@ -25,7 +25,7 @@ function selectOperator(bootstrap: BootstrapSnapshot): DeskUser {
 }
 
 async function restoreOrLogin(
-	client: LightApiClient,
+	api: LightApi,
 	user: DeskUser,
 	role: SessionRole,
 ): Promise<SessionResponse> {
@@ -33,10 +33,10 @@ async function restoreOrLogin(
 		const restored = requirePrimarySession(
 			localStorage.getItem("light.primary-session"),
 		);
-		client.restoreSession(restored);
+		api.runtime.restoreSession(restored);
 		return restored;
 	}
-	return client.login(user.name);
+	return api.runtime.login(user.name);
 }
 
 async function ensureActiveShow(
@@ -45,17 +45,17 @@ async function ensureActiveShow(
 	locked: boolean,
 ) {
 	if (bootstrap.active_show || locked) return bootstrap;
-	const library = await state.client.shows();
+	const library = await state.api.shows.shows();
 	const show =
 		library.find((candidate) => candidate.name === "Default Stage Show") ??
-		(await state.client.createShow("Default Stage Show"));
-	await state.client.openShow(show.id, "hold_current");
-	const next = await state.client.bootstrap();
+		(await state.api.shows.createShow("Default Stage Show"));
+	await state.api.shows.openShow(show.id, "hold_current");
+	const next = await state.api.runtime.bootstrap();
 	state.setBootstrap(next);
 	return next;
 }
 
-async function loadInitialResources(client: LightApiClient) {
+async function loadInitialResources(api: LightApi) {
 	const [
 		programmers,
 		shows,
@@ -66,14 +66,14 @@ async function loadInitialResources(client: LightApiClient) {
 		fixtureProfileWarnings,
 		screens,
 	] = await Promise.all([
-		client.programmers(),
-		client.shows(),
-		client.configuration(),
-		client.mediaServers(),
-		client.fixtureLibrary(),
-		client.fixtureProfiles().catch(() => []),
-		client.fixtureProfileWarnings().catch(() => []),
-		client.screens(),
+		api.desk.programmers(),
+		api.shows.shows(),
+		api.desk.configuration(),
+		api.mediaOutput.mediaServers(),
+		api.fixtures.fixtureLibrary(),
+		api.fixtures.fixtureProfiles().catch(() => []),
+		api.fixtures.fixtureProfileWarnings().catch(() => []),
+		api.playback.screens(),
 	]);
 	return {
 		programmers,
@@ -130,19 +130,19 @@ export async function bootstrapConnection(
 	isCancelled: () => boolean,
 	role: SessionRole,
 ) {
-	const initial = await state.client.bootstrap();
+	const initial = await state.api.runtime.bootstrap();
 	if (isCancelled()) return null;
 	state.setBootstrap(initial);
 	const user = selectOperator(initial);
-	const session = await restoreOrLogin(state.client, user, role);
-	const deskLock = await state.client.deskLock();
+	const session = await restoreOrLogin(state.api, user, role);
+	const deskLock = await state.api.desk.deskLock();
 	localStorage.setItem("light.operator", user.name);
 	const bootstrap = await ensureActiveShow(state, initial, deskLock.locked);
-	const resources = await loadInitialResources(state.client);
+	const resources = await loadInitialResources(state.api);
 	if (isCancelled()) return null;
 	state.setSession(session);
 	state.setConnectionGeneration((current) => current + 1);
-	state.setCommandHistory(await state.client.commandHistory());
+	state.setCommandHistory(await state.api.desk.commandHistory());
 	state.deskLockStore.install(deskLock);
 	installInitialResources(state, resources);
 	await loadShowObjects(

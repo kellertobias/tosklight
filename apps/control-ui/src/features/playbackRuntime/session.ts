@@ -76,6 +76,19 @@ export class PlaybackRuntimeSession {
 		};
 	}
 
+	async refreshAuthority() {
+		if (
+			this.storeScope === null ||
+			!this.store.isScopeCurrent(this.storeScope) ||
+			!this.scope.hasViews()
+		)
+			throw new Error("The Playback runtime authority is unavailable");
+		await this.repair(this.lifecycle);
+		if (this.store.getSnapshot().status === "error")
+			throw this.store.getSnapshot().error ??
+				new Error("Playback runtime refresh failed");
+	}
+
 	stop() {
 		this.scope.clear();
 		this.lifecycle++;

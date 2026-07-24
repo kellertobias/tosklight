@@ -24,11 +24,7 @@ const DEMO_SHOW = fileURLToPath(new URL("../assets/demo.show", import.meta.url))
 const RECORDING = process.env.LIGHT_VISUAL_RECORDING === "1";
 const UPDATE_DEMO_SHOW = process.env.LIGHT_UPDATE_DEMO_SHOW === "1";
 
-// Known pre-existing failure, not new: the ServerProvider/useServerConnection stack tears its
-// session down and blacks out when the demo enters the Show Patch phase (full diagnosis in
-// docs/plans/refactoring/pending/22-retire-serverprovider-and-v1-client.md). Deliberately
-// skipped until chunk 22 rebuilds that stack; un-skip is part of that chunk's acceptance.
-test.skip("@ui narrates the complete Full HD product demo surface in one regression run", async ({ api, bench, desk, page }, testInfo) => {
+test("@ui narrates the complete Full HD product demo surface in one regression run", async ({ api, bench, desk, page }, testInfo) => {
   test.setTimeout(RECORDING ? 900_000 : 300_000);
   page.setDefaultTimeout(15_000);
   await loadCanonicalCopy(api, bench, "planned-product-demo", "default-stage");
@@ -363,6 +359,7 @@ test.skip("@ui narrates the complete Full HD product demo surface in one regress
     await desk.titleCard("PRELOADING", "Physical playback changes and new moving-light positions are prepared blind, then committed together with a four-second programmer fade.");
     await clearProgrammer(desk, keypad, api);
     await desk.click(keypad.getByRole("button", { name: "PRELOAD GO", exact: true }));
+    await expect.poll(async () => (await preloadState(api)).capturesValues).toBe(true);
     await desk.click(demo.getByRole("button", { name: "Playback 21 button 1", exact: true }));
     await desk.click(demo.getByRole("button", { name: "Playback 24 button 1", exact: true }));
     await openBuiltIn(desk, app, "Fixtures");
@@ -373,12 +370,17 @@ test.skip("@ui narrates the complete Full HD product demo surface in one regress
     await desk.click(app.getByRole("button", { name: "Position", exact: true }));
     await setEncoderRange(desk, page, 1, "Pan", [20, 80]);
     await setEncoderValue(desk, page, "Prog. Fade", 4);
-    await expect.poll(async () => (await programmer(api)).preload_pending.length).toBeGreaterThanOrEqual(2);
-    const pending = await programmer(api);
-    expect(pending.preload_playback_pending.length).toBeGreaterThanOrEqual(2);
-    expect(pending.preload_pending.length).toBeGreaterThanOrEqual(2);
+    await expect.poll(async () => (await preloadState(api)).valueCount).toBeGreaterThanOrEqual(2);
+    const pending = await preloadState(api);
+    expect(pending.playbackCount).toBeGreaterThanOrEqual(2);
+    expect(pending.valueCount).toBeGreaterThanOrEqual(2);
     await pause(page, 1_500);
     await desk.click(keypad.getByRole("button", { name: "PRELOAD GO", exact: true }));
+    await expect.poll(async () => await preloadState(api)).toEqual({
+      capturesValues: false,
+      valueCount: 0,
+      playbackCount: 0,
+    });
     await bench.tick(6_000);
     await pause(page, 6_000);
 
@@ -697,6 +699,25 @@ async function clearProgrammer(desk: DeskDriver, keypad: Locator, api: ApiDriver
     const state = await programmer(api);
     return state.selected.length + state.values.length + Object.keys(state.group_values).length;
   }).toBe(0);
+}
+
+async function preloadState(api: ApiDriver): Promise<{
+  capturesValues: boolean;
+  valueCount: number;
+  playbackCount: number;
+}> {
+  const userId = api.session?.user.id;
+  if (!userId) throw new Error("The product demo requires an authenticated user");
+  const [capture, values, playback] = await Promise.all([
+    api.request<any>("GET", `/api/v2/users/${userId}/programmer-capture-mode/snapshot`),
+    api.request<any>("GET", `/api/v2/users/${userId}/programmer-preload-values/snapshot`),
+    api.request<any>("GET", `/api/v2/users/${userId}/programmer-preload-playback-queue/snapshot`),
+  ]);
+  return {
+    capturesValues: capture.projection.blind && capture.projection.preload_capture_programmer,
+    valueCount: values.projection.fixture_values.length + values.projection.group_values.length,
+    playbackCount: playback.projection.actions.length,
+  };
 }
 
 async function blueStageColors(api: ApiDriver, rig: Awaited<ReturnType<typeof seedPlannedDemoPatch>>): Promise<number> {

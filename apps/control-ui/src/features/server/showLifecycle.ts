@@ -1,9 +1,9 @@
 import type { ShowEntry } from "../../api/types";
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 type ShowLifecycleActions = Pick<
-	ServerContextValue,
+	ServerCapabilities,
 	| "createShow"
 	| "saveShowAs"
 	| "overwriteShow"
@@ -33,12 +33,12 @@ export function createShowLifecycleActions(
 function createShowCreationActions(
 	model: ServerController,
 ): ShowCreationActions {
-	const { client, setError, bootstrap, shows, setShows, refresh } = model;
+	const { api, setError, bootstrap, shows, setShows, refresh } = model;
 	return {
 		createShow: async (name) => {
 			try {
-				await client.createShow(name);
-				setShows(await client.shows());
+				await api.shows.createShow(name);
+				setShows(await api.shows.shows());
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
@@ -52,16 +52,16 @@ function createShowCreationActions(
 					bootstrap?.active_show &&
 					/^New Empty Show(?: [1-9]\d*)?$/.test(bootstrap.active_show.name)
 				) {
-					created = await client.renameShow(bootstrap.active_show.id, name);
+					created = await api.shows.renameShow(bootstrap.active_show.id, name);
 					shouldOpen = false;
 				} else if (bootstrap?.active_show) {
-					const blob = await client.downloadShow(bootstrap.active_show.id);
+					const blob = await api.shows.downloadShow(bootstrap.active_show.id);
 					const bytes = new Uint8Array(await blob.arrayBuffer());
 					let binary = "";
 					for (const byte of bytes) binary += String.fromCharCode(byte);
-					created = await client.createShow(name, btoa(binary), false);
-				} else created = await client.createShow(name);
-				if (shouldOpen) await client.openShow(created.id, "hold_current");
+					created = await api.shows.createShow(name, btoa(binary), false);
+				} else created = await api.shows.createShow(name);
+				if (shouldOpen) await api.shows.openShow(created.id, "hold_current");
 				await refresh();
 				setError(null);
 				return true;
@@ -81,7 +81,7 @@ function createShowCreationActions(
 				const destination = shows.find((show) => show.id === destinationId);
 				if (!destination)
 					throw new Error("The overwrite destination is no longer available");
-				await client.overwriteShow(bootstrap.active_show.id, destination.id);
+				await api.shows.overwriteShow(bootstrap.active_show.id, destination.id);
 				await refresh();
 				setError(null);
 				return true;
@@ -96,8 +96,8 @@ function createShowCreationActions(
 				let name = "New Empty Show";
 				for (let suffix = 2; names.has(name.toLowerCase()); suffix += 1)
 					name = `New Empty Show ${suffix}`;
-				const created = await client.createShow(name);
-				await client.openShow(created.id, "hold_current");
+				const created = await api.shows.createShow(name);
+				await api.shows.openShow(created.id, "hold_current");
 				await refresh();
 				setError(null);
 				return true;
@@ -110,19 +110,19 @@ function createShowCreationActions(
 }
 
 function createShowOpeningActions(model: ServerController): ShowOpeningActions {
-	const { client, setError, shows, setShows, refresh } = model;
+	const { api, setError, shows, setShows, refresh } = model;
 	return {
 		uploadShow: async (file, overwrite = false) => {
 			try {
 				const bytes = new Uint8Array(await file.arrayBuffer());
 				let binary = "";
 				for (const byte of bytes) binary += String.fromCharCode(byte);
-				await client.createShow(
+				await api.shows.createShow(
 					file.name.replace(/\.show$/i, ""),
 					btoa(binary),
 					overwrite,
 				);
-				setShows(await client.shows());
+				setShows(await api.shows.shows());
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
@@ -130,7 +130,7 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 		},
 		openShow: async (id, transition = "safe_blackout") => {
 			try {
-				await client.openShow(id, transition);
+				await api.shows.openShow(id, transition);
 				await refresh();
 				setError(null);
 			} catch (reason) {
@@ -139,7 +139,7 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 		},
 		openCleanDefaultShow: async () => {
 			try {
-				await client.openCleanDefaultShow();
+				await api.shows.openCleanDefaultShow();
 				await refresh();
 				setError(null);
 				return true;
@@ -161,13 +161,13 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
 							)
 						: undefined;
 				if (!entry) {
-					const blob = await client.fileContent(rootId, path);
+					const blob = await api.files.fileContent(rootId, path);
 					const bytes = new Uint8Array(await blob.arrayBuffer());
 					let binary = "";
 					for (const byte of bytes) binary += String.fromCharCode(byte);
-					entry = await client.createShow(showName, btoa(binary), false);
+					entry = await api.shows.createShow(showName, btoa(binary), false);
 				}
-				await client.openShow(entry.id, "safe_blackout");
+				await api.shows.openShow(entry.id, "safe_blackout");
 				await refresh();
 				setError(null);
 				return true;

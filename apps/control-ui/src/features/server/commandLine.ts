@@ -4,12 +4,12 @@ import {
 } from "../../controlSurface/commandTarget";
 import type { PendingCommandChoice } from "./contracts";
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 export function createCommandLineActions(
 	model: ServerController,
 ): Pick<
-	ServerContextValue,
+	ServerCapabilities,
 	| "refresh"
 	| "setCommandLine"
 	| "resetCommandLine"
@@ -18,7 +18,7 @@ export function createCommandLineActions(
 	| "executeCommandLine"
 > {
 	const {
-		client,
+		api,
 		setError,
 		setCommandTargetMode,
 		commandTargetModeRef,
@@ -71,12 +71,12 @@ export function createCommandLineActions(
 					commandLineEpoch.current += 1;
 					setCommandLineState(nextTarget);
 					setCommandLinePristine(true);
-					await client.setCommandTarget(nextTarget);
+					await api.programming.setCommandTarget(nextTarget);
 					await persistCommandLine(nextTarget);
 					setError(null);
 					return true;
 				}
-				const result = (await client.executeCommandLine(value)) as
+				const result = (await api.programming.executeCommandLine(value)) as
 					| {
 							programmer?: {
 								selected?: string[];

@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import type { StoredPreset } from "./types";
 import type { ServerState } from "../features/server/useServerState";
 import { createFeatureErrorGroup } from "./featureErrorReporting";
-import { configuredServerUrl } from "./LightApiClient";
+import { configuredServerUrl } from "./client/serverLocation";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { HttpPresetRecordingTransport } from "./PresetRecordingTransport";
 
@@ -24,8 +24,8 @@ export function usePresetRecordingBoundaries(state: ServerState) {
 	);
 	const loadPresetForRepair = useCallback(
 		(showId: string, objectId: string) =>
-			state.client.objectOrNull<StoredPreset>(showId, "preset", objectId),
-		[state.client],
+			state.api.showObjects.objectOrNull<StoredPreset>(showId, "preset", objectId),
+		[state.api],
 	);
 	return {
 		presetRecordingTransport,

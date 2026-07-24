@@ -120,7 +120,7 @@ function refreshCommandHistory(
 		(event.payload as { desk_id?: string }).desk_id !== session.desk.id
 	)
 		return;
-	void state.client
+	void state.api.desk
 		.commandHistory()
 		.then(state.setCommandHistory)
 		.catch(() => undefined);

@@ -53,6 +53,10 @@ export class LightClientRuntime {
 		return this.session;
 	}
 
+	capabilityTransport(): LiveClientTransport {
+		return this.transport;
+	}
+
 	restoreSession(session: SessionResponse): void {
 		this.session = session;
 	}

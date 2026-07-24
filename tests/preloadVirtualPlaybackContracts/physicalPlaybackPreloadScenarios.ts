@@ -124,7 +124,13 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 			(entry: any) => entry.action,
 		);
 		await page.getByRole("button", { name: /^PRELOAD GO\b/ }).click();
-		state.applicationTimestamp = (await activePlayback(api, 1))?.activated_at;
+		await expect
+			.poll(async () => {
+				state.applicationTimestamp =
+					(await activePlayback(api, 1))?.activated_at;
+				return state.applicationTimestamp ?? "";
+			})
+			.not.toBe("");
 		await bench.tick(2_000);
 		state.committedState = summarizePlaybackState(
 			await playbacks(api),
@@ -408,6 +414,11 @@ const preload002UiSupplement = async ({
 		),
 	).toBeVisible();
 	await page.getByRole("button", { name: /^PRELOAD GO\b/ }).click();
+	await expect
+		.poll(
+			async () => (await programmer(api)).preload_playback_pending.length,
+		)
+		.toBe(0);
 	await bench.tick(2_000);
 	expect(await activePlayback(api, 4)).toMatchObject({ enabled: false });
 	expect(await activePlayback(api, 5)).toMatchObject({ enabled: true });

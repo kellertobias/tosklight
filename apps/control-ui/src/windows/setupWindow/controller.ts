@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { configuredServerUrl } from "../../api/LightApiClient";
+import { configuredServerUrl } from "../../api/client/serverLocation";
 import { useDeskConnection } from "../../features/deskConnection/DeskConnectionContext";
 import type { DeskConfiguration, UpdateSettings } from "../../api/types";
 import { defaultUpdateSettings } from "../../components/control/updateWorkflow";

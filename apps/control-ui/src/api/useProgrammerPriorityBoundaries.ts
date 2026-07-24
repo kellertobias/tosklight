@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { ServerState } from "../features/server/useServerState";
 import { createFeatureErrorGroup } from "./featureErrorReporting";
-import { configuredServerUrl } from "./LightApiClient";
+import { configuredServerUrl } from "./client/serverLocation";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { HttpProgrammerPriorityTransport } from "./ProgrammerPriorityTransport";
 
@@ -19,13 +19,13 @@ export function useProgrammerPriorityBoundaries(state: ServerState) {
 						authenticatedUserId: state.session.user.id,
 						deskBoundaryToken: browserDeskBoundaryToken(),
 						applyAction: (scope, request) =>
-							state.client.programmerPriorityLiveAction(
+							state.api.programming.programmerPriorityLiveAction(
 								scope.userId,
 								request,
 							),
 					})
 				: null,
-		[state.client, state.session],
+		[state.api, state.session],
 	);
 	const authorityKey = [
 		configuredServerUrl(),

@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { HttpCueRecordingTransport } from "./CueRecordingTransport";
 import { createFeatureErrorGroup } from "./featureErrorReporting";
-import { configuredServerUrl } from "./LightApiClient";
+import { configuredServerUrl } from "./client/serverLocation";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import type { ServerState } from "../features/server/useServerState";
 

@@ -52,6 +52,7 @@ export interface PlaybackRuntimeAuthority {
 	store: PlaybackRuntimeStore;
 	activate(identity: PlaybackIdentity): () => void;
 	activateDesk(): () => void;
+	refreshAuthority(): Promise<void>;
 	repairAuthority(error: Error): Promise<void>;
 }
 
@@ -122,6 +123,7 @@ export function PlaybackRuntimeViewProvider({
 						store,
 						activate: (identity) => session.activate(identity),
 						activateDesk: () => session.activateDesk(),
+						refreshAuthority: () => session.refreshAuthority(),
 						repairAuthority: (error) => session.repairAuthority(error),
 					}
 				: null,

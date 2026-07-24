@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import type { ServerState } from "../features/server/useServerState";
 import { createFeatureErrorGroup } from "./featureErrorReporting";
-import { configuredServerUrl } from "./LightApiClient";
+import { configuredServerUrl } from "./client/serverLocation";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { HttpProgrammerLifecycleTransport } from "./ProgrammerLifecycleTransport";
 

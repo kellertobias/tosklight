@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { ServerState } from "../features/server/useServerState";
 import { createFeatureErrorGroup } from "./featureErrorReporting";
-import { configuredServerUrl } from "./LightApiClient";
+import { configuredServerUrl } from "./client/serverLocation";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { HttpSpeedGroupRuntimeTransport } from "./SpeedGroupRuntimeTransport";
 
@@ -20,10 +20,10 @@ export function useSpeedGroupRuntimeBoundaries(state: ServerState) {
 						authenticatedDeskId: state.session.desk.id,
 						deskBoundaryToken: browserDeskBoundaryToken(),
 						applyAction: (_scope, request) =>
-							state.client.speedGroupRuntimeLiveAction(request),
+							state.api.desk.speedGroupRuntimeLiveAction(request),
 					})
 				: null,
-		[state.client, state.session],
+		[state.api, state.session],
 	);
 	return {
 		speedGroupRuntimeTransport: transport,

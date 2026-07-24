@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { ServerState } from "../features/server/useServerState";
 import { createFeatureErrorGroup } from "./featureErrorReporting";
-import { configuredServerUrl } from "./LightApiClient";
+import { configuredServerUrl } from "./client/serverLocation";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { HttpPresetRecallTransport } from "./PresetRecallTransport";
 
@@ -18,10 +18,10 @@ export function usePresetRecallBoundaries(state: ServerState) {
 						sessionToken: state.session.token,
 						deskBoundaryToken: browserDeskBoundaryToken(),
 						recall: (scope, request) =>
-							state.client.presetRecallLiveAction(scope, request),
+							state.api.programming.presetRecallLiveAction(scope, request),
 					})
 				: null,
-		[state.client, state.session],
+		[state.api, state.session],
 	);
 	return {
 		presetRecallTransport,

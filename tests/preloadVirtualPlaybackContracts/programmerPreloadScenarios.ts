@@ -103,9 +103,13 @@ const preload001Scenario: PairedScenario<PreloadProgrammerPairState> = {
 			state.groupFixtures,
 		);
 		await page.getByRole("button", { name: /^PRELOAD GO\b/ }).click();
-		state.applicationTimestamp = (await programmer(api)).preload_group_active[
-			"1"
-		].intensity.changed_at;
+		await expect
+			.poll(async () => {
+				const active = (await programmer(api)).preload_group_active["1"];
+				state.applicationTimestamp = active?.intensity.changed_at ?? "";
+				return state.applicationTimestamp;
+			})
+			.not.toBe("");
 		await bench.tick(3_000);
 		await longPressPreload(page);
 	},
@@ -270,6 +274,13 @@ const preload001UiSupplement = async ({
 		"The explicit 1 s value and the 3 s Programmer Fade fallback start now.",
 	);
 	await page.getByRole("button", { name: /^PRELOAD GO\b/ }).click();
+	await expect
+		.poll(
+			async () =>
+				(await programmer(api)).preload_group_active["1"]?.intensity
+					.changed_at ?? "",
+		)
+		.not.toBe("");
 	await bench.tick(3_000);
 	const state = await programmer(api);
 	expect(state.preload_group_active["1"].intensity.value.value).toBeCloseTo(

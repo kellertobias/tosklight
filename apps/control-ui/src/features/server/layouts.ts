@@ -2,13 +2,13 @@ import { ApiRequestError } from "../../api/ApiRequestError";
 import type { VersionedObject } from "../../api/types";
 import type { StoredDeskLayout } from "./contracts";
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 export function createLayoutActions(
 	model: ServerController,
-): Pick<ServerContextValue, "saveDeskLayout"> {
+): Pick<ServerCapabilities, "saveDeskLayout"> {
 	const {
-		client,
+		api,
 		setError,
 		bootstrap,
 		session,
@@ -23,7 +23,7 @@ export function createLayoutActions(
 				const revision = deskLayout?.revision ?? 0;
 				let outcome;
 				try {
-					outcome = await client.updateUserLayout(
+					outcome = await api.showObjects.updateUserLayout(
 						bootstrap.active_show.id,
 						session.user.id,
 						layout,
@@ -32,12 +32,12 @@ export function createLayoutActions(
 				} catch (reason) {
 					if (!(reason instanceof ApiRequestError) || reason.status !== 409)
 						throw reason;
-					const current = await client.objectOrNull<StoredDeskLayout>(
+					const current = await api.showObjects.objectOrNull<StoredDeskLayout>(
 						bootstrap.active_show.id,
 						"user_layout",
 						session.user.id,
 					);
-					outcome = await client.updateUserLayout(
+					outcome = await api.showObjects.updateUserLayout(
 						bootstrap.active_show.id,
 						session.user.id,
 						layout,

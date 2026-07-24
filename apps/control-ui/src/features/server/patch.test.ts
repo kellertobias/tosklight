@@ -56,10 +56,12 @@ describe("Patch layer reconciliation", () => {
 			},
 		);
 		const model = {
-			client: {
-				savePatchLayer: vi.fn().mockResolvedValue({
+			api: {
+				showObjects: {
+					savePatchLayer: vi.fn().mockResolvedValue({
 					object: storedLayer("front", 1),
-				}),
+					}),
+				},
 			},
 			bootstrap: { active_show: { id: "show-1" } },
 			patchLayers: layers,

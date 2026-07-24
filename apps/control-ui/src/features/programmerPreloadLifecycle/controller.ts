@@ -9,6 +9,7 @@ import type { ProgrammerPreloadLifecycleWriter } from "./writer";
 interface DeskRuntimeAuthority {
 	store: PlaybackRuntimeStore;
 	activateDesk(): () => void;
+	refreshAuthority(): Promise<void>;
 }
 
 interface ProgrammerPreloadLifecycleControllerOptions {
@@ -78,6 +79,7 @@ export class ProgrammerPreloadLifecycleController
 		try {
 			// The runtime session marks the store loading in its queued refresh.
 			await Promise.resolve();
+			await this.options.runtime.refreshAuthority();
 			await this.waitForRuntime(runtimeScope);
 			if (this.stopped) return null;
 			return await this.options.writer.go(requestId);

@@ -12,7 +12,7 @@ function refreshHighlight(event: ServerEvent, state: ServerState) {
 	const request = ++state.highlightEpoch.current;
 	void state.highlightWrite.current
 		.catch(() => undefined)
-		.then(() => state.client.highlight())
+		.then(() => state.api.mediaOutput.highlight())
 		.then((next) => {
 			if (request !== state.highlightEpoch.current) return;
 			state.setHighlight(next);
@@ -28,7 +28,7 @@ function refreshConfiguration(event: ServerEvent, state: ServerState) {
 		"speed_group_action",
 	];
 	if (!kinds.includes(event.kind)) return;
-	void state.client
+	void state.api.desk
 		.configuration()
 		.then((next) => {
 			state.setConfiguration(next.configuration);
@@ -45,7 +45,7 @@ function refreshScreens(event: ServerEvent, state: ServerState) {
 		"show_opened",
 	];
 	if (!kinds.includes(event.kind)) return;
-	void state.client
+	void state.api.playback
 		.screens()
 		.then(state.setScreens)
 		.catch(() => undefined);
@@ -76,7 +76,7 @@ function refreshBootstrap(
 	const requestedEpoch = state.commandLineEpoch.current;
 	void state.commandLineWrite.current
 		.catch(() => undefined)
-		.then(() => state.client.bootstrap())
+		.then(() => state.api.runtime.bootstrap())
 		.then((next) => {
 			const current = getState();
 			current.setBootstrap(next);
@@ -191,15 +191,15 @@ function refreshFixtureLibrary(event: ServerEvent, state: ServerState) {
 		!["fixture_library_changed", "fixture_profile_changed"].includes(event.kind)
 	)
 		return;
-	void state.client
+	void state.api.fixtures
 		.fixtureLibrary()
 		.then(state.setFixtureLibrary)
 		.catch(() => undefined);
-	void state.client
+	void state.api.fixtures
 		.fixtureProfiles()
 		.then(state.setFixtureProfiles)
 		.catch(() => undefined);
-	void state.client
+	void state.api.fixtures
 		.fixtureProfileWarnings()
 		.then(state.setFixtureProfileWarnings)
 		.catch(() => undefined);
@@ -214,7 +214,7 @@ function refreshShows(event: ServerEvent, state: ServerState) {
 		"show_rolled_back",
 	];
 	if (!kinds.includes(event.kind)) return;
-	void state.client
+	void state.api.shows
 		.shows()
 		.then(state.setShows)
 		.catch(() => undefined);
@@ -228,7 +228,7 @@ function refreshMedia(event: ServerEvent, state: ServerState) {
 		"media_server_offline",
 	];
 	if (!kinds.includes(event.kind)) return;
-	void state.client
+	void state.api.mediaOutput
 		.mediaServers()
 		.then((next) => state.setMediaServers(next.fixtures))
 		.catch(() => undefined);
@@ -240,7 +240,7 @@ function refreshSelection(
 	state: ServerState,
 ) {
 	if (event.kind !== "show_opened") return;
-	void state.client
+	void state.api.desk
 		.programmers()
 		.then((programmers) => {
 			const own = programmers.find(

@@ -1,13 +1,13 @@
 import { ApiRequestError } from "../../api/ApiRequestError";
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 import { reconcileShowObject } from "./showObjectMutations";
 
 export function createPreloadActions(
 	model: ServerController,
-): Pick<ServerContextValue, "storePreload" | "storeDynamic"> {
+): Pick<ServerCapabilities, "storePreload" | "storeDynamic"> {
 	const {
-		client,
+		api,
 		setError,
 		bootstrap,
 		cueObjects,
@@ -22,7 +22,7 @@ export function createPreloadActions(
 					throw new Error("Open a show before storing preload data");
 				let response;
 				try {
-					response = await client.storePreload(
+					response = await api.showObjects.storePreload(
 						bootstrap.active_show.id,
 						input,
 						revision,
@@ -31,12 +31,12 @@ export function createPreloadActions(
 					if (!(reason instanceof ApiRequestError) || reason.status !== 409)
 						throw reason;
 					const kind = input.target === "preset" ? "preset" : "cue_list";
-					const current = await client.objectOrNull(
+					const current = await api.showObjects.objectOrNull(
 						bootstrap.active_show.id,
 						kind,
 						input.target_id,
 					);
-					response = await client.storePreload(
+					response = await api.showObjects.storePreload(
 						bootstrap.active_show.id,
 						input,
 						current?.revision ?? 0,
@@ -67,7 +67,7 @@ export function createPreloadActions(
 				if (!target)
 					throw new Error("Create a Cuelist before storing a dynamic");
 				try {
-					await client.recordDynamic(
+					await api.showObjects.recordDynamic(
 						bootstrap.active_show.id,
 						target.id,
 						target.revision,
@@ -82,12 +82,12 @@ export function createPreloadActions(
 				} catch (reason) {
 					if (!(reason instanceof ApiRequestError) || reason.status !== 409)
 						throw reason;
-					const current = await client.object(
+					const current = await api.showObjects.object(
 						bootstrap.active_show.id,
 						"cue_list",
 						target.id,
 					);
-					await client.recordDynamic(
+					await api.showObjects.recordDynamic(
 						bootstrap.active_show.id,
 						target.id,
 						current.revision,

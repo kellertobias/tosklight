@@ -6,9 +6,9 @@ import {
 	useProgrammerPreloadValuesView,
 } from "../features/programmerPreloadValues/ProgrammerPreloadValuesView";
 import type { ProgrammerPreloadValuesEventObserver } from "../features/programmerPreloadValues/transport";
-import { LightApiClient } from "./LightApiClient";
+import { LightClientRuntime } from "./client/runtime";
 import { useBootstrapSnapshot } from "../features/deskSnapshot/DeskSnapshotState";
-import { ServerProvider } from "./ServerContext";
+import { ServerRuntime } from "./ServerRuntime";
 
 const SHOW_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -159,12 +159,12 @@ function PreloadValuesProbe() {
 
 function Harness({ showValues }: { showValues: boolean }) {
 	return (
-		<ServerProvider>
+		<ServerRuntime>
 			<UnrelatedServerConsumer />
 			<CaptureProbe />
 			<PreloadActionsProbe />
 			{showValues ? <PreloadValuesProbe /> : null}
-		</ServerProvider>
+		</ServerRuntime>
 	);
 }
 
@@ -187,14 +187,14 @@ function preloadProjection(revision: number) {
 	};
 }
 
-describe("ServerProvider Programmer Preload-values boundary", () => {
+describe("ServerRuntime Programmer Preload-values boundary", () => {
 	it("waits for both active capture and a mounted values view", async () => {
 		boundaries.loadCaptureMode.mockReset();
 		boundaries.subscribeCaptureMode.mockReset();
 		boundaries.loadPreloadValues.mockReset();
 		boundaries.applyPreloadValues.mockReset();
 		boundaries.subscribePreloadValues.mockReset();
-		const broadBootstrap = vi.spyOn(LightApiClient.prototype, "bootstrap");
+		const broadBootstrap = vi.spyOn(LightClientRuntime.prototype, "bootstrap");
 		let observer: ProgrammerPreloadValuesEventObserver | null = null;
 		boundaries.loadCaptureMode.mockResolvedValue({
 			cursor: 10,

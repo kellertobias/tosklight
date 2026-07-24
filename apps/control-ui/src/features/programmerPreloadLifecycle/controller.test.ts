@@ -17,14 +17,22 @@ function controllerHarness(
 ) {
 	const releaseDesk = vi.fn();
 	const activateDesk = vi.fn(() => releaseDesk);
+	const refreshAuthority = vi.fn(async () => undefined);
 	const onError = vi.fn();
 	const controller = new ProgrammerPreloadLifecycleController({
 		scope: { showId: SHOW_ID, userId: USER_ID, deskId: DESK_ID },
 		writer: setup.writer,
-		runtime: { store: setup.runtimeStore, activateDesk },
+		runtime: { store: setup.runtimeStore, activateDesk, refreshAuthority },
 		onError,
 	});
-	return { ...setup, controller, activateDesk, releaseDesk, onError };
+	return {
+		...setup,
+		controller,
+		activateDesk,
+		refreshAuthority,
+		releaseDesk,
+		onError,
+	};
 }
 
 async function settle() {
@@ -77,6 +85,7 @@ describe("ProgrammerPreloadLifecycleController", () => {
 		const release = setup.controller.release("release");
 		await settle();
 		expect(setup.activateDesk).toHaveBeenCalledOnce();
+		expect(setup.refreshAuthority).toHaveBeenCalledOnce();
 		expect(setup.apply).toHaveBeenCalledOnce();
 		expect(setup.releaseDesk).not.toHaveBeenCalled();
 

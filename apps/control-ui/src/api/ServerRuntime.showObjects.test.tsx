@@ -8,7 +8,7 @@ import {
 } from "../features/showObjects/ShowObjectsState";
 import type { ShowObjectsStore } from "../features/showObjects/store";
 import { useBootstrapSnapshot } from "../features/deskSnapshot/DeskSnapshotState";
-import { ServerProvider } from "./ServerContext";
+import { ServerRuntime } from "./ServerRuntime";
 
 vi.mock("../features/server/useServerPolling", () => ({
 	useServerPolling: vi.fn(),
@@ -69,22 +69,22 @@ function StoreCapture({
 	return null;
 }
 
-describe("ServerProvider show-object ownership", () => {
-	it("does not rerender an unrelated ServerContext consumer for a Group update", () => {
+describe("ServerRuntime show-object ownership", () => {
+	it("does not rerender an unrelated scoped server consumer for a Group update", () => {
 		unrelatedServerRenders = 0;
 		featureRenders = 0;
 		disabledGroupRenders = 0;
 		presetRenders = 0;
 		let store!: ShowObjectsStore;
 		render(
-			<ServerProvider>
+			<ServerRuntime>
 				<UnrelatedServerConsumer />
 				<GroupConsumer />
 				<DisabledGroupConsumer />
 				<PresetConsumer />
 				<MutationStatusConsumer />
 				<StoreCapture onStore={(value) => (store = value)} />
-			</ServerProvider>,
+			</ServerRuntime>,
 		);
 		expect(screen.getByText("No Group")).toBeTruthy();
 		expect(unrelatedServerRenders).toBe(1);

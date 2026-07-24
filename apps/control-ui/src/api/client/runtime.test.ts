@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
-import { LightApiClient } from "../LightApiClient";
+import { LightClientRuntime } from "./runtime";
 import type { BootstrapSnapshot, ServerEvent, SessionResponse } from "../types";
 
 class FakeWebSocket {
@@ -66,13 +66,13 @@ afterEach(() => {
 
 describe("LightClientRuntime", () => {
 	it("preserves the public runtime method contracts", () => {
-		expectTypeOf<ReturnType<LightApiClient["bootstrap"]>>().toEqualTypeOf<
+		expectTypeOf<ReturnType<LightClientRuntime["bootstrap"]>>().toEqualTypeOf<
 			Promise<BootstrapSnapshot>
 		>();
-		expectTypeOf<ReturnType<LightApiClient["command"]>>().toEqualTypeOf<
+		expectTypeOf<ReturnType<LightClientRuntime["command"]>>().toEqualTypeOf<
 			Promise<unknown>
 		>();
-		expectTypeOf<ReturnType<LightApiClient["onEvent"]>>().toEqualTypeOf<
+		expectTypeOf<ReturnType<LightClientRuntime["onEvent"]>>().toEqualTypeOf<
 			() => boolean
 		>();
 	});
@@ -216,7 +216,7 @@ function facadeEvent(notification: ServerEvent) {
 	};
 }
 
-async function openEvents(client: LightApiClient): Promise<FakeWebSocket> {
+async function openEvents(client: LightClientRuntime): Promise<FakeWebSocket> {
 	const connecting = client.connectEvents();
 	const socket = FakeWebSocket.instances.at(-1);
 	if (!socket) throw new Error("Expected an event socket");
@@ -225,8 +225,8 @@ async function openEvents(client: LightApiClient): Promise<FakeWebSocket> {
 	return socket;
 }
 
-function connectedClient(): LightApiClient {
-	const client = new LightApiClient("http://desk.local");
+function connectedClient(): LightClientRuntime {
+	const client = new LightClientRuntime("http://desk.local");
 	client.restoreSession(session());
 	return client;
 }

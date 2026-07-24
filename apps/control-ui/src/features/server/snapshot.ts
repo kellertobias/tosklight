@@ -1,10 +1,10 @@
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 export function createServerSnapshotValue(
 	model: ServerController,
 ): Pick<
-	ServerContextValue,
+	ServerCapabilities,
 	| "dismissError"
 	| "simulateError"
 	| "readServerLogs"
@@ -36,7 +36,7 @@ export function createServerSnapshotValue(
 	| "dismissHighlightError"
 > {
 	const {
-		client,
+		api,
 		setError,
 		bootstrap,
 		session,
@@ -69,7 +69,7 @@ export function createServerSnapshotValue(
 	return {
 		dismissError: () => setError(null),
 		simulateError: (message) => setError(message),
-		readServerLogs: () => client.auditEvents(),
+		readServerLogs: () => api.desk.auditEvents(),
 		bootstrap,
 		session,
 		outputRoutes,

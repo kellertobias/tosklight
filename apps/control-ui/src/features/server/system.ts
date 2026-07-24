@@ -1,16 +1,16 @@
-import { saveServerUrl } from "../../api/LightApiClient";
+import { saveServerUrl } from "../../api/client/serverLocation";
 import type { CueList, StoredGroup, StoredPreset } from "../../api/types";
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 /**
  * Paperwork is a one-shot operator export, so it reads the current Patch on demand instead of
  * keeping a broad Patch snapshot resident. A Patch read failure degrades the export rather than
  * blocking it or masking a more relevant collection error.
  */
-async function readPatchForPaperwork(client: ServerController["client"]) {
+async function readPatchForPaperwork(api: ServerController["api"]) {
 	try {
-		return await client.patch();
+		return await api.fixtures.patch();
 	} catch {
 		return null;
 	}
@@ -19,7 +19,7 @@ async function readPatchForPaperwork(client: ServerController["client"]) {
 export function createSystemActions(
 	model: ServerController,
 ): Pick<
-	ServerContextValue,
+	ServerCapabilities,
 	| "switchUser"
 	| "exportPaperwork"
 	| "shutdownServer"
@@ -28,7 +28,7 @@ export function createSystemActions(
 	| "setServerUrl"
 > {
 	const {
-		client,
+		api,
 		setError,
 		bootstrap,
 		session,
@@ -46,12 +46,12 @@ export function createSystemActions(
 		exportPaperwork: async () => {
 			try {
 				const showId = bootstrap?.active_show?.id;
-				const patch = showId ? await readPatchForPaperwork(client) : null;
+				const patch = showId ? await readPatchForPaperwork(api) : null;
 				const [groups, presets, cueLists] = showId
 					? await Promise.all([
-							client.objects<StoredGroup>(showId, "group"),
-							client.objects<StoredPreset>(showId, "preset"),
-							client.objects<CueList>(showId, "cue_list"),
+							api.showObjects.objects<StoredGroup>(showId, "group"),
+							api.showObjects.objects<StoredPreset>(showId, "preset"),
+							api.showObjects.objects<CueList>(showId, "cue_list"),
 						])
 					: [[], [], []];
 				const payload = {
@@ -82,7 +82,7 @@ export function createSystemActions(
 		},
 		shutdownServer: async () => {
 			try {
-				await client.shutdown();
+				await api.desk.shutdown();
 				setError(null);
 				return true;
 			} catch (reason) {
@@ -92,7 +92,7 @@ export function createSystemActions(
 		},
 		clearProgrammer: async (sessionId) => {
 			try {
-				await client.clearProgrammer(sessionId);
+				await api.desk.clearProgrammer(sessionId);
 				if (sessionId === session?.session_id) {
 					setSelectedFixtures([]);
 					setSelectedGroupId(null);
@@ -105,7 +105,7 @@ export function createSystemActions(
 			}
 		},
 		setDeskToken: (token) => {
-			client.setDeskToken(token);
+			api.runtime.setDeskToken(token);
 			location.reload();
 		},
 		setServerUrl: (url) => {

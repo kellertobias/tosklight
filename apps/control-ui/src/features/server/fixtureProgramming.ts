@@ -1,15 +1,15 @@
 import type { ServerController } from "./model";
-import type { ServerContextValue } from "./ServerContextValue";
+import type { ServerCapabilities } from "./capabilityContracts";
 
 /** Compatibility surface for transient fixture actions and preset generation only. */
 export function createFixtureProgrammingActions(
 	model: ServerController,
-): Pick<ServerContextValue, "controlFixtureAction" | "generateFixturePresets"> {
-	const { client, setError, bootstrap } = model;
+): Pick<ServerCapabilities, "controlFixtureAction" | "generateFixturePresets"> {
+	const { api, setError, bootstrap } = model;
 	return {
 		controlFixtureAction: async (fixtureId, actionId, active) => {
 			try {
-				await client.controlFixtureAction(fixtureId, actionId, active);
+				await api.programming.controlFixtureAction(fixtureId, actionId, active);
 				setError(null);
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
@@ -19,7 +19,7 @@ export function createFixtureProgrammingActions(
 			try {
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before generating presets");
-				const result = await client.generateFixturePresets(fixtureIds);
+				const result = await api.programming.generateFixturePresets(fixtureIds);
 				setError(null);
 				return result;
 			} catch (reason) {
