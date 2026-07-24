@@ -44,7 +44,8 @@ describe("visible selection scenario routes", () => {
 		const harness = visibleHarness();
 
 		await harness.selection.fixtures.via.stage.via.click.item(102);
-		await harness.selection.fixtures.via.stage.via.shiftClick?.item(103);
+		const result =
+			await harness.selection.fixtures.via.stage.via.shiftClick?.item(103);
 
 		expect(harness.clickedNames()).toEqual(["stage:master-102"]);
 		expect(harness.locator("stage:master-102").click).toHaveBeenCalledWith({
@@ -52,6 +53,13 @@ describe("visible selection scenario routes", () => {
 		});
 		expect(harness.locator("stage:master-103").click).toHaveBeenCalledWith({
 			modifiers: ["Shift"],
+		});
+		expect(result).toEqual({
+			order: "stage-visible",
+			anchor: 102,
+			target: 103,
+			selection: [102, 103],
+			expression: null,
 		});
 	});
 
@@ -122,6 +130,7 @@ function visibleHarness(options: HarnessOptions = {}) {
 	const fixtureSelector = /data-fixture-id="([^"]+)"/;
 	const groupRoot = new FakeGroupRoot(locators, new Set(options.hidden));
 	const page = {
+		waitForTimeout: vi.fn(async () => undefined),
 		locator: vi.fn((selector: string) => {
 			if (selector === ".group-pool-window .group-card") return groupRoot;
 			const fixtureId = fixtureSelector.exec(selector)?.[1];
@@ -149,7 +158,10 @@ function visibleHarness(options: HarnessOptions = {}) {
 		showObjects: vi.fn(async () => groups()),
 	} as unknown as ApiDriver;
 	return {
-		selection: new BrowserVisibleSelection(page as never, desk, api),
+		selection: new BrowserVisibleSelection(page as never, desk, api, async () => ({
+			targets: [{ number: 102 }, { number: 103 }],
+			expression: null,
+		})),
 		click,
 		locator: (name: string) => {
 			const locator = locators.get(name);

@@ -116,8 +116,11 @@ Selection routes now include explicit Fixture Sheet, Stage, Group pool, real tou
 and subscribed OSC item adapters. Unqualified selection chooses reproducibly between eligible
 API and keypad adapters and records its seed, action index, candidates, and selected route for
 replay. Stage click/Shift-click requires an anchor established through the Stage route. Numeric
-Stage Shift-click ranges and OSC multi-target/range helpers deliberately fail before mutation
-until refactoring chunk 28/05c resolves their ordering and transport findings.
+Stage Shift-click ranges stay unavailable because Stage order is visual rather than numeric;
+`shiftClick.item(...)` instead returns the observed visible-order selection and its truthful
+gesture expression. OSC item, ordered-items, and range helpers require a pristine command line
+and synchronize every press against the authoritative command-line revision rather than periodic
+OSC feedback.
 
 The runner exposes separate commands so CI classifies failures clearly:
 

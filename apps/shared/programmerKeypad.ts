@@ -59,6 +59,7 @@ const oscActionNames: Partial<Record<SoftwareKey, string>> = {
   DEL: "del",
   MOV: "mov",
   CPY: "cpy",
+  ESC: "escape",
 };
 
 export function oscProgrammerActionForKey(key: SoftwareKey): string {

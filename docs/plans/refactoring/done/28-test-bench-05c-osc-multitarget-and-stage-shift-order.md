@@ -7,10 +7,9 @@ unverified semantic helpers.
 
 ## Findings
 
-- A subscribed OSC controller reliably selects a single semantic Fixture when each press and
-  release waits for command-line feedback. The compiled `6 TRU 8 ENT` sequence currently leaves
-  only Fixture 8 selected in the isolated browser bench, so public OSC `items/range` helpers fail
-  before mutation until the product or adapter cause is resolved.
+- A subscribed OSC controller reliably selects semantic Fixtures when each press waits for the
+  authoritative command-line revision. Waiting for any feedback packet was not a valid barrier
+  because the server also broadcasts command-line feedback every 500 ms.
 - Stage Shift-click uses visible Stage order, which can differ from Fixture-number order. A real
   click plus Shift-click works with an established Stage anchor, but `range(1, 5)` cannot honestly
   promise the numeric Fixture range without an explicit ordering contract.
@@ -29,3 +28,15 @@ unverified semantic helpers.
 
 - Focused public route scenarios for OSC items/ranges and Stage click/Shift-click.
 - Full architecture and Playwright regression gates.
+
+## Result
+
+- Enabled public OSC item, ordered-items, and range selection after replacing periodic-feedback
+  synchronization with an authoritative command-line revision barrier for every press.
+- Required a pristine command line before OSC semantic selection because OSC Escape is a desk
+  action rather than a revisioned Programmer edit; unsupported state fails before mutation.
+- Kept numeric Stage Shift-click range unavailable and made the real anchored Shift-click return
+  the observed visible-order selection plus its truthful gesture expression.
+- Passed 26 focused adapter tests, TypeScript typechecking, architecture ratchets, and both focused
+  Playwright scenarios. The full catalog reached 304 passed and 9 skipped with one unrelated
+  Speed Group UI timing failure; its exact rerun passed.

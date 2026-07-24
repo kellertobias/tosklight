@@ -83,28 +83,6 @@ function routeItems(
 	return new RoutedItems(kind, mutate, {});
 }
 
-function singleItemRoute(
-	kind: ItemKind,
-	mutate: (
-		mutation: SelectionMutation,
-		targets: readonly SelectionTarget[],
-	) => Promise<unknown>,
-	label: string,
-): SelectionItemRoute {
-	return {
-		item: (number) =>
-			mutate("replace", [kind === "fixture" ? fixture(number) : group(number)]),
-		items: async () => {
-			throw new Error(
-				`${label} ordered multi-target selection is pending route verification`,
-			);
-		},
-		range: async () => {
-			throw new Error(`${label} range selection is pending route verification`);
-		},
-	};
-}
-
 export class BrowserRoutedSelection {
 	readonly fixtures: RoutedItems;
 	readonly groups: RoutedItems;
@@ -120,7 +98,9 @@ export class BrowserRoutedSelection {
 		desk: DeskDriver,
 		seed: string,
 	) {
-		const visible = new BrowserVisibleSelection(page, desk, api);
+		const visible = new BrowserVisibleSelection(page, desk, api, () =>
+			core.observe(),
+		);
 		const apiMutation = this.apiMutation.bind(this);
 		const keypadMutation = this.keypadMutation.bind(this);
 		const oscMutation = this.oscMutation.bind(this);
@@ -137,7 +117,7 @@ export class BrowserRoutedSelection {
 			{
 				api: routeItems("fixture", apiMutation),
 				keypad: routeItems("fixture", keypadMutation),
-				osc: singleItemRoute("fixture", oscMutation, "OSC"),
+				osc: routeItems("fixture", oscMutation),
 				ui: fixtureSheet,
 				touch: fixtureSheet.via.touch,
 				fixtureSheet,
@@ -152,7 +132,7 @@ export class BrowserRoutedSelection {
 			{
 				api: routeItems("group", apiMutation),
 				keypad: routeItems("group", keypadMutation),
-				osc: singleItemRoute("group", oscMutation, "OSC"),
+				osc: routeItems("group", oscMutation),
 				ui: pool,
 				pool,
 			},
@@ -237,26 +217,54 @@ export class BrowserRoutedSelection {
 		if (!this.api.session) throw new Error("API session is not initialized");
 		const alias = this.api.session.desk.osc_alias;
 		const authority = await this.transportAuthority();
-		const escapeMark = this.hardware.mark();
-		await this.sendOscKey(alias, "ESC", true);
-		await this.hardware.expectAfter(
-			escapeMark,
-			`/light/${alias}/feedback/command-line`,
-		);
-		const escapeReleaseMark = this.hardware.mark();
-		await this.sendOscKey(alias, "ESC", false);
-		await this.hardware.expectAfter(
-			escapeReleaseMark,
-			`/light/${alias}/feedback/command-line`,
-		);
+		const commandLine = (await this.api.getCommandLine()).commandLine;
+		if (!commandLine.pristine)
+			throw new Error(
+				"OSC semantic selection requires a pristine command line because OSC Escape is a desk action, not a Programmer edit",
+			);
 		for (const event of oscSelectionEvents(alias, action, targets, authority)) {
-			const mark = this.hardware.mark();
-			await this.hardware.send(event.address, [...event.arguments]);
-			await this.hardware.expectAfter(
-				mark,
-				`/light/${alias}/feedback/command-line`,
+			await this.sendOscEvent(
+				alias,
+				event.key,
+				event.phase === "press",
+				event.address,
 			);
 		}
+	}
+
+	private async sendOscEvent(
+		alias: string,
+		key: KeypadKey,
+		pressed: boolean,
+		address = `/light/${alias}/programmer/${oscProgrammerActionForKey(key)}`,
+	): Promise<void> {
+		if (!pressed) {
+			await this.hardware.send(address, [false]);
+			return;
+		}
+		const before = (await this.api.getCommandLine()).commandLine.revision;
+		const mark = this.hardware.mark();
+		await this.hardware.send(address, [true]);
+		await this.hardware.expectAfter(
+			mark,
+			`/light/${alias}/feedback/command-line`,
+		);
+		await this.waitForCommandLineRevision(before, key);
+	}
+
+	private async waitForCommandLineRevision(
+		before: number,
+		key: KeypadKey,
+	): Promise<void> {
+		const deadline = Date.now() + 2_000;
+		do {
+			if ((await this.api.getCommandLine()).commandLine.revision > before)
+				return;
+			await new Promise<void>((resolve) => setTimeout(resolve, 5));
+		} while (Date.now() < deadline);
+		throw new Error(
+			`Timed out waiting for OSC Programmer key ${key} to advance command-line revision ${before}`,
+		);
 	}
 
 	private async transportAuthority(): Promise<SelectionTransportAuthority> {
@@ -278,12 +286,6 @@ export class BrowserRoutedSelection {
 		};
 	}
 
-	private sendOscKey(alias: string, key: "ESC", pressed: boolean) {
-		return this.hardware.send(
-			`/light/${alias}/programmer/${oscProgrammerActionForKey(key)}`,
-			[pressed],
-		);
-	}
 }
 
 function adapter(

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { oscProgrammerActionForKey } from "../../../shared/programmerKeypad";
 import {
 	dereferencedGroup,
 	fixture,
@@ -15,6 +16,10 @@ import {
 } from "./selectionTransportScenario";
 
 describe("selection transport compiler", () => {
+	it("uses the server's canonical OSC Escape action", () => {
+		expect(oscProgrammerActionForKey("ESC")).toBe("escape");
+	});
+
 	it("preserves ordered fixture/head ranges and mixed Group chunks", () => {
 		expect(
 			selectionKeys(

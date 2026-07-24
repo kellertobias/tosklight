@@ -4,6 +4,11 @@ import type { ApiDriver } from "./api";
 import type { DeskDriver } from "./desk";
 import { inclusiveSelectionNumbers } from "./selectionContract";
 import { VisibleGroupPool } from "./selectionVisibleGroupScenario";
+import {
+	type SelectionObservation,
+	type StageShiftSelectionResult,
+	waitForObservedStageFixture,
+} from "./selectionVisibleStageScenario";
 
 type FixtureSurface = "fixtureSheet" | "stage";
 
@@ -47,7 +52,7 @@ class FixtureTouchRoute {
 class StageShiftClickRoute {
 	constructor(private readonly surface: VisibleFixtureSurface) {}
 
-	item(number: number, head?: number): Promise<void> {
+	item(number: number, head?: number): Promise<StageShiftSelectionResult> {
 		return this.surface.shiftClickItem(number, head);
 	}
 
@@ -80,6 +85,7 @@ export class VisibleFixtureSurface {
 		private readonly page: Page,
 		private readonly desk: DeskDriver,
 		private readonly api: ApiDriver,
+		private readonly observeSelection: () => Promise<SelectionObservation>,
 	) {
 		this.via = {
 			click: new FixtureClickRoute(this),
@@ -146,12 +152,17 @@ export class VisibleFixtureSurface {
 		await this.touchResolved(fixtures);
 	}
 
-	async shiftClickItem(number: number, head?: number): Promise<void> {
+	async shiftClickItem(
+		number: number,
+		head?: number,
+	): Promise<StageShiftSelectionResult> {
 		this.assertShiftClickSurface();
 		if (!this.shiftAnchor)
 			throw new Error(
 				"Stage Shift-click requires a preceding Stage click anchor",
 			);
+		if (this.shiftAnchorNumber === undefined)
+			throw new Error("Stage Shift-click anchor lost its semantic Fixture number");
 		const fixtures = await this.resolveItems([{ number, head }], "item");
 		const targets = await this.visibleTargets(fixtures);
 		if (targets.length !== 1)
@@ -161,7 +172,21 @@ export class VisibleFixtureSurface {
 		await this.record("Shift-click", fixtures);
 		await this.shiftAnchor.click({ modifiers: ["Meta"] });
 		await targets[0].click({ modifiers: ["Shift"] });
+		const anchor = this.shiftAnchorNumber;
 		this.shiftAnchor = targets[0];
+		this.shiftAnchorNumber = number;
+		const observation = await waitForObservedStageFixture(
+			this.page,
+			this.observeSelection,
+			number,
+		);
+		return {
+			order: "stage-visible",
+			anchor,
+			target: number,
+			selection: observation.targets.map((fixture) => fixture.number),
+			expression: observation.expression,
+		};
 	}
 
 	private async resolveItems(
@@ -202,11 +227,16 @@ export class VisibleFixtureSurface {
 	): Promise<void> {
 		const targets = await this.visibleTargets(fixtures);
 		await this.record(gesture === "plain" ? "Click" : gesture, fixtures);
-		for (const target of targets) {
+		for (const [index, target] of targets.entries()) {
 			await this.desk.click(target);
-			if (this.surface === "stage") this.shiftAnchor = target;
+			if (this.surface === "stage") {
+				this.shiftAnchor = target;
+				this.shiftAnchorNumber = fixtures[index]?.number;
+			}
 		}
 	}
+
+	private shiftAnchorNumber?: number;
 
 	private async touchResolved(
 		fixtures: readonly ResolvedVisibleFixture[],
@@ -273,7 +303,12 @@ export class BrowserVisibleSelection {
 		};
 	};
 
-	constructor(page: Page, desk: DeskDriver, api: ApiDriver) {
+	constructor(
+		page: Page,
+		desk: DeskDriver,
+		api: ApiDriver,
+		observeSelection: () => Promise<SelectionObservation>,
+	) {
 		this.fixtures = {
 			via: {
 				fixtureSheet: new VisibleFixtureSurface(
@@ -281,8 +316,15 @@ export class BrowserVisibleSelection {
 					page,
 					desk,
 					api,
+					observeSelection,
 				),
-				stage: new VisibleFixtureSurface("stage", page, desk, api),
+				stage: new VisibleFixtureSurface(
+					"stage",
+					page,
+					desk,
+					api,
+					observeSelection,
+				),
 			},
 		};
 		this.groups = {
