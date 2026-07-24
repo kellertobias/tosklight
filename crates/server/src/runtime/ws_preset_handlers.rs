@@ -76,7 +76,7 @@ pub(super) fn ws_preset_recall_action(
     let input: Input =
         serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
     crate::tolerant_json::log_unknown_value_fields::<Input>(
-        "/api/v1/events preset.recall.action",
+        "/api/v2/events preset.recall.action",
         &command.payload,
     );
     if input.request.request_id != command.request_id {

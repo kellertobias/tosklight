@@ -10,7 +10,7 @@ The baseline was captured on 2026-07-18 from the `refactoring` branch by tracing
 
 - every interval created by the mounted server provider and view projections;
 - every request made by the global `refresh()` operation;
-- every request family selected by `stateEventRouting.ts` for each v1 event;
+- every request family formerly selected by `stateEventRouting.ts` for each facade event;
 - every global `refresh()` call site;
 - the Add Fixture flow from `placementBatch.ts` through generic show-object mutation; and
 - whether mounted-but-hidden panes and secondary screens continue to own subscriptions or polling.
@@ -40,7 +40,7 @@ Mounted views add independent polling:
 | Channels visualization | 250 ms | 4 |
 | DMX view | 250 ms | 4 |
 
-A representative active workspace reaches roughly 30 GETs per second before mutations or v1 event fan-out, and 31 with Matter enabled. Duplicate panes duplicate their rates. Maximizing one pane does not unmount the others, and a component being mounted does not prove that it is currently visible.
+A representative active workspace reached roughly 30 GETs per second before mutations or legacy facade-event fan-out, and 31 with Matter enabled. Duplicate panes duplicated their rates. Maximizing one pane did not unmount the others, and a component being mounted did not prove that it was currently visible.
 
 The visualization consumers do not share request de-duplication. Parameter Controls, Stage, Fixture Sheet, and Channels may request the same authoritative projection independently.
 
@@ -53,7 +53,7 @@ One authenticated global `refresh()` performs 17 GETs:
 
 There are 25 global broad-refresh call sites. Initial connection also eagerly fetches ten resource projections and the eight show-object lists, including fixture-library data for screens that never display the library.
 
-## V1 event amplification
+## Legacy facade-event amplification
 
 The pre-refactor event router has no cross-event coalescing or request single-flight. Its request fan-out is:
 
@@ -67,7 +67,7 @@ The pre-refactor event router has no cross-event coalescing or request single-fl
 | `preload_stored` | 10 |
 | `preset_stored` | 9 |
 
-A touch fader may publish Programmer mutations once per animation frame. At 60 Hz, the current nine-request Programmer event route can attempt roughly 540 GETs per second for each connected frontend. The v1 socket broadcasts the same event to every connected screen.
+A touch fader could publish Programmer mutations once per animation frame. At 60 Hz, the former nine-request Programmer event route could attempt roughly 540 GETs per second for each connected frontend. The retired compatibility socket broadcast the same event to every connected screen.
 
 ## Add Fixture operator path
 
@@ -102,7 +102,7 @@ Runtime benchmarks must record request count, payload bytes, mutation response t
 
 ## First reconciliation checkpoint
 
-The first event-routing migration keeps v1 compatibility while replacing broad discovery with affected-resource reconciliation:
+The first event-routing migration kept facade compatibility while replacing broad discovery with affected-resource reconciliation:
 
 | Event | Before | After |
 | --- | ---: | ---: |
@@ -116,4 +116,4 @@ The first event-routing migration keeps v1 compatibility while replacing broad d
 
 Same-resource bursts coalesce to the latest event revision, and late responses cannot replace newer state. Route events intentionally read their small coupled collection because the current Patch projection omits route object identity; this keeps Output and Patch projections consistent without a broad refresh. Show open and rollback continue to perform full authoritative hydration.
 
-This checkpoint does not make v1 events the final authority. The remaining bootstrap read for Programmer events, unconditional provider polling, view-local visualization polling, broad mutation-call refreshes, and eager connection bootstrap remain migration targets for typed v2 events and narrow feature stores.
+This historical checkpoint did not make facade notifications the final authority. The compatibility event socket has since been retired in favor of typed v2 subscriptions; the remaining polling and reconciliation targets are tracked by the active refactoring plan.

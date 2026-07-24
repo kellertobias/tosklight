@@ -1,7 +1,7 @@
 import { expect, test } from "./bench/fixtures";
 import type { APIRequestContext, Page } from "@playwright/test";
 
-interface Session { session_id: string; token: string }
+interface Session { session_id: string; token: string; desk: { id: string } }
 interface AuditEvent { revision: number; kind: string; payload: Record<string, unknown> }
 test.describe.configure({ mode: "serial" });
 
@@ -72,12 +72,26 @@ async function waitForDmx(request: APIRequestContext, expected: number) {
 async function registerAuditReceiver(page: Page, session: Session) {
   await page.evaluate(({ token }) => new Promise<void>((resolve, reject) => {
     window.__lightAuditEvents = [];
-    const socket = new WebSocket(`ws://${location.host}/api/v1/events`, ["light.v1", `light.token.${token}`]);
+    const socket = new WebSocket(`ws://${location.host}/api/v2/events`, ["light.events.v2", `light.token.${token}`]);
     socket.addEventListener("message", (message) => {
-      const event = JSON.parse(String(message.data)) as AuditEvent;
-      if ("kind" in event) window.__lightAuditEvents.push(event);
+      const envelope = JSON.parse(String(message.data));
+      if (envelope?.type === "ready" || envelope?.type === "repaired") {
+        resolve();
+        return;
+      }
+      const event = envelope?.event?.payload?.type === "facade_notification"
+        ? envelope.event.payload.notification as AuditEvent
+        : null;
+      if (event) window.__lightAuditEvents.push(event);
     });
-    socket.addEventListener("open", () => resolve(), { once: true });
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({
+        type: "subscribe",
+        filter: { capabilities: ["system"] },
+        capacity: 256,
+        rate_limits: [],
+      }));
+    }, { once: true });
     socket.addEventListener("error", () => reject(new Error("audit WebSocket failed")), { once: true });
     window.__lightAuditSocket = socket;
   }), session);
@@ -98,6 +112,9 @@ test("touch programmer path is audited and reaches the rendered DMX output", asy
   await jsonRequest(request, "put", `/api/v1/shows/${show.id}/objects/group/1`, setupSession, { name: "All Dimmers", fixtures: fixtureIds, master: 1, playback_fader: 1 });
   await jsonRequest(request, "post", `/api/v1/shows/${show.id}/open`, setupSession, { transition: "hold_current" });
 
+  await page.addInitScript((deskId) => {
+    sessionStorage.setItem("light.control-desk", deskId);
+  }, setupSession.desk.id);
   await page.goto("/");
   await waitForConnected(page);
   await registerAuditReceiver(page, setupSession);
@@ -105,16 +122,16 @@ test("touch programmer path is audited and reaches the rendered DMX output", asy
   await page.locator(".ui-data-table-row:not(.header):not(.empty)").first().click();
   await setDimmerByTouch(page, 75);
 
-  await expect.poll(() => page.evaluate(() => window.__lightAuditEvents.some((event) => event.kind === "command_applied" && event.payload.command === "programmer.set"))).toBeTruthy();
+  await expect.poll(() => page.evaluate(() => window.__lightAuditEvents.some((event) => event.kind === "command_applied" && event.payload.command === "programmer.values.action"))).toBeTruthy();
   await waitForDmx(request, 191);
 
   const audit = await jsonRequest<AuditEvent[]>(request, "get", "/api/v1/audit?after=0", setupSession);
-  expect(audit.some((event) => event.kind === "command_applied" && event.payload.command === "programmer.set")).toBeTruthy();
+  expect(audit.some((event) => event.kind === "command_applied" && event.payload.command === "programmer.values.action")).toBeTruthy();
 
-  await page.getByTitle("Open output and timecode controls").click();
+  await page.getByTitle("Open running and output controls").click();
   await page.getByRole("button", { name: "BLACKOUT", exact: true }).click();
   await waitForDmx(request, 0);
-  await expect.poll(() => page.evaluate(() => window.__lightAuditEvents.some((event) => event.kind === "command_applied" && event.payload.command === "master.set"))).toBeTruthy();
+  await expect.poll(() => page.evaluate(() => window.__lightAuditEvents.some((event) => event.kind === "command_applied" && event.payload.command === "output_runtime.action"))).toBeTruthy();
   await page.getByRole("button", { name: "RELEASE BLACKOUT", exact: true }).click();
   await waitForDmx(request, 191);
 

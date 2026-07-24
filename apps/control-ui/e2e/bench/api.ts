@@ -226,7 +226,7 @@ export class ApiDriver {
     return this.sendCompatibilityCommandLine(request.command);
   }
 
-  /** Raw v1 textual command envelope. Private so new scenarios cannot reach it directly. */
+  /** Raw textual WebSocket command envelope. Private so new scenarios cannot reach it directly. */
   private async sendCompatibilityCommandLine(command: string): Promise<CommandResponse> {
     return this.command("programmer.execute", { value: command });
   }
@@ -245,9 +245,15 @@ export class ApiDriver {
 
   async command<T>(command: string, payload: unknown, expectedRevision?: number): Promise<CommandResponse<T>> {
     if (!this.session) throw new Error("API session is not initialized");
-    const socket = new WebSocket(this.baseUrl.replace(/^http/, "ws") + "/api/v1/events", ["light.v1", `light.token.${this.session.token}`]);
+    const socket = new WebSocket(this.baseUrl.replace(/^http/, "ws") + "/api/v2/events", ["light.events.v2", `light.token.${this.session.token}`]);
     try {
       await waitForWebSocketOpen(socket);
+      socket.send(JSON.stringify({
+        type: "subscribe",
+        filter: { capabilities: ["system"] },
+        capacity: 32,
+        rate_limits: [],
+      }));
       const requestId = crypto.randomUUID();
       return await new Promise<CommandResponse<T>>((resolve, reject) => {
         const finish = (response?: CommandResponse<T>, error?: Error) => {

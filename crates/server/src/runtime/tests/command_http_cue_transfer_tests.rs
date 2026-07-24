@@ -135,7 +135,7 @@ impl CueTransferRouteScenario {
 }
 
 #[tokio::test]
-async fn legacy_command_transfer_emits_only_its_temporary_per_object_v1_notification() {
+async fn legacy_command_transfer_emits_only_its_temporary_per_object_facade_notification() {
     let scenario = CueTransferRouteScenario::new();
     let compatibility = scenario.compatibility_count();
     let response = scenario

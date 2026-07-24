@@ -37,3 +37,17 @@ reload.
 ## Decisions
 
 Inherited from parent chunk 13. No open decisions.
+
+## Result
+
+- Bench and acceptance helpers now subscribe to the multiplexed v2 event stream and decode
+  facade notifications from typed event envelopes.
+- Server route tests observe the facade `EventBus` directly; the separate Tokio broadcast
+  sender, connection counter, v1 handler, and `/api/v1/events` registration are removed.
+- The retired route has an explicit `404 Not Found` regression assertion, and repository-wide
+  auditing found no remaining caller or registration.
+- Verification passed: `cargo fmt --all -- --check`, `npm run test:unit` (including 449
+  light-server tests plus 14 benchmark tests and 2,000 frontend tests), the focused v2
+  WebSocket/OSC/operator-output acceptance paths, and the full Playwright suite. The full
+  Playwright run had one transient OSC output-sampling failure among 284 passes and 11 skips;
+  that exact scenario passed immediately in isolation.

@@ -83,8 +83,8 @@ export async function openEventStream(
 	api: ApiDriver,
 ): Promise<{ socket: WebSocket; events: any[] }> {
 	const socket = new WebSocket(
-		api.baseUrl.replace(/^http/, "ws") + "/api/v1/events",
-		["light.v1", `light.token.${api.session!.token}`],
+		api.baseUrl.replace(/^http/, "ws") + "/api/v2/events",
+		["light.events.v2", `light.token.${api.session!.token}`],
 	);
 	await new Promise<void>((resolve, reject) => {
 		const timeout = setTimeout(
@@ -94,6 +94,14 @@ export async function openEventStream(
 		socket.addEventListener(
 			"open",
 			() => {
+				socket.send(
+					JSON.stringify({
+						type: "subscribe",
+						filter: { capabilities: ["system"] },
+						capacity: 256,
+						rate_limits: [],
+					}),
+				);
 				clearTimeout(timeout);
 				resolve();
 			},
@@ -110,8 +118,12 @@ export async function openEventStream(
 	});
 	const events: any[] = [];
 	socket.addEventListener("message", (message) => {
-		const event = JSON.parse(String(message.data));
-		if (event.kind) events.push(event);
+		const envelope = JSON.parse(String(message.data));
+		const event =
+			envelope?.event?.payload?.type === "facade_notification"
+				? envelope.event.payload.notification
+				: null;
+		if (event) events.push(event);
 	});
 	return { socket, events };
 }

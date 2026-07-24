@@ -133,7 +133,7 @@ impl PlaybackTopologyPorts for ServerPlaybackTopologyPorts {
         self.authorize(context)
     }
 
-    /// v1 notifications mirror exact mutations but do not publish another application event.
+    /// Facade notifications mirror exact mutations but do not publish another application event.
     fn reconcile_playback_topology(&self, changes: &[ActiveShowObjectChange]) {
         self.publish_compatibility(changes);
     }

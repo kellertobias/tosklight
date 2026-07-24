@@ -275,7 +275,7 @@ async fn direct_action_rejects_stale_authority_and_foreign_desk_atomically() {
 }
 
 #[tokio::test]
-async fn compatibility_websocket_uses_typed_delete_and_emits_one_exact_v1_notification() {
+async fn multiplexed_websocket_uses_typed_delete_and_emits_one_exact_facade_notification() {
     let (scenario, _) = cue_navigation_scenario().await;
     let baseline = scenario.state.application_events.latest_sequence();
     let compatibility = cue_delete_compatibility_events(&scenario).len();

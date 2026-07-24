@@ -7,19 +7,19 @@ import {
 
 /**
  * Public Cue-deletion scenarios use the exact revisioned v2 action helper. This one test retains
- * the deliberately separate integration surface used by existing external clients: a v1 textual
+ * the deliberately separate integration surface used by existing external clients: a textual
  * `programmer.execute` WebSocket envelope. Successful deletion proves that envelope reaches the
  * typed Programming action; Rust boundary tests own replay and legacy-notification cardinality.
  */
 test.describe("docs/engineering/refactoring-test-boundaries.md", () => {
-  test("CUE-016 @api › retained v1 WebSocket Cue deletion reaches the typed Programming action", async ({
+  test("CUE-016 @api › multiplexed WebSocket Cue deletion reaches the typed Programming action", async ({
     api,
     bench,
   }) => {
     await loadCanonicalCopy(
       api,
       bench,
-      "cue-delete-v1-compatibility",
+      "cue-delete-websocket-compatibility",
       "compact-rig",
     );
     const installed = await installPlaybackSequence(api, 1, [

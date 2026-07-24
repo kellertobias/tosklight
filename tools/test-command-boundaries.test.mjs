@@ -63,7 +63,7 @@ test("a retired legacy helper call fails regardless of the baseline", () => {
   assert.match(failures[0], /executeLegacyCommandLine is retired/u);
 });
 
-test("a new direct literal v1 WebSocket action is rejected", () => {
+test("a new direct literal WebSocket action is rejected", () => {
   const scan = scanTestCommandBoundaries([
     {
       path: "tests/new.spec.ts",
@@ -72,8 +72,8 @@ test("a new direct literal v1 WebSocket action is rejected", () => {
   ]);
   const failures = evaluateTestCommandBoundaries(scan, EMPTY_BASELINE);
   assert.equal(failures.length, 2);
-  assert.match(failures[0], /new direct v1 WebSocket action call site: tests\/new\.spec\.ts/u);
-  assert.match(failures[1], /new direct v1 WebSocket action family use: programmer\.command_line/u);
+  assert.match(failures[0], /new direct WebSocket action call site: tests\/new\.spec\.ts/u);
+  assert.match(failures[1], /new direct WebSocket action family use: programmer\.command_line/u);
 });
 
 test("a generic typed WebSocket command is inventoried and rejected", () => {
@@ -143,7 +143,7 @@ test("a removed direct action family reports a stale baseline entry", () => {
     directActionFamilies: { "preset.apply": 1 },
   });
   assert.deepEqual(failures, [
-    "stale direct v1 WebSocket action family use baseline entry: preset.apply",
+    "stale direct WebSocket action family use baseline entry: preset.apply",
   ]);
 });
 
@@ -160,8 +160,8 @@ test("a partially shrunk direct action count requires an exact baseline update",
     directActionFamilies: { "programmer.set": 2 },
   });
   assert.deepEqual(failures, [
-    "direct v1 WebSocket action call site shrank: tests/actions.spec.ts has 1 (baseline 2); lower or regenerate the baseline",
-    "direct v1 WebSocket action family use shrank: programmer.set has 1 (baseline 2); lower or regenerate the baseline",
+    "direct WebSocket action call site shrank: tests/actions.spec.ts has 1 (baseline 2); lower or regenerate the baseline",
+    "direct WebSocket action family use shrank: programmer.set has 1 (baseline 2); lower or regenerate the baseline",
   ]);
 });
 

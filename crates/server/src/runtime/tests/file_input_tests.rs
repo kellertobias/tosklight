@@ -1,5 +1,5 @@
 #[tokio::test]
-async fn event_socket_disconnect_keeps_file_input_owned_until_session_close() {
+async fn file_input_stays_owned_until_session_close() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, session_id) = login(&app, "Operator").await;
@@ -13,7 +13,6 @@ async fn event_socket_disconnect_keeps_file_input_owned_until_session_close() {
     state
         .programmers
         .set_command_line(session.id, "COPY".into());
-    state.ws_connections.lock().insert(session.id, 1);
 
     let claimed = app
         .clone()
@@ -35,11 +34,6 @@ async fn event_socket_disconnect_keeps_file_input_owned_until_session_close() {
         .unwrap();
     assert_eq!(claimed.status(), StatusCode::OK);
 
-    // ApiDriver commands use a short-lived event socket. Its asynchronous
-    // close must not release a claim made immediately afterwards by the
-    // still-authenticated Desk session.
-    finish_event_socket(&state, &session);
-    assert!(!state.ws_connections.lock().contains_key(&session.id));
     assert!(
         state
             .file_input_contexts

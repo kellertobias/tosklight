@@ -96,7 +96,7 @@ into it rather than restating it.
 - `/api/v1/media` exposes authenticated CITP media-server status, bounded thumbnail retrieval, and
   live-preview snapshots for fixture profiles that explicitly support direct IP control.
 - Mutating versioned objects require `If-Match: <revision>` and return an `ETag`. Revision zero creates an object; stale revisions return HTTP 409.
-- WebSocket `/api/v1/events` publishes ordered revisioned changes and accepts versioned, request-ID-bearing typed commands. REST remains the authoritative snapshot/recovery path after an event gap.
+- WebSocket `/api/v2/events` publishes ordered filtered changes and accepts versioned, request-ID-bearing typed commands after subscription. REST remains the authoritative snapshot/recovery path after an event gap.
 - A session authenticates a device as a configured user. Selection, command line, programmer values, blind/preview/highlight modes, editing context, and bounded undo/redo history belong to that user and are shared across their connected devices. Disconnected programmers remain present until explicitly cleared and survive server restart. New desks create an `Operator` user, and new devices select it unless a different user was remembered locally.
 
 Show objects use the kinds `patched_fixture`, `cue_list`, and `route` for the live engine snapshot. Other kinds such as presets, groups, phasers, mappings, and user layouts use the same revisioned object store.

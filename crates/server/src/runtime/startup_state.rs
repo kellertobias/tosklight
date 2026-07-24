@@ -1,7 +1,7 @@
 //! Persistent state loading and engine restoration for process startup.
 
 use super::{
-    DeskConfiguration, Event, PersistedOutputRuntime, active_playbacks_setting,
+    DeskConfiguration, PersistedOutputRuntime, active_playbacks_setting,
     compile_active_show_for_startup, ensure_default_show_available, fixed_test_time,
     open_fixture_library_for_startup, output_runtime_setting, rebase_desk_show_paths,
     sibling_fixture_package_dir, startup_options,
@@ -19,7 +19,6 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use tokio::sync::broadcast;
 
 pub(super) struct PersistentState {
     pub(super) data_dir: PathBuf,
@@ -114,14 +113,12 @@ pub(super) struct StartupState {
     pub(super) output_runtime: PersistedOutputRuntime,
     pub(super) manual_clock: Option<Arc<ManualClock>>,
     pub(super) speed_groups: Arc<Mutex<[SpeedGroupController; 5]>>,
-    pub(super) events: broadcast::Sender<Event>,
 }
 
 impl StartupState {
     pub(super) fn load(options: startup_options::StartupOptions) -> anyhow::Result<Self> {
         let persistent = PersistentState::open(options)?;
         let (manual_clock, programmers) = restore_programmers(&persistent)?;
-        let (events, _) = broadcast::channel(256);
         let (engine, active_show_error) = load_engine(&persistent, &programmers)?;
         let output_runtime = load_output_runtime(&persistent, active_show_error.as_deref())?;
         apply_output_runtime(&engine, &output_runtime);
@@ -134,7 +131,6 @@ impl StartupState {
             output_runtime,
             manual_clock,
             speed_groups,
-            events,
         })
     }
 }

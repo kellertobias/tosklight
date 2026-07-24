@@ -16,7 +16,6 @@ fn test_state_with_programmers(
     let fixture_library =
         light_fixture::FixtureLibrary::open(data_dir.join("fixtures.sqlite")).unwrap();
     let engine = Arc::new(Engine::new(programmers.clone()));
-    let (events, _) = broadcast::channel(32);
     let application_events = EventBus::default();
     let active_show_service = ActiveShowService::new(application_events.clone());
     let highlight = Arc::new(HighlightRegistry::default());
@@ -33,7 +32,6 @@ fn test_state_with_programmers(
             data_dir: data_dir.clone(),
             sessions: Arc::default(),
             session_clients: Arc::default(),
-            ws_connections: Arc::new(Mutex::new(HashMap::new())),
             programmers: programmers.clone(),
             programming,
             playback_service: PlaybackService::new(application_events.clone()),
@@ -61,7 +59,6 @@ fn test_state_with_programmers(
             active_show_document: Arc::default(),
             active_show_backup_checkpoint: Arc::default(),
             active_show_error: Arc::default(),
-            events,
             application_events: application_events.clone(),
             facade_events: EventBus::new(2_048),
             active_show_service: active_show_service.clone(),
@@ -102,6 +99,34 @@ fn test_state_with_programmers(
         },
         data_dir,
     )
+}
+
+fn subscribe_facade_events(state: &AppState) -> light_application::EventSubscription {
+    state.facade_events.subscribe(
+        light_application::EventFilter::default(),
+        light_application::SubscriptionOptions::default(),
+    )
+}
+
+fn next_facade_notification(
+    subscription: &light_application::EventSubscription,
+) -> Option<light_application::FacadeNotification> {
+    let light_application::SubscriptionDelivery::Event(event) = subscription.try_next()? else {
+        return None;
+    };
+    let light_application::ApplicationEvent::System(
+        light_application::SystemEvent::FacadeNotification(notification),
+    ) = &event.payload
+    else {
+        return None;
+    };
+    Some(notification.clone())
+}
+
+fn drain_facade_notifications(
+    subscription: &light_application::EventSubscription,
+) -> Vec<light_application::FacadeNotification> {
+    std::iter::from_fn(|| next_facade_notification(subscription)).collect()
 }
 
 fn assert_programming_selection_event(

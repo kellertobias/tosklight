@@ -207,7 +207,7 @@ async fn optional_desk_token_guards_the_api_boundary() {
             Request::get("/api/v1/readiness")
                 .header(
                     header::SEC_WEBSOCKET_PROTOCOL,
-                    "light.v1, light.desk.b64.c2hhcmVkLXNlY3JldA",
+                    "light.events.v2, light.desk.b64.c2hhcmVkLXNlY3JldA",
                 )
                 .body(Body::empty())
                 .unwrap(),
@@ -255,15 +255,15 @@ async fn authenticated_shutdown_requests_orderly_server_cancellation() {
 #[test]
 fn emitted_events_have_strictly_sequential_revisions() {
     let (state, data_dir) = test_state();
-    let mut receiver = state.events.subscribe();
+    let receiver = subscribe_facade_events(&state);
     let application_events = state.facade_events.subscribe(
         light_application::EventFilter::default(),
         light_application::SubscriptionOptions::default(),
     );
     emit(&state, "first", serde_json::Value::Null);
     emit(&state, "second", serde_json::Value::Null);
-    let first = receiver.try_recv().unwrap();
-    let second = receiver.try_recv().unwrap();
+    let first = next_facade_notification(&receiver).unwrap();
+    let second = next_facade_notification(&receiver).unwrap();
     assert_eq!(first.revision + 1, second.revision);
     let audit = state.audit_events.lock();
     assert_eq!(audit.len(), 2);

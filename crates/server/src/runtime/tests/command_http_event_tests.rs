@@ -60,7 +60,7 @@ async fn supplied_command_executes_without_publishing_intermediate_command_text(
 #[tokio::test]
 async fn sensitive_command_text_is_returned_to_its_writer_but_redacted_from_global_events() {
     let scenario = CommandHttpScenario::new().await;
-    let mut events = scenario.state.events.subscribe();
+    let events = subscribe_facade_events(&scenario.state);
     let response = scenario
         .put("FIXTURE 1 TOKEN super-secret-value", 0)
         .await;
@@ -70,7 +70,7 @@ async fn sensitive_command_text_is_returned_to_its_writer_but_redacted_from_glob
         "FIXTURE 1 TOKEN super-secret-value"
     );
 
-    let event = events.recv().await.unwrap();
+    let event = next_facade_notification(&events).unwrap();
     assert_eq!(event.kind, "command_line_changed");
     assert_eq!(event.payload["text"], "[REDACTED SENSITIVE COMMAND]");
     assert_eq!(event.payload["redacted"], true);

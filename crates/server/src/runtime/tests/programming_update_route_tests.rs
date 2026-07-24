@@ -270,7 +270,7 @@ async fn v2_update_action_is_lossless_replay_safe_and_one_event() {
     let scenario = UpdateRouteScenario::new();
     let initial_revision = scenario.revision();
     let cursor = scenario.state.application_events.latest_sequence();
-    let mut compatibility = scenario.state.events.subscribe();
+    let compatibility = subscribe_facade_events(&scenario.state);
     let action = direct_group_action(&scenario, "group-add", "add_new");
 
     let changed = scenario
@@ -294,7 +294,8 @@ async fn v2_update_action_is_lossless_replay_safe_and_one_event() {
         cursor + 1
     );
     assert!(
-        std::iter::from_fn(|| compatibility.try_recv().ok())
+        drain_facade_notifications(&compatibility)
+            .into_iter()
             .all(|event| event.kind != "show_object_changed")
     );
 

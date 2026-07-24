@@ -417,11 +417,11 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       .toEqual(Array(12).fill(128));
   });
 
-  // The retained direct exercise of v1 command-line editing and target selection. CUE execution
+  // The retained direct exercise of WebSocket command-line editing and target selection. CUE execution
   // has one dedicated compatibility spec; every other scenario states execution intent through
   // the v2 command-line HTTP contract or a categorized compatibility helper.
-  test("API-004 @api › retained v1 WebSocket command-edit envelope contract", async ({ api, bench }) => {
-    await loadCanonicalCopy(api, bench, "api-004-v1-command-line-envelope");
+  test("API-004 @api › multiplexed WebSocket command-edit envelope contract", async ({ api, bench }) => {
+    await loadCanonicalCopy(api, bench, "api-004-websocket-command-line-envelope");
 
     const accepted = await api.command<unknown>("programmer.command_line", { value: "GROUP 1 +" });
     expect(accepted).toMatchObject({ protocol_version: 1, ok: true });
@@ -429,7 +429,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     expect(Number.isSafeInteger(accepted.revision)).toBe(true);
     expect((await programmer(api)).command_line).toBe("GROUP 1 +");
 
-    // The v1 envelope still owns the FIXTURE/GROUP command target; no typed v2 action replaces it.
+    // The command envelope still owns the FIXTURE/GROUP command target; no typed action replaces it.
     const target = await api.command<unknown>("programmer.command_target", { value: "FIXTURE" });
     expect(target).toMatchObject({ protocol_version: 1, ok: true });
     expect(target.revision).toBeGreaterThanOrEqual(accepted.revision);

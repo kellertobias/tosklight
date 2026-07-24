@@ -437,7 +437,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     let (scenario, _show_id) = cue_navigation_scenario().await;
     select_playback(&scenario, scenario.session.desk.id, Some(2));
 
-    // The compatibility WebSocket keeps its v1 notification through the same typed action.
+    // The multiplexed WebSocket keeps its facade notification through the same typed action.
     let ws_command = || WsCommand {
         protocol_version: 1,
         request_id: "cue-ws-go-to".into(),

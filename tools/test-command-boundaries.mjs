@@ -5,7 +5,7 @@
 // are deliberately bounded:
 //
 //   1. The raw `executeLegacyCommandLine` helper is gone. It must not come back.
-//   2. Every direct literal v1 WebSocket action is inventoried by file and action family. The
+//   2. Every direct literal WebSocket action is inventoried by file and action family. The
 //      centralized sender is excluded; retained compatibility calls are explicit in the baseline.
 //   3. Command families without a production boundary remain explicit compatibility intents.
 //
@@ -25,7 +25,7 @@ export const COMPATIBILITY_FAMILIES = Object.freeze([
   "update",
 ]);
 
-/** The bench API driver owns the centralized v1 senders, so it is not a scenario call site. */
+/** The bench API driver owns the centralized WebSocket sender, so it is not a scenario call site. */
 export const CENTRALIZED_SENDER = "apps/control-ui/e2e/bench/api.ts";
 
 const LEGACY_HELPER = /\bexecuteLegacyCommandLine\b/gu;
@@ -109,13 +109,13 @@ export function evaluateTestCommandBoundaries(scan, baseline) {
   compareCounts(
     scan.directActionCommands,
     baseline?.directActionCommands,
-    "direct v1 WebSocket action call site",
+    "direct WebSocket action call site",
     failures,
   );
   compareCounts(
     scan.directActionFamilies,
     baseline?.directActionFamilies,
-    "direct v1 WebSocket action family use",
+    "direct WebSocket action family use",
     failures,
   );
   compareCounts(

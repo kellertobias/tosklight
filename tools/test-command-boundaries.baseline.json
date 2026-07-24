@@ -2,8 +2,8 @@
 	"version": 2,
 	"directActionCommands": {
 		"tests/04-osc-api-and-cross-surface.spec.ts": 5,
-		"tests/09-cue-delete-v1-compatibility.spec.ts": 1,
-		"tests/09-cue-navigation-v1-compatibility.spec.ts": 6
+		"tests/09-cue-delete-websocket-compatibility.spec.ts": 1,
+		"tests/09-cue-navigation-websocket-compatibility.spec.ts": 6
 	},
 	"directActionFamilies": {
 		"not.a.command": 1,

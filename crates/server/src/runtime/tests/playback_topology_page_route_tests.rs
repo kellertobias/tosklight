@@ -5,7 +5,7 @@ async fn create_page_returns_one_authority_and_is_replayable_and_idempotent() {
     let scenario = TopologyScenario::new("Create Playback Page").await;
     let revision = scenario.show_revision();
     let cursor = scenario.state.application_events.latest_sequence();
-    let mut compatibility = scenario.state.events.subscribe();
+    let compatibility = subscribe_facade_events(&scenario.state);
     let request = create_page_request("create-page-four", 4, 0, None);
 
     let response = scenario.action(revision, request.clone()).await;
@@ -26,8 +26,7 @@ async fn create_page_returns_one_authority_and_is_replayable_and_idempotent() {
         serde_json::json!({"number":4,"name":"Page 4","slots":{}})
     );
     assert_one_topology_event(&scenario.state, cursor, 1);
-    let compatibility_events =
-        std::iter::from_fn(|| compatibility.try_recv().ok()).collect::<Vec<_>>();
+    let compatibility_events = drain_facade_notifications(&compatibility);
     assert_eq!(compatibility_events.len(), 1);
     assert_eq!(compatibility_events[0].kind, "show_object_changed");
 
@@ -226,7 +225,7 @@ async fn strict_desk_page_selects_one_existing_page_without_creating_another() {
     let desk_id = scenario_desk_id(&scenario);
     let show_id = scenario_show_id(&scenario);
     let cursor = scenario.state.application_events.latest_sequence();
-    let mut compatibility = scenario.state.events.subscribe();
+    let compatibility = subscribe_facade_events(&scenario.state);
 
     let response = put_desk_page(&scenario, desk_id, 2, Some(true)).await;
 
@@ -251,7 +250,7 @@ async fn strict_desk_page_selects_one_existing_page_without_creating_another() {
     };
     assert_eq!(projection.desk_id, desk_id);
     assert_eq!(projection.active_page, 2);
-    let events = std::iter::from_fn(|| compatibility.try_recv().ok()).collect::<Vec<_>>();
+    let events = drain_facade_notifications(&compatibility);
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].kind, "playback_page_changed");
     scenario.cleanup();
@@ -271,7 +270,7 @@ async fn strict_missing_page_is_side_effect_free_while_legacy_advance_still_crea
     let show_id = scenario_show_id(&scenario);
     let revision = scenario.show_revision();
     let cursor = scenario.state.application_events.latest_sequence();
-    let mut compatibility = scenario.state.events.subscribe();
+    let compatibility = subscribe_facade_events(&scenario.state);
 
     let strict = put_desk_page(&scenario, desk_id, 2, Some(true)).await;
 
@@ -289,7 +288,7 @@ async fn strict_missing_page_is_side_effect_free_while_legacy_advance_still_crea
     );
     assert_eq!(desk_page(&scenario, desk_id, show_id), 1);
     assert_eq!(scenario.state.application_events.latest_sequence(), cursor);
-    assert!(compatibility.try_recv().is_err());
+    assert!(next_facade_notification(&compatibility).is_none());
 
     let legacy = put_desk_page(&scenario, desk_id, 2, None).await;
 
@@ -303,7 +302,7 @@ async fn strict_missing_page_is_side_effect_free_while_legacy_advance_still_crea
         scenario.state.application_events.latest_sequence(),
         cursor + 2
     );
-    let events = std::iter::from_fn(|| compatibility.try_recv().ok()).collect::<Vec<_>>();
+    let events = drain_facade_notifications(&compatibility);
     assert_eq!(events.len(), 2);
     assert_eq!(events[0].kind, "show_object_changed");
     assert_eq!(events[1].kind, "playback_page_changed");

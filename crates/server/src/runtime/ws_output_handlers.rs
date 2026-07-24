@@ -14,7 +14,7 @@ pub(super) fn ws_speed_group_action(
         serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
     crate::tolerant_json::log_unknown_value_fields::<
         light_wire::v2::speed_group::SpeedGroupActionRequest,
-    >("/api/v1/events speed_group.action", &command.payload);
+    >("/api/v2/events speed_group.action", &command.payload);
     if request.request_id != command.request_id {
         return Err("Speed Group payload request_id must match the WebSocket request_id".into());
     }
@@ -57,7 +57,7 @@ pub(super) fn ws_output_runtime_action(
         serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
     crate::tolerant_json::log_unknown_value_fields::<
         light_wire::v2::output_runtime::OutputRuntimeActionRequest,
-    >("/api/v1/events output_runtime.action", &command.payload);
+    >("/api/v2/events output_runtime.action", &command.payload);
     if request.request_id != command.request_id {
         return Err("Output runtime payload request_id must match the WebSocket request_id".into());
     }

@@ -5,7 +5,7 @@ async fn configure_no_change_replay_conflict_and_clear_are_one_event_actions() {
     let scenario = TopologyScenario::new("Playback topology lifecycle").await;
     let initial_revision = scenario.show_revision();
     let cursor = scenario.state.application_events.latest_sequence();
-    let mut compatibility = scenario.state.events.subscribe();
+    let compatibility = subscribe_facade_events(&scenario.state);
     let configure = configure_request("configure-house", 0, 0);
 
     let response = scenario.action(initial_revision, configure.clone()).await;
@@ -24,8 +24,7 @@ async fn configure_no_change_replay_conflict_and_clear_are_one_event_actions() {
     let page_revision = projection_revision(&configured, "playback_page");
     assert_eq!(show_events(&scenario.state, cursor).len(), 1);
     assert_one_topology_event(&scenario.state, cursor, 2);
-    let compatibility_events =
-        std::iter::from_fn(|| compatibility.try_recv().ok()).collect::<Vec<_>>();
+    let compatibility_events = drain_facade_notifications(&compatibility);
     assert_eq!(compatibility_events.len(), 2);
     assert!(
         compatibility_events

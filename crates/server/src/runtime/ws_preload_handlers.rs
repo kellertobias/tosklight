@@ -11,7 +11,7 @@ pub(super) fn ws_programmer_preload_lifecycle_action(
     crate::tolerant_json::log_unknown_value_fields::<
         light_wire::v2::preload_lifecycle::ProgrammingPreloadLifecycleRequest,
     >(
-        "/api/v1/events programmer.preload.lifecycle.action",
+        "/api/v2/events programmer.preload.lifecycle.action",
         &command.payload,
     );
     if request.request_id != command.request_id {
@@ -56,7 +56,7 @@ pub(super) fn ws_programmer_preload_values_action(
     crate::tolerant_json::log_unknown_value_fields::<
         light_wire::v2::preload_values::ProgrammingPreloadValuesActionRequest,
     >(
-        "/api/v1/events programmer.preload.values.action",
+        "/api/v2/events programmer.preload.values.action",
         &command.payload,
     );
     if request.request_id != command.request_id {

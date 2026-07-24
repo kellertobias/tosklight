@@ -221,7 +221,6 @@ fn programmer_and_update_routes() -> Router<AppState> {
             put(patch_preview_highlight),
         )
         .route("/api/v1/master", put(update_master))
-        .route("/api/v1/events", get(ws_events))
         .route("/api/v1/command-history", get(command_history))
         .route("/api/v1/audit", get(audit_events))
 }

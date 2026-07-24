@@ -4,22 +4,22 @@ import { fixtureIdsByNumber, loadCanonicalCopy, putObject } from "./support/cata
 
 /**
  * CUE navigation is owned by the typed v2 command-line HTTP contract; `CUE-014` states operator
- * intent through it. This spec deliberately retains the *other* surface: the v1 textual WebSocket
+ * intent through it. This spec deliberately retains the *other* surface: the textual WebSocket
  * envelope that external integrations still use. It proves the compatibility caller reaches the
- * same typed Playback action and keeps its v1 success and rejection behavior, so the v1 adapter
+ * same typed Playback action and keeps its command-envelope success and rejection behavior, so the adapter
  * cannot silently diverge from the typed owner before it is removed. Rust boundary coverage owns
  * the temporary `playback_changed` notification cardinality.
  */
 test.describe("docs/engineering/refactoring-test-boundaries.md", () => {
-  test("CUE-015 @api › retained v1 WebSocket CUE navigation converges on the typed Playback action", async ({
+  test("CUE-015 @api › multiplexed WebSocket CUE navigation converges on the typed Playback action", async ({
     api,
     bench,
   }) => {
-    await loadCanonicalCopy(api, bench, "cue-navigation-v1-compatibility", "compact-rig");
+    await loadCanonicalCopy(api, bench, "cue-navigation-websocket-compatibility", "compact-rig");
     await installTwinPlaybacks(api);
     await api.request("POST", "/api/v1/cuelists/2/select", {});
 
-    // Go To through the v1 textual envelope moves the desk-selected Playback.
+    // Go To through the textual envelope moves the desk-selected Playback.
     const goTo = await api.command<unknown>("programmer.execute", { value: "CUE 3" });
     expect(goTo).toMatchObject({ protocol_version: 1, ok: true });
     expect(await runtime(api, 2)).toMatchObject({ current_cue_number: 3, master: 1, enabled: true });
@@ -38,7 +38,7 @@ test.describe("docs/engineering/refactoring-test-boundaries.md", () => {
     await api.command("programmer.execute", { value: "CUE CUE SET 1 . 2 CUE 1" });
     expect(await runtime(api, 2)).toMatchObject({ effective_next_cue_number: 1, effective_next_is_loaded: true });
 
-    // A rejected action reports through the v1 envelope and moves no runtime.
+    // A rejected action reports through the command envelope and moves no runtime.
     const before = await playbackState(api);
     await expect(api.command("programmer.execute", { value: "CUE 99" })).rejects.toThrow(
       /programmer\.execute failed/i,

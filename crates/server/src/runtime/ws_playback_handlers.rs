@@ -9,7 +9,7 @@ pub(super) fn ws_playback_action(
     let request: light_wire::v2::playback::PlaybackActionRequest =
         serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
     crate::tolerant_json::log_unknown_value_fields::<light_wire::v2::playback::PlaybackActionRequest>(
-        "/api/v1/events playback.action",
+        "/api/v2/events playback.action",
         &command.payload,
     );
     if request.request_id != command.request_id {

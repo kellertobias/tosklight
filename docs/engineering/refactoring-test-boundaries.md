@@ -44,7 +44,7 @@ The root suite currently contains 35 specifications and 17,372 lines. It is a sy
 | `07-move-in-black.spec.ts` | HTTP v1 show/runtime mutation, visible UI edits, virtual time | resolved/output state at timing boundaries, HTTP projection, UI state |
 | `07-playback-configuration.spec.ts` | HTTP v1 and legacy WS setup, visible controls, OSC, virtual time | HTTP playback projections, UI feedback, OSC LEDs/faders/actions, reload behavior |
 | `08-file-manager-and-text-editor.spec.ts` | HTTP v1 file operations and visible File Manager/Text Editor actions | confined file HTTP contract and UI projection |
-| `09-cue-go-to-load.spec.ts` | legacy WS, HTTP v1, visible Cue keys, OSC | HTTP loaded/next runtime, UI projection, OSC feedback, output timing |
+| `09-cue-go-to-load.spec.ts` | multiplexed WS, HTTP v1, visible Cue keys, OSC | HTTP loaded/next runtime, UI projection, OSC feedback, output timing |
 | `09-desk-lock.spec.ts` | visible lock UI, HTTP v1 and OSC attempts while locked | UI lock coverage and HTTP/output proof that rejected inputs do not mutate state |
 | `11-update-highlight-fixture-profiles-and-matter.spec.ts` | HTTP v1/legacy WS and visible UI, OSC, restart, SQLite fixtures, fault routes | HTTP/runtime projections, UI errors and geometry, OSC, SQLite and restart durability |
 | `14-sound-to-light.spec.ts` | paired HTTP v1 and visible UI with a simulated browser audio source | authoritative HTTP speed-group/configuration state and UI audio feedback |
@@ -124,7 +124,7 @@ Every later full-suite result must be compared with this named list. A changed f
 - `ApiDriver` now exposes the revisioned desk-scoped command-line HTTP contract, including ETag validation, compare-and-set replacement, logical key phases, typed outcomes, and request IDs.
 - Both command helpers route Programmer-owned and migrated Playback/Show command families through
   `/api/v2/desks/{desk_id}/command-line/execute`. The remaining `SPD GRP`, whole-Cue deletion, and
-  Playback `SET` gaps use the deliberately named compatibility helper. Direct v1 text is confined
+  Playback `SET` gaps use the deliberately named compatibility helper. Direct WebSocket text is confined
   to `API-004` command editing/target selection and the dedicated `CUE-015` execution contract.
 - `API-003` exercises GET, logical keys, compare-and-set PUT, stale-writer rejection, execution, idempotent replay, Programmer state, and both network-output protocols at the process boundary.
 - At the Stage 1 checkpoint, the remaining 129 `api.command()` calls exercised bounded selection,
@@ -133,7 +133,7 @@ Every later full-suite result must be compared with this named list. A changed f
 
 ## Stage 2: the public command boundary
 
-`executeLegacyCommandLine` is retired. Its 40 call sites and the 10 direct textual v1 WebSocket
+`executeLegacyCommandLine` is retired. Its 40 call sites and the 10 direct textual WebSocket
 command-line calls now use helpers that name the surface they exercise.
 
 ### How ownership is decided
@@ -151,7 +151,7 @@ legacy family:
 | `CUE [CUE] [SET <playback>\|SET <page> . <slot>] [CUE] <cue>` | Cue navigation (Playback `GoTo`/`Load`) |
 
 `commandLineOwnership()` in the bench API driver mirrors exactly that rule. It is a **static**
-decision. Attempting v2 and falling back to v1 is prohibited: it would silently absorb an ownership
+decision. Attempting the typed owner and falling back to compatibility is prohibited: it would silently absorb an ownership
 regression instead of failing.
 
 ### The three surfaces
@@ -162,7 +162,7 @@ regression instead of failing.
   `executeProgrammerCommand` over `ProgrammerSurface`. OSC retains exact press/release pairs with
   feedback waits; these are independent acceptance surfaces, not shortcuts for each other.
 - **Named compatibility** — `executeCompatibilityProgrammerCommand({ family, command })` for
-  families whose production boundary does not exist yet. The raw v1 textual sender is private.
+  families whose production boundary does not exist yet. The raw textual sender is private.
 
 ### Compatibility families and what each is waiting for
 
@@ -177,22 +177,22 @@ regression instead of failing.
 `cue_navigation` is retired. `CUE`/`CUE CUE` Go To and Load now parse into the typed
 `PlaybackAction::GoTo`/`PlaybackAction::Load` and execute through the Playback application service,
 so `CUE-014` states its intent through `executeCommandLine`. The Programming interaction boundary
-still owns the shared command-line transition, history, and reset, and the temporary v1
-`playback_changed` notification is emitted only for the compatibility WebSocket and OSC surfaces.
-`CUE-015 @api` is the dedicated retained v1 WebSocket envelope test for that family.
+still owns the shared command-line transition, history, and reset, and the temporary
+`playback_changed` facade notification is emitted only for the WebSocket and OSC surfaces.
+`CUE-015 @api` is the dedicated multiplexed WebSocket envelope test for that family.
 
-`setCompatibilityCommandTarget` is a separate named v1 caller: the FIXTURE/GROUP command target has
+`setCompatibilityCommandTarget` is a separate named compatibility caller: the FIXTURE/GROUP command target has
 no typed v2 owner, and the production frontend still issues it from `api/client/programming.ts`.
 
-### Retained v1 coverage and the ratchet
+### Retained WebSocket coverage and the ratchet
 
-`API-004 @api` retains the v1 command-edit and target-selection envelopes, including protocol
-version, request-id echo, and revision. `CUE-015 @api` separately retains v1 textual execution,
+`API-004 @api` retains the command-edit and target-selection envelopes, including protocol
+version, request-id echo, and revision. `CUE-015 @api` separately retains textual execution,
 success, and rejection while proving it reaches the typed Playback action. Other scenarios assert
 operator behavior through typed intent or the categorized compatibility helper.
 
 `tools/test-command-boundaries.mjs` runs inside `./test architecture`. It fails on any
-`executeLegacyCommandLine` occurrence, and ratchets both direct textual v1 WebSocket calls and
+`executeLegacyCommandLine` occurrence, and ratchets both direct textual WebSocket calls and
 categorized compatibility call sites against `tools/test-command-boundaries.baseline.json`. Removing
 a call site reports a stale baseline entry, so the baseline tightens rather than drifting.
 

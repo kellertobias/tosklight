@@ -115,7 +115,7 @@ async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order
         }),
     )
     .await;
-    let mut events = state.events.subscribe();
+    let events = subscribe_facade_events(&state);
 
     let response = post_stage_layout_action(
         &app,
@@ -153,7 +153,7 @@ async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order
     assert_eq!(layout["body"]["camera3d"]["position"][2], 2.0);
 
     let mut observed_change = false;
-    while let Ok(event) = events.try_recv() {
+    while let Some(event) = next_facade_notification(&events) {
         if event.kind == "show_object_changed"
             && event.payload["kind"] == "stage_layout"
             && event.payload["id"] == "main"

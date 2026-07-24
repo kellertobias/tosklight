@@ -172,7 +172,7 @@ OSC scenarios still receive the mandatory `@api` and `@ui` variants for their op
 
 **Detailed procedure:**
 
-1. Authenticate, open `/api/v1/events` with the token subprotocol, and record the current show revision and audit tail.
+1. Authenticate, subscribe to System facade notifications on `/api/v2/events` with the token subprotocol, and record the current show revision and audit tail.
 2. PUT a new Group object at an unused ID with expected revision 0. Wait for its WebSocket event and audit entry before continuing.
 3. PUT the same Group with a new `name` and the returned current revision. Wait for the rename event/audit entry.
 4. DELETE the Group with its current revision and wait for the delete event/audit entry.

@@ -7,7 +7,6 @@ pub(super) struct AppState {
     pub(super) data_dir: PathBuf,
     pub(super) sessions: Arc<RwLock<HashMap<SessionId, Session>>>,
     pub(super) session_clients: Arc<RwLock<HashMap<SessionId, Uuid>>>,
-    pub(super) ws_connections: Arc<Mutex<HashMap<SessionId, u32>>>,
     pub(super) programmers: ProgrammerRegistry,
     pub(super) programming: ProgrammingService,
     pub(super) playback_service: PlaybackService,
@@ -45,7 +44,6 @@ pub(super) struct AppState {
     /// Mutation backups are gated to at most one per configured autosave interval (api-rules §8).
     pub(super) active_show_backup_checkpoint: Arc<Mutex<Option<(light_core::ShowId, u64)>>>,
     pub(super) active_show_error: Arc<RwLock<Option<String>>>,
-    pub(super) events: broadcast::Sender<Event>,
     pub(super) application_events: EventBus,
     pub(super) facade_events: EventBus,
     pub(super) active_show_service: ActiveShowService,

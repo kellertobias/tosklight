@@ -94,7 +94,7 @@ fn selected_playback(state: &AppState, session: &Session) -> Result<u16, String>
         })
 }
 
-/// Temporary per-object v1 notification, isolated to the compatibility surfaces.
+/// Temporary per-object facade notification, isolated to compatibility consumers.
 pub(super) fn emit_compatibility_change(
     state: &AppState,
     session: &Session,

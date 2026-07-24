@@ -28,11 +28,10 @@ mod startup_options;
 mod startup_state;
 
 use crate::update;
-use axum::extract::ws::{Message, WebSocket};
 use axum::{
     Json, Router,
     extract::Request,
-    extract::{DefaultBodyLimit, Path, Query, State, WebSocketUpgrade},
+    extract::{DefaultBodyLimit, Path, Query, State},
     http::{HeaderMap, Method, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -86,7 +85,6 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 use tower_http::{
     cors::{Any, CorsLayer},

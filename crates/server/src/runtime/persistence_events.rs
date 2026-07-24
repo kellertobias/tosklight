@@ -197,7 +197,6 @@ pub(super) fn emit(state: &AppState, kind: &str, payload: serde_json::Value) {
                 payload: event.payload.clone(),
             },
         ));
-    let _ = state.events.send(event);
 }
 
 pub(super) fn record_command_history(

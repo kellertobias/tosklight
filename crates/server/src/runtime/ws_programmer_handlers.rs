@@ -15,7 +15,7 @@ pub(super) fn ws_programmer_command_line_replace(
     let input: Input =
         serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
     crate::tolerant_json::log_unknown_value_fields::<Input>(
-        "/api/v1/events programmer.command_line.replace",
+        "/api/v2/events programmer.command_line.replace",
         &command.payload,
     );
     if input.request_id != command.request_id {
@@ -69,7 +69,7 @@ pub(super) fn ws_programmer_selection_action(
     crate::tolerant_json::log_unknown_value_fields::<
         light_wire::v2::command_line::ProgrammingSelectionActionRequest,
     >(
-        "/api/v1/events programmer.selection.action",
+        "/api/v2/events programmer.selection.action",
         &command.payload,
     );
     if request.request_id != command.request_id {
@@ -114,7 +114,7 @@ pub(super) fn ws_programmer_values_action(
         serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
     crate::tolerant_json::log_unknown_value_fields::<
         light_wire::v2::programming::ProgrammingValuesActionRequest,
-    >("/api/v1/events programmer.values.action", &command.payload);
+    >("/api/v2/events programmer.values.action", &command.payload);
     if request.request_id != command.request_id {
         return Err(
             "Programmer values payload request_id must match the WebSocket request_id".into(),
@@ -296,7 +296,7 @@ pub(super) fn ws_programmer_priority_action(
     crate::tolerant_json::log_unknown_value_fields::<
         light_wire::v2::programmer_priority::ProgrammerPriorityActionRequest,
     >(
-        "/api/v1/events programmer.priority.action",
+        "/api/v2/events programmer.priority.action",
         &command.payload,
     );
     if request.request_id != command.request_id {
