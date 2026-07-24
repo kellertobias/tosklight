@@ -11,14 +11,14 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
   }) => {
     const name = `text-editor-${crypto.randomUUID()}.md`;
     const renamedName = `text-editor-renamed-${crypto.randomUUID()}.md`;
-    await api.request("POST", "/api/v1/files/shows/operations", {
+    await api.request("POST", "/api/v2/files/shows/operations", {
       operation: "create_file",
       sources: [],
       destination: "",
       name,
     });
-    const empty = await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(name)}`);
-    await api.request("PUT", "/api/v1/files/shows/text", {
+    const empty = await api.request<any>("GET", `/api/v2/files/shows/text?path=${encodeURIComponent(name)}`);
+    await api.request("PUT", "/api/v2/files/shows/text", {
       path: name,
       text: "Initial run sheet\n",
       revision: empty.revision,
@@ -54,11 +54,11 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     page.once("dialog", (dialog) => dialog.accept());
     await editors.nth(1).getByRole("button", { name: "Reload Newer Version" }).click();
     await expect(editors.nth(1).getByLabel("File text")).toHaveValue("External version\n");
-    await expect.poll(async () => (await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(name)}`)).text)
+    await expect.poll(async () => (await api.request<any>("GET", `/api/v2/files/shows/text?path=${encodeURIComponent(name)}`)).text)
       .toBe("External version\n");
 
-    const beforeExternalWrite = await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(name)}`);
-    await api.request("PUT", "/api/v1/files/shows/text", {
+    const beforeExternalWrite = await api.request<any>("GET", `/api/v2/files/shows/text?path=${encodeURIComponent(name)}`);
+    await api.request("PUT", "/api/v2/files/shows/text", {
       path: name,
       text: "External API update\n",
       revision: beforeExternalWrite.revision,
@@ -67,8 +67,8 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     await expect(editors.nth(1).getByLabel("File text")).toHaveValue("External API update\n", { timeout: 5_000 });
 
     await editors.nth(1).getByLabel("File text").fill("Unsaved during external write\n");
-    const beforeConflictingWrite = await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(name)}`);
-    await api.request("PUT", "/api/v1/files/shows/text", {
+    const beforeConflictingWrite = await api.request<any>("GET", `/api/v2/files/shows/text?path=${encodeURIComponent(name)}`);
+    await api.request("PUT", "/api/v2/files/shows/text", {
       path: name,
       text: "Second external API update\n",
       revision: beforeConflictingWrite.revision,
@@ -83,7 +83,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     // A completed File Manager/API rename updates the persisted association
     // without discarding an editor's independent unsaved draft.
     await editors.nth(1).getByLabel("File text").fill("Draft retained across rename\n");
-    await api.request("POST", "/api/v1/files/shows/operations", {
+    await api.request("POST", "/api/v2/files/shows/operations", {
       operation: "rename",
       sources: [name],
       name: renamedName,
@@ -93,7 +93,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     await expect(editors.nth(1).getByLabel("File text")).toHaveValue("Draft retained across rename\n");
     await expect(editors.nth(1).locator(".text-save-state")).toHaveText("Unsaved");
     await editors.nth(1).getByRole("button", { name: "Save", exact: true }).click();
-    await expect.poll(async () => (await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(renamedName)}`)).text)
+    await expect.poll(async () => (await api.request<any>("GET", `/api/v2/files/shows/text?path=${encodeURIComponent(renamedName)}`)).text)
       .toBe("Draft retained across rename\n");
 
     // The root/path association belongs to persisted pane configuration,
@@ -106,16 +106,16 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
         .length;
     }).toBe(2);
 
-    await api.request("POST", "/api/v1/files/shows/operations", { operation: "delete", sources: [renamedName] });
+    await api.request("POST", "/api/v2/files/shows/operations", { operation: "delete", sources: [renamedName] });
     await expect(editors.nth(0).locator(".text-save-state")).toHaveText("Missing", { timeout: 5_000 });
     await expect(editors.nth(0).getByLabel("File text")).toHaveValue("Draft retained across rename\n");
     page.once("dialog", (dialog) => dialog.accept());
     await editors.nth(0).getByRole("button", { name: "Recreate File" }).click();
-    await expect.poll(async () => (await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(renamedName)}`)).text)
+    await expect.poll(async () => (await api.request<any>("GET", `/api/v2/files/shows/text?path=${encodeURIComponent(renamedName)}`)).text)
       .toBe("Draft retained across rename\n");
     await expect(editors.nth(1).locator(".text-save-state")).toHaveText("Saved");
 
-    await api.request("POST", "/api/v1/files/shows/operations", { operation: "delete", sources: [renamedName] });
+    await api.request("POST", "/api/v2/files/shows/operations", { operation: "delete", sources: [renamedName] });
   });
 
   test("TEXT-015 @ui › Open File is root-confined and Pane Settings control read-only and Markdown views", async ({
@@ -126,14 +126,14 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     show,
   }) => {
     const name = `text-editor-settings-${crypto.randomUUID()}.md`;
-    await api.request("POST", "/api/v1/files/shows/operations", {
+    await api.request("POST", "/api/v2/files/shows/operations", {
       operation: "create_file",
       sources: [],
       destination: "",
       name,
     });
-    const empty = await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(name)}`);
-    await api.request("PUT", "/api/v1/files/shows/text", {
+    const empty = await api.request<any>("GET", `/api/v2/files/shows/text?path=${encodeURIComponent(name)}`);
+    await api.request("PUT", "/api/v2/files/shows/text", {
       path: name,
       text: "# Cue Sheet\n\n- House open\n- Beginners\n",
       revision: empty.revision,
@@ -192,7 +192,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     await editor.getByLabel("File text").fill("# Updated Cue Sheet\n\nStand by.\n");
     await expect(editor.getByRole("article", { name: "Rendered Markdown" }).getByRole("heading", { name: "Updated Cue Sheet" })).toBeVisible();
     await editor.getByRole("button", { name: "Save", exact: true }).click();
-    await expect.poll(async () => (await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(name)}`)).text)
+    await expect.poll(async () => (await api.request<any>("GET", `/api/v2/files/shows/text?path=${encodeURIComponent(name)}`)).text)
       .toBe("# Updated Cue Sheet\n\nStand by.\n");
 
     await editor.getByRole("button", { name: "Settings", exact: true }).click();
@@ -203,7 +203,7 @@ test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
     await expect(editor.getByLabel("File text")).toBeVisible();
     await expect(editor.getByRole("article", { name: "Rendered Markdown" })).toHaveCount(0);
 
-    await api.request("POST", "/api/v1/files/shows/operations", { operation: "delete", sources: [name] });
+    await api.request("POST", "/api/v2/files/shows/operations", { operation: "delete", sources: [name] });
   });
 });
 

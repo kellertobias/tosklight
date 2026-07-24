@@ -11,15 +11,20 @@ use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
 };
+use light_wire::v2::files::TextDocumentUpdateRequest;
 use parking_lot::Mutex as SyncMutex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use uuid::Uuid;
 
-use super::super::{ApiError, AppState, authenticate};
+use super::super::{
+    ApiError, AppState, authenticate, desk_management_v2::ReplayKey,
+    show_objects_v2::validate_request_id,
+};
 use super::FILE_MUTATION_LOCK;
 use super::paths::{DirectoryQuery, confined, root};
+use crate::tolerant_json::TolerantJson;
 
 const MAX_TEXT_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -227,11 +232,34 @@ pub(super) async fn save_text(
     State(state): State<AppState>,
     Path(root_id): Path<String>,
     headers: HeaderMap,
-    Json(input): Json<SaveText>,
-) -> Result<Json<TextDocument>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
+    TolerantJson(input): TolerantJson<TextDocumentUpdateRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    validate_request_id(&input.request_id)?;
+    let key = ReplayKey::new(
+        session.id,
+        &format!("file-text-update:{root_id}"),
+        &input.request_id,
+    );
+    let fingerprint =
+        serde_json::to_value(&input).map_err(|error| ApiError::internal(error.to_string()))?;
+    let mut replay = state.desk_management_replay.lock().await;
+    if let Some(value) = replay.get(&key, &fingerprint)? {
+        return Ok(Json(value));
+    }
     let (root, _) = root(&state, &root_id)?;
-    save_text_document(root_id, &root.path, input)
-        .await
-        .map(Json)
+    let request_id = input.request_id;
+    let document = save_text_document(
+        root_id,
+        &root.path,
+        SaveText {
+            path: input.path,
+            text: input.text,
+            revision: input.revision,
+        },
+    )
+    .await?;
+    let value = super::intent_value(document, &request_id, false)?;
+    replay.insert(key, fingerprint, value.clone());
+    Ok(Json(value))
 }

@@ -3,11 +3,16 @@ use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
 };
-use serde::{Deserialize, Serialize};
+use light_wire::v2::files::NativeNoteUpdateRequest;
+use serde::Serialize;
 
 use super::super::file_manager_support as support;
-use super::super::{ApiError, AppState, authenticate};
+use super::super::{
+    ApiError, AppState, authenticate, desk_management_v2::ReplayKey,
+    show_objects_v2::validate_request_id,
+};
 use super::paths::{DirectoryQuery, confined, io_api_error, root};
+use crate::tolerant_json::TolerantJson;
 
 #[derive(Serialize)]
 pub(super) struct NativeNote {
@@ -15,12 +20,6 @@ pub(super) struct NativeNote {
     path: String,
     supported: bool,
     note: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub(super) struct SaveNativeNote {
-    path: String,
-    note: String,
 }
 
 pub(super) async fn read_note(
@@ -49,9 +48,21 @@ pub(super) async fn save_note(
     State(state): State<AppState>,
     Path(root_id): Path<String>,
     headers: HeaderMap,
-    Json(input): Json<SaveNativeNote>,
-) -> Result<Json<NativeNote>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
+    TolerantJson(input): TolerantJson<NativeNoteUpdateRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    validate_request_id(&input.request_id)?;
+    let key = ReplayKey::new(
+        session.id,
+        &format!("file-note-update:{root_id}"),
+        &input.request_id,
+    );
+    let fingerprint =
+        serde_json::to_value(&input).map_err(|error| ApiError::internal(error.to_string()))?;
+    let mut replay = state.desk_management_replay.lock().await;
+    if let Some(value) = replay.get(&key, &fingerprint)? {
+        return Ok(Json(value));
+    }
     if input.note.len() > 64 * 1024 {
         return Err(ApiError::bad_request("native notes are limited to 64 KiB"));
     }
@@ -63,10 +74,16 @@ pub(super) async fn save_note(
         ));
     }
     support::write_native_note(&path, &input.note).map_err(io_api_error)?;
-    Ok(Json(NativeNote {
-        root_id,
-        path: input.path,
-        supported: true,
-        note: (!input.note.is_empty()).then_some(input.note),
-    }))
+    let value = super::intent_value(
+        NativeNote {
+            root_id,
+            path: input.path,
+            supported: true,
+            note: (!input.note.is_empty()).then_some(input.note),
+        },
+        &input.request_id,
+        false,
+    )?;
+    replay.insert(key, fingerprint, value.clone());
+    Ok(Json(value))
 }

@@ -7,6 +7,7 @@ pub mod cue_recording;
 pub mod cue_transfer;
 pub mod desk_management;
 pub mod events;
+pub mod files;
 pub mod fixture_library;
 pub mod group_management;
 pub mod group_recording;

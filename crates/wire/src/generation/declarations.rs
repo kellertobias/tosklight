@@ -7,6 +7,7 @@ use crate::v2::cue_recording::*;
 use crate::v2::cue_transfer::*;
 use crate::v2::desk_management::*;
 use crate::v2::events::*;
+use crate::v2::files::*;
 use crate::v2::fixture_library::*;
 use crate::v2::group_management::*;
 use crate::v2::group_recording::*;
@@ -38,6 +39,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(control_desk_configuration(config));
     declarations.extend(desk_management(config));
     declarations.extend(event_subscription(config));
+    declarations.extend(files(config));
     declarations.extend(programming(config));
     declarations.extend(programming_update(config));
     declarations.extend(playback_projection(config));
@@ -57,6 +59,20 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(show_library(config));
     declarations.extend(interaction(config));
     declarations
+}
+
+fn files(config: &Config) -> Vec<String> {
+    vec![
+        FileInputAction::decl(config),
+        FileInputOrigin::decl(config),
+        FileInputClaimRequest::decl(config),
+        FileInputReleaseRequest::decl(config),
+        NativeNoteUpdateRequest::decl(config),
+        TextDocumentUpdateRequest::decl(config),
+        FileOperationKind::decl(config),
+        FileConflictChoice::decl(config),
+        FileOperationRequest::decl(config),
+    ]
 }
 
 fn desk_management(config: &Config) -> Vec<String> {

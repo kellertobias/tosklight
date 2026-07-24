@@ -20,7 +20,7 @@ describe("help Markdown extensions", () => {
     expect(output).toContain("`help-key:.`");
   });
   it("allows safe links and relative images only", () => {
-    expect(safeHelpUrl("images/desk.png", "image")).toBe("/api/v1/help/assets/images/desk.png");
+    expect(safeHelpUrl("images/desk.png", "image")).toBe("/api/v2/help/assets/images/desk.png");
     expect(safeHelpUrl("../secret.png", "image")).toBeUndefined();
     expect(safeHelpUrl("javascript:alert(1)", "link")).toBeUndefined();
     expect(safeHelpUrl("https://example.com/help", "link")).toBe("https://example.com/help");

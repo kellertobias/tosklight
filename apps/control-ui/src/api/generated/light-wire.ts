@@ -103,6 +103,24 @@ export type SequenceGap = { after_sequence: number, oldest_available: number, la
 
 export type EventSource = { "kind": "runtime" } | { "kind": "action", source: EventActionSource, };
 
+export type FileInputAction = "rename" | "copy" | "move" | "delete";
+
+export type FileInputOrigin = "pending" | "toolbar";
+
+export type FileInputClaimRequest = { request_id: string, instance_id: string, action: FileInputAction, origin: FileInputOrigin, };
+
+export type FileInputReleaseRequest = { request_id: string, instance_id: string | null, };
+
+export type NativeNoteUpdateRequest = { request_id: string, path: string, note: string, };
+
+export type TextDocumentUpdateRequest = { request_id: string, path: string, text: string, revision: string | null, };
+
+export type FileOperationKind = "create_file" | "create_folder" | "rename" | "copy" | "move" | "trash" | "delete";
+
+export type FileConflictChoice = "replace" | "keep_both" | "skip";
+
+export type FileOperationRequest = { request_id: string, operation: FileOperationKind, sources: Array<string>, destination: string | null, destination_root_id: string | null, name: string | null, replace: boolean, conflict: FileConflictChoice | null, apply_to_all: boolean, };
+
 export type ProgrammingLifecycleSession = { session_id: string, };
 
 export type ProgrammingLifecycleProgrammer = { programmer_id: string, user_id: string, connected: boolean, selected_fixture_count: number, normal_value_count: number,

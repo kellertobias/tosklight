@@ -120,7 +120,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
       scene: `${prefix}.glb`,
     };
     for (const name of Object.values(files)) {
-      await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_file", sources: [], destination: "", name });
+      await api.request("POST", "/api/v2/files/shows/operations", { operation: "create_file", sources: [], destination: "", name });
     }
 
     await desk.open(api.baseUrl);
@@ -170,7 +170,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await page.getByRole("button", { name: "Choose lock wallpaper", exact: true }).click();
     await expectPickerConstraint(page, files.invalid, files.wallpaper);
 
-    await api.request("POST", "/api/v1/files/shows/operations", { operation: "delete", sources: Object.values(files) });
+    await api.request("POST", "/api/v2/files/shows/operations", { operation: "delete", sources: Object.values(files) });
   });
 
   // SKIP (pre-existing, predates the refactoring): the dedicated Cues pane does not yet
@@ -330,7 +330,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
       overwrite: false,
     });
     const decoy = `not-a-show-${crypto.randomUUID()}.txt`;
-    await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_file", sources: [], destination: "", name: decoy });
+    await api.request("POST", "/api/v2/files/shows/operations", { operation: "create_file", sources: [], destination: "", name: decoy });
 
     await desk.open(api.baseUrl);
     await desk.recordStep("SHOW RECOVERY FILE MANAGER", "Shows & recovery starts in the confined Shows root, rejects non-show files, and opens the selected indexed show through safe blackout.");

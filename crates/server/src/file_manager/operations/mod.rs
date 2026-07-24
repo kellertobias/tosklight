@@ -7,47 +7,21 @@ use axum::{
     extract::{Path, State},
     http::HeaderMap,
 };
-use serde::{Deserialize, Serialize};
+use light_wire::v2::files::{
+    FileConflictChoice as RequestedConflict, FileOperationKind,
+    FileOperationRequest as FileOperation,
+};
+use serde::Serialize;
 
 use self::execute::{create_item, remove_items, rename_item, transfer_items};
 use super::super::file_manager_support::ConflictChoice;
-use super::super::{ApiError, AppState, authenticate, emit};
+use super::super::{
+    ApiError, AppState, authenticate, desk_management_v2::ReplayKey, emit,
+    show_objects_v2::validate_request_id,
+};
 use super::FILE_MUTATION_LOCK;
 use super::paths::{ConfiguredRoot, root};
-
-#[derive(Clone, Copy, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(super) enum FileOperationKind {
-    CreateFile,
-    CreateFolder,
-    Rename,
-    Copy,
-    Move,
-    Trash,
-    Delete,
-}
-
-#[derive(Clone, Copy, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum RequestedConflict {
-    Replace,
-    KeepBoth,
-    Skip,
-}
-
-#[derive(Deserialize)]
-pub(super) struct FileOperation {
-    operation: FileOperationKind,
-    sources: Vec<String>,
-    destination: Option<String>,
-    destination_root_id: Option<String>,
-    name: Option<String>,
-    #[serde(default)]
-    replace: bool,
-    conflict: Option<RequestedConflict>,
-    #[serde(default)]
-    apply_to_all: bool,
-}
+use crate::tolerant_json::TolerantJson;
 
 #[derive(Serialize)]
 pub(super) struct FileOperationResult {
@@ -86,20 +60,38 @@ pub(super) async fn operate(
     State(state): State<AppState>,
     Path(root_id): Path<String>,
     headers: HeaderMap,
-    Json(input): Json<FileOperation>,
-) -> Result<Json<FileOperationResult>, ApiError> {
-    let _session = authenticate(&state, &headers)?;
+    TolerantJson(input): TolerantJson<FileOperation>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    validate_request_id(&input.request_id)?;
+    let key = ReplayKey::new(
+        session.id,
+        &format!("file-operation:{root_id}"),
+        &input.request_id,
+    );
+    let fingerprint =
+        serde_json::to_value(&input).map_err(|error| ApiError::internal(error.to_string()))?;
+    let mut replay = state.desk_management_replay.lock().await;
+    if let Some(value) = replay.get(&key, &fingerprint)? {
+        return Ok(Json(value));
+    }
     let _mutation_guard = FILE_MUTATION_LOCK.lock().await;
     validate_sources(&input.sources)?;
     let _apply_to_all = input.apply_to_all;
     let context = OperationContext::new(&state, root_id, &input)?;
     let output = execute_operation(&context, &input)?;
     emit_completion(&state, input.operation, &output.items);
-    Ok(Json(FileOperationResult {
-        complete: output.items.iter().all(|item| item.status != "failed"),
-        paths: output.paths,
-        items: output.items,
-    }))
+    let value = super::intent_value(
+        FileOperationResult {
+            complete: output.items.iter().all(|item| item.status != "failed"),
+            paths: output.paths,
+            items: output.items,
+        },
+        &input.request_id,
+        false,
+    )?;
+    replay.insert(key, fingerprint, value.clone());
+    Ok(Json(value))
 }
 
 fn validate_sources(sources: &[String]) -> Result<(), ApiError> {

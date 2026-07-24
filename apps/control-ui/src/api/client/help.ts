@@ -5,12 +5,12 @@ export class HelpApiClient {
 	constructor(private readonly transport: ClientTransport) {}
 
 	helpCatalog(): Promise<HelpCatalog> {
-		return this.transport.request("/api/v1/help", {}, false);
+		return this.transport.request("/api/v2/help", {}, false);
 	}
 
 	helpTopic(id: string): Promise<HelpTopic> {
 		return this.transport.request(
-			`/api/v1/help/topics/${encodeURIComponent(id)}`,
+			`/api/v2/help/topics/${encodeURIComponent(id)}`,
 			{},
 			false,
 		);

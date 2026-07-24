@@ -1,26 +1,18 @@
 use std::time::{Duration, Instant};
 
-use axum::{
-    Json,
-    extract::{Query, State},
-    http::{HeaderMap, StatusCode},
-};
+use axum::{Json, extract::State, http::HeaderMap};
 use light_core::SessionId;
-use serde::{Deserialize, Serialize};
+pub(crate) use light_wire::v2::files::FileInputAction;
+use light_wire::v2::files::{FileInputClaimRequest, FileInputOrigin, FileInputReleaseRequest};
+use serde::Serialize;
 use uuid::Uuid;
 
+use crate::tolerant_json::TolerantJson;
+
 use super::super::{ApiError, AppState, Session, authenticate, emit, persist_programmer};
+use super::super::{desk_management_v2::ReplayKey, show_objects_v2::validate_request_id};
 
 const FILE_INPUT_CONTEXT_TTL: Duration = Duration::from_secs(120);
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum FileInputAction {
-    Rename,
-    Copy,
-    Move,
-    Delete,
-}
 
 #[derive(Clone)]
 pub(crate) struct FileInputContext {
@@ -38,25 +30,6 @@ pub(super) struct FileInputContextResponse {
     session_id: SessionId,
     desk_id: Uuid,
     expires_in_millis: u128,
-}
-
-#[derive(Clone, Copy, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum FileInputOrigin {
-    Pending,
-    Toolbar,
-}
-
-#[derive(Deserialize)]
-pub(super) struct ClaimFileInput {
-    instance_id: String,
-    action: FileInputAction,
-    origin: FileInputOrigin,
-}
-
-#[derive(Default, Deserialize)]
-pub(super) struct FileInputQuery {
-    instance_id: Option<String>,
 }
 
 fn context_response(context: &FileInputContext) -> FileInputContextResponse {
@@ -120,9 +93,17 @@ pub(super) async fn input_context(
 pub(super) async fn claim_input_context(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(input): Json<ClaimFileInput>,
-) -> Result<Json<FileInputContextResponse>, ApiError> {
+    TolerantJson(input): TolerantJson<FileInputClaimRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    validate_request_id(&input.request_id)?;
+    let key = ReplayKey::new(session.id, "file-input-claim", &input.request_id);
+    let fingerprint =
+        serde_json::to_value(&input).map_err(|error| ApiError::internal(error.to_string()))?;
+    let mut replay = state.desk_management_replay.lock().await;
+    if let Some(value) = replay.get(&key, &fingerprint)? {
+        return Ok(Json(value));
+    }
     let instance_id = validate_instance_id(&input.instance_id)?;
     let pending_origin = matches!(input.origin, FileInputOrigin::Pending);
     let context = FileInputContext {
@@ -143,7 +124,9 @@ pub(super) async fn claim_input_context(
         );
     }
     emit_claim_changed(&state, session.id, session.desk.id, &context, true);
-    Ok(Json(context_response(&context)))
+    let value = super::intent_value(context_response(&context), &input.request_id, false)?;
+    replay.insert(key, fingerprint, value.clone());
+    Ok(Json(value))
 }
 
 fn validate_instance_id(value: &str) -> Result<&str, ApiError> {
@@ -211,24 +194,39 @@ fn emit_claim_changed(
 
 pub(super) async fn release_input_context(
     State(state): State<AppState>,
-    Query(query): Query<FileInputQuery>,
     headers: HeaderMap,
-) -> Result<StatusCode, ApiError> {
+    TolerantJson(input): TolerantJson<FileInputReleaseRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
+    validate_request_id(&input.request_id)?;
+    let key = ReplayKey::new(session.id, "file-input-release", &input.request_id);
+    let fingerprint =
+        serde_json::to_value(&input).map_err(|error| ApiError::internal(error.to_string()))?;
+    let mut replay = state.desk_management_replay.lock().await;
+    if let Some(value) = replay.get(&key, &fingerprint)? {
+        return Ok(Json(value));
+    }
     let released = {
         let mut contexts = state.file_input_contexts.lock();
         let matches = contexts.get(&session.desk.id).is_some_and(|context| {
-            query
+            input
                 .instance_id
                 .as_deref()
                 .is_none_or(|instance| instance == context.instance_id)
         });
         matches.then(|| contexts.remove(&session.desk.id)).flatten()
     };
+    let was_released = released.is_some();
     if let Some(context) = released {
         emit_claim_changed(&state, session.id, session.desk.id, &context, false);
     }
-    Ok(StatusCode::NO_CONTENT)
+    let value = super::intent_value(
+        serde_json::json!({"released": was_released}),
+        &input.request_id,
+        false,
+    )?;
+    replay.insert(key, fingerprint, value.clone());
+    Ok(Json(value))
 }
 
 pub(super) fn pending_file_action(command_line: &str) -> Option<FileInputAction> {

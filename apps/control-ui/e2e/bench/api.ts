@@ -326,6 +326,30 @@ export class ApiDriver {
   }
 
   private v2DeskManagementRequest(method: string, path: string, body: unknown) {
+    if (method === "POST" && /^\/api\/v2\/files\/[^/]+\/operations$/.test(path)) {
+      return {
+        method,
+        path,
+        body: { request_id: crypto.randomUUID(), ...(body as object) },
+      };
+    }
+    if (
+      method === "PUT" &&
+      /^\/api\/v2\/files\/[^/]+\/(?:notes|text)$/.test(path)
+    ) {
+      return {
+        method: "POST",
+        path: `${path}/update`,
+        body: { request_id: crypto.randomUUID(), ...(body as object) },
+      };
+    }
+    if (method === "POST" && path === "/api/v2/files/input-context") {
+      return {
+        method,
+        path: `${path}/claim`,
+        body: { request_id: crypto.randomUUID(), ...(body as object) },
+      };
+    }
     if (method === "PUT" && path === "/api/v2/configuration") {
       return {
         method: "POST",

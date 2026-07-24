@@ -211,7 +211,7 @@ function resetFileManagerMocks() {
 	mocks.server.fileStreamUrl
 		.mockReset()
 		.mockResolvedValue(
-			"http://light.test/api/v1/files/shows/content?path=audio.wav&ticket=capability",
+			"http://light.test/api/v2/files/shows/content?path=audio.wav&ticket=capability",
 		);
 	mocks.server.fileThumbnail
 		.mockReset()

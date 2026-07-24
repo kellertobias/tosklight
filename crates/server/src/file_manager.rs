@@ -34,36 +34,55 @@ static FILE_MUTATION_LOCK: AsyncMutex<()> = AsyncMutex::const_new(());
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/files/roots", get(browse::roots))
+        .route("/api/v2/files/roots", get(browse::roots))
         .route(
-            "/api/v1/files/input-context",
-            get(input_context::input_context)
-                .post(input_context::claim_input_context)
-                .delete(input_context::release_input_context),
+            "/api/v2/files/input-context",
+            get(input_context::input_context),
         )
-        .route("/api/v1/files/{root_id}/entries", get(browse::entries))
-        .route("/api/v1/files/{root_id}/metadata", get(browse::metadata))
-        .route("/api/v1/files/{root_id}/content", get(streaming::content))
         .route(
-            "/api/v1/files/{root_id}/stream-ticket",
+            "/api/v2/files/input-context/claim",
+            post(input_context::claim_input_context),
+        )
+        .route(
+            "/api/v2/files/input-context/release",
+            post(input_context::release_input_context),
+        )
+        .route("/api/v2/files/{root_id}/entries", get(browse::entries))
+        .route("/api/v2/files/{root_id}/metadata", get(browse::metadata))
+        .route("/api/v2/files/{root_id}/content", get(streaming::content))
+        .route(
+            "/api/v2/files/{root_id}/stream-ticket",
             post(streaming::stream_ticket),
         )
         .route(
-            "/api/v1/files/{root_id}/thumbnail",
+            "/api/v2/files/{root_id}/thumbnail",
             get(thumbnail::thumbnail),
         )
+        .route("/api/v2/files/{root_id}/notes", get(notes::read_note))
         .route(
-            "/api/v1/files/{root_id}/notes",
-            get(notes::read_note).put(notes::save_note),
+            "/api/v2/files/{root_id}/notes/update",
+            post(notes::save_note),
         )
+        .route("/api/v2/files/{root_id}/text", get(text::read_text))
+        .route("/api/v2/files/{root_id}/text/update", post(text::save_text))
         .route(
-            "/api/v1/files/{root_id}/text",
-            get(text::read_text).put(text::save_text),
-        )
-        .route(
-            "/api/v1/files/{root_id}/operations",
+            "/api/v2/files/{root_id}/operations",
             post(operations::operate),
         )
+}
+
+fn intent_value<T: serde::Serialize>(
+    value: T,
+    request_id: &str,
+    replayed: bool,
+) -> Result<serde_json::Value, super::ApiError> {
+    let mut value = serde_json::to_value(value)
+        .map_err(|error| super::ApiError::internal(error.to_string()))?;
+    if let Some(object) = value.as_object_mut() {
+        object.insert("request_id".into(), request_id.into());
+        object.insert("replayed".into(), replayed.into());
+    }
+    Ok(value)
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ pub(super) async fn desk_boundary(
         return next.run(request).await;
     };
     let ticketed_file_stream = request.method() == Method::GET
-        && request.uri().path().starts_with("/api/v1/files/")
+        && request.uri().path().starts_with("/api/v2/files/")
         && request.uri().path().ends_with("/content")
         && request.uri().query().is_some_and(|query| {
             query
@@ -18,7 +18,7 @@ pub(super) async fn desk_boundary(
         });
     if request.uri().path() == "/"
         || request.uri().path().starts_with("/assets/")
-        || request.uri().path().starts_with("/api/v1/help/assets/")
+        || request.uri().path().starts_with("/api/v2/help/assets/")
         // Native audio elements cannot attach the desk-boundary header. The
         // content handler still validates the path-bound, expiring stream
         // capability and its active authenticated session.

@@ -16,7 +16,7 @@ export class FileApiClient {
 	constructor(private readonly transport: ClientTransport) {}
 
 	fileRoots(): Promise<FileRoot[]> {
-		return this.transport.request("/api/v1/files/roots");
+		return this.transport.request("/api/v2/files/roots");
 	}
 
 	fileEntries(root: string, path = "", hidden = false): Promise<FileDirectory> {
@@ -42,8 +42,8 @@ export class FileApiClient {
 		note: string,
 	): Promise<FileNativeNote> {
 		return this.transport.request(
-			filePath(root, "notes"),
-			jsonRequest("PUT", { path, note }),
+			filePath(root, "notes/update"),
+			jsonRequest("POST", { request_id: crypto.randomUUID(), path, note }),
 		);
 	}
 
@@ -60,8 +60,13 @@ export class FileApiClient {
 		revision: string | null,
 	): Promise<TextDocument> {
 		return this.transport.request(
-			filePath(root, "text"),
-			jsonRequest("PUT", { path, text, revision }),
+			filePath(root, "text/update"),
+			jsonRequest("POST", {
+				request_id: crypto.randomUUID(),
+				path,
+				text,
+				revision,
+			}),
 		);
 	}
 
@@ -71,7 +76,11 @@ export class FileApiClient {
 	): Promise<FileOperationResult> {
 		return this.transport.request(
 			filePath(root, "operations"),
-			jsonRequest("POST", { sources: [], ...input }),
+			jsonRequest("POST", {
+				request_id: crypto.randomUUID(),
+				sources: [],
+				...input,
+			}),
 		);
 	}
 
@@ -101,21 +110,29 @@ export class FileApiClient {
 		origin: "pending" | "toolbar",
 	): Promise<FileInputContext> {
 		return this.transport.request(
-			"/api/v1/files/input-context",
-			jsonRequest("POST", { instance_id: instanceId, action, origin }),
+			"/api/v2/files/input-context/claim",
+			jsonRequest("POST", {
+				request_id: crypto.randomUUID(),
+				instance_id: instanceId,
+				action,
+				origin,
+			}),
 		);
 	}
 
 	releaseFileInput(instanceId: string): Promise<void> {
-		const query = `?instance_id=${encodeURIComponent(instanceId)}`;
-		return this.transport.request(`/api/v1/files/input-context${query}`, {
-			method: "DELETE",
-		});
+		return this.transport.request(
+			"/api/v2/files/input-context/release",
+			jsonRequest("POST", {
+				request_id: crypto.randomUUID(),
+				instance_id: instanceId,
+			}),
+		);
 	}
 }
 
 function filePath(root: string, suffix: string): string {
-	return `/api/v1/files/${encodeURIComponent(root)}/${suffix}`;
+	return `/api/v2/files/${encodeURIComponent(root)}/${suffix}`;
 }
 
 function pathQuery(path: string): string {

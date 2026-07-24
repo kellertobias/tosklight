@@ -48,9 +48,9 @@ where
     S: Clone + Send + Sync + 'static,
 {
     Router::new()
-        .route("/api/v1/help", get(catalog))
-        .route("/api/v1/help/topics/{*id}", get(topic))
-        .route("/api/v1/help/assets/{*path}", get(asset))
+        .route("/api/v2/help", get(catalog))
+        .route("/api/v2/help/topics/{*id}", get(topic))
+        .route("/api/v2/help/assets/{*path}", get(asset))
 }
 
 fn live_help_dir() -> Option<PathBuf> {

@@ -13,7 +13,7 @@ export function safeHelpUrl(url: string, kind: "link" | "image"): string | undef
   if (/^https:\/\//i.test(trimmed)) return trimmed;
   if (kind === "link" && trimmed.startsWith("#")) return trimmed;
   if (kind === "image" && !/^[a-z][a-z0-9+.-]*:/i.test(trimmed) && !trimmed.startsWith("/") && !trimmed.split("/").includes("..")) {
-    return `/api/v1/help/assets/${trimmed.split("/").map(encodeURIComponent).join("/")}`;
+    return `/api/v2/help/assets/${trimmed.split("/").map(encodeURIComponent).join("/")}`;
   }
   return undefined;
 }

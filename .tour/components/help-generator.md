@@ -41,9 +41,9 @@ Build-enforced rules:
 
 `crates/server/src/help.rs` embeds `docs/help` with `#[derive(RustEmbed)]` and serves:
 
-- `GET /api/v1/help` — catalog tree
-- `GET /api/v1/help/topics/{*id}`
-- `GET /api/v1/help/assets/{*path}`
+- `GET /api/v2/help` — catalog tree
+- `GET /api/v2/help/topics/{*id}`
+- `GET /api/v2/help/assets/{*path}`
 
 Debug builds prefer a live on-disk `docs/help` (`live_help_dir()`), so edits show up immediately.
 Release builds serve the embedded copy.

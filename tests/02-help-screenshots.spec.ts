@@ -358,9 +358,9 @@ async function seedScreenshotProgramming(api: ApiDriver, showId: string) {
     await put(api, showId, "playback", String(Number(id) + 1), playback(Number(id) + 1, name, { type: "group", group_id: id }, ["select", "flash", "select_dereferenced"]));
   }
   await put(api, showId, "playback_page", "1", { number: 1, name: "Main", slots: { "1": 1, "2": 2, "3": 3, "4": 4, "5": 5 } });
-  await api.request("POST", "/api/v1/files/shows/operations", { operation: "create_file", sources: [], destination: "", name: SCREENSHOT_TEXT_FILE });
-  const empty = await api.request<any>("GET", `/api/v1/files/shows/text?path=${encodeURIComponent(SCREENSHOT_TEXT_FILE)}`);
-  await api.request("PUT", "/api/v1/files/shows/text", {
+  await api.request("POST", "/api/v2/files/shows/operations", { operation: "create_file", sources: [], destination: "", name: SCREENSHOT_TEXT_FILE });
+  const empty = await api.request<any>("GET", `/api/v2/files/shows/text?path=${encodeURIComponent(SCREENSHOT_TEXT_FILE)}`);
+  await api.request("PUT", "/api/v2/files/shows/text", {
     path: SCREENSHOT_TEXT_FILE,
     text: "# Run of show\n\n- 18:45 House open\n- 19:25 Beginners\n- 19:30 Opening Sequence\n\n## Notes\n\nCheck follow spots before preset.\n",
     revision: empty.revision,

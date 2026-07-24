@@ -17,11 +17,12 @@ async fn file_input_stays_owned_until_session_close() {
     let claimed = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/files/input-context")
+            Request::post("/api/v2/files/input-context/claim")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({
+                        "request_id":"claim-owner",
                         "instance_id":"acceptance-file-manager",
                         "action":"copy",
                         "origin":"pending"
@@ -44,11 +45,12 @@ async fn file_input_stays_owned_until_session_close() {
     let competing = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/files/input-context")
+            Request::post("/api/v2/files/input-context/claim")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({
+                        "request_id":"claim-competitor",
                         "instance_id":"another-pane",
                         "action":"copy",
                         "origin":"toolbar"
@@ -94,11 +96,12 @@ async fn losing_file_input_claim_does_not_consume_the_pending_command() {
     let winner = app
         .clone()
         .oneshot(
-            Request::post("/api/v1/files/input-context")
+            Request::post("/api/v2/files/input-context/claim")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({
+                        "request_id":"claim-winner",
                         "instance_id":"winning-toolbar",
                         "action":"copy",
                         "origin":"toolbar"
@@ -113,11 +116,12 @@ async fn losing_file_input_claim_does_not_consume_the_pending_command() {
 
     let loser = app
         .oneshot(
-            Request::post("/api/v1/files/input-context")
+            Request::post("/api/v2/files/input-context/claim")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({
+                        "request_id":"claim-loser",
                         "instance_id":"losing-pending-pane",
                         "action":"copy",
                         "origin":"pending"
