@@ -13,7 +13,6 @@ use super::events::EventSnapshotCursor;
 
 /// Body of the atomic, idempotent `PatchFixtures` POST operation.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PatchFixturesRequest {
     /// Client-generated idempotency identity, scoped to the authenticated desk session.
     #[schemars(length(min = 1, max = 128))]
@@ -25,6 +24,46 @@ pub struct PatchFixturesRequest {
     /// are accepted as the requested desired state.
     #[serde(default)]
     pub remove_fixture_ids: Vec<Uuid>,
+    /// Server-resolved placement intents. Empty retains the generic desired-state Patch behavior
+    /// where fixture split assignments are already explicit.
+    #[serde(default)]
+    pub placements: Vec<PatchPlacementIntent>,
+}
+
+/// One ordered fixture batch whose per-split addresses are resolved by the server.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchPlacementIntent {
+    #[schemars(length(min = 1))]
+    pub fixture_ids: Vec<Uuid>,
+    #[schemars(length(min = 1))]
+    pub splits: Vec<PatchSplitPlacementIntent>,
+}
+
+/// Base address and deterministic assignment mode for one selected-mode split.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchSplitPlacementIntent {
+    pub split: u16,
+    pub universe: Option<u16>,
+    pub address: Option<u16>,
+    pub mode: PatchSplitPlacementMode,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PatchSplitPlacementMode {
+    Consecutive,
+    OperatorOverrides {
+        #[serde(default)]
+        overrides: Vec<PatchOperatorAddressOverride>,
+    },
+}
+
+/// Sparse operator-selected address replacing the deterministic proposal for one fixture.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchOperatorAddressOverride {
+    pub fixture_id: Uuid,
+    pub universe: u16,
+    pub address: u16,
 }
 
 /// One fixture candidate containing only identities and state owned by the portable patch.

@@ -138,6 +138,15 @@ impl ResolvedMode {
     pub(super) fn projection(&self) -> &PatchModeProjection {
         &self.projection
     }
+
+    pub(super) fn split_footprint(&self, split: u16) -> Result<u16, ActionError> {
+        self.projection
+            .splits
+            .iter()
+            .find(|candidate| candidate.number == split)
+            .map(|candidate| candidate.footprint)
+            .ok_or_else(|| invalid(format!("selected fixture mode has no split {split}")))
+    }
 }
 
 pub(super) const fn profile_key(reference: PatchedFixtureProfileReference) -> ProfileKey {

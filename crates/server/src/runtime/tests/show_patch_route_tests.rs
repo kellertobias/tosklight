@@ -1,6 +1,81 @@
 use super::*;
 
 #[tokio::test]
+async fn v2_patch_route_resolves_ordered_placement_and_replays_authoritative_addresses() {
+    let (state, data_dir) = test_state();
+    let (profile_id, mode_id) = install_patch_route_profile(&state);
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "V2 server placement").await;
+    let show_id = show["id"].as_str().unwrap();
+    open_show_for_patch_test(&app, &token, show_id).await;
+
+    let mut request = valid_patch_request_for(profile_id, mode_id, "server-placement-route-test");
+    let template = request["fixtures"][0].clone();
+    let fixture_ids = [Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
+    request["fixtures"] = serde_json::Value::Array(
+        fixture_ids
+            .iter()
+            .enumerate()
+            .map(|(index, fixture_id)| {
+                let mut fixture = template.clone();
+                fixture["fixture_id"] = serde_json::json!(fixture_id);
+                fixture["fixture_number"] = serde_json::json!(index + 1);
+                fixture
+            })
+            .collect(),
+    );
+    request["placements"] = serde_json::json!([{
+        "fixture_ids": fixture_ids,
+        "splits": [{
+            "split": 1,
+            "universe": 1,
+            "address": 1,
+            "mode": {
+                "type": "operator_overrides",
+                "overrides": [{
+                    "fixture_id": fixture_ids[1],
+                    "universe": 1,
+                    "address": 50
+                }],
+                "future_mode_field": true
+            },
+            "future_split_field": "accepted"
+        }],
+        "future_placement_field": {"accepted": true}
+    }]);
+    request["future_request_field"] = serde_json::json!("accepted");
+
+    let response = post_patch(&app, &token, show_id, Some(0), request.clone()).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = json(response).await;
+    assert_eq!(
+        response["fixtures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|fixture| fixture["split_patches"][0]["address"].as_u64())
+            .collect::<Vec<_>>(),
+        vec![Some(1), Some(50), Some(3)]
+    );
+
+    let replay = post_patch(&app, &token, show_id, Some(0), request).await;
+    assert_eq!(replay.status(), StatusCode::OK);
+    let replay = json(replay).await;
+    assert_eq!(replay["replayed"], true);
+    assert_eq!(
+        replay["fixtures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|fixture| fixture["split_patches"][0]["address"].as_u64())
+            .collect::<Vec<_>>(),
+        vec![Some(1), Some(50), Some(3)]
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_patch_snapshot_authenticates_and_returns_the_patch_revision_etag() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

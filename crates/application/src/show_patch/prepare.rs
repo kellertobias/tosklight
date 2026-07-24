@@ -1,4 +1,5 @@
 use super::legacy_profiles::materialize_touched_legacy_profiles;
+use super::placement::assign_placement_addresses;
 use super::profiles::ResolvedProfiles;
 use super::projection::build_change;
 use super::record_index::StoredFixtureRecords;
@@ -10,6 +11,7 @@ use std::collections::BTreeSet;
 
 pub(super) struct PatchPlan {
     profiles: ResolvedProfiles,
+    fixtures: Vec<super::PatchFixtureCandidate>,
 }
 
 pub(super) enum PreparedPatch {
@@ -35,7 +37,8 @@ pub(super) fn plan_patch<P: ShowPatchPorts>(
     let stored = StoredFixtureRecords::load(document)?;
     let materialized = materialize_touched_legacy_profiles(document, &stored, command)?;
     let profiles = ResolvedProfiles::resolve(document, command, materialized, ports)?;
-    Ok(PatchPlan { profiles })
+    let fixtures = assign_placement_addresses(command, &profiles)?;
+    Ok(PatchPlan { profiles, fixtures })
 }
 
 pub(super) fn prepare_patch(
@@ -45,7 +48,13 @@ pub(super) fn prepare_patch(
 ) -> Result<PreparedPatch, ActionError> {
     let stored = StoredFixtureRecords::load(document)?;
     let profiles = plan.profiles;
-    let fixtures = build_records(&stored, &profiles, command)?;
+    let assigned_command = PatchFixturesCommand {
+        show_id: command.show_id,
+        fixtures: plan.fixtures,
+        remove_fixture_ids: command.remove_fixture_ids.clone(),
+        placements: Vec::new(),
+    };
+    let fixtures = build_records(&stored, &profiles, &assigned_command)?;
     let mut transaction = document.transaction();
     let modes = profiles.stage(&mut transaction)?;
     stage_records(&mut transaction, &fixtures);

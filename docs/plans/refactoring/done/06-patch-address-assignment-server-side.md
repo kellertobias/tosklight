@@ -60,3 +60,32 @@ npm run test:e2e   # full suite gate
 
 Decided (see above) — preview client-side, actual patching server-side. No open
 decisions remain.
+
+## Result
+
+- Added a v2 patch placement intent containing the ordered fixture IDs, per-split base
+  addresses, placement mode, and sparse operator overrides. The application layer now
+  resolves authoritative mode footprints and computes every non-overridden address
+  before the existing patch validation and replay path commits the revision.
+- Kept placement estimates in the client for display only. Address/universe changes
+  rebase the preview, independently moved proposals become sparse overrides, and the
+  final fixture writes deliberately omit the preview's computed split assignments.
+  Generic desired-state updates and unpatching send an empty placement-intent list.
+- Regenerated the TypeScript and JSON-schema wire contracts and added focused
+  application, server-route, wire, and client tests. Added `PATCH-PLACEMENT-001` to the
+  real fixture-address screen coverage; it arranges the preview as `1, 50, 3`, commits,
+  and compares the authoritative v2 patch snapshot with the displayed addresses.
+- Verification passed: application 29 tests, server route 7 tests, wire 80 tests plus
+  the generated-contract test, focused client 46 tests, full `npm run test:unit`
+  (including 1,990 control-ui tests), focused fixture-address E2E 2 tests, and full
+  `npm run test:e2e` at 283 passed / 11 skipped / 0 failed. This is above the recorded
+  baseline of 281 passed / 12 skipped / 0 failed. `cargo fmt --all -- --check` and
+  `git diff --check` also passed.
+- The original `UniverseMap.tsx` claim was stale and referred to display-row wrapping,
+  not fixture assignment. The operator help also requires independently movable
+  proposals, so the selected consecutive mode retains sparse server-applied overrides.
+  The first E2E draft used a synthetic drag that did not exercise the supported
+  interaction; the final test uses proposal selection followed by tapping a free
+  address.
+- No new follow-up chunk was needed: pending chunk 08 already owns tolerant unknown-field
+  logging, and pending chunk 12 already owns de-scoping the route layer.

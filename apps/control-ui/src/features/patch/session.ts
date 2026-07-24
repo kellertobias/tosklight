@@ -3,6 +3,7 @@ import type {
 	PatchEventMessage,
 	PatchMutation,
 	PatchMutationOutcome,
+	PatchPlacement,
 } from "./contracts";
 import {
 	changedPatchFixtureCandidate,
@@ -105,12 +106,18 @@ export class PatchSession {
 	patchFixtures(
 		candidates: readonly PatchFixtureCandidate[],
 		removeFixtureIds: readonly string[] = [],
+		placements: readonly PatchPlacement[] = [],
 	): Promise<PatchMutationOutcome> {
 		if (!candidates.length && !removeFixtureIds.length)
 			return Promise.reject(
 				new Error("A Patch mutation must change at least one fixture"),
 			);
-		return this.queuePatch(candidates, removeFixtureIds, () => candidates);
+		return this.queuePatch(
+			candidates,
+			removeFixtureIds,
+			() => candidates,
+			placements,
+		);
 	}
 
 	updateFixture(
@@ -140,13 +147,20 @@ export class PatchSession {
 		initial: readonly PatchFixtureCandidate[],
 		removeFixtureIds: readonly string[],
 		materialize: CandidateMaterializer,
+		placements: readonly PatchPlacement[] = [],
 	): Promise<PatchMutationOutcome> {
 		const lifecycle = this.writableLifecycle();
 		if (lifecycle == null) return Promise.reject(authorityChanged());
 		const requestId = crypto.randomUUID();
 		this.store.begin(requestId, initial, removeFixtureIds);
 		return this.enqueueWrite(() =>
-			this.runPatch(requestId, removeFixtureIds, materialize, lifecycle),
+			this.runPatch(
+				requestId,
+				removeFixtureIds,
+				materialize,
+				placements,
+				lifecycle,
+			),
 		);
 	}
 
@@ -154,6 +168,7 @@ export class PatchSession {
 		requestId: string,
 		removeFixtureIds: readonly string[],
 		materialize: CandidateMaterializer,
+		placements: readonly PatchPlacement[],
 		lifecycle: number,
 	): Promise<PatchMutationOutcome> {
 		try {
@@ -162,6 +177,7 @@ export class PatchSession {
 				requestId,
 				removeFixtureIds,
 				materialize,
+				placements,
 				lifecycle,
 			);
 			this.requireActiveLifecycle(lifecycle);
@@ -180,13 +196,19 @@ export class PatchSession {
 		requestId: string,
 		removeFixtureIds: readonly string[],
 		materialize: CandidateMaterializer,
+		placements: readonly PatchPlacement[],
 		lifecycle: number,
 	): Promise<PatchMutationOutcome> {
 		for (let conflicts = 0; ; conflicts++) {
 			this.requireActiveLifecycle(lifecycle);
 			const candidates = materialize(requestId);
 			this.store.replacePending(requestId, candidates, removeFixtureIds);
-			const request = patchMutation(requestId, candidates, removeFixtureIds);
+			const request = patchMutation(
+				requestId,
+				candidates,
+				removeFixtureIds,
+				placements,
+			);
 			try {
 				return await this.sendReplaySafe(request, lifecycle);
 			} catch (reason) {

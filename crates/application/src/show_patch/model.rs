@@ -25,12 +25,42 @@ pub struct PatchFixturesCommand {
     /// Stable fixture identities removed by the same atomic patch transaction. Already-absent
     /// identities are ignored so retries and convergent desired-state updates remain idempotent.
     pub remove_fixture_ids: Vec<FixtureId>,
+    /// Ordered placement intents whose final split assignments are resolved from authoritative
+    /// selected-mode footprints before the candidate show is validated and committed.
+    pub placements: Vec<PatchPlacementIntent>,
 }
 
 impl ApplicationCommand for PatchFixturesCommand {
     type Value = PatchFixturesResult;
 
     const FAMILY: CommandFamily = CommandFamily::Show;
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PatchPlacementIntent {
+    pub fixture_ids: Vec<FixtureId>,
+    pub splits: Vec<PatchSplitPlacementIntent>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PatchSplitPlacementIntent {
+    pub split: u16,
+    pub universe: Option<u16>,
+    pub address: Option<u16>,
+    pub mode: PatchSplitPlacementMode,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum PatchSplitPlacementMode {
+    Consecutive,
+    OperatorOverrides(Vec<PatchOperatorAddressOverride>),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PatchOperatorAddressOverride {
+    pub fixture_id: FixtureId,
+    pub universe: u16,
+    pub address: u16,
 }
 
 /// Authoritative patch projection for one fixture, without an inline profile definition.

@@ -81,6 +81,9 @@ function usePatchUiState() {
 	});
 	const [splitDrafts, setSplitDrafts] = useState<Record<number, string>>({});
 	const [batchPatches, setBatchPatches] = useState(["1.1"]);
+	const [placementOverrides, setPlacementOverrides] = useState<
+		Record<number, string>
+	>({});
 	const [status, setStatus] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [placementBaseline, setPlacementBaseline] =
@@ -138,6 +141,8 @@ function usePatchUiState() {
 		setSplitDrafts,
 		batchPatches,
 		setBatchPatches,
+		placementOverrides,
+		setPlacementOverrides,
 		status,
 		setStatus,
 		busy,

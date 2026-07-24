@@ -116,13 +116,34 @@ fn retained_bytes(command: &PatchFixturesCommand, result: &PatchFixturesResult) 
 }
 
 fn command_bytes(command: &PatchFixturesCommand) -> usize {
-    command
+    let fixtures = command
         .fixtures
         .iter()
         .map(|fixture| size_of_val_and_patch(&fixture.patch))
         .sum::<usize>()
-        .saturating_add(command.fixtures.capacity() * size_of::<super::PatchFixtureCandidate>())
+        .saturating_add(command.fixtures.capacity() * size_of::<super::PatchFixtureCandidate>());
+    let placements = command
+        .placements
+        .iter()
+        .map(|placement| {
+            placement.fixture_ids.capacity() * size_of::<light_core::FixtureId>()
+                + placement.splits.capacity() * size_of::<super::PatchSplitPlacementIntent>()
+                + placement
+                    .splits
+                    .iter()
+                    .map(|split| match &split.mode {
+                        super::PatchSplitPlacementMode::Consecutive => 0,
+                        super::PatchSplitPlacementMode::OperatorOverrides(overrides) => {
+                            overrides.capacity() * size_of::<super::PatchOperatorAddressOverride>()
+                        }
+                    })
+                    .sum::<usize>()
+        })
+        .sum::<usize>()
+        .saturating_add(command.placements.capacity() * size_of::<super::PatchPlacementIntent>());
+    fixtures
         .saturating_add(command.remove_fixture_ids.capacity() * size_of::<light_core::FixtureId>())
+        .saturating_add(placements)
 }
 
 fn result_bytes(result: &PatchFixturesResult) -> usize {

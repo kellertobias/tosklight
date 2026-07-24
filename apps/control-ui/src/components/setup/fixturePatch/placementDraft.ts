@@ -6,7 +6,6 @@ import {
 	contiguousBatchPatches,
 	nextAvailableFixtureNumber,
 	placementBatchCount,
-	resizeBatchPatches,
 } from "./fixtureIds";
 import { definitionSplits } from "./patchModel";
 
@@ -61,6 +60,7 @@ export function beginPlacement(controller: PatchController) {
 			splits[0]?.footprint ?? definition.footprint,
 		),
 	);
+	ui.setPlacementOverrides({});
 	openPlacement(controller, nextDraft, nextSplitDrafts);
 }
 
@@ -85,6 +85,7 @@ function beginVirtualPlacement(controller: PatchController) {
 	ui.setDraft(nextDraft);
 	ui.setSplitDrafts({});
 	ui.setBatchPatches([]);
+	ui.setPlacementOverrides({});
 	openPlacement(controller, nextDraft, {});
 }
 
@@ -115,15 +116,22 @@ export function updatePlacementCount(
 	if (!definition || !isDmxPatchable(definition)) return;
 	const footprint =
 		definitionSplits(definition)[0]?.footprint ?? definition.footprint;
-	const base = parsePatchAddress(ui.batchPatches[0] ?? ui.draft.patch);
+	const base = parsePatchAddress(ui.draft.patch);
 	if (!base) return;
-	ui.setBatchPatches((current) =>
-		resizeBatchPatches(
-			current,
-			placementBatchCount(count),
+	const nextCount = placementBatchCount(count);
+	const nextOverrides = Object.fromEntries(
+		Object.entries(ui.placementOverrides).filter(
+			([index]) => Number(index) < nextCount,
+		),
+	);
+	ui.setPlacementOverrides(nextOverrides);
+	ui.setBatchPatches(
+		batchPreviewPatches(
 			base.universe,
 			base.address,
+			nextCount,
 			footprint,
+			nextOverrides,
 		),
 	);
 }
@@ -137,7 +145,8 @@ export function updatePlacementPatch(
 	ui.setDraft((current) => ({ ...current, patch }));
 	if (!definition) return;
 	const parsed = parsePatchAddress(patch);
-	if (parsed)
+	if (parsed) {
+		ui.setPlacementOverrides({});
 		ui.setBatchPatches(
 			contiguousBatchPatches(
 				parsed.universe,
@@ -146,6 +155,7 @@ export function updatePlacementPatch(
 				definitionSplits(definition)[0]?.footprint ?? definition.footprint,
 			),
 		);
+	}
 }
 
 export function updateSplitPlacementPatch(
@@ -160,6 +170,7 @@ export function updateSplitPlacementPatch(
 	const parsed = parsePatchAddress(value);
 	if (!parsed) return;
 	ui.setDraft((current) => ({ ...current, patch: value }));
+	ui.setPlacementOverrides({});
 	ui.setBatchPatches(
 		contiguousBatchPatches(
 			parsed.universe,
@@ -178,15 +189,10 @@ export function updateBatchPatch(
 ) {
 	const value = `${universe}.${address}`;
 	const { ui } = controller;
-	const { definition } = controller.data;
 	ui.setBatchPatches((current) =>
 		current.map((patch, candidate) => (candidate === index ? value : patch)),
 	);
-	if (index !== 0) return;
-	ui.setDraft((current) => ({ ...current, patch: value }));
-	const primarySplit = definition && definitionSplits(definition)[0]?.number;
-	if (primarySplit != null)
-		ui.setSplitDrafts((current) => ({ ...current, [primarySplit]: value }));
+	ui.setPlacementOverrides((current) => ({ ...current, [index]: value }));
 }
 
 export function changePlacementUniverse(
@@ -204,6 +210,7 @@ export function changePlacementUniverse(
 		definitionSplits(definition)[0]?.footprint ?? definition.footprint,
 	);
 	ui.setBatchPatches(patches);
+	ui.setPlacementOverrides({});
 	ui.setDraft({ ...ui.draft, patch: patches[0] });
 	ui.setSplitDrafts((current) => ({
 		...current,
@@ -211,8 +218,21 @@ export function changePlacementUniverse(
 	}));
 }
 
+function batchPreviewPatches(
+	universe: number,
+	address: number,
+	count: number,
+	footprint: number,
+	overrides: Record<number, string>,
+) {
+	return contiguousBatchPatches(universe, address, count, footprint).map(
+		(patch, index) => overrides[index] ?? patch,
+	);
+}
+
 export function placementIsDirty(controller: PatchController) {
-	const { placementBaseline, draft, splitDrafts } = controller.ui;
+	const { placementBaseline, draft, splitDrafts, placementOverrides } =
+		controller.ui;
 	const { definition } = controller.data;
 	return Boolean(
 		placementBaseline &&
@@ -220,7 +240,8 @@ export function placementIsDirty(controller: PatchController) {
 			(placementBaseline.definitionKey !== fixtureDefinitionKey(definition) ||
 				JSON.stringify(placementBaseline.draft) !== JSON.stringify(draft) ||
 				JSON.stringify(placementBaseline.splitDrafts) !==
-					JSON.stringify(splitDrafts)),
+					JSON.stringify(splitDrafts) ||
+				Object.keys(placementOverrides).length > 0),
 	);
 }
 

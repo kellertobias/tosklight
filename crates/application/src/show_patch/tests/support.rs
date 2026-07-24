@@ -451,6 +451,7 @@ pub fn patch_batch(
             .map(|index| fixture_candidate(profile, index))
             .collect(),
         remove_fixture_ids: Vec::new(),
+        placements: Vec::new(),
     }
 }
 

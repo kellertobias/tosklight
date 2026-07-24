@@ -10,6 +10,7 @@ fn request_contains_references_and_patch_owned_state_only() {
         request_id: "patch-1".into(),
         fixtures: vec![fixture_input()],
         remove_fixture_ids: Vec::new(),
+        placements: Vec::new(),
     };
     let value = serde_json::to_value(request).expect("serialize patch request");
     let fixture = value["fixtures"][0]
@@ -34,6 +35,7 @@ fn request_rejects_mass_assigned_definition_data() {
         request_id: "patch-2".into(),
         fixtures: vec![fixture_input()],
         remove_fixture_ids: Vec::new(),
+        placements: Vec::new(),
     })
     .expect("serialize patch request");
     value["fixtures"][0]["definition"] = serde_json::json!({ "modes": ["catalog"] });
@@ -58,6 +60,50 @@ fn request_schema_bounds_idempotency_identity_and_batch_collections() {
     assert_eq!(
         schema["$defs"]["PatchFixtureInput"]["additionalProperties"],
         false
+    );
+}
+
+#[test]
+fn placement_intent_is_typed_and_tolerates_future_properties() {
+    let fixture_id = Uuid::from_u128(44);
+    let request = serde_json::json!({
+        "request_id": "placement-1",
+        "fixtures": [],
+        "remove_fixture_ids": [],
+        "placements": [{
+            "fixture_ids": [fixture_id],
+            "splits": [{
+                "split": 1,
+                "universe": 1,
+                "address": 1,
+                "mode": {
+                    "type": "operator_overrides",
+                    "overrides": [{
+                        "fixture_id": fixture_id,
+                        "universe": 1,
+                        "address": 50,
+                        "future_override_field": true
+                    }],
+                    "future_mode_field": true
+                },
+                "future_split_field": true
+            }],
+            "future_placement_field": true
+        }],
+        "future_request_field": true
+    });
+
+    let decoded = serde_json::from_value::<PatchFixturesRequest>(request).unwrap();
+    assert_eq!(decoded.placements[0].fixture_ids, vec![fixture_id]);
+    assert_eq!(
+        decoded.placements[0].splits[0].mode,
+        PatchSplitPlacementMode::OperatorOverrides {
+            overrides: vec![PatchOperatorAddressOverride {
+                fixture_id,
+                universe: 1,
+                address: 50,
+            }]
+        }
     );
 }
 

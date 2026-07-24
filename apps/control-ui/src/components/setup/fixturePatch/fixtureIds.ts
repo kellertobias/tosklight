@@ -1,5 +1,4 @@
 import type { PatchedFixture } from "../../../api/types";
-import { parsePatchAddress } from "../../input/ConsoleFields";
 import { conflicts } from "../patchUtils";
 
 export function fixtureDisplayId(
@@ -71,25 +70,6 @@ export function contiguousBatchPatches(
 		{ length: count },
 		(_, index) => `${universe}.${address + index * footprint}`,
 	);
-}
-
-export function resizeBatchPatches(
-	current: string[],
-	count: number,
-	universe: number,
-	address: number,
-	footprint: number,
-) {
-	if (current.length >= count) return current.slice(0, count);
-	const next = [...current];
-	while (next.length < count) {
-		const previous = parsePatchAddress(next.at(-1) ?? "") ?? {
-			universe,
-			address: address - footprint,
-		};
-		next.push(`${previous.universe}.${previous.address + footprint}`);
-	}
-	return next;
 }
 
 export function batchPatchError(

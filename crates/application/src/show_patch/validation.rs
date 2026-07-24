@@ -1,4 +1,6 @@
-use super::{PatchFixtureCandidate, PatchFixturesCommand};
+use super::{
+    PatchFixtureCandidate, PatchFixturesCommand, PatchPlacementIntent, PatchSplitPlacementMode,
+};
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use std::collections::HashSet;
 
@@ -40,6 +42,21 @@ pub(super) fn validate_action(
             return Err(invalid("patch batch contains a duplicate fixture identity"));
         }
     }
+    let mut placed_fixture_ids = HashSet::new();
+    for placement in &command.placements {
+        elements = elements
+            .checked_add(validate_placement(
+                placement,
+                &fixture_ids,
+                &mut placed_fixture_ids,
+            )?)
+            .ok_or_else(|| invalid("patch batch is too large"))?;
+        if elements > MAX_PATCH_ELEMENTS {
+            return Err(invalid(format!(
+                "patch batch must contain at most {MAX_PATCH_ELEMENTS} nested patch elements"
+            )));
+        }
+    }
     let mut removals = HashSet::with_capacity(command.remove_fixture_ids.len());
     for fixture_id in &command.remove_fixture_ids {
         if !removals.insert(*fixture_id) {
@@ -52,6 +69,78 @@ pub(super) fn validate_action(
         }
     }
     Ok(())
+}
+
+fn validate_placement(
+    placement: &PatchPlacementIntent,
+    candidates: &HashSet<light_core::FixtureId>,
+    placed_fixture_ids: &mut HashSet<light_core::FixtureId>,
+) -> Result<usize, ActionError> {
+    if placement.fixture_ids.is_empty() {
+        return Err(invalid(
+            "patch placement must contain at least one ordered fixture identity",
+        ));
+    }
+    if placement.splits.is_empty() {
+        return Err(invalid(
+            "patch placement must contain at least one split intent",
+        ));
+    }
+    let mut ordered = HashSet::with_capacity(placement.fixture_ids.len());
+    for fixture_id in &placement.fixture_ids {
+        if !candidates.contains(fixture_id) {
+            return Err(invalid(
+                "patch placement fixture identities must belong to the upsert batch",
+            ));
+        }
+        if !ordered.insert(*fixture_id) {
+            return Err(invalid(
+                "patch placement contains a duplicate ordered fixture identity",
+            ));
+        }
+        if !placed_fixture_ids.insert(*fixture_id) {
+            return Err(invalid(
+                "a fixture may belong to only one patch placement intent",
+            ));
+        }
+    }
+    let mut splits = HashSet::with_capacity(placement.splits.len());
+    let mut elements = placement
+        .fixture_ids
+        .len()
+        .saturating_add(placement.splits.len());
+    for split in &placement.splits {
+        if split.split == 0 || !splits.insert(split.split) {
+            return Err(invalid(
+                "patch placement split numbers must be unique and greater than zero",
+            ));
+        }
+        if split.universe.is_some() != split.address.is_some() {
+            return Err(invalid(
+                "patch placement split universe and address must both be set or both be absent",
+            ));
+        }
+        match &split.mode {
+            PatchSplitPlacementMode::Consecutive => {}
+            PatchSplitPlacementMode::OperatorOverrides(overrides) => {
+                elements = elements.saturating_add(overrides.len());
+                let mut overridden = HashSet::with_capacity(overrides.len());
+                for override_ in overrides {
+                    if !ordered.contains(&override_.fixture_id) {
+                        return Err(invalid(
+                            "patch placement override fixture identity is not in the ordered batch",
+                        ));
+                    }
+                    if !overridden.insert(override_.fixture_id) {
+                        return Err(invalid(
+                            "patch placement contains duplicate overrides for one fixture and split",
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(elements)
 }
 
 fn validate_request_identity(context: &ActionContext) -> Result<(), ActionError> {

@@ -1,5 +1,6 @@
 mod legacy_profiles;
 mod model;
+mod placement;
 mod ports;
 mod prepare;
 mod profiles;
@@ -13,7 +14,9 @@ mod validation;
 
 pub use model::{
     PatchChange, PatchFixtureCandidate, PatchFixtureProjection, PatchFixturesCommand,
-    PatchFixturesResult, PatchModeProjection, PatchProfileRevisionProjection, PatchSnapshot,
+    PatchFixturesResult, PatchModeProjection, PatchOperatorAddressOverride, PatchPlacementIntent,
+    PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
+    PatchSplitPlacementMode,
 };
 pub use ports::ShowPatchPorts;
 pub use service::ShowPatchService;

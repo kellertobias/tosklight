@@ -57,6 +57,31 @@ export interface PatchFixtureWrite {
 	highlightOverrides: readonly PatchHighlightOverride[];
 }
 
+export interface PatchPlacementOverride {
+	fixtureId: string;
+	universe: number;
+	address: number;
+}
+
+export type PatchPlacementMode =
+	| { type: "consecutive" }
+	| {
+			type: "operator_overrides";
+			overrides: readonly PatchPlacementOverride[];
+	  };
+
+export interface PatchPlacementSplit {
+	split: number;
+	universe: number | null;
+	address: number | null;
+	mode: PatchPlacementMode;
+}
+
+export interface PatchPlacement {
+	fixtureIds: readonly string[];
+	splits: readonly PatchPlacementSplit[];
+}
+
 export interface PatchLogicalHead {
 	profileHeadId: string | null;
 	headIndex: number;
@@ -111,6 +136,7 @@ export interface PatchMutation {
 	requestId: string;
 	fixtures: readonly PatchFixtureWrite[];
 	removeFixtureIds: readonly string[];
+	placements?: readonly PatchPlacement[];
 }
 
 export interface PatchSnapshot {

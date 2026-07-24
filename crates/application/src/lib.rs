@@ -169,8 +169,9 @@ pub use selective_import::{
 pub use show_compiler::{PreparedShowCandidate, prepare_show_candidate};
 pub use show_patch::{
     PatchChange, PatchFixtureCandidate, PatchFixtureProjection, PatchFixturesCommand,
-    PatchFixturesResult, PatchModeProjection, PatchProfileRevisionProjection, PatchSnapshot,
-    ShowPatchPorts, ShowPatchService,
+    PatchFixturesResult, PatchModeProjection, PatchOperatorAddressOverride, PatchPlacementIntent,
+    PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
+    PatchSplitPlacementMode, ShowPatchPorts, ShowPatchService,
 };
 pub use speed_group::{
     SPEED_GROUP_COUNT, SpeedBpm, SpeedBpmDelta, SpeedGroupAction, SpeedGroupApplication,

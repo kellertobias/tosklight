@@ -1,4 +1,4 @@
-import type { PatchMutation } from "./contracts";
+import type { PatchMutation, PatchPlacement } from "./contracts";
 import type { PatchFixtureCandidate } from "./model";
 import { PatchTransportError } from "./transport";
 
@@ -14,11 +14,27 @@ export function patchMutation(
 	requestId: string,
 	candidates: readonly PatchFixtureCandidate[],
 	removeFixtureIds: readonly string[],
+	placements: readonly PatchPlacement[] = [],
 ): PatchMutation {
+	const placedFixtureIds = new Set(
+		placements.flatMap((placement) => placement.fixtureIds),
+	);
 	return {
 		requestId,
-		fixtures: candidates.map((candidate) => candidate.input),
+		fixtures: candidates.map((candidate) =>
+			placedFixtureIds.has(candidate.input.fixtureId)
+				? {
+						...candidate.input,
+						splitPatches: candidate.input.splitPatches.map((assignment) => ({
+							...assignment,
+							universe: null,
+							address: null,
+						})),
+					}
+				: candidate.input,
+		),
 		removeFixtureIds: [...removeFixtureIds],
+		placements: [...placements],
 	};
 }
 

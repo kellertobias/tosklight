@@ -613,6 +613,14 @@ fixture_id: string, fixture_number: number | null, virtual_fixture_number: numbe
  */
 split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, location: PatchFixtureLocation, rotation: PatchFixtureRotation, multipatch: Array<PatchMultiPatchInput>, move_in_black_enabled: boolean, move_in_black_delay_millis: number, highlight_overrides: Array<PatchHighlightOverrideInput>, };
 
+export type PatchOperatorAddressOverride = { fixture_id: string, universe: number, address: number, };
+
+export type PatchSplitPlacementMode = { "type": "consecutive" } | { "type": "operator_overrides", overrides: Array<PatchOperatorAddressOverride>, };
+
+export type PatchSplitPlacementIntent = { split: number, universe: number | null, address: number | null, mode: PatchSplitPlacementMode, };
+
+export type PatchPlacementIntent = { fixture_ids: Array<string>, splits: Array<PatchSplitPlacementIntent>, };
+
 export type PatchFixturesRequest = {
 /**
  * Client-generated idempotency identity, scoped to the authenticated desk session.
@@ -626,7 +634,12 @@ fixtures: Array<PatchFixtureInput>,
  * Stable fixture identities removed by the same atomic operation. Already-absent identities
  * are accepted as the requested desired state.
  */
-remove_fixture_ids: Array<string>, };
+remove_fixture_ids: Array<string>,
+/**
+ * Server-resolved placement intents. Empty retains the generic desired-state Patch behavior
+ * where fixture split assignments are already explicit.
+ */
+placements: Array<PatchPlacementIntent>, };
 
 export type PatchErrorResponse = { error: string, current_revision?: number | null, retryable: boolean, };
 

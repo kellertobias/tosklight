@@ -73,7 +73,6 @@ export {
 	parseFixtureNumber,
 	parseVirtualFixtureNumber,
 	placementBatchCount,
-	resizeBatchPatches,
 } from "./fixturePatch/fixtureIds";
 export {
 	definitionModeChannels,

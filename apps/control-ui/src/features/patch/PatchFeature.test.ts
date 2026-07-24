@@ -25,6 +25,7 @@ import {
 import { patchedFixtureResults } from "./PatchContext";
 import { PatchSession } from "./session";
 import { PatchStore } from "./store";
+import { patchMutation } from "./mutationSupport";
 import {
 	type PatchEventObserver,
 	type PatchEventStream,
@@ -359,11 +360,13 @@ describe("Patch v2 network boundary", () => {
 	])("sends one atomic request for a batch of %i fixture(s) and no unrelated reads", async (count) => {
 		const fetchMock = vi.fn(
 			async (_input: RequestInfo | URL, init?: RequestInit) => {
-				const body = JSON.parse(String(init?.body)) as {
-					request_id: string;
-					fixtures: unknown[];
-				};
-				return new Response(JSON.stringify(wireOutcome(body.request_id)), {
+					const body = JSON.parse(String(init?.body)) as {
+						request_id: string;
+						fixtures: unknown[];
+						placements: unknown[];
+					};
+					expect(body.placements).toEqual([]);
+					return new Response(JSON.stringify(wireOutcome(body.request_id)), {
 					status: 200,
 					headers: { "content-type": "application/json" },
 				});
@@ -398,6 +401,94 @@ describe("Patch v2 network boundary", () => {
 		expect(String(url)).not.toMatch(
 			/\/bootstrap|\/playbacks|\/shows$|\/configuration|\/media-servers|\/fixture-library|\/fixture-profiles/,
 		);
+	});
+
+	it("sends placement starts and sparse operator overrides without final assignments", async () => {
+		let body: Record<string, unknown> | null = null;
+		const fetchMock = vi.fn(
+			async (_input: RequestInfo | URL, init?: RequestInit) => {
+				body = JSON.parse(String(init?.body));
+				return new Response(JSON.stringify(wireOutcome("place-3")), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				});
+			},
+		);
+		const transport = new HttpPatchTransport({
+			baseUrl: "http://desk.local",
+			sessionToken: "session-token",
+			fetch: fetchMock as typeof fetch,
+		});
+		const candidates = [1, 2, 3].map((number) =>
+			candidate(
+				`40000000-0000-0000-0000-${String(number).padStart(12, "0")}`,
+				number,
+			),
+		);
+		candidates[1].fixture.address = 50;
+		candidates[1].fixture.split_patches = [
+			{ split: 1, universe: 1, address: 50 },
+		];
+		candidates[1].input = {
+			...candidates[1].input,
+			splitPatches: [{ split: 1, universe: 1, address: 50 }],
+		};
+		const fixtureIds = candidates.map((item) => item.fixture.fixture_id);
+		const mutation = patchMutation("place-3", candidates, [], [
+			{
+				fixtureIds,
+				splits: [
+					{
+						split: 1,
+						universe: 1,
+						address: 1,
+						mode: {
+							type: "operator_overrides",
+							overrides: [
+								{
+									fixtureId: fixtureIds[1],
+									universe: 1,
+									address: 50,
+								},
+							],
+						},
+					},
+				],
+			},
+		]);
+
+		await transport.patchFixtures(SHOW_ID, 7, mutation);
+
+		expect(body).toMatchObject({
+			request_id: "place-3",
+			fixtures: fixtureIds.map((fixtureId, index) => ({
+				fixture_id: fixtureId,
+				fixture_number: index + 1,
+				split_patches: [{ split: 1, universe: null, address: null }],
+			})),
+			placements: [
+				{
+					fixture_ids: fixtureIds,
+					splits: [
+						{
+							split: 1,
+							universe: 1,
+							address: 1,
+							mode: {
+								type: "operator_overrides",
+								overrides: [
+									{
+										fixture_id: fixtureIds[1],
+										universe: 1,
+										address: 50,
+									},
+								],
+							},
+						},
+					],
+				},
+			],
+		});
 	});
 
 	it("subscribes only to the active show's Patch projection and closes with the view", () => {

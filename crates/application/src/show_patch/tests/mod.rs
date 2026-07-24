@@ -2,10 +2,204 @@ mod support;
 
 use crate::ActionErrorKind;
 use crate::active_show::PreparedActiveShowTransaction;
+use crate::{
+    PatchOperatorAddressOverride, PatchPlacementIntent, PatchSplitPlacementIntent,
+    PatchSplitPlacementMode,
+};
 use light_show::FixtureProfileRevision;
 use serde_json::json;
 use support::{CounterSnapshot, FailurePoint, TestRig, envelope, patch_batch, profile_with_modes};
 use uuid::Uuid;
+
+#[test]
+fn placement_intent_resolves_consecutive_addresses_with_sparse_operator_overrides() {
+    let (profile, reference) = profile_with_modes(1);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let mut command = patch_batch(rig.ports.show_id(), reference, 3);
+    let fixture_ids = command
+        .fixtures
+        .iter()
+        .map(|fixture| fixture.patch.fixture_id)
+        .collect::<Vec<_>>();
+    for fixture in &mut command.fixtures {
+        fixture.patch.split_patches[0].universe = None;
+        fixture.patch.split_patches[0].address = None;
+    }
+    command.placements = vec![PatchPlacementIntent {
+        fixture_ids: fixture_ids.clone(),
+        splits: vec![PatchSplitPlacementIntent {
+            split: 1,
+            universe: Some(1),
+            address: Some(1),
+            mode: PatchSplitPlacementMode::OperatorOverrides(vec![PatchOperatorAddressOverride {
+                fixture_id: fixture_ids[1],
+                universe: 1,
+                address: 50,
+            }]),
+        }],
+    }];
+
+    let result = rig
+        .service
+        .handle(
+            envelope(command.clone(), "placement-overrides", 0),
+            &rig.ports,
+        )
+        .unwrap();
+
+    assert_eq!(
+        result
+            .change
+            .fixtures
+            .iter()
+            .map(|fixture| fixture.patch.address)
+            .collect::<Vec<_>>(),
+        vec![Some(1), Some(50), Some(3)]
+    );
+
+    let replay = rig
+        .service
+        .handle(envelope(command, "placement-overrides", 0), &rig.ports)
+        .unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.change, result.change);
+    assert_eq!(rig.service.events().latest_sequence(), 1);
+}
+
+#[test]
+fn placement_conflict_and_universe_overflow_stop_before_commit() {
+    let (profile, reference) = profile_with_modes(1);
+    let conflict_rig = TestRig::new(profile.clone(), FailurePoint::None);
+    let mut conflict = patch_batch(conflict_rig.ports.show_id(), reference, 2);
+    let conflict_ids = conflict
+        .fixtures
+        .iter()
+        .map(|fixture| fixture.patch.fixture_id)
+        .collect::<Vec<_>>();
+    conflict.placements = vec![PatchPlacementIntent {
+        fixture_ids: conflict_ids.clone(),
+        splits: vec![PatchSplitPlacementIntent {
+            split: 1,
+            universe: Some(1),
+            address: Some(1),
+            mode: PatchSplitPlacementMode::OperatorOverrides(vec![PatchOperatorAddressOverride {
+                fixture_id: conflict_ids[1],
+                universe: 1,
+                address: 1,
+            }]),
+        }],
+    }];
+    let error = conflict_rig
+        .service
+        .handle(
+            envelope(conflict, "placement-conflict", 0),
+            &conflict_rig.ports,
+        )
+        .unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(error.message.contains("patch overlap"));
+    conflict_rig.assert_empty_show();
+
+    let overflow_rig = TestRig::new(profile, FailurePoint::None);
+    let mut overflow = patch_batch(overflow_rig.ports.show_id(), reference, 2);
+    let overflow_ids = overflow
+        .fixtures
+        .iter()
+        .map(|fixture| fixture.patch.fixture_id)
+        .collect::<Vec<_>>();
+    overflow.placements = vec![PatchPlacementIntent {
+        fixture_ids: overflow_ids,
+        splits: vec![PatchSplitPlacementIntent {
+            split: 1,
+            universe: Some(1),
+            address: Some(512),
+            mode: PatchSplitPlacementMode::Consecutive,
+        }],
+    }];
+    let error = overflow_rig
+        .service
+        .handle(
+            envelope(overflow, "placement-overflow", 0),
+            &overflow_rig.ports,
+        )
+        .unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(error.message.contains("exceeds universe"));
+    overflow_rig.assert_empty_show();
+}
+
+#[test]
+fn placement_progresses_each_mode_split_by_its_authoritative_footprint() {
+    let (profile, reference) = profile_with_modes(1);
+    let mut profile_value = profile.profile().clone();
+    profile_value["modes"][0]["splits"] = json!([
+        {"number": 1, "footprint": 1},
+        {"number": 3, "footprint": 4}
+    ]);
+    let profile = FixtureProfileRevision::from_profile(profile_value).unwrap();
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let mut command = patch_batch(rig.ports.show_id(), reference, 3);
+    let fixture_ids = command
+        .fixtures
+        .iter()
+        .map(|fixture| fixture.patch.fixture_id)
+        .collect::<Vec<_>>();
+    for fixture in &mut command.fixtures {
+        fixture.patch.split_patches = vec![
+            light_fixture::SplitPatch {
+                split: 1,
+                universe: None,
+                address: None,
+            },
+            light_fixture::SplitPatch {
+                split: 3,
+                universe: None,
+                address: None,
+            },
+        ];
+    }
+    command.placements = vec![PatchPlacementIntent {
+        fixture_ids,
+        splits: vec![
+            PatchSplitPlacementIntent {
+                split: 1,
+                universe: Some(1),
+                address: Some(1),
+                mode: PatchSplitPlacementMode::Consecutive,
+            },
+            PatchSplitPlacementIntent {
+                split: 3,
+                universe: Some(2),
+                address: Some(101),
+                mode: PatchSplitPlacementMode::Consecutive,
+            },
+        ],
+    }];
+
+    let result = rig
+        .service
+        .handle(envelope(command, "multi-split-placement", 0), &rig.ports)
+        .unwrap();
+
+    assert_eq!(
+        result
+            .change
+            .fixtures
+            .iter()
+            .map(|fixture| fixture
+                .patch
+                .split_patches
+                .iter()
+                .map(|split| (split.universe, split.address))
+                .collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+        vec![
+            vec![(Some(1), Some(1)), (Some(2), Some(101))],
+            vec![(Some(1), Some(2)), (Some(2), Some(105))],
+            vec![(Some(1), Some(3)), (Some(2), Some(109))],
+        ]
+    );
+}
 
 #[test]
 fn large_shared_profile_batch_reads_and_mutates_each_boundary_once() {
@@ -362,6 +556,7 @@ fn removal_uses_the_same_atomic_compile_and_event_path() {
         show_id: rig.ports.show_id(),
         fixtures: Vec::new(),
         remove_fixture_ids: vec![fixture_id],
+        placements: Vec::new(),
     };
 
     let result = rig
@@ -402,6 +597,7 @@ fn removing_an_already_absent_fixture_is_an_idempotent_noop() {
         show_id: rig.ports.show_id(),
         fixtures: Vec::new(),
         remove_fixture_ids: vec![light_core::FixtureId::new()],
+        placements: Vec::new(),
     };
 
     let result = rig

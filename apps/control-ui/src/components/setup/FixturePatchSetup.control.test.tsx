@@ -572,7 +572,7 @@ describe("fixture batch DMX placement", () => {
 			within(placement).getByRole("textbox", {
 				name: "Address (universe.address)",
 			}),
-		).toHaveValue("1.101");
+		).toHaveValue("1.1");
 		expect(grid.querySelector('[data-dmx-address="101"]')).toHaveClass(
 			"proposed",
 			"conflict",
@@ -620,6 +620,37 @@ describe("fixture batch DMX placement", () => {
 		expect(grid.querySelector('[data-dmx-address="50"]')).toHaveAccessibleName(
 			/Fixture 2/,
 		);
+		const count = within(placement).getByRole("textbox", { name: "Count" });
+		fireEvent.change(count, { target: { value: "1" } });
+		fireEvent.change(count, { target: { value: "3" } });
+		expect(grid.querySelector('[data-dmx-address="2"]')).toHaveAccessibleName(
+			/Fixture 2/,
+		);
+		expect(
+			grid.querySelector('[data-dmx-address="50"]'),
+		).not.toHaveAccessibleName(/Fixture 2/);
+
+		Object.defineProperty(document, "elementFromPoint", {
+			configurable: true,
+			value: vi.fn(() => destination),
+		});
+		try {
+			fireEvent.pointerDown(
+				grid.querySelector('[data-dmx-address="2"]') as HTMLElement,
+				{ pointerId: 10, clientX: 10, clientY: 10 },
+			);
+			fireEvent.pointerMove(grid, {
+				pointerId: 10,
+				clientX: 100,
+				clientY: 100,
+			});
+			fireEvent.pointerUp(grid, { pointerId: 10 });
+		} finally {
+			Object.defineProperty(document, "elementFromPoint", {
+				configurable: true,
+				value: originalElementFromPoint,
+			});
+		}
 		patchFeature.patchFixtures.mockImplementationOnce(
 			async (candidates: Array<{ fixture: PatchedFixture }>) =>
 				candidates.map((candidate, index) => ({
@@ -642,6 +673,31 @@ describe("fixture batch DMX placement", () => {
 				(candidate: { fixture: PatchedFixture }) => candidate.fixture.address,
 			),
 		).toEqual([1, 50, 3]);
+		const candidates = patchFeature.patchFixtures.mock.calls[0][0] as Array<{
+			fixture: PatchedFixture;
+		}>;
+		expect(patchFeature.patchFixtures.mock.calls[0][1]).toEqual([
+			{
+				fixtureIds: candidates.map((candidate) => candidate.fixture.fixture_id),
+				splits: [
+					{
+						split: 1,
+						universe: 1,
+						address: 1,
+						mode: {
+							type: "operator_overrides",
+							overrides: [
+								{
+									fixtureId: candidates[1].fixture.fixture_id,
+									universe: 1,
+									address: 50,
+								},
+							],
+						},
+					},
+				],
+			},
+		]);
 		expect(programming.actions.replace).toHaveBeenCalledWith({
 			resolvedFixtures: ["last-head-left", "last-head-right"],
 		});

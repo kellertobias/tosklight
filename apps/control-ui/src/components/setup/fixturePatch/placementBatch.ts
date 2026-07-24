@@ -1,4 +1,5 @@
 import type { SplitPatch } from "../../../api/types";
+import type { PatchPlacement } from "../../../features/patch/contracts";
 import {
 	newPatchFixtureCandidate,
 	type PatchFixtureCandidate,
@@ -122,7 +123,9 @@ async function addSingleSplitBatch(controller: PatchController) {
 		usedFixtureNumbers.add(nextFixtureNumber);
 		fixtureNumberCursor = nextFixtureNumber + 1;
 	}
-	const results = await commitPlacementBatch(controller, candidates);
+	const results = await commitPlacementBatch(controller, candidates, [
+		placementIntent(controller, candidates),
+	]);
 	if (!results) return;
 	const added = candidates.length;
 	const remaining = planned.length - added;
@@ -216,7 +219,9 @@ async function addSplitBatch(controller: PatchController) {
 				item.address += item.split.footprint;
 		});
 	}
-	const results = await commitPlacementBatch(controller, candidates);
+	const results = await commitPlacementBatch(controller, candidates, [
+		placementIntent(controller, candidates),
+	]);
 	if (!results) return;
 	const added = candidates.length;
 	const remaining = requested - added;
@@ -248,7 +253,14 @@ function continueSingleBatch(
 		usedFixtureNumbers,
 	);
 	const nextPatches = ui.batchPatches.slice(added);
+	const nextOverrides = Object.fromEntries(
+		Object.entries(ui.placementOverrides).flatMap(([index, patch]) => {
+			const nextIndex = Number(index) - added;
+			return nextIndex >= 0 ? [[nextIndex, patch]] : [];
+		}),
+	);
 	ui.setBatchPatches(nextPatches);
+	ui.setPlacementOverrides(nextOverrides);
 	ui.setDraft((current) => ({
 		...current,
 		fixtureNumber: String(nextFixtureNumber ?? fixtureNumberCursor),
@@ -311,9 +323,56 @@ function physicalFixtureNumbers(fixtures: PatchController["data"]["all"]) {
 	);
 }
 
+function placementIntent(
+	controller: PatchController,
+	candidates: readonly PatchFixtureCandidate[],
+): PatchPlacement {
+	const definition = controller.data.definition;
+	if (!definition)
+		throw new Error("A fixture definition is required for placement");
+	const splits = definitionSplits(definition);
+	return {
+		fixtureIds: candidates.map((candidate) => candidate.fixture.fixture_id),
+		splits: splits.map((split, splitIndex) => {
+			const base = parsePatchAddress(
+				splitIndex === 0
+					? controller.ui.draft.patch
+					: (controller.ui.splitDrafts[split.number] ?? ""),
+			);
+			const overrides =
+				splitIndex === 0
+					? Object.entries(controller.ui.placementOverrides).flatMap(
+							([index, patch]) => {
+								const candidate = candidates[Number(index)];
+								const address = parsePatchAddress(patch);
+								return candidate && address
+									? [
+											{
+												fixtureId: candidate.fixture.fixture_id,
+												universe: address.universe,
+												address: address.address,
+											},
+										]
+									: [];
+							},
+						)
+					: [];
+			return {
+				split: split.number,
+				universe: base?.universe ?? null,
+				address: base?.address ?? null,
+				mode: overrides.length
+					? { type: "operator_overrides" as const, overrides }
+					: { type: "consecutive" as const },
+			};
+		}),
+	};
+}
+
 async function commitPlacementBatch(
 	controller: PatchController,
 	candidates: readonly PatchFixtureCandidate[],
+	placements: readonly PatchPlacement[] = [],
 ): Promise<readonly PatchedFixtureResult[] | null> {
 	if (!candidates.length) {
 		controller.ui.setStatus("No available fixture IDs could be added.");
@@ -321,7 +380,7 @@ async function commitPlacementBatch(
 	}
 	controller.ui.setBusy(true);
 	try {
-		const ids = await controller.patch.patchFixtures(candidates);
+		const ids = await controller.patch.patchFixtures(candidates, placements);
 		if (!ids)
 			controller.ui.setStatus(
 				"Fixtures could not be added. Review the Patch status and try again.",

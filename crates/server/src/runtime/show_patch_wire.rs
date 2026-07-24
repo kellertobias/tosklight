@@ -20,7 +20,44 @@ pub(super) fn application_command(
             .into_iter()
             .map(FixtureId)
             .collect(),
+        placements: request
+            .placements
+            .into_iter()
+            .map(application_placement)
+            .collect(),
     })
+}
+
+fn application_placement(input: wire::PatchPlacementIntent) -> application::PatchPlacementIntent {
+    application::PatchPlacementIntent {
+        fixture_ids: input.fixture_ids.into_iter().map(FixtureId).collect(),
+        splits: input
+            .splits
+            .into_iter()
+            .map(|split| application::PatchSplitPlacementIntent {
+                split: split.split,
+                universe: split.universe,
+                address: split.address,
+                mode: match split.mode {
+                    wire::PatchSplitPlacementMode::Consecutive => {
+                        application::PatchSplitPlacementMode::Consecutive
+                    }
+                    wire::PatchSplitPlacementMode::OperatorOverrides { overrides } => {
+                        application::PatchSplitPlacementMode::OperatorOverrides(
+                            overrides
+                                .into_iter()
+                                .map(|override_| application::PatchOperatorAddressOverride {
+                                    fixture_id: FixtureId(override_.fixture_id),
+                                    universe: override_.universe,
+                                    address: override_.address,
+                                })
+                                .collect(),
+                        )
+                    }
+                },
+            })
+            .collect(),
+    }
 }
 
 pub(super) fn wire_outcome(result: application::PatchFixturesResult) -> wire::PatchFixturesOutcome {

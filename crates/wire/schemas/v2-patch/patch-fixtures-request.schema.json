@@ -12,6 +12,14 @@
         "$ref": "#/$defs/PatchFixtureInput"
       }
     },
+    "placements": {
+      "description": "Server-resolved placement intents. Empty retains the generic desired-state Patch behavior\nwhere fixture split assignments are already explicit.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PatchPlacementIntent"
+      }
+    },
     "remove_fixture_ids": {
       "description": "Stable fixture identities removed by the same atomic operation. Already-absent identities\nare accepted as the requested desired state.",
       "type": "array",
@@ -28,7 +36,6 @@
       "minLength": 1
     }
   },
-  "additionalProperties": false,
   "required": [
     "request_id"
   ],
@@ -269,6 +276,58 @@
         "rotation"
       ]
     },
+    "PatchOperatorAddressOverride": {
+      "description": "Sparse operator-selected address replacing the deterministic proposal for one fixture.",
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "universe": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "fixture_id",
+        "universe",
+        "address"
+      ]
+    },
+    "PatchPlacementIntent": {
+      "description": "One ordered fixture batch whose per-split addresses are resolved by the server.",
+      "type": "object",
+      "properties": {
+        "fixture_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "minItems": 1
+        },
+        "splits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchSplitPlacementIntent"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "fixture_ids",
+        "splits"
+      ]
+    },
     "PatchSplitAssignment": {
       "type": "object",
       "properties": {
@@ -300,6 +359,78 @@
       "additionalProperties": false,
       "required": [
         "split"
+      ]
+    },
+    "PatchSplitPlacementIntent": {
+      "description": "Base address and deterministic assignment mode for one selected-mode split.",
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "mode": {
+          "$ref": "#/$defs/PatchSplitPlacementMode"
+        },
+        "split": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "universe": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "split",
+        "mode"
+      ]
+    },
+    "PatchSplitPlacementMode": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "consecutive"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "overrides": {
+              "type": "array",
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PatchOperatorAddressOverride"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "operator_overrides"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
       ]
     }
   }

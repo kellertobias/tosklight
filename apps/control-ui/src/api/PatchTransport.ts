@@ -2,11 +2,13 @@ import type {
 	EventClientMessage,
 	PatchFixtureInput,
 	PatchFixturesRequest,
+	PatchPlacementIntent,
 } from "./generated/light-wire";
 import type {
 	PatchDirectControlEndpoint,
 	PatchFixtureWrite,
 	PatchMutation,
+	PatchPlacement,
 } from "../features/patch/contracts";
 import {
 	type PatchEventObserver,
@@ -61,6 +63,7 @@ export class HttpPatchTransport implements PatchTransport {
 			request_id: mutation.requestId,
 			fixtures: mutation.fixtures.map(toWireFixture),
 			remove_fixture_ids: [...mutation.removeFixtureIds],
+			placements: (mutation.placements ?? []).map(toWirePlacement),
 		};
 		const response = await this.fetchImplementation(
 			this.patchPath(showId) + "/fixtures",
@@ -182,6 +185,28 @@ export class HttpPatchTransport implements PatchTransport {
 			);
 		}
 	}
+}
+
+function toWirePlacement(placement: PatchPlacement): PatchPlacementIntent {
+	return {
+		fixture_ids: [...placement.fixtureIds],
+		splits: placement.splits.map((split) => ({
+			split: split.split,
+			universe: split.universe,
+			address: split.address,
+			mode:
+				split.mode.type === "consecutive"
+					? { type: "consecutive" }
+					: {
+							type: "operator_overrides",
+							overrides: split.mode.overrides.map((override) => ({
+								fixture_id: override.fixtureId,
+								universe: override.universe,
+								address: override.address,
+							})),
+						},
+		})),
+	};
 }
 
 export function browserDeskBoundaryToken(): string {

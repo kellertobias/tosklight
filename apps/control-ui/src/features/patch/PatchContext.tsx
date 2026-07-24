@@ -13,6 +13,7 @@ import {
 	type PatchFixtureCandidate,
 } from "./model";
 import type { PatchFixtureProjection } from "./contracts";
+import type { PatchPlacement } from "./contracts";
 import { PatchSession } from "./session";
 import type { PatchStore, PatchStoreSnapshot } from "./store";
 import type { PatchTransport } from "./transport";
@@ -44,6 +45,7 @@ export function patchedFixtureResults(
 export interface PatchContextValue extends PatchStoreSnapshot {
 	patchFixtures(
 		candidates: readonly PatchFixtureCandidate[],
+		placements?: readonly PatchPlacement[],
 	): Promise<readonly PatchedFixtureResult[] | null>;
 	updateFixture(
 		fixtureId: string,
@@ -112,10 +114,14 @@ export function PatchViewProvider({
 	const value = useMemo<PatchContextValue>(
 		() => ({
 			...snapshot,
-			patchFixtures: async (candidates) => {
+			patchFixtures: async (candidates, placements = []) => {
 				if (!session || snapshot.status !== "ready") return null;
 				try {
-					const outcome = await session.patchFixtures(candidates);
+					const outcome = await session.patchFixtures(
+						candidates,
+						[],
+						placements,
+					);
 					return patchedFixtureResults(candidates, outcome.fixtures);
 				} catch {
 					return null;
