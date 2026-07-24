@@ -131,6 +131,9 @@ export class ApiDriver {
     if (authenticate) {
       if (!this.session) throw new Error("API session is not initialized");
       headers.authorization = `Bearer ${this.session.token}`;
+      if (path.startsWith("/api/v2/command-line")) {
+        headers["x-tosk-desk"] = this.session.desk.id;
+      }
     }
     if (revision !== undefined) headers["if-match"] = String(revision);
     const response = await fetch(`${this.baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -221,7 +224,7 @@ export class ApiDriver {
 
   private commandLinePath(): string {
     if (!this.session) throw new Error("API session is not initialized");
-    return `/api/v2/desks/${this.session.desk.id}/command-line`;
+    return "/api/v2/command-line";
   }
 
   async command<T>(command: string, payload: unknown, expectedRevision?: number): Promise<CommandResponse<T>> {

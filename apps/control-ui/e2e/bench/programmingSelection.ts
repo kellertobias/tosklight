@@ -16,7 +16,7 @@ import type { ApiDriver, Session } from "./api";
 import {
 	type IntentHttpDependencies,
 	intentFetch,
-	intentHeaders,
+	intentContextHeaders,
 	intentRequestId,
 	intentSession,
 	intentUrl,
@@ -169,10 +169,10 @@ async function loadPlaybackAuthority(
 	session: Session,
 	fetch: typeof globalThis.fetch,
 ) {
-	const path = `/api/v2/desks/${encodeURIComponent(session.desk.id)}/playback-runtime/snapshot`;
+	const path = "/api/v2/playback-runtime/snapshot";
 	const response = await fetch(intentUrl(api, path), {
 		method: "POST",
-		headers: { ...intentHeaders(session), "content-type": "application/json" },
+		headers: { ...intentContextHeaders(session), "content-type": "application/json" },
 		body: JSON.stringify({ identities: [] }),
 	});
 	return decodePlaybackSnapshot(await successfulJson(response, "Playback runtime"));
@@ -183,9 +183,9 @@ async function loadProgrammingAuthority(
 	session: Session,
 	fetch: typeof globalThis.fetch,
 ) {
-	const path = `/api/v2/desks/${encodeURIComponent(session.desk.id)}/programming-interaction/snapshot`;
+	const path = "/api/v2/programming-interaction/snapshot";
 	const response = await fetch(intentUrl(api, path), {
-		headers: intentHeaders(session),
+		headers: intentContextHeaders(session),
 	});
 	const value = await successfulJson(response, "Programming interaction");
 	return decodeProgrammingInteractionSnapshot(value, session.desk.id);
@@ -198,10 +198,10 @@ async function postSelection(
 	action: SelectionAction,
 	fetch: typeof globalThis.fetch,
 ) {
-	const path = `/api/v2/desks/${encodeURIComponent(session.desk.id)}/programming-selection/actions`;
+	const path = "/api/v2/programming-selection/actions";
 	const response = await fetch(intentUrl(api, path), {
 		method: "POST",
-		headers: { ...intentHeaders(session), "content-type": "application/json" },
+		headers: { ...intentContextHeaders(session), "content-type": "application/json" },
 		body: JSON.stringify(encodeSelectionActionRequest({ requestId, action })),
 	});
 	const value = await responseJson(response, "Programming selection action");

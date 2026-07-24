@@ -189,7 +189,7 @@ function topologyFetch(outcome: unknown, options: FetchOptions = {}) {
 function assertNarrowCalls(fetchMock: ReturnType<typeof topologyFetch>) {
 	const urls = fetchMock.mock.calls.map(([input]) => String(input));
 	expect(urls).toEqual([
-		`http://desk.local/api/v2/desks/${DESK_ID}/playback-runtime/snapshot`,
+		"http://desk.local/api/v2/playback-runtime/snapshot",
 		`http://desk.local/api/v1/shows/${SHOW_ID}/objects/playback_page/1`,
 		`http://desk.local/api/v1/shows/${SHOW_ID}/objects/playback/1`,
 		`http://desk.local/api/v2/shows/${SHOW_ID}/playback-topology/actions`,

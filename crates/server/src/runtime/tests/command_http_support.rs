@@ -27,7 +27,7 @@ impl CommandHttpScenario {
             .cloned()
             .unwrap();
         Self {
-            path: format!("/api/v2/desks/{}/command-line", session.desk.id),
+            path: "/api/v2/command-line".into(),
             state,
             app,
             token,
@@ -65,6 +65,7 @@ impl CommandHttpScenario {
                         header::AUTHORIZATION,
                         format!("Bearer {}", self.token),
                     )
+                    .header("x-tosk-desk", self.session.desk.id.to_string())
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -81,6 +82,7 @@ impl CommandHttpScenario {
                         header::AUTHORIZATION,
                         format!("Bearer {}", self.token),
                     )
+                    .header("x-tosk-desk", self.session.desk.id.to_string())
                     .header(header::CONTENT_TYPE, "application/json")
                     .header(header::IF_MATCH, revision.to_string())
                     .body(Body::from(
@@ -105,6 +107,7 @@ impl CommandHttpScenario {
                         header::AUTHORIZATION,
                         format!("Bearer {}", self.token),
                     )
+                    .header("x-tosk-desk", self.session.desk.id.to_string())
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(request.to_string()))
                     .unwrap(),
@@ -121,14 +124,12 @@ impl CommandHttpScenario {
         self.app
             .clone()
             .oneshot(
-                Request::get(format!(
-                    "/api/v2/desks/{}/programming-interaction/snapshot",
-                    desk_id
-                ))
+                Request::get("/api/v2/programming-interaction/snapshot")
                 .header(
                     header::AUTHORIZATION,
                     format!("Bearer {}", self.token),
                 )
+                .header("x-tosk-desk", desk_id.to_string())
                 .body(Body::empty())
                 .unwrap(),
             )
@@ -374,8 +375,9 @@ impl CommandHttpScenario {
         self.app
             .clone()
             .oneshot(
-                Request::post(format!("/api/v2/desks/{desk_id}/playback-actions"))
+                Request::post("/api/v2/playback-actions")
                     .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header("x-tosk-desk", desk_id.to_string())
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(input.to_string()))
                     .unwrap(),
@@ -487,14 +489,12 @@ impl CommandHttpScenario {
         self.app
             .clone()
             .oneshot(
-                Request::post(format!(
-                    "/api/v2/desks/{}/playback-actions",
-                    self.session.desk.id
-                ))
+                Request::post("/api/v2/playback-actions")
                 .header(
                     header::AUTHORIZATION,
                     format!("Bearer {}", self.token),
                 )
+                .header("x-tosk-desk", self.session.desk.id.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({
@@ -517,6 +517,7 @@ impl CommandHttpScenario {
             .oneshot(
                 Request::post(format!("{}/keys", self.path))
                     .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header("x-tosk-desk", self.session.desk.id.to_string())
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         serde_json::json!({
@@ -545,14 +546,12 @@ impl CommandHttpScenario {
         self.app
             .clone()
             .oneshot(
-                Request::post(format!(
-                    "/api/v2/desks/{}/programming-selection/actions",
-                    desk_id
-                ))
+                Request::post("/api/v2/programming-selection/actions")
                 .header(
                     header::AUTHORIZATION,
                     format!("Bearer {}", self.token),
                 )
+                .header("x-tosk-desk", desk_id.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(body)
                 .unwrap(),

@@ -18,7 +18,7 @@ import type { ApiDriver } from "./api";
 import {
 	type IntentHttpDependencies,
 	intentFetch,
-	intentHeaders,
+	intentContextHeaders,
 	intentRequestId,
 	intentSession,
 	intentUrl,
@@ -133,9 +133,9 @@ function presetRecall(
 
 async function loadInteraction(api: ApiDriver, fetch: typeof globalThis.fetch) {
 	const session = intentSession(api);
-	const path = `/api/v2/desks/${encodeURIComponent(session.desk.id)}/programming-interaction/snapshot`;
+	const path = "/api/v2/programming-interaction/snapshot";
 	const response = await fetch(intentUrl(api, path), {
-		headers: intentHeaders(session),
+		headers: intentContextHeaders(session),
 	});
 	const value = await responseJson(response, "Programming interaction");
 	if (!response.ok)

@@ -68,7 +68,8 @@ export class ProgrammingApiClient {
 		deskId: string,
 	): Promise<ProgrammingSnapshot> {
 		const value = await this.transport.request<unknown>(
-			`/api/v2/desks/${encodeURIComponent(deskId)}/programming-interaction/snapshot`,
+			"/api/v2/programming-interaction/snapshot",
+			{ headers: { "x-tosk-desk": deskId } },
 		);
 		return decodeProgrammingInteractionSnapshot(value, deskId);
 	}

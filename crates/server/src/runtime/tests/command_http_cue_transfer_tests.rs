@@ -59,11 +59,9 @@ impl CueTransferRouteScenario {
         self.app
             .clone()
             .oneshot(
-                Request::post(format!(
-                    "/api/v2/desks/{}/command-line/execute",
-                    self.session.desk.id
-                ))
+                Request::post("/api/v2/command-line/execute")
                 .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
+                .header("x-tosk-desk", self.session.desk.id.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({"request_id":request_id,"command":command}).to_string(),
@@ -78,11 +76,9 @@ impl CueTransferRouteScenario {
         self.app
             .clone()
             .oneshot(
-                Request::put(format!(
-                    "/api/v2/desks/{}/command-line",
-                    self.session.desk.id
-                ))
+                Request::put("/api/v2/command-line")
                 .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
+                .header("x-tosk-desk", self.session.desk.id.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::IF_MATCH, expected_revision.to_string())
                 .body(Body::from(serde_json::json!({"text":text}).to_string()))

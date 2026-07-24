@@ -1,3 +1,4 @@
+use super::super::{ApiError, AppState, DeskContext, Session, ShowContext, session_for_desk};
 use super::adapter::{run_service, run_snapshot};
 use super::events::publish_service_result;
 use super::interaction_wire::interaction_snapshot;
@@ -6,7 +7,7 @@ use super::wire::{
 };
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Path, State},
+    extract::{DefaultBodyLimit, State},
     http::HeaderMap,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -18,9 +19,6 @@ use light_programmer::CommandLineState;
 use light_wire::v2::command_line::{
     CommandKeyRequest, CommandLineResponse, ExecuteCommandLineRequest, ReplaceCommandLineRequest,
 };
-use uuid::Uuid;
-
-use super::super::{ApiError, AppState, Session};
 
 const REQUEST_ID_LIMIT: usize = 128;
 const COMMAND_LINE_LIMIT: usize = 16 * 1024;
@@ -28,19 +26,13 @@ const COMMAND_LINE_LIMIT: usize = 16 * 1024;
 pub(crate) fn router() -> Router<AppState> {
     let command_line = Router::new()
         .route(
-            "/api/v2/desks/{desk_id}/command-line",
+            "/api/v2/command-line",
             get(get_command_line).put(put_command_line),
         )
+        .route("/api/v2/command-line/keys", post(apply_command_key))
+        .route("/api/v2/command-line/execute", post(execute_command_line))
         .route(
-            "/api/v2/desks/{desk_id}/command-line/keys",
-            post(apply_command_key),
-        )
-        .route(
-            "/api/v2/desks/{desk_id}/command-line/execute",
-            post(execute_command_line),
-        )
-        .route(
-            "/api/v2/desks/{desk_id}/programming-interaction/snapshot",
+            "/api/v2/programming-interaction/snapshot",
             get(get_programming_interaction),
         )
         .layer(DefaultBodyLimit::max(32 * 1024));
@@ -63,32 +55,38 @@ pub(crate) fn router() -> Router<AppState> {
 
 async fn get_programming_interaction(
     State(state): State<AppState>,
-    Path(desk_id): Path<Uuid>,
+    show: ShowContext,
+    desk: DeskContext,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    let session = authenticate_desk(&state, &headers, desk_id)?;
+    let session = session_for_desk(&state, &headers, &desk)?;
+    show.verify(&state)?;
     let snapshot = run_snapshot(&state, &session, http_context(&session, None))?;
     Ok(Json(interaction_snapshot(snapshot)).into_response())
 }
 
 async fn get_command_line(
     State(state): State<AppState>,
-    Path(desk_id): Path<Uuid>,
+    show: ShowContext,
+    desk: DeskContext,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    let session = authenticate_desk(&state, &headers, desk_id)?;
+    let session = session_for_desk(&state, &headers, &desk)?;
+    show.verify(&state)?;
     let response = command_line_response(&state, &session)?;
     Ok(with_etag(response))
 }
 
 async fn put_command_line(
     State(state): State<AppState>,
-    Path(desk_id): Path<Uuid>,
+    show: ShowContext,
+    desk: DeskContext,
     headers: HeaderMap,
     Json(input): Json<ReplaceCommandLineRequest>,
 ) -> Result<Response, ApiError> {
     validate_command(&input.text)?;
-    let session = authenticate_desk_mutation(&state, &headers, desk_id)?;
+    let session = authenticate_desk_mutation(&state, &headers, &desk)?;
+    show.verify(&state)?;
     let expected_revision = super::super::parse_if_match(&headers)?;
     let context = http_context(&session, None).with_expected_revision(expected_revision);
     let result = run_service(
@@ -108,13 +106,15 @@ async fn put_command_line(
 
 async fn apply_command_key(
     State(state): State<AppState>,
-    Path(desk_id): Path<Uuid>,
+    show: ShowContext,
+    desk: DeskContext,
     headers: HeaderMap,
     Json(input): Json<CommandKeyRequest>,
 ) -> Result<Response, ApiError> {
     validate_request_id(&input.request_id)?;
-    let session = authenticate_desk_mutation(&state, &headers, desk_id)?;
+    let session = authenticate_desk_mutation(&state, &headers, &desk)?;
     let _activation = state.activation_lock.clone().lock_owned().await;
+    show.verify(&state)?;
     let context = http_context(&session, Some(&input.request_id));
     let result = run_service(
         &state,
@@ -141,7 +141,8 @@ async fn apply_command_key(
 
 async fn execute_command_line(
     State(state): State<AppState>,
-    Path(desk_id): Path<Uuid>,
+    show: ShowContext,
+    desk: DeskContext,
     headers: HeaderMap,
     Json(input): Json<ExecuteCommandLineRequest>,
 ) -> Result<Response, ApiError> {
@@ -149,8 +150,9 @@ async fn execute_command_line(
     if let Some(command) = &input.command {
         validate_command(command)?;
     }
-    let session = authenticate_desk_mutation(&state, &headers, desk_id)?;
+    let session = authenticate_desk_mutation(&state, &headers, &desk)?;
     let _activation = state.activation_lock.clone().lock_owned().await;
+    show.verify(&state)?;
     let context = http_context(&session, Some(&input.request_id));
     let result = run_service(
         &state,
@@ -189,31 +191,17 @@ pub(super) fn http_context(session: &Session, request_id: Option<&str>) -> Actio
     request_id.map_or(context.clone(), |id| context.with_request_id(id))
 }
 
-fn authenticate_desk(
-    state: &AppState,
-    headers: &HeaderMap,
-    desk_id: Uuid,
-) -> Result<Session, ApiError> {
-    let session = super::super::authenticate(state, headers)?;
-    if session.desk.id != desk_id {
-        return Err(ApiError::forbidden(
-            "the authenticated session does not belong to this desk",
-        ));
-    }
-    Ok(session)
-}
-
 pub(super) fn authenticate_desk_mutation(
     state: &AppState,
     headers: &HeaderMap,
-    desk_id: Uuid,
+    desk: &DeskContext,
 ) -> Result<Session, ApiError> {
-    let session = authenticate_desk(state, headers, desk_id)?;
-    ensure_desk_unlocked(state, desk_id)?;
+    let session = session_for_desk(state, headers, desk)?;
+    ensure_desk_unlocked(state, session.desk.id)?;
     Ok(session)
 }
 
-fn ensure_desk_unlocked(state: &AppState, desk_id: Uuid) -> Result<(), ApiError> {
+fn ensure_desk_unlocked(state: &AppState, desk_id: uuid::Uuid) -> Result<(), ApiError> {
     if super::super::read_desk_lock(state, desk_id).locked {
         Err(ApiError::conflict("desk is locked"))
     } else {

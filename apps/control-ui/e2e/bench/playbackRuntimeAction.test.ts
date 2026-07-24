@@ -113,8 +113,8 @@ describe("Playback runtime acceptance intent", () => {
 function assertExactCalls(fetchMock: ReturnType<typeof playbackFetch>) {
 	const urls = fetchMock.mock.calls.map(([input]) => String(input));
 	expect(urls).toEqual([
-		`http://desk.local/api/v2/desks/${DESK_ID}/playback-runtime/snapshot`,
-		`http://desk.local/api/v2/shows/${SHOW_ID}/desks/${DESK_ID}/playback-actions`,
+		"http://desk.local/api/v2/playback-runtime/snapshot",
+		"http://desk.local/api/v2/playback-actions",
 	]);
 	expect(
 		urls.some((url) =>

@@ -56,13 +56,13 @@ async fn delete_cue_action(
         .app
         .clone()
         .oneshot(
-            Request::post(format!(
-                "/api/v2/desks/{desk_id}/shows/{show_id}/cues/delete"
-            ))
+            Request::post("/api/v2/cues/delete")
             .header(
                 header::AUTHORIZATION,
                 format!("Bearer {}", scenario.token),
             )
+            .header("x-tosk-desk", desk_id.to_string())
+            .header("x-tosk-show", show_id)
             .header(header::CONTENT_TYPE, "application/json")
             .header(header::IF_MATCH, expected_revision.to_string())
             .body(Body::from(request.to_string()))
@@ -209,8 +209,10 @@ async fn direct_current_page_action_returns_authority_and_replays_before_page_an
         request.clone(),
     )
     .await;
-    assert_eq!(replay.status(), StatusCode::OK);
-    assert_eq!(json(replay).await["replayed"], true);
+    let replay_status = replay.status();
+    let replay = json(replay).await;
+    assert_eq!(replay_status, StatusCode::OK, "{replay}");
+    assert_eq!(replay["replayed"], true);
     assert_eq!(cue_deletion_show_events(&scenario, baseline), 1);
 
     let changed_if_match = delete_cue_action(
@@ -267,7 +269,7 @@ async fn direct_action_rejects_stale_authority_and_foreign_desk_atomically() {
         request,
     )
     .await;
-    assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
+    assert_eq!(foreign.status(), StatusCode::NOT_FOUND);
     assert_eq!(cue_deletion_show_events(&scenario, baseline), 0);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

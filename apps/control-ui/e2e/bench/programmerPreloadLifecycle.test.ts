@@ -201,7 +201,7 @@ function assertExactAuthorityCalls(
 			`http://desk.local/api/v2/users/${USER_ID}/programmer-capture-mode/snapshot`,
 			`http://desk.local/api/v2/users/${USER_ID}/programmer-preload-values/snapshot`,
 			`http://desk.local/api/v2/users/${USER_ID}/programmer-preload-playback-queue/snapshot`,
-			`http://desk.local/api/v2/desks/${DESK_ID}/programming-interaction/snapshot`,
+			"http://desk.local/api/v2/programming-interaction/snapshot",
 			`http://desk.local/api/v2/users/${USER_ID}/programmer-preload/actions`,
 		]),
 	);

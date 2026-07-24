@@ -286,13 +286,13 @@ function assertNarrowCalls(
 ) {
 	const urls = fetchMock.mock.calls.map(([input]) => String(input));
 	expect(urls).toEqual([
-		`http://desk.local/api/v2/desks/${DESK_ID}/playback-runtime/snapshot`,
+		"http://desk.local/api/v2/playback-runtime/snapshot",
 		`http://desk.local/api/v1/shows/${SHOW_ID}/objects/playback`,
 		`http://desk.local/api/v1/shows/${SHOW_ID}/objects/cue_list`,
 		...(withPage
 			? [`http://desk.local/api/v1/shows/${SHOW_ID}/objects/playback_page`]
 			: []),
-		`http://desk.local/api/v2/desks/${DESK_ID}/shows/${SHOW_ID}/cues/delete`,
+		"http://desk.local/api/v2/cues/delete",
 	]);
 	expect(urls.some((url) => /bootstrap|\/playbacks|programmers/.test(url))).toBe(false);
 	expect(actionCalls(fetchMock)).toHaveLength(1);

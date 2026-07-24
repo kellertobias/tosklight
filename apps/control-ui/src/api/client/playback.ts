@@ -64,10 +64,13 @@ export class PlaybackApiClient {
 		identities: PlaybackRuntimeIdentity[],
 	): Promise<PlaybackRuntimeSnapshot> {
 		const value = await this.transport.request<unknown>(
-			`/api/v2/desks/${encodeURIComponent(deskId)}/playback-runtime/snapshot`,
+			"/api/v2/playback-runtime/snapshot",
 			{
 				method: "POST",
-				headers: { "content-type": "application/json" },
+				headers: {
+					"content-type": "application/json",
+					"x-tosk-desk": deskId,
+				},
 				body: JSON.stringify({ identities }),
 			},
 		);
@@ -80,10 +83,14 @@ export class PlaybackApiClient {
 		request: PlaybackActionRequest,
 	): Promise<PlaybackActionOutcome> {
 		const value = await this.transport.request<unknown>(
-			`/api/v2/shows/${encodeURIComponent(showId)}/desks/${encodeURIComponent(deskId)}/playback-actions`,
+			"/api/v2/playback-actions",
 			{
 				method: "POST",
-				headers: { "content-type": "application/json" },
+				headers: {
+					"content-type": "application/json",
+					"x-tosk-show": showId,
+					"x-tosk-desk": deskId,
+				},
 				body: JSON.stringify(request),
 			},
 		);

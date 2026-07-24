@@ -17,7 +17,7 @@ import type { ApiDriver, Session } from "./api";
 import {
 	type IntentHttpDependencies,
 	intentFetch,
-	intentHeaders,
+	intentContextHeaders,
 	intentRequestId,
 	intentSession,
 	intentUrl,
@@ -171,7 +171,7 @@ async function applyProgrammerValues(
 	const scope = { showId: intent.showId, userId: session.user.id };
 	const transport = valuesTransport(api, session, fetch);
 	const [playback, values, captureMode] = await Promise.all([
-		loadPlaybackAuthority(api, session, fetch),
+		loadPlaybackAuthority(api, session, intent.showId, fetch),
 		transport.loadSnapshot(scope),
 		captureModeTransport(api, session, fetch).loadSnapshot(scope),
 	]);
@@ -218,12 +218,16 @@ function captureModeTransport(
 async function loadPlaybackAuthority(
 	api: ApiDriver,
 	session: Session,
+	expectedShowId: string,
 	fetch: typeof globalThis.fetch,
 ) {
-	const path = `/api/v2/desks/${encodeURIComponent(session.desk.id)}/playback-runtime/snapshot`;
+	const path = "/api/v2/playback-runtime/snapshot";
 	const response = await fetch(intentUrl(api, path), {
 		method: "POST",
-		headers: { ...intentHeaders(session), "content-type": "application/json" },
+		headers: {
+			...intentContextHeaders(session, expectedShowId),
+			"content-type": "application/json",
+		},
 		body: JSON.stringify({ identities: [] }),
 	});
 	const value = await responseJson(response, "Playback runtime");

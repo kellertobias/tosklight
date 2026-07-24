@@ -73,8 +73,8 @@ export class HttpCueTransferTransport
 	async loadCommandLine(deskId: string) {
 		programmingUuidAt(deskId, "$.scope.desk_id");
 		const response = await this.fetchImplementation(
-			`${this.baseUrl}/api/v2/desks/${encodeURIComponent(deskId)}/command-line`,
-			{ headers: this.authHeaders() },
+			`${this.baseUrl}/api/v2/command-line`,
+			{ headers: this.contextHeaders(deskId) },
 		);
 		const value = await exactReadValue(response);
 		const commandLine = decodeProgrammingCommandLine(value);
@@ -95,6 +95,12 @@ export class HttpCueTransferTransport
 		});
 		if (this.options.deskBoundaryToken)
 			headers.set("x-light-desk-token", this.options.deskBoundaryToken);
+		return headers;
+	}
+
+	private contextHeaders(deskId: string) {
+		const headers = this.authHeaders();
+		headers.set("x-tosk-desk", deskId);
 		return headers;
 	}
 

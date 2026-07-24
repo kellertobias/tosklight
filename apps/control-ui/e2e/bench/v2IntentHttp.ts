@@ -26,6 +26,14 @@ export function intentHeaders(session: Session) {
 	return { authorization: `Bearer ${session.token}` };
 }
 
+export function intentContextHeaders(session: Session, showId?: string) {
+	return {
+		...intentHeaders(session),
+		"x-tosk-desk": session.desk.id,
+		...(showId ? { "x-tosk-show": showId } : {}),
+	};
+}
+
 export async function responseJson(response: Response, label: string) {
 	try {
 		return (await response.json()) as unknown;

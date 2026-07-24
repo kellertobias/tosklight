@@ -361,11 +361,9 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
         .app
         .clone()
         .oneshot(
-            Request::post(format!(
-                "/api/v2/desks/{}/command-line/execute",
-                second_desk.id
-            ))
+            Request::post("/api/v2/command-line/execute")
             .header(header::AUTHORIZATION, format!("Bearer {second_token}"))
+            .header("x-tosk-desk", second_desk.id.to_string())
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(
                 serde_json::json!({"request_id":"desk-two-go-to","command":"CUE 2"}).to_string(),
@@ -384,14 +382,12 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
         .app
         .clone()
         .oneshot(
-            Request::post(format!(
-                "/api/v2/desks/{}/command-line/execute",
-                second_desk.id
-            ))
+            Request::post("/api/v2/command-line/execute")
             .header(
                 header::AUTHORIZATION,
                 format!("Bearer {}", scenario.token),
             )
+            .header("x-tosk-desk", second_desk.id.to_string())
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(
                 serde_json::json!({"request_id":"foreign-desk","command":"CUE 1"}).to_string(),

@@ -244,21 +244,19 @@ impl CuePreloadScenario {
         self.app
             .clone()
             .oneshot(
-                Request::post(format!(
-                    "/api/v2/desks/{}/command-line/keys",
-                    session.desk.id
-                ))
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
-                .body(Body::from(
-                    serde_json::json!({
-                        "key":"PRE",
-                        "phase":"press",
-                        "request_id":"preload-store-capture-mode"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
+                Request::post("/api/v2/command-line/keys")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
+                    .header("x-tosk-desk", session.desk.id.to_string())
+                    .body(Body::from(
+                        serde_json::json!({
+                            "key":"PRE",
+                            "phase":"press",
+                            "request_id":"preload-store-capture-mode"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
             )
             .await
             .unwrap()

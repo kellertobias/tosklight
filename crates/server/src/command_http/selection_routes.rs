@@ -1,21 +1,19 @@
+use super::super::{ApiError, AppState, DeskContext, ShowContext};
 use super::{
     adapter::run_service,
     events::publish_service_result,
     routes::{authenticate_desk_mutation, http_context, validate_request_id},
     selection_wire::{selection_command, selection_response},
 };
+use crate::tolerant_json::TolerantJson;
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Path, State},
+    extract::{DefaultBodyLimit, State},
     http::HeaderMap,
     response::{IntoResponse, Response},
     routing::post,
 };
 use light_wire::v2::command_line::{ProgrammingSelectionAction, ProgrammingSelectionActionRequest};
-use uuid::Uuid;
-
-use super::super::{ApiError, AppState};
-use crate::tolerant_json::TolerantJson;
 
 const FIXTURE_LIMIT: usize = 10_000;
 const GROUP_ID_LIMIT: usize = 256;
@@ -24,7 +22,7 @@ const BODY_LIMIT: usize = 512 * 1024;
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route(
-            "/api/v2/desks/{desk_id}/programming-selection/actions",
+            "/api/v2/programming-selection/actions",
             post(apply_selection_action),
         )
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
@@ -32,15 +30,17 @@ pub(super) fn router() -> Router<AppState> {
 
 async fn apply_selection_action(
     State(state): State<AppState>,
-    Path(desk_id): Path<Uuid>,
+    show: ShowContext,
+    desk: DeskContext,
     headers: HeaderMap,
     TolerantJson(input): TolerantJson<ProgrammingSelectionActionRequest>,
 ) -> Result<Response, ApiError> {
     validate_request(&input)?;
-    let session = authenticate_desk_mutation(&state, &headers, desk_id)?;
+    let session = authenticate_desk_mutation(&state, &headers, &desk)?;
     let context = http_context(&session, Some(&input.request_id));
     let command = selection_command(input.action)?;
     let activation = state.activation_lock.clone().lock_owned().await;
+    show.verify(&state)?;
     let worker_state = state.clone();
     let worker_session = session.clone();
     let (result, _activation) = tokio::task::spawn_blocking(move || {

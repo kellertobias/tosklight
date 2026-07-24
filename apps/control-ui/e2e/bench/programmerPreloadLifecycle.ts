@@ -13,7 +13,7 @@ import type { ApiDriver, Session } from "./api";
 import {
 	type IntentHttpDependencies,
 	intentFetch,
-	intentHeaders,
+	intentContextHeaders,
 	intentRequestId,
 	intentSession,
 	intentUrl,
@@ -214,9 +214,9 @@ async function loadInteraction(
 	session: Session,
 	fetch: typeof globalThis.fetch,
 ) {
-	const path = `/api/v2/desks/${encodeURIComponent(session.desk.id)}/programming-interaction/snapshot`;
+	const path = "/api/v2/programming-interaction/snapshot";
 	const response = await fetch(intentUrl(api, path), {
-		headers: intentHeaders(session),
+		headers: intentContextHeaders(session),
 	});
 	const value = await responseJson(response, "Programming interaction");
 	if (!response.ok)
@@ -232,10 +232,10 @@ async function loadPlaybackAuthority(
 	showId: string,
 	fetch: typeof globalThis.fetch,
 ) {
-	const path = `/api/v2/desks/${encodeURIComponent(session.desk.id)}/playback-runtime/snapshot`;
+	const path = "/api/v2/playback-runtime/snapshot";
 	const response = await fetch(intentUrl(api, path), {
 		method: "POST",
-		headers: { ...intentHeaders(session), "content-type": "application/json" },
+		headers: { ...intentContextHeaders(session, showId), "content-type": "application/json" },
 		body: JSON.stringify({ identities: [] }),
 	});
 	const value = await responseJson(response, "Playback runtime");

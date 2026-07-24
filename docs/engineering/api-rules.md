@@ -82,20 +82,23 @@ per-fixture values.
 - **No show-scoped routes.** The desk operates on the one loaded show. Cross-show routes
   exist only for the library: listing shows and loading objects from another show — there
   the show id is the operand, not a scope.
-- The show guard is an **optional request header**: when the desk sends it, the server
-  verifies the loaded show and rejects a mismatch (the show-switch race); when absent —
-  the automation case — no check happens.
+- The show guard is the optional `X-Tosk-Show: <show UUID>` request header. When the desk
+  sends it, the server verifies the loaded show and rejects a mismatch with `409 Conflict`
+  (the show-switch race); when absent — the automation case — no check happens. A malformed
+  or nil UUID is rejected with `400 Bad Request`.
 - **No desk segment in a route unless the desk is the operand** (maintainer,
   2026-07-23). A desk id belongs in the path only when the request *edits or reads that
   desk object itself* (desk configuration, its page assignment) — there the desk is the
   operand, like a show id in a library route.
 - Where an operation merely *depends on* a desk — current-page playback actions, the
   shared command line, anything resolved against "the desk I'm working on" — the desk is
-  **context, not operand**: it travels in an **optional request header**. Absent header →
-  the server uses the **main/controlling desk** (deterministic default; in practice
-  there is usually exactly one desk). On the desk's own WebSocket, the session already
-  carries the desk — frames need no header. This is deliberately symmetric with the show
-  guard header above.
+  **context, not operand**: it travels in the optional
+  `X-Tosk-Desk: <control-desk UUID>` request header. An unknown UUID is rejected with
+  `404 Not Found`; malformed or nil UUIDs are rejected with `400 Bad Request`. Absent
+  header → the server uses the only desk, an explicitly `main`-aliased desk when there
+  are several, or otherwise the first desk in deterministic case-insensitive name/UUID
+  order. On the desk's own WebSocket, the session already carries the desk — frames need
+  no header. This is deliberately symmetric with the show guard header above.
 - Virtual-playback exclusion zones are **show-level** (the storage already keys by
   show); the desk segment in the current route is an authentication artifact and is
   dropped whenever that route is next touched.

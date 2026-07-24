@@ -1,6 +1,55 @@
 use super::*;
 
 #[tokio::test]
+async fn v2_context_headers_default_to_the_single_or_main_control_desk() {
+    let (single_state, single_data_dir) = test_state();
+    let single_app = router(single_state.clone());
+    let (single_token, _) = login(&single_app, "Operator").await;
+    let single_desk = session_desk_id(&single_state, &single_token);
+    open_playback_test_show(&single_app, &single_token).await;
+    let single = single_app
+        .oneshot(
+            Request::post("/api/v2/playback-runtime/snapshot")
+                .header(header::AUTHORIZATION, format!("Bearer {single_token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"identities":[]}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(single.status(), StatusCode::OK);
+    assert_eq!(
+        json(single).await["desk"]["desk_id"],
+        single_desk.to_string()
+    );
+
+    let (main_state, main_data_dir) = test_state();
+    let wing = main_state.desk.lock().add_desk("A wing", "wing").unwrap();
+    let main = main_state.desk.lock().add_desk("Z main", "main").unwrap();
+    let main_app = router(main_state.clone());
+    let main_token = login_playback_user_on_desk(&main_app, "Operator", main.id).await;
+    open_playback_test_show(&main_app, &main_token).await;
+    let defaulted = main_app
+        .oneshot(
+            Request::post("/api/v2/playback-runtime/snapshot")
+                .header(header::AUTHORIZATION, format!("Bearer {main_token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"identities":[]}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(defaulted.status(), StatusCode::OK);
+    assert_eq!(
+        json(defaulted).await["desk"]["desk_id"],
+        main.id.to_string()
+    );
+    assert_ne!(wing.id, main.id);
+    let _ = std::fs::remove_dir_all(single_data_dir);
+    let _ = std::fs::remove_dir_all(main_data_dir);
+}
+
+#[tokio::test]
 async fn v2_scoped_playback_action_rejects_stale_show_before_execution() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
@@ -38,7 +87,10 @@ async fn v2_scoped_playback_action_rejects_stale_show_before_execution() {
     )
     .await;
     assert_eq!(rejected.status(), StatusCode::CONFLICT);
-    assert_eq!(json(rejected).await["kind"], "conflict");
+    assert_eq!(
+        json(rejected).await["error"],
+        "X-Tosk-Show does not match the active show"
+    );
     assert_eq!(state.application_events.latest_sequence(), cursor);
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -73,7 +125,7 @@ async fn v2_playback_action_is_desk_scoped_typed_and_idempotent() {
         ),
     )
     .await;
-    assert_eq!(wrong_desk.status(), StatusCode::FORBIDDEN);
+    assert_eq!(wrong_desk.status(), StatusCode::NOT_FOUND);
 
     let request = action_request(
         "go-playback-1",
@@ -778,8 +830,9 @@ async fn v2_snapshot_returns_only_requested_runtime_and_a_pre_read_cursor() {
 
     let response = app
         .oneshot(
-            Request::post(format!("/api/v2/desks/{desk_id}/playback-runtime/snapshot"))
+            Request::post("/api/v2/playback-runtime/snapshot")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-desk", desk_id.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({
@@ -962,7 +1015,7 @@ async fn v2_group_snapshot_is_exact_and_rejects_foreign_or_invalid_identity() {
         serde_json::json!({"identities":[{"kind":"group","group_id":"front"}]}),
     )
     .await;
-    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    assert_eq!(denied.status(), StatusCode::NOT_FOUND);
 
     for group_id in [String::new(), "front\n".into(), "x".repeat(257)] {
         let rejected = post_playback_snapshot(
@@ -1177,8 +1230,9 @@ async fn v2_snapshot_allows_a_desk_only_request() {
 
     let response = app
         .oneshot(
-            Request::post(format!("/api/v2/desks/{desk_id}/playback-runtime/snapshot"))
+            Request::post("/api/v2/playback-runtime/snapshot")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-desk", desk_id.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(r#"{"identities":[]}"#))
                 .unwrap(),
@@ -1877,8 +1931,9 @@ async fn post_action(
     desk_id: Uuid,
     request: serde_json::Value,
 ) -> Response {
-    let mut builder = Request::post(format!("/api/v2/desks/{desk_id}/playback-actions"))
-        .header(header::CONTENT_TYPE, "application/json");
+    let mut builder = Request::post("/api/v2/playback-actions")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-tosk-desk", desk_id.to_string());
     if let Some(token) = token {
         builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }
@@ -1895,10 +1950,10 @@ async fn post_scoped_action(
     desk_id: Uuid,
     request: serde_json::Value,
 ) -> Response {
-    let mut builder = Request::post(format!(
-        "/api/v2/shows/{show_id}/desks/{desk_id}/playback-actions"
-    ))
-    .header(header::CONTENT_TYPE, "application/json");
+    let mut builder = Request::post("/api/v2/playback-actions")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-tosk-show", show_id.to_string())
+        .header("x-tosk-desk", desk_id.to_string());
     if let Some(token) = token {
         builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }
@@ -1914,8 +1969,9 @@ async fn post_playback_snapshot(
     desk_id: Uuid,
     request: serde_json::Value,
 ) -> Response {
-    let mut builder = Request::post(format!("/api/v2/desks/{desk_id}/playback-runtime/snapshot"))
-        .header(header::CONTENT_TYPE, "application/json");
+    let mut builder = Request::post("/api/v2/playback-runtime/snapshot")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-tosk-desk", desk_id.to_string());
     if let Some(token) = token {
         builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }
@@ -1935,8 +1991,9 @@ async fn assert_preload_key(
     let response = app
         .clone()
         .oneshot(
-            Request::post(format!("/api/v2/desks/{desk_id}/command-line/keys"))
+            Request::post("/api/v2/command-line/keys")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-desk", desk_id.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({

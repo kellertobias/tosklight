@@ -18,7 +18,7 @@ import type { ApiDriver, Session } from "./api";
 import {
 	type IntentHttpDependencies,
 	intentFetch,
-	intentHeaders,
+	intentContextHeaders,
 	intentRequestId,
 	intentSession,
 	intentUrl,
@@ -118,7 +118,7 @@ export async function deleteCue(
 	const requestId = validRequestId(intentRequestId(dependencies));
 	const response = await fetch(actionUrl(api, session, active), {
 		method: "POST",
-		headers: actionHeaders(session, active.showRevision),
+		headers: actionHeaders(session, active.showId, active.showRevision),
 		body: JSON.stringify(actionRequest(requestId, intent, authority)),
 	});
 	assertCurrentSession(api, session, "after response");
@@ -135,10 +135,10 @@ async function loadActiveShow(
 	session: Session,
 	fetch: typeof globalThis.fetch,
 ): Promise<ActiveShowAuthority> {
-	const path = `/api/v2/desks/${encodeURIComponent(session.desk.id)}/playback-runtime/snapshot`;
+	const path = "/api/v2/playback-runtime/snapshot";
 	const response = await fetch(intentUrl(api, path), {
 		method: "POST",
-		headers: { ...intentHeaders(session), "content-type": "application/json" },
+		headers: { ...intentContextHeaders(session), "content-type": "application/json" },
 		body: JSON.stringify({ identities: [] }),
 	});
 	const value = await readJson(response, "Playback runtime");
@@ -397,13 +397,13 @@ function validateIntent(intent: DeleteCueIntent) {
 function actionUrl(api: ApiDriver, session: Session, active: ActiveShowAuthority) {
 	return intentUrl(
 		api,
-		`/api/v2/desks/${encodeURIComponent(session.desk.id)}/shows/${encodeURIComponent(active.showId)}/cues/delete`,
+		"/api/v2/cues/delete",
 	);
 }
 
-function actionHeaders(session: Session, revision: number) {
+function actionHeaders(session: Session, showId: string, revision: number) {
 	return new Headers({
-		...intentHeaders(session),
+		...intentContextHeaders(session, showId),
 		"content-type": "application/json",
 		"if-match": `"${revision}"`,
 	});

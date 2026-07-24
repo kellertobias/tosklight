@@ -76,9 +76,10 @@ describe("PlaybackApiClient v2 action boundary", () => {
 			],
 		});
 		expect(request).toHaveBeenCalledWith(
-			`/api/v2/desks/${DESK_ID}/playback-runtime/snapshot`,
+			"/api/v2/playback-runtime/snapshot",
 			expect.objectContaining({
 				method: "POST",
+				headers: expect.objectContaining({ "x-tosk-desk": DESK_ID }),
 				body: JSON.stringify({ identities: [identity] }),
 			}),
 		);
@@ -91,9 +92,13 @@ describe("PlaybackApiClient v2 action boundary", () => {
 			client.playbackRuntimeAction(SHOW_ID, DESK_ID, actionRequest),
 		).resolves.toMatchObject({ request_id: REQUEST_ID });
 		expect(request).toHaveBeenCalledWith(
-			`/api/v2/shows/${SHOW_ID}/desks/${DESK_ID}/playback-actions`,
+			"/api/v2/playback-actions",
 			expect.objectContaining({
 				method: "POST",
+				headers: expect.objectContaining({
+					"x-tosk-show": SHOW_ID,
+					"x-tosk-desk": DESK_ID,
+				}),
 				body: JSON.stringify(actionRequest),
 			}),
 		);

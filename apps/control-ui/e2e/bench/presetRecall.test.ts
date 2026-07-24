@@ -44,7 +44,7 @@ describe("Preset recall acceptance intent", () => {
 				`http://desk.local/api/v1/shows/${SHOW_ID}/objects/preset/2.1`,
 				`http://desk.local/api/v2/users/${USER_ID}/programmer-values/snapshot`,
 				`http://desk.local/api/v2/users/${USER_ID}/programmer-capture-mode/snapshot`,
-				`http://desk.local/api/v2/desks/${DESK_ID}/programming-interaction/snapshot`,
+				"http://desk.local/api/v2/programming-interaction/snapshot",
 				`http://desk.local/api/v2/shows/${SHOW_ID}/presets/recall`,
 			]),
 		);

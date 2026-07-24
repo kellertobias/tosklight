@@ -91,7 +91,7 @@ describe("HttpCueTransferTransport", () => {
 				return new Response(JSON.stringify([cueListObject()]), {
 					headers: { etag: '"9"' },
 				});
-			if (url.endsWith(`/desks/${DESK_ID}/command-line`))
+			if (url.endsWith("/command-line"))
 				return new Response(JSON.stringify(commandLineWire()), {
 					headers: { etag: '"6"' },
 				});
@@ -113,13 +113,15 @@ describe("HttpCueTransferTransport", () => {
 		);
 		expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([
 			`http://desk.test/api/v1/shows/${SHOW_ID}/objects/cue_list`,
-			`http://desk.test/api/v2/desks/${DESK_ID}/command-line`,
+			"http://desk.test/api/v2/command-line",
 		]);
 		for (const [, init] of fetch.mock.calls) {
 			const headers = new Headers(init?.headers);
 			expect(headers.get("authorization")).toBe("Bearer session-token");
 			expect(headers.get("x-light-desk-token")).toBe("desk-token");
 		}
+		const commandHeaders = new Headers(fetch.mock.calls[1]?.[1]?.headers);
+		expect(commandHeaders.get("x-tosk-desk")).toBe(DESK_ID);
 	});
 });
 

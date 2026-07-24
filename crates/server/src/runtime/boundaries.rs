@@ -127,14 +127,7 @@ pub(super) async fn desk_lock_boundary(
 }
 
 fn is_cue_deletion_action_route(method: &Method, path: &str) -> bool {
-    let parts = path.trim_matches('/').split('/').collect::<Vec<_>>();
-    matches!(
-        (method, parts.as_slice()),
-        (
-            &Method::POST,
-            ["api", "v2", "desks", _, "shows", _, "cues", "delete"]
-        )
-    )
+    method == Method::POST && path == "/api/v2/cues/delete"
 }
 
 fn is_output_runtime_action_route(method: &Method, path: &str) -> bool {

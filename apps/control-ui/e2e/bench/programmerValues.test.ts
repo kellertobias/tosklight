@@ -401,7 +401,7 @@ function assertExactAuthorityCalls(
 	expect(urls).toHaveLength(4);
 	expect(urls).toEqual(
 		expect.arrayContaining([
-			`http://desk.local/api/v2/desks/${DESK_ID}/playback-runtime/snapshot`,
+			"http://desk.local/api/v2/playback-runtime/snapshot",
 			`http://desk.local/api/v2/users/${USER_ID}/programmer-values/snapshot`,
 			`http://desk.local/api/v2/users/${USER_ID}/programmer-capture-mode/snapshot`,
 			`http://desk.local/api/v2/users/${USER_ID}/programmer-values/actions`,

@@ -155,25 +155,23 @@ async fn command_line_v2_is_revisioned_desk_scoped_and_idempotent() {
             .interaction_snapshot_for(Uuid::new_v4())
             .await
             .status(),
-        StatusCode::FORBIDDEN
+        StatusCode::NOT_FOUND
     );
     let wrong_desk = scenario
         .app
         .clone()
         .oneshot(
-            Request::get(format!(
-                "/api/v2/desks/{}/command-line",
-                Uuid::new_v4()
-            ))
+            Request::get("/api/v2/command-line")
             .header(
                 header::AUTHORIZATION,
                 format!("Bearer {}", scenario.token),
             )
+            .header("x-tosk-desk", Uuid::new_v4().to_string())
             .body(Body::empty())
             .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(wrong_desk.status(), StatusCode::FORBIDDEN);
+    assert_eq!(wrong_desk.status(), StatusCode::NOT_FOUND);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

@@ -181,7 +181,7 @@ async fn programming_selection_request_identity_scope_and_lock_are_enforced() {
             }),
         )
         .await;
-    assert_eq!(wrong_desk.status(), StatusCode::FORBIDDEN);
+    assert_eq!(wrong_desk.status(), StatusCode::NOT_FOUND);
 
     write_desk_lock(
         &scenario.state,
@@ -208,7 +208,17 @@ async fn accepted_selection_persistence_warning_is_replayed_without_duplicate_ev
     let scenario = CommandHttpScenario::new().await;
     let isolated = light_show::DeskStore::open(scenario.data_dir.join("isolated-desk.sqlite"))
         .expect("isolated Desk store");
+    let isolated_desk = isolated
+        .add_desk("Isolated", "isolated")
+        .expect("isolated control desk");
     *scenario.state.desk.lock() = isolated;
+    scenario
+        .state
+        .sessions
+        .write()
+        .get_mut(&scenario.session.id)
+        .expect("live session")
+        .desk = isolated_desk.clone();
     let request = serde_json::json!({
         "request_id": "selection-persistence-warning",
         "action": "replace",
@@ -216,14 +226,16 @@ async fn accepted_selection_persistence_warning_is_replayed_without_duplicate_ev
         "expected_revision": 0,
     });
 
-    let first = scenario.selection_action(request.clone()).await;
+    let first = scenario
+        .selection_action_for(isolated_desk.id, request.clone())
+        .await;
     assert_eq!(first.status(), StatusCode::OK);
     let first = json(first).await;
     assert!(first["warning"].as_str().is_some_and(|warning| !warning.is_empty()));
     assert_eq!(first["replayed"], false);
     let sequence = first["event_sequence"].as_u64().unwrap();
 
-    let replay = scenario.selection_action(request).await;
+    let replay = scenario.selection_action_for(isolated_desk.id, request).await;
     assert_eq!(replay.status(), StatusCode::OK);
     let replay = json(replay).await;
     assert_eq!(replay["warning"], first["warning"]);
@@ -306,13 +318,12 @@ async fn selection_waits_for_active_group_install_before_resolving_its_environme
     let mut selection = tokio::spawn(async move {
         selection_app
             .oneshot(
-                Request::post(format!(
-                    "/api/v2/desks/{desk_id}/programming-selection/actions"
-                ))
+                Request::post("/api/v2/programming-selection/actions")
                 .header(
                     header::AUTHORIZATION,
                     format!("Bearer {selection_token}"),
                 )
+                .header("x-tosk-desk", desk_id.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({

@@ -123,7 +123,8 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 			decodedInteractionSnapshot(),
 		);
 		expect(request).toHaveBeenCalledWith(
-			`/api/v2/desks/${DESK_ID}/programming-interaction/snapshot`,
+			"/api/v2/programming-interaction/snapshot",
+			{ headers: { "x-tosk-desk": DESK_ID } },
 		);
 	});
 

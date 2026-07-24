@@ -36,3 +36,17 @@ npm run test:e2e
 ## Decisions
 
 Inherited from parent chunk 12. No open decisions.
+
+## Result
+
+- Added shared `X-Tosk-Show` and `X-Tosk-Desk` request-context extraction,
+  deterministic absent-desk resolution, and authenticated desk/session validation.
+- De-scoped playback action/snapshot, command-line, programming-selection, and Cue
+  deletion routes while preserving typed outcomes, replay, locking, and session
+  authorization behavior.
+- Migrated control UI transports, E2E bench helpers, and server/root coverage to the
+  new routes and context headers.
+- Verified with `npm run test:unit` (including the full Rust workspace and 1,999
+  frontend tests), `npm run test:e2e-api` (86 passed, 1 skipped), and
+  `npm run test:e2e` (283 passed, 11 skipped). The two load-sensitive supplemental UI
+  failures from the full E2E run both passed in the isolated three-scenario rerun.

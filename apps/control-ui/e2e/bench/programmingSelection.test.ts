@@ -300,9 +300,9 @@ function assertExactCalls(fetchMock: ReturnType<typeof selectionFetch>) {
 	const urls = fetchMock.mock.calls.map(([input]) => String(input));
 	expect(urls).toEqual(
 		expect.arrayContaining([
-			`http://desk.local/api/v2/desks/${DESK_ID}/playback-runtime/snapshot`,
-			`http://desk.local/api/v2/desks/${DESK_ID}/programming-interaction/snapshot`,
-			`http://desk.local/api/v2/desks/${DESK_ID}/programming-selection/actions`,
+			"http://desk.local/api/v2/playback-runtime/snapshot",
+			"http://desk.local/api/v2/programming-interaction/snapshot",
+			"http://desk.local/api/v2/programming-selection/actions",
 		]),
 	);
 	expect(urls).toHaveLength(3);

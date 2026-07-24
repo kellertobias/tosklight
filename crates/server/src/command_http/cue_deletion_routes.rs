@@ -1,39 +1,40 @@
+use super::super::{ApiError, AppState, DeskContext, Session, ShowContext, session_for_desk};
+use super::{ServerProgrammingCueDeletionPorts, cue_deletion_wire, routes::http_context};
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Path, State, rejection::JsonRejection},
+    extract::{DefaultBodyLimit, State, rejection::JsonRejection},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::post,
 };
 use light_application::{ActionEnvelope, ActionError, ActionErrorKind};
-use light_core::ShowId;
 use light_wire::v2::cue_deletion::{
     CueDeletionErrorKind, CueDeletionErrorResponse, CueDeletionRequest,
 };
-use uuid::Uuid;
-
-use super::super::{ApiError, AppState, Session};
-use super::{ServerProgrammingCueDeletionPorts, cue_deletion_wire, routes::http_context};
 
 const BODY_LIMIT: usize = 16 * 1024;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
-        .route(
-            "/api/v2/desks/{desk_id}/shows/{show_id}/cues/delete",
-            post(delete_cue),
-        )
+        .route("/api/v2/cues/delete", post(delete_cue))
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
 }
 
 async fn delete_cue(
     State(state): State<AppState>,
-    Path((desk_id, show_id)): Path<(Uuid, String)>,
+    show: ShowContext,
+    desk: DeskContext,
     headers: HeaderMap,
     request: Result<Json<CueDeletionRequest>, JsonRejection>,
 ) -> Result<Response, CueDeletionHttpError> {
-    let session = authenticated_desk(&state, &headers, desk_id)?;
-    let show_id = parse_show_id(&show_id)?;
+    let session = session_for_desk(&state, &headers, &desk).map_err(CueDeletionHttpError::api)?;
+    show.verify(&state).map_err(CueDeletionHttpError::api)?;
+    let show_id = state
+        .active_show
+        .read()
+        .as_ref()
+        .map(|show| show.id)
+        .ok_or_else(|| CueDeletionHttpError::api(ApiError::conflict("no show is active")))?;
     let expected_revision =
         super::super::parse_if_match(&headers).map_err(CueDeletionHttpError::api)?;
     let Json(request) = request.map_err(CueDeletionHttpError::json)?;
@@ -61,34 +62,6 @@ async fn run_action(
     .await
     .map_err(CueDeletionHttpError::blocking)?
     .map_err(CueDeletionHttpError::application)
-}
-
-fn authenticated_desk(
-    state: &AppState,
-    headers: &HeaderMap,
-    desk_id: Uuid,
-) -> Result<Session, CueDeletionHttpError> {
-    let session = super::super::authenticate(state, headers).map_err(CueDeletionHttpError::api)?;
-    if session.desk.id != desk_id {
-        return Err(CueDeletionHttpError::new(
-            StatusCode::FORBIDDEN,
-            CueDeletionErrorKind::Forbidden,
-            "the authenticated session does not belong to this desk",
-            None,
-            None,
-            false,
-        ));
-    }
-    Ok(session)
-}
-
-fn parse_show_id(value: &str) -> Result<ShowId, CueDeletionHttpError> {
-    let id = Uuid::parse_str(value)
-        .map_err(|_| CueDeletionHttpError::invalid("show_id must be a UUID"))?;
-    if id.is_nil() {
-        return Err(CueDeletionHttpError::invalid("show_id must not be nil"));
-    }
-    Ok(ShowId(id))
 }
 
 fn json_with_etag<T: serde::Serialize>(revision: u64, body: T) -> Response {
