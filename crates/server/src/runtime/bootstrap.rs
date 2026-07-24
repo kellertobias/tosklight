@@ -271,6 +271,7 @@ fn build_app_state(
         network_output: Some(output),
         output_sequences,
         manual_clock: startup.manual_clock,
+        test_clock_lock: Arc::new(tokio::sync::Mutex::new(())),
         speed_groups: startup.speed_groups,
         sound_capture_owners: Arc::new(Mutex::new([None; 5])),
     })

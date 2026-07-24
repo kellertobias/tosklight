@@ -6,11 +6,24 @@ import {
 } from "@playwright/test";
 import type { ControllableDesktopAction } from "../../src/platform/desktop/controllableBrowserDesktopBridge";
 import type { ApiDriver } from "./api";
+import { BrowserClock } from "./clockScenario";
 import type { DeskDriver } from "./desk";
 import { BrowserDesktops } from "./desktopScenario";
+import { BrowserDmx, type DmxUniverseExpectation } from "./dmxScenario";
+import {
+	type FixtureDMXExpectation,
+	type FixtureDMXTarget,
+	FixtureDmxAssertions,
+} from "./fixtureDmx";
 import type { LightBench, TestShow } from "./lightBench";
+import {
+	BrowserOutputPackets,
+	type OutputPacketAssertion,
+} from "./outputPacketScenario";
+import { BrowserOutput } from "./outputScenario";
 import type { BuiltInPaneType } from "./paneTypes";
 import { builtInLabels } from "./paneTypes";
+import type { DmxProtocol } from "./protocols";
 import { BrowserShows } from "./showScenario";
 
 export interface ScreenConfigurationIntent {
@@ -45,6 +58,22 @@ export class BrowserScenarioWorld {
 	readonly screenshot: BrowserScreenshots;
 	readonly screen: BrowserScreens;
 	readonly show: BrowserShows;
+	readonly clock: BrowserClock;
+	readonly dmx: BrowserDmx;
+	readonly output: BrowserOutput;
+	readonly expect: {
+		dmx: (universe: number) => DmxUniverseExpectation;
+		outputPacket: (
+			protocol: DmxProtocol,
+			universe: number,
+			assertion: OutputPacketAssertion,
+		) => Promise<void>;
+	};
+	readonly expectFixtureDMX: (
+		target: FixtureDMXTarget,
+		expected: FixtureDMXExpectation,
+	) => Promise<void>;
+	readonly expectFixtureDMXAbsent: (target: FixtureDMXTarget) => Promise<void>;
 
 	constructor(
 		page: Page,
@@ -64,6 +93,21 @@ export class BrowserScenarioWorld {
 		this.screenshot = new BrowserScreenshots(page, attach, this.builtIn);
 		this.screen = new BrowserScreens(page, desk);
 		this.show = new BrowserShows(api, bench, desk, initialShow, page);
+		this.clock = new BrowserClock(bench, desk);
+		this.dmx = new BrowserDmx(api);
+		this.output = new BrowserOutput(api, desk);
+		const outputPackets = new BrowserOutputPackets(bench);
+		this.expect = {
+			dmx: (universe) => this.dmx.expect(universe),
+			outputPacket: (protocol, universe, assertion) =>
+				outputPackets.expect(protocol, universe, assertion),
+		};
+		const fixtureDmx = new FixtureDmxAssertions(api, undefined, () =>
+			bench.applicationTime(),
+		);
+		this.expectFixtureDMX = (target, expected) =>
+			fixtureDmx.expect(target, expected);
+		this.expectFixtureDMXAbsent = (target) => fixtureDmx.expectAbsent(target);
 	}
 }
 
@@ -71,7 +115,7 @@ export class BrowserApplication {
 	readonly expect: { ready: () => Promise<void> };
 
 	constructor(
-		private readonly page: Page,
+		page: Page,
 		private readonly desk: DeskDriver,
 		private readonly baseUrl: string,
 	) {

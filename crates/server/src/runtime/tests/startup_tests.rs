@@ -726,6 +726,17 @@ async fn production_router_does_not_expose_test_clock_controls() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/test/clock/free-run")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"millis":100}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let response = app
         .oneshot(
             Request::post(
                 "/api/v2/test/shows/00000000-0000-4000-8000-000000000001/objects/group/1",

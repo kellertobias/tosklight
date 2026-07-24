@@ -10,6 +10,7 @@ pub(super) fn fixed_test_time() -> chrono::DateTime<chrono::Utc> {
 pub(super) async fn reset_test_clock(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let _clock_session = state.test_clock_lock.lock().await;
     let clock = state
         .manual_clock
         .as_ref()
@@ -52,6 +53,7 @@ pub(super) async fn advance_test_clock(
     if !(0..=604_800_000).contains(&input.millis) {
         return Err(ApiError::bad_request("millis must be within 0-604800000"));
     }
+    let _clock_session = state.test_clock_lock.lock().await;
     let clock = state
         .manual_clock
         .as_ref()
@@ -113,6 +115,60 @@ pub(super) async fn advance_test_clock(
         "revision": rendered.revision,
         "packets_sent": packets,
         "universes": frames.into_iter().map(|(universe, slots)| serde_json::json!({"universe":universe,"slots":slots.to_vec()})).collect::<Vec<_>>(),
+    })))
+}
+
+#[derive(Deserialize)]
+pub(super) struct FreeRunTestClock {
+    pub(super) millis: u64,
+}
+
+/// Runs the production deadline scheduler against the manual application clock for a bounded
+/// wall-time interval. The request resolves only after the exact final application-time frame has
+/// rendered and the clock is frozen again.
+pub(super) async fn free_run_test_clock(
+    State(state): State<AppState>,
+    Json(input): Json<FreeRunTestClock>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if !(1..=60_000).contains(&input.millis) {
+        return Err(ApiError::bad_request("millis must be within 1-60000"));
+    }
+    let _clock_session = state.test_clock_lock.lock().await;
+    let clock = state
+        .manual_clock
+        .as_ref()
+        .cloned()
+        .ok_or_else(|| ApiError::not_found("test clock"))?;
+    let started = std::time::Instant::now();
+    let cancellation = tokio_util::sync::CancellationToken::new();
+    let cancellation_after_tick = cancellation.clone();
+    let mut advanced = 0_u64;
+    let rate = Arc::clone(&state.output_rate);
+    let health = Arc::clone(&state.output_health);
+    light_output::run_scheduler_dynamic(rate, cancellation, health, || {
+        let elapsed = u64::try_from(started.elapsed().as_millis())
+            .unwrap_or(u64::MAX)
+            .min(input.millis);
+        let delta = elapsed.saturating_sub(advanced);
+        advanced = elapsed;
+        if delta > 0 {
+            clock.advance_millis(i64::try_from(delta).unwrap_or(i64::MAX));
+        }
+        refresh_speed_group_engine(&state);
+        if elapsed == input.millis {
+            cancellation_after_tick.cancel();
+        }
+        let tick_state = state.clone();
+        async move {
+            let result = output_scheduler::render_test_tick(tick_state.clone()).await;
+            send_osc_feedback(&tick_state, true);
+            result
+        }
+    })
+    .await;
+    Ok(Json(serde_json::json!({
+        "now": clock.now(),
+        "wall_millis": started.elapsed().as_millis(),
     })))
 }
 

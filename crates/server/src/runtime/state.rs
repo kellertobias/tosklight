@@ -94,6 +94,8 @@ pub(super) struct AppState {
     pub(super) output_sequences:
         Arc<tokio::sync::Mutex<HashMap<(light_output::Protocol, u16), u8>>>,
     pub(super) manual_clock: Option<Arc<ManualClock>>,
+    /// Serializes deterministic clock steps and bounded free-running scheduler sessions.
+    pub(super) test_clock_lock: Arc<tokio::sync::Mutex<()>>,
     pub(super) speed_groups: Arc<Mutex<[SpeedGroupController; 5]>>,
     pub(super) sound_capture_owners: Arc<Mutex<[Option<SoundCaptureOwner>; 5]>>,
 }

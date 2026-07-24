@@ -15,6 +15,16 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.
 const SERVER = path.join(artifactPaths.cargo, "debug", process.platform === "win32" ? "light-server.exe" : "light-server");
 
 export interface TestShow { id: string; fixtureIds: string[]; session: Session }
+export interface ClockFrame {
+  now: string;
+  revision: number;
+  packets_sent: number;
+  universes: Array<{ universe: number; slots: number[] }>;
+}
+export interface ClockFreeRunResult {
+  now: string;
+  wall_millis: number;
+}
 
 export class LightBench {
   private process?: ChildProcess;
@@ -131,12 +141,25 @@ export class LightBench {
     return { id: show.id, fixtureIds, session };
   }
 
-  async tick(millis = 0): Promise<{ now: string; packets_sent: number; universes: Array<{ universe: number; slots: number[] }> }> {
+  async tick(millis = 0): Promise<ClockFrame> {
     const response = await fetch(`${this.baseUrl}/api/v2/test/clock/advance`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ millis }), signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) throw new Error(`Test clock advance failed: ${await response.text()}`);
-    const result = await response.json() as { now: string; packets_sent: number; universes: Array<{ universe: number; slots: number[] }> };
+    const result = await response.json() as ClockFrame;
+    this.lastVirtualNow = result.now;
+    return result;
+  }
+
+  async freeRunClock(millis: number): Promise<ClockFreeRunResult> {
+    const response = await fetch(`${this.baseUrl}/api/v2/test/clock/free-run`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ millis }),
+      signal: AbortSignal.timeout(millis + 5_000),
+    });
+    if (!response.ok) throw new Error(`Test clock free run failed: ${await response.text()}`);
+    const result = await response.json() as ClockFreeRunResult;
     this.lastVirtualNow = result.now;
     return result;
   }
@@ -190,10 +213,12 @@ export class LightBench {
       })
       .join(" · ");
   }
+  applicationTime(): string { return this.lastVirtualNow; }
   recentLog(): string { return this.log.slice(-100).join(""); }
 
   async failureArtifacts(token: string): Promise<Record<string, string>> {
     let audit: unknown = [];
+    let logicalDmx: unknown = { error: "Logical DMX snapshot was unavailable" };
     try {
       const response = await fetch(`${this.baseUrl}/api/v2/audit?after=0`, {
         headers: { authorization: `Bearer ${token}` },
@@ -201,6 +226,18 @@ export class LightBench {
       });
       if (response.ok) audit = (await response.json() as unknown[]).slice(-100);
     } catch { /* server failure is represented by its log */ }
+    try {
+      const response = await fetch(`${this.baseUrl}/api/v2/output/dmx`, {
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(2_000),
+      });
+      if (response.ok) logicalDmx = await response.json();
+      else logicalDmx = { error: `Logical DMX returned HTTP ${response.status}` };
+    } catch (reason) {
+      logicalDmx = {
+        error: reason instanceof Error ? reason.message : String(reason),
+      };
+    }
     const packets = [...this.artnet.packets, ...this.sacn.packets].slice(-40).map((packet) => ({
       protocol: packet.protocol, universe: packet.universe, sequence: packet.sequence,
       priority: packet.priority, terminated: packet.terminated, slots: Array.from(packet.slots.slice(0, 64)),
@@ -211,6 +248,7 @@ export class LightBench {
       "audit-tail.json": JSON.stringify(audit, null, 2),
       "osc-tail.json": JSON.stringify(this.oscHardware.flatMap((hardware) => hardware.messages).slice(-200), null, 2),
       "osc-trace.json": JSON.stringify(this.oscHardware.flatMap((hardware) => hardware.trace).sort((left, right) => left.recordedAt - right.recordedAt).slice(-200), null, 2),
+      "logical-dmx.json": JSON.stringify(logicalDmx, null, 2),
       "dmx-packets.json": JSON.stringify(packets, null, 2),
     };
   }

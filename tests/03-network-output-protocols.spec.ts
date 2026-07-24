@@ -198,8 +198,8 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       const route = (await objects(api, "route")).find((entry) => entry.body.protocol === "sacn")!;
       const mark = bench.sacn.mark();
       await putObject(api, "route", route.id, { ...route.body, enabled: false }, route.revision);
-      await expect.poll(() => bench.sacn.packets.slice(mark).filter((packet) => packet.protocol === "sacn" && packet.universe === 101).length).toBe(3);
-      const terminated = bench.sacn.packets.slice(mark).filter((packet) => packet.protocol === "sacn" && packet.universe === 101);
+      await expect.poll(() => bench.sacn.packetsAfter(mark).filter((packet) => packet.protocol === "sacn" && packet.universe === 101).length).toBe(3);
+      const terminated = bench.sacn.packetsAfter(mark).filter((packet) => packet.protocol === "sacn" && packet.universe === 101);
       expect(terminated).toHaveLength(3);
       expect(terminated.every((packet) => packet.terminated && packet.priority === 100 && packet.sequence !== 0)).toBe(true);
     },
@@ -238,7 +238,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       expect(Array.from(primary.slots.slice(0, 3))).toEqual([64, 128, 191]);
       expect(Array.from(extra.slots.slice(0, 3))).toEqual([64, 128, 191]);
       await new Promise((resolve) => setTimeout(resolve, 75));
-      expect(state.disabledSacn.packets.slice(disabledMark)).toHaveLength(0);
+      expect(state.disabledSacn.packetsAfter(disabledMark)).toHaveLength(0);
       await Promise.all([state.extraArt.close(), state.disabledSacn.close()]);
     },
   });
@@ -427,7 +427,7 @@ test.describe("docs/testing/03-network-output-protocols.md", () => {
       await bench.tick(3_000);
       expect((await bench.artnet.nextAfter(healthyMark, "artnet", 1)).slots[0]).toBe(64);
       await new Promise((resolve) => setTimeout(resolve, 75));
-      expect(state.failing.packets.slice(failedMark)).toHaveLength(0);
+      expect(state.failing.packetsAfter(failedMark)).toHaveLength(0);
       const after = await api.request<any>("GET", "/api/v2/diagnostics");
       expect(after.output.send_errors).toBe(before.output.send_errors + 1);
       expect(routeSendErrors(after, state.destination)).toBe(failingErrorsBefore + 1);
@@ -672,7 +672,7 @@ async function exerciseMinimumRoute(api: ApiDriver, bench: any, state: MinimumRo
   await bench.tick(0);
   await state.receiver.nextAfter(mark, "sacn", 132);
   await new Promise((resolve) => setTimeout(resolve, 75));
-  state.artDisabled = !state.receiver.packets.slice(mark).some((packet) => packet.protocol === "artnet" && packet.universe === 32);
+  state.artDisabled = !state.receiver.packetsAfter(mark).some((packet) => packet.protocol === "artnet" && packet.universe === 32);
 }
 
 async function installPatchConflict(api: ApiDriver): Promise<PatchConflictState> {

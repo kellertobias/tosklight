@@ -1,7 +1,7 @@
 //! Network-output scheduling and safe shutdown for the server runtime.
 
 use super::{
-    OutputControl, PersistedOutputRuntime, playback_service,
+    AppState, OutputControl, PersistedOutputRuntime, playback_service,
     playback_telemetry::PlaybackTelemetrySampler,
 };
 use light_application::{
@@ -168,6 +168,29 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             &mut *runtime.sequences.lock().await,
         )
         .await
+}
+
+/// Runs one test-bench frame through the same render, routing, sequence, health-facing output
+/// boundary as the production scheduler.
+pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
+    let output = state
+        .network_output
+        .as_ref()
+        .cloned()
+        .ok_or_else(|| io::Error::other("network output is unavailable"))?;
+    render_tick(Runtime {
+        engine: Arc::clone(&state.engine),
+        output,
+        sequences: Arc::clone(&state.output_sequences),
+        control: Arc::clone(&state.output_control),
+        timecode: Arc::clone(&state.timecode_router),
+        playback_service: state.playback_service.clone(),
+        active_show: Arc::clone(&state.active_show),
+        activation_lock: Arc::clone(&state.activation_lock),
+        telemetry: Arc::clone(&state.playback_telemetry),
+        cancellation: state.shutdown.clone(),
+    })
+    .await
 }
 
 pub(super) fn render_with_playback_events(

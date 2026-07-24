@@ -92,6 +92,7 @@ fn with_test_routes(router: Router<AppState>, enabled: bool) -> Router<AppState>
     router
         .route("/api/v2/test/clock/reset", post(reset_test_clock))
         .route("/api/v2/test/clock/advance", post(advance_test_clock))
+        .route("/api/v2/test/clock/free-run", post(free_run_test_clock))
         .route("/api/v2/test/output/failure", post(set_test_output_failure))
         .route(
             "/api/v2/test/shows/{show_id}/objects/{kind}/{object_id}",

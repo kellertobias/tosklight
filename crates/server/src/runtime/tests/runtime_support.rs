@@ -95,6 +95,7 @@ fn test_state_with_programmers(
             network_output: None,
             output_sequences: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             manual_clock,
+            test_clock_lock: Arc::new(tokio::sync::Mutex::new(())),
             speed_groups: Arc::new(Mutex::new(std::array::from_fn(|index| {
                 SpeedGroupController::new(
                     default_speed_groups()[index],

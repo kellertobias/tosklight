@@ -4,10 +4,15 @@ export default defineConfig({
 	test: {
 		environment: "node",
 		include: [
+			"e2e/bench/clockScenario.test.ts",
 			"e2e/bench/cueDeletion.test.ts",
+			"e2e/bench/dmxScenario.test.ts",
+			"e2e/bench/fixtureDmx.test.ts",
 			"e2e/bench/mapExistingPlaybackToSlot.test.ts",
 			"e2e/bench/outputRuntime.test.ts",
+			"e2e/bench/outputPacketScenario.test.ts",
 			"e2e/bench/playbackRuntimeAction.test.ts",
+			"e2e/bench/protocols.test.ts",
 			"e2e/bench/programmerPreloadLifecycle.test.ts",
 			"e2e/bench/programmerPriority.test.ts",
 			"e2e/bench/programmingSelection.test.ts",

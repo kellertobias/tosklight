@@ -35,10 +35,14 @@ export interface DmxPacket {
 export class DmxReceiver {
   readonly packets: DmxPacket[] = [];
   private closePromise?: Promise<void>;
+  private readonly packetCursors = new WeakMap<DmxPacket, number>();
+  private nextCursor = 0;
   private constructor(private readonly socket: Socket, readonly port: number) {
     socket.on("message", (message) => {
       const packet = parseDmxPacket(message);
       if (packet) {
+        this.nextCursor += 1;
+        this.packetCursors.set(packet, this.nextCursor);
         this.packets.push(packet);
         if (this.packets.length > 200) this.packets.shift();
       }
@@ -57,14 +61,22 @@ export class DmxReceiver {
     return new DmxReceiver(socket, (socket.address() as dgram.AddressInfo).port);
   }
 
-  mark(): number { return this.packets.length; }
+  mark(): number { return this.nextCursor; }
 
   reset(): void { this.packets.length = 0; }
+
+  packetsAfter(mark: number): DmxPacket[] {
+    return this.packets.filter(
+      (packet) => (this.packetCursors.get(packet) ?? 0) > mark,
+    );
+  }
 
   async nextAfter(mark: number, protocol: DmxProtocol, universe: number, timeout = 2_000): Promise<DmxPacket> {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
-      const packet = this.packets.slice(mark).find((candidate) => candidate.protocol === protocol && candidate.universe === universe);
+      const packet = this.packetsAfter(mark).find((candidate) =>
+        candidate.protocol === protocol && candidate.universe === universe
+      );
       if (packet) return packet;
       await new Promise<void>((resolve) => setTimeout(resolve, 5));
     }

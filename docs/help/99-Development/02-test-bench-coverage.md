@@ -196,6 +196,24 @@ The executable workflows that use this patch are cataloged under the concrete Gr
 - **Pass:** One Playwright test completes the full operator story without splitting state across scenarios. `./test demo` atomically refreshes the completed portable show at `assets/demo.show`, records the narrated Full HD product surface, and writes the maintained screenshot and video below `.artifacts/test/visual-inspection/product-demo/`.
 - **Executable scenario:** [DEMO-001](../../../tests/product-demo.spec.ts)
 
+## BENCH-CLOCK-DMX-001–002 — Scenario clock and output observations
+
+- **Starting show:** Use the isolated twelve-dimmer bench show and its test-owned Art-Net and
+  sACN receivers; the free-run case installs one test-owned Phaser playback.
+- **Surface:** Typed scenario clock, fixture-aware and raw logical-DMX observations, and decoded
+  Art-Net/sACN packets.
+- **Actions:** Render one zero-time step; visit named 999/1000/1001 ms boundaries; resolve
+  fixture-number and fixture-range channel names from the current patch/profile; then run the
+  production output scheduler against the manual clock for 350 ms of real recording time.
+- **Oracle:** Exact application timestamps, one deterministic step, current semantic channel
+  bytes, multiple changing Art-Net and sACN frames during free run, and no packets after the
+  awaited operation freezes the clock.
+- **Pass:** Exact tests never wait on wall time, fixture assertions never hard-code patch
+  addresses or advance time, live recordings receive genuinely moving output, and logical,
+  Art-Net, and sACN observations remain separate.
+- **Executable scenarios:**
+  [BENCH-CLOCK-DMX-001–002](../../../tests/testBench/04-clock-dmx-and-output.spec.ts)
+
 ## Required coverage matrix
 
 | IDs | Area | Required cases | Primary oracle |
@@ -233,6 +251,7 @@ The executable workflows that use this patch are cataloged under the concrete Gr
 | API-001–002 | REST/events | authentication, revision conflicts, CRUD, matching events, and audit ordering | HTTP status/body, events, audit |
 | CROSS-001–002 | Cross-surface agreement | equivalent Group value through UI/API/OSC and visible UI synchronization after external mutation | normalized programmer/output state and visible UI |
 | TIME-001–003 | Virtual time | zero tick, exact fade boundaries, chaser/phaser speed, pause/resume, and maximum one-week jump | exact virtual timestamp, runtime phase, and output frame |
+| BENCH-CLOCK-DMX-001–002 | Test-bench clock and DMX helpers | exact steps and named boundaries, genuine scheduler free run, fixture/profile component resolution, repatch-safe semantic lookup, fixture ranges, raw logical frames, and distinct wire packets | application timestamp, latest logical frame, decoded Art-Net/sACN history, and diagnostic artifacts |
 | DESKTOP-001–002 | Packaged app | WebView load, session/bootstrap, app-owned server readiness and clean child shutdown; independent-server non-adoption and survival | ready marker, HTTP readiness, exact process ownership and exit, authenticated post-exit write |
 | FILE-001–002, FILE-016 | File Manager | confined revision-safe text, visible browse/edit, authenticated roots/capabilities/range streaming, file operations, configured roots, pane input ownership, and hosted picker contracts | HTTP status/body, persisted files, visible pane/picker state, OSC-owned input context |
 | TEXT-001, TEXT-015 | Text Editor | file association and dirty state, multi-pane synchronization/conflicts, external updates, rename/delete recovery, read-only and Markdown modes | persisted text/layout and visible editor state |

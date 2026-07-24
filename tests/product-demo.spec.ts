@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
 import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+import { BrowserClock } from "../apps/control-ui/e2e/bench/clockScenario";
 import type { DeskDriver } from "../apps/control-ui/e2e/bench/desk";
 import { activeShowId, loadCanonicalCopy, programmer } from "./support/catalog";
 import {
@@ -30,6 +31,7 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
   await loadCanonicalCopy(api, bench, "planned-product-demo", "default-stage");
   const video = page.video();
   let completedShow: Buffer | null = null;
+  const clock = new BrowserClock(bench, desk);
   try {
     await desk.open(`${bench.baseUrl}/?demo=product`);
     const demo = page.getByTestId("product-demo");
@@ -343,7 +345,7 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
     await desk.click(demo.getByRole("button", { name: "Playback 3 button 1", exact: true }));
     await bench.tick(1_200);
     await expect.poll(async () => (await api.request<any>("GET", "/api/v2/output/dmx", undefined, false)).universes.some((frame: any) => frame.slots.some((value: number) => value > 0))).toBe(true);
-    await pause(page, 1_800);
+    if (RECORDING) await clock.freeRunFor("1.8s");
 
     await desk.click(demo.getByRole("button", { name: "Playback 3 button 1", exact: true }));
     await desk.click(demo.getByRole("button", { name: "Playback 22 button 1", exact: true }));
@@ -381,8 +383,8 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
       valueCount: 0,
       playbackCount: 0,
     });
-    await bench.tick(6_000);
-    await pause(page, 6_000);
+    if (RECORDING) await clock.freeRunFor("6s");
+    else await clock.advanceBy("6s");
 
     await desk.titleCard("ACL CHASER · SPEED A", "The final playback starts the alternating ACL fan; two learned taps set its Speed A tempo.");
     await desk.click(demo.getByRole("button", { name: "Playback 4 button 1", exact: true }));
@@ -390,10 +392,10 @@ test("@ui narrates the complete Full HD product demo surface in one regression r
     await page.waitForTimeout(650);
     await page.keyboard.press("F9");
     await expect.poll(async () => activeNumbers(api)).toContain(4);
-    await bench.tick(2_000);
+    if (RECORDING) await clock.freeRunFor("2s");
+    else await clock.advanceBy("2s");
     await expect.poll(async () => (await api.request<any>("GET", "/api/v2/output/dmx", undefined, false)).universes.some((frame: any) => frame.slots.some((value: number) => value > 0))).toBe(true);
     if (UPDATE_DEMO_SHOW) completedShow = await downloadCompletedDemoShow(api, showId);
-    await pause(page, 2_000);
 
     if (RECORDING) {
       await fs.mkdir(path.dirname(SCREENSHOT), { recursive: true });
