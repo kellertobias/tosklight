@@ -161,10 +161,6 @@ fn playback_routes() -> Router<AppState> {
             post(paged_playback_action).put(paged_playback_action),
         )
         .route("/api/v1/playbacks", get(playbacks))
-        .route(
-            "/api/v1/playback-pages/{page}/slots/{slot}",
-            put(upsert_playback_slot).delete(clear_playback_slot),
-        )
 }
 
 fn programmer_and_update_routes() -> Router<AppState> {

@@ -1,5 +1,6 @@
 import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
 import { objects, putObject } from "../catalog";
+import { configurePlaybackSlot } from "../playbackTopology";
 
 export async function assignFaderlessMatterPlayback(
 	api: Parameters<typeof objects>[0],
@@ -44,29 +45,21 @@ export async function assignFaderlessMatterPlayback(
 	const existingCueList = (await objects<any>(api, "cue_list"))[0];
 	const cueListId =
 		existingCueList?.id ?? (await createMatterAcceptanceCueList(api));
-	const result = await api.request<any>(
-		"PUT",
-		`/api/v1/playback-pages/${pageNumber}/slots/${slot}`,
-		{
-			playback: {
-				number: 0,
-				name: "Matter Button Only",
-				target: { type: "cue_list", cue_list_id: cueListId },
-				buttons: ["toggle", "none", "none"],
-				button_count: 1,
-				fader: "master",
-				has_fader: false,
-				go_activates: true,
-				auto_off: false,
-				xfade_millis: 0,
-				color: "#20c997",
-				flash_release: "release_all",
-				protect_from_swap: false,
-			},
-			expected_playback_revision: 0,
-			expected_page_revision: pageState?.revision ?? 0,
-		},
-	);
+	const result = await configurePlaybackSlot(api, pageNumber!, slot!, {
+		number: 0,
+		name: "Matter Button Only",
+		target: { type: "cue_list", cue_list_id: cueListId },
+		buttons: ["toggle", "none", "none"],
+		button_count: 1,
+		fader: "master",
+		has_fader: false,
+		go_activates: true,
+		auto_off: false,
+		xfade_millis: 0,
+		color: "#20c997",
+		flash_release: "release_all",
+		protect_from_swap: false,
+	});
 	return {
 		page: pageNumber!,
 		slot: slot!,

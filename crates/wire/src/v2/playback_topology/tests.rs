@@ -33,7 +33,7 @@ fn all_semantic_actions_have_strict_readable_discriminants() {
 }
 
 #[test]
-fn identity_and_nested_unknown_fields_are_rejected() {
+fn unknown_fields_are_tolerated_while_required_authority_stays_typed() {
     for forged in [
         "show_id",
         "user_id",
@@ -43,17 +43,17 @@ fn identity_and_nested_unknown_fields_are_rejected() {
     ] {
         let mut request = configure_request();
         request[forged] = json!("forged");
-        assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(request).is_err());
+        serde_json::from_value::<PlaybackTopologyActionRequest>(request).unwrap();
     }
     let mut action = configure_request();
     action["action"]["object_kind"] = json!("playback");
-    assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(action).is_err());
+    serde_json::from_value::<PlaybackTopologyActionRequest>(action).unwrap();
     let mut playback = configure_request();
     playback["action"]["playback"]["future"] = json!(true);
-    assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(playback).is_err());
+    serde_json::from_value::<PlaybackTopologyActionRequest>(playback).unwrap();
     let mut target = configure_request();
     target["action"]["playback"]["target"]["future"] = json!(true);
-    assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(target).is_err());
+    serde_json::from_value::<PlaybackTopologyActionRequest>(target).unwrap();
 
     for field in ["expected_page_object_id", "expected_playback_object_id"] {
         let mut missing = configure_request();
@@ -69,7 +69,7 @@ fn identity_and_nested_unknown_fields_are_rejected() {
     }
     let mut page = rename_page_request();
     page["action"]["future"] = json!(true);
-    assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(page).is_err());
+    serde_json::from_value::<PlaybackTopologyActionRequest>(page).unwrap();
     let missing_save_identity = json!({
         "request_id":"save",
         "action":{"type":"save_cue_list","cue_list_id":Uuid::nil(),
@@ -80,7 +80,7 @@ fn identity_and_nested_unknown_fields_are_rejected() {
     );
     let mut map = map_existing_request();
     map["action"]["target"] = json!({"type":"cue_list"});
-    assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(map).is_err());
+    serde_json::from_value::<PlaybackTopologyActionRequest>(map).unwrap();
     for field in ["expected_page_object_id", "expected_playback_object_id"] {
         let mut missing = map_existing_request();
         missing["action"].as_object_mut().unwrap().remove(field);

@@ -16,8 +16,6 @@ import type {
 import { decodePlaybackOutcome, decodePlaybackSnapshot } from "../playbackWire";
 import type {
 	ControlDesk,
-	PlaybackDefinition,
-	PlaybackPage,
 	ScreenConfiguration,
 	ScreenSnapshot,
 } from "../types";
@@ -188,49 +186,6 @@ export class PlaybackApiClient {
 			method: action === "master" ? "PUT" : "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(input),
-		});
-	}
-
-	savePlaybackSlot(
-		page: number,
-		slot: number,
-		playback: PlaybackDefinition,
-		expectedPlaybackRevision: number,
-		expectedPageRevision: number,
-	) {
-		return this.transport.request<{
-			playback: PlaybackDefinition;
-			page: PlaybackPage;
-		}>(`/api/v1/playback-pages/${page}/slots/${slot}`, {
-			method: "PUT",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({
-				playback,
-				expected_playback_revision: expectedPlaybackRevision,
-				expected_page_revision: expectedPageRevision,
-			}),
-		});
-	}
-
-	clearPlaybackSlot(
-		page: number,
-		slot: number,
-		expectedPlaybackRevision: number,
-		expectedPageRevision: number,
-	) {
-		return this.transport.request<{
-			cleared: boolean;
-			playback_number: number;
-			page: number;
-			slot: number;
-			page_revisions: number[];
-		}>(`/api/v1/playback-pages/${page}/slots/${slot}`, {
-			method: "DELETE",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({
-				expected_playback_revision: expectedPlaybackRevision,
-				expected_page_revision: expectedPageRevision,
-			}),
 		});
 	}
 

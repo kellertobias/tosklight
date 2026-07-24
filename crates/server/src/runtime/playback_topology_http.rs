@@ -1,5 +1,7 @@
 //! Authenticated v2 actions for portable Cuelist, Playback, and Page topology.
 
+use crate::tolerant_json::TolerantJson;
+
 use super::{
     ApiError, AppState, ServerPlaybackTopologyPorts, Session, ShowContext, authenticate,
     parse_if_match, playback_topology_wire,
@@ -29,7 +31,7 @@ async fn apply_action(
     State(state): State<AppState>,
     show: ShowContext,
     headers: HeaderMap,
-    request: Result<Json<PlaybackTopologyActionRequest>, JsonRejection>,
+    request: Result<TolerantJson<PlaybackTopologyActionRequest>, JsonRejection>,
 ) -> Result<Response, PlaybackTopologyHttpError> {
     let session = authenticate(&state, &headers).map_err(PlaybackTopologyHttpError::api)?;
     let show_id = show
@@ -37,7 +39,7 @@ async fn apply_action(
         .map_err(PlaybackTopologyHttpError::api)?;
     let expected_revision = parse_if_match(&headers).map_err(PlaybackTopologyHttpError::api)?;
     validate_safe_revision(expected_revision, "If-Match")?;
-    let Json(request) = request.map_err(PlaybackTopologyHttpError::json)?;
+    let TolerantJson(request) = request.map_err(PlaybackTopologyHttpError::json)?;
     validate_request_id(&request.request_id)?;
     let (request_id, command) = playback_topology_wire::application_command(show_id, request)
         .map_err(PlaybackTopologyHttpError::invalid)?;

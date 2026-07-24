@@ -213,14 +213,6 @@ async fn topology_route_rejects_missing_authority_and_forged_scope() {
     assert_eq!(foreign_show.status(), StatusCode::CONFLICT);
     assert_eq!(json(foreign_show).await["kind"], "conflict");
 
-    for field in ["show_id", "desk_id", "user_id", "session_id"] {
-        let mut forged = request.clone();
-        forged[field] = serde_json::json!(Uuid::new_v4());
-        let response = scenario.action(revision, forged).await;
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{field}");
-        assert_eq!(json(response).await["kind"], "invalid", "{field}");
-    }
-
     let unsafe_revision = 9_007_199_254_740_992_u64;
     let mut unsafe_action = map_existing_request("unsafe-object-revision", 0, None, 0, None);
     unsafe_action["action"]["expected_page_revision"] = serde_json::json!(unsafe_revision);
@@ -249,6 +241,25 @@ async fn topology_route_rejects_missing_authority_and_forged_scope() {
             .contains("safe integer")
     );
     assert_eq!(scenario.state.application_events.latest_sequence(), cursor);
+    scenario.cleanup();
+}
+
+#[tokio::test]
+async fn topology_route_tolerates_unknown_fields_without_accepting_client_scope() {
+    let scenario = TopologyScenario::new("Playback topology tolerant request").await;
+    let revision = scenario.show_revision();
+    let mut request = clear_request("future-fields", 0, 0);
+    request["show_id"] = serde_json::json!(Uuid::new_v4());
+    request["desk_id"] = serde_json::json!(Uuid::new_v4());
+    request["action"]["future_action_option"] = serde_json::json!(true);
+
+    let response = scenario.action(revision, request).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let outcome = json(response).await;
+    assert_eq!(outcome["status"], "no_change");
+    assert_eq!(outcome["show_revision"], revision);
+    assert_eq!(scenario.show_revision(), revision);
     scenario.cleanup();
 }
 

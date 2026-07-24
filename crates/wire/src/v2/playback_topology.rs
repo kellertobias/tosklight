@@ -24,7 +24,6 @@ impl PlaybackTopologyObjectIdentity {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PlaybackTopologyActionRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
@@ -32,7 +31,7 @@ pub struct PlaybackTopologyActionRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlaybackTopologyAction {
     SaveCueList {
         cue_list_id: Uuid,
@@ -119,7 +118,6 @@ pub enum PlaybackTopologyAction {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PlaybackTopologyPlaybackDefinition {
     #[schemars(range(max = 1000))]
     pub number: u16,
@@ -147,7 +145,7 @@ pub struct PlaybackTopologyPlaybackDefinition {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlaybackTopologyTarget {
     CueList { cue_list_id: Uuid },
     Group { group_id: String },

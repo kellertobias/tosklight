@@ -7,6 +7,10 @@ import {
 	objects,
 	putObject,
 } from "../support/catalog";
+import {
+	clearMappedPlaybackSlot,
+	configurePlaybackSlot,
+} from "../support/playbackTopology";
 import type {
 	PlaybackDefinition,
 	PlaybackTarget,
@@ -224,36 +228,11 @@ export async function saveSlot(
 	slot: number,
 	playback: PlaybackDefinition,
 ) {
-	const pageState = await pageObject(api, page);
-	const currentNumber = pageState.body.slots[String(slot)];
-	const currentPlayback =
-		currentNumber == null
-			? undefined
-			: (await objects<PlaybackDefinition>(api, "playback")).find(
-					(item) => item.id === String(currentNumber),
-				);
-	return api.request<any>(
-		"PUT",
-		`/api/v1/playback-pages/${page}/slots/${slot}`,
-		{
-			playback,
-			expected_playback_revision: currentPlayback?.revision ?? 0,
-			expected_page_revision: pageState.revision,
-		},
-	);
+	return configurePlaybackSlot(api, page, slot, playback);
 }
 
 export async function clearSlot(api: ApiDriver, page: number, slot: number) {
-	const pageState = await pageObject(api, page);
-	const playback = await playbackAt(api, page, slot);
-	return api.request<any>(
-		"DELETE",
-		`/api/v1/playback-pages/${page}/slots/${slot}`,
-		{
-			expected_playback_revision: playback.revision,
-			expected_page_revision: pageState.revision,
-		},
-	);
+	return clearMappedPlaybackSlot(api, page, slot);
 }
 
 export async function updatePlayback(

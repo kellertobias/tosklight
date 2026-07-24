@@ -2,6 +2,7 @@ import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
 import { expect } from "../apps/control-ui/e2e/bench/fixtures";
 import type { LightBench } from "../apps/control-ui/e2e/bench/lightBench";
 import { fixtureIdsByNumber, objects, putObject } from "./support/catalog";
+import { configurePlaybackSlot } from "./support/playbackTopology";
 
 export async function assignMatterRestartPlayback(api: ApiDriver): Promise<{
 	page: number;
@@ -32,29 +33,21 @@ export async function assignMatterRestartPlayback(api: ApiDriver): Promise<{
 	const existingCueList = (await objects<any>(api, "cue_list"))[0];
 	const cueListId =
 		existingCueList?.id ?? (await createMatterRestartCueList(api));
-	const result = await api.request<any>(
-		"PUT",
-		`/api/v1/playback-pages/${pageNumber}/slots/${slot}`,
-		{
-			playback: {
-				number: 0,
-				name: "Matter restart persistence",
-				target: { type: "cue_list", cue_list_id: cueListId },
-				buttons: ["toggle", "none", "none"],
-				button_count: 1,
-				fader: "master",
-				has_fader: false,
-				go_activates: true,
-				auto_off: false,
-				xfade_millis: 0,
-				color: "#20c997",
-				flash_release: "release_all",
-				protect_from_swap: false,
-			},
-			expected_playback_revision: 0,
-			expected_page_revision: page?.revision ?? 0,
-		},
-	);
+	const result = await configurePlaybackSlot(api, pageNumber!, slot!, {
+		number: 0,
+		name: "Matter restart persistence",
+		target: { type: "cue_list", cue_list_id: cueListId },
+		buttons: ["toggle", "none", "none"],
+		button_count: 1,
+		fader: "master",
+		has_fader: false,
+		go_activates: true,
+		auto_off: false,
+		xfade_millis: 0,
+		color: "#20c997",
+		flash_release: "release_all",
+		protect_from_swap: false,
+	});
 	return {
 		page: pageNumber!,
 		slot: slot!,

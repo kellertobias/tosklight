@@ -258,8 +258,6 @@ export class LightApiClient extends LightClientRuntime {
 	setScreenPage = bindClientMethod(this.playbackApi, "setScreenPage");
 	playbackAction = bindClientMethod(this.playbackApi, "playbackAction");
 	poolPlaybackAction = bindClientMethod(this.playbackApi, "poolPlaybackAction");
-	savePlaybackSlot = bindClientMethod(this.playbackApi, "savePlaybackSlot");
-	clearPlaybackSlot = bindClientMethod(this.playbackApi, "clearPlaybackSlot");
 	setPlaybackPage = bindClientMethod(this.playbackApi, "setPlaybackPage");
 	updateControlDesk = bindClientMethod(this.playbackApi, "updateControlDesk");
 	removeClient = bindClientMethod(this.playbackApi, "removeClient");

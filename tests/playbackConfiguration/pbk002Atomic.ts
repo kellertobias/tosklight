@@ -4,6 +4,10 @@ import {
 	expect,
 } from "../../apps/control-ui/e2e/bench/fixtures";
 import {
+	playbackSlotAuthority,
+	postPlaybackTopologyAction,
+} from "../support/playbackTopology";
+import {
 	clearSlot,
 	definition,
 	object,
@@ -115,40 +119,43 @@ async function installFunctionAssignments(
 async function verifyAtomicRejections(api: ApiDriver): Promise<void> {
 	const first = await playbackAt(api, 1, 1);
 	const firstPage = await pageObject(api, 1);
-	const headers = {
-		authorization: `Bearer ${api.session!.token}`,
-		"content-type": "application/json",
-	};
-	const staleResponse = await fetch(
-		`${api.baseUrl}/api/v1/playback-pages/1/slots/1`,
+	const authority = await playbackSlotAuthority(api, 1, 1);
+	const staleResponse = await postPlaybackTopologyAction(
+		api,
+		authority.showId,
+		authority.showRevision,
 		{
-			method: "PUT",
-			headers,
-			body: JSON.stringify({
-				playback: { ...first.body, name: "Must not land" },
-				expected_playback_revision: first.revision - 1,
-				expected_page_revision: firstPage.revision - 1,
-			}),
+			type: "configure_slot",
+			page: 1,
+			slot: 1,
+			playback: { ...first.body, name: "Must not land" },
+			expectedPlaybackRevision: first.revision - 1,
+			expectedPlaybackObjectId: first.id,
+			expectedPageRevision: firstPage.revision - 1,
+			expectedPageObjectId: firstPage.id,
 		},
 	);
 	expect(staleResponse.status).toBe(409);
 	expect((await playbackAt(api, 1, 1)).body.name).toBe("Function 1");
 	expect((await pageObject(api, 1)).body).toEqual(firstPage.body);
 
-	const invalidResponse = await fetch(
-		`${api.baseUrl}/api/v1/playback-pages/1/slots/1`,
+	const invalidResponse = await postPlaybackTopologyAction(
+		api,
+		authority.showId,
+		authority.showRevision,
 		{
-			method: "PUT",
-			headers,
-			body: JSON.stringify({
-				playback: {
-					...first.body,
-					target: { type: "group", group_id: "1" },
-					buttons: ["go", "go_minus", "flash"],
-				},
-				expected_playback_revision: first.revision,
-				expected_page_revision: firstPage.revision,
-			}),
+			type: "configure_slot",
+			page: 1,
+			slot: 1,
+			playback: {
+				...first.body,
+				target: { type: "group", group_id: "1" },
+				buttons: ["go", "go_minus", "flash"],
+			},
+			expectedPlaybackRevision: first.revision,
+			expectedPlaybackObjectId: first.id,
+			expectedPageRevision: firstPage.revision,
+			expectedPageObjectId: firstPage.id,
 		},
 	);
 	expect(invalidResponse.status).toBe(400);

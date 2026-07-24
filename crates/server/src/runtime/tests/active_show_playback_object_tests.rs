@@ -1,4 +1,4 @@
-use super::*;
+use super::{playback_topology_route_support::post_topology, *};
 
 #[tokio::test]
 async fn active_slot_upsert_is_lossless_single_commit_and_stale_failure_safe() {
@@ -25,13 +25,14 @@ async fn active_slot_upsert_is_lossless_single_commit_and_stale_failure_safe() {
     scenario.open().await;
 
     let before = scenario.capture();
-    let response = scenario
-        .put_slot(1, 1, playback(99, cue_list.id), 1, 1)
-        .await;
+    let mut updated = playback(99, cue_list.id);
+    updated.name = "Updated slot target".into();
+    let response = scenario.put_slot(1, 1, updated, 1, 1).await;
     assert_eq!(response.status(), StatusCode::OK);
     let response = json(response).await;
-    assert_eq!(response["playback_revision"], 2);
-    assert_eq!(response["page_revision"], 2);
+    assert_eq!(response["status"], "changed");
+    assert_eq!(projection_revision(&response, "playback", "1"), 2);
+    assert_eq!(projection_revision(&response, "playback_page", "1"), 1);
     assert_eq!(response["event_sequence"], before.event_sequence + 1);
 
     let document = ShowStore::open(&scenario.entry.path)
@@ -47,7 +48,7 @@ async fn active_slot_upsert_is_lossless_single_commit_and_stale_failure_safe() {
         document.object("playback_page", "1").unwrap().body()["future_layout"]["columns"],
         10
     );
-    scenario.assert_one_success(&before, 2);
+    scenario.assert_one_success(&before, 1);
 
     let after_success = scenario.capture();
     let stale = scenario
@@ -94,7 +95,15 @@ async fn clearing_a_slot_removes_the_pool_playback_from_every_page_atomically() 
     let response = scenario.clear_slot(1, 1, 1, 1).await;
     assert_eq!(response.status(), StatusCode::OK);
     let response = json(response).await;
-    assert_eq!(response["page_revisions"], serde_json::json!([2, 2]));
+    assert_eq!(response["status"], "changed");
+    let page_revisions = response["objects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|object| object["kind"] == "playback_page")
+        .map(|object| object["object_revision"].as_u64().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(page_revisions, vec![2, 2]);
     assert_eq!(response["event_sequence"], before.event_sequence + 1);
 
     let document = ShowStore::open(&scenario.entry.path)
@@ -111,6 +120,29 @@ async fn clearing_a_slot_removes_the_pool_playback_from_every_page_atomically() 
         assert_eq!(page.body()["future_layout"]["page"], number);
     }
     scenario.assert_one_success(&before, 3);
+    scenario.cleanup();
+}
+
+#[tokio::test]
+async fn v1_playback_page_slot_mutations_are_absent() {
+    let scenario = PlaybackObjectScenario::new("Retired slot routes").await;
+    for request in [
+        Request::put("/api/v1/playback-pages/1/slots/1"),
+        Request::delete("/api/v1/playback-pages/1/slots/1"),
+    ] {
+        let response = scenario
+            .app
+            .clone()
+            .oneshot(
+                request
+                    .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
     scenario.cleanup();
 }
 
@@ -164,24 +196,29 @@ impl PlaybackObjectScenario {
         expected_playback_revision: u64,
         expected_page_revision: u64,
     ) -> Response {
-        self.app
-            .clone()
-            .oneshot(
-                Request::put(format!("/api/v1/playback-pages/{page}/slots/{slot}"))
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
-                    .body(Body::from(
-                        serde_json::json!({
-                            "playback": playback,
-                            "expected_playback_revision": expected_playback_revision,
-                            "expected_page_revision": expected_page_revision
-                        })
-                        .to_string(),
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap()
+        post_topology(
+            &self.app,
+            Some(&self.token),
+            &self.show_id,
+            Some(self.capture().show_revision),
+            serde_json::json!({
+                "request_id": Uuid::new_v4().to_string(),
+                "action": {
+                    "type": "configure_slot",
+                    "page": page,
+                    "slot": slot,
+                    "playback": playback,
+                    "expected_playback_revision": expected_playback_revision,
+                    "expected_playback_object_id":
+                        (expected_playback_revision > 0).then_some("1"),
+                    "expected_page_revision": expected_page_revision,
+                    "expected_page_object_id":
+                        (expected_page_revision > 0).then_some(page.to_string())
+                }
+            }),
+            None,
+        )
+        .await
     }
 
     async fn clear_slot(
@@ -191,23 +228,28 @@ impl PlaybackObjectScenario {
         expected_playback_revision: u64,
         expected_page_revision: u64,
     ) -> Response {
-        self.app
-            .clone()
-            .oneshot(
-                Request::delete(format!("/api/v1/playback-pages/{page}/slots/{slot}"))
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
-                    .body(Body::from(
-                        serde_json::json!({
-                            "expected_playback_revision": expected_playback_revision,
-                            "expected_page_revision": expected_page_revision
-                        })
-                        .to_string(),
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap()
+        post_topology(
+            &self.app,
+            Some(&self.token),
+            &self.show_id,
+            Some(self.capture().show_revision),
+            serde_json::json!({
+                "request_id": Uuid::new_v4().to_string(),
+                "action": {
+                    "type": "clear_mapped_playback",
+                    "page": page,
+                    "slot": slot,
+                    "expected_playback_revision": expected_playback_revision,
+                    "expected_playback_object_id":
+                        (expected_playback_revision > 0).then_some("1"),
+                    "expected_page_revision": expected_page_revision,
+                    "expected_page_object_id":
+                        (expected_page_revision > 0).then_some(page.to_string())
+                }
+            }),
+            None,
+        )
+        .await
     }
 
     fn capture(&self) -> PlaybackBoundary {
@@ -276,6 +318,17 @@ struct PlaybackBoundary {
 
 fn put_raw(store: &ShowStore, kind: &str, id: &str, body: serde_json::Value) {
     store.put_object(kind, id, &body, 0).unwrap();
+}
+
+fn projection_revision(outcome: &serde_json::Value, kind: &str, object_id: &str) -> u64 {
+    outcome["objects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|object| object["kind"] == kind && object["object_id"] == object_id)
+        .unwrap()["object_revision"]
+        .as_u64()
+        .unwrap()
 }
 
 fn backup_count(data_dir: &std::path::Path) -> usize {
