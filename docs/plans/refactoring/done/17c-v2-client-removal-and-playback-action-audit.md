@@ -35,3 +35,20 @@ npm run test:e2e
 ## Decisions
 
 Inherited from chunk 17. No open decisions.
+
+## Result
+
+- Added replay-safe `remove_client` to the typed v2 control-desk action contract and migrated the
+  UI plus client-history acceptance flow. The retired `DELETE /api/v1/clients/{id}` route now
+  returns 404.
+- Removed the dead v1 playback-action methods from `LightApiClient`. A caller audit found no
+  production desk or E2E-bench live-control path using the legacy cuelist, playback-pool, or
+  cue-list action URLs; desk live control remains WebSocket-owned.
+- Added direct v2 coverage proving current-page and explicit-page addresses resolve independently.
+- Filed `17d-retire-legacy-playback-http.md` with an exact owner inventory for the retained root-test,
+  server-test, and integrator compatibility action/read routes.
+- Verification passed: `cargo test -p light-server` (470 passed, 1 ignored in the server crate;
+  all dependency and contract tests green), `npm run test:unit` (2,005 passed), focused E2E
+  (31 passed), source-size and architecture gates, and the full E2E suite. The full run recorded
+  284 passed / 11 skipped with one OSC timing failure; that exact case passed immediately in
+  isolation, yielding the expected 285 passing scenarios.

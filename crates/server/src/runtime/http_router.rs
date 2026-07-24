@@ -121,7 +121,6 @@ fn session_routes() -> Router<AppState> {
     Router::new()
         .route("/api/v2/sessions", post(create_session))
         .route("/api/v2/sessions/{id}", delete(close_session))
-        .route("/api/v1/clients/{id}", delete(remove_client))
         .route("/api/v1/desk-lock", get(desk_lock).put(update_desk_lock))
         .route("/api/v1/desk-lock/lock", post(lock_desk))
         .route("/api/v1/desk-lock/unlock", post(unlock_desk))

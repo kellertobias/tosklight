@@ -265,4 +265,26 @@ describe("PlaybackApiClient v2 action boundary", () => {
 			}),
 		);
 	});
+
+	it("removes a historical client through the typed replay-safe desk action", async () => {
+		const { client, request } = clientReturning({
+			request_id: "remove-client",
+			replayed: false,
+			desk: deskProjection(),
+			removed: true,
+			page: null,
+			event_sequence: null,
+			page_creation_event_sequence: null,
+		});
+
+		await client.removeClient(DESK_ID);
+
+		expect(request).toHaveBeenCalledWith(
+			`/api/v2/control-desks/${DESK_ID}/actions`,
+			expect.objectContaining({
+				method: "POST",
+				body: expect.stringContaining('"type":"remove_client"'),
+			}),
+		);
+	});
 });

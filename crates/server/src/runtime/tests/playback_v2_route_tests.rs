@@ -602,6 +602,72 @@ async fn v2_explicit_non_current_page_does_not_borrow_virtual_exclusions() {
 }
 
 #[tokio::test]
+async fn v2_current_page_and_explicit_page_addresses_resolve_independently() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+    let mut snapshot = (*state.engine.snapshot()).clone();
+    snapshot.playback_pages = vec![
+        light_playback::PlaybackPage {
+            number: 1,
+            name: "Current".into(),
+            slots: HashMap::from([(1, 1)]),
+        },
+        light_playback::PlaybackPage {
+            number: 2,
+            name: "Explicit".into(),
+            slots: HashMap::from([(1, 2)]),
+        },
+    ];
+    state.engine.replace_snapshot(snapshot).unwrap();
+
+    let current = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        serde_json::json!({
+            "request_id":"current-page-slot",
+            "address":{"kind":"current_page","slot":1},
+            "action":{"type":"on","pressed":true},
+            "surface":"physical"
+        }),
+    )
+    .await;
+    assert_eq!(current.status(), StatusCode::OK);
+    let current = json(current).await;
+    assert_eq!(current["requested"]["kind"], "current_page");
+    assert_eq!(current["resolved"]["playback_number"], 1);
+
+    let explicit = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        serde_json::json!({
+            "request_id":"explicit-page-slot",
+            "address":{"kind":"explicit_page","page":2,"slot":1},
+            "action":{"type":"master","value":0.5},
+            "surface":"physical"
+        }),
+    )
+    .await;
+    let explicit_status = explicit.status();
+    let explicit = json(explicit).await;
+    assert_eq!(
+        explicit_status,
+        StatusCode::OK,
+        "explicit-page action failed: {explicit}"
+    );
+    assert_eq!(explicit["requested"]["kind"], "explicit_page");
+    assert_eq!(explicit["resolved"]["playback_number"], 2);
+    assert_eq!(explicit["resolved"]["page"], 2);
+    assert_eq!(explicit["resolved"]["slot"], 1);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_virtual_exclusion_configuration_is_desk_scoped() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

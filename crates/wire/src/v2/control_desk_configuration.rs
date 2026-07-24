@@ -24,6 +24,7 @@ pub enum ControlDeskConfigurationAction {
         #[serde(default)]
         existing_only: bool,
     },
+    RemoveClient,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -41,6 +42,7 @@ pub struct ControlDeskConfigurationActionOutcome {
     pub request_id: String,
     pub replayed: bool,
     pub desk: RuntimeControlDesk,
+    pub removed: bool,
     pub page: Option<u8>,
     #[schemars(range(max = 9007199254740991_u64))]
     #[ts(type = "number | null")]

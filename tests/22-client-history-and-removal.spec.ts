@@ -29,8 +29,8 @@ test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
     expect(historical.can_remove).toBe(false);
     expect(clients.slice(0, 2).every((client) => client.connected)).toBe(true);
 
-    await expect(api.request("DELETE", `/api/v1/clients/${historical.desk.id}`)).rejects.toThrow(/409.*actively connected/);
-    await expect(api.request("DELETE", `/api/v1/clients/${observer.desk.id}`)).rejects.toThrow(/409.*current client/);
+    await expect(removeClient(api, historical.desk.id)).rejects.toThrow(/409.*actively connected/);
+    await expect(removeClient(api, observer.desk.id)).rejects.toThrow(/409.*current client/);
 
     await clientBApi.request("DELETE", `/api/v2/sessions/${sessionB.session_id}`);
     clients = await clientSummaries(api);
@@ -76,7 +76,20 @@ test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
 
     const showBefore = await api.request<any>("GET", `/api/v1/shows/${show.id}/objects/group`, undefined, false);
     const usersBefore = (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).users;
-    await api.request("DELETE", `/api/v1/clients/${historicalDesk.id}`);
+    const removalRequestId = crypto.randomUUID();
+    const removed = await removeClient(api, historicalDesk.id, removalRequestId);
+    expect(removed).toMatchObject({
+      request_id: removalRequestId,
+      replayed: false,
+      removed: true,
+      desk: { id: historicalDesk.id },
+    });
+    await expect(removeClient(api, historicalDesk.id, removalRequestId)).resolves.toMatchObject({
+      request_id: removalRequestId,
+      replayed: true,
+      removed: true,
+      desk: { id: historicalDesk.id },
+    });
     clients = await clientSummaries(api);
     expect(clients.some((client) => client.client_id === clientB)).toBe(false);
     expect(clients.some((client) => client.client_id === api.session!.client_id)).toBe(true);
@@ -90,6 +103,8 @@ test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
     const afterReRegistration = await clientSummaries(api);
     expect(afterReRegistration.filter((client) => client.client_id === clientB)).toHaveLength(1);
     expect(afterReRegistration.find((client) => client.client_id === clientB)?.desk.id).toBe(fresh.desk.id);
+
+    await expect(api.request("DELETE", `/api/v1/clients/${fresh.desk.id}`)).rejects.toThrow(/404/);
   });
 });
 
@@ -105,6 +120,13 @@ async function createSession(baseUrl: string, clientId: string, deskId: string |
 
 async function clientSummaries(api: ApiDriver): Promise<ClientSummary[]> {
   return (await api.request<{ clients: ClientSummary[] }>("GET", "/api/v2/bootstrap", undefined, false)).clients;
+}
+
+async function removeClient(api: ApiDriver, deskId: string, requestId = crypto.randomUUID()) {
+  return api.request<any>("POST", `/api/v2/control-desks/${deskId}/actions`, {
+    request_id: requestId,
+    action: { type: "remove_client" },
+  });
 }
 
 function escapeRegex(value: string): string {

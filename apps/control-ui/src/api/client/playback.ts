@@ -22,43 +22,6 @@ import type {
 import { WireValidationError } from "../wireValidation";
 import type { LiveClientTransport } from "./transport";
 
-type PoolPlaybackAction =
-	| "button"
-	| "on"
-	| "off"
-	| "toggle"
-	| "go"
-	| "go-minus"
-	| "go-to"
-	| "load"
-	| "fast-forward"
-	| "fast-rewind"
-	| "temp"
-	| "temp-on"
-	| "temp-off"
-	| "swap"
-	| "select"
-	| "select-contents"
-	| "select-dereferenced"
-	| "learn"
-	| "double"
-	| "half"
-	| "pause"
-	| "blackout"
-	| "pause-dynamics"
-	| "flash"
-	| "master"
-	| "xfade-on"
-	| "xfade-off";
-
-interface PoolPlaybackInput {
-	value?: number;
-	pressed?: boolean;
-	button?: number;
-	cue_number?: number;
-	surface?: "physical" | "virtual";
-}
-
 interface PlaybackPageSelectionOptions {
 	existingOnly?: boolean;
 }
@@ -168,27 +131,6 @@ export class PlaybackApiClient {
 		await this.screenAction({ type: "set_page", screen_id: id, page });
 	}
 
-	playbackAction(
-		cueListId: string,
-		action: "go" | "back" | "pause" | "release",
-	) {
-		return this.transport.command(`playback.${action}`, {
-			cue_list_id: cueListId,
-		});
-	}
-
-	poolPlaybackAction(
-		number: number,
-		action: PoolPlaybackAction,
-		input: PoolPlaybackInput = {},
-	) {
-		return this.transport.request(`/api/v1/cuelists/${number}/${action}`, {
-			method: action === "master" ? "PUT" : "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(input),
-		});
-	}
-
 	async setPlaybackPage(
 		deskId: string,
 		page: number,
@@ -218,10 +160,8 @@ export class PlaybackApiClient {
 		return outcome.desk as ControlDesk;
 	}
 
-	removeClient(deskId: string): Promise<void> {
-		return this.transport.request(`/api/v1/clients/${deskId}`, {
-			method: "DELETE",
-		});
+	async removeClient(deskId: string): Promise<void> {
+		await this.controlDeskAction(deskId, { type: "remove_client" });
 	}
 
 	private screenAction(
