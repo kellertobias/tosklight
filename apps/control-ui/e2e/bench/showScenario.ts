@@ -1,31 +1,33 @@
 import fs from "node:fs/promises";
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import type { ApiDriver } from "./api";
 import type { DeskDriver } from "./desk";
 import type { LightBench, TestShow } from "./lightBench";
+import {
+	availableShowNames,
+	type DefinedShow,
+	initialShowCatalog,
+	isDefinedShow,
+	mergeShowRequirements,
+	resolveShow,
+	Show,
+	type ShowPrerequisites,
+	showName,
+} from "./showCatalog";
+import {
+	type ResolvedShowTarget,
+	resolveShowHandle,
+	type ShowHandle,
+} from "./showIdentity";
+import {
+	ShowOperatorAdapter,
+	type ShowRevisionExpectation,
+} from "./showOperatorScenario";
+import { RestartMode, ShowRecoveryAdapter } from "./showRecoveryScenario";
 
-export enum Show {
-	Empty = "empty",
-	TwelveDimmers = "twelve-dimmers",
-	CompactRig = "compact-rig",
-	DefaultStage = "default-stage",
-}
-
-export interface ShowPrerequisites {
-	fixtureNumbers?: readonly number[];
-	profiles?: readonly string[];
-	groups?: readonly string[];
-	desktops?: readonly string[];
-}
-
-export interface DefinedShow {
-	readonly name: string;
-}
-
-interface RegisteredShow {
-	base: Show;
-	requires: ShowPrerequisites;
-}
+export { defineShow, Show } from "./showCatalog";
+export type { ShowHandle } from "./showIdentity";
+export { RestartMode };
 
 interface WorkingShow {
 	catalogName: string;
@@ -35,95 +37,129 @@ interface WorkingShow {
 	canonicalBytes: Buffer;
 }
 
-const recipes = new Map<string, RegisteredShow>();
+export type ShowTarget = Show | DefinedShow | ShowHandle | string;
+
+class ShowActionSurface {
+	constructor(
+		private readonly owner: BrowserShows,
+		private readonly adapter: ShowOperatorAdapter,
+	) {}
+
+	create(name: string): Promise<ShowHandle> {
+		return this.adapter.create(name);
+	}
+
+	load(target: ShowTarget): Promise<ShowHandle> {
+		return this.adapter.load(this.owner.resolveTarget(target));
+	}
+
+	save(): Promise<ShowHandle> {
+		return this.adapter.save();
+	}
+
+	saveAs(name: string): Promise<ShowHandle> {
+		return this.adapter.saveAs(name);
+	}
+
+	saveRevision(name: string): Promise<number> {
+		return this.adapter.saveRevision(name);
+	}
+
+	loadRevision(target: ShowTarget, revision: number): Promise<ShowHandle> {
+		return this.adapter.loadRevision(
+			this.owner.resolveTarget(target),
+			revision,
+		);
+	}
+
+	loadCleanDefault(): Promise<ShowHandle> {
+		return this.adapter.loadCleanDefault();
+	}
+}
+
 const fixtureUrl = (name: "compact-rig" | "default-stage") =>
 	new URL(`../../../../tests/fixtures/${name}.show`, import.meta.url);
 
-const initialCatalog: Readonly<Record<Show, ShowPrerequisites>> = {
-	[Show.Empty]: { fixtureNumbers: [], profiles: [], groups: [], desktops: [] },
-	[Show.TwelveDimmers]: {
-		fixtureNumbers: Array.from({ length: 12 }, (_, index) => index + 1),
-		profiles: ["Generic Dimmer"],
-		groups: ["1", "2", "3"],
-		desktops: [],
-	},
-	[Show.CompactRig]: {
-		fixtureNumbers: [
-			...Array.from({ length: 12 }, (_, index) => index + 1),
-			21,
-			22,
-			23,
-			24,
-		],
-		groups: ["1", "2", "3", "4"],
-		desktops: [],
-	},
-	[Show.DefaultStage]: { fixtureNumbers: [1], groups: [], desktops: [] },
-};
-
-class ShowRecipeBuilder {
-	baseShow: Show | null = null;
-	prerequisites: ShowPrerequisites = {};
-
-	from(show: Show): this {
-		this.baseShow = show;
-		return this;
-	}
-
-	requires(prerequisites: ShowPrerequisites): this {
-		this.prerequisites = prerequisites;
-		return this;
-	}
-}
-
-export function defineShow(
-	name: string,
-	recipe: (show: ShowRecipeBuilder) => void,
-): DefinedShow {
-	if (!name.trim()) throw new Error("Defined show name must not be empty");
-	if (recipes.has(name))
-		throw new Error(`Show recipe "${name}" is already registered`);
-	const builder = new ShowRecipeBuilder();
-	recipe(builder);
-	if (!builder.baseShow)
-		throw new Error(`Show recipe "${name}" must select a catalog base`);
-	recipes.set(name, {
-		base: builder.baseShow,
-		requires: builder.prerequisites,
-	});
-	return Object.freeze({ name });
-}
-
 export class BrowserShows {
 	private current?: WorkingShow;
+	private readonly ui: ShowOperatorAdapter;
+	private readonly apiRoute: ShowOperatorAdapter;
+	private readonly recoveryDriver: ShowRecoveryAdapter;
+	readonly via: { ui: ShowActionSurface; api: ShowActionSurface };
+	readonly recovery: { prepareMalformedActive: () => Promise<void> };
 
 	constructor(
 		private readonly api: ApiDriver,
 		private readonly bench: LightBench,
 		private readonly desk: DeskDriver,
 		private readonly initialShow: TestShow,
-	) {}
+		page?: Page,
+	) {
+		this.ui = new ShowOperatorAdapter("ui", api, bench, desk, page);
+		this.apiRoute = new ShowOperatorAdapter("api", api, bench, desk, page);
+		this.recoveryDriver = new ShowRecoveryAdapter(api, bench, desk, page);
+		this.via = {
+			ui: new ShowActionSurface(this, this.ui),
+			api: new ShowActionSurface(this, this.apiRoute),
+		};
+		this.recovery = {
+			prepareMalformedActive: () =>
+				this.recoveryDriver.prepareMalformedActiveShow(),
+		};
+	}
 
 	readonly expect = {
-		active: async (show: Show | DefinedShow) => {
-			const current = this.requireCurrent();
-			const expectedName = showName(show);
-			if (current.catalogName !== expectedName) {
-				throw new Error(
-					`Active working copy is "${current.catalogName}", not "${expectedName}"`,
-				);
+		active: async (show: ShowTarget) => {
+			const target = this.resolveTarget(show);
+			const active = await this.ui.active();
+			if (target.id) expect(active.id).toBe(target.id);
+			else expect(active.name).toBe(target.name);
+			if (
+				typeof show === "string" &&
+				Object.values(Show).includes(show as Show)
+			) {
+				const current = this.requireCurrent();
+				expect(current.workingId).not.toBe(current.canonicalId);
 			}
-			const bootstrap = await this.api.request<{
-				active_show: { id: string; name?: string } | null;
-			}>("GET", "/api/v2/bootstrap", undefined, false);
-			expect(bootstrap.active_show?.id).toBe(current.workingId);
-			const entry = (
-				await this.api.shows<Array<{ id: string; name: string }>[number]>()
-			).find((candidate) => candidate.id === current.workingId);
-			expect(entry?.name).toBe(current.workingName);
-			expect(current.workingId).not.toBe(current.canonicalId);
 		},
+		revision: (expectation: ShowRevisionExpectation) =>
+			this.ui.expectRevision(expectation),
+		dirty: (expected: boolean) => this.ui.expectAutosaved(expected),
+		recoveryRequired: () => this.recoveryDriver.expectRecoveryRequired(),
+		recovered: () => this.recoveryDriver.expectRecovered(),
 	};
+
+	create(name: string): Promise<ShowHandle> {
+		return this.via.ui.create(name);
+	}
+
+	load(target: ShowTarget): Promise<ShowHandle> {
+		return this.via.ui.load(target);
+	}
+
+	save(): Promise<ShowHandle> {
+		return this.via.ui.save();
+	}
+
+	saveAs(name: string): Promise<ShowHandle> {
+		return this.via.ui.saveAs(name);
+	}
+
+	saveRevision(name: string): Promise<number> {
+		return this.via.ui.saveRevision(name);
+	}
+
+	loadRevision(target: ShowTarget, revision: number): Promise<ShowHandle> {
+		return this.via.ui.loadRevision(target, revision);
+	}
+
+	loadCleanDefault(): Promise<ShowHandle> {
+		return this.via.ui.loadCleanDefault();
+	}
+
+	restart(mode: RestartMode): Promise<void> {
+		return this.recoveryDriver.restart(mode);
+	}
 
 	async use(show: Show | DefinedShow): Promise<void> {
 		const resolved = resolveShow(show);
@@ -150,7 +186,10 @@ export class BrowserShows {
 			canonicalBytes,
 		};
 		await this.validatePrerequisites(
-			mergeRequirements(initialCatalog[resolved.base], resolved.requires),
+			mergeShowRequirements(
+				initialShowCatalog[resolved.base],
+				resolved.requires,
+			),
 		);
 		await this.resetBenchState();
 	}
@@ -181,6 +220,31 @@ export class BrowserShows {
 			canonicalId: current.canonicalId,
 			workingId: current.workingId,
 		};
+	}
+
+	resolveTarget(show: ShowTarget): ResolvedShowTarget {
+		if (typeof show === "object" && "name" in show) {
+			if (isDefinedShow(show.name)) {
+				const current = this.requireCurrent();
+				if (current.catalogName !== show.name) {
+					throw new Error(
+						`Catalog recipe "${show.name}" has not established this scenario's fixture`,
+					);
+				}
+				return { id: current.workingId, name: current.workingName };
+			}
+			return resolveShowHandle(show);
+		}
+		if (Object.values(Show).includes(show as Show)) {
+			const current = this.requireCurrent();
+			if (current.catalogName !== show) {
+				throw new Error(
+					`Catalog show "${show}" has not established this scenario's fixture`,
+				);
+			}
+			return { id: current.workingId, name: current.workingName };
+		}
+		return { name: show };
 	}
 
 	private async createCanonical(show: Show): Promise<{ id: string }> {
@@ -251,7 +315,7 @@ export class BrowserShows {
 		].filter(Boolean);
 		if (failures.length) {
 			throw new Error(
-				`Show catalog entry "${current.catalogName}" is stale: missing ${failures.join("; ")}. Available entries: ${[...Object.values(Show), ...recipes.keys()].join(", ")}`,
+				`Show catalog entry "${current.catalogName}" is stale: missing ${failures.join("; ")}. Available entries: ${availableShowNames().join(", ")}`,
 			);
 		}
 	}
@@ -289,15 +353,7 @@ export class BrowserShows {
 	}
 
 	private async download(id: string): Promise<Buffer> {
-		const response = await fetch(
-			`${this.api.baseUrl}/api/v2/shows/${id}/download`,
-			{
-				headers: { authorization: `Bearer ${this.api.session?.token}` },
-			},
-		);
-		if (!response.ok)
-			throw new Error(`Could not copy catalog show ${id}: ${response.status}`);
-		return Buffer.from(await response.arrayBuffer());
+		return this.api.downloadShow(id);
 	}
 
 	private requireCurrent(): WorkingShow {
@@ -305,39 +361,4 @@ export class BrowserShows {
 			throw new Error("No isolated show is active; call show.use(...) first");
 		return this.current;
 	}
-}
-
-function resolveShow(show: Show | DefinedShow): RegisteredShow {
-	if (typeof show === "string") return { base: show, requires: {} };
-	const recipe = recipes.get(show.name);
-	if (!recipe)
-		throw new Error(
-			`Unknown show recipe "${show.name}". Available entries: ${[...Object.values(Show), ...recipes.keys()].join(", ")}`,
-		);
-	return recipe;
-}
-
-function showName(show: Show | DefinedShow): string {
-	return typeof show === "string" ? show : show.name;
-}
-
-function mergeRequirements(
-	base: ShowPrerequisites,
-	extra: ShowPrerequisites,
-): ShowPrerequisites {
-	return {
-		fixtureNumbers: [
-			...new Set([
-				...(base.fixtureNumbers ?? []),
-				...(extra.fixtureNumbers ?? []),
-			]),
-		],
-		profiles: [
-			...new Set([...(base.profiles ?? []), ...(extra.profiles ?? [])]),
-		],
-		groups: [...new Set([...(base.groups ?? []), ...(extra.groups ?? [])])],
-		desktops: [
-			...new Set([...(base.desktops ?? []), ...(extra.desktops ?? [])]),
-		],
-	};
 }

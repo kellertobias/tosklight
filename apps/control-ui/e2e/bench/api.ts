@@ -268,6 +268,17 @@ export class ApiDriver {
     return shows.find((show) => show.id === showId)?.revisions ?? [];
   }
 
+  async downloadShow(showId: string): Promise<Buffer> {
+    const response = await fetch(
+      `${this.baseUrl}/api/v2/shows/${encodeURIComponent(showId)}/download`,
+      { headers: { authorization: `Bearer ${this.session?.token}` } },
+    );
+    if (!response.ok) {
+      throw new Error(`Show download failed: ${response.status} ${await response.text()}`);
+    }
+    return Buffer.from(await response.arrayBuffer());
+  }
+
   saveShowRevision<T = any>(showId: string, name: string): Promise<T> {
     return this.revisionResult<T>({ type: "save_revision", show_id: showId, name });
   }

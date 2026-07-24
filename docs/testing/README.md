@@ -90,6 +90,19 @@ bench. Desktops are desk data and must be established with `desktop.use(...)`, n
 show prerequisite. This fast fixture setup is distinct from testing the operator-facing load
 workflow, which will use the `show.load(...)` intent introduced by the next bench step.
 
+Operator-facing show workflows now use `show.create(name)`, `show.load(show)`, `show.save()`,
+`show.saveAs(name)`, `show.saveRevision(name)`, `show.loadRevision(show, revision)`,
+`show.loadCleanDefault()`, and `show.restart(RestartMode.Graceful | RestartMode.Abrupt)`.
+Unqualified actions use the visible browser workflow; independently meaningful production API
+routes are available under `show.via.api`, while `show.via.ui` makes the browser choice explicit.
+The helpers return opaque named show handles, so scenarios can load and assert identities without
+runtime show IDs or paths. `show.save()` truthfully confirms continuous autosave (or keeps a
+revision copy separate); ToskLight has no ordinary manual-Save mutation. Accordingly,
+`show.expect.dirty(false)` proves persisted convergence and `dirty(true)` fails as unsupported
+instead of inventing a dirty projection. Recovery fixture placement stays inside the isolated
+bench, while `show.expect.recoveryRequired()` and `show.expect.recovered()` prove the real
+readiness state, visible recovery actions, and preservation of the damaged file.
+
 The runner exposes separate commands so CI classifies failures clearly:
 
 - `./test e2e-api`

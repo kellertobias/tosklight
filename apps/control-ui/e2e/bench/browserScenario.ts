@@ -63,7 +63,7 @@ export class BrowserScenarioWorld {
 		this.desktop = new BrowserDesktops(page, attach);
 		this.screenshot = new BrowserScreenshots(page, attach, this.builtIn);
 		this.screen = new BrowserScreens(page, desk);
-		this.show = new BrowserShows(api, bench, desk, initialShow);
+		this.show = new BrowserShows(api, bench, desk, initialShow, page);
 	}
 }
 
