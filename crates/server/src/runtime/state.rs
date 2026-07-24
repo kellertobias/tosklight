@@ -51,6 +51,8 @@ pub(super) struct AppState {
     pub(super) playback_topology: PlaybackTopologyService,
     pub(super) show_patch: ShowPatchService,
     pub(super) stage_layout_replay: Arc<Mutex<stage_layout_http::StageLayoutReplayCache>>,
+    pub(super) virtual_playback_zones_replay:
+        Arc<Mutex<virtual_playback_zones_http::VirtualPlaybackZonesReplayCache>>,
     pub(super) selective_show_import: SelectiveShowImportService,
     #[cfg(test)]
     pub(super) patch_profile_resolution: Arc<PatchProfileResolutionPause>,

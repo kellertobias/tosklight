@@ -18,8 +18,20 @@ function zone() {
 function snapshot(overrides: Record<string, unknown> = {}) {
 	return {
 		show_id: SHOW_ID,
+		desks: { [DESK_ID]: { "surface-a": [zone()] } },
+		...overrides,
+	};
+}
+
+function saveOutcome(overrides: Record<string, unknown> = {}) {
+	return {
+		request_id: "request-a",
+		show_id: SHOW_ID,
 		desk_id: DESK_ID,
-		surfaces: { "surface-a": [zone()] },
+		surface_id: "surface-a",
+		zones: [zone()],
+		replayed: false,
+		changed: true,
 		...overrides,
 	};
 }
@@ -28,48 +40,58 @@ describe("Virtual Playback exclusion-zone wire", () => {
 	it("decodes an exact authority-scoped snapshot", () => {
 		expect(decodeVirtualPlaybackZonesSnapshot(snapshot(), SCOPE)).toEqual({
 			showId: SHOW_ID,
-			deskId: DESK_ID,
-			surfaces: { "surface-a": [zone()] },
+			desks: { [DESK_ID]: { "surface-a": [zone()] } },
 		});
 	});
 
-	it.each([
-		["show", { show_id: OTHER_ID }],
-		["desk", { desk_id: OTHER_ID }],
-	])("rejects a foreign %s snapshot", (_label, override) => {
+	it("rejects a foreign show snapshot", () => {
 		expect(() =>
-			decodeVirtualPlaybackZonesSnapshot(snapshot(override), SCOPE),
+			decodeVirtualPlaybackZonesSnapshot(
+				snapshot({ show_id: OTHER_ID }),
+				SCOPE,
+			),
 		).toThrow(VirtualPlaybackZonesProtocolError);
 	});
 
 	it.each([
 		["unexpected field", snapshot({ extra: true })],
-		["untrimmed surface", snapshot({ surfaces: { " surface-a": [zone()] } })],
+		[
+			"untrimmed surface",
+			snapshot({ desks: { [DESK_ID]: { " surface-a": [zone()] } } }),
+		],
 		[
 			"duplicate zone ids",
-			snapshot({ surfaces: { "surface-a": [zone(), zone()] } }),
+			snapshot({
+				desks: { [DESK_ID]: { "surface-a": [zone(), zone()] } },
+			}),
 		],
 		[
 			"duplicate cells",
 			snapshot({
-				surfaces: {
-					"surface-a": [{ ...zone(), slots: [1, 1] }],
+				desks: {
+					[DESK_ID]: {
+						"surface-a": [{ ...zone(), slots: [1, 1] }],
+					},
 				},
 			}),
 		],
 		[
 			"cell above the persisted grid domain",
 			snapshot({
-				surfaces: {
-					"surface-a": [{ ...zone(), slots: [1, 145] }],
+				desks: {
+					[DESK_ID]: {
+						"surface-a": [{ ...zone(), slots: [1, 145] }],
+					},
 				},
 			}),
 		],
 		[
 			"unknown zone field",
 			snapshot({
-				surfaces: {
-					"surface-a": [{ ...zone(), color: "red" }],
+				desks: {
+					[DESK_ID]: {
+						"surface-a": [{ ...zone(), color: "red" }],
+					},
 				},
 			}),
 		],
@@ -82,26 +104,22 @@ describe("Virtual Playback exclusion-zone wire", () => {
 	it("decodes only the requested save surface", () => {
 		expect(
 			decodeVirtualPlaybackZonesSaveOutcome(
-				{
-					show_id: SHOW_ID,
-					desk_id: DESK_ID,
-					surface_id: "surface-a",
-					zones: [zone()],
-				},
+				saveOutcome(),
 				SCOPE,
 				"surface-a",
+				"request-a",
 			),
-		).toEqual({ surfaceId: "surface-a", zones: [zone()] });
+		).toMatchObject({
+			requestId: "request-a",
+			surfaceId: "surface-a",
+			zones: [zone()],
+		});
 		expect(() =>
 			decodeVirtualPlaybackZonesSaveOutcome(
-				{
-					show_id: SHOW_ID,
-					desk_id: DESK_ID,
-					surface_id: "surface-b",
-					zones: [zone()],
-				},
+				saveOutcome({ surface_id: "surface-b" }),
 				SCOPE,
 				"surface-a",
+				"request-a",
 			),
 		).toThrow(VirtualPlaybackZonesProtocolError);
 	});
@@ -112,19 +130,21 @@ describe("Virtual Playback exclusion-zone wire", () => {
 	])("rejects a foreign %s save outcome", (_label, identity) => {
 		expect(() =>
 			decodeVirtualPlaybackZonesSaveOutcome(
-				{ ...identity, surface_id: "surface-a", zones: [zone()] },
+				saveOutcome(identity),
 				SCOPE,
 				"surface-a",
+				"request-a",
 			),
 		).toThrow(VirtualPlaybackZonesProtocolError);
 	});
 
 	it("validates an outgoing save before serialization", () => {
-		expect(encodeVirtualPlaybackZonesSaveRequest([zone()])).toEqual({
+		expect(encodeVirtualPlaybackZonesSaveRequest("request-a", [zone()])).toEqual({
+			request_id: "request-a",
 			zones: [zone()],
 		});
 		expect(() =>
-			encodeVirtualPlaybackZonesSaveRequest([
+			encodeVirtualPlaybackZonesSaveRequest("request-a", [
 				{ ...zone(), name: "", slots: [1, 2] },
 			]),
 		).toThrow(VirtualPlaybackZonesProtocolError);
@@ -134,11 +154,12 @@ describe("Virtual Playback exclusion-zone wire", () => {
 		const legacy = { ...zone(), slots: [128, 144] };
 		expect(
 			decodeVirtualPlaybackZonesSnapshot(
-				snapshot({ surfaces: { "surface-a": [legacy] } }),
+				snapshot({ desks: { [DESK_ID]: { "surface-a": [legacy] } } }),
 				SCOPE,
-			).surfaces["surface-a"],
+			).desks[DESK_ID]["surface-a"],
 		).toEqual([legacy]);
-		expect(encodeVirtualPlaybackZonesSaveRequest([legacy])).toEqual({
+		expect(encodeVirtualPlaybackZonesSaveRequest("request-a", [legacy])).toEqual({
+			request_id: "request-a",
 			zones: [legacy],
 		});
 	});

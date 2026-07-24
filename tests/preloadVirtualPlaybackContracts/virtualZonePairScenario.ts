@@ -10,6 +10,7 @@ import {
 	normalizedVirtualZones,
 	poolAction,
 	prepare,
+	saveVirtualZoneSurface,
 	type VirtualZonePairState,
 	visualizationLevel,
 } from "./support";
@@ -63,13 +64,9 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 		return prepared;
 	},
 	api: async ({ api }, state) => {
-		await api.request(
-			"PUT",
-			"/api/v1/virtual-playback-exclusion-zones/vpb-paired-surface",
-			{
-				zones: [{ id: "touring-pair", name: "Touring pair", slots: [1, 2] }],
-			},
-		);
+		await saveVirtualZoneSurface(api, "vpb-paired-surface", [
+			{ id: "touring-pair", name: "Touring pair", slots: [1, 2] },
+		]);
 		state.savedZones = await normalizedVirtualZones(api);
 		state.creationState = [
 			Boolean((await activePlayback(api, 74))?.enabled),

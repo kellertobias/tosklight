@@ -38,7 +38,7 @@ pub use event::{
     ApplicationEvent, DeliveryPolicy, DeskEvent, EventBus, EventCapability, EventClass, EventDraft,
     EventEnvelope, EventFilter, EventObject, EventReplay, EventSource, EventSubscription,
     OutputEvent, PlaybackEvent, ProgrammingEvent, ReplaceableEventRateLimit, SequenceGap,
-    ShowEvent, SubscriptionDelivery, SubscriptionOptions,
+    ShowEvent, SubscriptionDelivery, SubscriptionOptions, VirtualPlaybackExclusionZonesChange,
 };
 pub use fixture_position::{
     FixturePositionCommand, FixturePositionExecution, FixturePositionOutcome, FixturePositionPorts,

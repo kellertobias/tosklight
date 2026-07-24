@@ -90,17 +90,8 @@ pub(super) fn authoritative_playback_controls(state: &AppState) -> serde_json::V
     })
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub(super) struct VirtualPlaybackExclusionZone {
-    pub(super) id: String,
-    pub(super) name: String,
-    pub(super) slots: Vec<u8>,
-}
-
-#[derive(Deserialize)]
-pub(super) struct VirtualPlaybackExclusionZoneInput {
-    pub(super) zones: Vec<VirtualPlaybackExclusionZone>,
-}
+pub(super) type VirtualPlaybackExclusionZone =
+    light_wire::v2::virtual_playback_zones::VirtualPlaybackExclusionZone;
 
 pub(super) type VirtualPlaybackExclusionSurfaces =
     HashMap<String, Vec<VirtualPlaybackExclusionZone>>;
@@ -122,11 +113,11 @@ pub(super) fn read_virtual_playback_exclusion_store(
 }
 
 pub(super) fn validate_virtual_playback_exclusion_zones(
-    input: VirtualPlaybackExclusionZoneInput,
+    input: Vec<VirtualPlaybackExclusionZone>,
 ) -> Result<Vec<VirtualPlaybackExclusionZone>, ApiError> {
     let mut zone_ids = HashSet::new();
-    let mut zones = Vec::with_capacity(input.zones.len());
-    for mut zone in input.zones {
+    let mut zones = Vec::with_capacity(input.len());
+    for mut zone in input {
         zone.id = zone.id.trim().to_owned();
         zone.name = zone.name.trim().to_owned();
         validate_virtual_playback_exclusion_zone(&mut zone, &mut zone_ids)?;
@@ -141,20 +132,28 @@ fn validate_virtual_playback_exclusion_zone(
 ) -> Result<(), ApiError> {
     if zone.id.is_empty() || zone.id.len() > 128 || !zone_ids.insert(zone.id.clone()) {
         return Err(ApiError::bad_request(
-            "zone ids must be unique and contain 1-128 characters",
+            "zones[].id must be unique and contain 1-128 characters",
         ));
     }
     if zone.name.is_empty() || zone.name.len() > 80 {
         return Err(ApiError::bad_request(
-            "zone names must contain 1-80 characters",
+            "zones[].name must contain 1-80 characters",
         ));
     }
     let mut seen = HashSet::new();
-    zone.slots
-        .retain(|slot| (1..=144).contains(slot) && seen.insert(*slot));
+    if let Some(slot) = zone.slots.iter().find(|slot| !(1..=144).contains(*slot)) {
+        return Err(ApiError::bad_request(format!(
+            "zones[].slots contains {slot}; cells must be between 1 and 144"
+        )));
+    }
+    if zone.slots.iter().any(|slot| !seen.insert(*slot)) {
+        return Err(ApiError::bad_request(
+            "zones[].slots must contain unique cells",
+        ));
+    }
     if zone.slots.len() < 2 {
         return Err(ApiError::bad_request(
-            "an exclusion zone needs at least two cells",
+            "zones[].slots must contain at least two cells",
         ));
     }
     Ok(())
@@ -182,57 +181,6 @@ pub(super) fn write_virtual_playback_exclusion_surface(
         &serde_json::to_string(&stored).map_err(|error| ApiError::internal(error.to_string()))?,
     )
     .map_err(ApiError::store)
-}
-
-pub(super) async fn virtual_playback_exclusion_zones(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    let show = state
-        .active_show
-        .read()
-        .clone()
-        .ok_or_else(|| ApiError::bad_request("no show is open"))?;
-    let surfaces = read_virtual_playback_exclusion_store(&state.desk.lock(), show.id)
-        .remove(&session.desk.id.to_string())
-        .unwrap_or_default();
-    Ok(Json(serde_json::json!({
-        "show_id": show.id,
-        "desk_id": session.desk.id,
-        "surfaces": surfaces,
-    })))
-}
-
-pub(super) async fn put_virtual_playback_exclusion_zones(
-    State(state): State<AppState>,
-    Path(surface_id): Path<String>,
-    headers: HeaderMap,
-    Json(input): Json<VirtualPlaybackExclusionZoneInput>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    let show = state
-        .active_show
-        .read()
-        .clone()
-        .ok_or_else(|| ApiError::bad_request("no show is open"))?;
-    if surface_id.trim().is_empty() || surface_id.len() > 128 {
-        return Err(ApiError::bad_request(
-            "surface id must contain 1-128 characters",
-        ));
-    }
-    let zones = validate_virtual_playback_exclusion_zones(input)?;
-    let desk = state.desk.lock();
-    write_virtual_playback_exclusion_surface(&desk, show.id, session.desk.id, &surface_id, &zones)?;
-    drop(desk);
-    emit(
-        &state,
-        "virtual_playback_exclusion_zones_changed",
-        serde_json::json!({"desk_id":session.desk.id,"show_id":show.id,"surface_id":surface_id,"zones":zones}),
-    );
-    Ok(Json(
-        serde_json::json!({"surface_id":surface_id,"zones":zones}),
-    ))
 }
 
 pub(super) struct VirtualPlaybackExclusionResolver {

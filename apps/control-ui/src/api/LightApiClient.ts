@@ -224,14 +224,6 @@ export class LightApiClient extends LightClientRuntime {
 	setScreenPage = bindClientMethod(this.playbackApi, "setScreenPage");
 	playbackAction = bindClientMethod(this.playbackApi, "playbackAction");
 	poolPlaybackAction = bindClientMethod(this.playbackApi, "poolPlaybackAction");
-	virtualPlaybackExclusionZones = bindClientMethod(
-		this.playbackApi,
-		"virtualPlaybackExclusionZones",
-	);
-	saveVirtualPlaybackExclusionZones = bindClientMethod(
-		this.playbackApi,
-		"saveVirtualPlaybackExclusionZones",
-	);
 	savePlaybackSlot = bindClientMethod(this.playbackApi, "savePlaybackSlot");
 	clearPlaybackSlot = bindClientMethod(this.playbackApi, "clearPlaybackSlot");
 	setPlaybackPage = bindClientMethod(this.playbackApi, "setPlaybackPage");

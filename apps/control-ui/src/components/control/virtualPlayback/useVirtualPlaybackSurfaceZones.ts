@@ -48,6 +48,20 @@ export function useVirtualPlaybackSurfaceZones({
 		const source = capabilityRef.current;
 		if (!active || !authorityReady || !source.available || !source.authorityId)
 			return;
+		return source.activateSurface(surfaceId);
+	}, [
+		active,
+		authorityReady,
+		capability.authorityId,
+		capability.authorityGeneration,
+		capability.available,
+		surfaceId,
+	]);
+
+	useEffect(() => {
+		const source = capabilityRef.current;
+		if (!active || !authorityReady || !source.available || !source.authorityId)
+			return;
 		if (source.getSurface(surfaceId) !== null) return;
 		void source.loadSurface(surfaceId);
 	}, [

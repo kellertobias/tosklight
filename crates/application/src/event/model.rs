@@ -153,6 +153,14 @@ pub enum ShowEvent {
     OutputRouteChanged(OutputRouteChange),
     ObjectsChanged(ActiveShowObjectsChange),
     SelectiveImportApplied(SelectiveShowImportChange),
+    VirtualPlaybackExclusionZonesChanged(VirtualPlaybackExclusionZonesChange),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VirtualPlaybackExclusionZonesChange {
+    pub show_id: ShowId,
+    pub desk_id: Uuid,
+    pub surface_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -179,6 +187,27 @@ pub struct EventDraft {
 }
 
 impl EventDraft {
+    pub fn virtual_playback_exclusion_zones_changed(
+        change: VirtualPlaybackExclusionZonesChange,
+    ) -> Self {
+        let object = EventObject::new(
+            EventCapability::Show,
+            format!("virtual-playback-exclusion-zones:{}", change.show_id.0),
+        );
+        Self {
+            desk_id: None,
+            class: EventClass::Projection,
+            object: Some(object),
+            related_objects: Vec::new(),
+            source: EventSource::Action(ActionSource::Http),
+            correlation_id: None,
+            delivery: DeliveryPolicy::Lossless,
+            payload: ApplicationEvent::Show(ShowEvent::VirtualPlaybackExclusionZonesChanged(
+                change,
+            )),
+        }
+    }
+
     /// Volatile sampled playback telemetry: replaceable, telemetry-class, one shared route.
     pub fn playback_telemetry_sampled(tick: crate::PlaybackTelemetryTick) -> Self {
         Self {

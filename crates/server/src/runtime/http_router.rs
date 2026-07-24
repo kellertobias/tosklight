@@ -198,14 +198,6 @@ fn playback_routes() -> Router<AppState> {
         .route("/api/v1/screens/{id}/page", put(update_screen_page))
         .route("/api/v1/playbacks", get(playbacks))
         .route(
-            "/api/v1/virtual-playback-exclusion-zones",
-            get(virtual_playback_exclusion_zones),
-        )
-        .route(
-            "/api/v1/virtual-playback-exclusion-zones/{surface_id}",
-            put(put_virtual_playback_exclusion_zones),
-        )
-        .route(
             "/api/v1/playback-pages/{page}/slots/{slot}",
             put(upsert_playback_slot).delete(clear_playback_slot),
         )

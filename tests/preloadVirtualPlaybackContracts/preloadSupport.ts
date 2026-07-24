@@ -1,7 +1,7 @@
 import type { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
 import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
 import type { Page } from "../../apps/control-ui/node_modules/@playwright/test/index.js";
-import { programmer } from "../support/catalog";
+import { activeShowId, programmer } from "../support/catalog";
 import { configuration, visualizationLevel } from "./showFixtures";
 import type {
 	Configuration,
@@ -106,18 +106,58 @@ export function timestampMillis(value: unknown): number {
 	return millis;
 }
 
+export interface VirtualZoneFixture {
+	id: string;
+	name: string;
+	slots: number[];
+}
+
+export interface VirtualZoneSnapshot {
+	show_id: string;
+	desks: Record<string, Record<string, VirtualZoneFixture[]>>;
+}
+
+export interface VirtualZoneSaveOutcome {
+	request_id: string;
+	show_id: string;
+	desk_id: string;
+	surface_id: string;
+	zones: VirtualZoneFixture[];
+	replayed: boolean;
+	changed: boolean;
+}
+
+export async function virtualZoneSnapshot(
+	api: ApiDriver,
+): Promise<VirtualZoneSnapshot> {
+	const showId = await activeShowId(api);
+	return api.request<VirtualZoneSnapshot>(
+		"GET",
+		`/api/v2/shows/${showId}/virtual-playback-exclusion-zones`,
+	);
+}
+
+export async function saveVirtualZoneSurface(
+	api: ApiDriver,
+	surfaceId: string,
+	zones: readonly VirtualZoneFixture[],
+) {
+	const showId = await activeShowId(api);
+	const requestId = crypto.randomUUID();
+	return api.request<VirtualZoneSaveOutcome>(
+		"POST",
+		`/api/v2/shows/${showId}/virtual-playback-exclusion-zones/${encodeURIComponent(surfaceId)}/update`,
+		{ request_id: requestId, zones },
+	);
+}
+
 export async function normalizedVirtualZones(
 	api: ApiDriver,
 ): Promise<Array<{ name: string; slots: number[] }>> {
-	const response = await api.request<any>(
-		"GET",
-		"/api/v1/virtual-playback-exclusion-zones",
-	);
+	const response = await virtualZoneSnapshot(api);
+	const surfaces = response.desks[api.session!.desk.id] ?? {};
 	return Object.values(
-		response.surfaces as Record<
-			string,
-			Array<{ name: string; slots: number[] }>
-		>,
+		surfaces,
 	)
 		.flat()
 		.map((zone) => ({ name: zone.name, slots: [...zone.slots] }))

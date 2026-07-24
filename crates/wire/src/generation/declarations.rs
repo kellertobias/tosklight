@@ -23,6 +23,7 @@ use crate::v2::programming_update::*;
 use crate::v2::selective_import::*;
 use crate::v2::speed_group::*;
 use crate::v2::stage_layout::*;
+use crate::v2::virtual_playback_zones::*;
 
 pub(super) fn all(config: &Config) -> Vec<String> {
     let mut declarations = command_line(config);
@@ -37,9 +38,20 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(playback_topology(config));
     declarations.extend(patch(config));
     declarations.extend(stage_layout(config));
+    declarations.extend(virtual_playback_zones(config));
     declarations.extend(selective_import(config));
     declarations.extend(interaction(config));
     declarations
+}
+
+fn virtual_playback_zones(config: &Config) -> Vec<String> {
+    vec![
+        VirtualPlaybackExclusionZone::decl(config),
+        VirtualPlaybackExclusionSnapshot::decl(config),
+        VirtualPlaybackExclusionUpdateRequest::decl(config),
+        VirtualPlaybackExclusionUpdateOutcome::decl(config),
+        VirtualPlaybackExclusionZonesChange::decl(config),
+    ]
 }
 
 fn speed_group_transport(config: &Config) -> Vec<String> {

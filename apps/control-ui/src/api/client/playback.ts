@@ -12,8 +12,6 @@ import type {
 	PlaybackPage,
 	ScreenConfiguration,
 	ScreenSnapshot,
-	VirtualPlaybackExclusionSnapshot,
-	VirtualPlaybackExclusionZone,
 } from "../types";
 import type { LiveClientTransport } from "./transport";
 
@@ -144,27 +142,6 @@ export class PlaybackApiClient {
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(input),
 		});
-	}
-
-	virtualPlaybackExclusionZones(): Promise<VirtualPlaybackExclusionSnapshot> {
-		return this.transport.request("/api/v1/virtual-playback-exclusion-zones");
-	}
-
-	saveVirtualPlaybackExclusionZones(
-		surfaceId: string,
-		zones: VirtualPlaybackExclusionZone[],
-	) {
-		return this.transport.request<{
-			surface_id: string;
-			zones: VirtualPlaybackExclusionZone[];
-		}>(
-			`/api/v1/virtual-playback-exclusion-zones/${encodeURIComponent(surfaceId)}`,
-			{
-				method: "PUT",
-				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ zones }),
-			},
-		);
 	}
 
 	savePlaybackSlot(

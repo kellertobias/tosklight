@@ -3,7 +3,7 @@ use super::{playback_topology_route_support::open_topology_show, *};
 const SURFACE_ID: &str = "surface-a";
 
 #[tokio::test]
-async fn scoped_routes_prove_show_and_authenticated_desk_authority() {
+async fn show_level_route_returns_all_desks_and_publishes_one_replay_safe_event() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -12,14 +12,15 @@ async fn scoped_routes_prove_show_and_authenticated_desk_authority() {
     open_topology_show(&app, &token, show_id, None).await;
     let desk_id = authenticated_desk_id(&state, &token);
 
-    let empty = get_zones(&app, &token, show_id, desk_id).await;
+    let empty = get_zones(&app, &token, show_id).await;
     assert_eq!(empty.status(), StatusCode::OK);
     assert_eq!(
         json(empty).await,
-        serde_json::json!({"show_id":show_id,"desk_id":desk_id,"surfaces":{}})
+        serde_json::json!({"show_id":show_id,"desks":{}})
     );
 
-    let saved = put_zones(&app, &token, show_id, desk_id, SURFACE_ID).await;
+    let cursor = state.application_events.latest_sequence();
+    let saved = put_zones(&app, &token, show_id, SURFACE_ID, "save-zones").await;
     assert_eq!(saved.status(), StatusCode::OK);
     assert_eq!(
         json(saved).await,
@@ -28,21 +29,70 @@ async fn scoped_routes_prove_show_and_authenticated_desk_authority() {
             "desk_id": desk_id,
             "surface_id": SURFACE_ID,
             "zones": zones(),
+            "request_id": "save-zones",
+            "replayed": false,
+            "changed": true,
         })
     );
 
-    let foreign_desk = put_zones(&app, &token, show_id, Uuid::new_v4(), SURFACE_ID).await;
-    assert_eq!(foreign_desk.status(), StatusCode::FORBIDDEN);
+    let replay = put_zones(&app, &token, show_id, SURFACE_ID, "save-zones").await;
+    assert_eq!(replay.status(), StatusCode::OK);
+    let replay = json(replay).await;
+    assert_eq!(replay["replayed"], true);
+    assert_eq!(replay["changed"], true);
+    assert_eq!(state.application_events.latest_sequence(), cursor + 1);
+    let light_application::EventReplay::Events(events) = state.application_events.replay(
+        cursor,
+        &light_application::EventFilter::default()
+            .with_capability(light_application::EventCapability::Show),
+    ) else {
+        panic!("zone invalidation event should remain replayable")
+    };
+    assert_eq!(events.len(), 1);
+    let light_application::ApplicationEvent::Show(
+        light_application::ShowEvent::VirtualPlaybackExclusionZonesChanged(change),
+    ) = &events[0].payload
+    else {
+        panic!("expected typed exclusion-zone invalidation event")
+    };
+    assert_eq!(change.show_id.0.to_string(), show_id);
+    assert_eq!(change.desk_id, desk_id);
+    assert_eq!(change.surface_id, SURFACE_ID);
+
+    let no_change =
+        json(put_zones(&app, &token, show_id, SURFACE_ID, "same-zones-new-request").await).await;
+    assert_eq!(no_change["replayed"], false);
+    assert_eq!(no_change["changed"], false);
+    assert_eq!(state.application_events.latest_sequence(), cursor + 1);
+
+    let second_desk = state
+        .desk
+        .lock()
+        .add_desk("Zone wing", "zone-wing")
+        .unwrap();
+    let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
+    let second = put_zones(
+        &app,
+        &second_token,
+        show_id,
+        "surface-b",
+        "save-second-zones",
+    )
+    .await;
+    assert_eq!(second.status(), StatusCode::OK);
+    let snapshot = json(get_zones(&app, &token, show_id).await).await;
+    assert_eq!(snapshot["desks"][desk_id.to_string()][SURFACE_ID], zones());
     assert_eq!(
-        json(foreign_desk).await["error"],
-        "session is not authorized for this desk"
+        snapshot["desks"][second_desk.id.to_string()]["surface-b"],
+        zones()
     );
+
     let foreign_show = put_zones(
         &app,
         &token,
         &Uuid::new_v4().to_string(),
-        desk_id,
         SURFACE_ID,
+        "foreign-show",
     )
     .await;
     assert_eq!(foreign_show.status(), StatusCode::CONFLICT);
@@ -61,13 +111,11 @@ async fn captured_show_scope_is_rejected_after_active_show_replacement() {
     let first = create_show(&app, &token, "First zone show").await;
     let first_id = first["id"].as_str().unwrap().to_owned();
     open_topology_show(&app, &token, &first_id, None).await;
-    let desk_id = authenticated_desk_id(&state, &token);
-
     let second = create_show(&app, &token, "Replacement zone show").await;
     let second_id = second["id"].as_str().unwrap().to_owned();
     open_topology_show(&app, &token, &second_id, None).await;
 
-    let stale = put_zones(&app, &token, &first_id, desk_id, SURFACE_ID).await;
+    let stale = put_zones(&app, &token, &first_id, SURFACE_ID, "stale-show").await;
     assert_eq!(stale.status(), StatusCode::CONFLICT);
     assert_eq!(
         json(stale).await["error"],
@@ -87,7 +135,7 @@ async fn captured_show_scope_is_rejected_after_active_show_replacement() {
         assert!(second_store.is_empty());
     }
 
-    let current = put_zones(&app, &token, &second_id, desk_id, SURFACE_ID).await;
+    let current = put_zones(&app, &token, &second_id, SURFACE_ID, "current-show").await;
     assert_eq!(current.status(), StatusCode::OK);
     assert_eq!(json(current).await["show_id"], second_id);
     let _ = std::fs::remove_dir_all(data_dir);
@@ -108,11 +156,11 @@ fn zones() -> serde_json::Value {
     serde_json::json!([{"id":"paired","name":"Paired","slots":[1,2]}])
 }
 
-async fn get_zones(app: &Router, token: &str, show_id: &str, desk_id: Uuid) -> Response {
+async fn get_zones(app: &Router, token: &str, show_id: &str) -> Response {
     app.clone()
         .oneshot(
             Request::get(format!(
-                "/api/v2/shows/{show_id}/desks/{desk_id}/virtual-playback-exclusion-zones"
+                "/api/v2/shows/{show_id}/virtual-playback-exclusion-zones"
             ))
             .header(header::AUTHORIZATION, format!("Bearer {token}"))
             .body(Body::empty())
@@ -126,19 +174,38 @@ async fn put_zones(
     app: &Router,
     token: &str,
     show_id: &str,
-    desk_id: Uuid,
     surface_id: &str,
+    request_id: &str,
 ) -> Response {
     app.clone()
         .oneshot(
-            Request::put(format!(
-                "/api/v2/shows/{show_id}/desks/{desk_id}/virtual-playback-exclusion-zones/{surface_id}"
+            Request::post(format!(
+                "/api/v2/shows/{show_id}/virtual-playback-exclusion-zones/{surface_id}/update"
             ))
             .header(header::AUTHORIZATION, format!("Bearer {token}"))
             .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(serde_json::json!({"zones":zones()}).to_string()))
+            .body(Body::from(
+                serde_json::json!({"request_id":request_id,"zones":zones()}).to_string(),
+            ))
             .unwrap(),
         )
         .await
         .unwrap()
+}
+
+async fn login_playback_user_on_desk(app: &Router, username: &str, desk_id: Uuid) -> String {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/sessions")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"username":username,"desk_id":desk_id}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    json(response).await["token"].as_str().unwrap().to_owned()
 }

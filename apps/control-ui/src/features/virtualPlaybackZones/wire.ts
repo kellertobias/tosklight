@@ -1,6 +1,7 @@
 import {
 	MAX_PERSISTED_VIRTUAL_PLAYBACK_ZONE_SLOT,
 	type VirtualPlaybackZone,
+	type VirtualPlaybackZonesChange,
 	type VirtualPlaybackZonesSaveOutcome,
 	type VirtualPlaybackZonesScope,
 	type VirtualPlaybackZonesSnapshot,
@@ -28,15 +29,12 @@ export function decodeVirtualPlaybackZonesSnapshot(
 	expected: VirtualPlaybackZonesScope,
 ): VirtualPlaybackZonesSnapshot {
 	validateScope(expected);
-	const snapshot = exactObject(value, "$", ["show_id", "desk_id", "surfaces"]);
+	const snapshot = exactObject(value, "$", ["show_id", "desks"]);
 	const showId = uuid(snapshot.show_id, "$.show_id");
-	const deskId = uuid(snapshot.desk_id, "$.desk_id");
 	requireIdentity(showId, expected.showId, "$.show_id");
-	requireIdentity(deskId, expected.deskId, "$.desk_id");
 	return {
 		showId,
-		deskId,
-		surfaces: decodeSurfaces(snapshot.surfaces, "$.surfaces"),
+		desks: decodeDesks(snapshot.desks, "$.desks"),
 	};
 }
 
@@ -44,6 +42,7 @@ export function decodeVirtualPlaybackZonesSaveOutcome(
 	value: unknown,
 	expected: VirtualPlaybackZonesScope,
 	expectedSurfaceId: string,
+	expectedRequestId: string,
 ): VirtualPlaybackZonesSaveOutcome {
 	validateScope(expected);
 	validateSurfaceId(expectedSurfaceId, "$.requested_surface_id");
@@ -52,28 +51,73 @@ export function decodeVirtualPlaybackZonesSaveOutcome(
 		"desk_id",
 		"surface_id",
 		"zones",
+		"request_id",
+		"replayed",
+		"changed",
 	]);
 	const showId = uuid(outcome.show_id, "$.show_id");
 	const deskId = uuid(outcome.desk_id, "$.desk_id");
 	const surfaceId = validateSurfaceId(outcome.surface_id, "$.surface_id");
+	const requestId = nonEmptyString(outcome.request_id, "$.request_id");
 	requireIdentity(showId, expected.showId, "$.show_id");
 	requireIdentity(deskId, expected.deskId, "$.desk_id");
 	requireIdentity(surfaceId, expectedSurfaceId, "$.surface_id");
+	requireIdentity(requestId, expectedRequestId, "$.request_id");
 	return {
+		requestId,
+		showId,
+		deskId,
 		surfaceId,
 		zones: decodeZones(outcome.zones, "$.zones"),
+		replayed: boolean(outcome.replayed, "$.replayed"),
+		changed: boolean(outcome.changed, "$.changed"),
 	};
 }
 
 export function encodeVirtualPlaybackZonesSaveRequest(
+	requestId: string,
 	zones: readonly VirtualPlaybackZone[],
 ) {
 	return {
+		request_id: nonEmptyString(requestId, "$.request_id"),
 		zones: decodeZones(zones, "$.zones").map((zone) => ({
 			id: zone.id,
 			name: zone.name,
 			slots: [...zone.slots],
 		})),
+	};
+}
+
+export function decodeVirtualPlaybackZonesEvent(
+	value: unknown,
+): VirtualPlaybackZonesChange | "gap" | "ready" | "error" {
+	const message = object(value, "$");
+	const type = nonEmptyString(message.type, "$.type");
+	if (type === "ready" || type === "repaired") return "ready";
+	if (type === "gap") return "gap";
+	if (type === "error") return "error";
+	if (type !== "event")
+		invalid("$.type", "ready, repaired, gap, error, or event", type);
+	const event = object(message.event, "$.event");
+	const payload = object(event.payload, "$.event.payload");
+	if (payload.type !== "virtual_playback_exclusion_zones_changed")
+		invalid(
+			"$.event.payload.type",
+			"virtual_playback_exclusion_zones_changed",
+			payload.type,
+		);
+	const change = exactObject(payload.change, "$.event.payload.change", [
+		"show_id",
+		"desk_id",
+		"surface_id",
+	]);
+	return {
+		showId: uuid(change.show_id, "$.event.payload.change.show_id"),
+		deskId: uuid(change.desk_id, "$.event.payload.change.desk_id"),
+		surfaceId: validateSurfaceId(
+			change.surface_id,
+			"$.event.payload.change.surface_id",
+		),
 	};
 }
 
@@ -93,6 +137,16 @@ function decodeSurfaces(value: unknown, path: string) {
 		Object.entries(surfaces).map(([surfaceId, zones]) => {
 			validateSurfaceId(surfaceId, `${path}.${surfaceId}`);
 			return [surfaceId, decodeZones(zones, `${path}.${surfaceId}`)];
+		}),
+	);
+}
+
+function decodeDesks(value: unknown, path: string) {
+	const desks = object(value, path);
+	return Object.fromEntries(
+		Object.entries(desks).map(([deskId, surfaces]) => {
+			uuid(deskId, `${path}.${deskId}`);
+			return [deskId, decodeSurfaces(surfaces, `${path}.${deskId}`)];
 		}),
 	);
 }
@@ -162,6 +216,11 @@ function nonEmptyString(value: unknown, path: string) {
 	if (typeof value !== "string" || value.length === 0)
 		invalid(path, "non-empty string", value);
 	return value as string;
+}
+
+function boolean(value: unknown, path: string) {
+	if (typeof value !== "boolean") invalid(path, "boolean", value);
+	return value;
 }
 
 function uuid(value: unknown, path: string) {

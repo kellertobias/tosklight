@@ -65,3 +65,38 @@ npm run test:e2e   # full suite gate; exclusion-zone scenarios specifically
 
 None new — the desk-segment drop is already decided. Flag in the result note if step 2
 reveals the UI depends on server-side desk filtering.
+
+## Result
+
+- Replaced both former route families with one v2 show snapshot at
+  `GET /api/v2/shows/{show_id}/virtual-playback-exclusion-zones` and one replay-safe
+  surface update at
+  `POST /api/v2/shows/{show_id}/virtual-playback-exclusion-zones/{surface_id}/update`.
+  The `{show_id}` segment remains until chunk 12 resolves show-path scoping.
+- The snapshot now exposes every persisted desk/surface partition in the show-level
+  setting. The active UI did depend on the old server-side desk filter, so the window
+  provider now selects its authenticated desk locally. It loads only while a Virtual
+  Playbacks surface is open, reloads on the typed invalidation event or an event gap,
+  and reports load/save failures visibly.
+- Deleted the v1 handlers, routes, facade calls, and dead compatibility types. Added a
+  lossless typed `virtual_playback_exclusion_zones_changed` event and kept the temporary
+  legacy notification only for consumers scheduled for retirement in chunk 13.
+- Confirmed that mutual exclusion was already enforced server-side. Migrated the
+  acceptance coverage to prove one-active-playback enforcement plus show-level
+  round-trip, isolated desk partitions, OSC, concurrent edits, restart persistence, and
+  UI reload behavior.
+- Verification: `cargo test -p light-server` passed (428 library tests, 1 ignored; 14
+  benchmark tests); `npm run test:unit` passed, including 275 control-UI files / 1,988
+  tests; focused VPB-007 E2E passed 4/4; full `npm run test:e2e` passed 283 with 11
+  skipped and no failures, matching the fresh post-chunk-06 baseline and exceeding the
+  README baseline of 281 passed / 12 skipped. `cargo fmt --all -- --check`, architecture,
+  source-size, generated-contract, focused route/enforcement, typecheck, and diff checks
+  also passed.
+- Surprises: the persisted value was show-keyed only at the outer setting while its
+  payload deliberately retained desk partitions; the active window had already moved
+  most reads to v2, leaving the v1 facade calls dead. The plan's source line numbers had
+  drifted and were reverified before editing. Initial isolated-worktree checks needed
+  the built frontend artifact, and the broad unit run needed loopback permission for
+  existing media-protocol socket tests.
+- Follow-ups: none filed. Unknown-field logging remains owned by chunk 08, show-path
+  removal by chunk 12, and legacy event retirement by chunk 13.

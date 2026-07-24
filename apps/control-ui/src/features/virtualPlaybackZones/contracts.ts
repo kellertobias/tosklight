@@ -20,13 +20,39 @@ export interface VirtualPlaybackZonesAuthority {
 
 export interface VirtualPlaybackZonesSnapshot {
 	readonly showId: string;
-	readonly deskId: string;
-	readonly surfaces: Readonly<Record<string, readonly VirtualPlaybackZone[]>>;
+	readonly desks: Readonly<
+		Record<
+			string,
+			Readonly<Record<string, readonly VirtualPlaybackZone[]>>
+		>
+	>;
 }
 
 export interface VirtualPlaybackZonesSaveOutcome {
+	readonly requestId: string;
+	readonly showId: string;
+	readonly deskId: string;
 	readonly surfaceId: string;
 	readonly zones: readonly VirtualPlaybackZone[];
+	readonly replayed: boolean;
+	readonly changed: boolean;
+}
+
+export interface VirtualPlaybackZonesChange {
+	readonly showId: string;
+	readonly deskId: string;
+	readonly surfaceId: string;
+}
+
+export interface VirtualPlaybackZonesEventObserver {
+	changed(change: VirtualPlaybackZonesChange): void;
+	gap(): void;
+	error(error: Error): void;
+	closed(): void;
+}
+
+export interface VirtualPlaybackZonesEventStream {
+	close(): void;
 }
 
 export interface VirtualPlaybackZonesTransport {
@@ -38,8 +64,13 @@ export interface VirtualPlaybackZonesTransport {
 		scope: VirtualPlaybackZonesScope,
 		surfaceId: string,
 		zones: readonly VirtualPlaybackZone[],
+		requestId: string,
 		signal?: AbortSignal,
 	): Promise<VirtualPlaybackZonesSaveOutcome>;
+	subscribe?(
+		scope: VirtualPlaybackZonesScope,
+		observer: VirtualPlaybackZonesEventObserver,
+	): VirtualPlaybackZonesEventStream;
 }
 
 export interface VirtualPlaybackZonesCapability {
@@ -52,6 +83,7 @@ export interface VirtualPlaybackZonesCapability {
 	getSurface(surfaceId: string): readonly VirtualPlaybackZone[] | null;
 	isSavingSurface(surfaceId: string): boolean;
 	subscribeSurface(surfaceId: string, listener: () => void): () => void;
+	activateSurface(surfaceId: string): () => void;
 	loadSurface(surfaceId: string): Promise<readonly VirtualPlaybackZone[] | null>;
 	saveSurface(
 		surfaceId: string,

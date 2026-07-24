@@ -736,6 +736,22 @@
             "type",
             "change"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
+              "$ref": "#/$defs/VirtualPlaybackExclusionZonesChange"
+            },
+            "type": {
+              "type": "string",
+              "const": "virtual_playback_exclusion_zones_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
         }
       ]
     },
@@ -3564,6 +3580,27 @@
         "sound",
         "held_sound",
         "manual_fallback"
+      ]
+    },
+    "VirtualPlaybackExclusionZonesChange": {
+      "type": "object",
+      "properties": {
+        "desk_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "surface_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "show_id",
+        "desk_id",
+        "surface_id"
       ]
     }
   }

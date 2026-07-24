@@ -7,7 +7,7 @@ pub use bus::{EventBus, EventSubscription};
 pub use model::{
     ApplicationEvent, DeliveryPolicy, DeskEvent, EventCapability, EventClass, EventDraft,
     EventEnvelope, EventObject, EventSource, OutputEvent, PlaybackEvent, ProgrammingEvent,
-    ShowEvent,
+    ShowEvent, VirtualPlaybackExclusionZonesChange,
 };
 pub use subscription::{
     EventFilter, EventReplay, ReplaceableEventRateLimit, SequenceGap, SubscriptionDelivery,

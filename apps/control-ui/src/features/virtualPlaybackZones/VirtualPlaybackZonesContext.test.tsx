@@ -2,6 +2,7 @@ import { act, render } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type {
+	VirtualPlaybackZone,
 	VirtualPlaybackZonesAuthority,
 	VirtualPlaybackZonesCapability,
 	VirtualPlaybackZonesSnapshot,
@@ -24,9 +25,21 @@ function authority(authorityId: string): VirtualPlaybackZonesAuthority {
 }
 
 function snapshot(
-	surfaces: VirtualPlaybackZonesSnapshot["surfaces"] = {},
+	surfaces: Record<string, readonly VirtualPlaybackZone[]> = {},
 ): VirtualPlaybackZonesSnapshot {
-	return { showId: SHOW_ID, deskId: DESK_ID, surfaces };
+	return { showId: SHOW_ID, desks: { [DESK_ID]: surfaces } };
+}
+
+function saveOutcome(zones: readonly VirtualPlaybackZone[] = ZONES) {
+	return {
+		requestId: "request-a",
+		showId: SHOW_ID,
+		deskId: DESK_ID,
+		surfaceId: "surface-a",
+		zones,
+		replayed: false,
+		changed: true,
+	};
 }
 
 function deferred<T>() {
@@ -92,7 +105,7 @@ describe("VirtualPlaybackZonesProvider", () => {
 	it("saves a surface and exposes local failures", async () => {
 		const saveSurface = vi
 			.fn<VirtualPlaybackZonesTransport["saveSurface"]>()
-			.mockResolvedValueOnce({ surfaceId: "surface-a", zones: ZONES })
+			.mockResolvedValueOnce(saveOutcome())
 			.mockRejectedValueOnce(new Error("save failed"));
 		const transport = fakeTransport(vi.fn(), saveSurface);
 		const current = { capability: null as VirtualPlaybackZonesCapability | null };
@@ -107,6 +120,7 @@ describe("VirtualPlaybackZonesProvider", () => {
 			{ showId: SHOW_ID, deskId: DESK_ID },
 			"surface-a",
 			ZONES,
+			expect.any(String),
 		);
 		await act(async () => {
 			await expect(
@@ -120,14 +134,14 @@ describe("VirtualPlaybackZonesProvider", () => {
 	});
 
 	it("serializes saves so an older response cannot overwrite a newer intent", async () => {
-		const first = deferred<{ surfaceId: string; zones: typeof ZONES }>();
+		const first = deferred<ReturnType<typeof saveOutcome>>();
 		const newest = [
 			{ id: "paired", name: "Newest", slots: [1, 2, 4] },
 		] as const;
 		const saveSurface = vi
 			.fn<VirtualPlaybackZonesTransport["saveSurface"]>()
 			.mockReturnValueOnce(first.promise)
-			.mockResolvedValueOnce({ surfaceId: "surface-a", zones: newest });
+			.mockResolvedValueOnce(saveOutcome(newest));
 		const current = { capability: null as VirtualPlaybackZonesCapability | null };
 		render(
 			harness(
@@ -142,7 +156,7 @@ describe("VirtualPlaybackZonesProvider", () => {
 		await Promise.resolve();
 		expect(saveSurface).toHaveBeenCalledOnce();
 
-		first.resolve({ surfaceId: "surface-a", zones: ZONES });
+		first.resolve(saveOutcome());
 		await act(async () => {
 			await expect(older).resolves.toEqual(ZONES);
 			await expect(newer).resolves.toEqual(newest);
@@ -156,10 +170,7 @@ describe("VirtualPlaybackZonesProvider", () => {
 		const listener = vi.fn();
 		const transport = fakeTransport(
 			vi.fn(() => pending.promise),
-			vi.fn(async () => ({
-				surfaceId: "surface-a",
-				zones: UPDATED_ZONES,
-			})),
+			vi.fn(async () => saveOutcome(UPDATED_ZONES)),
 		);
 		const current = { capability: null as VirtualPlaybackZonesCapability | null };
 		render(harness(current, authority("session-a"), transport));
@@ -186,7 +197,7 @@ describe("VirtualPlaybackZonesProvider", () => {
 
 	it("rejects a foreign typed transport result as a local error", async () => {
 		const transport = fakeTransport(
-			vi.fn(async () => ({ ...snapshot(), deskId: SHOW_ID })),
+			vi.fn(async () => ({ ...snapshot(), showId: DESK_ID })),
 		);
 		const current = { capability: null as VirtualPlaybackZonesCapability | null };
 		render(harness(current, authority("session-a"), transport));
@@ -252,7 +263,7 @@ describe("VirtualPlaybackZonesProvider", () => {
 	});
 
 	it("ignores a late save outcome after authority replacement", async () => {
-		const oldSave = deferred<{ surfaceId: string; zones: typeof ZONES }>();
+		const oldSave = deferred<ReturnType<typeof saveOutcome>>();
 		const saveSurface = vi
 			.fn<VirtualPlaybackZonesTransport["saveSurface"]>()
 			.mockReturnValueOnce(oldSave.promise);
@@ -264,7 +275,7 @@ describe("VirtualPlaybackZonesProvider", () => {
 		const stale = current.capability?.saveSurface("surface-a", ZONES);
 
 		rendered.rerender(harness(current, authority("session-b"), transport));
-		oldSave.resolve({ surfaceId: "surface-a", zones: ZONES });
+		oldSave.resolve(saveOutcome());
 		await act(async () => {
 			await expect(stale).resolves.toBeNull();
 		});

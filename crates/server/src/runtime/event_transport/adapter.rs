@@ -257,6 +257,15 @@ fn wire_payload(
         )) => wire::EventPayload::SelectiveImportApplied {
             change: Box::new(selective_import::wire_change(change)),
         },
+        application::ApplicationEvent::Show(
+            application::ShowEvent::VirtualPlaybackExclusionZonesChanged(change),
+        ) => wire::EventPayload::VirtualPlaybackExclusionZonesChanged {
+            change: light_wire::v2::virtual_playback_zones::VirtualPlaybackExclusionZonesChange {
+                show_id: change.show_id.0,
+                desk_id: change.desk_id,
+                surface_id: change.surface_id.clone(),
+            },
+        },
     })
 }
 

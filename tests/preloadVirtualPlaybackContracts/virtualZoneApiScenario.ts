@@ -12,6 +12,8 @@ import {
 	playbacks,
 	poolAction,
 	prepare,
+	saveVirtualZoneSurface,
+	virtualZoneSnapshot,
 	visualizationLevel,
 	writePage,
 } from "./support";
@@ -58,19 +60,24 @@ async function prepareAuthoritativeVirtualZone({
 	expect(await activePlayback(api, 71)).toMatchObject({ enabled: true });
 	expect(await activePlayback(api, 72)).toMatchObject({ enabled: true });
 	expect(await activePlayback(api, 73)).toMatchObject({ enabled: true });
-	await api.request(
-		"PUT",
-		"/api/v1/virtual-playback-exclusion-zones/vpb-api-surface",
-		{ zones },
-	);
+	const saved = await saveVirtualZoneSurface(api, "vpb-api-surface", zones);
+	expect(saved).toMatchObject({
+		show_id: prepared.showId,
+		desk_id: firstDesk.id,
+		surface_id: "vpb-api-surface",
+		zones,
+		replayed: false,
+		changed: true,
+	});
+	expect(saved.request_id).toEqual(expect.any(String));
 	expect(await activePlayback(api, 71)).toMatchObject({ enabled: true });
 	expect(await activePlayback(api, 72)).toMatchObject({ enabled: true });
 	expect(await activePlayback(api, 73)).toMatchObject({ enabled: true });
-	expect(
-		await api.request<any>("GET", "/api/v1/virtual-playback-exclusion-zones"),
-	).toMatchObject({
-		desk_id: firstDesk.id,
-		surfaces: { "vpb-api-surface": zones },
+	expect(await virtualZoneSnapshot(api)).toMatchObject({
+		show_id: prepared.showId,
+		desks: {
+			[firstDesk.id]: { "vpb-api-surface": zones },
+		},
 	});
 	return { prepared, firstDesk, zones };
 }
@@ -96,8 +103,9 @@ async function verifyRestartedVirtualZone(
 	expect(await activePlayback(api, 72)).toMatchObject({ enabled: false });
 	expect(await activePlayback(api, 73)).toMatchObject({ enabled: true });
 	expect(
-		(await api.request<any>("GET", "/api/v1/virtual-playback-exclusion-zones"))
-			.surfaces["vpb-api-surface"],
+		(await virtualZoneSnapshot(api)).desks[firstDesk.id][
+			"vpb-api-surface"
+		],
 	).toEqual(zones);
 
 	for (const number of [71, 72, 73]) await poolAction(api, number, "off");
@@ -185,9 +193,9 @@ async function verifyFirstDeskPageAndOsc({
 	}
 }
 
-async function verifySecondDeskIsolation(
+async function verifySecondDeskPartitionIsolation(
 	{ api, bench }: VirtualZoneApiContext,
-	{ prepared }: AuthoritativeVirtualZoneSetup,
+	{ prepared, firstDesk, zones }: AuthoritativeVirtualZoneSetup,
 ) {
 	const second = await api.request<Session>(
 		"POST",
@@ -196,10 +204,29 @@ async function verifySecondDeskIsolation(
 		false,
 	);
 	api.session = second;
-	expect(
-		(await api.request<any>("GET", "/api/v1/virtual-playback-exclusion-zones"))
-			.surfaces,
-	).toEqual({});
+	const secondZones = [
+		{ id: "wing-spares", name: "Wing spares", slots: [4, 5] },
+	];
+	const secondSaved = await saveVirtualZoneSurface(
+		api,
+		"vpb-second-surface",
+		secondZones,
+	);
+	expect(secondSaved).toMatchObject({
+		show_id: prepared.showId,
+		desk_id: second.desk.id,
+		surface_id: "vpb-second-surface",
+		zones: secondZones,
+		replayed: false,
+		changed: true,
+	});
+	expect(await virtualZoneSnapshot(api)).toMatchObject({
+		show_id: prepared.showId,
+		desks: {
+			[firstDesk.id]: { "vpb-api-surface": zones },
+			[second.desk.id]: { "vpb-second-surface": secondZones },
+		},
+	});
 	for (const number of [71, 72, 73]) await poolAction(api, number, "off");
 	const secondHardware = await bench.osc();
 	try {
@@ -240,12 +267,12 @@ const virtualZoneApiSupplement = async ({
 	const setup = await prepareAuthoritativeVirtualZone(context);
 	await verifyRestartedVirtualZone(context, setup);
 	await verifyFirstDeskPageAndOsc(context);
-	await verifySecondDeskIsolation(context, setup);
+	await verifySecondDeskPartitionIsolation(context, setup);
 };
 
 export function registerVirtualZoneApiScenario(): void {
 	test(
-		"VPB-007 @supplemental @osc @restart › overlapping zones are serialized, desk-scoped, and durable on every transport",
+		"VPB-007 @supplemental @osc @restart › show-level zone snapshots retain isolated desk partitions across every transport",
 		virtualZoneApiSupplement,
 	);
 }

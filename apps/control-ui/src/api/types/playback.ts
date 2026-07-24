@@ -180,15 +180,3 @@ export interface PlaybackPage {
 	name: string;
 	slots: Record<string, number>;
 }
-
-export interface VirtualPlaybackExclusionZone {
-	id: string;
-	name: string;
-	slots: number[];
-}
-
-export interface VirtualPlaybackExclusionSnapshot {
-	show_id: string;
-	desk_id: string;
-	surfaces: Record<string, VirtualPlaybackExclusionZone[]>;
-}

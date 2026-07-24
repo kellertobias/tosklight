@@ -237,6 +237,7 @@ fn build_app_state(
         playback_topology: PlaybackTopologyService::new(active_show_service.clone()),
         show_patch: ShowPatchService::new(active_show_service.clone()),
         stage_layout_replay: Arc::default(),
+        virtual_playback_zones_replay: Arc::default(),
         selective_show_import: SelectiveShowImportService::new(active_show_service),
         #[cfg(test)]
         patch_profile_resolution: Arc::default(),

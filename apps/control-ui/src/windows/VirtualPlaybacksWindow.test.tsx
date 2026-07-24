@@ -111,6 +111,7 @@ const mocks = vi.hoisted(() => {
 					return () => listeners.delete(listener);
 				},
 			),
+			activateSurface: vi.fn(() => () => undefined),
 			loadSurface: vi.fn(async (surfaceId: string) => {
 				const zones = await loadSurface(surfaceId);
 				if (zones) publishZones(surfaceId, zones);
@@ -240,6 +241,7 @@ beforeEach(() => {
 	mocks.zoneCapability.getSurface.mockClear();
 	mocks.zoneCapability.isSavingSurface.mockClear();
 	mocks.zoneCapability.subscribeSurface.mockClear();
+	mocks.zoneCapability.activateSurface.mockClear();
 	mocks.zoneCapability.loadSurface.mockClear();
 	mocks.zoneCapability.saveSurface.mockClear();
 	mocks.zoneCapability.available = true;

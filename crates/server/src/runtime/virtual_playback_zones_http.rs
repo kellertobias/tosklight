@@ -1,101 +1,137 @@
-//! Explicitly scoped exclusion-zone snapshot and mutation routes.
+//! Show-level snapshot and replay-safe exclusion-zone updates.
 
 use super::{
-    ApiError, AppState, Session, authenticate, emit,
+    ApiError, AppState, authenticate, emit,
     playback_api::{
-        VirtualPlaybackExclusionZone, VirtualPlaybackExclusionZoneInput,
-        read_virtual_playback_exclusion_store, validate_virtual_playback_exclusion_zones,
-        write_virtual_playback_exclusion_surface,
+        VirtualPlaybackExclusionZone, read_virtual_playback_exclusion_store,
+        validate_virtual_playback_exclusion_zones, write_virtual_playback_exclusion_surface,
     },
 };
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, State, rejection::JsonRejection},
     http::HeaderMap,
-    routing::{get, put},
+    routing::{get, post},
 };
+use light_application::{EventDraft, VirtualPlaybackExclusionZonesChange};
 use light_core::ShowId;
-use serde::Serialize;
-use std::collections::HashMap;
+use light_wire::v2::virtual_playback_zones::{
+    VirtualPlaybackExclusionSnapshot, VirtualPlaybackExclusionUpdateOutcome,
+    VirtualPlaybackExclusionUpdateRequest,
+};
+use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
+
+const REQUEST_CACHE_ENTRY_LIMIT: usize = 1_024;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route(
-            "/api/v2/shows/{show_id}/desks/{desk_id}/virtual-playback-exclusion-zones",
+            "/api/v2/shows/{show_id}/virtual-playback-exclusion-zones",
             get(snapshot),
         )
         .route(
-            "/api/v2/shows/{show_id}/desks/{desk_id}/virtual-playback-exclusion-zones/{surface_id}",
-            put(save_surface),
+            "/api/v2/shows/{show_id}/virtual-playback-exclusion-zones/{surface_id}/update",
+            post(update_surface),
         )
-}
-
-#[derive(Serialize)]
-struct SnapshotResponse {
-    show_id: ShowId,
-    desk_id: Uuid,
-    surfaces: HashMap<String, Vec<VirtualPlaybackExclusionZone>>,
-}
-
-#[derive(Serialize)]
-struct SaveResponse {
-    show_id: ShowId,
-    desk_id: Uuid,
-    surface_id: String,
-    zones: Vec<VirtualPlaybackExclusionZone>,
 }
 
 async fn snapshot(
     State(state): State<AppState>,
-    Path((show_id, desk_id)): Path<(Uuid, Uuid)>,
+    Path(show_id): Path<Uuid>,
     headers: HeaderMap,
-) -> Result<Json<SnapshotResponse>, ApiError> {
-    let session = authenticated_desk(&state, &headers, desk_id)?;
+) -> Result<Json<VirtualPlaybackExclusionSnapshot>, ApiError> {
+    authenticate(&state, &headers)?;
     let _activation = state.activation_lock.clone().lock_owned().await;
     let show_id = require_active_show(&state, show_id)?;
-    let surfaces = read_virtual_playback_exclusion_store(&state.desk.lock(), show_id)
-        .remove(&session.desk.id.to_string())
-        .unwrap_or_default();
-    Ok(Json(SnapshotResponse {
-        show_id,
-        desk_id: session.desk.id,
-        surfaces,
+    let desks = read_virtual_playback_exclusion_store(&state.desk.lock(), show_id);
+    Ok(Json(VirtualPlaybackExclusionSnapshot {
+        show_id: show_id.0,
+        desks,
     }))
 }
 
-async fn save_surface(
+async fn update_surface(
     State(state): State<AppState>,
-    Path((show_id, desk_id, surface_id)): Path<(Uuid, Uuid, String)>,
+    Path((show_id, surface_id)): Path<(Uuid, String)>,
     headers: HeaderMap,
-    Json(input): Json<VirtualPlaybackExclusionZoneInput>,
-) -> Result<Json<SaveResponse>, ApiError> {
-    let session = authenticated_desk(&state, &headers, desk_id)?;
+    request: Result<Json<VirtualPlaybackExclusionUpdateRequest>, JsonRejection>,
+) -> Result<Json<VirtualPlaybackExclusionUpdateOutcome>, ApiError> {
+    let session = authenticate(&state, &headers)?;
     validate_surface_id(&surface_id)?;
-    let zones = validate_virtual_playback_exclusion_zones(input)?;
-    let _activation = state.activation_lock.clone().lock_owned().await;
-    let show_id = require_active_show(&state, show_id)?;
-    write_surface(&state, &session, show_id, &surface_id, &zones)?;
-    Ok(Json(SaveResponse {
+    let Json(request) = request.map_err(|error| ApiError::bad_request(error.body_text()))?;
+    validate_request_id(&request.request_id)?;
+    let zones = validate_virtual_playback_exclusion_zones(request.zones)?;
+    let action = ReplayAction {
         show_id,
-        desk_id: session.desk.id,
-        surface_id,
-        zones,
-    }))
-}
+        surface_id: surface_id.clone(),
+        zones: zones.clone(),
+    };
+    let key = ReplayKey {
+        session_id: session.id.0,
+        request_id: request.request_id.clone(),
+    };
 
-fn authenticated_desk(
-    state: &AppState,
-    headers: &HeaderMap,
-    desk_id: Uuid,
-) -> Result<Session, ApiError> {
-    let session = authenticate(state, headers)?;
-    if session.desk.id != desk_id {
-        return Err(ApiError::forbidden(
-            "session is not authorized for this desk",
-        ));
+    let _activation = state.activation_lock.clone().lock_owned().await;
+    if let Some(outcome) = state
+        .virtual_playback_zones_replay
+        .lock()
+        .get(&key, &action)?
+    {
+        return Ok(Json(outcome));
     }
-    Ok(session)
+    let show_id = require_active_show(&state, show_id)?;
+    let desk_id = session.desk.id;
+    let changed = {
+        let desk = state.desk.lock();
+        let stored = read_virtual_playback_exclusion_store(&desk, show_id);
+        let previous = stored
+            .get(&desk_id.to_string())
+            .and_then(|surfaces| surfaces.get(&surface_id));
+        if previous == Some(&zones) || (previous.is_none() && zones.is_empty()) {
+            false
+        } else {
+            write_virtual_playback_exclusion_surface(&desk, show_id, desk_id, &surface_id, &zones)?;
+            true
+        }
+    };
+    let outcome = VirtualPlaybackExclusionUpdateOutcome {
+        request_id: request.request_id,
+        show_id: show_id.0,
+        desk_id,
+        surface_id: surface_id.clone(),
+        zones: zones.clone(),
+        replayed: false,
+        changed,
+    };
+    state
+        .virtual_playback_zones_replay
+        .lock()
+        .insert(key, action, outcome.clone());
+
+    if changed {
+        state
+            .application_events
+            .publish(EventDraft::virtual_playback_exclusion_zones_changed(
+                VirtualPlaybackExclusionZonesChange {
+                    show_id,
+                    desk_id,
+                    surface_id: surface_id.clone(),
+                },
+            ));
+        // Retained for the compatibility event stream until its dedicated retirement chunk.
+        emit(
+            &state,
+            "virtual_playback_exclusion_zones_changed",
+            serde_json::json!({
+                "desk_id": desk_id,
+                "show_id": show_id,
+                "surface_id": surface_id,
+                "zones": zones,
+            }),
+        );
+    }
+    Ok(Json(outcome))
 }
 
 fn require_active_show(state: &AppState, requested: Uuid) -> Result<ShowId, ApiError> {
@@ -111,38 +147,88 @@ fn require_active_show(state: &AppState, requested: Uuid) -> Result<ShowId, ApiE
     Ok(active)
 }
 
-fn validate_surface_id(surface_id: &str) -> Result<(), ApiError> {
-    if surface_id.trim().is_empty() || surface_id.len() > 128 {
+fn validate_request_id(request_id: &str) -> Result<(), ApiError> {
+    if request_id.trim().is_empty()
+        || request_id.len() > 128
+        || request_id.chars().any(char::is_control)
+    {
         return Err(ApiError::bad_request(
-            "surface id must contain 1-128 characters",
+            "request_id must contain 1-128 printable characters",
         ));
     }
     Ok(())
 }
 
-fn write_surface(
-    state: &AppState,
-    session: &Session,
-    show_id: ShowId,
-    surface_id: &str,
-    zones: &[VirtualPlaybackExclusionZone],
-) -> Result<(), ApiError> {
-    write_virtual_playback_exclusion_surface(
-        &state.desk.lock(),
-        show_id,
-        session.desk.id,
-        surface_id,
-        zones,
-    )?;
-    emit(
-        state,
-        "virtual_playback_exclusion_zones_changed",
-        serde_json::json!({
-            "desk_id": session.desk.id,
-            "show_id": show_id,
-            "surface_id": surface_id,
-            "zones": zones,
-        }),
-    );
+fn validate_surface_id(surface_id: &str) -> Result<(), ApiError> {
+    if surface_id.is_empty()
+        || surface_id.len() > 128
+        || surface_id != surface_id.trim()
+        || surface_id.chars().any(char::is_control)
+    {
+        return Err(ApiError::bad_request(
+            "surface_id must be a trimmed string containing 1-128 printable characters",
+        ));
+    }
     Ok(())
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct ReplayKey {
+    session_id: Uuid,
+    request_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ReplayAction {
+    show_id: Uuid,
+    surface_id: String,
+    zones: Vec<VirtualPlaybackExclusionZone>,
+}
+
+struct ReplayEntry {
+    action: ReplayAction,
+    outcome: VirtualPlaybackExclusionUpdateOutcome,
+}
+
+#[derive(Default)]
+pub(super) struct VirtualPlaybackZonesReplayCache {
+    entries: HashMap<ReplayKey, ReplayEntry>,
+    order: VecDeque<ReplayKey>,
+}
+
+impl VirtualPlaybackZonesReplayCache {
+    fn get(
+        &self,
+        key: &ReplayKey,
+        action: &ReplayAction,
+    ) -> Result<Option<VirtualPlaybackExclusionUpdateOutcome>, ApiError> {
+        let Some(entry) = self.entries.get(key) else {
+            return Ok(None);
+        };
+        if &entry.action != action {
+            return Err(ApiError::conflict(
+                "request_id was already used for a different exclusion-zone update",
+            ));
+        }
+        let mut replay = entry.outcome.clone();
+        replay.replayed = true;
+        Ok(Some(replay))
+    }
+
+    fn insert(
+        &mut self,
+        key: ReplayKey,
+        action: ReplayAction,
+        outcome: VirtualPlaybackExclusionUpdateOutcome,
+    ) {
+        if !self.entries.contains_key(&key) {
+            self.order.push_back(key.clone());
+        }
+        self.entries.insert(key, ReplayEntry { action, outcome });
+        while self.entries.len() > REQUEST_CACHE_ENTRY_LIMIT {
+            if let Some(oldest) = self.order.pop_front() {
+                self.entries.remove(&oldest);
+            }
+        }
+    }
 }

@@ -67,6 +67,7 @@ fn test_state_with_programmers(
             playback_topology: PlaybackTopologyService::new(active_show_service.clone()),
             show_patch: ShowPatchService::new(active_show_service.clone()),
             stage_layout_replay: Arc::default(),
+            virtual_playback_zones_replay: Arc::default(),
             selective_show_import: SelectiveShowImportService::new(active_show_service),
             patch_profile_resolution: Arc::default(),
             active_show_http_lifecycle: Arc::default(),

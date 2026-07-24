@@ -9,6 +9,7 @@ use super::{
     programmer_priority::ProgrammerPriorityChange,
     programming::{ProgrammingCaptureModeChange, ProgrammingValuesChange},
     speed_group::SpeedGroupChange,
+    virtual_playback_zones::VirtualPlaybackExclusionZonesChange,
 };
 
 use schemars::JsonSchema;
@@ -206,6 +207,9 @@ pub enum EventPayload {
     },
     SelectiveImportApplied {
         change: Box<SelectiveImportChange>,
+    },
+    VirtualPlaybackExclusionZonesChanged {
+        change: VirtualPlaybackExclusionZonesChange,
     },
 }
 

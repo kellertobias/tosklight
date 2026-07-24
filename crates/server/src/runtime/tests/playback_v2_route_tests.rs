@@ -201,7 +201,7 @@ async fn v2_virtual_exclusion_publishes_changed_peer_before_target_and_replays_n
     install_virtual_exclusion_test_state(&state);
     set_pool_enabled(&state, 2, true);
     set_pool_enabled(&state, 4, true);
-    put_virtual_exclusion_zone(&app, &token, &[1, 2, 3]).await;
+    put_virtual_exclusion_zone(&state, &app, &token, &[1, 2, 3]).await;
     let cursor = state.application_events.latest_sequence();
     let request = action_request(
         "activate-zoned-playback",
@@ -387,7 +387,7 @@ async fn v2_crossfade_activation_uses_the_same_atomic_exclusion_transition_set()
     open_playback_test_show(&app, &token).await;
     install_virtual_exclusion_test_state(&state);
     set_pool_enabled(&state, 2, true);
-    put_virtual_exclusion_zone(&app, &token, &[1, 2]).await;
+    put_virtual_exclusion_zone(&state, &app, &token, &[1, 2]).await;
     let cursor = state.application_events.latest_sequence();
 
     let response = post_action(
@@ -425,7 +425,7 @@ async fn v2_flash_release_promotion_publishes_its_exclusion_peer() {
         definition.flash_release = light_playback::FlashReleaseMode::ReleaseIntensityOnly;
     });
     set_pool_enabled(&state, 1, true);
-    put_virtual_exclusion_zone(&app, &token, &[1, 2]).await;
+    put_virtual_exclusion_zone(&state, &app, &token, &[1, 2]).await;
 
     let press = json(
         post_action(
@@ -478,7 +478,7 @@ async fn v2_zero_manual_xfade_activation_publishes_its_exclusion_peer() {
         definition.fader = light_playback::PlaybackFaderMode::XFade;
     });
     set_pool_enabled(&state, 1, true);
-    put_virtual_exclusion_zone(&app, &token, &[1, 2]).await;
+    put_virtual_exclusion_zone(&state, &app, &token, &[1, 2]).await;
     let cursor = state.application_events.latest_sequence();
 
     let response = json(
@@ -512,7 +512,7 @@ async fn v2_explicit_non_current_page_does_not_borrow_virtual_exclusions() {
     install_virtual_exclusion_test_state(&state);
     add_explicit_virtual_page(&state);
     set_pool_enabled(&state, 2, true);
-    put_virtual_exclusion_zone(&app, &token, &[1, 2]).await;
+    put_virtual_exclusion_zone(&state, &app, &token, &[1, 2]).await;
     let cursor = state.application_events.latest_sequence();
 
     let request = serde_json::json!({
@@ -563,7 +563,7 @@ async fn v2_virtual_exclusion_configuration_is_desk_scoped() {
     open_playback_test_show(&app, &first_token).await;
     install_virtual_exclusion_test_state(&state);
     set_pool_enabled(&state, 2, true);
-    put_virtual_exclusion_zone(&app, &first_token, &[1, 2]).await;
+    put_virtual_exclusion_zone(&state, &app, &first_token, &[1, 2]).await;
     let cursor = state.application_events.latest_sequence();
 
     let response = post_action(
@@ -1697,7 +1697,7 @@ async fn same_user_preload_commit_keeps_each_captured_actions_originating_desk()
     open_playback_test_show(&app, &first_token).await;
     install_virtual_exclusion_test_state(&state);
     set_pool_enabled(&state, 2, true);
-    put_virtual_exclusion_zone(&app, &first_token, &[1, 2]).await;
+    put_virtual_exclusion_zone(&state, &app, &first_token, &[1, 2]).await;
     assert_preload_key(
         &app,
         &second_token,
@@ -2279,20 +2279,24 @@ fn pool_is_enabled(state: &AppState, number: u16) -> bool {
         .any(|playback| playback.playback_number == Some(number) && playback.enabled)
 }
 
-async fn put_virtual_exclusion_zone(app: &Router, token: &str, slots: &[u8]) {
+async fn put_virtual_exclusion_zone(state: &AppState, app: &Router, token: &str, slots: &[u8]) {
+    let show_id = state.active_show.read().as_ref().unwrap().id.0;
     let response = app
         .clone()
         .oneshot(
-            Request::put("/api/v1/virtual-playback-exclusion-zones/v2-route-test")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "zones":[{"id":"v2-route-zone","name":"v2 route zone","slots":slots}]
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
+            Request::post(format!(
+                "/api/v2/shows/{show_id}/virtual-playback-exclusion-zones/v2-route-test/update"
+            ))
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "request_id": Uuid::new_v4().to_string(),
+                    "zones":[{"id":"v2-route-zone","name":"v2 route zone","slots":slots}]
+                })
+                .to_string(),
+            ))
+            .unwrap(),
         )
         .await
         .unwrap();

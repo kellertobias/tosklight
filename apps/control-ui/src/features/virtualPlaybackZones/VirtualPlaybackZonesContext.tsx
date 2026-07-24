@@ -11,6 +11,7 @@ import type {
 	VirtualPlaybackZone,
 	VirtualPlaybackZonesAuthority,
 	VirtualPlaybackZonesCapability,
+	VirtualPlaybackZonesEventStream,
 	VirtualPlaybackZonesScope,
 	VirtualPlaybackZonesSnapshot,
 	VirtualPlaybackZonesTransport,
@@ -79,6 +80,8 @@ export function VirtualPlaybackZonesProvider({
 				controller?.isSavingSurface(surfaceId) ?? false,
 			subscribeSurface: (surfaceId, listener) =>
 				controller?.subscribeSurface(surfaceId, listener) ?? noOp,
+			activateSurface: (surfaceId) =>
+				controller?.activateSurface(surfaceId) ?? noOp,
 			loadSurface: (surfaceId) =>
 				controller?.loadSurface(surfaceId) ?? Promise.resolve(null),
 			saveSurface: (surfaceId, zones) =>
@@ -112,6 +115,8 @@ export class VirtualPlaybackZonesController {
 	private readonly surfaceVersions = new Map<string, number>();
 	private readonly surfaceSaveCounts = new Map<string, number>();
 	private readonly surfaceListeners = new Map<string, Set<() => void>>();
+	private readonly activeSurfaceCounts = new Map<string, number>();
+	private eventStream: VirtualPlaybackZonesEventStream | null = null;
 	private snapshotLoaded = false;
 	private mutationVersion = 0;
 
@@ -156,6 +161,71 @@ export class VirtualPlaybackZonesController {
 		};
 	}
 
+	activateSurface(surfaceId: string) {
+		try {
+			validateVirtualPlaybackZoneSurfaceId(surfaceId);
+		} catch (reason) {
+			this.failure(reason);
+			return noOp;
+		}
+		const count = this.activeSurfaceCounts.get(surfaceId) ?? 0;
+		this.activeSurfaceCounts.set(surfaceId, count + 1);
+		if (this.activeSurfaceCount() === 1) this.openWindow();
+		let active = true;
+		return () => {
+			if (!active) return;
+			active = false;
+			const current = this.activeSurfaceCounts.get(surfaceId) ?? 0;
+			if (current <= 1) this.activeSurfaceCounts.delete(surfaceId);
+			else this.activeSurfaceCounts.set(surfaceId, current - 1);
+			if (this.activeSurfaceCount() === 0) {
+				this.eventStream?.close();
+				this.eventStream = null;
+			}
+		};
+	}
+
+	private activeSurfaceCount() {
+		let count = 0;
+		for (const active of this.activeSurfaceCounts.values()) count += active;
+		return count;
+	}
+
+	private openWindow() {
+		this.snapshotLoaded = false;
+		this.surfaceCache.clear();
+		this.surfaceVersions.clear();
+		for (const surfaceId of this.surfaceListeners.keys())
+			this.notifySurface(surfaceId);
+		this.eventStream = this.transport.subscribe?.(this.scope, {
+			changed: (change) => {
+				if (
+					this.isCurrent() &&
+					change.showId === this.scope.showId &&
+					change.deskId === this.scope.deskId &&
+					this.activeSurfaceCounts.has(change.surfaceId)
+				)
+					void this.reloadSnapshot();
+			},
+			gap: () => {
+				if (this.isCurrent()) void this.reloadSnapshot();
+			},
+			error: (error) => {
+				if (this.isCurrent()) this.reportError(error);
+			},
+			closed: () => {
+				if (this.isCurrent() && this.activeSurfaceCount() > 0)
+					this.reportError(
+						new Error("Virtual Playback zone event connection closed"),
+					);
+			},
+		}) ?? null;
+	}
+
+	private reloadSnapshot() {
+		return this.loadSnapshot();
+	}
+
 	saveSurface(
 		surfaceId: string,
 		zones: readonly VirtualPlaybackZone[],
@@ -187,6 +257,7 @@ export class VirtualPlaybackZonesController {
 				this.scope,
 				surfaceId,
 				zones,
+				crypto.randomUUID(),
 			);
 			if (!this.isCurrent()) return null;
 			if (outcome.surfaceId !== surfaceId)
@@ -226,10 +297,7 @@ export class VirtualPlaybackZonesController {
 		try {
 			const snapshot = await this.transport.loadSnapshot(this.scope);
 			if (!this.isCurrent()) return null;
-			if (
-				snapshot.showId !== this.scope.showId ||
-				snapshot.deskId !== this.scope.deskId
-			)
+			if (snapshot.showId !== this.scope.showId)
 				throw new Error("Virtual Playback zone response changed authority scope");
 			this.installSnapshot(snapshot, loadVersion);
 			this.reportError(null);
@@ -246,13 +314,13 @@ export class VirtualPlaybackZonesController {
 		const surfaceIds = new Set([
 			...this.surfaceCache.keys(),
 			...this.surfaceListeners.keys(),
-			...Object.keys(snapshot.surfaces),
+			...Object.keys(snapshot.desks[this.scope.deskId] ?? {}),
 		]);
 		for (const surfaceId of surfaceIds) {
 			if ((this.surfaceVersions.get(surfaceId) ?? 0) > loadVersion) continue;
 			this.storeSurface(
 				surfaceId,
-				snapshot.surfaces[surfaceId] ?? EMPTY_ZONES,
+				snapshot.desks[this.scope.deskId]?.[surfaceId] ?? EMPTY_ZONES,
 				loadVersion,
 			);
 		}

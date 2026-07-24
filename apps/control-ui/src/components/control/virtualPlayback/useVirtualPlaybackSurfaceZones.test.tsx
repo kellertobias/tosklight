@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
 	VirtualPlaybackZone,
 	VirtualPlaybackZonesAuthority,
+	VirtualPlaybackZonesEventObserver,
 	VirtualPlaybackZonesSnapshot,
 	VirtualPlaybackZonesTransport,
 } from "../../../features/virtualPlaybackZones/contracts";
@@ -40,8 +41,19 @@ function snapshot(
 ): VirtualPlaybackZonesSnapshot {
 	return {
 		showId,
+		desks: { [DESK_ID]: { "surface-a": zones } },
+	};
+}
+
+function saveOutcome(zones: readonly VirtualPlaybackZone[]) {
+	return {
+		requestId: "request-a",
+		showId: SHOW_ID,
 		deskId: DESK_ID,
-		surfaces: { "surface-a": zones },
+		surfaceId: "surface-a",
+		zones,
+		replayed: false,
+		changed: true,
 	};
 }
 
@@ -109,10 +121,7 @@ afterEach(cleanup);
 describe("useVirtualPlaybackSurfaceZones", () => {
 	it("shares one snapshot and a saved surface across two consumers", async () => {
 		const loadSnapshot = vi.fn(async () => snapshot(INITIAL_ZONES));
-		const saveSurface = vi.fn(async () => ({
-			surfaceId: "surface-a",
-			zones: UPDATED_ZONES,
-		}));
+		const saveSurface = vi.fn(async () => saveOutcome(UPDATED_ZONES));
 		const transport = { loadSnapshot, saveSurface };
 		render(
 			tree(
@@ -142,11 +151,74 @@ describe("useVirtualPlaybackSurfaceZones", () => {
 		expect(loadSnapshot).toHaveBeenCalledOnce();
 	});
 
+	it("reloads an open matching surface after external invalidation and closes on inactivity", async () => {
+		let observer: VirtualPlaybackZonesEventObserver | null = null;
+		const close = vi.fn();
+		const loadSnapshot = vi
+			.fn<VirtualPlaybackZonesTransport["loadSnapshot"]>()
+			.mockResolvedValueOnce(snapshot(INITIAL_ZONES))
+			.mockResolvedValueOnce(snapshot(UPDATED_ZONES))
+			.mockResolvedValueOnce(snapshot(INITIAL_ZONES))
+			.mockResolvedValueOnce(snapshot(UPDATED_ZONES));
+		const transport: VirtualPlaybackZonesTransport = {
+			loadSnapshot,
+			saveSurface: vi.fn(),
+			subscribe: vi.fn((_scope, nextObserver) => {
+				observer = nextObserver;
+				return { close };
+			}),
+		};
+		const rendered = render(
+			tree(authority(), transport, <SurfaceProbe label="pane" />),
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId("pane-zones")).toHaveTextContent("Paired"),
+		);
+
+		act(() =>
+			observer?.changed({
+				showId: SHOW_ID,
+				deskId: DESK_ID,
+				surfaceId: "surface-a",
+			}),
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId("pane-zones")).toHaveTextContent("Updated"),
+		);
+		expect(loadSnapshot).toHaveBeenCalledTimes(2);
+		act(() => observer?.gap());
+		await waitFor(() =>
+			expect(screen.getByTestId("pane-zones")).toHaveTextContent("Paired"),
+		);
+		expect(loadSnapshot).toHaveBeenCalledTimes(3);
+		act(() => observer?.error(new Error("zone events failed")));
+		expect(screen.getByRole("alert")).toHaveTextContent("zone events failed");
+
+		rendered.rerender(
+			tree(
+				authority(),
+				transport,
+				<SurfaceProbe label="pane" active={false} />,
+			),
+		);
+		expect(close).toHaveBeenCalledOnce();
+		act(() =>
+			observer?.changed({
+				showId: SHOW_ID,
+				deskId: DESK_ID,
+				surfaceId: "surface-a",
+			}),
+		);
+		expect(loadSnapshot).toHaveBeenCalledTimes(3);
+
+		rendered.rerender(
+			tree(authority(), transport, <SurfaceProbe label="pane" />),
+		);
+		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledTimes(4));
+	});
+
 	it("blocks overlapping edits while one surface save is pending", async () => {
-		const pending = deferred<{
-			surfaceId: string;
-			zones: typeof UPDATED_ZONES;
-		}>();
+		const pending = deferred<ReturnType<typeof saveOutcome>>();
 		const saveSurface = vi.fn(() => pending.promise);
 		render(
 			tree(
@@ -174,7 +246,7 @@ describe("useVirtualPlaybackSurfaceZones", () => {
 		fireEvent.click(settingsSave);
 		expect(saveSurface).toHaveBeenCalledOnce();
 
-		pending.resolve({ surfaceId: "surface-a", zones: UPDATED_ZONES });
+		pending.resolve(saveOutcome(UPDATED_ZONES));
 		await waitFor(() => {
 			expect(paneSave).toBeEnabled();
 			expect(settingsSave).toBeEnabled();
