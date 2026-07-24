@@ -34,8 +34,29 @@ pub enum ProgrammingValueMutation {
     },
 }
 
+/// One operator value gesture before application-owned activation expansion.
+///
+/// The ordered targets and initiating operation are transport facts. Any linked attributes are
+/// resolved later from one `ProgrammingValuesEnvironment`, inside the Programmer transaction.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProgrammingValueIntent {
+    pub fixture_ids: Vec<FixtureId>,
+    pub attribute: AttributeKey,
+    pub operation: ProgrammingValueOperation,
+    pub timing: ProgrammingValueTiming,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ProgrammingValueOperation {
+    AbsoluteSet(AttributeValue),
+    RelativeStep(f32),
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProgrammingValuesCommand {
+    ApplyIntent {
+        intent: ProgrammingValueIntent,
+    },
     SetFixture {
         fixture_id: FixtureId,
         attribute: AttributeKey,
@@ -65,6 +86,7 @@ pub enum ProgrammingValuesCommand {
 impl ProgrammingValuesCommand {
     pub fn mutations(&self) -> Cow<'_, [ProgrammingValueMutation]> {
         match self {
+            Self::ApplyIntent { .. } => Cow::Borrowed(&[]),
             Self::SetFixture {
                 fixture_id,
                 attribute,
@@ -108,6 +130,13 @@ impl ProgrammingValuesCommand {
 
     pub const fn is_clear(&self) -> bool {
         matches!(self, Self::Clear)
+    }
+
+    pub const fn intent(&self) -> Option<&ProgrammingValueIntent> {
+        match self {
+            Self::ApplyIntent { intent } => Some(intent),
+            _ => None,
+        }
     }
 }
 

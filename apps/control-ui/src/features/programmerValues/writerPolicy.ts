@@ -19,13 +19,6 @@ export function programmerValuesReadinessError(
 	return null;
 }
 
-export function isReplayableValuesError(reason: unknown) {
-	if (!reason || typeof reason !== "object") return true;
-	if ("retryable" in reason)
-		return (reason as { retryable?: unknown }).retryable === true;
-	return !("status" in reason);
-}
-
 export function requiresValuesAuthorityRepair(reason: unknown) {
 	if (!reason || typeof reason !== "object") return true;
 	const status =

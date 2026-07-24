@@ -4,6 +4,7 @@ import type { LiveClientTransport } from "./transport";
 
 const DESK_ID = "11111111-1111-4111-8111-111111111111";
 const FIXTURE_ID = "22222222-2222-4222-8222-222222222222";
+const USER_ID = "44444444-4444-4444-8444-444444444444";
 
 function commandLine(revision = 4) {
 	return {
@@ -59,16 +60,55 @@ function decodedInteractionSnapshot() {
 
 function clientReturning(value: unknown) {
 	const request = vi.fn(async (_path: string, _init?: RequestInit) => value);
+	const commandWithRequestId = vi.fn(async () => value);
 	const transport = {
 		request,
+		commandWithRequestId,
 		blob: vi.fn(),
 		absoluteUrl: vi.fn(),
 		command: vi.fn(),
 	} as unknown as LiveClientTransport;
-	return { client: new ProgrammingApiClient(transport), request };
+	return {
+		client: new ProgrammingApiClient(transport),
+		request,
+		commandWithRequestId,
+	};
 }
 
 describe("ProgrammingApiClient v2 interaction boundary", () => {
+	it("sends one correlated Programmer values command frame", async () => {
+		const response = {
+			request_id: "values-1",
+			correlation_id: "33333333-3333-4333-8333-333333333333",
+			revision: 2,
+			capture_mode_revision: 1,
+			status: "no_change",
+			replayed: false,
+			warning: null,
+		};
+		const { client, commandWithRequestId } = clientReturning(response);
+
+		await expect(
+			client.programmerValuesLiveAction(USER_ID, {
+				requestId: "values-1",
+				expectedRevision: 2,
+				expectedCaptureModeRevision: 1,
+				action: { action: "clear" },
+			}),
+		).resolves.toMatchObject({ requestId: "values-1", status: "no_change" });
+		expect(commandWithRequestId).toHaveBeenCalledOnce();
+		expect(commandWithRequestId).toHaveBeenCalledWith(
+			"programmer.values.action",
+			{
+				request_id: "values-1",
+				expected_revision: 2,
+				expected_capture_mode_revision: 1,
+				action: { type: "clear" },
+			},
+			"values-1",
+		);
+	});
+
 	it("loads a strictly validated desk interaction snapshot", async () => {
 		const { client, request } = clientReturning(interactionSnapshot());
 

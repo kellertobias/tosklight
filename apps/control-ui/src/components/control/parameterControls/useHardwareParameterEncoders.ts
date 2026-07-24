@@ -3,9 +3,11 @@ import type { ParameterProjection } from "./useParameterProjection";
 
 interface HardwareParameterActions {
 	canWriteValues: boolean;
+	relativeSteps: boolean;
 	programmerTarget(attribute: string): number | undefined;
 	programmerDiscreteTarget(attribute: string): string | undefined;
 	applyParameter(attribute: string, level: number): Promise<unknown>;
+	stepParameter(attribute: string, delta: number): Promise<unknown>;
 }
 
 interface AccumulatedEncoderValue {
@@ -72,6 +74,10 @@ export function useHardwareParameterEncoders(
 				projection.discrete.get(attribute)
 			)
 				return;
+			if (actions.relativeSteps) {
+				void actions.stepParameter(attribute, delta);
+				return;
+			}
 			const base =
 				actions.programmerTarget(attribute) ??
 				projection.normalized.get(attribute) ??

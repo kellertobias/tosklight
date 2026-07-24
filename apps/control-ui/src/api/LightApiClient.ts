@@ -172,6 +172,10 @@ export class LightApiClient extends LightClientRuntime {
 	storePreload = bindClientMethod(this.showObjectsApi, "storePreload");
 	undoObject = bindClientMethod(this.showObjectsApi, "undoObject");
 	programmers = bindClientMethod(this.programmingApi, "programmers");
+	programmerValuesLiveAction = bindClientMethod(
+		this.programmingApi,
+		"programmerValuesLiveAction",
+	);
 	programmingInteractionSnapshot = bindClientMethod(
 		this.programmingApi,
 		"programmingInteractionSnapshot",

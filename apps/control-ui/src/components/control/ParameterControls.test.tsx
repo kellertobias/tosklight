@@ -46,6 +46,7 @@ const preloadProgrammerValues = vi.hoisted(() => ({
 }));
 const normalValuesActions = vi.hoisted(() => ({
 	batch: vi.fn(async () => null),
+	applyIntent: vi.fn(async () => null),
 }));
 const preloadValuesActions = vi.hoisted(() => ({
 	batch: vi.fn(async () => null),
@@ -416,7 +417,7 @@ describe("ParameterControls hardware encoders", () => {
 		expect(preloadValuesActions.batch).not.toHaveBeenCalled();
 	});
 
-	it("keeps six numbered hardware slots and accumulates fine and coarse turns", async () => {
+	it("keeps six numbered hardware slots and sends fine and coarse relative steps", async () => {
 		server.bootstrap.hardware_connected = true;
 		server.selectedFixtures = ["fixture-1"];
 		server.patch.fixtures = [
@@ -447,17 +448,12 @@ describe("ParameterControls hardware encoders", () => {
 				detail: { control: "encode/1", value: "up" },
 			}),
 		);
-		expect(normalValuesActions.batch).toHaveBeenLastCalledWith({
+		expect(normalValuesActions.applyIntent).toHaveBeenLastCalledWith({
 			requestId: expect.any(String),
-			mutations: [
-				{
-					action: "set_fixture",
-					fixtureId: "fixture-1",
-					attribute: "intensity",
-					value: { kind: "normalized", value: 0.01 },
-					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
-				},
-			],
+			fixtureIds: ["fixture-1"],
+			attribute: "intensity",
+			operation: { type: "relative_step", delta: 0.01 },
+			timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 		});
 		window.dispatchEvent(
 			new CustomEvent("light:encoder-action", {
@@ -465,17 +461,12 @@ describe("ParameterControls hardware encoders", () => {
 			}),
 		);
 		await vi.waitFor(() =>
-			expect(normalValuesActions.batch).toHaveBeenLastCalledWith({
+			expect(normalValuesActions.applyIntent).toHaveBeenLastCalledWith({
 				requestId: expect.any(String),
-				mutations: [
-					{
-						action: "set_fixture",
-						fixtureId: "fixture-1",
-						attribute: "intensity",
-						value: { kind: "normalized", value: 0.11 },
-						timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
-					},
-				],
+				fixtureIds: ["fixture-1"],
+				attribute: "intensity",
+				operation: { type: "relative_step", delta: 0.1 },
+				timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 			}),
 		);
 
@@ -555,18 +546,16 @@ describe("ParameterControls hardware encoders", () => {
 			fireEvent.click(screen.getByRole("button", { name: key }));
 		}
 
-		// The server resolves the fan-out: one ordered-selection mutation carries the points.
-		expect(normalValuesActions.batch).toHaveBeenCalledWith({
+		// The application service resolves the ordered fan-out and any linked captures.
+		expect(normalValuesActions.applyIntent).toHaveBeenCalledWith({
 			requestId: expect.any(String),
-			mutations: [
-				{
-					action: "set_selection",
-					fixtureIds: ["fixture-3", "fixture-1", "fixture-2"],
-					attribute: "intensity",
-					value: { kind: "spread", value: [0, 0.5] },
-					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
-				},
-			],
+			fixtureIds: ["fixture-3", "fixture-1", "fixture-2"],
+			attribute: "intensity",
+			operation: {
+				type: "absolute_set",
+				value: { kind: "spread", value: [0, 0.5] },
+			},
+			timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 		});
 	});
 });

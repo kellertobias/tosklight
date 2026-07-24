@@ -180,20 +180,23 @@ describe("ProgrammerValuesWriter reconciliation", () => {
 		expect(store.getSnapshot().pendingRequestIds).toEqual([]);
 	});
 
-	it("replays an ambiguous request once with the identical body", async () => {
-		const { applyAction, writer } = harness();
-		applyAction
-			.mockRejectedValueOnce(new Error("connection reset"))
-			.mockResolvedValueOnce(noChange("replay-a"));
+	it("sends an ambiguous live frame once, repairs authority, and reports the error", async () => {
+		const { applyAction, repair, repairCaptureMode, onError, writer } =
+			harness();
+		applyAction.mockRejectedValueOnce(new Error("connection reset"));
 
 		await writer.releaseFixtureValue({
-			requestId: "replay-a",
+			requestId: "single-send-a",
 			fixtureId: "22222222-2222-4222-8222-222222222222",
 			attribute: "intensity",
 		});
 
-		expect(applyAction).toHaveBeenCalledTimes(2);
-		expect(applyAction.mock.calls[1]?.[1]).toBe(applyAction.mock.calls[0]?.[1]);
+		expect(applyAction).toHaveBeenCalledOnce();
+		expect(repair).toHaveBeenCalledOnce();
+		expect(repairCaptureMode).toHaveBeenCalledOnce();
+		expect(onError).toHaveBeenLastCalledWith(
+			expect.objectContaining({ message: "connection reset" }),
+		);
 	});
 
 	it("sends a batch as one action and one network request", async () => {

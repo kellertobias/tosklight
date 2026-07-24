@@ -129,8 +129,9 @@ pub use priority::{
 pub use projection::{ProgrammingInteractionProjection, ProgrammingLiveSnapshot};
 pub use service::ProgrammingService;
 pub use values_action::{
-    ProgrammingValueMutation, ProgrammingValueTiming, ProgrammingValuesCommand,
-    ProgrammingValuesOutcome, ProgrammingValuesRequest, ProgrammingValuesResult,
+    ProgrammingValueIntent, ProgrammingValueMutation, ProgrammingValueOperation,
+    ProgrammingValueTiming, ProgrammingValuesCommand, ProgrammingValuesOutcome,
+    ProgrammingValuesRequest, ProgrammingValuesResult,
 };
 pub use values_projection::{
     ProgrammingValuesChange, ProgrammingValuesProjection, ProgrammingValuesSnapshot,

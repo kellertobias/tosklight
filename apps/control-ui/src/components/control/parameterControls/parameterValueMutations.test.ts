@@ -3,7 +3,9 @@ import {
 	releaseParameterMutations,
 	setParameterMutations,
 	setParameterRangeMutations,
+	submitParameterAbsoluteIntent,
 	submitParameterMutations,
+	submitParameterStep,
 } from "./parameterValueMutations";
 import type { ParameterProjection } from "./useParameterProjection";
 
@@ -121,5 +123,52 @@ describe("parameter value mutation builders", () => {
 		const actions = { batch: vi.fn(async () => ({ status: "changed" })) };
 		await submitParameterMutations(actions, [], () => "request-1");
 		expect(actions.batch).not.toHaveBeenCalled();
+	});
+
+	it("submits a hardware tick as one signed server-owned intent", async () => {
+		const actions = {
+			batch: vi.fn(),
+			applyIntent: vi.fn(async () => ({ status: "changed" })),
+		};
+		await submitParameterStep(
+			actions,
+			projection(),
+			"intensity",
+			-0.1,
+			() => "step-1",
+		);
+		expect(actions.batch).not.toHaveBeenCalled();
+		expect(actions.applyIntent).toHaveBeenCalledWith({
+			requestId: "step-1",
+			fixtureIds: ["fixture-3", "fixture-1", "fixture-2"],
+			attribute: "intensity",
+			operation: { type: "relative_step", delta: -0.1 },
+			timing: { fade: true, fadeMillis: 1_250, delayMillis: null },
+		});
+	});
+
+	it("submits an absolute selection without expanding fixture writes locally", async () => {
+		const actions = {
+			batch: vi.fn(),
+			applyIntent: vi.fn(async () => ({ status: "changed" })),
+		};
+		await submitParameterAbsoluteIntent(
+			actions,
+			projection(),
+			"pan",
+			{ kind: "spread", value: [0, 0.5, 1] },
+			() => "absolute-1",
+		);
+		expect(actions.batch).not.toHaveBeenCalled();
+		expect(actions.applyIntent).toHaveBeenCalledWith({
+			requestId: "absolute-1",
+			fixtureIds: ["fixture-3", "fixture-1", "fixture-2"],
+			attribute: "pan",
+			operation: {
+				type: "absolute_set",
+				value: { kind: "spread", value: [0, 0.5, 1] },
+			},
+			timing: { fade: true, fadeMillis: 1_250, delayMillis: null },
+		});
 	});
 });

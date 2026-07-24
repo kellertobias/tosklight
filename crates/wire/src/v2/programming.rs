@@ -117,6 +117,16 @@ pub struct ProgrammingValuesActionRequest {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingValuesAction {
+    /// One application-owned fixture/head value intent. The server resolves ordered spreads,
+    /// relative steps, and any configured linked-attribute captures atomically.
+    ApplyIntent {
+        #[schemars(length(max = 10_000))]
+        fixture_ids: Vec<Uuid>,
+        attribute: String,
+        operation: ProgrammingValueOperation,
+        #[serde(default)]
+        timing: ProgrammingValueTiming,
+    },
     /// Server-side fan-out over an explicitly ordered selection (see
     /// `ProgrammingValueMutation::SetSelection`).
     SetSelection {
@@ -170,6 +180,13 @@ pub enum ProgrammingValuesAction {
         mutations: Vec<ProgrammingValueMutation>,
     },
     Clear,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ProgrammingValueOperation {
+    AbsoluteSet { value: ProgrammingAttributeValue },
+    RelativeStep { delta: f32 },
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

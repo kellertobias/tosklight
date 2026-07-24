@@ -215,6 +215,23 @@ function validateRequest(request: ProgrammerValuesActionRequest) {
 function encodeAction(
 	action: ProgrammerValuesActionRequest["action"],
 ): WireProgrammingValuesAction {
+	if (action.action === "apply_intent")
+		return {
+			type: action.action,
+			fixture_ids: [...action.fixtureIds],
+			attribute: action.attribute,
+			operation:
+				action.operation.type === "absolute_set"
+					? {
+							type: "absolute_set",
+							value: action.operation.value,
+						}
+					: {
+							type: "relative_step",
+							delta: action.operation.delta,
+						},
+			timing: encodeTiming(action.timing),
+		};
 	if (action.action === "batch")
 		return {
 			type: action.action,

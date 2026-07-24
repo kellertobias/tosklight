@@ -12,6 +12,7 @@ export function predictProgrammerValues(
 	action: ProgrammerValuesCommand,
 ): ProgrammerValuesOptimisticReducer {
 	if (action.action === "clear") return clearPrediction;
+	if (action.action === "apply_intent") return (current) => current;
 	const mutations = action.action === "batch" ? action.mutations : [action];
 	return (current) => applyMutations(current, mutations);
 }

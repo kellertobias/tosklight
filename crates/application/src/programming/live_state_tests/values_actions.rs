@@ -79,6 +79,7 @@ impl ValuesSetup {
                 environment: ProgrammingValuesEnvironment {
                     fixture_ids: fixtures.into_iter().collect(),
                     group_memberships: HashMap::from([("front".into(), 3), ("back".into(), 3)]),
+                    ..Default::default()
                 },
                 ..Default::default()
             },
@@ -396,6 +397,113 @@ fn values_batch_is_one_persisted_projection_event_and_undo_checkpoint() {
     let undone = setup.registry.get(setup.session).unwrap();
     assert!(undone.values.is_empty());
     assert!(undone.group_values.is_empty());
+}
+
+#[test]
+fn value_intent_identity_and_injected_activation_expansion_are_atomic() {
+    let mut setup = ValuesSetup::new();
+    let fixture = setup.fixtures[0];
+    let intensity = AttributeKey::intensity();
+    let pan = AttributeKey("pan".into());
+    setup.ports.environment.current_values = HashMap::from([
+        (
+            (fixture, intensity.clone()),
+            AttributeValue::Normalized(0.4),
+        ),
+        ((fixture, pan.clone()), AttributeValue::Normalized(0.7)),
+    ]);
+    setup.ports.environment.supported_attributes =
+        HashMap::from([(fixture, HashSet::from([intensity.clone(), pan.clone()]))]);
+
+    let absolute = setup.handle(
+        "intent-absolute",
+        0,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: vec![fixture],
+                attribute: intensity.clone(),
+                operation: ProgrammingValueOperation::AbsoluteSet(AttributeValue::Normalized(0.25)),
+                timing: Default::default(),
+            },
+        },
+    );
+    let ProgrammingValuesOutcome::Changed { projection, .. } = absolute.outcome else {
+        panic!("the identity intent should change one value")
+    };
+    assert_eq!(projection.fixture_values.len(), 1);
+    assert_eq!(projection.fixture_values[0].attribute, intensity);
+    assert_eq!(setup.registry.get(setup.session).unwrap().undo.len(), 1);
+    assert!(setup.registry.undo(setup.session));
+
+    setup
+        .ports
+        .environment
+        .activation_links
+        .insert(intensity.clone(), vec![pan.clone()]);
+    let relative_action = setup.action(
+        "intent-relative",
+        1,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: vec![fixture],
+                attribute: intensity.clone(),
+                operation: ProgrammingValueOperation::RelativeStep(0.1),
+                timing: Default::default(),
+            },
+        },
+    );
+    let relative = setup
+        .service
+        .handle_values(relative_action.clone(), &setup.ports)
+        .unwrap();
+    let ProgrammingValuesOutcome::Changed {
+        projection,
+        event_sequence,
+    } = &relative.outcome
+    else {
+        panic!("the relative intent should change linked values")
+    };
+    assert_eq!(projection.revision, 2);
+    assert_eq!(*event_sequence, 3);
+    assert_eq!(projection.fixture_values.len(), 2);
+    assert_eq!(
+        projection
+            .fixture_values
+            .iter()
+            .find(|value| value.attribute == intensity)
+            .and_then(|value| value.value.normalized()),
+        Some(0.5)
+    );
+    assert_eq!(
+        projection
+            .fixture_values
+            .iter()
+            .find(|value| value.attribute == pan)
+            .and_then(|value| value.value.normalized()),
+        Some(0.7)
+    );
+    assert_eq!(setup.registry.get(setup.session).unwrap().undo.len(), 1);
+    assert_eq!(
+        *setup.ports.persisted.lock(),
+        vec!["programmer.values", "programmer.values"]
+    );
+
+    setup
+        .ports
+        .environment
+        .current_values
+        .insert((fixture, intensity), AttributeValue::Normalized(0.9));
+    let replay = setup
+        .service
+        .handle_values(relative_action, &setup.ports)
+        .unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.outcome, relative.outcome);
+    assert_eq!(setup.registry.get(setup.session).unwrap().undo.len(), 1);
+
+    assert!(setup.registry.undo(setup.session));
+    let undone = setup.registry.get(setup.session).unwrap();
+    assert!(undone.values.is_empty());
 }
 
 #[test]

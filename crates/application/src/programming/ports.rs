@@ -1,6 +1,6 @@
 use super::{CueMoveCopyChoice, ExecutionPolicy};
 use crate::{ActionContext, ActionError};
-use light_core::FixtureId;
+use light_core::{AttributeKey, AttributeValue, FixtureId};
 use light_programmer::GroupDefinition;
 use light_programmer::ProgrammerRegistry;
 use std::collections::HashMap;
@@ -19,6 +19,14 @@ pub struct ProgrammingValuesEnvironment {
     /// Group id → resolved ordered-membership size, so value validation can reject
     /// multi-point spreads with more control points than the Group has members.
     pub group_memberships: HashMap<String, usize>,
+    /// One frozen view of the values currently feeding output. Relative steps and linked captures
+    /// must all resolve from this same view.
+    pub current_values: HashMap<(FixtureId, AttributeKey), AttributeValue>,
+    /// Attributes supported by each fixture or logical-head identity.
+    pub supported_attributes: HashMap<FixtureId, HashSet<AttributeKey>>,
+    /// Application policy input. Empty in current production configuration; tests and the future
+    /// attribute registry can inject ordered linked attributes without changing the transport.
+    pub activation_links: HashMap<AttributeKey, Vec<AttributeKey>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

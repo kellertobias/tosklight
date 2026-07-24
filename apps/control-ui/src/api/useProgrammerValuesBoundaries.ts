@@ -106,11 +106,11 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 			scope: NonNullable<typeof programmerScope>,
 			request: Parameters<HttpProgrammerValuesTransport["applyAction"]>[1],
 		) => {
-			if (!programmerValuesTransport)
+			if (!state.session)
 				throw new Error("Programmer values session is unavailable");
-			return programmerValuesTransport.applyAction(scope, request);
+			return state.client.programmerValuesLiveAction(scope.userId, request);
 		},
-		[programmerValuesTransport],
+		[state.client, state.session],
 	);
 	const applyProgrammerPreloadValuesAction = useCallback(
 		(

@@ -1,5 +1,59 @@
 use super::*;
 
+pub(super) fn ws_programmer_values_action(
+    state: &AppState,
+    command: &WsCommand,
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> Result<WsTypedProgrammingAction, String> {
+    let request: light_wire::v2::programming::ProgrammingValuesActionRequest =
+        serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
+    crate::tolerant_json::log_unknown_value_fields::<
+        light_wire::v2::programming::ProgrammingValuesActionRequest,
+    >("/api/v1/events programmer.values.action", &command.payload);
+    if request.request_id != command.request_id {
+        return Err(
+            "Programmer values payload request_id must match the WebSocket request_id".into(),
+        );
+    }
+    let request_id = request.request_id;
+    let context = context
+        .clone()
+        .with_expected_revision(request.expected_revision);
+    let colors = command_http::color_attribute_index(state);
+    let command =
+        command_http::values_command(request.action, &colors).map_err(|error| error.message)?;
+    let result = state
+        .programming
+        .handle_values(
+            light_application::ActionEnvelope {
+                context,
+                command: light_application::ProgrammingValuesRequest {
+                    expected_capture_mode_revision: request.expected_capture_mode_revision,
+                    command,
+                },
+            },
+            ports,
+        )
+        .map_err(|error| error.message)?;
+    let interaction_changed = result.interaction_event_sequence.is_some();
+    let values_changed = matches!(
+        result.outcome,
+        light_application::ProgrammingValuesOutcome::Changed { .. }
+    );
+    let replayed = result.replayed;
+    let payload = serde_json::to_value(command_http::values_outcome(request_id, result))
+        .map_err(|error| error.to_string())?;
+    Ok(WsTypedProgrammingAction {
+        payload,
+        interaction_changed,
+        values_changed,
+        preload_values_changed: false,
+        preload_queue_changed: false,
+        replayed,
+    })
+}
+
 pub(super) fn ws_programmer_group_set(
     state: &AppState,
     session: &Session,

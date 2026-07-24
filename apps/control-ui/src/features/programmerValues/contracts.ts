@@ -98,6 +98,15 @@ export type ProgrammerValuesMutation =
 	  };
 
 export type ProgrammerValuesCommand =
+	| {
+			action: "apply_intent";
+			fixtureIds: readonly string[];
+			attribute: string;
+			operation:
+				| { type: "absolute_set"; value: AttributeValue }
+				| { type: "relative_step"; delta: number };
+			timing: ProgrammerValueTiming;
+	  }
 	| ProgrammerValuesMutation
 	| { action: "batch"; mutations: readonly ProgrammerValuesMutation[] }
 	| { action: "clear" };
@@ -165,6 +174,15 @@ export interface BatchProgrammerValuesInput {
 
 /** View-owned mutation boundary. It stays dormant until authority has been mounted. */
 export interface ProgrammerValuesActions {
+	applyIntent(input: {
+		requestId: string;
+		fixtureIds: readonly string[];
+		attribute: string;
+		operation:
+			| { type: "absolute_set"; value: AttributeValue }
+			| { type: "relative_step"; delta: number };
+		timing: ProgrammerValueTiming;
+	}): Promise<ProgrammerValuesActionOutcome | null>;
 	setFixtureValue(
 		input: SetProgrammerFixtureValueInput,
 	): Promise<ProgrammerValuesActionOutcome | null>;

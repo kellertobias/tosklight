@@ -183,6 +183,7 @@ fn programming(config: &Config) -> Vec<String> {
         ProgrammingValuesSnapshot::decl(config),
         ProgrammingPickerColor::decl(config),
         ProgrammingValueTiming::decl(config),
+        ProgrammingValueOperation::decl(config),
         ProgrammingValueMutation::decl(config),
         ProgrammingValuesAction::decl(config),
         ProgrammingValuesActionRequest::decl(config),

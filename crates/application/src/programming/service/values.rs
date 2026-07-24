@@ -1,12 +1,13 @@
 use super::{ProgrammingService, state::interaction_change, support::Snapshot};
 use crate::{
-    ActionEnvelope, ActionError, ActionErrorKind, ProgrammingPorts, ProgrammingValueMutation,
-    ProgrammingValueTiming, ProgrammingValuesCommand, ProgrammingValuesOutcome,
+    ActionEnvelope, ActionError, ActionErrorKind, ProgrammingPorts, ProgrammingValueIntent,
+    ProgrammingValueMutation, ProgrammingValueOperation, ProgrammingValueTiming,
+    ProgrammingValuesCommand, ProgrammingValuesEnvironment, ProgrammingValuesOutcome,
     ProgrammingValuesRequest, ProgrammingValuesResult,
 };
-use light_core::{SessionId, UserId};
+use light_core::{AttributeValue, SessionId, UserId};
 use light_programmer::{NormalProgrammerValueMutation, NormalProgrammerValueTiming};
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use super::values_replay_fingerprint::{RequestFingerprint, values_request_fingerprint};
 use super::values_validation::{validate_request_id, validate_value_mutations};
@@ -68,10 +69,36 @@ impl ProgrammingService {
     ) -> Result<ProgrammingValuesResult, ActionError> {
         let lifecycle_before = self.active_lifecycle_programmer(user_id);
         let before = Snapshot::read(&self.programmers, action.context.desk_id, session, user_id)?;
-        let mutations = action.command.command.mutations();
+        let environment = (!action.command.command.is_clear())
+            .then(|| ports.values_environment(&action.context))
+            .transpose()?;
+        let planned;
+        let mutations = if let Some(intent) = action.command.command.intent() {
+            planned = plan_value_intent(
+                intent,
+                environment
+                    .as_ref()
+                    .expect("non-clear actions load a values environment"),
+                self.programmers
+                    .get(session)
+                    .map(|state| state.update_content())
+                    .unwrap_or_default()
+                    .fixture_values
+                    .iter()
+                    .map(|value| (value.fixture_id, value.attribute.clone()))
+                    .collect(),
+            )?;
+            std::borrow::Cow::Owned(planned)
+        } else {
+            action.command.command.mutations()
+        };
         if !mutations.is_empty() {
-            let environment = ports.values_environment(&action.context)?;
-            validate_value_mutations(mutations.as_ref(), &environment)?;
+            validate_value_mutations(
+                mutations.as_ref(),
+                environment
+                    .as_ref()
+                    .expect("non-clear actions load a values environment"),
+            )?;
         }
         let changed =
             self.mutate_normal_values(session, &action.command.command, mutations.as_ref());
@@ -234,6 +261,119 @@ impl ProgrammingService {
             fingerprint,
             result,
         );
+    }
+}
+
+fn plan_value_intent(
+    intent: &ProgrammingValueIntent,
+    environment: &ProgrammingValuesEnvironment,
+    active_values: HashSet<(light_core::FixtureId, light_core::AttributeKey)>,
+) -> Result<Vec<ProgrammingValueMutation>, ActionError> {
+    if let ProgrammingValueOperation::RelativeStep(delta) = intent.operation
+        && (!delta.is_finite() || delta == 0.0)
+    {
+        return Err(ActionError::new(
+            ActionErrorKind::Invalid,
+            "relative Programmer value step must be finite and non-zero",
+        ));
+    }
+    let count = intent.fixture_ids.len();
+    if let ProgrammingValueOperation::AbsoluteSet(AttributeValue::Spread(points)) =
+        &intent.operation
+        && (points.len() < 2
+            || points
+                .iter()
+                .any(|value| !value.is_finite() || !(0.0..=1.0).contains(value))
+            || (points.len() > 2 && points.len() > count))
+    {
+        return Err(ActionError::new(
+            ActionErrorKind::Invalid,
+            format!(
+                "spread has {} control points but only {count} selected items",
+                points.len()
+            ),
+        ));
+    }
+    let mut mutations = Vec::new();
+    let mut addresses = HashSet::new();
+    for (index, fixture_id) in intent.fixture_ids.iter().copied().enumerate() {
+        let requested = match &intent.operation {
+            ProgrammingValueOperation::AbsoluteSet(AttributeValue::Spread(points)) => {
+                AttributeValue::Normalized(light_core::spread_position(
+                    points.as_slice(),
+                    index,
+                    count,
+                ))
+            }
+            ProgrammingValueOperation::AbsoluteSet(value) => value.clone(),
+            ProgrammingValueOperation::RelativeStep(delta) => {
+                let current = environment
+                    .current_values
+                    .get(&(fixture_id, intent.attribute.clone()))
+                    .and_then(AttributeValue::normalized)
+                    .ok_or_else(|| {
+                        ActionError::new(
+                            ActionErrorKind::Invalid,
+                            "relative Programmer value requires a current normalized value",
+                        )
+                    })?;
+                AttributeValue::Normalized((current + delta).clamp(0.0, 1.0))
+            }
+        };
+        push_intent_value(
+            &mut mutations,
+            &mut addresses,
+            fixture_id,
+            intent.attribute.clone(),
+            requested,
+            intent.timing,
+        );
+        for linked in environment
+            .activation_links
+            .get(&intent.attribute)
+            .into_iter()
+            .flatten()
+        {
+            let address = (fixture_id, linked.clone());
+            if active_values.contains(&address)
+                || !environment
+                    .supported_attributes
+                    .get(&fixture_id)
+                    .is_some_and(|attributes| attributes.contains(linked))
+            {
+                continue;
+            }
+            let Some(value) = environment.current_values.get(&address).cloned() else {
+                continue;
+            };
+            push_intent_value(
+                &mut mutations,
+                &mut addresses,
+                fixture_id,
+                linked.clone(),
+                value,
+                intent.timing,
+            );
+        }
+    }
+    Ok(mutations)
+}
+
+fn push_intent_value(
+    mutations: &mut Vec<ProgrammingValueMutation>,
+    addresses: &mut HashSet<(light_core::FixtureId, light_core::AttributeKey)>,
+    fixture_id: light_core::FixtureId,
+    attribute: light_core::AttributeKey,
+    value: AttributeValue,
+    timing: ProgrammingValueTiming,
+) {
+    if addresses.insert((fixture_id, attribute.clone())) {
+        mutations.push(ProgrammingValueMutation::SetFixture {
+            fixture_id,
+            attribute,
+            value,
+            timing,
+        });
     }
 }
 

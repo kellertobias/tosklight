@@ -1,7 +1,8 @@
 use super::super::{
     ProgrammingPreloadValueMutation, ProgrammingPreloadValueTiming,
     ProgrammingPreloadValuesCommand, ProgrammingPreloadValuesRequest, ProgrammingValueMutation,
-    ProgrammingValueTiming, ProgrammingValuesCommand, ProgrammingValuesRequest,
+    ProgrammingValueOperation, ProgrammingValueTiming, ProgrammingValuesCommand,
+    ProgrammingValuesRequest,
 };
 use light_core::AttributeValue;
 use sha2::{Digest, Sha256};
@@ -44,6 +45,25 @@ fn request_hasher(domain: &[u8], expected_revision: u64, capture_revision: u64) 
 
 fn hash_values_command(hasher: &mut Sha256, command: &ProgrammingValuesCommand) {
     match command {
+        ProgrammingValuesCommand::ApplyIntent { intent } => {
+            hasher.update([6]);
+            hash_len(hasher, intent.fixture_ids.len());
+            for fixture_id in &intent.fixture_ids {
+                hasher.update(fixture_id.0.as_bytes());
+            }
+            hash_bytes(hasher, intent.attribute.0.as_bytes());
+            match &intent.operation {
+                ProgrammingValueOperation::AbsoluteSet(value) => {
+                    hasher.update([0]);
+                    hash_attribute_value(hasher, value);
+                }
+                ProgrammingValueOperation::RelativeStep(delta) => {
+                    hasher.update([1]);
+                    hasher.update(delta.to_bits().to_le_bytes());
+                }
+            }
+            hash_value_timing(hasher, intent.timing);
+        }
         ProgrammingValuesCommand::SetFixture {
             fixture_id,
             attribute,

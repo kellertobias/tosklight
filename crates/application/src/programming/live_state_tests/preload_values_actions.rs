@@ -1,7 +1,7 @@
 use super::*;
 use crate::{ActionErrorKind, EventObject};
 use light_core::{AttributeKey, AttributeValue};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 #[derive(Default)]
 struct PreloadValuesPorts {
@@ -82,6 +82,7 @@ impl PreloadValuesSetup {
                 environment: ProgrammingValuesEnvironment {
                     fixture_ids: fixtures.into_iter().collect(),
                     group_memberships: HashMap::from([("front".into(), 3), ("back".into(), 3)]),
+                    ..Default::default()
                 },
                 registry: Some(registry),
                 session: Some(session),

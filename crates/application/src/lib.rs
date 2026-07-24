@@ -146,11 +146,11 @@ pub use programming::{
     ProgrammingPrioritySnapshot, ProgrammingRecalledPresetProjection, ProgrammingReconciliation,
     ProgrammingRecordedCue, ProgrammingResult, ProgrammingSelectionEnvironment,
     ProgrammingSelectionQuery, ProgrammingSelectionRefreshEvent, ProgrammingSelectionRefreshResult,
-    ProgrammingSelectionTarget, ProgrammingService, ProgrammingValueMutation,
-    ProgrammingValueTiming, ProgrammingValuesChange, ProgrammingValuesCommand,
-    ProgrammingValuesEnvironment, ProgrammingValuesOutcome, ProgrammingValuesProjection,
-    ProgrammingValuesRequest, ProgrammingValuesResult, ProgrammingValuesSnapshot,
-    SelectionGestureSource,
+    ProgrammingSelectionTarget, ProgrammingService, ProgrammingValueIntent,
+    ProgrammingValueMutation, ProgrammingValueOperation, ProgrammingValueTiming,
+    ProgrammingValuesChange, ProgrammingValuesCommand, ProgrammingValuesEnvironment,
+    ProgrammingValuesOutcome, ProgrammingValuesProjection, ProgrammingValuesRequest,
+    ProgrammingValuesResult, ProgrammingValuesSnapshot, SelectionGestureSource,
 };
 pub use scheduling::{
     MonotonicClock, MonotonicMoment, MonotonicScheduler, SchedulerError, SchedulerErrorKind,

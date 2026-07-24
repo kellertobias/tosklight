@@ -4,10 +4,18 @@ import type {
 	SelectionActionOutcome,
 	SelectionActionRequest,
 } from "../../features/programmingInteraction/contracts";
+import type {
+	ProgrammerValuesActionOutcome,
+	ProgrammerValuesActionRequest,
+} from "../../features/programmerValues/contracts";
 import {
 	decodeSelectionActionOutcome,
 	encodeSelectionActionRequest,
 } from "../programmingSelectionWire";
+import {
+	decodeProgrammerValuesActionOutcome,
+	encodeProgrammerValuesActionRequest,
+} from "../programmerValuesWire";
 import {
 	decodeProgrammingCommandLine,
 	decodeProgrammingInteractionSnapshot,
@@ -57,6 +65,23 @@ export class ProgrammingApiClient {
 			jsonRequest("POST", encodeSelectionActionRequest(request)),
 		);
 		return decodeSelectionActionOutcome(value, request.requestId);
+	}
+
+	async programmerValuesLiveAction(
+		userId: string,
+		request: ProgrammerValuesActionRequest,
+	): Promise<ProgrammerValuesActionOutcome> {
+		const wireRequest = encodeProgrammerValuesActionRequest(request);
+		const value = await this.transport.commandWithRequestId(
+			"programmer.values.action",
+			wireRequest,
+			wireRequest.request_id,
+		);
+		return decodeProgrammerValuesActionOutcome(
+			value,
+			userId,
+			request.requestId,
+		);
 	}
 
 	programmers(): Promise<ProgrammerState[]> {

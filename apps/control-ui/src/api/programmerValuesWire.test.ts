@@ -159,6 +159,34 @@ describe("Programmer values wire projection", () => {
 });
 
 describe("Programmer values mutation wire boundary", () => {
+	it("encodes absolute and relative intents without client-side expansion", () => {
+		expect(
+			encodeProgrammerValuesActionRequest({
+				requestId: "step-1",
+				expectedRevision: 6,
+				expectedCaptureModeRevision: 4,
+				action: {
+					action: "apply_intent",
+					fixtureIds: [FIXTURE_ID],
+					attribute: "pan",
+					operation: { type: "relative_step", delta: -0.1 },
+					timing: { fade: true, fadeMillis: 500, delayMillis: null },
+				},
+			}),
+		).toEqual({
+			request_id: "step-1",
+			expected_revision: 6,
+			expected_capture_mode_revision: 4,
+			action: {
+				type: "apply_intent",
+				fixture_ids: [FIXTURE_ID],
+				attribute: "pan",
+				operation: { type: "relative_step", delta: -0.1 },
+				timing: { fade: true, fade_millis: 500, delay_millis: null },
+			},
+		});
+	});
+
 	it("decodes changed and no-change outcomes with different payload shapes", () => {
 		expect(
 			decodeProgrammerValuesActionOutcome(

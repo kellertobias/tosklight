@@ -374,6 +374,43 @@
         }
       ]
     },
+    "ProgrammingValueOperation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "absolute_set"
+            },
+            "value": {
+              "$ref": "#/$defs/ProgrammingAttributeValue"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "delta": {
+              "type": "number",
+              "format": "float"
+            },
+            "type": {
+              "type": "string",
+              "const": "relative_step"
+            }
+          },
+          "required": [
+            "type",
+            "delta"
+          ]
+        }
+      ]
+    },
     "ProgrammingValueTiming": {
       "type": "object",
       "properties": {
@@ -401,6 +438,42 @@
     },
     "ProgrammingValuesAction": {
       "oneOf": [
+        {
+          "description": "One application-owned fixture/head value intent. The server resolves ordered spreads,\nrelative steps, and any configured linked-attribute captures atomically.",
+          "type": "object",
+          "properties": {
+            "attribute": {
+              "type": "string"
+            },
+            "fixture_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 10000
+            },
+            "operation": {
+              "$ref": "#/$defs/ProgrammingValueOperation"
+            },
+            "timing": {
+              "$ref": "#/$defs/ProgrammingValueTiming",
+              "default": {
+                "fade": false
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "apply_intent"
+            }
+          },
+          "required": [
+            "type",
+            "fixture_ids",
+            "attribute",
+            "operation"
+          ]
+        },
         {
           "description": "Server-side fan-out over an explicitly ordered selection (see\n`ProgrammingValueMutation::SetSelection`).",
           "type": "object",

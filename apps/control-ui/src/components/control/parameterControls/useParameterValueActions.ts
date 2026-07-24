@@ -9,6 +9,8 @@ import {
 	releaseParameterMutations,
 	setParameterMutations,
 	setParameterRangeMutations,
+	submitParameterAbsoluteIntent,
+	submitParameterStep,
 	submitParameterMutations,
 } from "./parameterValueMutations";
 import type { ParameterProjection } from "./useParameterProjection";
@@ -30,6 +32,22 @@ export function useParameterValueActions(projection: ParameterProjection) {
 	const submit = (mutations: ReturnType<typeof setParameterMutations>) =>
 		submitParameterMutations(canWriteValues ? actions : null, mutations);
 	const applyParameter = (attribute: string, level: number) => {
+		if (
+			projection.programmerValuesRoute === "normal" &&
+			!projection.selectedGroupId &&
+			actions?.applyIntent
+		)
+			return queue.submitLatest(
+				`intent:${projection.selectedFixtureIds.join(",")}:${attribute}`,
+				String(level),
+				() =>
+					submitParameterAbsoluteIntent(
+						canWriteValues ? actions : null,
+						projection,
+						attribute,
+						{ kind: "normalized", value: level },
+					) ?? Promise.resolve(null),
+			);
 		const mutations = setParameterMutations(projection, attribute, {
 			kind: "normalized",
 			value: level,
@@ -40,12 +58,33 @@ export function useParameterValueActions(projection: ParameterProjection) {
 			() => submit(mutations),
 		);
 	};
+	const stepParameter = (attribute: string, delta: number) =>
+		queue.submitBarrier(() =>
+			submitParameterStep(canWriteValues ? actions : null, projection, attribute, delta),
+		);
 	return {
 		canWriteValues,
+		relativeSteps: Boolean(
+			projection.programmerValuesRoute === "normal" && actions?.applyIntent,
+		),
 		applyParameter,
+		stepParameter,
 		applyParameterRange: (attribute: string, percentages: number[]) =>
-			queue.submitBarrier(() =>
-				submit(setParameterRangeMutations(projection, attribute, percentages)),
+			queue.submitBarrier(
+				() =>
+					(projection.programmerValuesRoute === "normal" &&
+						submitParameterAbsoluteIntent(
+							canWriteValues ? actions : null,
+							projection,
+							attribute,
+							{
+								kind: "spread",
+								value: percentages.map(
+									(value) => Math.max(0, Math.min(100, value)) / 100,
+								),
+							},
+						)) ||
+					submit(setParameterRangeMutations(projection, attribute, percentages)),
 			),
 		releaseParameter: (attribute: string) =>
 			queue.submitBarrier(() =>

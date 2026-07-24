@@ -18,9 +18,9 @@ pub(super) const COLOR_CHANNELS: [(&str, usize, bool); 6] = [
 /// Selectable identity → the color channel attributes its heads expose. A plain fixture id
 /// resolves through its shared heads; a logical-head id through exactly that head — the same
 /// rule the operator color dialog applied while this resolution still lived client-side.
-pub(super) type ColorAttributeIndex = HashMap<FixtureId, Vec<&'static str>>;
+pub(crate) type ColorAttributeIndex = HashMap<FixtureId, Vec<&'static str>>;
 
-pub(super) fn color_attribute_index(state: &AppState) -> ColorAttributeIndex {
+pub(crate) fn color_attribute_index(state: &AppState) -> ColorAttributeIndex {
     let snapshot = state.engine.snapshot();
     let mut index = ColorAttributeIndex::new();
     for fixture in &snapshot.fixtures {

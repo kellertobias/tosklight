@@ -19,7 +19,6 @@ import {
 	ProgrammerValuesCaptureAuthority,
 } from "./writerCaptureAuthority";
 import {
-	isReplayableValuesError,
 	programmerValuesError,
 	programmerValuesReadinessError,
 	requiresValuesAuthorityRepair,
@@ -45,7 +44,7 @@ export interface ProgrammerValuesWriterOptions {
 	onError?: (error: Error | null) => void;
 }
 
-/** One replay-safe FIFO for every normal Programmer values mutation surface. */
+/** One single-send FIFO for every normal Programmer values mutation surface. */
 export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 	private readonly queue: QueuedValuesWrite[] = [];
 	private readonly captureAuthority: ProgrammerValuesCaptureAuthority;
@@ -67,6 +66,27 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 			attribute: input.attribute,
 			value: input.value,
 			timing: timing(input),
+		});
+	}
+
+	applyIntent(input: {
+		requestId: string;
+		fixtureIds: readonly string[];
+		attribute: string;
+		operation:
+			| {
+					type: "absolute_set";
+					value: import("../../api/types/playback").AttributeValue;
+			  }
+			| { type: "relative_step"; delta: number };
+		timing: import("./contracts").ProgrammerValueTiming;
+	}) {
+		return this.enqueue(input.requestId, {
+			action: "apply_intent",
+			fixtureIds: input.fixtureIds,
+			attribute: input.attribute,
+			operation: input.operation,
+			timing: input.timing,
 		});
 	}
 
@@ -194,7 +214,7 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 		}
 		try {
 			const request = this.requestAtCurrentRevision(write);
-			const outcome = await this.requestWithOneReplay(request);
+			const outcome = await this.options.applyAction(this.options.scope, request);
 			if (!this.scopesAreCurrent()) return this.abandon(write.requestId);
 			this.assertResponse(request, outcome);
 			await this.settle(write.requestId, outcome);
@@ -235,16 +255,6 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 			action: write.action,
 		};
 	}
-	private async requestWithOneReplay(request: ProgrammerValuesActionRequest) {
-		try {
-			return await this.options.applyAction(this.options.scope, request);
-		} catch (reason) {
-			if (!isReplayableValuesError(reason) || !this.scopesAreCurrent())
-				throw reason;
-			return this.options.applyAction(this.options.scope, request);
-		}
-	}
-
 	private async settle(
 		requestId: string,
 		outcome: ProgrammerValuesActionOutcome,

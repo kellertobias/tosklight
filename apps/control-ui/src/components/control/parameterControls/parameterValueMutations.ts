@@ -8,6 +8,15 @@ import type { ParameterProjection } from "./useParameterProjection";
 
 export interface ParameterValuesMutationPort {
 	batch(input: BatchProgrammerValuesInput): Promise<unknown>;
+	applyIntent?(input: {
+		requestId: string;
+		fixtureIds: readonly string[];
+		attribute: string;
+		operation:
+			| { type: "absolute_set"; value: AttributeValue }
+			| { type: "relative_step"; delta: number };
+		timing: ProgrammerValueTiming;
+	}): Promise<unknown>;
 }
 
 export function parameterValueTiming(
@@ -112,6 +121,67 @@ export function submitParameterMutations(
 ) {
 	if (!actions || mutations.length === 0) return Promise.resolve(null);
 	return actions.batch({ requestId: requestId(), mutations });
+}
+
+export function submitParameterStep(
+	actions: ParameterValuesMutationPort | null,
+	projection: ParameterProjection,
+	attribute: string,
+	delta: number,
+	requestId: () => string = () => crypto.randomUUID(),
+) {
+	if (!actions || projection.selectedFixtureIds.length === 0)
+		return Promise.resolve(null);
+	if (!actions.applyIntent) {
+		const base =
+			projection.normalized.get(attribute) ??
+			projection.programmerValues.find(
+				(value) => value.attribute === attribute,
+			)?.value;
+		const normalized =
+			typeof base === "number"
+				? base
+				: base?.kind === "normalized"
+					? base.value
+					: 0;
+		return submitParameterMutations(
+			actions,
+			setParameterMutations(projection, attribute, {
+				kind: "normalized",
+				value: Math.max(0, Math.min(1, normalized + delta)),
+			}),
+			requestId,
+		);
+	}
+	return actions.applyIntent({
+		requestId: requestId(),
+		fixtureIds: projection.selectedFixtureIds,
+		attribute,
+		operation: { type: "relative_step", delta },
+		timing: parameterValueTiming(projection.programmerFadeMillis),
+	});
+}
+
+export function submitParameterAbsoluteIntent(
+	actions: ParameterValuesMutationPort | null,
+	projection: ParameterProjection,
+	attribute: string,
+	value: AttributeValue,
+	requestId: () => string = () => crypto.randomUUID(),
+) {
+	if (
+		!actions?.applyIntent ||
+		projection.selectedGroupId ||
+		projection.selectedFixtureIds.length === 0
+	)
+		return null;
+	return actions.applyIntent({
+		requestId: requestId(),
+		fixtureIds: projection.selectedFixtureIds,
+		attribute,
+		operation: { type: "absolute_set", value },
+		timing: parameterValueTiming(projection.programmerFadeMillis),
+	});
 }
 
 export function parameterMutationKey(

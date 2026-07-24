@@ -11,6 +11,7 @@ const LIVE_ABSOLUTE_COMMANDS: &[&str] = &[
     "programmer.set_value",
     "programmer.control_action",
     "programmer.priority",
+    "programmer.values.action",
     "programmer.release",
     "programmer.group.set",
     "programmer.group.release",
@@ -48,6 +49,7 @@ const PROGRAMMING_INTERACTION_COMMANDS: &[&str] = &[
     "programmer.set_value",
     "programmer.control_action",
     "programmer.priority",
+    "programmer.values.action",
     "programmer.release",
     "programmer.group.set",
     "programmer.group.release",
@@ -84,6 +86,9 @@ fn dispatch_ws_payload(
         "programmer.group.release" => ws_programmer_group_release(state, session, command),
         "programmer.priority" => {
             Err("Programmer priority requires the typed action boundary".into())
+        }
+        "programmer.values.action" => {
+            Err("Programmer values require the typed action boundary".into())
         }
         "programmer.set" => ws_programmer_set(state, session, command),
         "programmer.set_many" => ws_programmer_set_many(state, session, command),
@@ -196,6 +201,7 @@ fn dispatch_validated_ws_command(
     if matches!(
         command.command.as_str(),
         "programmer.priority"
+            | "programmer.values.action"
             | "preset.apply"
             | "preload.enter"
             | "preload.go"
@@ -228,12 +234,13 @@ fn dispatch_typed_programming_action(
 ) -> WsProgrammingOutput {
     let result = match command.command.as_str() {
         "programmer.priority" => ws_programmer_priority(state, session, command, context, ports),
+        "programmer.values.action" => ws_programmer_values_action(state, command, context, ports),
         "preset.apply" => ws_preset_apply(state, session, command, context, ports),
         "preload.enter" => ws_preload_enter(state, session, command, context, ports),
         "preload.go" => ws_preload_go(state, session, command, context, ports),
         "preload.clear" => ws_preload_clear(state, session, command, context, ports),
         "preload.release" => ws_preload_release(state, session, command, context, ports),
-        _ => unreachable!("only typed compatibility actions reach this boundary"),
+        _ => unreachable!("only typed programming actions reach this boundary"),
     };
     match result {
         Ok(result) => {

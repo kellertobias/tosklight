@@ -4,11 +4,33 @@ use light_wire::v2::{events::EventSnapshotCursor, programming as wire};
 
 use super::color_attributes::{COLOR_CHANNELS, ColorAttributeIndex};
 
-pub(super) fn values_command(
+pub(crate) fn values_command(
     action: wire::ProgrammingValuesAction,
     colors: &ColorAttributeIndex,
 ) -> Result<application::ProgrammingValuesCommand, application::ActionError> {
     Ok(match action {
+        wire::ProgrammingValuesAction::ApplyIntent {
+            fixture_ids,
+            attribute,
+            operation,
+            timing,
+        } => application::ProgrammingValuesCommand::ApplyIntent {
+            intent: application::ProgrammingValueIntent {
+                fixture_ids: fixture_ids.into_iter().map(FixtureId).collect(),
+                attribute: AttributeKey(attribute),
+                operation: match operation {
+                    wire::ProgrammingValueOperation::AbsoluteSet { value } => {
+                        application::ProgrammingValueOperation::AbsoluteSet(application_value(
+                            value,
+                        ))
+                    }
+                    wire::ProgrammingValueOperation::RelativeStep { delta } => {
+                        application::ProgrammingValueOperation::RelativeStep(delta)
+                    }
+                },
+                timing: application_timing(timing),
+            },
+        },
         wire::ProgrammingValuesAction::SetSelection {
             fixture_ids,
             attribute,
@@ -94,7 +116,7 @@ pub(super) fn values_command(
     })
 }
 
-pub(super) fn values_outcome(
+pub(crate) fn values_outcome(
     request_id: String,
     result: application::ProgrammingValuesResult,
 ) -> wire::ProgrammingValuesActionOutcome {
