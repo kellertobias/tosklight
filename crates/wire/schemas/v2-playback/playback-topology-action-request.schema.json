@@ -12,7 +12,6 @@
       "minLength": 1
     }
   },
-  "additionalProperties": false,
   "required": [
     "request_id",
     "action"
@@ -44,7 +43,6 @@
               "const": "save_cue_list"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "cue_list_id",
@@ -94,7 +92,6 @@
               "const": "configure_slot"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "page",
@@ -150,7 +147,6 @@
               "const": "map_existing_playback"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "page",
@@ -185,7 +181,6 @@
               "const": "create_page"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "page",
@@ -221,7 +216,6 @@
               "const": "rename_page"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "page",
@@ -268,7 +262,6 @@
               "const": "clear_mapped_playback"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "page",
@@ -405,7 +398,6 @@
           "minimum": 0
         }
       },
-      "additionalProperties": false,
       "required": [
         "number",
         "name",
@@ -436,7 +428,6 @@
               "const": "cue_list"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "cue_list_id"
@@ -453,7 +444,6 @@
               "const": "group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group_id"
@@ -470,7 +460,6 @@
               "const": "speed_group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group"
@@ -484,7 +473,6 @@
               "const": "programmer_fade"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -497,7 +485,6 @@
               "const": "cue_fade"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -510,7 +497,6 @@
               "const": "grand_master"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
