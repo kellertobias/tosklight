@@ -25,6 +25,51 @@ use super::super::playback_service;
 use super::super::{Engine, EngineSnapshot, ProgrammerRegistry, RenderOptions};
 use super::*;
 
+#[test]
+fn multiplexed_client_messages_keep_subscriptions_and_commands_distinct() {
+    let subscribe =
+        parse_client_message(r#"{"type":"subscribe","filter":{},"capacity":32,"rate_limits":[]}"#);
+    assert!(matches!(
+        subscribe,
+        ClientMessage::Event(wire::EventClientMessage::Subscribe {
+            capacity: Some(32),
+            ..
+        })
+    ));
+
+    let command = parse_client_message(
+        r#"{
+            "protocol_version":1,
+            "request_id":"multiplex-command",
+            "session_id":"00000000-0000-0000-0000-000000000011",
+            "command":"programmer.undo",
+            "payload":{}
+        }"#,
+    );
+    let ClientMessage::Command(command) = command else {
+        panic!("typed command should remain distinct from event control messages");
+    };
+    assert_eq!(command.request_id, "multiplex-command");
+    assert_eq!(command.command, "programmer.undo");
+}
+
+#[test]
+fn malformed_correlated_command_retains_its_request_identity() {
+    let invalid = parse_client_message(
+        r#"{
+            "protocol_version":1,
+            "request_id":"broken-command",
+            "session_id":"not-a-uuid",
+            "command":"programmer.undo"
+        }"#,
+    );
+    let ClientMessage::Invalid { request_id, error } = invalid else {
+        panic!("malformed command should become a correlated failure");
+    };
+    assert_eq!(request_id.as_deref(), Some("broken-command"));
+    assert!(error.starts_with("invalid command envelope:"));
+}
+
 #[tokio::test]
 async fn running_chaser_wakes_only_its_narrow_subscriber() {
     let started = Utc::now();

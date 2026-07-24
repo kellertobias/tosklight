@@ -2,7 +2,9 @@
 
 mod adapter;
 
-use super::{ApiError, AppState, Session, authenticate_token};
+use super::{
+    ApiError, AppState, Session, WsCommand, WsResponse, authenticate_token, dispatch_ws_command,
+};
 use axum::{
     Router,
     extract::{State, WebSocketUpgrade, ws::Message, ws::WebSocket},
@@ -12,6 +14,7 @@ use axum::{
 };
 use light_application as application;
 use light_wire::v2::events as wire;
+use serde::Serialize;
 use uuid::Uuid;
 
 const DEFAULT_CAPACITY: usize = 256;
@@ -57,6 +60,11 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
     let Some(request) = next_client_message(&mut socket).await else {
         return;
     };
+    let request = match request {
+        ClientMessage::Event(request) => Ok(request),
+        ClientMessage::Command(_) => Err("the first event message must subscribe".into()),
+        ClientMessage::Invalid { error, .. } => Err(error),
+    };
     let mut stream = match EventStream::subscribe(&state.application_events, &session, request) {
         Ok(stream) => stream,
         Err(error) => {
@@ -67,16 +75,21 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
     if !send_wire(&mut socket, stream.ready()).await {
         return;
     }
-    event_loop(&mut socket, &mut stream).await;
+    event_loop(&mut socket, &mut stream, &state, &session).await;
 }
 
-async fn event_loop(socket: &mut WebSocket, stream: &mut EventStream) {
+async fn event_loop(
+    socket: &mut WebSocket,
+    stream: &mut EventStream,
+    state: &AppState,
+    session: &Session,
+) {
     loop {
         let item = tokio::select! {
             delivery = stream.next() => LoopItem::Delivery(delivery),
             request = next_client_message(socket) => LoopItem::Client(request),
         };
-        if !handle_loop_item(socket, stream, item).await {
+        if !handle_loop_item(socket, stream, state, session, item).await {
             return;
         }
     }
@@ -84,41 +97,59 @@ async fn event_loop(socket: &mut WebSocket, stream: &mut EventStream) {
 
 enum LoopItem {
     Delivery(Option<wire::EventServerMessage>),
-    Client(Option<Result<wire::EventClientMessage, String>>),
+    Client(Option<ClientMessage>),
 }
 
-async fn handle_loop_item(socket: &mut WebSocket, stream: &EventStream, item: LoopItem) -> bool {
+async fn handle_loop_item(
+    socket: &mut WebSocket,
+    stream: &EventStream,
+    state: &AppState,
+    session: &Session,
+    item: LoopItem,
+) -> bool {
     match item {
         LoopItem::Delivery(Some(message)) => send_wire(socket, message).await,
         LoopItem::Delivery(None) | LoopItem::Client(None) => false,
-        LoopItem::Client(Some(Ok(message))) => handle_client_message(socket, stream, message).await,
-        LoopItem::Client(Some(Err(error))) => {
-            send_wire(socket, wire::EventServerMessage::Error { error }).await
+        LoopItem::Client(Some(message)) => {
+            send_server_message(socket, client_response(stream, state, session, message)).await
         }
     }
 }
 
-async fn handle_client_message(
-    socket: &mut WebSocket,
+pub(super) fn client_response(
     stream: &EventStream,
-    message: wire::EventClientMessage,
-) -> bool {
-    let response = match message {
-        wire::EventClientMessage::Repair { cursor } => stream.repair(cursor),
-        wire::EventClientMessage::Subscribe { .. } => wire::EventServerMessage::Error {
-            error: "event subscription is already active".into(),
-        },
-    };
-    send_wire(socket, response).await
+    state: &AppState,
+    session: &Session,
+    message: ClientMessage,
+) -> ServerMessage {
+    match message {
+        ClientMessage::Event(wire::EventClientMessage::Repair { cursor }) => {
+            ServerMessage::Event(stream.repair(cursor))
+        }
+        ClientMessage::Event(wire::EventClientMessage::Subscribe { .. }) => {
+            ServerMessage::Event(wire::EventServerMessage::Error {
+                error: "event subscription is already active".into(),
+            })
+        }
+        ClientMessage::Command(command) => {
+            ServerMessage::Command(dispatch_ws_command(state, session, command))
+        }
+        ClientMessage::Invalid {
+            request_id: Some(request_id),
+            error,
+        } => ServerMessage::Command(command_error(state, request_id, error)),
+        ClientMessage::Invalid {
+            request_id: None,
+            error,
+        } => ServerMessage::Event(wire::EventServerMessage::Error { error }),
+    }
 }
 
-async fn next_client_message(
-    socket: &mut WebSocket,
-) -> Option<Result<wire::EventClientMessage, String>> {
+async fn next_client_message(socket: &mut WebSocket) -> Option<ClientMessage> {
     loop {
         match socket.recv().await? {
             Ok(Message::Text(text)) => {
-                return Some(serde_json::from_str(&text).map_err(|error| error.to_string()));
+                return Some(parse_client_message(&text));
             }
             Ok(Message::Ping(value)) => {
                 socket.send(Message::Pong(value)).await.ok()?;
@@ -129,8 +160,76 @@ async fn next_client_message(
     }
 }
 
+pub(super) enum ClientMessage {
+    Event(wire::EventClientMessage),
+    Command(WsCommand),
+    Invalid {
+        request_id: Option<String>,
+        error: String,
+    },
+}
+
+pub(super) enum ServerMessage {
+    Event(wire::EventServerMessage),
+    Command(WsResponse),
+}
+
+fn parse_client_message(text: &str) -> ClientMessage {
+    let value = match serde_json::from_str::<serde_json::Value>(text) {
+        Ok(value) => value,
+        Err(error) => {
+            return ClientMessage::Invalid {
+                request_id: None,
+                error: format!("invalid WebSocket message: {error}"),
+            };
+        }
+    };
+    if value.get("type").is_some() {
+        return match serde_json::from_value(value) {
+            Ok(message) => ClientMessage::Event(message),
+            Err(error) => ClientMessage::Invalid {
+                request_id: None,
+                error: format!("invalid event control message: {error}"),
+            },
+        };
+    }
+    let request_id = value
+        .get("request_id")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned);
+    match serde_json::from_value(value) {
+        Ok(command) => ClientMessage::Command(command),
+        Err(error) => ClientMessage::Invalid {
+            request_id,
+            error: format!("invalid command envelope: {error}"),
+        },
+    }
+}
+
+fn command_error(state: &AppState, request_id: String, error: String) -> WsResponse {
+    WsResponse {
+        protocol_version: 1,
+        request_id,
+        ok: false,
+        revision: state.engine.snapshot().revision,
+        payload: None,
+        error: Some(error),
+    }
+}
+
 async fn send_wire(socket: &mut WebSocket, message: wire::EventServerMessage) -> bool {
-    let Ok(json) = serde_json::to_string(&message) else {
+    send_json(socket, &message).await
+}
+
+async fn send_server_message(socket: &mut WebSocket, message: ServerMessage) -> bool {
+    match message {
+        ServerMessage::Event(message) => send_wire(socket, message).await,
+        ServerMessage::Command(message) => send_json(socket, &message).await,
+    }
+}
+
+async fn send_json<T: Serialize>(socket: &mut WebSocket, message: &T) -> bool {
+    let Ok(json) = serde_json::to_string(message) else {
         return false;
     };
     socket.send(Message::Text(json.into())).await.is_ok()

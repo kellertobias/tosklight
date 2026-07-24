@@ -34,3 +34,16 @@ npm run test:unit
 ## Decisions
 
 Inherited from parent chunk 13. No open decisions.
+
+## Result
+
+- The v2 event socket now distinguishes subscription/repair frames from the existing
+  typed command envelope after the required initial subscription.
+- Command frames dispatch through the same authenticated command boundary as v1 and
+  return the existing correlated response shape; malformed correlated commands retain
+  their request id, while malformed uncorrelated frames return a v2 event error.
+- Focused coverage proves a command executes on an active subscription and filtered
+  event delivery continues afterward.
+- Verification passed: 31 focused event-transport tests, the focused WebSocket command
+  ownership test, 447 server tests plus 14 benchmark tests (1 server test ignored), and
+  1,999 frontend unit tests.

@@ -30,3 +30,67 @@ async fn v2_socket_protocol_uses_live_auth_and_the_broad_snapshot_is_removed() {
     assert_eq!(removed.status(), StatusCode::NOT_FOUND);
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[tokio::test]
+async fn v2_subscription_dispatches_a_command_and_keeps_delivering_events() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let mut protocols = HeaderMap::new();
+    protocols.insert(
+        header::SEC_WEBSOCKET_PROTOCOL,
+        format!("light.events.v2, light.token.{token}")
+            .parse()
+            .unwrap(),
+    );
+    let session = event_transport::authenticate_protocols(&state, &protocols).unwrap();
+    let mut stream = event_transport::EventStream::subscribe(
+        &state.application_events,
+        &session,
+        Ok(light_wire::v2::events::EventClientMessage::Subscribe {
+            filter: light_wire::v2::events::EventSubscriptionFilter::default(),
+            after_sequence: Some(state.application_events.latest_sequence()),
+            capacity: Some(32),
+            rate_limits: Vec::new(),
+        }),
+    )
+    .unwrap();
+
+    let response = event_transport::client_response(
+        &stream,
+        &state,
+        &session,
+        event_transport::ClientMessage::Command(WsCommand {
+            protocol_version: 1,
+            request_id: "v2-multiplex-command".into(),
+            session_id: session.id,
+            expected_revision: None,
+            command: "programmer.undo".into(),
+            payload: serde_json::Value::Null,
+        }),
+    );
+    let event_transport::ServerMessage::Command(response) = response else {
+        panic!("command frames should return command responses");
+    };
+    assert!(response.ok, "{:?}", response.error);
+    assert_eq!(response.request_id, "v2-multiplex-command");
+
+    state.application_events.publish(
+        light_application::EventDraft::virtual_playback_exclusion_zones_changed(
+            light_application::VirtualPlaybackExclusionZonesChange {
+                show_id: light_core::ShowId(Uuid::from_u128(41)),
+                desk_id: session.desk.id,
+                surface_id: "multiplex-test".into(),
+            },
+        ),
+    );
+    let Some(light_wire::v2::events::EventServerMessage::Event { event }) = stream.next().await
+    else {
+        panic!("filtered event delivery should remain active after a command");
+    };
+    assert!(matches!(
+        event.payload,
+        light_wire::v2::events::EventPayload::VirtualPlaybackExclusionZonesChanged { .. }
+    ));
+    let _ = std::fs::remove_dir_all(data_dir);
+}
