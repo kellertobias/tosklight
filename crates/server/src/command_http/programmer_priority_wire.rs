@@ -1,7 +1,7 @@
 use light_application as application;
 use light_wire::v2::programmer_priority as wire;
 
-pub(super) fn outcome(
+pub(crate) fn outcome(
     result: application::ProgrammingPriorityResult,
 ) -> wire::ProgrammerPriorityActionOutcome {
     let outcome = match result.outcome {

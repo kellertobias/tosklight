@@ -19,9 +19,14 @@ export function useProgrammerPreloadLifecycleBoundaries(state: ServerState) {
 						authenticatedUserId: state.session.user.id,
 						authenticatedDeskId: state.session.desk.id,
 						deskBoundaryToken: browserDeskBoundaryToken(),
+						applyAction: (scope, request) =>
+							state.client.programmerPreloadLifecycleLiveAction(
+								scope.userId,
+								request,
+							),
 					})
 				: null,
-		[state.session],
+		[state.client, state.session],
 	);
 	return {
 		programmerPreloadLifecycleTransport: transport,

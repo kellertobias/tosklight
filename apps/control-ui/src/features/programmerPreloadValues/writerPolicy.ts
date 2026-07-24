@@ -20,26 +20,6 @@ export function preloadValuesReadinessError(
 	return null;
 }
 
-export function isReplayablePreloadError(reason: unknown) {
-	if (!reason || typeof reason !== "object") return true;
-	if ("retryable" in reason)
-		return (reason as { retryable?: unknown }).retryable === true;
-	return !("status" in reason);
-}
-
-export function requiresPreloadAuthorityRepair(reason: unknown) {
-	if (!reason || typeof reason !== "object") return true;
-	const status =
-		"status" in reason ? (reason as { status?: unknown }).status : null;
-	return (
-		status === null ||
-		status === 408 ||
-		status === 409 ||
-		status === 423 ||
-		(typeof status === "number" && status >= 500)
-	);
-}
-
 export function preloadValuesError(reason: unknown) {
 	return reason instanceof Error ? reason : new Error(String(reason));
 }

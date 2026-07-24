@@ -2,7 +2,7 @@ use light_application as application;
 use light_programmer::{PresetAddress, PresetFamily, PresetStoreMode};
 use light_wire::v2::preset_recording as wire;
 
-pub(super) fn address(value: wire::PresetRecordingAddress) -> Result<PresetAddress, String> {
+pub(crate) fn address(value: wire::PresetRecordingAddress) -> Result<PresetAddress, String> {
     PresetAddress::new(family(value.family), value.number)
 }
 

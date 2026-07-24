@@ -199,7 +199,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
         })
         .unwrap();
 
-    let request = preset_recall_request(
+    let mut request = preset_recall_request(
         "preset-recall-http",
         show_revision,
         selection_revision,
@@ -223,15 +223,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
             .status(),
         StatusCode::CONFLICT
     );
-    let mut forged = request.clone();
-    forged["values"] = serde_json::json!({"forged":true});
-    assert_eq!(
-        scenario
-            .preset_recall_action(&show_id, Some(&scenario.token), forged)
-            .await
-            .status(),
-        StatusCode::BAD_REQUEST
-    );
+    request["values"] = serde_json::json!({"forged":true});
     let baseline = scenario.state.application_events.latest_sequence();
     let compatibility_before = compatibility_event_count(&scenario.state);
     let response = scenario
@@ -449,6 +441,100 @@ async fn priority_and_preset_v1_compatibility_reuse_typed_services_and_replay_qu
         values_event_count(&scenario.state, scenario.session.user.id.0),
         values_before + 1
     );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_policy() {
+    let scenario = CommandHttpScenario::new().await;
+    let priority = || WsCommand {
+        protocol_version: 1,
+        request_id: "priority-ws-exact".into(),
+        session_id: scenario.session.id,
+        expected_revision: None,
+        command: "programmer.priority.action".into(),
+        payload: serde_json::json!({
+            "request_id":"priority-ws-exact",
+            "expected_revision":0,
+            "priority":65,
+        }),
+    };
+    let activation = scenario.state.activation_lock.clone().lock_owned().await;
+    let first = dispatch_ws_command(&scenario.state, &scenario.session, priority());
+    assert!(first.ok, "{:?}", first.error);
+    assert_eq!(first.payload.unwrap()["projection"]["revision"], 1);
+    drop(activation);
+    let replay = dispatch_ws_command(&scenario.state, &scenario.session, priority());
+    assert!(replay.ok, "{:?}", replay.error);
+    assert_eq!(replay.payload.unwrap()["replayed"], true);
+
+    let show_id = scenario.create_and_open_show("Preset typed WS").await;
+    let fixture = light_core::FixtureId::new();
+    let selection_revision = scenario
+        .state
+        .programmers
+        .select(scenario.session.id, [fixture]);
+    let preset = light_programmer::Preset {
+        name: "Typed WS look".into(),
+        family: light_programmer::PresetFamily::Intensity,
+        number: 3,
+        values: HashMap::from([(
+            fixture,
+            HashMap::from([(
+                light_core::AttributeKey::intensity(),
+                light_core::AttributeValue::Normalized(0.8),
+            )]),
+        )]),
+        group_values: HashMap::new(),
+    };
+    assert_eq!(
+        scenario
+            .put_active_object(
+                &show_id,
+                "preset",
+                "1.3",
+                0,
+                serde_json::to_value(preset).unwrap(),
+            )
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let show = scenario.state.active_show.read().clone().unwrap();
+    let show_revision = ShowStore::open(&show.path)
+        .unwrap()
+        .portable_revision()
+        .unwrap()
+        .value();
+    let recall = || WsCommand {
+        protocol_version: 1,
+        request_id: "preset-ws-exact".into(),
+        session_id: scenario.session.id,
+        expected_revision: None,
+        command: "preset.recall.action".into(),
+        payload: serde_json::json!({
+            "show_id":show_id,
+            "request":{
+                "request_id":"preset-ws-exact",
+                "address":{"family":"intensity","number":3},
+                "expected_preset_revision":1,
+                "expected_show_revision":show_revision,
+                "expected_programmer_revision":0,
+                "expected_capture_mode_revision":0,
+                "expected_selection_revision":selection_revision,
+                "future_field":true
+            },
+            "future_envelope":true
+        }),
+    };
+    let first = dispatch_ws_command(&scenario.state, &scenario.session, recall());
+    assert!(first.ok, "{:?}", first.error);
+    let payload = first.payload.unwrap();
+    assert_eq!(payload["status"], "changed");
+    assert_eq!(payload["preset"]["id"], "1.3");
+    let replay = dispatch_ws_command(&scenario.state, &scenario.session, recall());
+    assert!(replay.ok, "{:?}", replay.error);
+    assert_eq!(replay.payload.unwrap()["replayed"], true);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

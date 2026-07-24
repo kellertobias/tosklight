@@ -19,7 +19,6 @@ import type {
 	PresetRecallTransport,
 	RecallPresetInput,
 } from "./contracts";
-import { PresetRecallTransportError } from "./contracts";
 
 interface PresetAuthoritySnapshot {
 	object: ShowObject<"preset"> | null;
@@ -192,23 +191,10 @@ export class PresetRecallWriter implements PresetRecallActions {
 	}
 
 	private async send(authority: RecallAuthority) {
-		try {
-			return await this.options.transport.recall(
-				this.options.scope,
-				authority.request,
-			);
-		} catch (reason) {
-			if (
-				!(reason instanceof PresetRecallTransportError) ||
-				!reason.retryable ||
-				!this.isCurrent(authority)
-			)
-				throw reason;
-			return this.options.transport.recall(
-				this.options.scope,
-				authority.request,
-			);
-		}
+		return this.options.transport.recall(
+			this.options.scope,
+			authority.request,
+		);
 	}
 
 	private async reconcile(
@@ -280,8 +266,7 @@ export class PresetRecallWriter implements PresetRecallActions {
 
 	private async fail(error: Error, authority: RecallAuthority) {
 		if (!this.isCurrent(authority)) return null;
-		if (error instanceof PresetRecallTransportError && error.status === 409)
-			await this.repairConflict(error, authority);
+		await this.repairConflict(error, authority);
 		if (!this.isCurrent(authority)) return null;
 		this.options.onError?.(error);
 		return null;

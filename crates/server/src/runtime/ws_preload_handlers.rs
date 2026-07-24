@@ -1,5 +1,98 @@
 use super::*;
 
+pub(super) fn ws_programmer_preload_lifecycle_action(
+    state: &AppState,
+    command: &WsCommand,
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> Result<WsTypedProgrammingAction, String> {
+    let request: light_wire::v2::preload_lifecycle::ProgrammingPreloadLifecycleRequest =
+        serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
+    crate::tolerant_json::log_unknown_value_fields::<
+        light_wire::v2::preload_lifecycle::ProgrammingPreloadLifecycleRequest,
+    >(
+        "/api/v1/events programmer.preload.lifecycle.action",
+        &command.payload,
+    );
+    if request.request_id != command.request_id {
+        return Err(
+            "Preload lifecycle payload request_id must match the WebSocket request_id".into(),
+        );
+    }
+    let result = state
+        .programming
+        .handle_preload_lifecycle(
+            light_application::ActionEnvelope {
+                context: context.clone(),
+                command: command_http::preload_lifecycle_command(&request),
+            },
+            ports,
+        )
+        .map_err(|error| error.message)?;
+    let interaction_changed = result.interaction_event_sequence.is_some();
+    let preload_values_changed = result.values_event_sequence.is_some();
+    let preload_queue_changed = result.queue_event_sequence.is_some();
+    let replayed = result.replayed;
+    let payload = serde_json::to_value(command_http::preload_lifecycle_outcome(result))
+        .map_err(|error| error.to_string())?;
+    Ok(WsTypedProgrammingAction {
+        payload,
+        interaction_changed,
+        values_changed: false,
+        preload_values_changed,
+        preload_queue_changed,
+        replayed,
+    })
+}
+
+pub(super) fn ws_programmer_preload_values_action(
+    state: &AppState,
+    command: &WsCommand,
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> Result<WsTypedProgrammingAction, String> {
+    let request: light_wire::v2::preload_values::ProgrammingPreloadValuesActionRequest =
+        serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
+    crate::tolerant_json::log_unknown_value_fields::<
+        light_wire::v2::preload_values::ProgrammingPreloadValuesActionRequest,
+    >(
+        "/api/v1/events programmer.preload.values.action",
+        &command.payload,
+    );
+    if request.request_id != command.request_id {
+        return Err("Preload values payload request_id must match the WebSocket request_id".into());
+    }
+    let request_id = request.request_id;
+    let action = light_application::ActionEnvelope {
+        context: context
+            .clone()
+            .with_expected_revision(request.expected_revision),
+        command: light_application::ProgrammingPreloadValuesRequest {
+            expected_capture_mode_revision: request.expected_capture_mode_revision,
+            command: command_http::preload_values_command(request.action),
+        },
+    };
+    let result = state
+        .programming
+        .handle_preload_values(action, ports)
+        .map_err(|error| error.message)?;
+    let preload_values_changed = matches!(
+        result.outcome,
+        light_application::ProgrammingPreloadValuesOutcome::Changed { .. }
+    );
+    let replayed = result.replayed;
+    let payload = serde_json::to_value(command_http::preload_values_outcome(request_id, result))
+        .map_err(|error| error.to_string())?;
+    Ok(WsTypedProgrammingAction {
+        payload,
+        interaction_changed: false,
+        values_changed: false,
+        preload_values_changed,
+        preload_queue_changed: false,
+        replayed,
+    })
+}
+
 pub(super) fn ws_programmer_clear(
     state: &AppState,
     session: &Session,

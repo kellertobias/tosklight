@@ -8,7 +8,6 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PresetRecallRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
@@ -107,7 +106,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn request_rejects_client_authored_values() {
+    fn request_ignores_future_client_fields_without_authoring_values() {
         let value = serde_json::json!({
             "request_id": "recall-1",
             "address": {"family":"color", "number":1},
@@ -118,7 +117,8 @@ mod tests {
             "expected_selection_revision": 6,
             "values": []
         });
-        assert!(serde_json::from_value::<PresetRecallRequest>(value).is_err());
+        let request = serde_json::from_value::<PresetRecallRequest>(value).unwrap();
+        assert_eq!(request.expected_programmer_revision, 4);
     }
 
     #[test]

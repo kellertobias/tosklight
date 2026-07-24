@@ -12,7 +12,6 @@ import type {
 	ProgrammerPreloadLifecycleScope,
 	ProgrammerPreloadLifecycleTransport,
 } from "./contracts";
-import { ProgrammerPreloadLifecycleTransportError } from "./contracts";
 import type {
 	ProgrammerPreloadLifecycleMutation,
 	ProgrammerPreloadLifecycleStore,
@@ -127,7 +126,10 @@ export class ProgrammerPreloadLifecycleWriter
 		}
 		if (!this.begin(authority, action)) return null;
 		try {
-			const outcome = await this.requestWithOneRetry(authority.request);
+			const outcome = await this.options.transport.applyAction(
+				this.options.scope,
+				authority.request,
+			);
 			if (!this.isCurrent(authority)) return this.abandon(authority);
 			if (!(await this.reconcile(authority, outcome))) return null;
 			if (!this.options.store.settle(authority.request.requestId, authority.storeScope))
@@ -137,7 +139,7 @@ export class ProgrammerPreloadLifecycleWriter
 			);
 			return outcome;
 		} catch (reason) {
-			return this.fail(asError(reason), authority, reason);
+			return this.fail(asError(reason), authority);
 		}
 	}
 
@@ -157,15 +159,6 @@ export class ProgrammerPreloadLifecycleWriter
 			{ requestId: authority.request.requestId, action, optimisticActive },
 			authority.storeScope,
 		);
-	}
-
-	private async requestWithOneRetry(request: ProgrammerPreloadLifecycleRequest) {
-		try {
-			return await this.options.transport.applyAction(this.options.scope, request);
-		} catch (reason) {
-			if (!isRetryable(reason)) throw reason;
-			return this.options.transport.applyAction(this.options.scope, request);
-		}
 	}
 
 	private async reconcile(
@@ -227,10 +220,9 @@ export class ProgrammerPreloadLifecycleWriter
 	private async fail(
 		error: Error,
 		authority: LifecycleAuthority,
-		reason: unknown,
 	) {
 		if (!this.isCurrent(authority)) return this.abandon(authority);
-		if (requiresRepair(reason)) await this.repairAll(error, authority);
+		await this.repairAll(error, authority);
 		if (!this.isCurrent(authority)) return this.abandon(authority);
 		this.options.store.rollback(
 			authority.request.requestId,
@@ -280,19 +272,6 @@ export class ProgrammerPreloadLifecycleWriter
 		this.options.onError?.(new Error(message));
 		return Promise.resolve(null);
 	}
-}
-
-function isRetryable(reason: unknown) {
-	return (
-		reason instanceof ProgrammerPreloadLifecycleTransportError && reason.retryable
-	);
-}
-
-function requiresRepair(reason: unknown) {
-	return (
-		reason instanceof ProgrammerPreloadLifecycleTransportError &&
-		reason.status === 409
-	);
 }
 
 function asError(reason: unknown) {

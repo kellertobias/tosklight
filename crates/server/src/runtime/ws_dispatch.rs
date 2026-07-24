@@ -11,7 +11,10 @@ const LIVE_ABSOLUTE_COMMANDS: &[&str] = &[
     "programmer.set_value",
     "programmer.control_action",
     "programmer.priority",
+    "programmer.priority.action",
     "programmer.values.action",
+    "programmer.preload.lifecycle.action",
+    "programmer.preload.values.action",
     "programmer.command_line.replace",
     "programmer.selection.action",
     "programmer.release",
@@ -39,6 +42,7 @@ const LIVE_ABSOLUTE_COMMANDS: &[&str] = &[
     "playback.release",
     "playback.action",
     "preset.apply",
+    "preset.recall.action",
 ];
 
 const PROGRAMMING_INTERACTION_COMMANDS: &[&str] = &[
@@ -51,7 +55,10 @@ const PROGRAMMING_INTERACTION_COMMANDS: &[&str] = &[
     "programmer.set_value",
     "programmer.control_action",
     "programmer.priority",
+    "programmer.priority.action",
     "programmer.values.action",
+    "programmer.preload.lifecycle.action",
+    "programmer.preload.values.action",
     "programmer.command_line.replace",
     "programmer.selection.action",
     "programmer.release",
@@ -72,6 +79,7 @@ const PROGRAMMING_INTERACTION_COMMANDS: &[&str] = &[
     "preload.release",
     "playback.action",
     "preset.apply",
+    "preset.recall.action",
 ];
 
 fn dispatch_ws_payload(
@@ -91,8 +99,17 @@ fn dispatch_ws_payload(
         "programmer.priority" => {
             Err("Programmer priority requires the typed action boundary".into())
         }
+        "programmer.priority.action" => {
+            Err("Programmer priority action requires the typed action boundary".into())
+        }
         "programmer.values.action" => {
             Err("Programmer values require the typed action boundary".into())
+        }
+        "programmer.preload.lifecycle.action" => {
+            Err("Preload lifecycle requires the typed action boundary".into())
+        }
+        "programmer.preload.values.action" => {
+            Err("Preload values require the typed action boundary".into())
         }
         "programmer.command_line.replace" => {
             Err("Command-line replacement requires the typed action boundary".into())
@@ -119,6 +136,9 @@ fn dispatch_ws_payload(
         "programmer.command_target" => ws_programmer_command_target(state, session, command),
         "programmer.execute" => ws_programmer_execute(state, session, command, context),
         "preset.apply" => Err("Preset recall requires the typed action boundary".into()),
+        "preset.recall.action" => {
+            Err("Preset recall action requires the typed action boundary".into())
+        }
         "programmer.mode" => ws_programmer_mode(state, session, command),
         "master.set" => ws_master_set(state, session, command),
         "group.master.set" => ws_group_master_set(state, session, command),
@@ -202,6 +222,18 @@ fn dispatch_validated_ws_command(
     if !PROGRAMMING_INTERACTION_COMMANDS.contains(&command.command.as_str()) {
         return WsProgrammingOutput::untracked(dispatch_ws_payload(state, session, command, None));
     }
+    if command.command == "programmer.priority.action"
+        || (command.command == "programmer.preload.lifecycle.action"
+            && command
+                .payload
+                .pointer("/action/type")
+                .and_then(serde_json::Value::as_str)
+                != Some("go"))
+    {
+        let context = interaction_context(session, command);
+        let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
+        return dispatch_typed_programming_action(state, session, command, &context, &ports);
+    }
     let _activation = match try_programming_activation(state) {
         Ok(activation) => activation,
         Err(error) => return WsProgrammingOutput::untracked(Err(error)),
@@ -212,9 +244,12 @@ fn dispatch_validated_ws_command(
         command.command.as_str(),
         "programmer.priority"
             | "programmer.values.action"
+            | "programmer.preload.lifecycle.action"
+            | "programmer.preload.values.action"
             | "programmer.command_line.replace"
             | "programmer.selection.action"
             | "preset.apply"
+            | "preset.recall.action"
             | "preload.enter"
             | "preload.go"
             | "preload.clear"
@@ -246,7 +281,16 @@ fn dispatch_typed_programming_action(
 ) -> WsProgrammingOutput {
     let result = match command.command.as_str() {
         "programmer.priority" => ws_programmer_priority(state, session, command, context, ports),
+        "programmer.priority.action" => {
+            ws_programmer_priority_action(state, command, context, ports)
+        }
         "programmer.values.action" => ws_programmer_values_action(state, command, context, ports),
+        "programmer.preload.lifecycle.action" => {
+            ws_programmer_preload_lifecycle_action(state, command, context, ports)
+        }
+        "programmer.preload.values.action" => {
+            ws_programmer_preload_values_action(state, command, context, ports)
+        }
         "programmer.command_line.replace" => {
             ws_programmer_command_line_replace(state, command, context, ports)
         }
@@ -254,6 +298,7 @@ fn dispatch_typed_programming_action(
             ws_programmer_selection_action(state, command, context, ports)
         }
         "preset.apply" => ws_preset_apply(state, session, command, context, ports),
+        "preset.recall.action" => ws_preset_recall_action(state, command, context, ports),
         "preload.enter" => ws_preload_enter(state, session, command, context, ports),
         "preload.go" => ws_preload_go(state, session, command, context, ports),
         "preload.clear" => ws_preload_clear(state, session, command, context, ports),

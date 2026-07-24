@@ -119,11 +119,14 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 				HttpProgrammerPreloadValuesTransport["applyAction"]
 			>[1],
 		) => {
-			if (!programmerPreloadValuesTransport)
+			if (!state.session)
 				throw new Error("Programmer Preload values session is unavailable");
-			return programmerPreloadValuesTransport.applyAction(scope, request);
+			return state.client.programmerPreloadValuesLiveAction(
+				scope.userId,
+				request,
+			);
 		},
-		[programmerPreloadValuesTransport],
+		[state.client, state.session],
 	);
 	return {
 		programmerValuesTransport,

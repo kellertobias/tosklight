@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 use super::super::{ApiError, AppState, Session};
 use super::{preset_recording_wire, programming_ports::ServerProgrammingPorts};
+use crate::tolerant_json::TolerantJson;
 
 const BODY_LIMIT: usize = 32 * 1024;
 
@@ -30,10 +31,10 @@ async fn recall_preset(
     State(state): State<AppState>,
     Path(show_id): Path<Uuid>,
     headers: HeaderMap,
-    request: Result<Json<PresetRecallRequest>, JsonRejection>,
+    request: Result<TolerantJson<PresetRecallRequest>, JsonRejection>,
 ) -> Result<Response, PresetRecallHttpError> {
     let session = authenticated_mutation(&state, &headers)?;
-    let Json(request) = request.map_err(PresetRecallHttpError::json)?;
+    let TolerantJson(request) = request.map_err(PresetRecallHttpError::json)?;
     super::routes::validate_request_id(&request.request_id).map_err(PresetRecallHttpError::api)?;
     let address =
         preset_recording_wire::address(request.address).map_err(PresetRecallHttpError::invalid)?;

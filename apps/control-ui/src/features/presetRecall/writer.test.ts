@@ -305,49 +305,37 @@ describe("PresetRecallWriter", () => {
 		expect(eventFirst.repairSelection).not.toHaveBeenCalled();
 	});
 
-	it("accepts a replay of an already-observed gesture close without repairing", async () => {
-		let attempt = 0;
+	it("repairs all authorities after an ambiguous response loss without resending", async () => {
 		let setup!: ReturnType<typeof harness>;
-		setup = harness(async (_scope, request) => {
-			attempt++;
-			if (attempt === 1) {
-				setup.programmingStore.applyChange(
-					{
-						deskId: DESK_ID,
-						selection: {
-							selected: [FIXTURE_ID],
-							expression: { type: "static" },
-							revision: 9,
-							gestureOpen: false,
-						},
+		setup = harness(async () => {
+			setup.programmingStore.applyChange(
+				{
+					deskId: DESK_ID,
+					selection: {
+						selected: [FIXTURE_ID],
+						expression: { type: "static" },
+						revision: 9,
+						gestureOpen: false,
 					},
-					42,
-				);
-				throw new PresetRecallTransportError(
-					"response lost",
-					"unavailable",
-					0,
-					null,
-					null,
-					true,
-				);
-			}
-			return sparseOutcome(request, {
-				replayed: true,
-				selectionRevision: 9,
-				interactionEventSequence: 42,
-			});
+				},
+				42,
+			);
+			throw new PresetRecallTransportError(
+				"response lost",
+				"unavailable",
+				0,
+				null,
+				null,
+				true,
+			);
 		});
 
-		await expect(setup.writer.recall(input)).resolves.toMatchObject({
-			replayed: true,
-			interactionEventSequence: 42,
-		});
-		expect(setup.recall).toHaveBeenCalledTimes(2);
-		expect(setup.recall.mock.calls[0][1].requestId).toBe(
-			setup.recall.mock.calls[1][1].requestId,
-		);
-		expect(setup.repairSelection).not.toHaveBeenCalled();
+		await expect(setup.writer.recall(input)).resolves.toBeNull();
+		expect(setup.recall).toHaveBeenCalledOnce();
+		expect(setup.repairValues).toHaveBeenCalledOnce();
+		expect(setup.repairCaptureMode).toHaveBeenCalledOnce();
+		expect(setup.repairSelection).toHaveBeenCalledOnce();
+		expect(setup.loadPreset).toHaveBeenCalledOnce();
 	});
 
 	it("handles replay, context-only changed, and no-change without materializing values", async () => {
@@ -371,29 +359,20 @@ describe("PresetRecallWriter", () => {
 		expect(setup.valuesStore.getSnapshot().projection?.revision).toBe(6);
 	});
 
-	it("retries once with the same request ID and rolls back by leaving authority untouched", async () => {
-		let attempt = 0;
-		const setup = harness(async (_scope, request) => {
-			attempt++;
-			if (attempt === 1)
-				throw new PresetRecallTransportError(
-					"response lost",
-					"unavailable",
-					0,
-					null,
-					null,
-					true,
-				);
-			return outcome(request, { replayed: true });
+	it("does not resend failed recalls and leaves authority untouched", async () => {
+		const setup = harness(async () => {
+			throw new PresetRecallTransportError(
+				"response lost",
+				"unavailable",
+				0,
+				null,
+				null,
+				true,
+			);
 		});
 
-		await expect(setup.writer.recall(input)).resolves.toMatchObject({
-			replayed: true,
-		});
-		expect(setup.recall).toHaveBeenCalledTimes(2);
-		expect(setup.recall.mock.calls[0][1].requestId).toBe(
-			setup.recall.mock.calls[1][1].requestId,
-		);
+		await expect(setup.writer.recall(input)).resolves.toBeNull();
+		expect(setup.recall).toHaveBeenCalledOnce();
 
 		const failed = harness(async () => {
 			throw new PresetRecallTransportError(

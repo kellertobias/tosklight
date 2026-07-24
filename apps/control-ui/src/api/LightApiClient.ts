@@ -176,6 +176,22 @@ export class LightApiClient extends LightClientRuntime {
 		this.programmingApi,
 		"programmerValuesLiveAction",
 	);
+	programmerPriorityLiveAction = bindClientMethod(
+		this.programmingApi,
+		"programmerPriorityLiveAction",
+	);
+	presetRecallLiveAction = bindClientMethod(
+		this.programmingApi,
+		"presetRecallLiveAction",
+	);
+	programmerPreloadLifecycleLiveAction = bindClientMethod(
+		this.programmingApi,
+		"programmerPreloadLifecycleLiveAction",
+	);
+	programmerPreloadValuesLiveAction = bindClientMethod(
+		this.programmingApi,
+		"programmerPreloadValuesLiveAction",
+	);
 	programmingInteractionSnapshot = bindClientMethod(
 		this.programmingApi,
 		"programmingInteractionSnapshot",

@@ -18,9 +18,14 @@ export function useProgrammerPriorityBoundaries(state: ServerState) {
 						sessionToken: state.session.token,
 						authenticatedUserId: state.session.user.id,
 						deskBoundaryToken: browserDeskBoundaryToken(),
+						applyAction: (scope, request) =>
+							state.client.programmerPriorityLiveAction(
+								scope.userId,
+								request,
+							),
 					})
 				: null,
-		[state.session],
+		[state.client, state.session],
 	);
 	const authorityKey = [
 		configuredServerUrl(),

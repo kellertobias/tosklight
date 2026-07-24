@@ -27,19 +27,19 @@ function transportError(
 }
 
 describe("ProgrammerPreloadLifecycleWriter recovery", () => {
-	it("retries one ambiguous request with the identical request object", async () => {
-		let attempt = 0;
-		const setup = harness(async (_scope, request) => {
-			attempt++;
-			if (attempt === 1) throw transportError("unavailable", 0, true);
-			return outcome(request, { replayed: true });
+	it("repairs one ambiguous request without resending it", async () => {
+		const setup = harness(async () => {
+			throw transportError("unavailable", 0, true);
 		});
 
-		await expect(setup.writer.release("replay-request")).resolves.toMatchObject({
-			replayed: true,
-		});
-		expect(setup.apply).toHaveBeenCalledTimes(2);
-		expect(setup.apply.mock.calls[1][1]).toBe(setup.apply.mock.calls[0][1]);
+		await expect(setup.writer.release("replay-request")).resolves.toBeNull();
+		expect(setup.apply).toHaveBeenCalledOnce();
+		expect(setup.repair.captureMode).toHaveBeenCalledOnce();
+		expect(setup.repair.values).toHaveBeenCalledOnce();
+		expect(setup.repair.queue).toHaveBeenCalledOnce();
+		expect(setup.repair.selection).toHaveBeenCalledOnce();
+		expect(setup.repair.lifecycle).toHaveBeenCalledOnce();
+		expect(setup.repair.runtime).not.toHaveBeenCalled();
 	});
 
 	it("rolls back a definitive rejection without retrying", async () => {

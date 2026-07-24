@@ -285,6 +285,52 @@ pub(super) fn ws_programmer_priority(
     })
 }
 
+pub(super) fn ws_programmer_priority_action(
+    state: &AppState,
+    command: &WsCommand,
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> Result<WsTypedProgrammingAction, String> {
+    let request: light_wire::v2::programmer_priority::ProgrammerPriorityActionRequest =
+        serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
+    crate::tolerant_json::log_unknown_value_fields::<
+        light_wire::v2::programmer_priority::ProgrammerPriorityActionRequest,
+    >(
+        "/api/v1/events programmer.priority.action",
+        &command.payload,
+    );
+    if request.request_id != command.request_id {
+        return Err("Priority payload request_id must match the WebSocket request_id".into());
+    }
+    let result = state
+        .programming
+        .handle_priority(
+            light_application::ActionEnvelope {
+                context: context.clone(),
+                command: light_application::ProgrammingPriorityRequest {
+                    expected_revision:
+                        light_application::ProgrammingPriorityRevisionExpectation::Exact(
+                            request.expected_revision,
+                        ),
+                    priority: request.priority,
+                },
+            },
+            ports,
+        )
+        .map_err(|error| error.message)?;
+    let replayed = result.replayed;
+    let payload = serde_json::to_value(command_http::programmer_priority_outcome(result))
+        .map_err(|error| error.to_string())?;
+    Ok(WsTypedProgrammingAction {
+        payload,
+        interaction_changed: false,
+        values_changed: false,
+        preload_values_changed: false,
+        preload_queue_changed: false,
+        replayed,
+    })
+}
+
 pub(super) fn ws_programmer_set(
     state: &AppState,
     session: &Session,

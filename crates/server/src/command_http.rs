@@ -134,9 +134,18 @@ pub(crate) use cue_recording_osc::intercept_armed_playback as intercept_armed_cu
 pub(crate) use cue_transfer_ports::ServerProgrammingCueTransferPorts;
 pub(super) use interaction_wire::interaction_change;
 pub(super) use lifecycle_wire::lifecycle_change;
+pub(crate) use preload_lifecycle_wire::{
+    command as preload_lifecycle_command, outcome as preload_lifecycle_outcome,
+};
 pub(super) use preload_playback_queue_wire::change as preload_playback_queue_change;
 pub(super) use preload_values_wire::change as preload_values_change;
+pub(crate) use preload_values_wire::{
+    command as preload_values_command, outcome as preload_values_outcome,
+};
+pub(crate) use preset_recall_wire::outcome as preset_recall_outcome;
+pub(crate) use preset_recording_wire::address as preset_address;
 pub(super) use programmer_priority_wire::change as priority_change;
+pub(crate) use programmer_priority_wire::outcome as programmer_priority_outcome;
 pub(crate) use programming_ports::ServerProgrammingPorts;
 pub(super) use routes::router;
 pub(crate) use routes::validate_command;

@@ -62,6 +62,63 @@ pub(super) fn ws_preset_apply(
     })
 }
 
+pub(super) fn ws_preset_recall_action(
+    state: &AppState,
+    command: &WsCommand,
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> Result<WsTypedProgrammingAction, String> {
+    #[derive(Deserialize)]
+    struct Input {
+        show_id: uuid::Uuid,
+        request: light_wire::v2::preset_recall::PresetRecallRequest,
+    }
+    let input: Input =
+        serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
+    crate::tolerant_json::log_unknown_value_fields::<Input>(
+        "/api/v1/events preset.recall.action",
+        &command.payload,
+    );
+    if input.request.request_id != command.request_id {
+        return Err("Preset payload request_id must match the WebSocket request_id".into());
+    }
+    let expectation = light_application::ProgrammingPresetRecallRevisionExpectation::Exact;
+    let request = input.request;
+    let result = state
+        .programming
+        .handle_preset_recall(
+            light_application::ActionEnvelope {
+                context: context.clone(),
+                command: light_application::ProgrammingPresetRecallRequest {
+                    show_id: light_core::ShowId(input.show_id),
+                    address: command_http::preset_address(request.address)?,
+                    expected_preset_revision: expectation(request.expected_preset_revision),
+                    expected_show_revision: expectation(request.expected_show_revision),
+                    expected_values_revision: expectation(request.expected_programmer_revision),
+                    expected_capture_mode_revision: expectation(
+                        request.expected_capture_mode_revision,
+                    ),
+                    expected_selection_revision: expectation(request.expected_selection_revision),
+                },
+            },
+            ports,
+        )
+        .map_err(|error| error.message)?;
+    let interaction_changed = result.interaction_event_sequence.is_some();
+    let values_changed = result.outcome.values_event_sequence().is_some();
+    let replayed = result.replayed;
+    let payload = serde_json::to_value(command_http::preset_recall_outcome(result))
+        .map_err(|error| error.to_string())?;
+    Ok(WsTypedProgrammingAction {
+        payload,
+        interaction_changed,
+        values_changed,
+        preload_values_changed: false,
+        preload_queue_changed: false,
+        replayed,
+    })
+}
+
 pub(super) fn ws_programmer_mode(
     state: &AppState,
     session: &Session,

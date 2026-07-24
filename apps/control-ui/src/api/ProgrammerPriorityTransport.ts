@@ -28,6 +28,7 @@ export interface HttpProgrammerPriorityTransportOptions {
 	deskBoundaryToken?: string;
 	fetch?: typeof globalThis.fetch;
 	webSocket?: typeof globalThis.WebSocket;
+	applyAction?: ProgrammerPriorityTransport["applyAction"];
 }
 
 /** Dormant exact-user HTTP and WebSocket adapter for Programmer priority. */
@@ -64,6 +65,8 @@ export class HttpProgrammerPriorityTransport
 		request: ProgrammerPriorityActionRequest,
 	) {
 		this.validateScope(scope);
+		if (this.options.applyAction)
+			return this.options.applyAction(scope, request);
 		const headers = this.headers();
 		headers.set("content-type", "application/json");
 		const response = await this.fetchRequest(this.actionPath(scope), {

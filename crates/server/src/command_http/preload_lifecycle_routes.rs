@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 use super::super::{ApiError, AppState, Session};
 use super::{programming_ports::ServerProgrammingPorts, routes::http_context};
+use crate::tolerant_json::TolerantJson;
 
 const BODY_LIMIT: usize = 32 * 1024;
 
@@ -30,10 +31,10 @@ async fn apply_action(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
     headers: HeaderMap,
-    request: Result<Json<ProgrammingPreloadLifecycleRequest>, JsonRejection>,
+    request: Result<TolerantJson<ProgrammingPreloadLifecycleRequest>, JsonRejection>,
 ) -> Result<Response, PreloadLifecycleHttpError> {
     let session = authenticated_user(&state, &headers, &user_id)?;
-    let Json(request) = request.map_err(PreloadLifecycleHttpError::json)?;
+    let TolerantJson(request) = request.map_err(PreloadLifecycleHttpError::json)?;
     super::routes::validate_request_id(&request.request_id)
         .map_err(PreloadLifecycleHttpError::api)?;
     let needs_show_lock = matches!(request.action, ProgrammingPreloadLifecycleAction::Go { .. });

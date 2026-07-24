@@ -19,10 +19,8 @@ import {
 	ProgrammerPreloadCaptureAuthority,
 } from "./writerCaptureAuthority";
 import {
-	isReplayablePreloadError,
 	preloadValuesError,
 	preloadValuesReadinessError,
-	requiresPreloadAuthorityRepair,
 } from "./writerPolicy";
 
 interface QueuedPreloadWrite {
@@ -183,7 +181,10 @@ export class ProgrammerPreloadValuesWriter
 		if (precondition) return this.rollback(write.requestId, precondition);
 		try {
 			const request = this.requestAtCurrentRevision(write);
-			const outcome = await this.requestWithOneReplay(request);
+			const outcome = await this.options.applyAction(
+				this.options.scope,
+				request,
+			);
 			if (!this.scopesAreCurrent()) return this.abandon(write.requestId);
 			this.assertResponse(request, outcome);
 			await this.settle(write.requestId, outcome);
@@ -195,9 +196,7 @@ export class ProgrammerPreloadValuesWriter
 		} catch (reason) {
 			if (!this.scopesAreCurrent()) return this.abandon(write.requestId);
 			const error = preloadValuesError(reason);
-			const reported = requiresPreloadAuthorityRepair(reason)
-				? await this.repairError(error)
-				: error;
+			const reported = await this.repairError(error);
 			if (!this.scopesAreCurrent()) return this.abandon(write.requestId);
 			return this.rollback(write.requestId, reported);
 		}
@@ -219,18 +218,6 @@ export class ProgrammerPreloadValuesWriter
 			expectedCaptureModeRevision: write.expectedCaptureModeRevision,
 			action: write.action,
 		};
-	}
-
-	private async requestWithOneReplay(
-		request: ProgrammerPreloadValuesActionRequest,
-	) {
-		try {
-			return await this.options.applyAction(this.options.scope, request);
-		} catch (reason) {
-			if (!isReplayablePreloadError(reason) || !this.scopesAreCurrent())
-				throw reason;
-			return this.options.applyAction(this.options.scope, request);
-		}
 	}
 
 	private async settle(

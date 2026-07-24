@@ -12,7 +12,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingPreloadLifecycleAction {
     Enter {},
     Go {
@@ -27,7 +27,6 @@ pub enum ProgrammingPreloadLifecycleAction {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct ProgrammingPreloadLifecycleRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
@@ -186,7 +185,7 @@ mod tests {
     }
 
     #[test]
-    fn request_and_tagged_action_reject_unknown_fields() {
+    fn request_and_tagged_action_ignore_unknown_fields() {
         let request = serde_json::json!({
             "request_id":"strict-preload",
             "expected_capture_mode_revision":0,
@@ -196,9 +195,9 @@ mod tests {
             "action":{"type":"enter"},
             "programmer":{"forged":true},
         });
-        assert!(serde_json::from_value::<ProgrammingPreloadLifecycleRequest>(request).is_err());
+        assert!(serde_json::from_value::<ProgrammingPreloadLifecycleRequest>(request).is_ok());
 
         let action = serde_json::json!({"type":"release","future":true});
-        assert!(serde_json::from_value::<ProgrammingPreloadLifecycleAction>(action).is_err());
+        assert!(serde_json::from_value::<ProgrammingPreloadLifecycleAction>(action).is_ok());
     }
 }

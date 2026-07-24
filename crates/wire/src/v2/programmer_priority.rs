@@ -8,7 +8,6 @@ use uuid::Uuid;
 use super::events::EventSnapshotCursor;
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct ProgrammerPriorityActionRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,

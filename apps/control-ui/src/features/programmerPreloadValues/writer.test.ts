@@ -264,11 +264,9 @@ describe("ProgrammerPreloadValuesWriter contract", () => {
 		expect(store.getSnapshot().pendingRequestIds).toEqual([]);
 	});
 
-	it("replays one ambiguous request with the identical request object", async () => {
-		const { applyAction, writer } = harness();
-		applyAction
-			.mockRejectedValueOnce(new Error("connection reset"))
-			.mockResolvedValueOnce(noChange("replay"));
+	it("repairs one ambiguous request without resending it", async () => {
+		const { applyAction, repair, repairCaptureMode, writer } = harness();
+		applyAction.mockRejectedValueOnce(new Error("connection reset"));
 
 		await writer.releaseFixtureValue({
 			requestId: "replay",
@@ -276,8 +274,9 @@ describe("ProgrammerPreloadValuesWriter contract", () => {
 			attribute: "intensity",
 		});
 
-		expect(applyAction).toHaveBeenCalledTimes(2);
-		expect(applyAction.mock.calls[1]?.[1]).toBe(applyAction.mock.calls[0]?.[1]);
+		expect(applyAction).toHaveBeenCalledOnce();
+		expect(repair).toHaveBeenCalledOnce();
+		expect(repairCaptureMode).toHaveBeenCalledOnce();
 	});
 });
 

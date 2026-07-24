@@ -144,6 +144,104 @@ async fn programmer_values_ws_frame_rejects_mismatched_identity_without_mutation
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+#[tokio::test]
+async fn preload_lifecycle_and_values_ws_frames_use_exact_typed_authority() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = state
+        .sessions
+        .read()
+        .values()
+        .find(|session| session.token == token)
+        .cloned()
+        .unwrap();
+    open_values_test_show(&app, &token).await;
+    let enter_id = "ws-preload-enter";
+    let enter = dispatch_ws_command(
+        &state,
+        &session,
+        WsCommand {
+            protocol_version: 1,
+            request_id: enter_id.into(),
+            session_id: session.id,
+            expected_revision: None,
+            command: "programmer.preload.lifecycle.action".into(),
+            payload: serde_json::json!({
+                "request_id":enter_id,
+                "expected_capture_mode_revision":0,
+                "expected_values_revision":0,
+                "expected_queue_revision":0,
+                "expected_selection_revision":0,
+                "action":{"type":"enter","future_action_field":true},
+                "future_request_field":true
+            }),
+        },
+    );
+    assert!(enter.ok, "{:?}", enter.error);
+    let enter_payload = enter.payload.unwrap();
+    assert_eq!(enter_payload["status"], "changed");
+    assert_eq!(enter_payload["capture_mode"]["revision"], 1);
+
+    let fixture_id = state.engine.snapshot().fixtures[0].fixture_id;
+    let values_id = "ws-preload-values";
+    let values = dispatch_ws_command(
+        &state,
+        &session,
+        WsCommand {
+            protocol_version: 1,
+            request_id: values_id.into(),
+            session_id: session.id,
+            expected_revision: None,
+            command: "programmer.preload.values.action".into(),
+            payload: serde_json::json!({
+                "request_id":values_id,
+                "expected_revision":0,
+                "expected_capture_mode_revision":1,
+                "action":{
+                    "type":"set_fixture",
+                    "fixture_id":fixture_id.0,
+                    "attribute":"intensity",
+                    "value":{"kind":"normalized","value":0.6},
+                    "timing":{"fade":false},
+                    "future_action_field":true
+                }
+            }),
+        },
+    );
+    assert!(values.ok, "{:?}", values.error);
+    let values_payload = values.payload.unwrap();
+    assert_eq!(values_payload["status"], "changed");
+    assert_eq!(values_payload["revision"], 1);
+    let replay = dispatch_ws_command(
+        &state,
+        &session,
+        WsCommand {
+            protocol_version: 1,
+            request_id: values_id.into(),
+            session_id: session.id,
+            expected_revision: None,
+            command: "programmer.preload.values.action".into(),
+            payload: serde_json::json!({
+                "request_id":values_id,
+                "expected_revision":0,
+                "expected_capture_mode_revision":1,
+                "action":{
+                    "type":"set_fixture",
+                    "fixture_id":fixture_id.0,
+                    "attribute":"intensity",
+                    "value":{"kind":"normalized","value":0.6},
+                    "timing":{"fade":false},
+                    "future_action_field":true
+                }
+            }),
+        },
+    );
+    assert!(replay.ok, "{:?}", replay.error);
+    assert_eq!(replay.payload.unwrap()["replayed"], true);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
 fn values_command(session: &Session, request_id: &str, payload: serde_json::Value) -> WsCommand {
     WsCommand {
         protocol_version: 1,

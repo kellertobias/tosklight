@@ -8,6 +8,39 @@ import type {
 	ProgrammerValuesActionOutcome,
 	ProgrammerValuesActionRequest,
 } from "../../features/programmerValues/contracts";
+import type {
+	ProgrammerPriorityActionOutcome,
+	ProgrammerPriorityActionRequest,
+} from "../../features/programmerPriority/contracts";
+import type {
+	PresetRecallOutcome,
+	PresetRecallRequest,
+	PresetRecallScope,
+} from "../../features/presetRecall/contracts";
+import type {
+	ProgrammerPreloadLifecycleOutcome,
+	ProgrammerPreloadLifecycleRequest,
+} from "../../features/programmerPreloadLifecycle/contracts";
+import type {
+	ProgrammerPreloadValuesActionOutcome,
+	ProgrammerPreloadValuesActionRequest,
+} from "../../features/programmerPreloadValues/contracts";
+import {
+	decodeProgrammerPriorityActionOutcome,
+	encodeProgrammerPriorityActionRequest,
+} from "../programmerPriorityWire";
+import {
+	decodePresetRecallOutcome,
+	encodePresetRecallRequest,
+} from "../presetRecallWire";
+import {
+	decodeProgrammerPreloadLifecycleOutcome,
+	encodeProgrammerPreloadLifecycleRequest,
+} from "../programmerPreloadLifecycleWire";
+import {
+	decodeProgrammerPreloadValuesActionOutcome,
+	encodeProgrammerPreloadValuesActionRequest,
+} from "../programmerPreloadValuesWire";
 import {
 	decodeSelectionActionOutcome,
 	encodeSelectionActionRequest,
@@ -82,6 +115,62 @@ export class ProgrammingApiClient {
 			wireRequest.request_id,
 		);
 		return decodeProgrammerValuesActionOutcome(
+			value,
+			userId,
+			request.requestId,
+		);
+	}
+
+	async programmerPriorityLiveAction(
+		userId: string,
+		request: ProgrammerPriorityActionRequest,
+	): Promise<ProgrammerPriorityActionOutcome> {
+		const wireRequest = encodeProgrammerPriorityActionRequest(request);
+		const value = await this.transport.commandWithRequestId(
+			"programmer.priority.action",
+			wireRequest,
+			wireRequest.request_id,
+		);
+		return decodeProgrammerPriorityActionOutcome(value, userId, request);
+	}
+
+	async presetRecallLiveAction(
+		scope: PresetRecallScope,
+		request: PresetRecallRequest,
+	): Promise<PresetRecallOutcome> {
+		const wireRequest = encodePresetRecallRequest(request);
+		const value = await this.transport.commandWithRequestId(
+			"preset.recall.action",
+			{ show_id: scope.showId, request: wireRequest },
+			wireRequest.request_id,
+		);
+		return decodePresetRecallOutcome(value, scope.userId, request);
+	}
+
+	async programmerPreloadLifecycleLiveAction(
+		userId: string,
+		request: ProgrammerPreloadLifecycleRequest,
+	): Promise<ProgrammerPreloadLifecycleOutcome> {
+		const wireRequest = encodeProgrammerPreloadLifecycleRequest(request);
+		const value = await this.transport.commandWithRequestId(
+			"programmer.preload.lifecycle.action",
+			wireRequest,
+			wireRequest.request_id,
+		);
+		return decodeProgrammerPreloadLifecycleOutcome(value, userId, request);
+	}
+
+	async programmerPreloadValuesLiveAction(
+		userId: string,
+		request: ProgrammerPreloadValuesActionRequest,
+	): Promise<ProgrammerPreloadValuesActionOutcome> {
+		const wireRequest = encodeProgrammerPreloadValuesActionRequest(request);
+		const value = await this.transport.commandWithRequestId(
+			"programmer.preload.values.action",
+			wireRequest,
+			wireRequest.request_id,
+		);
+		return decodeProgrammerPreloadValuesActionOutcome(
 			value,
 			userId,
 			request.requestId,

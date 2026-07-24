@@ -17,6 +17,7 @@ export interface HttpPresetRecallTransportOptions {
 	sessionToken: string;
 	deskBoundaryToken?: string;
 	fetch?: typeof globalThis.fetch;
+	recall?: PresetRecallTransport["recall"];
 }
 
 /** Action-only adapter: construction performs no fetch or subscription. */
@@ -32,6 +33,7 @@ export class HttpPresetRecallTransport implements PresetRecallTransport {
 
 	async recall(scope: PresetRecallScope, request: PresetRecallRequest) {
 		validateScope(scope);
+		if (this.options.recall) return this.options.recall(scope, request);
 		const headers = this.headers();
 		headers.set("content-type", "application/json");
 		const path = `/api/v2/shows/${encodeURIComponent(scope.showId)}/presets/recall`;

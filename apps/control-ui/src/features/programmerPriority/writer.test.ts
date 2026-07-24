@@ -101,27 +101,23 @@ describe("ProgrammerPriorityWriter", () => {
 		expect(store.getSnapshot().pendingRequestIds).toEqual([]);
 	});
 
-	it("retries one ambiguous request with the identical body", async () => {
-		const { applyAction, writer } = harness();
-		applyAction
-			.mockRejectedValueOnce(
-				new ProgrammerPriorityTransportError(
-					"connection reset",
-					"unavailable",
-					0,
-					null,
-					true,
-				),
-			)
-			.mockImplementationOnce(async (_scope, request) =>
-				noChangeOutcome(request.requestId, priorityProjection(), true),
-			);
+	it("repairs one ambiguous request without resending it", async () => {
+		const { applyAction, repair, writer } = harness();
+		applyAction.mockRejectedValueOnce(
+			new ProgrammerPriorityTransportError(
+				"connection reset",
+				"unavailable",
+				0,
+				null,
+				true,
+			),
+		);
 
 		await expect(
 			writer.setPriority({ priority: 0, requestId: "replay" }),
-		).resolves.toMatchObject({ status: "no_change", replayed: true });
-		expect(applyAction).toHaveBeenCalledTimes(2);
-		expect(applyAction.mock.calls[1]?.[1]).toBe(applyAction.mock.calls[0]?.[1]);
+		).resolves.toBeNull();
+		expect(applyAction).toHaveBeenCalledOnce();
+		expect(repair).toHaveBeenCalledOnce();
 	});
 
 	it("serializes writes and advances the revision only once per outcome", async () => {

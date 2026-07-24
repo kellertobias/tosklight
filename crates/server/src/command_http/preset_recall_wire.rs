@@ -1,7 +1,7 @@
 use light_application as application;
 use light_wire::v2::preset_recall as wire;
 
-pub(super) fn outcome(
+pub(crate) fn outcome(
     result: application::ProgrammingPresetRecallResult,
 ) -> wire::PresetRecallOutcome {
     let programmer_revision = result.outcome.values_revision();

@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use super::super::{ApiError, AppState, Session};
 use super::{programming_ports::ServerProgrammingPorts, routes::http_context};
+use crate::tolerant_json::TolerantJson;
 
 const BODY_LIMIT: usize = 8 * 1024;
 
@@ -49,10 +50,10 @@ async fn apply_action(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
     headers: HeaderMap,
-    request: Result<Json<ProgrammerPriorityActionRequest>, JsonRejection>,
+    request: Result<TolerantJson<ProgrammerPriorityActionRequest>, JsonRejection>,
 ) -> Result<Response, PriorityHttpError> {
     let session = authenticated_user(&state, &headers, &user_id, true)?;
-    let Json(request) = request.map_err(PriorityHttpError::json)?;
+    let TolerantJson(request) = request.map_err(PriorityHttpError::json)?;
     super::routes::validate_request_id(&request.request_id).map_err(PriorityHttpError::api)?;
     let command = light_application::ProgrammingPriorityRequest {
         expected_revision: light_application::ProgrammingPriorityRevisionExpectation::Exact(

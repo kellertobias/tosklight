@@ -22,7 +22,6 @@
       "minLength": 1
     }
   },
-  "additionalProperties": false,
   "required": [
     "request_id",
     "expected_revision",
@@ -195,7 +194,6 @@
               "$ref": "#/$defs/ProgrammingPreloadAttributeValue"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "fixture_id",
@@ -218,7 +216,6 @@
               "const": "release_fixture"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "fixture_id",
@@ -248,7 +245,6 @@
               "$ref": "#/$defs/ProgrammingPreloadAttributeValue"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group_id",
@@ -270,7 +266,6 @@
               "const": "release_group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group_id",
@@ -302,8 +297,7 @@
           "format": "uint64",
           "minimum": 0
         }
-      },
-      "additionalProperties": false
+      }
     },
     "ProgrammingPreloadValuesAction": {
       "oneOf": [
@@ -331,7 +325,6 @@
               "$ref": "#/$defs/ProgrammingPreloadAttributeValue"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "fixture_id",
@@ -354,7 +347,6 @@
               "const": "release_fixture"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "fixture_id",
@@ -384,7 +376,6 @@
               "$ref": "#/$defs/ProgrammingPreloadAttributeValue"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group_id",
@@ -406,7 +397,6 @@
               "const": "release_group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group_id",
@@ -428,7 +418,6 @@
               "const": "batch"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "mutations"

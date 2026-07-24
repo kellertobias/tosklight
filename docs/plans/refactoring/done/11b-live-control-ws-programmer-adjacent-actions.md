@@ -35,3 +35,20 @@ npm run test:e2e
 ## Decisions
 
 None. Execute after 11a.
+
+## Result
+
+- Added correlated typed WebSocket actions for Programmer priority, Preset recall,
+  Preload lifecycle, and Preload values, including exact revision authority,
+  idempotent replay outcomes, tolerant request decoding, and retained compatibility
+  frames and HTTP routes.
+- Kept priority and non-GO Preload lifecycle writes independent of the active-Show
+  activation lock while Preset recall, Preload GO, and Preload value writes retain
+  their required activation boundary.
+- Routed all four desk-owned mutation families through the live client and removed
+  client mutation resends. Ambiguous failures now repair the narrow authoritative
+  snapshots before each writer continues.
+- Verified with `cargo test -p light-server` (440 passed, 1 ignored),
+  `npm run test:unit` (276 Vitest files / 1997 tests plus all Rust and contract
+  gates), and `npm run test:e2e` (284 passed, 11 skipped; two unrelated,
+  non-reproducing timing/UDP cases each passed immediately in isolation).

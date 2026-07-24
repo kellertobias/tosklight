@@ -88,7 +88,6 @@ pub struct ProgrammingPreloadValuesSnapshot {
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct ProgrammingPreloadValueTiming {
     #[serde(default)]
     pub fade: bool,
@@ -101,7 +100,7 @@ pub struct ProgrammingPreloadValueTiming {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingPreloadValueMutation {
     SetFixture {
         fixture_id: Uuid,
@@ -128,7 +127,7 @@ pub enum ProgrammingPreloadValueMutation {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingPreloadValuesAction {
     SetFixture {
         fixture_id: Uuid,
@@ -159,7 +158,6 @@ pub enum ProgrammingPreloadValuesAction {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct ProgrammingPreloadValuesActionRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
@@ -229,7 +227,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn action_is_a_distinct_pending_preload_contract() {
+    fn action_is_a_distinct_pending_preload_contract_and_ignores_future_fields() {
         let value = serde_json::json!({
             "request_id": "preload-1",
             "expected_revision": 2,
@@ -242,7 +240,7 @@ mod tests {
                 "mode": "normal"
             }
         });
-        assert!(serde_json::from_value::<ProgrammingPreloadValuesActionRequest>(value).is_err());
+        assert!(serde_json::from_value::<ProgrammingPreloadValuesActionRequest>(value).is_ok());
     }
 
     #[test]

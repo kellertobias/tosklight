@@ -2,7 +2,7 @@ use light_application as application;
 use light_core::{AttributeKey, AttributeValue, FixtureId, Xyz};
 use light_wire::v2::{events::EventSnapshotCursor, preload_values as wire};
 
-pub(super) fn command(
+pub(crate) fn command(
     action: wire::ProgrammingPreloadValuesAction,
 ) -> application::ProgrammingPreloadValuesCommand {
     match action {
@@ -50,7 +50,7 @@ pub(super) fn command(
     }
 }
 
-pub(super) fn outcome(
+pub(crate) fn outcome(
     request_id: String,
     result: application::ProgrammingPreloadValuesResult,
 ) -> wire::ProgrammingPreloadValuesActionOutcome {

@@ -13,7 +13,6 @@ import type {
 import type { ProgrammerPriorityTransport } from "./transport";
 import {
 	ProgrammerPriorityProtocolError,
-	ProgrammerPriorityTransportError,
 } from "./transport";
 
 interface QueuedPriorityWrite {
@@ -91,7 +90,10 @@ export class ProgrammerPriorityWriter implements ProgrammerPriorityActions {
 		if (!this.isPending(write.requestId)) return this.abandon(write.requestId);
 		try {
 			const request = this.requestAtCurrentRevision(write);
-			const outcome = await this.requestWithOneRetry(request);
+			const outcome = await this.options.transport.applyAction(
+				this.options.scope,
+				request,
+			);
 			if (!this.isCurrent()) return this.abandon(write.requestId);
 			this.assertOutcome(request, outcome);
 			if (!(await this.settle(write.requestId, outcome))) return null;
@@ -103,9 +105,7 @@ export class ProgrammerPriorityWriter implements ProgrammerPriorityActions {
 		} catch (reason) {
 			if (!this.isCurrent()) return this.abandon(write.requestId);
 			const error = asError(reason);
-			const reported = requiresRepair(reason)
-				? await this.repairError(error)
-				: error;
+			const reported = await this.repairError(error);
 			if (!this.isCurrent()) return this.abandon(write.requestId);
 			this.options.store.rollback(
 				write.requestId,
@@ -130,18 +130,6 @@ export class ProgrammerPriorityWriter implements ProgrammerPriorityActions {
 			expectedRevision,
 			priority: write.priority,
 		};
-	}
-
-	private async requestWithOneRetry(request: ProgrammerPriorityActionRequest) {
-		try {
-			return await this.options.transport.applyAction(
-				this.options.scope,
-				request,
-			);
-		} catch (reason) {
-			if (!isRetryable(reason) || !this.isCurrent()) throw reason;
-			return this.options.transport.applyAction(this.options.scope, request);
-		}
 	}
 
 	private async settle(
@@ -239,18 +227,6 @@ export class ProgrammerPriorityWriter implements ProgrammerPriorityActions {
 	private expectedStoreScope() {
 		return this.storeScope ?? -1;
 	}
-}
-
-function isRetryable(reason: unknown) {
-	return reason instanceof ProgrammerPriorityTransportError && reason.retryable;
-}
-
-function requiresRepair(reason: unknown) {
-	return (
-		reason instanceof ProgrammerPriorityProtocolError ||
-		(reason instanceof ProgrammerPriorityTransportError &&
-			reason.status === 409)
-	);
 }
 
 function asError(reason: unknown) {

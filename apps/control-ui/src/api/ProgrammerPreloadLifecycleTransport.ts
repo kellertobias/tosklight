@@ -20,6 +20,7 @@ export interface HttpProgrammerPreloadLifecycleTransportOptions {
 	authenticatedDeskId: string;
 	deskBoundaryToken?: string;
 	fetch?: typeof globalThis.fetch;
+	applyAction?: ProgrammerPreloadLifecycleTransport["applyAction"];
 }
 
 /** Action-only adapter: construction performs no request or subscription. */
@@ -51,6 +52,8 @@ export class HttpProgrammerPreloadLifecycleTransport
 			this.options.authenticatedUserId,
 			this.options.authenticatedDeskId,
 		);
+		if (this.options.applyAction)
+			return this.options.applyAction(scope, request);
 		const body = JSON.stringify(encodeProgrammerPreloadLifecycleRequest(request));
 		const headers = this.headers();
 		headers.set("content-type", "application/json");

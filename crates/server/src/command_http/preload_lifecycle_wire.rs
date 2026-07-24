@@ -2,7 +2,7 @@ use light_application as application;
 use light_core::ShowId;
 use light_wire::v2::preload_lifecycle as wire;
 
-pub(super) fn command(
+pub(crate) fn command(
     request: &wire::ProgrammingPreloadLifecycleRequest,
 ) -> application::ProgrammingPreloadLifecycleRequest {
     let exact = application::ProgrammingPreloadRevisionExpectation::Exact;
@@ -34,7 +34,7 @@ pub(super) fn command(
     }
 }
 
-pub(super) fn outcome(
+pub(crate) fn outcome(
     result: application::ProgrammingPreloadLifecycleResult,
 ) -> wire::ProgrammingPreloadLifecycleOutcome {
     wire::ProgrammingPreloadLifecycleOutcome {
