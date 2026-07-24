@@ -54,3 +54,40 @@ stage view reflects only that axis.
 
 None blocking. Column label wording (Location vs Position) — confirm with the maintainer
 in passing; default to the existing "Location" vocabulary.
+
+## Result
+
+**What changed.** The Show Patch table's two combined transform columns became six —
+Location X/Y/Z and Rotation X/Y/Z — for fixture rows and multi-patch instance rows alike
+(`PatchTable.tsx`). Each cell arms an editor for exactly that axis: `armEdit`/
+`beginMultipatchEdit` carry an axis, the edit dialog renders a single autofocused field
+titled e.g. "Set fixture rotation Y", and the dirty/close-confirm checks compare only that
+axis. A save recomposes the triple over the record's **current** siblings
+(`editSave.ts`/`multipatchActions.ts`), so a single-axis edit can never resubmit a stale
+sibling value. `formatRotation` became dead and was removed. Help documents the six
+columns; screenshots refreshed (`show-patch.png` now shows the new header).
+
+**Write-path decision (chunk item 2).** The planned alignment with chunk 04's
+stage-layout intent route is moot after 04d: patch placement (`patched_fixture`
+location/rotation, mm) is now the only positioning surface, and its sanctioned server
+path is the v2 PatchFixtures intent — so there is exactly one layout-save mechanism.
+Single-axis semantics are enforced at the edit model with contract tests asserting a
+one-axis delta over the current record for both fixture and multipatch rows.
+
+**Suite numbers.** `npm run test:unit` 275 files / 1984 tests green (two new one-axis
+contract tests); full `npm run test:e2e` 280 passed / 12 skipped / 1 failed —
+the failure was FIXTURE-002 @restart, on the README's known flaky-in-suite list and
+green in isolation per the standing rule, so the gate is at baseline. `npm run manual`
+verifies; architecture/source-size checks green. Manual acceptance against the live
+desk: editing Rotation Y to 33° changed exactly one fixture's rotation.y across the
+whole patch (locations and x/z untouched), then reverted.
+
+**Surprises.**
+- `apps/control-ui/e2e/operator-output.spec.ts` (and `deterministic-bench.spec.ts`) are
+  orphaned: the root Playwright config's `testDir` is `./tests` only, so no suite ever
+  runs them. The header assertion there was updated anyway; candidates for chunk 23
+  housekeeping (delete or re-home).
+- `tests/product-demo.spec.ts` drives the vector editors; its helpers were rewritten to
+  the per-axis flow (spec remains deliberately skipped pending chunk 22).
+
+**Follow-ups filed.** None new — the orphaned-spec finding is noted for chunk 23.

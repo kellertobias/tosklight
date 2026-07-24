@@ -54,3 +54,52 @@ all move by the same delta and unrelated fixtures' stored positions are untouche
 None — route shape follows api-rules §1/§3 (stored-config edit → object-intent update).
 Chunk 16 (generic object `/update` intent) is related but not a prerequisite; this route is
 a purpose-built spread intent like the programming-update routes.
+
+## Result
+
+**What changed.** New v2 intent route `POST /api/v2/stage-layout/actions` (wire types in
+`crates/wire/src/v2/stage_layout.rs`, handler `crates/server/src/runtime/stage_layout_http.rs`)
+using chunk 03's fan-out vocabulary: ordered `fixture_ids` + typed operation
+(`move_selection { axis, delta }`) + `request_id` with a session-scoped replay cache
+(fingerprint compare, 409 on request-id reuse for a different action). The server resolves each
+selected fixture's base position exactly like the stage views (stored `positions3d` entry →
+migrated legacy 2D entry → patch-order default grid slot; unpatched ids skipped), applies the
+uniform delta, and persists **only the touched entries** of `stage_layout/main` through the same
+normalize/validate/backup/put/activate/emit path as the generic object PUT, so revisions and
+`show_object_changed` reconciliation behave identically. `StageCommandControls` (numeric fader
+and hardware-encoder paths share `update`) now sends one request; the per-fixture delta loop and
+whole-layout save are gone. Tolerant typing per api-rules §5 (no `deny_unknown_fields`;
+unknown-field logging deferred to chunk 08's helper).
+
+**Suite numbers.** `cargo test -p light-server` 424 passed (4 new route tests) /
+`-p light-application` 391 passed; `npm run test:unit` green (tsc + 1988 vitest incl. 3 new
+client suites); full `npm run test:e2e` **281 passed / 12 skipped / 0 failed** — exactly at the
+README baseline. Manual acceptance done against the real desktop app (`npm run open` + served
+operator UI): selecting the 8-fixture Front group in the Demo Show and nudging X persisted
+exactly 8 entries, all moved by the identical delta, display refreshed via the change event.
+
+**Surprises.**
+- The chunk's DoD reading of the `:39` guard ("skips fixtures missing a 3D position") was wrong
+  in practice: the client backfills every *patched* fixture (legacy-2D migration or default
+  grid), so a skip-only server made the first nudge on a show without a `stage_layout` object
+  (the shipped Demo Show!) a silent no-op. The server now mirrors the full backfill; the
+  default-grid index uses the authoritative patch order (object-id ascending), which every
+  surface shares. Net behavior change vs. the old client: unselected fixtures' backfilled
+  positions are no longer persisted as a side effect — deliberate, that was the §3 violation.
+- Chunk 03b left the checked-in `programming-values-action-request.schema.json` stale after
+  restoring `deny_unknown_fields`; regenerating contracts surfaced it (committed as its own
+  sync commit).
+- `npm run open` was broken on this dev machine independent of this chunk: the Tauri setup hook
+  (8s) and `tools/build.sh`'s launchd wait (10s) both killed the bundled server mid-startup,
+  since a debug build on grown desk data needs ~14s (persisted-session restore dominates).
+  Both waits now match dev.sh's 60s window (`fix(dx)` commit).
+- No dedicated stage-move Playwright spec exists (product-demo covers stage rendering only and
+  stays deliberately skipped), so e2e coverage of this path is indirect; server + unit tests
+  carry the contract.
+
+**Follow-ups filed.**
+- `pending/04c-stage-drag-saves-whole-layout.md` — the 2D/3D drag and inspector paths
+  (`useStageLayout.save`/`savePosition3d`) still PUT the whole layout; absolute-placement
+  intent variant proposed on this route. Note: the maintainer has since asked to remove the
+  Stage window's Setup-positions surface and open a dedicated stage view from the Patch
+  instead — re-scope 04c against that outcome.

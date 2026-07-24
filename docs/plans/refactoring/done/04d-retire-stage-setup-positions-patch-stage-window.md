@@ -49,3 +49,42 @@ npm run open   # patch: short-press toggles movable overlay; long-press opens OS
                # selection in the OS window highlights patch rows; Stage built-in has no
                # Setup positions tab
 ```
+
+## Result
+
+**What changed.** The Stage built-in keeps Select fixtures and Navigate; the whole
+Setup-positions surface is gone (mode tab, six position faders, "Fixture position"
+inspector, 2D/3D drag-positioning, hardware-encoder positions path). Persisted layouts
+carrying `stageMode: "setup"` hydrate to `select`. The caller-less stage-layout client
+write path (StageLayoutActionsProvider, useStageLayout write half, stageLayout api
+client, whole-layout PUT wiring) was deleted; the read path and the chunk 04 v2 server
+route + tests stay for 04b/04c-scoped consumers. "Preview Stage" gained both requested
+paths: short press toggles the (now movable, grip-dragged) in-patch overlay; long press
+(desktop app; `WindowAction.onLongPress` is now a window-kit primitive) opens a dedicated
+view-only 3D Stage View OS window (`open_stage_view_window` Tauri command,
+`?stage-view=1` SPA entry, `sessionRole="secondary"`). Clicking fixtures there applies
+the shared desk programming selection, so the patch sheet highlights the same rows.
+Operator docs (quickstart, 20-Show-Setup/01+04, 05-Pane-Reference/01) rewritten around
+patch-based positioning; help screenshots intentionally refreshed (`stage-setup-2d.png`
+→ `stage-window-2d.png`).
+
+**Suite numbers.** `npm run test:unit` 275 files / 1982 tests green (tsc, architecture,
+source-size, boundaries incl. the shared-control audit); full `npm run test:e2e`
+**281 passed / 12 skipped / 0 failed** — at baseline; `npm run manual` verifies (130-page
+PDF, all images resolve); help-screenshot spec green after repairs. Browser verification
+against the real desk: overlay drag moves by the exact pointer delta; the `?stage-view=1`
+surface renders the full rig and its clicks mutate the shared programming selection.
+
+**Surprises.**
+- The on-demand help-screenshot spec had been stale since the maintainer's 2026-07-17
+  ModalTitleBar/File-Manager rework (`.modal-close` selectors, a Settings-less pane);
+  repaired in the same commit as the refresh.
+- `ScreenApp` (console screens) never mounts `PatchFeatureBoundary`, so its
+  fixture-reading panes render empty — same gap the new Stage View window hit. Filed as
+  `pending/26-console-screen-panes-missing-patch-boundary.md`.
+- A browser tab restoring a stale primary session loops on 401s in secondary surfaces
+  (desk-lock poll) without a visible error — chunk 22/24 territory, noted here only.
+
+**Follow-ups filed.** `pending/26-…` above; `pending/04c` was already re-scoped in its
+own file (drag paths no longer exist — its remaining scope is the absolute-placement
+intent for patch consumers and camera persistence).
