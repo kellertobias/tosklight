@@ -239,6 +239,9 @@ export class ShowObjectsStore {
 		);
 	}
 
+	// @tour frontend-slice:30 Reconcile response-first and event-first writes
+	// Settlement is keyed to the pending operation and authority generation. If the matching event
+	// arrived first, the response advances floors without applying the mutation twice.
 	settlePending<K extends ShowObjectKind>(
 		token: string,
 		settlement: ShowObjectSettlement<K>,

@@ -141,6 +141,9 @@ async fn run(
     run_scheduler_dynamic(rate, cancellation, health, || render_tick(runtime.clone())).await;
 }
 
+// @tour one-action-end-to-end:30 Render semantic state into routed frames
+// A scheduler tick advances timecode, renders authoritative engine state, maps universes into
+// frames, and sends configured routes. Network I/O starts only after rendering completes.
 async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     update_timecode(&runtime);
     let options = runtime.control.lock().render_options();

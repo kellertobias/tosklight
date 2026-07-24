@@ -24,6 +24,9 @@ pub(super) struct PlaybackFrame<'a> {
 }
 
 impl<'a> PlaybackFrame<'a> {
+    // @tour cue-tracking-and-goto:40 Reconstruct the target stage
+    // A frame combines the target Cue, previous state, tracking-wrap policy, timing, and compiled
+    // history. Sequential GO, backward navigation, and direct GOTO read the same authority.
     pub(super) fn new(
         context: &ContributionContext<'a>,
         playback: &'a ActivePlayback,

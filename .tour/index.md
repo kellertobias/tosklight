@@ -119,9 +119,11 @@ Tour steps are `@tour <slug>:<order> <Title>` comments in the source, so they mo
 The pages under `.tour/` hold the narrative. Validate and export them with:
 
 ```sh
+npm run codesafari
 npx --yes "@tobisk/codesafari@1.0.0" validate .
-npx --yes "@tobisk/codesafari@1.0.0" export . --out .artifacts/generated/codesafari
 npm run pages:generate
 ```
 
-Update the relevant safari and component page in the same commit as a boundary change.
+The Pages workflow layers the repository's narrow-layout stylesheet over the pinned static export.
+Update the relevant safari, source anchors, and component page in the same commit as a boundary
+change.

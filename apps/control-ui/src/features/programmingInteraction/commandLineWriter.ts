@@ -37,6 +37,9 @@ export interface ProgrammingCommandLineWriterOptions {
  * One request may be in flight. Further keystrokes collapse to the latest unsent
  * value, so slow transports cannot build an obsolete request backlog.
  */
+// @tour one-action-end-to-end:10 Immediate input with bounded writes
+// The optimistic command line updates immediately while transport writes remain latest-wins and
+// revisioned. ENTER drains accepted edits before execution.
 export class ProgrammingCommandLineWriter {
 	private readonly showId: string;
 	private readonly deskId: string;

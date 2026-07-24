@@ -270,6 +270,10 @@ pub struct Xyz {
     pub z: f32,
 }
 
+// @tour rust-by-example:10 Model domain values with an exhaustive enum
+// Each variant carries only valid data for that representation. Serde gives TypeScript a
+// discriminated wire shape while Rust requires exhaustive matching.
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum AttributeValue {
@@ -283,6 +287,10 @@ pub enum AttributeValue {
     /// channel clamps this to its configured 8/16/24/32-bit range at render time.
     RawDmxExact(u32),
 }
+
+// @tour value-spreading:30 Resolve control points over selection order
+// This deterministic anchor and interpolation rule is the semantic oracle shared by live Group
+// recall, frozen values, and ordinary ordered selections.
 
 /// Resolves ordered spread control points across a `count`-strong selection using the
 /// deterministic anchor rule (docs/plans/Next/50):

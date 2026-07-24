@@ -179,6 +179,9 @@ impl ProgrammingService {
         &self._highlight
     }
 
+    // @tour one-action-end-to-end:20 One ordered Programmer authority
+    // Every typed Programmer command enters this user-and-desk gate for replay detection,
+    // authorization, mutation, projection, and publication. Surface orchestration ends here.
     pub fn handle(
         &self,
         action: ActionEnvelope<ProgrammingCommand>,

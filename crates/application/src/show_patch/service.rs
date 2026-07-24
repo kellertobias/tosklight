@@ -73,6 +73,9 @@ impl ShowPatchService {
         self.apply(key, envelope, ports)
     }
 
+    // @tour fixture-semantics:20 Commit the patch as one active-show transaction
+    // Planning reads immutable library data before mutation. The candidate is validated, committed,
+    // reconciled into runtime, and published as one ordered change.
     fn apply<P: ShowPatchPorts>(
         &self,
         key: ReplayKey,

@@ -31,6 +31,9 @@ struct CompiledChange {
 }
 
 impl CompiledCueList {
+    // @tour cue-tracking-and-goto:20 Compile authored changes into tracking history
+    // The runtime indexes sparse authored changes by fixture and attribute instead of cloning a
+    // full stage for every Cue. These immutable histories support arbitrary tracked lookup.
     pub(crate) fn new(cue_list: &CueList) -> Self {
         let mut compiled = Self::default();
         for (cue_index, cue) in cue_list.cues.iter().enumerate() {

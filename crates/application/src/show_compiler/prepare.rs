@@ -65,6 +65,10 @@ pub fn prepare_normalized_show_candidate_incremental(
     })
 }
 
+// @tour portable-show:30 Prepare a side-effect-free runtime candidate
+// Compatibility migrations, candidate validation, and compilation finish before persistence or
+// live runtime installation can begin.
+
 /// Stages compatibility migrations and compiles the resulting candidate without persistence or
 /// live-runtime side effects. A failure leaves both the document and supplied transaction intact.
 pub fn prepare_show_candidate(

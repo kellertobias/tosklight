@@ -12,6 +12,10 @@ use std::{
 };
 use tokio_util::sync::CancellationToken;
 
+// @tour rust-by-example:30 Inject asynchronous work with generic futures
+// The scheduler owns timing and cancellation while callers provide the async tick operation.
+// Tests can drive the real deadline loop without opening output sockets.
+
 /// Runs output ticks independently from persistence and API work.
 pub async fn run_scheduler<F, Fut>(
     rate_hz: u16,

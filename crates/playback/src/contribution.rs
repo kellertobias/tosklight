@@ -32,6 +32,10 @@ impl PlaybackEngine {
             .collect()
     }
 
+    // @tour playback-runtime:30 Build owned Cue contributions
+    // Active and temporary Playbacks reconstruct tracked values here while retaining the exact
+    // sequence-master owner needed after normal HTP/LTP arbitration.
+
     /// Resolve active Cue values while retaining the exact playback master which owns each
     /// contribution. The engine uses this metadata only after normal HTP/LTP arbitration.
     pub fn contributions_with_context_at(

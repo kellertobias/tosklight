@@ -8,6 +8,10 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 
+// @tour portable-show:20 Merge only the typed-owned delta
+// Typed before-and-after values describe the owned change while the raw stored body remains the
+// base, preserving unknown fields and keyed-array extensions.
+
 /// Applies a typed before/after delta to raw stored JSON and returns the lossless result.
 ///
 /// Fields and keyed-array item contents unknown to `T` survive. Removing a known object or map

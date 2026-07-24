@@ -303,7 +303,7 @@ Then inspect the exported safari visually:
 | Accessibility and operator parity | complete with explicit product skips | Complete UI suite passed; three MANUAL-019 and two PRELOAD UI contracts remain deliberately skipped product work. |
 | Operations and developer commands | complete | Readiness/bootstrap/log guidance and root npm workflows are current; runtime log showed a clean active-show compile and ready bind. |
 | Test layering and ratchets | complete with explicit product skips | Unit/API/UI/full E2E, source-size, dependency, generated-contract, benchmark, and desktop layers are present. |
-| Engineering and human handoff | in progress | Living stale v1/write-behind claims corrected; `REFACTORING-SUMMARY.md` and all required safaris/glossary entries added. |
+| Engineering and human handoff | complete | Living stale v1/write-behind claims corrected; `REFACTORING-SUMMARY.md`, 12 source-backed safaris, and 111 glossary entries validated and rendered. |
 
 Behavior-preserving work is separated from defects fixed during the refactor in
 `REFACTORING-SUMMARY.md`. Deferred product features and deliberately retained OSC/integrator/
@@ -332,16 +332,36 @@ The representative programming, OSC/attached-hardware, legacy/recovery show, dir
 show-switch/reconnect, secondary screen, and sibling Hardware Controls paths are covered by the
 fresh acceptance and desktop runs above.
 
-### Open acceptance blockers
+### Resolved and deferred acceptance findings
 
-1. The pinned CodeSafari validator/export could not be executed because running a third-party npm
-   package with network access in the private workspace requires explicit maintainer approval.
-   Validation, export, visual inspection, and `npm run pages:generate` remain unverified.
+1. The maintainer explicitly approved the pinned CodeSafari package. Validation reports 8
+   components, 12 tours, 47 source-backed steps, 111 glossary concepts, and no problems.
+   `npm run pages:generate` rebuilt and verified the 140-page manual plus the deployable safari.
+   Browser inspection exercised the overview, all 12 tour routes, glossary, Start/Next navigation,
+   code highlighting, and 1440×900/390×844 layouts. A repository-owned export stylesheet stacks
+   code and narrative at narrow widths; all tour routes then rendered at viewport width with no
+   broken images or missing states.
 2. `npm run storybook:build` fails before Storybook starts because `package.json` targets the
    nonexistent workspace `@tosklight/ui`. The ignored `packages/ui/` directory contains only old
    `dist/` and `storybook-static/` artifacts; no tracked package source or manifest exists.
    `npm run test:ui-package` is unavailable for the same reason. This predates the capstone and
-   needs a product/repository decision rather than reconstructing a library from generated output.
-3. Rebase and local `main` integration wait until the handoff blockers are resolved and committed.
-   The unrelated dirty worktree remains recorded and excluded from every staged path; integration
-   can use a temporary clean worktree so those files are never stashed or rewritten.
+   is deferred to pending chunk `27a-restore-ui-package-gates.md` rather than reconstructing source
+   from generated output.
+3. The direct `npm --workspace @light/control-ui` selector is unavailable because the root workspace
+   intentionally lists only `packages/*`; `npm --prefix apps/control-ui run typecheck` is the
+   executable Control UI package check and passed.
+
+### CodeSafari completion evidence
+
+- The initial narrative-only export validated with 12 “no steps” warnings and rendered every tour
+  with a disabled “No steps yet” control. That was treated as incomplete rather than accepted.
+- Forty-seven concise `@tour` anchors now connect the 12 narratives to stable TypeScript and Rust
+  declarations across composition, application authority, persistence, render/output, frontend
+  repair, and Tauri lifecycle boundaries.
+- `npx --yes "@tobisk/codesafari@1.0.0" validate .`: no problems found.
+- `cargo fmt --all -- --check`, `cargo check --workspace --all-targets`,
+  `npm run test:architecture`, and `npm --prefix apps/control-ui run typecheck`: passed.
+- `npm run pages:generate`: passed after the anchors and responsive override; no generated site is
+  tracked.
+- Local integration remains the only unfinished Phase 3 action. The unrelated dirty worktree stays
+  excluded; a temporary clean worktree will fast-forward `main` without stashing it.

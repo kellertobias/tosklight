@@ -1,0 +1,32 @@
+/* Repository-owned responsive fixes layered over the pinned CodeSafari 1.0.0 export. */
+@media (max-width: 700px) {
+  .topbar .repo {
+    display: none;
+  }
+
+  .body {
+    align-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .activity-bar {
+    flex: 0 0 48px;
+    height: 50%;
+  }
+
+  .pane.code {
+    flex: 1 1 calc(100% - 48px);
+    height: 50%;
+    min-width: 0;
+  }
+
+  main.route {
+    flex: 0 0 100%;
+    height: 50%;
+    min-height: 0;
+  }
+
+  .tour-panel.standalone {
+    width: 100%;
+  }
+}

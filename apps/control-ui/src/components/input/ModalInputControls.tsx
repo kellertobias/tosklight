@@ -34,6 +34,9 @@ function useModalInput(onKey: (key: string) => void) {
  * must resolve the same expression to the same single-value or range submission.
  * Returns whether the dialog should close (an incomplete range keeps it open).
  */
+// @tour value-spreading:10 Submit one semantic THRU expression
+// Every encoder layout parses the same ordered control points and sends one range callback; the
+// client does not fan the gesture out into per-fixture writes.
 export function submitEncoderValue(
   input: string,
   onValue: ((value: number) => void) | undefined,

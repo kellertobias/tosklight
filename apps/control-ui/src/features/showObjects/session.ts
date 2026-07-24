@@ -35,6 +35,9 @@ import {
 export type { ShowObjectCollectionLoader, ShowObjectLoader } from "./hydration";
 export type { ShowObjectsSessionOptions } from "./sessionTypes";
 
+// @tour add-a-capability:40 Scope frontend authority to mounted views
+// The feature session hydrates and subscribes only for active targets, repairs event gaps, and
+// rejects late work after lifecycle replacement.
 export class ShowObjectsSession {
 	private readonly showId: string;
 	private readonly store: ShowObjectsStore;
@@ -76,6 +79,9 @@ export class ShowObjectsSession {
 		return this.activateTargets(kinds.map((kind) => ({ kind })));
 	}
 
+	// @tour frontend-slice:20 Activate only mounted view targets
+	// A mounted view adds its exact hydration and subscription requirements. Releasing the last
+	// target tears down hydration, timers, queued changes, and the socket.
 	private activateTargets(targets: readonly HydrationTarget[]) {
 		for (const target of targets) this.scope.activate(target.kind, target.objectId);
 		this.ensureHydrations();
@@ -316,6 +322,9 @@ export class ShowObjectsSession {
 		}
 	}
 
+	// @tour frontend-slice:40 Repair a sequence gap through a snapshot boundary
+	// A gap clears stale hydration and queued events, hydrates every active target at the new cursor,
+	// and resumes the stream only after all required coverage reaches that boundary.
 	private beginSnapshotBoundary(generation: number, cursor: number, repair: boolean) {
 		this.clearHydrations();
 		this.queued.clear();

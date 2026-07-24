@@ -222,6 +222,9 @@ fn validate_fixture_value(value: &AttributeValue) -> Result<(), ActionError> {
     validate_value(value)
 }
 
+// @tour value-spreading:20 Reject invalid curves before mutation
+// Group spreads require normalized control points and reject multi-point curves that cannot fit
+// the resolved membership, leaving the action atomic.
 fn validate_group_value(
     group_id: &str,
     value: &AttributeValue,

@@ -279,6 +279,9 @@ use ws_preset_handlers::*;
 use ws_programmer_handlers::*;
 use ws_selection_handlers::*;
 
+// @tour orientation:30 Compose the server runtime
+// Startup binds configuration, persistence, application services, input adapters, output, and
+// shutdown at one process edge. Domain crates remain unaware of Axum and operating-system wiring.
 pub async fn run() -> anyhow::Result<()> {
     run_server().await
 }

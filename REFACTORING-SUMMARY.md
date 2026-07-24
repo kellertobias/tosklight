@@ -33,7 +33,7 @@ The living rules are in
 [`architecture-boundaries.md`](docs/engineering/architecture-boundaries.md), and
 [`state-ownership.md`](docs/engineering/state-ownership.md).
 
-## Independently runnable components
+## Components and engineering subsystems
 
 | Component | Entry point | Contract |
 | --- | --- | --- |
@@ -41,7 +41,7 @@ The living rules are in
 | Control UI | `apps/control-ui` | Main Tauri/React desk, secondary Screen and Stage windows, validated v2 transports, and feature projections. |
 | Hardware Controls | `apps/hardware-controls` | Sibling Tauri app using the frozen OSC control and feedback contract. |
 | Domain/application workspace | `crates/*` | Pure domain rules, use cases, lossless persistence, compilation, render, output codecs, and typed wire contracts. |
-| UI package | `packages/ui` | Shared presentation primitives with its own package tests/build. |
+| UI primitives | `apps/control-ui/src/components` | App-local presentation primitives; the missing shared package/Storybook contract is explicitly deferred below. |
 | Help/manual generator | `docs/help` plus `tools/manual` | Markdown source rendered into in-app help, offline HTML, and PDF. |
 | Acceptance bench | `apps/control-ui/e2e/bench` plus root `tests` | Isolated server/browser, virtual clock, OSC and output receivers, restart/fault controls, and paired API/UI scenarios. |
 
@@ -195,6 +195,9 @@ contracts, and two desktop cases that run separately under `npm run test:desktop
   CI/local environment; sandbox denial is reported separately.
 - Historical refactoring documents retain old counts and migration terminology as execution
   evidence. Living rules are under `docs/engineering/`.
+- Root Storybook/UI-package scripts still name an absent `@tosklight/ui` workspace. Pending chunk
+  `27a-restore-ui-package-gates.md` owns the explicit restore-or-retire decision; generated local
+  package artifacts are not treated as source.
 
 ## Handoff map
 

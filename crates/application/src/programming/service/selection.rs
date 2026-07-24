@@ -233,6 +233,13 @@ impl SelectionOperation<'_> {
     }
 }
 
+// @tour recording-and-live-references:20 Choose live or frozen Group identity
+// Normal Group selection retains a live expression; DEGRP materializes the current ordered
+// fixtures so later Group edits cannot change the frozen selection.
+
+// @tour ordered-selection:40 DEGRP freezes the current members
+// Normal Group selection stores a live expression; frozen selection stores the current ordered
+// fixture references. Future Group edits therefore affect only the live form.
 fn group_selection(
     group_id: &str,
     frozen: bool,

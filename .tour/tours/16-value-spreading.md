@@ -19,7 +19,7 @@ The client does not expand them into N writes.
 ## Input and canonical control points
 
 Both encoder dialogs use the shared THRU submission path in
-`apps/control-ui/src/components/control/ModalInputControls.tsx`. Software and hardware layouts send
+`apps/control-ui/src/components/input/ModalInputControls.tsx`. Software and hardware layouts send
 the same `SetSelection` mutation with ordered fixture IDs and control points.
 
 `crates/application/src/programming/` validates the request and resolves Group membership.

@@ -10,6 +10,10 @@ use std::{
     sync::{Arc, atomic::Ordering},
 };
 
+// @tour rust-by-example:20 Encode preparation as typestate
+// Construction is fallible and side-effect free; installation consumes this value and cannot
+// fail. The type prevents an unprepared or twice-installed engine snapshot.
+
 /// A snapshot whose validation and playback compilation have already succeeded.
 ///
 /// Preparing a snapshot is side-effect free. Installing it consumes this value and cannot fail,

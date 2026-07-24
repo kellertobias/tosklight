@@ -27,6 +27,10 @@ pub enum ActionSource {
     System,
 }
 
+// @tour orientation:20 Every surface identifies its action
+// UI, keyboard, OSC, and HTTP commands carry the same desk, user, session, source, correlation,
+// request, and revision context. Transport adapters construct this identity; services consume it.
+
 /// Identity and optimistic-concurrency information shared by every application mutation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ActionContext {
@@ -74,6 +78,10 @@ impl ActionContext {
         self
     }
 }
+
+// @tour add-a-capability:10 Declare a bounded command and result
+// Each capability command owns its result type and family instead of extending a process-wide enum
+// or importing transport concerns.
 
 /// A concrete command declares its own typed result and bounded family.
 pub trait ApplicationCommand: Send + 'static {

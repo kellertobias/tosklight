@@ -69,6 +69,9 @@ async fn exact_snapshot(
     }))
 }
 
+// @tour add-a-capability:30 Keep HTTP at the adapter edge
+// The route authenticates, validates replay identity, maps wire intent into an application action,
+// and translates the typed outcome without owning show semantics.
 async fn output_route_action_v2(
     State(state): State<AppState>,
     context: ShowContext,

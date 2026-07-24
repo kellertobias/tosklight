@@ -81,6 +81,9 @@ impl ActiveShowService {
         })
     }
 
+    // @tour add-a-capability:20 Enter the application service
+    // The service authorizes and serializes the command, prepares its lossless candidate, and
+    // delegates persistence and runtime installation through injected ports.
     pub fn mutate_objects<P: ActiveShowPorts>(
         &self,
         envelope: ActionEnvelope<MutateActiveShowObjectsCommand>,
@@ -349,6 +352,10 @@ impl ActiveShowService {
             complete,
         )
     }
+
+    // @tour portable-show:40 Order backup, commit, and runtime installation
+    // The shared lifecycle serializes the active show, skips side effects for no-change, and
+    // installs only the runtime compiled from the transaction that successfully committed.
 
     /// Same ordered lifecycle as [`Self::transact`], but `prepare` observes the open unit of work
     /// so a capability can read adapter-owned history, such as object undo, inside the one

@@ -56,6 +56,9 @@ impl PlaybackService {
         Ok(result)
     }
 
+    // @tour playback-runtime:10 Order one Playback action
+    // One application operation resolves the address, captures before-state, executes the domain
+    // action, reads authoritative projection, and publishes typed runtime and desk events.
     fn apply(
         &self,
         envelope: &ActionEnvelope<PlaybackCommand>,
@@ -141,6 +144,9 @@ impl PlaybackService {
         })
     }
 
+    // @tour playback-runtime:40 Capture a repair-safe runtime snapshot
+    // The event cursor is captured before immutable projections are assembled, allowing a
+    // duplicate during a race but never omitting a completed event.
     pub fn snapshot(
         &self,
         context: &ActionContext,

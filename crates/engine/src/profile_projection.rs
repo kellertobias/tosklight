@@ -12,6 +12,10 @@ use light_fixture::{
 use light_output::DmxFrame;
 use std::collections::{HashMap, HashSet};
 
+// @tour fixture-semantics:30 Resolve semantic values for every logical head
+// Rendering binds the compiled mode plan, resolves each included logical head, and produces
+// channel values plus visualization output without consulting the fixture library.
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn resolve_profile_fixture(
     fixture: &PatchedFixture,

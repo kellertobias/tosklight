@@ -38,6 +38,9 @@ impl ProgrammingService {
         self.apply_group_recording(envelope, ports, identity, true)
     }
 
+    // @tour recording-and-live-references:30 Cross from scratch state into the show
+    // Group recording validates replay and ownership, captures desk-local selection, commits
+    // through the active-show port, and records only successful mutations in Programmer undo.
     fn apply_group_recording(
         &self,
         envelope: ActionEnvelope<ProgrammingGroupRecordRequest>,

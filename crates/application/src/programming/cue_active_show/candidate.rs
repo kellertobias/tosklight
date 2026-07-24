@@ -11,6 +11,9 @@ use light_show::PortableShowDocument;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+// @tour cue-tracking-and-goto:10 Prepare the complete portable mutation
+// Cue recording constructs every affected Cuelist, Playback, and page body in one candidate.
+// Planning or compilation failure leaves the current portable show and runtime untouched.
 pub(super) fn prepare_candidate(
     document: &PortableShowDocument,
     commit: &ProgrammingCueCommit,

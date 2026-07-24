@@ -68,6 +68,8 @@ build_safari() {
     echo "error: CodeSafari export produced no index.html in $LIGHT_SAFARI_DIR" >&2
     exit 1
   }
+  cp "$ROOT/tools/codesafari-overrides.css" "$LIGHT_SAFARI_DIR/codesafari-overrides.css"
+  node "$ROOT/tools/inject-codesafari-overrides.mjs" "$LIGHT_SAFARI_DIR/index.html"
   echo "Created $LIGHT_SAFARI_DIR"
 }
 

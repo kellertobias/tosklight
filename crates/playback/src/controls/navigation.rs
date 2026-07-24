@@ -1,6 +1,9 @@
 use crate::*;
 
 impl PlaybackEngine {
+    // @tour playback-runtime:20 Advance a Playback
+    // GO resolves the assigned Cuelist, honors activation policy and loaded Cues, advances runtime,
+    // restores the Playback master when required, and applies automatic exclusion behavior.
     pub fn go_playback(&mut self, number: u16) -> Result<&ActivePlayback, String> {
         let definition = self
             .definitions
@@ -76,6 +79,9 @@ impl PlaybackEngine {
             .map(|mutation| mutation.value)
     }
 
+    // @tour cue-tracking-and-goto:30 GOTO selects a target, not a history
+    // Direct navigation resolves the addressed Cue and installs its runtime identity without
+    // replaying intervening operator actions.
     pub fn goto_playback_mutation(
         &mut self,
         number: u16,

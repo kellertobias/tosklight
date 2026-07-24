@@ -83,6 +83,10 @@ impl PortableShowObjectKey {
     }
 }
 
+// @tour portable-show:10 Retain raw portable authority
+// A portable object keeps its complete JSON body and revision so a desk can edit fields it
+// understands without erasing fields introduced by another build.
+
 /// Raw versioned object whose JSON body retains fields unknown to this build.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PortableShowObject {

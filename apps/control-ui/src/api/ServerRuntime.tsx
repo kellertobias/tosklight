@@ -285,6 +285,9 @@ function useProviderActionSources(value: ReturnType<typeof createServerCapabilit
 	return { highlightActions, programmerActions, dmxDiagnostics, soundToLightActions, shellStatusActions };
 }
 
+// @tour frontend-slice:10 Compose focused server capabilities
+// The root runtime owns connection state and assembles narrow providers for data, actions, and
+// feature stores. Views consume focused capabilities instead of one mutable global server object.
 export function ServerRuntime({
 	children,
 	sessionRole = "primary",

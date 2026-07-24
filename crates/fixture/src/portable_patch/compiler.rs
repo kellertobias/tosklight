@@ -106,6 +106,9 @@ impl<R: FixtureProfileRevisionResolver> PatchedFixtureCompiler<R> {
         result
     }
 
+    // @tour fixture-semantics:10 Resolve an immutable profile revision
+    // Portable patch records become runtime fixtures here. Profile revisions are digest-checked,
+    // validated, and cached; legacy inline records take an explicit compatibility path.
     fn compile_record(
         &mut self,
         record: &PortablePatchedFixtureRecord,

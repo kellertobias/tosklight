@@ -254,6 +254,9 @@ fn debug_data_dir() -> PathBuf {
         })
 }
 
+// @tour rust-by-example:40 Supervise the bundled server at the Tauri edge
+// The desktop host reuses a local server or launches the packaged binary with explicit data,
+// fixture-library, bind, logging, readiness, timeout, and child-exit handling.
 fn launch_server(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::error::Error>> {
     let address = server_address();
     if server_is_running(address) {

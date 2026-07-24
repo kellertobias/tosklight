@@ -91,6 +91,9 @@ impl ActiveShowService {
         )
     }
 
+    // @tour recording-and-live-references:40 Update one explicit live owner
+    // Update plans the chosen Cue, Preset, or Group against observed revisions and commits its
+    // lossless object change through the same ordered active-show transaction.
     pub(crate) fn commit_programming_update<P: ProgrammingUpdatePorts>(
         &self,
         context: &ActionContext,

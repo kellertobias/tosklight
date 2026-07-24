@@ -47,6 +47,10 @@ impl FixtureMode {
 }
 
 impl FixtureModeEncodingPlan {
+    // @tour fixture-semantics:40 Encode one checked DMX split
+    // Every channel and address is validated before the first byte is written. The compiled plan
+    // then writes coarse and fine components MSB-first into their physical slots.
+
     /// Encode every resolved channel belonging to `split` as one checked batch.
     ///
     /// Validation happens before the first byte is written, so an unknown channel or invalid base

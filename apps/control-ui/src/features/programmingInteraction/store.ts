@@ -75,6 +75,9 @@ export class ProgrammingInteractionStore {
 		this.emit();
 	}
 
+	// @tour one-action-end-to-end:40 Repair the overlay from authority
+	// Valid snapshots replace authority, then any still-pending optimistic operations render over
+	// it again. This is the reconnect and sequence-gap repair destination.
 	installSnapshot(
 		snapshot: ProgrammingSnapshot,
 		{

@@ -113,6 +113,9 @@ pub struct FrozenGroup {
     pub captured_at: chrono::DateTime<Utc>,
 }
 
+// @tour ordered-selection:20 Resolve a Group without losing emptiness
+// An existing Group resolves in stored membership order, including a valid empty result. An
+// absent Group is an error, while derived Groups preserve the source's ordered rule.
 pub fn resolve_group(
     id: &str,
     groups: &HashMap<String, GroupDefinition>,

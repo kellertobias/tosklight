@@ -22,6 +22,10 @@ impl SelectionRule {
     }
 }
 
+// @tour ordered-selection:10 Preserve selection intent
+// Selection authority retains static members, live Groups, Playback contents, or ordered add and
+// remove sources. The expression is richer than the currently highlighted fixture IDs.
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionExpression {
@@ -69,6 +73,9 @@ pub fn apply_selection_rule(fixtures: &[FixtureId], rule: &SelectionRule) -> Vec
         .collect()
 }
 
+// @tour ordered-selection:30 Replay ordered add and remove sources
+// References apply left-to-right, preserving first appearance and deterministic removals.
+// Missing live references are skipped rather than becoming invented empty selections.
 pub fn resolve_selection_references(
     items: &[SelectionReference],
     groups: &HashMap<String, GroupDefinition>,

@@ -98,6 +98,10 @@ pub struct TransientProgrammerAction {
 }
 
 impl ProgrammerState {
+    // @tour recording-and-live-references:10 Capture only recordable Programmer content
+    // Record and Update consume operator-authored values while excluding Highlight, transient
+    // output, defaults, Preload buffers, and resolved stage output.
+
     /// Capture only the operator-authored content that Update and Record-style storage workflows
     /// may consume. This deliberately excludes resolved output, Highlight, defaults, and Preload
     /// buffers. The returned value is owned, so planning an Update never clears or otherwise

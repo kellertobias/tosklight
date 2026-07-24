@@ -71,13 +71,14 @@ The repository ships a guided onboarding tour under [`.tour/`](.tour). Start it 
 [CodeSafari](https://github.com/kellertobias/codesafari) — no install required:
 
 ```sh
-npx --yes "@tobisk/codesafari@1.0.0" dev .
+npm run codesafari
 npx --yes "@tobisk/codesafari@1.0.0" validate .
-npx --yes "@tobisk/codesafari@1.0.0" export . --out .artifacts/generated/codesafari
+npm run pages:generate
 ```
 
 The viewer opens a read-only IDE: a file tree, a source pane, and a step panel, so you can follow a
-tour and still explore any file. It covers:
+tour and still explore any file. `pages:generate` creates the responsive, deployable export under
+`.artifacts/generated/pages/safari/`. It covers:
 
 - **Tours** — Orientation; One Value from desk input to DMX; Cue Tracking and Goto; Ordered
   Selection; Value Spreading; the Portable Show; Add a Capability; Recording and Live References;
