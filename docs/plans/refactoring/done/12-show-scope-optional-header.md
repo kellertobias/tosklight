@@ -78,3 +78,16 @@ npm run test:e2e   # full suite gate
 
 Decided (see the desk-segment paragraph above and api-rules §6). No open decisions
 remain in this chunk.
+
+## Result
+
+Split at execution time so the shared extractors, desk-context routes, show-action
+routes, and patch/import routes can be reviewed and gated without one cross-cutting
+mega-commit:
+
+- `12a-context-headers-and-desk-routes.md`
+- `12b-show-action-route-descope.md`
+- `12c-patch-selective-import-route-descope.md`
+
+No production behavior changed in this parent chunk; the three ordered child chunks
+retain the complete definition of done above.
