@@ -175,6 +175,8 @@ export class LightApiClient extends LightClientRuntime {
 	objects = bindClientMethod(this.showObjectsApi, "objects");
 	object = bindClientMethod(this.showObjectsApi, "object");
 	objectOrNull = bindClientMethod(this.showObjectsApi, "objectOrNull");
+	saveOutputRoute = bindClientMethod(this.showObjectsApi, "saveOutputRoute");
+	deleteOutputRoute = bindClientMethod(this.showObjectsApi, "deleteOutputRoute");
 	putObject = bindClientMethod(this.showObjectsApi, "putObject");
 	deleteObject = bindClientMethod(this.showObjectsApi, "deleteObject");
 	storePreload = bindClientMethod(this.showObjectsApi, "storePreload");

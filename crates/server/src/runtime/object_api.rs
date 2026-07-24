@@ -3,7 +3,7 @@ use super::*;
 
 mod output_routes;
 
-use output_routes::*;
+pub(super) use output_routes::*;
 
 pub(super) async fn list_objects(
     State(state): State<AppState>,
@@ -69,7 +69,7 @@ pub(super) async fn get_object(
         .into_response())
 }
 
-fn exact_object_snapshot(
+pub(super) fn exact_object_snapshot(
     store: &ShowStore,
     kind: &str,
     object_id: &str,

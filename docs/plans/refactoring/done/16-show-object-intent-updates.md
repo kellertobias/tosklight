@@ -88,3 +88,8 @@ npm run test:e2e   # full suite gate — object-heavy scenarios (groups, cues, w
 **This chunk is large — split it at execution time** into (a) route + one writer,
 (b) remaining writers, (c) v1 deletion, as `16a/16b/16c` files in `pending/`. No open
 maintainer decision; typed-partial per kind follows the decided intent style.
+
+## Result
+
+Split into 16a (v2 snapshots plus output-route intents), 16b (remaining production writers),
+and 16c (test/bench migration, generic v1 deletion, and programmer-owned undo).

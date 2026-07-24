@@ -132,6 +132,7 @@ fn show_routes() -> Router<AppState> {
 
 fn show_object_routes() -> Router<AppState> {
     Router::new()
+        .merge(show_objects_v2::router())
         .route("/api/v1/shows/{id}/objects/{kind}", get(list_objects))
         .route(
             "/api/v1/shows/{id}/objects/{kind}/{object_id}",

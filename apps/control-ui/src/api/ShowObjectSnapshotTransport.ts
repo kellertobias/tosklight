@@ -2,6 +2,11 @@ import type {
 	ShowObject,
 	ShowObjectKind,
 } from "../features/showObjects/contracts";
+import {
+	integerAt,
+	recordAt,
+	stringAt,
+} from "./playbackWirePrimitives";
 import { decodeShowObject } from "./showObjectWire";
 import { WireValidationError } from "./wireValidation";
 
@@ -36,19 +41,25 @@ export class HttpShowObjectSnapshotTransport {
 		showId: string,
 		kind: K,
 	): Promise<ShowObjectCollectionSnapshot<K>> {
-		const path = `/api/v1/shows/${encodeURIComponent(showId)}/objects/${encodeURIComponent(kind)}`;
+		const path = `/api/v2/objects/${encodeURIComponent(kind)}`;
 		const response = await this.fetchImplementation(`${this.baseUrl}${path}`, {
-			headers: this.headers(),
+			headers: this.headers(showId),
 		});
 		if (!response.ok) throw new Error(await response.text());
-		const value: unknown = await response.json();
-		if (!Array.isArray(value))
-			throw new WireValidationError("$", "show-object array", value);
+		const snapshot = recordAt(await response.json(), "$");
+		assertIdentity(snapshot.show_id, showId, "$.show_id");
+		assertIdentity(snapshot.kind, kind, "$.kind");
+		if (!Array.isArray(snapshot.objects))
+			throw new WireValidationError(
+				"$.objects",
+				"show-object array",
+				snapshot.objects,
+			);
 		return {
-			objects: value.map((object, index) =>
-				decodeShowObject(object, kind, `$[${index}]`),
+			objects: snapshot.objects.map((object, index) =>
+				decodeShowObject(object, kind, `$.objects[${index}]`),
 			),
-			showRevision: revisionEtag(response),
+			showRevision: integerAt(snapshot.show_revision, "$.show_revision"),
 		};
 	}
 
@@ -57,22 +68,30 @@ export class HttpShowObjectSnapshotTransport {
 		kind: K,
 		objectId: string,
 	): Promise<ShowObjectExactSnapshot<K>> {
-		const path = `/api/v1/shows/${encodeURIComponent(showId)}/objects/${encodeURIComponent(kind)}/${encodeURIComponent(objectId)}`;
+		const path = `/api/v2/objects/${encodeURIComponent(kind)}/${encodeURIComponent(objectId)}`;
 		const response = await this.fetchImplementation(`${this.baseUrl}${path}`, {
-			headers: this.headers(),
+			headers: this.headers(showId),
 		});
-		const showRevision = revisionHeader(response, "x-light-show-revision");
-		if (response.status === 404) return { object: null, showRevision };
 		if (!response.ok) throw new Error(await response.text());
-		const object = decodeShowObject(await response.json(), kind);
+		const snapshot = recordAt(await response.json(), "$");
+		assertIdentity(snapshot.show_id, showId, "$.show_id");
+		assertIdentity(snapshot.kind, kind, "$.kind");
+		assertIdentity(snapshot.object_id, objectId, "$.object_id");
+		const showRevision = integerAt(
+			snapshot.show_revision,
+			"$.show_revision",
+		);
+		if (snapshot.object === null) return { object: null, showRevision };
+		const object = decodeShowObject(snapshot.object, kind, "$.object");
 		if (object.id !== objectId)
-			throw new WireValidationError("$.id", objectId, object.id);
+			throw new WireValidationError("$.object.id", objectId, object.id);
 		return { object, showRevision };
 	}
 
-	private headers() {
+	private headers(showId: string) {
 		const headers = new Headers({
 			authorization: `Bearer ${this.options.sessionToken}`,
+			"x-tosk-show": showId,
 		});
 		if (this.options.deskBoundaryToken)
 			headers.set("x-light-desk-token", this.options.deskBoundaryToken);
@@ -80,25 +99,7 @@ export class HttpShowObjectSnapshotTransport {
 	}
 }
 
-function revisionEtag(response: Response) {
-	return revisionHeader(response, "etag");
-}
-
-function revisionHeader(response: Response, name: string) {
-	const value = response.headers.get(name);
-	const match = /^"(0|[1-9]\d*)"$/.exec(value ?? "");
-	if (!match)
-		throw new WireValidationError(
-			"$.headers.etag",
-			"quoted non-negative Show revision",
-			value,
-		);
-	const revision = Number(match[1]);
-	if (!Number.isSafeInteger(revision))
-		throw new WireValidationError(
-			"$.headers.etag",
-			"safe Show revision",
-			value,
-		);
-	return revision;
+function assertIdentity(value: unknown, expected: string, path: string) {
+	const actual = stringAt(value, path);
+	if (actual !== expected) throw new WireValidationError(path, expected, actual);
 }

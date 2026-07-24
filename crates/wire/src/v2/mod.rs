@@ -23,6 +23,7 @@ pub mod programming_update;
 pub mod runtime;
 pub mod selective_import;
 pub mod show_library;
+pub mod show_objects;
 pub mod speed_group;
 pub mod stage_layout;
 pub mod virtual_playback_zones;

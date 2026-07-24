@@ -872,6 +872,20 @@ export type MvrPreviewFixture = { uuid: string, name: string, gdtf_spec: string,
 
 export type MvrExportPreview = { fixtures: number, scenery: number, embedded_profiles: number, missing_profiles: Array<string>, omitted: Array<string>, warnings: Array<string>, };
 
+export type ShowObjectRecord = { kind: string, id: string, revision: number, updated_at: string, body: unknown, };
+
+export type ShowObjectCollectionSnapshot = { show_id: string, show_revision: number, kind: string, objects: Array<ShowObjectRecord>, };
+
+export type ShowObjectExactSnapshot = { show_id: string, show_revision: number, kind: string, object_id: string, object: ShowObjectRecord | null, };
+
+export type OutputRouteActionRequest = { request_id: string, action: OutputRouteAction, };
+
+export type OutputRouteAction = { "type": "create", route_id: string, route: OutputRoute, } | { "type": "update", route_id: string, expected_revision: number, patch: OutputRoutePatch, } | { "type": "delete", route_id: string, expected_revision: number, };
+
+export type OutputRoutePatch = { protocol?: OutputProtocol | null, logical_universe?: number | null, destination_universe?: number | null, delivery_mode?: OutputDeliveryMode | null, destination?: string | null | null, enabled?: boolean | null, minimum_slots?: number | null, };
+
+export type OutputRouteActionOutcome = { request_id: string, replayed: boolean, change: OutputRouteChange, event_sequence: number, };
+
 export type ProgrammerSelectionRule = { "type": "all" } | { "type": "odd" } | { "type": "even" } | { "type": "every_nth", n: number, offset: number, };
 
 export type ProgrammerSelectionReference = { "type": "fixture", fixture_id: string, } | { "type": "live_group", group_id: string, } | { "type": "remove_fixture", fixture_id: string, } | { "type": "remove_live_group", group_id: string, };

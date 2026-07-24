@@ -195,6 +195,86 @@ describe("LightApiClient server selection and sessions", () => {
 		expect(headers.get("authorization")).toBe("Bearer token-a");
 	});
 
+	it("sends typed show-scoped output-route intents", async () => {
+		const outcome = {
+			request_id: "ignored-by-client",
+			replayed: false,
+			change: {
+				show_id: "show-a",
+				show_revision: 2,
+				route_id: "main",
+				object_revision: 1,
+				route: null,
+				deleted: false,
+			},
+			event_sequence: 1,
+		};
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						session_id: "session-a",
+						token: "token-a",
+						user: { id: "user-a", name: "Operator", enabled: true },
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
+			)
+			.mockImplementation(async () =>
+				new Response(JSON.stringify(outcome), {
+					status: 200,
+					headers: { "content-type": "application/json" },
+				}),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+		const client = new LightApiClient("http://desk.local");
+		await client.login("Operator");
+		const route = {
+			protocol: "art_net" as const,
+			logical_universe: 1,
+			destination_universe: 2,
+			delivery_mode: "broadcast" as const,
+			destination: null,
+			enabled: true,
+			minimum_slots: 128,
+		};
+
+		await client.saveOutputRoute("show-a", "main", route, 0);
+		await client.saveOutputRoute("show-a", "main", route, 3);
+		await client.deleteOutputRoute("show-a", "main", 4);
+
+		expect(fetchMock.mock.calls.slice(1).map((call) => call[0])).toEqual([
+			"http://desk.local/api/v2/output-routes/actions",
+			"http://desk.local/api/v2/output-routes/actions",
+			"http://desk.local/api/v2/output-routes/actions",
+		]);
+		const requests = fetchMock.mock.calls
+			.slice(1)
+			.map((call) => JSON.parse(call[1].body as string));
+		expect(requests[0].action).toEqual({
+			type: "create",
+			route_id: "main",
+			route,
+		});
+		expect(requests[1].action).toEqual({
+			type: "update",
+			route_id: "main",
+			expected_revision: 3,
+			patch: route,
+		});
+		expect(requests[2].action).toEqual({
+			type: "delete",
+			route_id: "main",
+			expected_revision: 4,
+		});
+		for (const call of fetchMock.mock.calls.slice(1)) {
+			const headers = call[1].headers as Headers;
+			expect(headers.get("authorization")).toBe("Bearer token-a");
+			expect(headers.get("x-tosk-show")).toBe("show-a");
+		}
+	});
+
 	it("reads one authenticated portable show object by its encoded identity", async () => {
 		const stored = {
 			kind: "user/layout",
@@ -216,7 +296,13 @@ describe("LightApiClient server selection and sessions", () => {
 				),
 			)
 			.mockResolvedValueOnce(
-				new Response(JSON.stringify(stored), {
+				new Response(JSON.stringify({
+					show_id: "show one",
+					show_revision: 8,
+					kind: "user/layout",
+					object_id: "operator one",
+					object: stored,
+				}), {
 					status: 200,
 					headers: { "content-type": "application/json" },
 				}),
@@ -230,10 +316,11 @@ describe("LightApiClient server selection and sessions", () => {
 		).resolves.toEqual(stored);
 
 		expect(fetchMock.mock.calls[1][0]).toBe(
-			"http://desk.local/api/v1/shows/show%20one/objects/user%2Flayout/operator%20one",
+			"http://desk.local/api/v2/objects/user%2Flayout/operator%20one",
 		);
 		const headers = fetchMock.mock.calls[1][1].headers as Headers;
 		expect(headers.get("authorization")).toBe("Bearer token-a");
+		expect(headers.get("x-tosk-show")).toBe("show one");
 	});
 
 	it("returns authoritative absence only for a missing optional object", async () => {
@@ -249,7 +336,18 @@ describe("LightApiClient server selection and sessions", () => {
 					{ status: 200, headers: { "content-type": "application/json" } },
 				),
 			)
-			.mockResolvedValueOnce(new Response("missing", { status: 404 }));
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						show_id: "show-a",
+						show_revision: 8,
+						kind: "group",
+						object_id: "1",
+						object: null,
+					}),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
+			);
 		vi.stubGlobal("fetch", fetchMock);
 		const client = new LightApiClient("http://desk.local");
 		await client.login("Operator");

@@ -1,6 +1,6 @@
 use super::super::*;
 
-pub(super) fn output_route_action(
+pub(in crate::runtime) fn output_route_action(
     session: &Session,
     show_id: light_core::ShowId,
     route_id: String,
@@ -23,7 +23,7 @@ pub(super) fn output_route_action(
     }
 }
 
-pub(super) async fn run_output_route_action(
+pub(in crate::runtime) async fn run_output_route_action(
     state: &AppState,
     activation: tokio::sync::OwnedMutexGuard<()>,
     action: light_application::ActionEnvelope<light_application::MutateOutputRouteCommand>,
@@ -52,7 +52,7 @@ pub(super) async fn run_output_route_action(
     Ok((result.map_err(active_show_api_error)?, activation))
 }
 
-pub(super) async fn terminate_changed_route(
+pub(in crate::runtime) async fn terminate_changed_route(
     state: &AppState,
     route: Option<&light_output::OutputRoute>,
 ) {

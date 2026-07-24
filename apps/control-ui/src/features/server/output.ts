@@ -27,9 +27,8 @@ export function createOutputActions(
 		saveOutputRoute: async (id, route, revision) => {
 			if (!bootstrap?.active_show) return false;
 			try {
-				await client.putObject(
+				await client.saveOutputRoute(
 					bootstrap.active_show.id,
-					"route",
 					id,
 					route,
 					revision,
@@ -47,9 +46,8 @@ export function createOutputActions(
 		deleteOutputRoute: async (id, revision) => {
 			if (!bootstrap?.active_show) return false;
 			try {
-				await client.deleteObject(
+				await client.deleteOutputRoute(
 					bootstrap.active_show.id,
-					"route",
 					id,
 					revision,
 				);

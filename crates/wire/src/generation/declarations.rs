@@ -23,6 +23,7 @@ use crate::v2::programming_update::*;
 use crate::v2::runtime::*;
 use crate::v2::selective_import::*;
 use crate::v2::show_library::*;
+use crate::v2::show_objects::*;
 use crate::v2::speed_group::*;
 use crate::v2::stage_layout::*;
 use crate::v2::virtual_playback_zones::*;
@@ -65,6 +66,13 @@ fn show_library(config: &Config) -> Vec<String> {
         MvrImportPreview::decl(config),
         MvrPreviewFixture::decl(config),
         MvrExportPreview::decl(config),
+        ShowObjectRecord::decl(config),
+        ShowObjectCollectionSnapshot::decl(config),
+        ShowObjectExactSnapshot::decl(config),
+        OutputRouteActionRequest::decl(config),
+        OutputRouteAction::decl(config),
+        OutputRoutePatch::decl(config),
+        OutputRouteActionOutcome::decl(config),
     ]
 }
 
