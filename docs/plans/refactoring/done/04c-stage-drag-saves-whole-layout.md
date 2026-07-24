@@ -42,3 +42,29 @@ cargo test -p light-server stage_layout
 npm run test:unit
 npm run test:e2e
 ```
+
+## Result
+
+**Superseded by chunk 04d — closed with verification, no code change.** This chunk was
+filed while chunk 04 was in flight, targeting the stage-view drag/inspector paths that
+saved the whole `stage_layout/main` object. Chunk 04d (maintainer-directed) then removed
+the Stage window's Setup-positions surface entirely and deleted the caller-less
+stage-layout client write path with it — `useStageLayout.save`/`savePosition3d`,
+`StageLayoutActionsProvider`, `putStageLayout`, and the whole-object PUT wiring no longer
+exist.
+
+**Verified at close (2026-07-24):**
+- No file under `apps/control-ui/src` writes any `stage_layout` object; the only remaining
+  references are the read path (`useShowData.ts:56`) and `show_object_changed`
+  reconciliation (`showObjectEventReconciliation.ts`).
+- The 3D camera end-of-orbit handler (`useStageRenderer.ts:49`) dispatches
+  `SET_STAGE_NAVIGATION` app state only; the stored `camera3d` field remains a tolerated
+  read-side field with no writer — no camera intent is needed.
+- The DoD ("no stage-view interaction path issues a whole-layout PUT") therefore holds:
+  positions are edited exclusively through Show Patch placement (per-axis since chunk
+  04b) via the v2 PatchFixtures intent. The v2 `stage-layout/actions` route from chunk 04
+  stays as the server-side primitive for integrators and future multi-fixture consumers.
+
+**Suite numbers.** No code changed in this chunk; the tree is identical to chunk 04b's
+gated state (full e2e at baseline: 280 passed / 12 skipped, plus FIXTURE-002 @restart
+green in isolation per the README flaky rule).
