@@ -11,6 +11,7 @@ import { BrowserCommands, BrowserKeypad } from "./commandScenario";
 import type { DeskDriver } from "./desk";
 import { BrowserDesktops } from "./desktopScenario";
 import { BrowserDmx, type DmxUniverseExpectation } from "./dmxScenario";
+import { BrowserEncoders } from "./encoderScenario";
 import {
 	type FixtureDMXExpectation,
 	type FixtureDMXTarget,
@@ -68,6 +69,7 @@ export class BrowserScenarioWorld {
 	readonly command: BrowserCommands;
 	readonly keypad: BrowserKeypad;
 	readonly selection: BrowserRoutedSelection;
+	readonly encoder: BrowserEncoders;
 	readonly hardware: SimulatedHardware;
 	readonly highlight: BrowserHighlight;
 	readonly dmx: BrowserDmx;
@@ -111,8 +113,9 @@ export class BrowserScenarioWorld {
 		this.command = new BrowserCommands(api, desk, page);
 		this.keypad = new BrowserKeypad(desk, page);
 		this.hardware = simulatedHardware(bench, api);
+		const coreSelection = new BrowserSelection(api);
 		this.selection = new BrowserRoutedSelection(
-			new BrowserSelection(api),
+			coreSelection,
 			api,
 			this.command,
 			this.keypad,
@@ -120,6 +123,13 @@ export class BrowserScenarioWorld {
 			page,
 			desk,
 			`${testInfo.workerIndex}:${testInfo.title}`,
+		);
+		this.encoder = new BrowserEncoders(
+			api,
+			coreSelection,
+			page,
+			desk,
+			`${testInfo.workerIndex}:${testInfo.title}:encoder`,
 		);
 		this.highlight = new BrowserHighlight(page, api, this.hardware);
 		this.dmx = new BrowserDmx(api);

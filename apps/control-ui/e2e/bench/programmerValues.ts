@@ -63,6 +63,35 @@ export interface BatchProgrammerValuesIntent extends ProgrammerValuesApiIntent {
 	mutations: readonly ProgrammerValuesMutation[];
 }
 
+export interface ApplyProgrammerSelectionValueIntent
+	extends ProgrammerValuesApiIntent {
+	fixtureIds: readonly string[];
+	attribute: string;
+	operation:
+		| { type: "absolute_set"; value: AttributeValue }
+		| { type: "relative_step"; delta: number };
+	timing: ProgrammerValueTiming;
+}
+
+export function applyProgrammerSelectionValue(
+	api: ApiDriver,
+	intent: ApplyProgrammerSelectionValueIntent,
+	dependencies: IntentHttpDependencies = {},
+) {
+	return applyProgrammerValues(
+		api,
+		intent,
+		{
+			action: "apply_intent",
+			fixtureIds: intent.fixtureIds,
+			attribute: intent.attribute,
+			operation: intent.operation,
+			timing: intent.timing,
+		},
+		dependencies,
+	);
+}
+
 export function setProgrammerFixtureValue(
 	api: ApiDriver,
 	intent: SetProgrammerFixtureValueIntent,

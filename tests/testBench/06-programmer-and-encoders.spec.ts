@@ -1,0 +1,85 @@
+import {
+	fixture as dmxFixture,
+} from "../../apps/control-ui/e2e/bench/fixtureDmx";
+import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
+import { scenario } from "../../apps/control-ui/e2e/bench/scenario";
+import {
+	fixture,
+	fixtureRange,
+} from "../../apps/control-ui/e2e/bench/selectionContract";
+import { Show } from "../../apps/control-ui/e2e/bench/showScenario";
+import { ProgrammerToken } from "../../apps/control-ui/e2e/bench/encoderCatalog";
+
+scenario(
+	"BENCH-ENCODER-001",
+	"normalized Dimmer absolute and relative API intents retain distinct semantics",
+	async (t) => {
+		await t.show.use(Show.DefaultStage);
+		await t.app.open();
+		await t.app.expect.ready();
+		await t.show.expect.active(Show.DefaultStage);
+		await t.selection.fixtures.via.api.item(1);
+		await t.expect.selection(fixture(1));
+
+		await t.encoder.intensity.dimmer.via.api.set(50);
+		await t.clock.advanceBy("3s");
+		await t.encoder.intensity.dimmer.via.api.add(3);
+		await t.clock.advanceBy("3s");
+		await t.encoder.intensity.dimmer.via.api.subtract(2);
+		await t.clock.advanceBy("3s");
+		await t.expectFixtureDMX(dmxFixture(1), { Intensity: 130 });
+	},
+);
+
+scenario(
+	"BENCH-ENCODER-002",
+	"Position Pan resolves its live software encoder without exposing a physical slot",
+	async (t) => {
+		await t.show.use(Show.DefaultStage);
+		await t.app.open();
+		await t.app.expect.ready();
+		await t.show.expect.active(Show.DefaultStage);
+		await t.selection.fixtures.via.fixtureSheet.item(101);
+		await t.expect.selection(fixture(101));
+
+		await t.encoder.position.pan.via.ui.set(25);
+		await t.clock.advanceBy("3s");
+		await t.expectFixtureDMX(dmxFixture(101), { Pan: 64 });
+	},
+);
+
+scenario(
+	"BENCH-ENCODER-003",
+	"typed multi-point THRU entry spreads over the ordered selection",
+	async (t) => {
+		await t.show.use(Show.DefaultStage);
+		await t.app.open();
+		await t.app.expect.ready();
+		await t.show.expect.active(Show.DefaultStage);
+		await t.selection.fixtures.via.fixtureSheet.range(1, 5);
+		await t.expect.selection(fixtureRange(1, 5));
+
+		await t.encoder.intensity.dimmer.via.ui.set([
+			100,
+			ProgrammerToken.Thru,
+			0,
+			ProgrammerToken.Thru,
+			100,
+		]);
+		await t.clock.advanceBy("3s");
+		await t.expectFixtureDMX(dmxFixture(1), { Intensity: 255 });
+		await t.expectFixtureDMX(dmxFixture(3), { Intensity: 0 });
+		await t.expectFixtureDMX(dmxFixture(5), { Intensity: 255 });
+
+		await t.encoder.intensity.dimmer.set(50);
+		const report = t.encoder.routeReports.at(-1);
+		expect(report).toMatchObject({
+			operation: "set",
+			group: "intensity",
+			attribute: "dimmer",
+			candidates: ["api", "ui"],
+			selected: expect.stringMatching(/^(api|ui)$/),
+		});
+		await t.expect.selection(fixture(1), fixture(2), fixture(3), fixture(4), fixture(5));
+	},
+);

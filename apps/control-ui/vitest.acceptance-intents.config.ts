@@ -10,6 +10,7 @@ export default defineConfig({
 			"e2e/bench/dmxScenario.test.ts",
 			"e2e/bench/fixtureDmx.test.ts",
 			"e2e/bench/hardwareScenario.test.ts",
+			"e2e/bench/encoderCatalog.test.ts",
 			"e2e/bench/highlightScenario.test.ts",
 			"e2e/bench/mapExistingPlaybackToSlot.test.ts",
 			"e2e/bench/outputRuntime.test.ts",

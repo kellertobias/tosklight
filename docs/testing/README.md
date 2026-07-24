@@ -122,6 +122,15 @@ gesture expression. OSC item, ordered-items, and range helpers require a pristin
 and synchronize every press against the authoritative command-line revision rather than periodic
 OSC feedback.
 
+Normalized Programmer encoders are available through the enum-backed
+`encoder.<group>.<attribute>` tree. `.set(value)` is the explicit absolute path,
+`.set([value, ProgrammerToken.Thru, ...])` enters a validated spread, and `.add(steps)` /
+`.subtract(steps)` apply relative one-percent detents through the typed API intent. Explicit
+`.via.api` and `.via.ui` routes constrain the surface; the visible route resolves the live family
+and software encoder without exposing labels or physical slots to scenario bodies. Unqualified
+actions record their seed, action index, candidates, and selected route. Hardware, discrete,
+special-dialog, and Programmer Fade routes remain in refactoring chunks 06b and 06c.
+
 The runner exposes separate commands so CI classifies failures clearly:
 
 - `./test e2e-api`

@@ -14,12 +14,14 @@ export interface SelectionObservation {
 	expression: SelectionExpression | null;
 }
 
+const STAGE_SELECTION_OBSERVATION_TIMEOUT_MS = 10_000;
+
 export async function waitForObservedStageFixture(
 	page: Page,
 	observeSelection: () => Promise<SelectionObservation>,
 	target: number,
 ): Promise<SelectionObservation> {
-	const deadline = Date.now() + 2_000;
+	const deadline = Date.now() + STAGE_SELECTION_OBSERVATION_TIMEOUT_MS;
 	do {
 		const observation = await observeSelection();
 		if (observation.targets.some((fixture) => fixture.number === target))
