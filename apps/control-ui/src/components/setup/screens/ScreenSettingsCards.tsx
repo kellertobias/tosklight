@@ -3,9 +3,11 @@ import type {
 	PlaybackSurfaceLayout,
 	ScreenConfiguration,
 } from "../../../api/types";
+import type { DeskModel } from "../../../types";
 import {
 	Button,
 	FormLayout,
+	NumberField,
 	SelectField,
 	SwitchField,
 	TextField,
@@ -16,13 +18,56 @@ import {
 	screenPlaybackLayout,
 } from "../screenConfiguration";
 
+function ScreenSettingsFields({
+	draft,
+	desks,
+	displays,
+	update,
+}: {
+	draft: ScreenConfiguration;
+	desks: DeskModel[];
+	displays: Array<{ id: string; name: string }>;
+	update: (changes: Partial<ScreenConfiguration>) => void;
+}) {
+	const bounds = (changes: Partial<NonNullable<ScreenConfiguration["bounds"]>>) => ({
+		x: draft.bounds?.x ?? 0,
+		y: draft.bounds?.y ?? 0,
+		width: draft.bounds?.width ?? 1280,
+		height: draft.bounds?.height ?? 720,
+		...changes,
+	});
+	return <div className="screen-settings-columns">
+		<section><h3>Layout</h3><div className="screen-settings-fields">
+			<SelectField label="Desktop" value={draft.layout.activeDeskId} onChange={(activeDeskId) => update({ layout: { desks, activeDeskId } })} options={desks.map((desk) => ({ value: desk.id, label: desk.name }))}/>
+			<SwitchField label="Show Dock" checked={draft.show_dock} onChange={(event) => update({ show_dock: event.target.checked })}/>
+			<SwitchField label="Show Playbacks" checked={draft.show_playbacks} onChange={(event) => update({ show_playbacks: event.target.checked })}/>
+			<SwitchField label="Show Page Controls" checked={draft.show_page_controls} onChange={(event) => update({ show_page_controls: event.target.checked })}/>
+		</div></section>
+		<section><h3>Placement</h3><div className="screen-settings-fields">
+			<SelectField label="Physical Display" value={draft.display_id ?? ""} onChange={(value) => update({ display_id: value || null })} options={[{ value: "", label: "Choose when opened" }, ...displays.map((display) => ({ value: display.id, label: display.name }))]}/>
+			<SwitchField label="Fullscreen" checked={draft.fullscreen} onChange={(event) => update({ fullscreen: event.target.checked })}/>
+			<FormLayout columns={2} minColumnWidth={90}>
+				<NumberField label="Window X" value={draft.bounds?.x ?? 0} onChange={(event) => update({ bounds: bounds({ x: Number(event.target.value) }) })}/>
+				<NumberField label="Window Y" value={draft.bounds?.y ?? 0} onChange={(event) => update({ bounds: bounds({ y: Number(event.target.value) }) })}/>
+				<NumberField label="Window width" min="1" value={draft.bounds?.width ?? 1280} onChange={(event) => update({ bounds: bounds({ width: Number(event.target.value) }) })}/>
+				<NumberField label="Window height" min="1" value={draft.bounds?.height ?? 720} onChange={(event) => update({ bounds: bounds({ height: Number(event.target.value) }) })}/>
+			</FormLayout>
+		</div></section>
+		<section><h3>Playbacks</h3><div className="screen-settings-fields"><p className="playback-layout-summary">
+			{screenPlaybackLayout(draft).rows.length} rows · {screenPlaybackLayout(draft).playbacks_per_row} playbacks per row · {draft.page_mode === "follow_main" ? "Follow Main" : "Dedicated Page"}
+		</p></div></section>
+	</div>;
+}
+
 export function ScreenSettingsCard({
 	screen,
+	desks = screen.layout.desks,
 	displays,
 	save,
 	remove,
 }: {
 	screen: ScreenConfiguration;
+	desks?: DeskModel[];
 	displays: Array<{ id: string; name: string }>;
 	save: (screen: ScreenConfiguration) => Promise<void>;
 	remove: (screen: ScreenConfiguration) => Promise<void>;
@@ -50,7 +95,7 @@ export function ScreenSettingsCard({
 			});
 	};
 	return (
-		<article className="screen-settings-card">
+		<article className="screen-settings-card" aria-label={`Screen ${draft.name}`} data-screen-id={draft.id}>
 			<header className="screen-settings-header">
 				<TextField
 					aria-label="Screen name"
@@ -72,67 +117,7 @@ export function ScreenSettingsCard({
 					</Button>
 				</div>
 			</header>
-			<div className="screen-settings-columns">
-				<section>
-					<h3>Layout</h3>
-					<div className="screen-settings-fields">
-						<SwitchField
-							label="Show Dock"
-							checked={draft.show_dock}
-							onChange={(event) => update({ show_dock: event.target.checked })}
-						/>
-						<SwitchField
-							label="Show Playbacks"
-							checked={draft.show_playbacks}
-							onChange={(event) =>
-								update({ show_playbacks: event.target.checked })
-							}
-						/>
-						<SwitchField
-							label="Show Page Controls"
-							checked={draft.show_page_controls}
-							onChange={(event) =>
-								update({ show_page_controls: event.target.checked })
-							}
-						/>
-					</div>
-				</section>
-				<section>
-					<h3>Placement</h3>
-					<div className="screen-settings-fields">
-						<SelectField
-							label="Physical Display"
-							value={draft.display_id ?? ""}
-							onChange={(value) => update({ display_id: value || null })}
-							options={[
-								{ value: "", label: "Choose when opened" },
-								...displays.map((display) => ({
-									value: display.id,
-									label: display.name,
-								})),
-							]}
-						/>
-						<SwitchField
-							label="Fullscreen"
-							checked={draft.fullscreen}
-							onChange={(event) => update({ fullscreen: event.target.checked })}
-						/>
-					</div>
-				</section>
-				<section>
-					<h3>Playbacks</h3>
-					<div className="screen-settings-fields">
-						<p className="playback-layout-summary">
-							{screenPlaybackLayout(draft).rows.length} rows ·{" "}
-							{screenPlaybackLayout(draft).playbacks_per_row} playbacks per row
-							·{" "}
-							{draft.page_mode === "follow_main"
-								? "Follow Main"
-								: "Dedicated Page"}
-						</p>
-					</div>
-				</section>
-			</div>
+			<ScreenSettingsFields draft={draft} desks={desks} displays={displays} update={update}/>
 			{playbackModalOpen && (
 				<PlaybackLayoutModal
 					initialLayout={screenPlaybackLayout(draft)}

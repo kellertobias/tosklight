@@ -137,6 +137,7 @@ export function ScreensSetup({
 						<ScreenSettingsCard
 							key={screen.id}
 							screen={screen}
+							desks={state.desks}
 							displays={displays}
 							save={server.saveScreen}
 							remove={remove}

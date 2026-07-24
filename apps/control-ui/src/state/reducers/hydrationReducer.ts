@@ -8,6 +8,12 @@ import {
 	normalizeFixtureSheetIncludedHeads,
 } from "../reducerHelpers";
 
+export function nextDesktopId(desks: readonly { id: string }[]): string {
+	let suffix = desks.length + 1;
+	while (desks.some((desk) => desk.id === `desk-${suffix}`)) suffix += 1;
+	return `desk-${suffix}`;
+}
+
 export function reduceHydration(
 	state: AppState,
 	action: Action,
@@ -82,7 +88,7 @@ export function reduceHydration(
 				savingDesk: false,
 			};
 		case "NEW_DESK": {
-			const id = `desk-${state.desks.length + 1}`;
+			const id = nextDesktopId(state.desks);
 			const source = state.desks.find((desk) => desk.id === state.activeDeskId);
 			const panes =
 				state.savingDesk && source

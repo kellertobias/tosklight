@@ -6,8 +6,8 @@ export function WorkspaceView() {
   const { state } = useApp();
   if (state.builtIn) {
     const Window = windowRegistry[state.builtIn];
-    return <main className="workspace-view built-in-view"><Window builtIn /></main>;
+    return <main className="workspace-view built-in-view" data-light-surface="built-in" data-pane-type={state.builtIn} aria-label={`${state.builtIn} built-in`}><Window builtIn /></main>;
   }
   const desk = state.desks.find((item) => item.id === state.activeDeskId) ?? state.desks[0];
-  return <main className="workspace-view"><DeskGrid desk={desk} /></main>;
+  return <main className="workspace-view" data-light-surface="desktop" data-desktop-id={desk.id} aria-label={`Desktop ${desk.name}`}><DeskGrid desk={desk} /></main>;
 }

@@ -63,6 +63,19 @@ describe("appReducer desk creation and layout hydration", () => {
 		);
 	});
 
+	it("allocates a unique Desktop id after a sparse deletion", () => {
+		const sparse = {
+			...initialState,
+			desks: [
+				initialState.desks[0],
+				{ ...initialState.desks[1], id: "desk-4" },
+				{ ...initialState.desks[2], id: "desk-5" },
+			],
+		};
+		const created = appReducer(sparse, { type: "NEW_DESK" });
+		expect(created.desks.at(-1)?.id).toBe("desk-6");
+	});
+
 	it("copies the active desk into an existing save target and hydrates stored layouts", () => {
 		const saving = appReducer(initialState, { type: "START_SAVE_DESK" });
 		const saved = appReducer(saving, { type: "SAVE_DESK_TO", id: "playback" });

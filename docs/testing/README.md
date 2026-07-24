@@ -69,6 +69,16 @@ An ID whose complete primary action is a harness boundary or packaged-process ow
 
 Use `pairedScenario(...)` from `apps/control-ui/e2e/bench/pairedScenario.ts` to register both variants. New cross-surface catalog scenarios must not be added as a lone `test(...)`. OSC, Art-Net packet-layout, packaged-desktop, CSS/layout, and test-bench self-tests may add `@osc`, `@wire`, `@desktop`, or `@bench` coverage, but these are supplemental checks rather than substitutes for the API/UI pair when the behavior exists on both surfaces.
 
+Browser-only operator contracts use `scenario(...)` from
+`apps/control-ui/e2e/bench/scenario.ts`. Its callback receives typed `app`, `builtIn`,
+`desktop`, `screen`, and `screenshot` intents: scenario authors name operator surfaces,
+Desktop pane types, stable kebab-case pane slugs, and 24 × 18 grid rectangles without
+querying selectors, pixel coordinates, runtime pane IDs, or browser globals. Pane handles
+remain actionable after a Desktop is reopened, and their configuration type follows the
+chosen `PaneType`. `npm run test:bench-types` protects those compile-time distinctions.
+Secondary-screen helpers prove the persisted browser intent and controllable desktop-bridge
+request; they do not claim that Playwright opened or captured a native OS window.
+
 The runner exposes separate commands so CI classifies failures clearly:
 
 - `./test e2e-api`

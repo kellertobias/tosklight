@@ -18,7 +18,7 @@ architecture(){
   node --test "$ROOT/tools/test-private-boundaries.test.mjs"
   node "$ROOT/tools/check-source-size.mjs"
 }
-unit(){ architecture; (cd "$UI" && npm run build); cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); }
+unit(){ architecture; (cd "$ROOT" && npm run test:bench-types); (cd "$UI" && npm run build); cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); }
 e2e(){ build_e2e; (cd "$UI" && npm run test:e2e -- "$@"); }
 e2e_api(){ e2e --grep '@api' "$@"; }
 e2e_ui(){ e2e --grep '@ui' "$@"; }

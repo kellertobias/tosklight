@@ -19,7 +19,7 @@ import { UpdateWorkflow } from "../modals/UpdateWorkflow";
 import { DeskLoadingOverlay } from "./DeskLoadingOverlay";
 
 export function AppShell() {
-  return <div className="app-shell">
+  return <div className="app-shell" data-light-surface="application" aria-label="ToskLight application">
     <NativeDragStrip />
     <SectionNameMap />
     <LayoutPersistence />
