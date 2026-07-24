@@ -156,6 +156,18 @@ pub enum ShowEvent {
     VirtualPlaybackExclusionZonesChanged(VirtualPlaybackExclusionZonesChange),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum SystemEvent {
+    FacadeNotification(FacadeNotification),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FacadeNotification {
+    pub revision: u64,
+    pub kind: String,
+    pub payload: serde_json::Value,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VirtualPlaybackExclusionZonesChange {
     pub show_id: ShowId,
@@ -170,6 +182,7 @@ pub enum ApplicationEvent {
     Desk(DeskEvent),
     Output(OutputEvent),
     Show(ShowEvent),
+    System(SystemEvent),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -187,6 +200,22 @@ pub struct EventDraft {
 }
 
 impl EventDraft {
+    pub fn facade_notification(notification: FacadeNotification) -> Self {
+        Self {
+            desk_id: None,
+            class: EventClass::Projection,
+            object: Some(EventObject::new(
+                EventCapability::System,
+                format!("facade:{}", notification.kind),
+            )),
+            related_objects: Vec::new(),
+            source: EventSource::Runtime,
+            correlation_id: None,
+            delivery: DeliveryPolicy::Lossless,
+            payload: ApplicationEvent::System(SystemEvent::FacadeNotification(notification)),
+        }
+    }
+
     pub fn virtual_playback_exclusion_zones_changed(
         change: VirtualPlaybackExclusionZonesChange,
     ) -> Self {

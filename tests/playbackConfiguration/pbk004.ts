@@ -313,7 +313,7 @@ export function registerPbk004ReloadFeedbackScenario(): void {
 		await poolAction(api, 47, "on");
 		const playbackFrames: any[] = [];
 		page.on("websocket", (socket) => {
-			if (!socket.url().includes("/api/v1/events")) return;
+			if (!socket.url().includes("/api/v2/events")) return;
 			socket.on("framesent", (frame) => {
 				const payload =
 					typeof frame.payload === "string"

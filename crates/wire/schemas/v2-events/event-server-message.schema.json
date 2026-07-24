@@ -752,6 +752,22 @@
             "type",
             "change"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "notification": {
+              "$ref": "#/$defs/FacadeNotification"
+            },
+            "type": {
+              "type": "string",
+              "const": "facade_notification"
+            }
+          },
+          "required": [
+            "type",
+            "notification"
+          ]
         }
       ]
     },
@@ -798,6 +814,25 @@
             "source"
           ]
         }
+      ]
+    },
+    "FacadeNotification": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "payload": true,
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "revision",
+        "kind",
+        "payload"
       ]
     },
     "FixtureProfileIdentity": {

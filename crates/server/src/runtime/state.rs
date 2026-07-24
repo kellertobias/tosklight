@@ -47,6 +47,7 @@ pub(super) struct AppState {
     pub(super) active_show_error: Arc<RwLock<Option<String>>>,
     pub(super) events: broadcast::Sender<Event>,
     pub(super) application_events: EventBus,
+    pub(super) facade_events: EventBus,
     pub(super) active_show_service: ActiveShowService,
     pub(super) playback_topology: PlaybackTopologyService,
     pub(super) show_patch: ShowPatchService,

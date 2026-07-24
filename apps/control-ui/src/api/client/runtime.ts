@@ -1,4 +1,5 @@
 import { ApiRequestError } from "../ApiRequestError";
+import type { EventServerMessage } from "../generated/light-wire";
 import type { BootstrapSnapshot, ServerEvent, SessionResponse } from "../types";
 import { browserStorage, defaultServerUrl } from "./serverLocation";
 import type { LiveClientTransport } from "./transport";
@@ -105,6 +106,16 @@ export class LightClientRuntime {
 		const socket = new WebSocket(this.eventsUrl(), this.eventProtocols());
 		this.socket = socket;
 		socket.onclose = () => onClose?.();
+		socket.addEventListener("open", () => {
+			socket.send(
+				JSON.stringify({
+					type: "subscribe",
+					filter: { capabilities: ["system"] },
+					capacity: 256,
+					rate_limits: [],
+				}),
+			);
+		});
 		socket.addEventListener("message", (message) =>
 			this.handleSocketMessage(message),
 		);
@@ -200,14 +211,14 @@ export class LightClientRuntime {
 	}
 
 	private eventsUrl(): URL {
-		const url = new URL("/api/v1/events", this.baseUrl);
+		const url = new URL("/api/v2/events", this.baseUrl);
 		url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
 		return url;
 	}
 
 	private eventProtocols(): string[] {
 		if (!this.session) return [];
-		const protocols = ["light.v1", `light.token.${this.session.token}`];
+		const protocols = ["light.events.v2", `light.token.${this.session.token}`];
 		if (this.deskToken) {
 			protocols.push(`light.desk.b64.${base64Url(this.deskToken)}`);
 		}
@@ -226,12 +237,24 @@ export class LightClientRuntime {
 	}
 
 	private handleSocketMessage(message: MessageEvent): void {
-		const data = JSON.parse(String(message.data)) as ServerEvent | CommandResponse;
+		const data = JSON.parse(String(message.data)) as
+			| EventServerMessage
+			| CommandResponse
+			| { type?: string };
 		if ("request_id" in data) {
 			this.resolveCommand(data);
 			return;
 		}
-		for (const listener of this.listeners) listener(data);
+		if (
+			data.type === "event" &&
+			"event" in data &&
+			data.event.payload.type === "facade_notification"
+		) {
+			for (const listener of this.listeners)
+				listener(data.event.payload.notification as ServerEvent);
+			return;
+		}
+		if (data.type === "gap" || data.type === "error") this.socket?.close();
 	}
 
 	private resolveCommand(response: CommandResponse): void {

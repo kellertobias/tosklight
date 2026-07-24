@@ -256,6 +256,10 @@ async fn authenticated_shutdown_requests_orderly_server_cancellation() {
 fn emitted_events_have_strictly_sequential_revisions() {
     let (state, data_dir) = test_state();
     let mut receiver = state.events.subscribe();
+    let application_events = state.facade_events.subscribe(
+        light_application::EventFilter::default(),
+        light_application::SubscriptionOptions::default(),
+    );
     emit(&state, "first", serde_json::Value::Null);
     emit(&state, "second", serde_json::Value::Null);
     let first = receiver.try_recv().unwrap();
@@ -265,5 +269,22 @@ fn emitted_events_have_strictly_sequential_revisions() {
     assert_eq!(audit.len(), 2);
     assert_eq!(audit[0].kind, "first");
     assert_eq!(audit[1].revision, second.revision);
+    let Some(light_application::SubscriptionDelivery::Event(application_event)) =
+        application_events.try_next()
+    else {
+        panic!("expected the facade notification on the application event bus");
+    };
+    assert_eq!(
+        application_event.payload,
+        light_application::ApplicationEvent::System(
+            light_application::SystemEvent::FacadeNotification(
+                light_application::FacadeNotification {
+                    revision: first.revision,
+                    kind: "first".into(),
+                    payload: serde_json::Value::Null,
+                }
+            )
+        )
+    );
     let _ = std::fs::remove_dir_all(data_dir);
 }

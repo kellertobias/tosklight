@@ -266,6 +266,15 @@ fn wire_payload(
                 surface_id: change.surface_id.clone(),
             },
         },
+        application::ApplicationEvent::System(application::SystemEvent::FacadeNotification(
+            notification,
+        )) => wire::EventPayload::FacadeNotification {
+            notification: wire::FacadeNotification {
+                revision: notification.revision,
+                kind: notification.kind.clone(),
+                payload: notification.payload.clone(),
+            },
+        },
     })
 }
 

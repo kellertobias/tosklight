@@ -94,3 +94,54 @@ async fn v2_subscription_dispatches_a_command_and_keeps_delivering_events() {
     ));
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[tokio::test]
+async fn v2_subscription_delivers_facade_notifications_from_the_emit_boundary() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let mut protocols = HeaderMap::new();
+    protocols.insert(
+        header::SEC_WEBSOCKET_PROTOCOL,
+        format!("light.events.v2, light.token.{token}")
+            .parse()
+            .unwrap(),
+    );
+    let session = event_transport::authenticate_protocols(&state, &protocols).unwrap();
+    let mut stream = event_transport::EventStream::subscribe(
+        &state.facade_events,
+        &session,
+        Ok(light_wire::v2::events::EventClientMessage::Subscribe {
+            filter: light_wire::v2::events::EventSubscriptionFilter {
+                capabilities: vec![light_wire::v2::events::EventCapability::System],
+                ..Default::default()
+            },
+            after_sequence: Some(state.facade_events.latest_sequence()),
+            capacity: Some(32),
+            rate_limits: Vec::new(),
+        }),
+    )
+    .unwrap();
+
+    emit(
+        &state,
+        "fixture_changed",
+        serde_json::json!({"fixture_id": 42}),
+    );
+
+    let Some(light_wire::v2::events::EventServerMessage::Event { event }) = stream.next().await
+    else {
+        panic!("expected the facade notification on the v2 event stream");
+    };
+    let light_wire::v2::events::EventPayload::FacadeNotification { notification } = event.payload
+    else {
+        panic!("expected a facade-notification payload");
+    };
+    assert_eq!(notification.kind, "fixture_changed");
+    assert_eq!(notification.payload, serde_json::json!({"fixture_id": 42}));
+    assert_eq!(
+        notification.revision,
+        state.audit_events.lock().back().unwrap().revision
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}

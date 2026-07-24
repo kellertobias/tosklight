@@ -233,6 +233,7 @@ fn build_app_state(
         active_show_error: Arc::new(RwLock::new(startup.active_show_error)),
         events: startup.events,
         application_events: application_events.clone(),
+        facade_events: EventBus::new(2_048),
         active_show_service: active_show_service.clone(),
         playback_topology: PlaybackTopologyService::new(active_show_service.clone()),
         show_patch: ShowPatchService::new(active_show_service.clone()),

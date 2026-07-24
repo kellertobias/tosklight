@@ -84,14 +84,20 @@ describe("LightClientRuntime", () => {
 
 		const connecting = client.connectEvents(onClose);
 		const socket = FakeWebSocket.instances[0];
-		expect(String(socket.url)).toBe("ws://desk.local/api/v1/events");
+		expect(String(socket.url)).toBe("ws://desk.local/api/v2/events");
 		expect(socket.protocols).toEqual([
-			"light.v1",
+			"light.events.v2",
 			"light.token.token-a",
 			"light.desk.b64.w6QgZGVzaw",
 		]);
 		socket.emit("open");
 		await connecting;
+		expect(JSON.parse(socket.sent[0])).toEqual({
+			type: "subscribe",
+			filter: { capabilities: ["system"] },
+			capacity: 256,
+			rate_limits: [],
+		});
 
 		client.disconnectEvents();
 		expect(onClose).not.toHaveBeenCalled();
@@ -108,11 +114,11 @@ describe("LightClientRuntime", () => {
 			payload: { session_id: "session-a" },
 		};
 
-		socket.emitMessage(event);
+		socket.emitMessage(facadeEvent(event));
 		expect(listener).toHaveBeenCalledWith(event);
 		expect(unsubscribe()).toBe(true);
 		expect(unsubscribe()).toBe(false);
-		socket.emitMessage({ ...event, revision: 5 });
+		socket.emitMessage(facadeEvent({ ...event, revision: 5 }));
 		expect(listener).toHaveBeenCalledOnce();
 	});
 
@@ -125,7 +131,7 @@ describe("LightClientRuntime", () => {
 		const socket = await openEvents(client);
 
 		const command = client.command("programmer.clear", {});
-		expect(JSON.parse(socket.sent[0])).toEqual({
+		expect(JSON.parse(socket.sent[1])).toEqual({
 			protocol_version: 1,
 			request_id: "00000000-0000-4000-8000-000000000001",
 			session_id: "session-a",
@@ -155,7 +161,7 @@ describe("LightClientRuntime", () => {
 		const unresolved = expect(
 			client.command("playback.action", { request_id: "playback-a" }),
 		).rejects.toThrow("Command timed out: playback.action");
-		expect(first.sent).toHaveLength(1);
+		expect(first.sent).toHaveLength(2);
 
 		const reconnecting = client.connectEvents();
 		const replacement = FakeWebSocket.instances.at(-1);
@@ -164,12 +170,51 @@ describe("LightClientRuntime", () => {
 		await reconnecting;
 
 		expect(replacement).not.toBe(first);
-		expect(replacement.sent).toEqual([]);
+		expect(replacement.sent.map((message) => JSON.parse(message))).toEqual([
+			{
+				type: "subscribe",
+				filter: { capabilities: ["system"] },
+				capacity: 256,
+				rate_limits: [],
+			},
+		]);
 		await vi.advanceTimersByTimeAsync(5_000);
 		await unresolved;
-		expect(replacement.sent).toEqual([]);
+		expect(replacement.sent).toHaveLength(1);
+	});
+
+	it("closes a gapped facade subscription so connection bootstrap repairs state", async () => {
+		const client = connectedClient();
+		const onClose = vi.fn();
+		const connecting = client.connectEvents(onClose);
+		const socket = FakeWebSocket.instances.at(-1);
+		if (!socket) throw new Error("Expected an event socket");
+		socket.emit("open");
+		await connecting;
+
+		socket.emitMessage({
+			type: "gap",
+			gap: {
+				after_sequence: 1,
+				oldest_available: 3,
+				latest_sequence: 4,
+			},
+		});
+		expect(onClose).toHaveBeenCalledOnce();
 	});
 });
+
+function facadeEvent(notification: ServerEvent) {
+	return {
+		type: "event",
+		event: {
+			payload: {
+				type: "facade_notification",
+				notification,
+			},
+		},
+	};
+}
 
 async function openEvents(client: LightApiClient): Promise<FakeWebSocket> {
 	const connecting = client.connectEvents();

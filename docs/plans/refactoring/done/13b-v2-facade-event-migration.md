@@ -37,3 +37,20 @@ npm run test:e2e
 
 Inherited from parent chunk 13. The temporary facade payload is removed with
 ServerProvider in chunk 22; it is not a new public operator protocol.
+
+## Result
+
+- `LightClientRuntime` now opens `/api/v2/events`, subscribes to the System facade
+  stream, and multiplexes its existing typed command requests on that socket.
+- The compatibility `emit` boundary publishes lossless `facade_notification`
+  application events on a dedicated EventBus. Keeping this temporary stream separate
+  prevents compatibility notifications from duplicating authoritative typed events or
+  changing their sequence domain.
+- The generated v2 wire contract carries the legacy revision, kind, and payload, while
+  gaps and errors close the facade socket so the existing reconnect bootstrap repairs
+  state.
+- Unit coverage proves the draft metadata, wire translation, compatibility publication,
+  authenticated v2 delivery, runtime decoding, command multiplexing, and gap recovery.
+- Verification passed: the full unit gate (449 server tests plus 14 benchmark tests,
+  1 server test ignored, and 2,000 frontend tests) and the full E2E gate (285 passed,
+  11 skipped).

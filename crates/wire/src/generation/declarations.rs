@@ -329,6 +329,7 @@ fn event_payload(config: &Config) -> Vec<String> {
         FixtureProfileIdentity::decl(config),
         ManagedAssetReference::decl(config),
         SelectiveImportChange::decl(config),
+        FacadeNotification::decl(config),
         EventPayload::decl(config),
         EventEnvelope::decl(config),
         EventClientMessage::decl(config),

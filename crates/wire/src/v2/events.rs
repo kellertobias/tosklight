@@ -211,6 +211,18 @@ pub enum EventPayload {
     VirtualPlaybackExclusionZonesChanged {
         change: VirtualPlaybackExclusionZonesChange,
     },
+    FacadeNotification {
+        notification: FacadeNotification,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FacadeNotification {
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub kind: String,
+    #[ts(type = "unknown")]
+    pub payload: serde_json::Value,
 }
 
 #[cfg(test)]

@@ -65,7 +65,8 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
         ClientMessage::Command(_) => Err("the first event message must subscribe".into()),
         ClientMessage::Invalid { error, .. } => Err(error),
     };
-    let mut stream = match EventStream::subscribe(&state.application_events, &session, request) {
+    let event_bus = event_bus(&state, &request);
+    let mut stream = match EventStream::subscribe(event_bus, &session, request) {
         Ok(stream) => stream,
         Err(error) => {
             send_wire(&mut socket, wire::EventServerMessage::Error { error }).await;
@@ -76,6 +77,20 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
         return;
     }
     event_loop(&mut socket, &mut stream, &state, &session).await;
+}
+
+fn event_bus<'a>(
+    state: &'a AppState,
+    request: &Result<wire::EventClientMessage, String>,
+) -> &'a application::EventBus {
+    let Ok(wire::EventClientMessage::Subscribe { filter, .. }) = request else {
+        return &state.application_events;
+    };
+    if filter.capabilities == [wire::EventCapability::System] {
+        &state.facade_events
+    } else {
+        &state.application_events
+    }
 }
 
 async fn event_loop(

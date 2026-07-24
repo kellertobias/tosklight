@@ -41,6 +41,41 @@ fn patch_event_delta_uses_the_authoritative_envelope_sequence() {
 }
 
 #[test]
+fn facade_notification_keeps_legacy_revision_kind_and_payload() {
+    let bus = EventBus::new(4);
+    let event = bus.publish(EventDraft::facade_notification(
+        application::FacadeNotification {
+            revision: 17,
+            kind: "fixture_changed".into(),
+            payload: serde_json::json!({"fixture_id": 42}),
+        },
+    ));
+
+    let Some(wire::EventServerMessage::Event { event }) =
+        wire_delivery(application::SubscriptionDelivery::Event(event))
+    else {
+        panic!("expected a facade-notification delivery");
+    };
+    assert_eq!(event.sequence, 1);
+    assert_eq!(event.desk_id, None);
+    assert_eq!(event.class, wire::EventClass::Projection);
+    assert_eq!(event.delivery, wire::EventDeliveryPolicy::Lossless);
+    assert_eq!(
+        event.object,
+        Some(wire::EventObject {
+            capability: wire::EventCapability::System,
+            id: "facade:fixture_changed".into(),
+        })
+    );
+    let wire::EventPayload::FacadeNotification { notification } = event.payload else {
+        panic!("expected a facade-notification payload");
+    };
+    assert_eq!(notification.revision, 17);
+    assert_eq!(notification.kind, "fixture_changed");
+    assert_eq!(notification.payload, serde_json::json!({"fixture_id": 42}));
+}
+
+#[test]
 fn show_object_batch_keeps_one_event_and_targeted_raw_deltas() {
     let bus = EventBus::new(4);
     let context = context(ActionSource::Osc);

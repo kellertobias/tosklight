@@ -188,6 +188,15 @@ pub(super) fn emit(state: &AppState, kind: &str, payload: serde_json::Value) {
         }
         audit.push_back(event.clone());
     }
+    state
+        .facade_events
+        .publish(light_application::EventDraft::facade_notification(
+            light_application::FacadeNotification {
+                revision: event.revision,
+                kind: event.kind.clone(),
+                payload: event.payload.clone(),
+            },
+        ));
     let _ = state.events.send(event);
 }
 
