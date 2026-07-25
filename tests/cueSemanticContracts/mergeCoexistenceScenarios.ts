@@ -94,6 +94,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	id: "MERGE-002",
 	title:
 		"independent Sequences coexist and retrigger only their stored addresses",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const show = await loadCanonicalCopy(
 			api,
@@ -187,68 +188,6 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		await api.playbackNumberAction(1, "off", {});
 		await bench.tick(0);
 		expect(await visualizationLevel(api, aFixture, "intensity")).toBe(0);
-		state.completed = true;
-	},
-	ui: async ({ api, bench, desk, page }, state) => {
-		await setSequenceMasterFade(api, 0);
-		const fixtures = await fixtureIdsByNumber(api);
-		const aFixture = fixtures[21];
-		const bFixture = fixtures[22];
-		await installPlaybackSequence(
-			api,
-			1,
-			[
-				fixtureCue(1, [
-					[aFixture, "intensity", 0.6],
-					[aFixture, "red", 0],
-					[aFixture, "green", 0],
-					[aFixture, "blue", 1],
-				]),
-			],
-			{ name: "Sequence A", priority: 100 },
-		);
-		await installPlaybackSequence(
-			api,
-			2,
-			[
-				fixtureCue(1, [
-					[bFixture, "intensity", 0.4],
-					[bFixture, "red", 1],
-					[bFixture, "green", 0.7],
-					[bFixture, "blue", 0.4],
-				]),
-			],
-			{ name: "Sequence B", priority: 100 },
-		);
-		await api.playbackNumberAction(1, "go", {});
-		await api.playbackNumberAction(2, "go", {});
-		await bench.tick(1);
-		await setFixtureValue(api, state.showId, aFixture, "red", 1);
-		await setFixtureValue(api, state.showId, bFixture, "blue", 0.8);
-		await bench.tick(1);
-		expect(await visualizationLevel(api, bFixture, "blue")).toBe(0.8);
-		await desk.open(bench.baseUrl);
-		api.session = await desk.session();
-		expect(await visualizationLevel(api, bFixture, "blue")).toBe(0.8);
-		await page.locator(".mode-toggle").click();
-		await page.keyboard.press("Shift+KeyZ");
-		const first = page
-			.locator(".playback-fader-bank article")
-			.filter({ hasText: "Sequence A" });
-		await first.getByRole("button", { name: "GO +", exact: true }).click();
-		await expect(first).toHaveAttribute("data-selected-playback", "true");
-		expect(await visualizationLevel(api, bFixture, "blue")).toBe(0.8);
-		await page.locator(".mode-toggle").click();
-		await page.getByRole("button", { name: "CUE", exact: true }).click();
-		await page.getByRole("button", { name: "1", exact: true }).click();
-		await expect(page.getByLabel("Command line")).toHaveValue("CUE 1");
-		await page.getByRole("button", { name: "ENT", exact: true }).click();
-		await expect(page.getByLabel("Command line")).toHaveValue("FIXTURE");
-		await bench.tick(0);
-		expect(await rgbValues(api, aFixture)).toEqual([0, 0, 1]);
-		expect(await visualizationLevel(api, bFixture, "blue")).toBe(0.8);
-		expect(await visualizationLevel(api, aFixture, "intensity")).toBe(0.6);
-		expect(await visualizationLevel(api, bFixture, "intensity")).toBe(0.4);
 		state.completed = true;
 	},
 	assert: async (_context, state) => expect(state.completed).toBe(true),

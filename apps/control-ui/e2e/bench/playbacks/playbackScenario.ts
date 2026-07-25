@@ -20,6 +20,7 @@ export enum PlaybackButton {
 	Swap = "swap",
 	Release = "release",
 	Pause = "pause",
+	Empty = "none",
 }
 
 export enum PlaybackFader {
@@ -31,6 +32,7 @@ export enum PlaybackFader {
 export interface PlaybackConfiguration {
 	name?: string;
 	color?: string;
+	autoOff?: boolean;
 	buttons?: [
 		Exclude<PlaybackButton, PlaybackButton.Release>,
 		Exclude<PlaybackButton, PlaybackButton.Release>,
@@ -134,7 +136,7 @@ class PlaybackSurface {
 	}
 
 	temp(target: PlaybackTarget) {
-		return new MomentaryPlayback(this.owner, this.route, target, "temp");
+		return this.owner.actionVia(this.route, target, "temp");
 	}
 
 	swap(target: PlaybackTarget) {
@@ -278,7 +280,7 @@ export class BrowserPlaybacks {
 				name: playbackButtonLabel(action),
 				exact: true,
 			});
-			if (["flash", "temp", "swap"].includes(action)) {
+			if (["flash", "swap"].includes(action)) {
 				if (pressed) {
 					await button.hover();
 					await this.page.mouse.down();
@@ -355,6 +357,9 @@ export class BrowserPlaybacks {
 					...current.body,
 					...(definition.name == null ? {} : { name: definition.name }),
 					...(definition.color == null ? {} : { color: definition.color }),
+					...(definition.autoOff == null
+						? {}
+						: { auto_off: definition.autoOff }),
 					...(definition.buttons == null
 						? {}
 						: { buttons: definition.buttons }),

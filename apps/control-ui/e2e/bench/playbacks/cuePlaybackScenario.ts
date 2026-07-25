@@ -1,6 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 import { HttpCueTransferTransport } from "../../../src/api/CueTransferTransport";
 import type { CueMoveCopyChoice } from "../../../src/api/generated/light-wire";
+import { HttpPlaybackTopologyTransport } from "../../../src/api/PlaybackTopologyTransport";
 import type {
 	Cue,
 	CueList,
@@ -19,6 +20,10 @@ export enum CueRecordMode {
 
 export interface CueTiming {
 	fade?: string;
+}
+
+export interface CueListConfiguration {
+	priority?: number;
 }
 
 type CommandRoute = "ui" | "api";
@@ -365,6 +370,43 @@ export class BrowserCues {
 
 	expect(playback: number, cue: number) {
 		return new CueExpectation(this, playback, cue);
+	}
+
+	async configure(playback: number, configuration: CueListConfiguration) {
+		const current = await cueListForPlayback(this.api, this.showId(), playback);
+		const priority = configuration.priority ?? current.body.priority;
+		if (
+			!Number.isSafeInteger(priority) ||
+			priority < -32_768 ||
+			priority > 32_767
+		)
+			throw new Error("Cuelist priority must be a signed 16-bit integer");
+		if (!this.api.session)
+			throw new Error("Cuelist configuration requires an API session");
+		const runtime = await this.api.request<any>(
+			"POST",
+			"/api/v2/playback-runtime/snapshot",
+			{ identities: [] },
+			true,
+			undefined,
+			{
+				showId: this.showId(),
+				deskId: this.api.session.desk.id,
+			},
+		);
+		await new HttpPlaybackTopologyTransport({
+			baseUrl: this.api.baseUrl,
+			sessionToken: this.api.session.token,
+		}).apply(this.showId(), runtime.desk.scope.show_revision, {
+			requestId: crypto.randomUUID(),
+			action: {
+				type: "save_cue_list",
+				cueListId: current.body.id,
+				expectedRevision: current.revision,
+				expectedObjectId: current.id,
+				body: { ...current.body, priority },
+			},
+		});
 	}
 
 	async updateVia(route: CommandRoute, playback: number, cue: number) {

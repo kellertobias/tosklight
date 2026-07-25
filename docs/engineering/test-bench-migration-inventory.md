@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **308 root cases across 48 files**.
+Default catalog: **308 root cases across 49 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -60,11 +60,8 @@ Default catalog: **308 root cases across 48 files**.
 | 02-cue-semantic-contracts.spec.ts | CUE-006 @api › explicit playback selection supplies the implicit Cuelist without following execution order | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 02-cue-semantic-contracts.spec.ts | CUE-007 @api › explicit zeroes block a later inserted on Cue from tracking past Cue 4 | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 02-cue-semantic-contracts.spec.ts | CUE-010 @api › tracking and LTP ownership stay per attribute and reveal the underlying programmer | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 02-cue-semantic-contracts.spec.ts | CUE-010 @ui › tracking and LTP ownership stay per attribute and reveal the underlying programmer | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cue-semantic-contracts | standard failure evidence | parallel | pending-semantic-migration |
 | 02-cue-semantic-contracts.spec.ts | MERGE-002 @api › independent Sequences coexist and retrigger only their stored addresses | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 02-cue-semantic-contracts.spec.ts | MERGE-002 @ui › independent Sequences coexist and retrigger only their stored addresses | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cue-semantic-contracts | standard failure evidence | parallel | pending-semantic-migration |
 | 02-cue-semantic-contracts.spec.ts | MERGE-003 @api › full normal overwrite auto-Offs while partial, disabled, Flash, and Temp restore | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 02-cue-semantic-contracts.spec.ts | MERGE-003 @ui › full normal overwrite auto-Offs while partial, disabled, Flash, and Temp restore | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cue-semantic-contracts | standard failure evidence | parallel | pending-semantic-migration |
 | 02-cue-semantic-contracts.spec.ts | CUE-013 @supplemental-api › inactive deletion is output-neutral and both sole-Cue safeguards are atomic | docs/testing/02-cues-tracking-and-arbitration.md | @supplemental-api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 02-cue-semantic-contracts.spec.ts | MERGE-001 @api › two programmer identities arbitrate by priority, HTP magnitude, and stable LTP edit time | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 02-cues-tracking-and-arbitration.spec.ts | CUE-009 @api › explicit Plain/Status Move/Copy choices preserve both independent axes | docs/testing/02-cues-tracking-and-arbitration.md | @api | cues-tracking-and-arbitration | standard failure evidence | parallel | reviewed-low-level-boundary |
@@ -322,6 +319,9 @@ Default catalog: **308 root cases across 48 files**.
 | 47-semantic-cue-trigger-and-selection.spec.ts | CUE-005 @bench @ui › GO, FOLLOW, and TIME measure from the preceding Cue's latest value endpoint | repository contract | @bench @ui | semantic-cue-trigger-and-selection | standard failure evidence | parallel | migrated-semantic-world |
 | 47-semantic-cue-trigger-and-selection.spec.ts | CUE-006 @bench @ui › explicit playback selection supplies the implicit Cuelist without following execution order | repository contract | @bench @ui | semantic-cue-trigger-and-selection | standard failure evidence | parallel | migrated-semantic-world |
 | 47-semantic-cue-trigger-and-selection.spec.ts | CUE-007 @bench @ui › explicit zeroes block a later inserted on Cue from tracking past Cue 4 | repository contract | @bench @ui | semantic-cue-trigger-and-selection | standard failure evidence | parallel | migrated-semantic-world |
+| 48-semantic-cue-tracking-and-merge.spec.ts | CUE-010 @bench @ui › tracking and LTP ownership stay per attribute and reveal the underlying programmer | repository contract | @bench @ui | semantic-cue-tracking-and-merge | standard failure evidence | parallel | migrated-semantic-world |
+| 48-semantic-cue-tracking-and-merge.spec.ts | MERGE-002 @bench @ui › independent Sequences coexist and retrigger only their stored addresses | repository contract | @bench @ui | semantic-cue-tracking-and-merge | standard failure evidence | parallel | migrated-semantic-world |
+| 48-semantic-cue-tracking-and-merge.spec.ts | MERGE-003 @bench @ui › full normal overwrite auto-Offs while partial, disabled, Flash, and Temp restore | repository contract | @bench @ui | semantic-cue-tracking-and-merge | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints

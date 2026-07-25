@@ -14,6 +14,19 @@ export interface SetProgrammerPriorityIntent {
 	priority: number;
 }
 
+export class BrowserProgrammer {
+	readonly priority = {
+		via: {
+			api: {
+				set: (priority: number) =>
+					setProgrammerPriority(this.api, { surface: "api", priority }),
+			},
+		},
+	};
+
+	constructor(private readonly api: ApiDriver) {}
+}
+
 export async function setProgrammerPriority(
 	api: ApiDriver,
 	intent: SetProgrammerPriorityIntent,

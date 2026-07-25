@@ -5,46 +5,58 @@ import {
 	type TestInfo,
 } from "@playwright/test";
 import type { ControllableDesktopAction } from "../../../src/platform/desktop/controllableBrowserDesktopBridge";
-import type { ApiDriver } from "./api";
-import { BrowserClock } from "./clockScenario";
-import { BrowserCommands, BrowserKeypad } from "../command-selection/commandScenario";
 import {
-	BrowserCues,
-	BrowserRecording,
-} from "../playbacks/cuePlaybackScenario";
-import type { DeskDriver } from "./desk";
-import { BrowserDesktops } from "../window-system/desktopScenario";
-import { BrowserDmx, type DmxUniverseExpectation } from "../output/dmxScenario";
+	BrowserCommands,
+	BrowserKeypad,
+} from "../command-selection/commandScenario";
+import { BrowserRoutedSelection } from "../command-selection/routedSelectionScenario";
+import type { SelectionTarget } from "../command-selection/selectionContract";
+import { BrowserSelection } from "../command-selection/selectionScenario";
 import { BrowserEncoders } from "../encoders/encoderScenario";
+import { BrowserGroups } from "../groups-presets/groupScenario";
+import { BrowserPresets } from "../groups-presets/presetScenario";
+import {
+	type SimulatedHardware,
+	simulatedHardware,
+} from "../hardware/hardwareScenario";
+import { BrowserDmx, type DmxUniverseExpectation } from "../output/dmxScenario";
 import {
 	type FixtureDMXExpectation,
 	type FixtureDMXTarget,
 	FixtureDmxAssertions,
 } from "../output/fixtureDmx";
-import { type SimulatedHardware, simulatedHardware } from "../hardware/hardwareScenario";
-import { BrowserHighlight } from "../programmer/highlightScenario";
-import { BrowserGroups } from "../groups-presets/groupScenario";
-import type { LightBench, TestShow } from "./lightBench";
+import type { FixtureReference } from "../output/fixtureDmxContract";
+import {
+	FixtureValueAssertions,
+	type FixtureValueExpectation,
+} from "../output/fixtureValueScenario";
 import {
 	BrowserOutputPackets,
 	type OutputPacketAssertion,
 } from "../output/outputPacketScenario";
 import { BrowserOutput } from "../output/outputScenario";
+import {
+	BrowserCues,
+	BrowserRecording,
+} from "../playbacks/cuePlaybackScenario";
+import { BrowserPages, BrowserPreload } from "../playbacks/pagePreloadScenario";
+import { BrowserPlaybacks } from "../playbacks/playbackScenario";
+import { BrowserSpeedGroups } from "../playbacks/speedGroupScenario";
+import { BrowserHighlight } from "../programmer/highlightScenario";
+import { BrowserTiming } from "../programmer/programmerFadeScenario";
+import { BrowserProgrammer } from "../programmer/programmerPriority";
+import { BrowserProgrammerSpecials } from "../programmer/programmerSpecialScenario";
+import { BrowserProductDemo } from "../show/productDemoScenario";
+import { BrowserShows } from "../show/showScenario";
+import { BrowserPatch } from "../show-setup/patchScenario";
+import { BrowserDesktops } from "../window-system/desktopScenario";
 import type { BuiltInPaneType } from "../window-system/paneTypes";
 import { builtInLabels } from "../window-system/paneTypes";
-import { BrowserPages, BrowserPreload } from "../playbacks/pagePreloadScenario";
-import { BrowserPatch } from "../show-setup/patchScenario";
-import { BrowserPlaybacks } from "../playbacks/playbackScenario";
+import type { ApiDriver } from "./api";
+import { BrowserClock } from "./clockScenario";
+import type { DeskDriver } from "./desk";
+import type { LightBench, TestShow } from "./lightBench";
 import type { DmxProtocol } from "./protocols";
-import { BrowserTiming } from "../programmer/programmerFadeScenario";
-import { BrowserPresets } from "../groups-presets/presetScenario";
-import { BrowserProductDemo } from "../show/productDemoScenario";
-import { BrowserProgrammerSpecials } from "../programmer/programmerSpecialScenario";
-import { BrowserRoutedSelection } from "../command-selection/routedSelectionScenario";
-import type { SelectionTarget } from "../command-selection/selectionContract";
-import { BrowserSelection } from "../command-selection/selectionScenario";
-import { BrowserShows } from "../show/showScenario";
-import { BrowserSpeedGroups } from "../playbacks/speedGroupScenario";
 import { BrowserRecipes } from "./recipeScenario";
 
 export interface ScreenConfigurationIntent {
@@ -102,11 +114,15 @@ export class BrowserScenarioWorld {
 	readonly dmx: BrowserDmx;
 	readonly output: BrowserOutput;
 	readonly timing: BrowserTiming;
+	readonly programmer: BrowserProgrammer;
 	readonly speedGroup: BrowserSpeedGroups;
 	readonly special: BrowserProgrammerSpecials;
 	readonly recipe: BrowserRecipes;
 	readonly routeSeed: string;
-	private readonly semanticTrace: Array<{ title: string; description: string }> = [];
+	private readonly semanticTrace: Array<{
+		title: string;
+		description: string;
+	}> = [];
 	private readonly stopObservingSteps: () => void;
 	private readonly testInfo: TestInfo;
 	private readonly evidencePage: Page;
@@ -128,6 +144,10 @@ export class BrowserScenarioWorld {
 		expected: FixtureDMXExpectation,
 	) => Promise<void>;
 	readonly expectFixtureDMXAbsent: (target: FixtureDMXTarget) => Promise<void>;
+	readonly expectFixtureValue: (
+		target: FixtureReference,
+		expected: FixtureValueExpectation,
+	) => Promise<void>;
 
 	constructor(
 		page: Page,
@@ -242,6 +262,7 @@ export class BrowserScenarioWorld {
 		this.patch = new BrowserPatch(api, page, desk);
 		this.dmx = new BrowserDmx(api);
 		this.output = new BrowserOutput(api, desk);
+		this.programmer = new BrowserProgrammer(api);
 		this.special = new BrowserProgrammerSpecials(
 			api,
 			page,
@@ -278,6 +299,9 @@ export class BrowserScenarioWorld {
 		this.expectFixtureDMX = (target, expected) =>
 			fixtureDmx.expect(target, expected);
 		this.expectFixtureDMXAbsent = (target) => fixtureDmx.expectAbsent(target);
+		const fixtureValues = new FixtureValueAssertions(api);
+		this.expectFixtureValue = (target, expected) =>
+			fixtureValues.expect(target, expected);
 	}
 
 	async finish(failure?: unknown): Promise<void> {
@@ -307,9 +331,14 @@ export class BrowserScenarioWorld {
 		if (failure === undefined) return;
 		const evidence: Record<string, unknown> = {
 			seed: this.routeSeed,
-			error: failure instanceof Error
-				? { name: failure.name, message: failure.message, stack: failure.stack }
-				: String(failure),
+			error:
+				failure instanceof Error
+					? {
+							name: failure.name,
+							message: failure.message,
+							stack: failure.stack,
+						}
+					: String(failure),
 			semanticActions: this.semanticTrace,
 		};
 		try {

@@ -34,6 +34,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	id: "CUE-010",
 	title:
 		"tracking and LTP ownership stay per attribute and reveal the underlying programmer",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const show = await loadCanonicalCopy(
 			api,
@@ -95,70 +96,6 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		expect(await rgbValues(api, rgb)).toEqual([0, 0, 1]);
 
 		await api.playbackNumberAction(1, "off", {});
-		await bench.tick(0);
-		expect(await rgbValues(api, rgb)).toEqual([0, 1, 0]);
-		state.completed = true;
-	},
-	ui: async ({ api, bench, desk, page }, state) => {
-		await setSequenceMasterFade(api, 0);
-		const fixtures = await fixtureIdsByNumber(api);
-		const rgb = fixtures[21];
-		await installPlaybackSequence(
-			api,
-			1,
-			[
-				fixtureCue(1, [[rgb, "intensity", 1]]),
-				fixtureCue(2, [[rgb, "intensity", 0.5]]),
-				fixtureCue(3, [
-					[rgb, "red", 0],
-					[rgb, "green", 0],
-					[rgb, "blue", 1],
-				]),
-				fixtureCue(4, [[fixtures[2], "intensity", 0.4]]),
-			],
-			{ priority: 100 },
-		);
-		const definition = await object<any>(api, "playback", "1");
-		await putObject(
-			api,
-			"playback",
-			"1",
-			{ ...definition.body, buttons: ["go_minus", "go", "off"] },
-			definition.revision,
-		);
-		for (const [attribute, value] of [
-			["red", 0],
-			["green", 1],
-			["blue", 0],
-		] as const)
-			await setProgrammerFixtureValue(api, {
-				surface: "api",
-				showId: state.showId,
-				fixtureId: rgb,
-				attribute,
-				value: { kind: "normalized", value },
-				timing: PROGRAMMER_TIMING,
-			});
-		await bench.tick(1);
-		await desk.open(bench.baseUrl);
-		await page.locator(".mode-toggle").click();
-		const card = page
-			.locator(".playback-fader-bank article")
-			.filter({ hasText: "Playback 1" });
-		const go = card.getByRole("button", { name: "GO +", exact: true });
-		await go.click();
-		await go.click();
-		await bench.tick(0);
-		expect(await visualizationLevel(api, rgb, "intensity")).toBe(0.5);
-		expect(await rgbValues(api, rgb)).toEqual([0, 1, 0]);
-		await go.click();
-		await bench.tick(0);
-		expect(await visualizationLevel(api, rgb, "intensity")).toBe(0.5);
-		expect(await rgbValues(api, rgb)).toEqual([0, 0, 1]);
-		await go.click();
-		await bench.tick(0);
-		expect(await rgbValues(api, rgb)).toEqual([0, 0, 1]);
-		await card.getByRole("button", { name: "OFF", exact: true }).click();
 		await bench.tick(0);
 		expect(await rgbValues(api, rgb)).toEqual([0, 1, 0]);
 		state.completed = true;
