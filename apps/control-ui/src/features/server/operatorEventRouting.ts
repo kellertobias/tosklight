@@ -28,7 +28,7 @@ function routeDeskAction(event: ServerEvent, session: SessionResponse) {
 	if (
 		payload.control &&
 		payload.desk_alias === session.desk.osc_alias &&
-		payload.control.startsWith("encode/")
+		(payload.control.startsWith("encode/") || payload.control === "nav")
 	) {
 		window.dispatchEvent(
 			new CustomEvent("light:encoder-action", { detail: payload }),

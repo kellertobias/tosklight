@@ -87,6 +87,93 @@ test("ENCODER-DISPLAY-001 @supplemental-ui › six stable slots mirror physical 
   }
 });
 
+test("ENCODER-DISPLAY-001 @ui › OSC NAV wraps families while non-first encoder turn, held-turn, and click follow the displayed cell", async ({
+  api,
+  bench,
+  desk,
+  page,
+}) => {
+  const show = await loadCanonicalCopy(
+    api,
+    bench,
+    "attached-encoder-semantics",
+    "default-stage",
+  );
+  const fixtures = await fixtureIdsByNumber(api);
+  await replaceProgrammingSelection(api, {
+    surface: "api",
+    showId: show.id,
+    fixtures: [fixtures[101]],
+  });
+  await desk.open(api.baseUrl);
+  const hardware = await bench.osc();
+  await hardware.subscribe(
+    `attached-encoder-semantics-${crypto.randomUUID()}`,
+    api.session!.desk.osc_alias,
+  );
+  const sendNavigation = async (
+    value: "up" | "down" | "left" | "right",
+    family: string,
+  ) => {
+    await hardware.send(`/light/${api.session!.desk.osc_alias}/nav`, [value]);
+    await expect(
+      page.getByRole("button", { name: family, exact: true }),
+    ).toHaveClass(/active/);
+  };
+  try {
+    await expect
+      .poll(
+        async () =>
+          (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false))
+            .hardware_connected,
+      )
+      .toBe(true);
+    for (const family of [
+      "Color",
+      "Position",
+      "Beam",
+      "Shapers",
+      "Focus",
+      "Control",
+      "Media",
+      "Intensity",
+    ]) {
+      await sendNavigation("down", family);
+    }
+    await sendNavigation("up", "Media");
+    await sendNavigation("left", "Control");
+    await sendNavigation("right", "Media");
+    await sendNavigation("down", "Intensity");
+    await sendNavigation("down", "Color");
+    await sendNavigation("down", "Position");
+
+    const tilt = page.getByRole("button", { name: /^Encoder 2: Tilt,/ });
+    const displayedPercent = async () =>
+      Number.parseInt(
+        (await tilt.locator("strong").first().textContent()) ?? "",
+        10,
+      );
+    await hardware.send(`/light/${api.session!.desk.osc_alias}/encode/2`, [
+      "right",
+    ]);
+    await expect.poll(displayedPercent).toBe(60);
+
+    await hardware.send(`/light/${api.session!.desk.osc_alias}/encode/2`, [
+      "press",
+    ]);
+    await expect(
+      page.getByRole("dialog", { name: "Encoder 2 value" }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("dialog", { name: "Encoder 2 value" })
+        .getByRole("heading"),
+    ).toHaveText("Tilt");
+  } finally {
+    await hardware.close();
+  }
+});
+
 test("PROG-002 @ui › hardware encoder modal spreads a typed value over the ordered selection", async ({ api, bench, desk, page }) => {
   await loadCanonicalCopy(api, bench, "encoder-spread-ui", "compact-rig");
   await desk.open(api.baseUrl);

@@ -1,7 +1,8 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "../../../../hardware-controls/src/styles.css";
 import { App as HardwareControlsApp } from "../../../../hardware-controls/src/App";
+import type { OscBridge } from "../../../../hardware-controls/src/transport/oscBridge";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => undefined) }));
@@ -26,6 +27,34 @@ afterEach(() => {
 });
 
 describe("hardware controls Programmer layout", () => {
+	it("sends turn, held-turn, and click vocabulary on encoder and NAV paths", async () => {
+		const send = vi.fn().mockResolvedValue(undefined);
+		const bridge: OscBridge = {
+			connect: vi.fn().mockResolvedValue(undefined),
+			send,
+			listenFeedback: vi.fn().mockResolvedValue(() => undefined),
+		};
+		render(<HardwareControlsApp bridge={bridge} />);
+
+		fireEvent.click(screen.getByRole("button", { name: "Encoder 2 up" }));
+		fireEvent.click(screen.getByRole("button", { name: "Encoder 2 hold" }));
+		fireEvent.click(screen.getByRole("button", { name: "Encoder 2 right" }));
+		fireEvent.click(screen.getByRole("button", { name: "Encoder 2 click" }));
+		fireEvent.click(screen.getByRole("button", { name: "Navigation down" }));
+		fireEvent.click(screen.getByRole("button", { name: "Navigation hold" }));
+		fireEvent.click(screen.getByRole("button", { name: "Navigation left" }));
+		fireEvent.click(screen.getByRole("button", { name: "Navigation click" }));
+
+		expect(send.mock.calls).toEqual([
+			["encode/2", ["up"]],
+			["encode/2", ["right"]],
+			["encode/2", ["press"]],
+			["nav", ["down"]],
+			["nav", ["left"]],
+			["nav", ["press"]],
+		]);
+	});
+
   it("uses the 2x2 command area for RECORD and PRELOAD GO and keeps equal adjacent fade faders", () => {
     const { container } = render(<HardwareControlsApp/>);
     const commandGrid = container.querySelector(".hardware-keypad-command-section");

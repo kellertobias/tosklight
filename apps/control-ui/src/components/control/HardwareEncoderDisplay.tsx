@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "../common";
 import { ModalNumberInput, submitEncoderValue } from "../input/ModalInputControls";
@@ -17,6 +17,7 @@ export function HardwareEncoderDisplay({
   onEdit,
   onEditRange,
   onRelease,
+  activateOnHardwarePress = false,
 }: {
   slot: number;
   target?: HardwareEncoderTarget;
@@ -25,13 +26,23 @@ export function HardwareEncoderDisplay({
   onEdit?: (value: number) => void;
   onEditRange?: (points: number[]) => void;
   onRelease?: () => void;
+  activateOnHardwarePress?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [inputValue, setInputValue] = useState("");
-  const openEditor = () => {
+  const openEditor = useCallback(() => {
     setInputValue(String(Number((editValue ?? 0).toFixed(1))));
     setEditing(true);
-  };
+  }, [editValue]);
+  useEffect(() => {
+    if (!activateOnHardwarePress || !onEdit) return;
+    const handleEncoder = (event: Event) => {
+      const { control, value } = (event as CustomEvent<{ control: string; value?: string }>).detail;
+      if (control === `encode/${slot}` && value === "press") openEditor();
+    };
+    window.addEventListener("light:encoder-action", handleEncoder);
+    return () => window.removeEventListener("light:encoder-action", handleEncoder);
+  }, [activateOnHardwarePress, onEdit, openEditor, slot]);
   const submit = () => {
     if (submitEncoderValue(inputValue, onEdit, onEditRange)) setEditing(false);
   };

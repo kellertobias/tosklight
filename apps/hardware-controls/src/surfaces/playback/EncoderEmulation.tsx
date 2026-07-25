@@ -20,14 +20,23 @@ export function EncoderEmulation({
   return (
     <section className={`encoder-emulation ${held ? "held" : ""}`}>
       <button
+        type="button"
         aria-label={`${name} ${held ? "left" : "up"}`}
         onClick={() => send(path, [held ? "left" : "up"])}
       >
         {held ? "‹" : "⌃"}
       </button>
       <div>
-        <button onClick={() => send(path, ["press"])}>CLK</button>
         <button
+          type="button"
+          aria-label={`${name} click`}
+          onClick={() => send(path, ["press"])}
+        >
+          CLK
+        </button>
+        <button
+          type="button"
+          aria-label={`${name} hold`}
           className={held ? "active" : ""}
           onClick={() => setHeld((value) => !value)}
         >
@@ -35,6 +44,7 @@ export function EncoderEmulation({
         </button>
       </div>
       <button
+        type="button"
         aria-label={`${name} ${held ? "right" : "down"}`}
         onClick={() => send(path, [held ? "right" : "down"])}
       >

@@ -222,6 +222,32 @@ describe("server event routing", () => {
 		expect(received).toEqual(["go"]);
 	});
 
+	it("routes encoder and navigation controls only for the matching OSC desk", () => {
+		const received: Array<{ control: string; value: string }> = [];
+		const listener = ((incoming: CustomEvent) => {
+			received.push(incoming.detail);
+		}) as EventListener;
+		window.addEventListener("light:encoder-action", listener);
+		try {
+			for (const payload of [
+				{ control: "nav", value: "down", desk_alias: "other" },
+				{ control: "nav", value: "down", desk_alias: "main" },
+				{ control: "encode/2", value: "press", desk_alias: "main" },
+			])
+				routeOperatorEvent(
+					event("desk_action", payload),
+					session,
+					{} as ServerState,
+				);
+			expect(received).toEqual([
+				{ control: "nav", value: "down", desk_alias: "main" },
+				{ control: "encode/2", value: "press", desk_alias: "main" },
+			]);
+		} finally {
+			window.removeEventListener("light:encoder-action", listener);
+		}
+	});
+
 	it("routes Update requests through the desk-scoped UI event", () => {
 		const received: unknown[] = [];
 		window.addEventListener(

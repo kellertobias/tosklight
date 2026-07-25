@@ -23,6 +23,9 @@ export const parameterFamilies = {
 } as const;
 
 export type ParameterFamily = keyof typeof parameterFamilies;
+export const parameterFamilyOrder = Object.keys(
+	parameterFamilies,
+) as ParameterFamily[];
 export type SpecialParameterFamily =
 	| "Color"
 	| "Position"

@@ -67,6 +67,7 @@ function EncoderSurface({
 		return (
 			<HardwareEncoderDisplay
 				slot={index + 1}
+				activateOnHardwarePress
 				target={{ label, value: discrete ?? display }}
 				editValue={discrete ? undefined : value * 100}
 				onEdit={

@@ -91,6 +91,31 @@ test.describe("docs/plans/Done/21-completion-coverage-and-release-verification.D
     await expect.poll(() => hardware.values("programmer/cue-fade")).toEqual([0, 1]);
   });
 
+  test("ENCODER-DISPLAY-001 @ui › simulator touch controls emit encoder and NAV turn, held-turn, and click tokens", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 2400, height: 1200 });
+    const hardware = new ControllableHardwareOscDriver(page);
+    await hardware.install();
+    await page.goto(hardwareUrl);
+
+    await page.getByRole("button", { name: "Encoder 2 up" }).click();
+    await page.getByRole("button", { name: "Encoder 2 hold" }).click();
+    await page.getByRole("button", { name: "Encoder 2 right" }).click();
+    await page.getByRole("button", { name: "Encoder 2 click" }).click();
+    await page.getByRole("button", { name: "Navigation down" }).click();
+    await page.getByRole("button", { name: "Navigation hold" }).click();
+    await page.getByRole("button", { name: "Navigation left" }).click();
+    await page.getByRole("button", { name: "Navigation click" }).click();
+
+    await expect
+      .poll(() => hardware.values("encode/2"))
+      .toEqual(["up", "right", "press"]);
+    await expect
+      .poll(() => hardware.values("nav"))
+      .toEqual(["down", "left", "press"]);
+  });
+
   test("UPDATE-002 @ui › actual simulator pointer gestures emit complete, mutually exclusive Shift and Record sequences", async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 1100 });
     const hardware = new ControllableHardwareOscDriver(page);

@@ -1,11 +1,11 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { VisualizationSnapshot } from "../../api/types";
+import { selectFixturesForSelection } from "../../features/patch/selectors";
 import type {
 	ProgrammerFixtureValue,
 	ProgrammerGroupValue,
 } from "../../features/programmerValues/contracts";
-import { selectFixturesForSelection } from "../../features/patch/selectors";
 import { ParameterControls } from "./ParameterControls";
 
 const state = {
@@ -522,6 +522,94 @@ describe("ParameterControls hardware encoders", () => {
 		).toBeInTheDocument();
 	});
 
+	it("cycles all family cells with NAV and wraps in both directions", () => {
+		server.bootstrap.hardware_connected = true;
+		server.selectedFixtures = ["fixture-1"];
+		render(<ParameterControls />);
+
+		const navigate = (value: string) =>
+			fireEvent(
+				window,
+				new CustomEvent("light:encoder-action", {
+					detail: { control: "nav", value },
+				}),
+			);
+		for (const family of [
+			"Color",
+			"Position",
+			"Beam",
+			"Shapers",
+			"Focus",
+			"Control",
+			"Media",
+			"Intensity",
+		]) {
+			navigate("down");
+			expect(screen.getByRole("button", { name: family })).toHaveClass(
+				"active",
+			);
+		}
+		navigate("up");
+		expect(screen.getByRole("button", { name: "Media" })).toHaveClass("active");
+		navigate("left");
+		expect(screen.getByRole("button", { name: "Control" })).toHaveClass(
+			"active",
+		);
+		navigate("right");
+		expect(screen.getByRole("button", { name: "Media" })).toHaveClass("active");
+	});
+
+	it("uses encoder press as the same cell action and coarse-turns a non-first slot", async () => {
+		server.bootstrap.hardware_connected = true;
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [
+			{
+				fixture_id: "fixture-1",
+				logical_heads: [],
+				definition: {
+					heads: [
+						{
+							shared: true,
+							parameters: [
+								{ attribute: "pan", capabilities: [] },
+								{ attribute: "tilt", capabilities: [] },
+							],
+						},
+					],
+				},
+			},
+		];
+		render(<ParameterControls />);
+		fireEvent.click(screen.getByRole("button", { name: "Position" }));
+
+		fireEvent(
+			window,
+			new CustomEvent("light:encoder-action", {
+				detail: { control: "encode/2", value: "left" },
+			}),
+		);
+		await vi.waitFor(() =>
+			expect(normalValuesActions.applyIntent).toHaveBeenLastCalledWith({
+				requestId: expect.any(String),
+				fixtureIds: ["fixture-1"],
+				attribute: "tilt",
+				operation: { type: "relative_step", delta: -0.1 },
+				timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+			}),
+		);
+
+		fireEvent(
+			window,
+			new CustomEvent("light:encoder-action", {
+				detail: { control: "encode/2", value: "press" },
+			}),
+		);
+		expect(
+			screen.getByRole("dialog", { name: "Encoder 2 value" }),
+		).toBeInTheDocument();
+		expect(screen.getByRole("heading", { name: "Tilt" })).toBeInTheDocument();
+	});
+
 	it("spreads a typed hardware encoder range over the ordered fixture selection", () => {
 		server.bootstrap.hardware_connected = true;
 		server.selectedFixtures = ["fixture-3", "fixture-1", "fixture-2"];
@@ -597,6 +685,20 @@ describe("ParameterControls hardware feedback values", () => {
 		expect(
 			screen.queryByRole("button", { name: "Set value for control reset" }),
 		).not.toBeInTheDocument();
+		fireEvent(
+			window,
+			new CustomEvent("light:encoder-action", {
+				detail: { control: "encode/1", value: "right" },
+			}),
+		);
+		fireEvent(
+			window,
+			new CustomEvent("light:encoder-action", {
+				detail: { control: "encode/1", value: "press" },
+			}),
+		);
+		expect(normalValuesActions.applyIntent).not.toHaveBeenCalled();
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
 
 	it("shows a hardware encoder percentage range for mixed selected fixture values", async () => {
