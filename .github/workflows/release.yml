@@ -5,6 +5,7 @@ name: CI, release, and Pages
 # tags and hosted releases. It never creates or pushes a branch commit.
 on:
   push:
+    # A branch filter means tag pushes do not trigger this workflow.
     branches: ["**"]
   pull_request:
   workflow_dispatch:
@@ -14,7 +15,7 @@ permissions:
 
 concurrency:
   group: github-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -643,6 +644,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git ls-remote origin refs/heads/main | awk '{print $1}')" = "$GITHUB_SHA"
           git diff --exit-code
           npm run release
           git diff --exit-code
