@@ -79,6 +79,26 @@ chosen `PaneType`. `npm run test:bench-types` protects those compile-time distin
 Secondary-screen helpers prove the persisted browser intent and controllable desktop-bridge
 request; they do not claim that Playwright opened or captured a native OS window.
 
+Reusable setup belongs in the typed `recipe` registry. Recipes receive only public
+semantic helpers, declare supported routes, retain their expanded action trace, and
+reject an unsupported explicit route before mutation. Set
+`LIGHT_TEST_ROUTE_SEED=<seed>` to replay unqualified adapter choices; the runner derives
+each choice from that seed, scenario identity, retry, and action index, prints a concise
+summary, and attaches the complete report. On failure it also attaches semantic actions,
+show/Desktop/session identity, selection and Programmer observations, screenshots, and
+the existing server/OSC/DMX/audit evidence.
+
+The generated [migration inventory](../engineering/test-bench-migration-inventory.md)
+tracks every root default-catalog case plus the serial screenshot/recording entrypoints.
+Regenerate it with
+`node tools/test-bench-migration-inventory.mjs --write`. A root spec may add
+`// @bench-semantic-world` only after every operator action in that file uses the
+semantic world; architecture checks then reject Playwright Page/Locator access,
+`ApiDriver`, raw HTTP/reducer actions, selectors, coordinates, fixture UUIDs, encoder
+slots, and mutable show-object helpers. Protocol encoding, wire, restart, packaged
+desktop, and generated-artifact cases remain explicit low-level inventory boundaries
+rather than pretending to be migrated UI.
+
 Browser scenarios establish show fixtures through the typed catalog exposed by
 `show.use(Show.Empty)`, `show.use(Show.TwelveDimmers)`, `show.use(Show.CompactRig)`, or
 `show.use(Show.DefaultStage)`. Each call copies an immutable canonical input into a uniquely

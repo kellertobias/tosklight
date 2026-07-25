@@ -16,6 +16,7 @@ architecture(){
   node --test "$ROOT/tools/source-size/source-size.test.mjs"
   node --test "$ROOT/tools/test-command-boundaries.test.mjs"
   node --test "$ROOT/tools/test-private-boundaries.test.mjs"
+  node --test "$ROOT/tools/test-semantic-world-boundaries.test.mjs"
   node "$ROOT/tools/check-source-size.mjs"
 }
 unit(){ architecture; (cd "$ROOT" && npm run test:bench-types); (cd "$UI" && npm run build); cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); }

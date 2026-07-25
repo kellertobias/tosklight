@@ -13,6 +13,9 @@ import {
   readPrivateBoundarySources,
   scanPrivateTestBoundaries,
 } from "./test-private-boundaries.mjs";
+import {
+  scanSemanticWorldFiles,
+} from "./test-semantic-world-boundaries.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
@@ -235,6 +238,18 @@ function privateTestBoundaries() {
   )) fail(failure);
 }
 
+function semanticWorldBoundaries() {
+  for (const failure of scanSemanticWorldFiles(repositoryRoot)) fail(failure);
+  try {
+    execFileSync("node", [
+      path.join(repositoryRoot, "tools/test-bench-migration-inventory.mjs"),
+      "--check",
+    ], { cwd: repositoryRoot, stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    fail(error?.stderr?.toString().trim() || error.message);
+  }
+}
+
 rustDependencyDirections();
 serverEntrypointIsThin();
 activeShowMutationDirections();
@@ -243,6 +258,7 @@ typeScriptDependencyDirections();
 legacyPlaybackSnapshotBoundaries();
 testCommandBoundaries();
 privateTestBoundaries();
+semanticWorldBoundaries();
 
 if (failures.length > 0) {
   for (const failure of failures) console.error(`architecture error: ${failure}`);
