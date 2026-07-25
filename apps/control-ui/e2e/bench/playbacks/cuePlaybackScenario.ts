@@ -28,6 +28,43 @@ export interface CueListConfiguration {
 
 type CommandRoute = "ui" | "api";
 
+class CueTransferChoice {
+	constructor(
+		private readonly page: Page,
+		private readonly desk: DeskDriver,
+		private readonly operation: "COPY" | "MOVE",
+	) {}
+
+	async available() {
+		const dialog = this.dialog();
+		const title = this.operation === "COPY" ? "Copy" : "Move";
+		await expect(dialog).toBeVisible();
+		await expect(
+			dialog.getByRole("button", { name: `Plain ${title}`, exact: true }),
+		).toBeVisible();
+		await expect(
+			dialog.getByRole("button", { name: `Status ${title}`, exact: true }),
+		).toBeVisible();
+		await expect(
+			dialog.getByRole("button", { name: "Cancel", exact: true }),
+		).toBeVisible();
+	}
+
+	async cancel() {
+		const dialog = this.dialog();
+		await this.available();
+		await this.desk.click(
+			dialog.getByRole("button", { name: "Cancel", exact: true }),
+		);
+		await expect(dialog).toBeHidden();
+	}
+
+	private dialog() {
+		const title = this.operation === "COPY" ? "Copy" : "Move";
+		return this.page.getByRole("dialog", { name: `Cue ${title} choice` });
+	}
+}
+
 class RecordingSurface {
 	constructor(
 		private readonly owner: BrowserRecording,
@@ -370,6 +407,10 @@ export class BrowserCues {
 
 	expect(playback: number, cue: number) {
 		return new CueExpectation(this, playback, cue);
+	}
+
+	transferChoice(operation: "COPY" | "MOVE") {
+		return new CueTransferChoice(this.page, this.desk, operation);
 	}
 
 	async configure(playback: number, configuration: CueListConfiguration) {

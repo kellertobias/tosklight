@@ -243,7 +243,19 @@ export function commandKeys(
 		if (requestedTarget !== target) keys.push("GRP");
 		tokens.shift();
 	}
-	for (const token of tokens) keys.push(...keysForToken(token));
+	for (let index = 0; index < tokens.length; index += 1) {
+		const token = tokens[index];
+		if (!token) continue;
+		if (
+			token.toUpperCase() === "SPD" &&
+			tokens[index + 1]?.toUpperCase() === "GRP"
+		) {
+			keys.push("SHIFT", "TIME");
+			index += 1;
+			continue;
+		}
+		keys.push(...keysForToken(token));
+	}
 	return keys;
 }
 

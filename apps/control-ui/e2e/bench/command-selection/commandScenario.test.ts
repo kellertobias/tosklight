@@ -90,6 +90,15 @@ describe("command scenario primitives", () => {
 			"3",
 		]);
 		expect(commandKeys("DEGRP 4", "FIXTURE")).toEqual(["GRP", "GRP", "4"]);
+		expect(commandKeys("SPD GRP 1 AT SPD GRP 3", "FIXTURE")).toEqual([
+			"SHIFT",
+			"TIME",
+			"1",
+			"AT",
+			"SHIFT",
+			"TIME",
+			"3",
+		]);
 	});
 
 	it("presses exact keypad keys in order through DeskDriver", async () => {
