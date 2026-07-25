@@ -177,7 +177,7 @@ Extract reusable input surfaces independently so applications can compose them w
 
 The existing app-aware `VerticalTouchFader` wrapper should remain in the Control UI initially and provide the hardware mode from `useServer` and `useApp`. The package surface receives that mode explicitly.
 
-A fader is an absolute control. It must not become the primary implementation of a software encoder. Relative software-encoder semantics remain governed by `docs/plans/Later/54-software-encoder-relative-controls.md`.
+A fader is an absolute control. It must not become the primary implementation of a software encoder. Relative software-encoder semantics remain governed by `docs/plans/Next/00-programmer-relative-encoders-and-fade-time-scope.md`.
 
 ### 7. Encoders
 

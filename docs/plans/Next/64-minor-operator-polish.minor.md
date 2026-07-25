@@ -16,7 +16,7 @@ Improve special dialogs so they read as professional production UI. The Position
 
 ### Relative encoders and programmer fade time
 
-This is not a minor polish item. It belongs in [Programmer Relative Encoders and Fade-Time Scope](65-programmer-relative-encoders-and-fade-time-scope.md).
+This is not a minor polish item. It belongs in the first-priority Next plan, [Programmer Relative Encoders, Touch Controls, and Fade-Time Scope](00-programmer-relative-encoders-and-fade-time-scope.md).
 
 ### Remove direct programmer encoder type
 
