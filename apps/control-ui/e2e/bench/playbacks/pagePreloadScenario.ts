@@ -16,6 +16,14 @@ import { mapExistingPlaybackToSlot } from "./mapExistingPlaybackToSlot";
 type PageRoute = "ui" | "api";
 type PreloadRoute = "ui" | "api";
 
+export interface PreloadCaptureConfiguration {
+	programmer: boolean;
+	physicalPlaybacks: boolean;
+	virtualPlaybacks: boolean;
+	programmerFade: number;
+	cueFade: number;
+}
+
 class PageSurface {
 	constructor(
 		private readonly owner: BrowserPages,
@@ -238,6 +246,8 @@ export class BrowserPreload {
 	readonly expect = {
 		active: async () => expect(await this.active()).toBe(true),
 		inactive: async () => expect(await this.active()).toBe(false),
+		pendingPlaybackActions: async (actions: readonly string[]) =>
+			expect(await this.pendingPlaybackActions()).toEqual(actions),
 	};
 
 	constructor(
@@ -257,6 +267,20 @@ export class BrowserPreload {
 
 	clear() {
 		return this.clearVia("api");
+	}
+
+	async configure(configuration: PreloadCaptureConfiguration) {
+		const current = await this.api.request<{
+			configuration: Record<string, unknown>;
+		}>("GET", "/api/v2/configuration");
+		await this.api.request("PUT", "/api/v2/configuration", {
+			...current.configuration,
+			programmer_fade_millis: configuration.programmerFade,
+			sequence_master_fade_millis: configuration.cueFade,
+			preload_programmer_changes: configuration.programmer,
+			preload_physical_playback_actions: configuration.physicalPlaybacks,
+			preload_virtual_playback_actions: configuration.virtualPlaybacks,
+		});
 	}
 
 	async startVia(route: PreloadRoute) {
@@ -350,9 +374,22 @@ export class BrowserPreload {
 			baseUrl: this.api.baseUrl,
 			sessionToken: session.token,
 		}).loadSnapshot({ showId: this.showId(), userId: session.user.id });
-		return (
-			snapshot.projection.blind && snapshot.projection.preloadCaptureProgrammer
-		);
+		return snapshot.projection.blind;
+	}
+
+	private async pendingPlaybackActions() {
+		const sessionId = this.session().session_id;
+		const programmers = await this.api.request<
+			Array<{
+				session_id: string;
+				preload_playback_pending: Array<{ action: string }>;
+			}>
+		>("GET", "/api/v2/programmers");
+		const programmer =
+			programmers.find((candidate) => candidate.session_id === sessionId) ??
+			programmers[0];
+		if (!programmer) throw new Error("No Programmer projection is available");
+		return programmer.preload_playback_pending.map((entry) => entry.action);
 	}
 
 	private intent() {

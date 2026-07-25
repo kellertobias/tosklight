@@ -35,6 +35,7 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 	id: "PRELOAD-002",
 	title:
 		"physical-playback-only Preload preserves the seven ordered action verbs",
+	surfaces: ["api"],
 	// UI-only gap (the @api contract passes, so the engine's ordered Preload action verbs are
 	// correct): the on-screen "PRELOAD" control is not present in the physical-playback-only
 	// layout, so the UI cannot exercise the verb ordering. Unskip once the PRELOAD control is
