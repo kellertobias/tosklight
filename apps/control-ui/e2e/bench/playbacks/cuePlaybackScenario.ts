@@ -37,6 +37,124 @@ export interface CueEditorValues {
 	triggerTime?: string;
 }
 
+export interface CueListSettingsValues {
+	mode?: "Sequence" | "Chaser";
+	priority?: number;
+	intensityPriority?: "HTP" | "LTP";
+	wrap?: "Off" | "Tracking" | "Reset";
+	restart?: "First Cue" | "Continue Current Cue";
+	forceCueTiming?: boolean;
+	disableCueTiming?: boolean;
+	speedMultiplier?: number;
+	chaserXfade?: number;
+}
+
+class CueListSettings {
+	constructor(
+		private readonly page: Page,
+		private readonly desk: DeskDriver,
+		private readonly cueListName: string,
+	) {}
+
+	async expectDefaults() {
+		const dialog = this.dialog();
+		await expect(dialog).toContainText(this.cueListName);
+		await expect(
+			dialog.getByRole("button", { name: /Mode\s*\(Sequence\)/ }),
+		).toBeVisible();
+		await expect(this.selectField("Intensity priority mode")).toContainText(
+			"HTP",
+		);
+		await expect(this.selectField("Wrap Around")).toContainText("Off");
+		await expect(this.selectField("Restart mode")).toContainText("First Cue");
+		await expect(dialog.getByLabel("Force Cue Timing")).not.toBeChecked();
+		await expect(dialog.getByLabel("Disable Cue Timing")).not.toBeChecked();
+	}
+
+	async configure(values: CueListSettingsValues) {
+		const dialog = this.dialog();
+		await this.desk.recordStep(
+			"CONFIGURE CUELIST SETTINGS",
+			"Configure Sequence or Chaser behavior through the visible settings dialog.",
+		);
+		if (values.mode != null) {
+			await dialog
+				.getByRole("button", { name: /Mode\s*\((Sequence|Chaser)\)/ })
+				.click();
+			await dialog
+				.getByRole("menuitemradio", { name: values.mode, exact: true })
+				.click();
+		}
+		if (values.priority != null)
+			await dialog.getByLabel("Numeric priority").fill(String(values.priority));
+		if (values.intensityPriority != null)
+			await this.choose("Intensity priority mode", values.intensityPriority);
+		if (values.wrap != null) await this.choose("Wrap Around", values.wrap);
+		if (values.restart != null)
+			await this.choose("Restart mode", values.restart);
+		if (values.forceCueTiming != null)
+			await this.setSwitch("Force Cue Timing", values.forceCueTiming);
+		if (values.disableCueTiming != null)
+			await this.setSwitch("Disable Cue Timing", values.disableCueTiming);
+		if (values.speedMultiplier != null)
+			await dialog
+				.getByLabel("Speed multiplier")
+				.fill(String(values.speedMultiplier));
+		if (values.chaserXfade != null) {
+			const xfade = dialog.getByRole("slider", { name: "Chaser X-fade" });
+			await expect(xfade).toHaveAttribute("min", "0");
+			await expect(xfade).toHaveAttribute("max", "100");
+			await xfade.evaluate((input: HTMLInputElement, value) => {
+				input.value = String(value);
+				input.dispatchEvent(new Event("input", { bubbles: true }));
+				input.dispatchEvent(new Event("change", { bubbles: true }));
+			}, values.chaserXfade);
+		}
+	}
+
+	async save() {
+		await this.desk.click(
+			this.dialog().getByRole("button", { name: "Save", exact: true }),
+		);
+		await expect(this.dialog()).toBeHidden();
+	}
+
+	async close() {
+		await this.desk.click(
+			this.dialog().getByRole("button", {
+				name: "Close Cuelist Settings",
+				exact: true,
+			}),
+		);
+		await expect(this.dialog()).toBeHidden();
+	}
+
+	private dialog() {
+		return this.page.getByRole("dialog", { name: "Cuelist Settings" });
+	}
+
+	private selectField(label: string) {
+		return this.dialog()
+			.locator(".ui-form-field")
+			.filter({ hasText: label })
+			.getByRole("button")
+			.first();
+	}
+
+	private async choose(label: string, next: string) {
+		await this.selectField(label).click();
+		await this.page.getByRole("option", { name: next, exact: true }).click();
+	}
+
+	private async setSwitch(label: string, checked: boolean) {
+		const input = this.dialog().getByLabel(label, { exact: true });
+		if ((await input.isChecked()) !== checked)
+			await input
+				.locator("xpath=ancestor::label[contains(@class, 'ui-switch-control')]")
+				.click();
+	}
+}
+
 class CueEditorExpectation {
 	constructor(private readonly owner: CueEditor) {}
 
@@ -127,6 +245,11 @@ export class CueEditor {
 	}
 
 	async inspectSettings() {
+		const settings = await this.openSettings();
+		await settings.close();
+	}
+
+	async openSettings() {
 		await this.desk.click(
 			this.page.getByRole("button", {
 				name: "Cuelist Settings",
@@ -137,13 +260,7 @@ export class CueEditor {
 			name: "Cuelist Settings",
 		});
 		await expect(dialog).toContainText(this.cueListName);
-		await this.desk.click(
-			dialog.getByRole("button", {
-				name: "Close Cuelist Settings",
-				exact: true,
-			}),
-		);
-		await expect(dialog).toBeHidden();
+		return new CueListSettings(this.page, this.desk, this.cueListName);
 	}
 
 	window() {
@@ -527,6 +644,19 @@ class CueExpectation {
 	}
 }
 
+class CueListExpectation {
+	constructor(
+		private readonly owner: BrowserCues,
+		private readonly playback: number,
+	) {}
+
+	async configuration(expected: Partial<CueList>) {
+		await expect
+			.poll(() => this.owner.cueList(this.playback))
+			.toMatchObject(expected);
+	}
+}
+
 export class BrowserCues {
 	readonly via = {
 		ui: new CueSurface(this, "ui"),
@@ -571,6 +701,10 @@ export class BrowserCues {
 
 	expect(playback: number, cue: number) {
 		return new CueExpectation(this, playback, cue);
+	}
+
+	expectList(playback: number) {
+		return new CueListExpectation(this, playback);
 	}
 
 	transferChoice(operation: "COPY" | "MOVE") {
@@ -744,6 +878,10 @@ export class BrowserCues {
 	async cue(playback: number, cue: number) {
 		const list = await cueListForPlayback(this.api, this.showId(), playback);
 		return list.body.cues.find((candidate) => candidate.number === cue);
+	}
+
+	async cueList(playback: number) {
+		return (await cueListForPlayback(this.api, this.showId(), playback)).body;
 	}
 
 	private async mutate(route: CommandRoute, playback: number, command: string) {

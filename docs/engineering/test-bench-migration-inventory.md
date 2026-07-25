@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **308 root cases across 51 files**.
+Default catalog: **309 root cases across 52 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -154,8 +154,8 @@ Default catalog: **308 root cases across 51 files**.
 | 06-cuelist-view-and-settings.spec.ts | CUE-011 @supplemental-ui › Renumber is one revision, preserves stable Cue/runtime identity, and rejects every invalid path | docs/testing/02-cues-tracking-and-arbitration.md | @supplemental-ui | cuelist-view-and-settings | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-cuelist-view-and-settings.spec.ts | CUE-013 @api › deleting the active Cue holds output and anchors GO/GO minus without hidden Cue data | docs/testing/02-cues-tracking-and-arbitration.md | @api | cuelist-view-and-settings | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-cuelist-view-and-settings.spec.ts | CUE-013 @ui › deleting the active Cue holds output and anchors GO/GO minus without hidden Cue data | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cuelist-view-and-settings | standard failure evidence | parallel | pending-semantic-migration |
+| 06-cuelist-view-and-settings.spec.ts | CUE-012 @restart › legacy Cuelist settings migrate and persist across restart | docs/testing/02-cues-tracking-and-arbitration.md | @restart | cuelist-view-and-settings | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-cuelist-view-and-settings.spec.ts | CUE-012 @api › Cuelist Settings drive arbitration, wrapping, restart, timing, and Chaser phase | docs/testing/02-cues-tracking-and-arbitration.md | @api | cuelist-view-and-settings | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 06-cuelist-view-and-settings.spec.ts | CUE-012 @ui › Cuelist Settings drive arbitration, wrapping, restart, timing, and Chaser phase | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cuelist-view-and-settings | standard failure evidence | parallel | pending-semantic-migration |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-001 @api › programmer-only Preload is blind, timed from GO, and releasable | docs/testing/06-preload-modes-and-virtual-playbacks.md | @api | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-001 @ui › programmer-only Preload is blind, timed from GO, and releasable | docs/testing/06-preload-modes-and-virtual-playbacks.md | @ui | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | pending-semantic-migration |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-001 @supplemental › API timing and source ownership at exact virtual-time checkpoints | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
@@ -322,6 +322,7 @@ Default catalog: **308 root cases across 51 files**.
 | 49-semantic-cue-transfer-speed-and-navigation.spec.ts | CMD-002 @bench @ui › Speed Group commands address, synchronize, display, and manually unlink all five groups | repository contract | @bench @ui | semantic-cue-transfer-speed-and-navigation | standard failure evidence | parallel | migrated-semantic-world |
 | 49-semantic-cue-transfer-speed-and-navigation.spec.ts | CUE-014 @bench @ui › Cue Go To and Load preserve desk-local selection and authoritative output controls | repository contract | @bench @ui | semantic-cue-transfer-speed-and-navigation | standard failure evidence | parallel | migrated-semantic-world |
 | 50-semantic-cue-editing.spec.ts | CUE-011 @bench @ui › Cuelist View edits preserve Cue identity, runtime selection, and persisted values | repository contract | @bench @ui | semantic-cue-editing | standard failure evidence | parallel | migrated-semantic-world |
+| 51-semantic-cuelist-settings.spec.ts | CUE-012 @bench @ui › Cuelist Settings persist Sequence and Chaser runtime policy | repository contract | @bench @ui | semantic-cuelist-settings | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints

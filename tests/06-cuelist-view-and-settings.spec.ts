@@ -484,9 +484,12 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     state.completed = true;
   };
 
+  test("CUE-012 @restart › legacy Cuelist settings migrate and persist across restart", cue012Ui);
+
   pairedScenario<{ completed: boolean }>({
     id: "CUE-012",
     title: "Cuelist Settings drive arbitration, wrapping, restart, timing, and Chaser phase",
+    surfaces: ["api"],
     arrange: () => ({ completed: false }),
     api: async ({ api, bench }, state) => {
       await loadCanonicalCopy(api, bench, "cue-012-engine", "compact-rig");
