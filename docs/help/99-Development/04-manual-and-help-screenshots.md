@@ -35,4 +35,4 @@ The expanded derivative resolves strokes, transforms, repeated patterns, and bin
 
 ## Release publication
 
-The Forgejo manual action builds both formats on pull requests and `main`. On a trusted `v*` tag it creates or reuses the hosted release and idempotently attaches the versioned PDF and HTML deployment ZIP. Pull-request code never receives release credentials.
+The Forgejo manual action validates both formats on pull requests and `main`, but publishes nothing to the Forgejo instance. GitHub builds and deploys the complete Pages site from mirrored `main`, including the HTML manual and its downloadable archive. Pull-request code receives no release or deployment credentials.

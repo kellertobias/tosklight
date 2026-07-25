@@ -1,7 +1,8 @@
 name: Release
 
-# The GitHub mirror does not run the test suite — Forgejo is the authoritative CI and
-# creates the tag only after that suite passes.
+# GitHub owns every application/server binary build. A mirrored main push builds all
+# platforms as workflow artifacts; the v* tag created after Forgejo validation publishes
+# those binaries as the GitHub Release. Forgejo never builds or hosts release binaries.
 #
 # A v* tag produces a published GitHub release. Branch builds produce the same artifacts
 # as downloadable workflow artifacts but never publish a release, so packaging can be
@@ -9,7 +10,7 @@ name: Release
 on:
   push:
     tags: ["v*"]
-    branches: [refactoring]
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:

@@ -1,24 +1,15 @@
 name: Pages
 
-# Runs on the GitHub mirror only. The test suite lives on Forgejo, which tags the release;
-# this publishes the product page for that tag.
-#
-# The trigger is `release: published`, not the tag push: the page lists the actual release
-# assets, so it must run after the Release workflow has finished uploading them. Building on
-# every push to main would also stamp the page with an unreleased version.
-#
-# Branch pushes build the site and upload it as a workflow artifact for inspection, but
-# do not deploy: deploying from a branch would replace the live site with an unreleased
-# version whose download links point at assets that do not exist.
+# GitHub owns the Pages build and deployment. Forgejo mirrors main here but never builds
+# or deploys the site itself. The later semantic-release version commit is also mirrored
+# to main, so it replaces any earlier build with the correctly versioned download links.
 on:
-  release:
-    types: [published]
   push:
-    branches: [refactoring]
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to publish the site for. Empty builds the branch.
+        description: Existing release tag to publish. Empty deploys main.
         required: false
 
 permissions:
@@ -27,19 +18,16 @@ permissions:
   id-token: write
 
 concurrency:
-  # Scoped by ref so a branch preview never cancels an in-flight release deployment.
-  group: pages-${{ github.event.inputs.tag || github.event.release.tag_name || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  group: pages
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # Check out the tagged commit so the manual and landing page carry the released
-      # version. Empty on a branch push, where the checked-out ref is already correct.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag || github.event.release.tag_name || github.ref }}
+          ref: ${{ github.event.inputs.tag || 'main' }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -68,11 +56,8 @@ jobs:
         with:
           path: ${{ steps.site.outputs.path }}
 
-  # Release-only. A branch build stops after `build`; download its pages artifact from the
-  # run to inspect the assembled site without touching the published one.
   deploy:
     needs: build
-    if: github.event_name == 'release' || startsWith(github.event.inputs.tag, 'v')
     runs-on: ubuntu-latest
     environment:
       name: github-pages

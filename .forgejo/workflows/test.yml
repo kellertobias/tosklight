@@ -57,11 +57,10 @@ jobs:
           --seconds 1 --warmup-seconds 0 --mutation-gate
           --hardware-label "Forgejo CI"
 
-  # Semantic release lives here, not on the GitHub mirror: the tag is only created once
-  # the authoritative suite has passed on main. semantic-release analyzes the commits,
-  # bumps every manifest via tools/set-version.mjs, commits the changelog and lockfile,
-  # and pushes a v* tag. The GitHub mirror reacts to that tag to build and deploy.
-  release:
+  # Forgejo remains the validation and version/tag authority because its one-way mirror
+  # feeds GitHub. It does not build or publish application binaries, Pages, manuals, or a
+  # hosted Forgejo release. GitHub reacts to mirrored main and v* refs for those jobs.
+  version:
     needs: [unit, e2e, benchmark]
     if: forgejo.ref == 'refs/heads/main' && forgejo.event_name == 'push'
     runs-on: ubuntu-latest
