@@ -36,12 +36,21 @@ test("Playwright exposes only UI and API-exception suites", () => {
 		path.join(repositoryRoot, "tests/bench/core/pairedScenario.ts"),
 		"utf8",
 	);
+	const testScript = fs.readFileSync(
+		path.join(repositoryRoot, "tools/test.sh"),
+		"utf8",
+	);
 
 	assert.equal(packageManifest.scripts["test:e2e-supplemental"], undefined);
 	assert.equal(packageManifest.scripts["test:desktop-smoke"], undefined);
 	assert.doesNotMatch(workflow, /Supplemental|test:e2e-supplemental/u);
 	assert.doesNotMatch(workflow, /^\s{2}desktop-smoke:/mu);
 	assert.match(workflow, /node tools\/ci-smoke-built-desktop\.mjs/u);
+	assert.match(workflow, /npm run test:demo/u);
+	assert.match(
+		testScript,
+		/e2e_ui\(\)\{ e2e --grep '@ui' --grep-invert '@demo'/u,
+	);
 	assert.doesNotMatch(pairedScenario, /\btest\s*\(/u);
 });
 

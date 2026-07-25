@@ -46272,14 +46272,24 @@
         "Generated artifacts"
       ],
       "migration": {
-        "status": "migrated-semantic-world",
-        "contract": "repository contract",
-        "helperFamily": "product-demo",
-        "artifacts": "generated show/video",
-        "constraint": "serial"
+        "status": "unresolved",
+        "contract": "unresolved",
+        "helperFamily": "unresolved",
+        "artifacts": "unresolved",
+        "constraint": "unresolved"
       },
       "lastRun": null,
-      "diagnostics": []
+      "diagnostics": [
+        {
+          "code": "missing-migration-status",
+          "message": "No exact source, ID, and title match exists in the generated migration inventory.",
+          "source": {
+            "file": "tests/product-demo.spec.ts",
+            "line": 5,
+            "column": 1
+          }
+        }
+      ]
     }
   ]
 }

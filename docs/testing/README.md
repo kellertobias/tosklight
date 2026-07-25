@@ -115,7 +115,9 @@ Use `./test record` for the narrated visual catalog and `./test demo` for the
 maintained product walkthrough. Browser Playwright coverage does not claim
 packaged Tauri or native OS-window coverage; each GitHub Actions desktop build
 launches its newly built application for five seconds and fails on an early
-exit.
+exit. The product walkthrough remains an `@ui @demo` scenario, but the ordinary
+sharded UI command excludes `@demo` because the visual-assets job records and
+validates it once.
 
 Regenerate maintained indexes after scenario changes:
 

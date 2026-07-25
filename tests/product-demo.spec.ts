@@ -8,4 +8,5 @@ scenario(
 	async (t) => {
 		await t.demo.run();
 	},
+	{ tags: ["@demo"] },
 );

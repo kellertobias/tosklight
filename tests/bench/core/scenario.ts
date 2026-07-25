@@ -5,15 +5,21 @@ export type ScenarioCallback = (
 	world: BrowserScenarioWorld,
 ) => Promise<void> | void;
 
+export interface ScenarioOptions {
+	tags?: readonly `@${string}`[];
+}
+
 /** Registers one browser-backed operator scenario on the isolated Light bench. */
 export function scenario(
 	id: string,
 	title: string,
 	callback: ScenarioCallback,
+	options: ScenarioOptions = {},
 ): void {
 	if (!/^[A-Z][A-Z0-9-]+$/.test(id))
 		throw new Error(`Scenario id "${id}" must be uppercase kebab-case`);
-	test(`${id} @bench @ui › ${title}`, async ({
+	const tags = options.tags?.length ? ` ${options.tags.join(" ")}` : "";
+	test(`${id} @bench @ui${tags} › ${title}`, async ({
 		api,
 		bench,
 		desk,

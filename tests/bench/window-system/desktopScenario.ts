@@ -226,7 +226,7 @@ export class BrowserDesktops {
 
 	async focus<T extends PaneType>(handle: PaneHandle<T>): Promise<void> {
 		const pane = this.locatorFor(handle);
-		await pane.locator("header").first().click();
+		await pane.focus();
 		await expect(pane).toBeFocused();
 	}
 

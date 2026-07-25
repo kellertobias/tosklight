@@ -202,18 +202,22 @@ export class DeskDriver {
   }
 
   private async updateDemoAction(target: Locator): Promise<void> {
-    if (await target.count() === 0) return;
-    await target.evaluate((element) => {
-      const action = document.querySelector<HTMLElement>("[data-demo-current-action]");
-      if (!action) return;
+    const label = await target.evaluateAll((elements) => {
+      const element = elements[0];
+      if (!(element instanceof HTMLElement)) return null;
       const inputLabel = element instanceof HTMLInputElement ? element.labels?.[0]?.textContent : null;
-      const label = element.getAttribute("aria-label")
+      return element.getAttribute("aria-label")
         || element.getAttribute("title")
         || inputLabel
         || element.textContent
         || "control";
-      action.textContent = `Click ${label.replace(/\s+/g, " ").trim()}.`;
     });
+    if (!label) return;
+    await this.page.evaluate((copy) => {
+      const action = document.querySelector<HTMLElement>("[data-demo-current-action]");
+      if (!action) return;
+      action.textContent = `Click ${copy.replace(/\s+/g, " ").trim()}.`;
+    }, label);
   }
 
   /** Adds a human-readable chapter card to visual recordings without affecting fast test runs. */

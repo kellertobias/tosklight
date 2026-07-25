@@ -153,7 +153,7 @@ Default catalog: **139 root cases across 52 files**.
 | 65-semantic-special-dialogs-and-hardware-selection.spec.ts | POSITION-HOME-001 @bench @ui › Return Home applies per-head Position defaults as one programmer gesture | repository contract | @bench @ui | semantic-special-dialogs-and-hardware-selection | standard failure evidence | parallel | migrated-semantic-world |
 | 65-semantic-special-dialogs-and-hardware-selection.spec.ts | COLOR-RANGE-001 @bench @ui › Shift-drag applies an ordered Color range from software and attached hardware | repository contract | @bench @ui | semantic-special-dialogs-and-hardware-selection | standard failure evidence | parallel | migrated-semantic-world |
 | 65-semantic-special-dialogs-and-hardware-selection.spec.ts | PLAYBACK-SELECT-001 @bench @ui › an attached-hardware playback card selects its concrete Cuelist playback | repository contract | @bench @ui | semantic-special-dialogs-and-hardware-selection | standard failure evidence | parallel | migrated-semantic-world |
-| product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
+| product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints
 

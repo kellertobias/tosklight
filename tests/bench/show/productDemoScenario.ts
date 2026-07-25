@@ -592,7 +592,8 @@ async function fastForwardPatchPhase(
 async function activatePatchLayer(desk: DeskDriver, patchWindow: Locator, layer: string): Promise<void> {
   const layerButton = patchWindow.locator(".patch-layers").getByRole("button")
     .filter({ hasText: new RegExp(`^${escapeRegex(layer)}\\s*\\d+$`) });
-  if (!await layerButton.evaluate((button) => button.classList.contains("active"))) await desk.click(layerButton);
+  await expect(layerButton).toBeVisible();
+  if (!(await layerButton.getAttribute("class"))?.split(/\s+/u).includes("active")) await desk.click(layerButton);
   await expect(layerButton).toHaveClass(/active/);
 }
 
