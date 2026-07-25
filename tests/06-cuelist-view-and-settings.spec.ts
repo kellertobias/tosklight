@@ -270,6 +270,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
   pairedScenario<{ completed: boolean }>({
     id: "CUE-013",
     title: "deleting the active Cue holds output and anchors GO/GO minus without hidden Cue data",
+    surfaces: ["api"],
     arrange: () => ({ completed: false }),
     api: async ({ api, bench }, state) => {
       await loadCanonicalCopy(api, bench, "cue-013-active-delete-api", "compact-rig");

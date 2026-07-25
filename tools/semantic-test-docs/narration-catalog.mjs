@@ -80,6 +80,7 @@ const supportedCallPaths = new Set([
 	"cue.expect.groupValueTiming",
 	"cue.expectList.configuration",
 	"cue.configure",
+	"cue.delete",
 	"cue.goto",
 	"cue.openEditor",
 	"cue.reopenEditor",
