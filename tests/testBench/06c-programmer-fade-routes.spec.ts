@@ -16,7 +16,7 @@ scenario(
 
 		await t.selection.fixtures.via.api.item(1);
 		await t.expect.selection(fixture(1));
-		await t.encoder.intensity.dimmer.via.api.set(100);
+		await t.command.execute("AT 100");
 		await t.clock.advanceBy("2s");
 		await t.expectFixtureDMX(dmxFixture(1), { Intensity: 128 });
 		await t.clock.advanceBy("2s");
