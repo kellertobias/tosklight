@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **309 root cases across 53 files**.
+Default catalog: **309 root cases across 54 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -156,7 +156,6 @@ Default catalog: **309 root cases across 53 files**.
 | 06-cuelist-view-and-settings.spec.ts | CUE-012 @restart › legacy Cuelist settings migrate and persist across restart | docs/testing/02-cues-tracking-and-arbitration.md | @restart | cuelist-view-and-settings | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-cuelist-view-and-settings.spec.ts | CUE-012 @api › Cuelist Settings drive arbitration, wrapping, restart, timing, and Chaser phase | docs/testing/02-cues-tracking-and-arbitration.md | @api | cuelist-view-and-settings | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-001 @api › programmer-only Preload is blind, timed from GO, and releasable | docs/testing/06-preload-modes-and-virtual-playbacks.md | @api | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-001 @ui › programmer-only Preload is blind, timed from GO, and releasable | docs/testing/06-preload-modes-and-virtual-playbacks.md | @ui | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | pending-semantic-migration |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-001 @supplemental › API timing and source ownership at exact virtual-time checkpoints | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-001 @supplemental-ui › the command line exposes detailed pending programmer timing | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental-ui | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-002 @api › physical-playback-only Preload preserves the seven ordered action verbs | docs/testing/06-preload-modes-and-virtual-playbacks.md | @api | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
@@ -323,6 +322,7 @@ Default catalog: **309 root cases across 53 files**.
 | 50-semantic-cue-editing.spec.ts | CUE-011 @bench @ui › Cuelist View edits preserve Cue identity, runtime selection, and persisted values | repository contract | @bench @ui | semantic-cue-editing | standard failure evidence | parallel | migrated-semantic-world |
 | 51-semantic-cuelist-settings.spec.ts | CUE-012 @bench @ui › Cuelist Settings persist Sequence and Chaser runtime policy | repository contract | @bench @ui | semantic-cuelist-settings | standard failure evidence | parallel | migrated-semantic-world |
 | 52-semantic-cue-deletion.spec.ts | CUE-013 @bench @ui › deleting the active Cue holds output and anchors GO around the surviving Cues | repository contract | @bench @ui | semantic-cue-deletion | standard failure evidence | parallel | migrated-semantic-world |
+| 53-semantic-programmer-preload.spec.ts | PRELOAD-001 @bench @ui › programmer-only Preload stays blind, commits, and releases | repository contract | @bench @ui | semantic-programmer-preload | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints

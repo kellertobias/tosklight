@@ -5,13 +5,13 @@ import { HttpProgrammerPreloadValuesTransport } from "../../../src/api/Programme
 import type { AttributeValue } from "../../../src/api/types/playback";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
-import { mapExistingPlaybackToSlot } from "./mapExistingPlaybackToSlot";
 import {
 	clearPendingProgrammerPreload,
 	enterProgrammerPreload,
 	goProgrammerPreload,
 	releaseProgrammerPreload,
 } from "../programmer/programmerPreloadLifecycle";
+import { mapExistingPlaybackToSlot } from "./mapExistingPlaybackToSlot";
 
 type PageRoute = "ui" | "api";
 type PreloadRoute = "ui" | "api";
@@ -201,7 +201,8 @@ export class BrowserPages {
 	}
 
 	private session() {
-		if (!this.api.session) throw new Error("Page helper requires an API session");
+		if (!this.api.session)
+			throw new Error("Page helper requires an API session");
 		return this.api.session;
 	}
 }
@@ -222,6 +223,10 @@ class PreloadSurface {
 
 	clear() {
 		return this.owner.clearVia(this.route);
+	}
+
+	release() {
+		return this.owner.releaseVia(this.route);
 	}
 }
 
@@ -256,24 +261,46 @@ export class BrowserPreload {
 
 	async startVia(route: PreloadRoute) {
 		if (route === "api") await enterProgrammerPreload(this.api, this.intent());
-		else await this.desk.click(this.page.locator(".preload-button:visible").first());
+		else
+			await this.desk.click(
+				this.page.locator(".preload-button:visible").first(),
+			);
 		await this.expect.active();
 	}
 
 	async commitVia(route: PreloadRoute) {
 		if (route === "api") await goProgrammerPreload(this.api, this.intent());
-		else await this.desk.click(this.page.locator(".preload-button:visible").first());
-		await this.expect.inactive();
+		else
+			await this.desk.click(
+				this.page.getByRole("button", { name: /^PRELOAD GO\b/ }),
+			);
+		if (route === "api") await this.expect.inactive();
+		else await this.expect.active();
 	}
 
 	async clearVia(route: PreloadRoute) {
 		if (route === "ui")
-			throw new Error("Visible Preload clear is a hold gesture; use release() or API clear");
+			throw new Error(
+				"Visible Preload clear is a hold gesture; use release() or API clear",
+			);
 		await clearPendingProgrammerPreload(this.api, this.intent());
 	}
 
 	async release() {
-		await releaseProgrammerPreload(this.api, this.intent());
+		await this.releaseVia("api");
+	}
+
+	async releaseVia(route: PreloadRoute) {
+		if (route === "api")
+			await releaseProgrammerPreload(this.api, this.intent());
+		else {
+			const preload = this.page.locator(".preload-button:visible").first();
+			await preload.hover();
+			await this.page.mouse.down();
+			await this.page.waitForTimeout(700);
+			await this.page.mouse.up();
+		}
+		await this.expect.inactive();
 	}
 
 	async setFixtureValue(input: {
@@ -323,7 +350,9 @@ export class BrowserPreload {
 			baseUrl: this.api.baseUrl,
 			sessionToken: session.token,
 		}).loadSnapshot({ showId: this.showId(), userId: session.user.id });
-		return snapshot.projection.blind && snapshot.projection.preloadCaptureProgrammer;
+		return (
+			snapshot.projection.blind && snapshot.projection.preloadCaptureProgrammer
+		);
 	}
 
 	private intent() {
@@ -331,7 +360,8 @@ export class BrowserPreload {
 	}
 
 	private session() {
-		if (!this.api.session) throw new Error("Preload helper requires an API session");
+		if (!this.api.session)
+			throw new Error("Preload helper requires an API session");
 		return this.api.session;
 	}
 }

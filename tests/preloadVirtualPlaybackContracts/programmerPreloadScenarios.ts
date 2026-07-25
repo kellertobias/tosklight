@@ -32,6 +32,7 @@ import {
 const preload001Scenario: PairedScenario<PreloadProgrammerPairState> = {
 	id: "PRELOAD-001",
 	title: "programmer-only Preload is blind, timed from GO, and releasable",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const prepared = await prepare(
 			api,
