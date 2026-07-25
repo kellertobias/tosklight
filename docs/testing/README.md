@@ -169,6 +169,16 @@ routes, synchronize OSC keys against command-line feedback, and normalize assert
 portable show objects. Unqualified multi-route actions choose reproducibly and retain a route
 report containing their seed, action index, candidates, and selected route.
 
+Cue and Playback authoring uses `record`, `cue`, and `playback`. `record.playback(slot)` visibly
+arms REC and targets the Page 1 playback card, returning its concrete Playback number;
+`record.cue({ playback, cue, mode, timing })` then resolves that concrete Playback back to its
+explicit page address. Cue overwrite, merge, subtract, update, delete, move, copy, Go To, Load,
+and selection helpers use complete addresses. Move and Copy retain their required typed
+Plain/Status choice boundary rather than replaying a command. Playback runtime helpers expose
+GO, GO BACK, ON, OFF, TOGGLE, RELEASE, selection, and normalized fader values through explicit
+`.via.ui` and `.via.api` routes. Typed configuration captures current Page, Playback, and Show
+revision authority before applying button, fader, name, and color changes.
+
 The runner exposes separate commands so CI classifies failures clearly:
 
 - `./test e2e-api`

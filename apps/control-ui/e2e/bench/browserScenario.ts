@@ -8,6 +8,10 @@ import type { ControllableDesktopAction } from "../../src/platform/desktop/contr
 import type { ApiDriver } from "./api";
 import { BrowserClock } from "./clockScenario";
 import { BrowserCommands, BrowserKeypad } from "./commandScenario";
+import {
+	BrowserCues,
+	BrowserRecording,
+} from "./cuePlaybackScenario";
 import type { DeskDriver } from "./desk";
 import { BrowserDesktops } from "./desktopScenario";
 import { BrowserDmx, type DmxUniverseExpectation } from "./dmxScenario";
@@ -28,6 +32,7 @@ import {
 import { BrowserOutput } from "./outputScenario";
 import type { BuiltInPaneType } from "./paneTypes";
 import { builtInLabels } from "./paneTypes";
+import { BrowserPlaybacks } from "./playbackScenario";
 import type { DmxProtocol } from "./protocols";
 import { BrowserTiming } from "./programmerFadeScenario";
 import { BrowserPresets } from "./presetScenario";
@@ -78,6 +83,9 @@ export class BrowserScenarioWorld {
 	readonly highlight: BrowserHighlight;
 	readonly group: BrowserGroups;
 	readonly preset: BrowserPresets;
+	readonly record: BrowserRecording;
+	readonly cue: BrowserCues;
+	readonly playback: BrowserPlaybacks;
 	readonly dmx: BrowserDmx;
 	readonly output: BrowserOutput;
 	readonly timing: BrowserTiming;
@@ -159,6 +167,26 @@ export class BrowserScenarioWorld {
 			this.hardware,
 			() => this.show.contractIdentity().workingId,
 			`${testInfo.workerIndex}:${testInfo.title}:preset`,
+		);
+		this.record = new BrowserRecording(
+			api,
+			page,
+			desk,
+			this.command,
+			() => this.show.contractIdentity().workingId,
+		);
+		this.cue = new BrowserCues(
+			api,
+			this.command,
+			page,
+			desk,
+			() => this.show.contractIdentity().workingId,
+		);
+		this.playback = new BrowserPlaybacks(
+			api,
+			page,
+			desk,
+			() => this.show.contractIdentity().workingId,
 		);
 		this.dmx = new BrowserDmx(api);
 		this.output = new BrowserOutput(api, desk);

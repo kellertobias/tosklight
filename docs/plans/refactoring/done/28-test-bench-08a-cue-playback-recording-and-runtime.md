@@ -34,3 +34,24 @@ from a scenario.
 - Recording and runtime actions have typed, unambiguous concrete targets.
 - Scenario files contain no raw show-object writes or transport paths.
 - UI and API routes converge on normalized Cue and Playback observations.
+
+## Result
+
+- Added `record`, `cue`, and `playback` worlds with enum-backed recording modes, button
+  functions, fader functions, and typed configuration.
+- Visible recording targets the production playback card, while subsequent Cue commands resolve
+  the concrete Playback to an explicit page address.
+- Cue Copy and Move cross the typed choice boundary for API and visible routes; they do not hide
+  raw show-object writes or replay a compatibility mutation.
+- Playback configuration captures exact Show, Page, and Playback revision authority before using
+  the production topology action.
+- Added focused scenarios for two-Cue recording and exact virtual-time DMX, Cue copy/move/delete,
+  configuration, selection, fader normalization, GO/GO BACK, ON/OFF, and TOGGLE.
+
+Verification:
+
+- `npm run test:e2e -- tests/testBench/08a-cue-playback-recording-and-runtime.spec.ts`:
+  2 passed.
+- `npm run test:e2e`: 321 passed, 9 skipped.
+- Control UI typecheck and source-size policy passed.
+- Architecture boundaries, bench typecheck, and `git diff --check` passed.
