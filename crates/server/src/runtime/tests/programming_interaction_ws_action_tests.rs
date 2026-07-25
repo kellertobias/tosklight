@@ -89,7 +89,14 @@ async fn selection_action_ws_uses_typed_service_and_request_identity() {
     let (token, _) = login(&app, "Operator").await;
     let session = session_for_token(&state, &token);
     open_default_show(&app, &token).await;
-    let fixture_id = state.engine.snapshot().fixtures[0].fixture_id;
+    let fixture_id = state
+        .engine
+        .snapshot()
+        .fixtures
+        .iter()
+        .find(|fixture| fixture.logical_heads.is_empty())
+        .expect("Default Stage must contain a leaf fixture")
+        .fixture_id;
     let revision = state.programmers.selection(session.id).unwrap().revision;
 
     let selection_payload = serde_json::json!({

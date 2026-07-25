@@ -24,3 +24,16 @@ receives the child identities.
 - The request-identity test is deterministic under current fixture ordering.
 - Production fixture-parent expansion is unchanged.
 - Focused and full unit gates pass.
+
+## Result
+
+Completed on 2026-07-25.
+
+- The request-identity test now explicitly chooses a leaf fixture from the
+  current Default Stage snapshot instead of assuming its first fixture has no
+  logical heads.
+- Production selection code and its intentional parent-to-head expansion are
+  unchanged.
+- Focused server test passed.
+- Full unit gate passed, including 470 server tests (one intentional ignore) and
+  2,007 Control UI tests across 283 files.
