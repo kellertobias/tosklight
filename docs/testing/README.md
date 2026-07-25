@@ -189,6 +189,14 @@ Playback helpers expose explicit `press()`, `release()`, and `hold(...)` phases 
 and Swap. The visible route performs a real pointer hold; the OSC route sends both button phases
 to a configured current- or explicit-page address.
 
+Cue Fade is available through `timing.cueFade.set/double/half/off` and remains separate from
+`timing.programmerFade` and explicit per-Cue timing. Speed controls use the enum-backed
+`speedGroup[SpeedGroup.A ... SpeedGroup.E]` surface for direct BPM, relative adjustment, and
+synchronization. Visible tap tempo uses bounded, seeded jitter, wall-paces each click, advances
+the same authoritative application-time interval, and records a replayable interval report.
+Direct BPM entry and the first learning tap break synchronization. Shift-click and a real
+650-millisecond hold open the Speed Group settings dialog without counting another tempo tap.
+
 The runner exposes separate commands so CI classifies failures clearly:
 
 - `./test e2e-api`

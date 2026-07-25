@@ -42,6 +42,7 @@ import { BrowserRoutedSelection } from "./routedSelectionScenario";
 import type { SelectionTarget } from "./selectionContract";
 import { BrowserSelection } from "./selectionScenario";
 import { BrowserShows } from "./showScenario";
+import { BrowserSpeedGroups } from "./speedGroupScenario";
 
 export interface ScreenConfigurationIntent {
 	name: string;
@@ -96,6 +97,7 @@ export class BrowserScenarioWorld {
 	readonly dmx: BrowserDmx;
 	readonly output: BrowserOutput;
 	readonly timing: BrowserTiming;
+	readonly speedGroup: BrowserSpeedGroups;
 	readonly special: BrowserProgrammerSpecials;
 	readonly expect: {
 		dmx: (universe: number) => DmxUniverseExpectation;
@@ -222,6 +224,13 @@ export class BrowserScenarioWorld {
 			desk,
 			this.hardware,
 			`${testInfo.workerIndex}:${testInfo.title}:timing`,
+		);
+		this.speedGroup = new BrowserSpeedGroups(
+			api,
+			page,
+			desk,
+			bench,
+			`${testInfo.workerIndex}:${testInfo.title}`,
 		);
 		const outputPackets = new BrowserOutputPackets(bench);
 		this.expect = {

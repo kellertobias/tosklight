@@ -32,3 +32,26 @@ ownership.
 - Cue Fade remains distinct from Programmer Fade and per-Cue timing.
 - Every Speed Group uses the enum-backed typed surface.
 - Tap-tempo behavior is truthful, deterministic, and diagnosable.
+
+## Result
+
+- Added a Cue Fade helper family with set, double, half, off, and normalized authority
+  assertions, kept separate from Programmer Fade.
+- Added enum-backed helpers for all five Speed Groups, including direct and relative BPM,
+  synchronization, source/BPM assertions, deterministic tap reports, Shift-click settings, and
+  real hold settings gestures.
+- Added focused scenarios proving Cue Fade fallback versus explicit Cue timing, all five Speed
+  Group identities, synchronization break rules, replayable humanized tap tempo, and settings
+  gesture boundaries.
+- Tap intervals advance wall time and the same virtual application-time interval because the
+  server intentionally stamps accepted taps with application time.
+
+Verification:
+
+- `npm run test:e2e -- tests/testBench/08c-cue-fade-and-speed-groups.spec.ts` — 2 passed.
+- `npm run test:e2e` — 325 passed, 9 skipped.
+- `npm --prefix apps/control-ui run typecheck` — passed.
+- `npm run test:bench-types` — passed.
+- `npm run test:architecture` — passed.
+- `node tools/check-source-size.mjs` — passed.
+- `git diff --check` — passed.

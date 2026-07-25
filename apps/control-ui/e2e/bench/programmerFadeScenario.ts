@@ -6,6 +6,7 @@ import {
 } from "./clockScenario";
 import type { DeskDriver } from "./desk";
 import type { SimulatedHardware } from "./hardwareScenario";
+import { BrowserCueFade } from "./cueFadeScenario";
 
 type ProgrammerFadeRoute = "api" | "fader" | "valueEntry" | "osc";
 type ProgrammerFadeOperation = "set" | "double" | "half" | "off";
@@ -216,6 +217,7 @@ export class BrowserProgrammerFade implements ProgrammerFadeSetPort {
 
 export class BrowserTiming {
 	readonly programmerFade: BrowserProgrammerFade;
+	readonly cueFade: BrowserCueFade;
 
 	constructor(
 		api: ApiDriver,
@@ -231,6 +233,7 @@ export class BrowserTiming {
 			hardware,
 			seed,
 		);
+		this.cueFade = new BrowserCueFade(api, desk);
 	}
 }
 
