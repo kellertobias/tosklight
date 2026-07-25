@@ -18,7 +18,10 @@ import {
 	prepareShow,
 	selectTrigger,
 } from "./helpers";
-import type { PlaybackConfigurationObservation, PreparedShow } from "./models";
+import type {
+	PlaybackConfigurationObservation,
+	PreparedShow,
+} from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
 
 type Pbk001State = PreparedShow & {
 	before: Awaited<ReturnType<typeof inertSnapshot>>;
@@ -30,6 +33,7 @@ export function registerPbk001PairedScenario(): void {
 		id: "PBK-001",
 		title:
 			"Set inspection resolves one playback identity and Close is mutation-free",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			const prepared = await prepareShow(
 				api,

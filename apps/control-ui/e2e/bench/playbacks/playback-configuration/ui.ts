@@ -1,8 +1,4 @@
-import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import type {
-	Locator,
-	Page,
-} from "../../apps/control-ui/node_modules/@playwright/test/index.js";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 export async function openPlaybackMode(page: Page): Promise<void> {
 	if (await page.locator(".playback-fader-bank").isVisible()) return;

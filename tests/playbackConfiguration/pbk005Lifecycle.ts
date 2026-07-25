@@ -15,7 +15,7 @@ import {
 	prepareShow,
 	updatePlayback,
 } from "./helpers";
-import type { PreparedShow } from "./models";
+import type { PreparedShow } from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
 
 interface LifecycleArrangement {
 	prepared: PreparedShow;

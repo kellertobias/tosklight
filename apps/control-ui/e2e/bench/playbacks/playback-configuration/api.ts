@@ -1,16 +1,16 @@
-import type { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
-import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
 import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,
 	object,
 	objects,
 	putObject,
-} from "../support/catalog";
+} from "../../../../../../tests/support/catalog";
 import {
 	clearMappedPlaybackSlot,
 	configurePlaybackSlot,
-} from "../support/playbackTopology";
+} from "../../../../../../tests/support/playbackTopology";
+import type { ApiDriver } from "../../core/api";
+import { expect } from "../../core/fixtures";
 import type {
 	PlaybackDefinition,
 	PlaybackTarget,

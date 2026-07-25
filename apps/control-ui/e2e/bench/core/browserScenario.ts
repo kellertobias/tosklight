@@ -41,6 +41,7 @@ import {
 } from "../playbacks/cuePlaybackScenario";
 import { BrowserMoveInBlack } from "../playbacks/moveInBlackScenario";
 import { BrowserPages, BrowserPreload } from "../playbacks/pagePreloadScenario";
+import { BrowserPlaybackConfiguration } from "../playbacks/playback-configuration/scenario";
 import { BrowserPlaybacks } from "../playbacks/playbackScenario";
 import { BrowserSpeedGroups } from "../playbacks/speedGroupScenario";
 import { BrowserVirtualPlaybacks } from "../playbacks/virtualPlaybackScenario";
@@ -114,6 +115,7 @@ export class BrowserScenarioWorld {
 	readonly page: BrowserPages;
 	readonly preload: BrowserPreload;
 	readonly moveInBlack: BrowserMoveInBlack;
+	readonly playbackConfiguration: BrowserPlaybackConfiguration;
 	readonly patch: BrowserPatch;
 	readonly dmx: BrowserDmx;
 	readonly output: BrowserOutput;
@@ -272,6 +274,12 @@ export class BrowserScenarioWorld {
 			this.playback,
 		);
 		this.moveInBlack = new BrowserMoveInBlack(
+			api,
+			page,
+			desk,
+			() => this.show.contractIdentity().workingId,
+		);
+		this.playbackConfiguration = new BrowserPlaybackConfiguration(
 			api,
 			page,
 			desk,

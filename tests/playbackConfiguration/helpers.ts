@@ -7,6 +7,6 @@ export {
 	programmer,
 	putObject,
 } from "../support/catalog";
-export * from "./api";
-export * from "./observations";
-export * from "./ui";
+export * from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/api";
+export * from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/observations";
+export * from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/ui";

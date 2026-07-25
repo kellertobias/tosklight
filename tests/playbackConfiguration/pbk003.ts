@@ -19,7 +19,7 @@ import {
 	programmer,
 	setFirstButton,
 } from "./helpers";
-import type { PreparedShow } from "./models";
+import type { PreparedShow } from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
 
 type Pbk003State = PreparedShow & {
 	runtimeBeforeSelect?: any;
@@ -31,6 +31,7 @@ export function registerPbk003PairedScenario(): void {
 		id: "PBK-003",
 		title:
 			"default navigation and remapped Select Contents dispatch one exact action",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			const prepared = await prepareShow(
 				api,

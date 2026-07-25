@@ -17,7 +17,7 @@ import {
 	poolAction,
 	prepareShow,
 } from "./helpers";
-import type { PreparedShow } from "./models";
+import type { PreparedShow } from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
 import { runPbk005LifecycleScenario } from "./pbk005Lifecycle";
 
 type Pbk005State = PreparedShow & {
@@ -37,6 +37,7 @@ const pbk005PairedScenario: PairedScenario<Pbk005State> = {
 	id: "PBK-005",
 	title:
 		"Temp and held Swap have explicit lifetimes and restore the underlying playback",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const prepared = await prepareShow(
 			api,

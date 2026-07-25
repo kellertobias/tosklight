@@ -1,4 +1,4 @@
-import type { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
+import type { ApiDriver } from "../../core/api";
 import { playbackAt } from "./api";
 import type {
 	PlaybackCheckpoint,
@@ -53,7 +53,10 @@ export async function visualizationLevel(
 	api: ApiDriver,
 	fixtureId: string,
 ): Promise<number> {
-	const snapshot = await api.request<any>("GET", "/api/v2/output/visualization");
+	const snapshot = await api.request<any>(
+		"GET",
+		"/api/v2/output/visualization",
+	);
 	const value = snapshot.values.find(
 		(entry: any) =>
 			entry.fixture_id === fixtureId && entry.attribute === "intensity",

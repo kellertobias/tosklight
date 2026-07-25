@@ -18,7 +18,10 @@ import {
 	visualizationLevel,
 	xfadeObservation,
 } from "./helpers";
-import type { PlaybackCheckpoint, PreparedShow } from "./models";
+import type {
+	PlaybackCheckpoint,
+	PreparedShow,
+} from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
 
 type Pbk004State = PreparedShow & {
 	timings: string;
@@ -30,6 +33,7 @@ export function registerPbk004PairedScenario(): void {
 		id: "PBK-004",
 		title:
 			"X-fade travel advances one Cue and preserves manual direction and timing",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			const prepared = await prepareShow(
 				api,

@@ -21,7 +21,10 @@ import {
 	saveSlot,
 	writePage,
 } from "./helpers";
-import type { PlaybackTarget, PreparedShow } from "./models";
+import type {
+	PlaybackTarget,
+	PreparedShow,
+} from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
 
 interface FunctionAssignment {
 	slot: number;

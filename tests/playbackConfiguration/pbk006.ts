@@ -19,7 +19,7 @@ import {
 	selectTrigger,
 	setSpeedRates,
 } from "./helpers";
-import type { PreparedShow } from "./models";
+import type { PreparedShow } from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
 import { runPbk006ActionMatrixScenario } from "./pbk006ActionMatrix";
 
 export function registerPbk006PairedScenario(): void {
@@ -27,6 +27,7 @@ export function registerPbk006PairedScenario(): void {
 		id: "PBK-006",
 		title:
 			"specialized layouts control their authoritative Speed, Group, Grand, and Fade masters",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			const prepared = await prepareShow(
 				api,

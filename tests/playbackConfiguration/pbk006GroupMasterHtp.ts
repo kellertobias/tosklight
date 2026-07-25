@@ -29,6 +29,7 @@ export function registerPbk006GroupMasterHtpScenario(): void {
 		id: "PBK-006",
 		title:
 			"independent overlapping Group Masters use the highest assigned level",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			await loadCompactRig(api, bench, `pbk-006-group-master-htp-${surface}`);
 			await writePage(api, 1, {});

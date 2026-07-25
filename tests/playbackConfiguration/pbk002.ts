@@ -17,7 +17,10 @@ import {
 	selectTrigger,
 	writePage,
 } from "./helpers";
-import type { PlaybackConfigurationObservation, PreparedShow } from "./models";
+import type {
+	PlaybackConfigurationObservation,
+	PreparedShow,
+} from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
 import { runPbk002AtomicConfigurationScenario } from "./pbk002Atomic";
 
 type Pbk002State = PreparedShow & {
@@ -28,6 +31,7 @@ export function registerPbk002PairedScenario(): void {
 	pairedScenario<Pbk002State>({
 		id: "PBK-002",
 		title: "Cue List assignment, color, and None plus Apply clear are atomic",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			const prepared = await prepareShow(
 				api,
