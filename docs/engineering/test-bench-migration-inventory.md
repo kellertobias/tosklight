@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **301 root cases across 38 files**.
+Default catalog: **305 root cases across 39 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -315,6 +315,10 @@ Default catalog: **301 root cases across 38 files**.
 | 37-semantic-desktop-show-clock.spec.ts | BENCH-UI-003 @bench @ui › captures semantic surfaces and emits typed secondary-screen intent | repository contract | @bench @ui | semantic-desktop-show-clock | standard failure evidence | parallel | migrated-semantic-world |
 | 37-semantic-desktop-show-clock.spec.ts | BENCH-SHOW-004 @bench @ui › runs named create, autosave, Save As, revision, and reopen through visible operator controls | repository contract | @bench @ui | semantic-desktop-show-clock | standard failure evidence | parallel | migrated-semantic-world |
 | 37-semantic-desktop-show-clock.spec.ts | BENCH-CLOCK-DMX-001 @bench @ui › uses exact clock boundaries and fixture-aware logical DMX without hidden ticks | repository contract | @bench @ui | semantic-desktop-show-clock | standard failure evidence | parallel | migrated-semantic-world |
+| 38-semantic-command-programmer-group-preset.spec.ts | BENCH-COMMAND-SELECTION-002 @bench @ui › preserves ordered typed sources while Highlight power stays independent | repository contract | @bench @ui | semantic-command-programmer-group-preset | standard failure evidence | parallel | migrated-semantic-world |
+| 38-semantic-command-programmer-group-preset.spec.ts | BENCH-ENCODER-001 @bench @ui › normalized Dimmer absolute and relative API intents retain distinct semantics | repository contract | @bench @ui | semantic-command-programmer-group-preset | standard failure evidence | parallel | migrated-semantic-world |
+| 38-semantic-command-programmer-group-preset.spec.ts | BENCH-GROUP-002 @bench @ui › live Group references refresh while dereferenced captures retain concrete fixtures | repository contract | @bench @ui | semantic-command-programmer-group-preset | standard failure evidence | parallel | migrated-semantic-world |
+| 38-semantic-command-programmer-group-preset.spec.ts | BENCH-PRESET-001 @bench @ui › Preset families record and recall through pool, keypad, API, and OSC | repository contract | @bench @ui | semantic-command-programmer-group-preset | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | @ui narrates the complete Full HD product demo surface in one regression run | repository contract | @ui | product-demo | generated show/video | serial | pending-semantic-migration |
 
 ## Serial generated entrypoints

@@ -11,27 +11,6 @@ import { Show } from "../../apps/control-ui/e2e/bench/showScenario";
 import { ProgrammerToken } from "../../apps/control-ui/e2e/bench/encoderCatalog";
 
 scenario(
-	"BENCH-ENCODER-001",
-	"normalized Dimmer absolute and relative API intents retain distinct semantics",
-	async (t) => {
-		await t.show.use(Show.DefaultStage);
-		await t.app.open();
-		await t.app.expect.ready();
-		await t.show.expect.active(Show.DefaultStage);
-		await t.selection.fixtures.via.api.item(1);
-		await t.expect.selection(fixture(1));
-
-		await t.encoder.intensity.dimmer.via.api.set(50);
-		await t.clock.advanceBy("3s");
-		await t.encoder.intensity.dimmer.via.api.add(3);
-		await t.clock.advanceBy("3s");
-		await t.encoder.intensity.dimmer.via.api.subtract(2);
-		await t.clock.advanceBy("3s");
-		await t.expectFixtureDMX(dmxFixture(1), { Intensity: 130 });
-	},
-);
-
-scenario(
 	"BENCH-ENCODER-002",
 	"Position Pan resolves its live software encoder without exposing a physical slot",
 	async (t) => {
