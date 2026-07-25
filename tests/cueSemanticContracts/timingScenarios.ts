@@ -25,6 +25,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 	id: "CUE-003",
 	title:
 		"GO, pause, resume, back, and release use exact application-time boundaries",
+	surfaces: ["api"],
 	arrange: () => ({ completed: false }),
 	api: async ({ api, bench }, state) => {
 		await loadCanonicalCopy(api, bench, "cue-003-exact-timing", "compact-rig");

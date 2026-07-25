@@ -19,6 +19,7 @@ export enum PlaybackButton {
 	Temp = "temp",
 	Swap = "swap",
 	Release = "release",
+	Pause = "pause",
 }
 
 export enum PlaybackFader {
@@ -114,6 +115,10 @@ class PlaybackSurface {
 
 	release(number: number) {
 		return this.owner.actionVia(this.route, number, PlaybackButton.Release);
+	}
+
+	pause(number: number) {
+		return this.owner.actionVia(this.route, number, PlaybackButton.Pause);
 	}
 
 	select(number: number) {
@@ -219,6 +224,10 @@ export class BrowserPlaybacks {
 		return this.actionVia("api", number, PlaybackButton.Release);
 	}
 
+	pause(number: number) {
+		return this.actionVia("ui", number, PlaybackButton.Pause);
+	}
+
 	select(number: number) {
 		return this.selectVia("ui", number);
 	}
@@ -248,8 +257,20 @@ export class BrowserPlaybacks {
 				? validInteger(target, "Playback")
 				: await this.playbackNumber(target);
 		if (route === "api") {
-			const wireAction = action === PlaybackButton.GoBack ? "go-minus" : action;
-			await this.apiAction(target, wireAction, pressed);
+			if (action === PlaybackButton.Release) {
+				const definition = await this.requiredDefinition(number);
+				if (definition.body.target.type !== "cue_list")
+					throw new Error("Playback release requires a Cuelist target");
+				await this.api.cueListPlaybackAction(
+					definition.body.target.cue_list_id,
+					"release",
+					{},
+				);
+			} else {
+				const wireAction =
+					action === PlaybackButton.GoBack ? "go-minus" : action;
+				await this.apiAction(target, wireAction, pressed);
+			}
 		} else if (route === "ui") {
 			if (action === PlaybackButton.Release)
 				throw new Error("Playback release has no default visible button");
@@ -453,6 +474,7 @@ function playbackButtonLabel(action: PlaybackButton) {
 		[PlaybackButton.Flash]: "FLASH",
 		[PlaybackButton.Temp]: "TEMP",
 		[PlaybackButton.Swap]: "SWAP",
+		[PlaybackButton.Pause]: /^(?:PAUSE|RESUME)$/,
 	};
 	const label = labels[action];
 	if (!label) throw new Error(`Playback ${action} has no visible button label`);
