@@ -53,37 +53,3 @@ scenario("BENCH-UI-002", "builds and operates a typed three-pane Desktop", async
 	expect(() => t.desktop.getPane(PaneType.Stage, "missing-pane")).toThrow(/No pane is bound/);
 	await fixtures.remove();
 });
-
-scenario("BENCH-UI-003", "captures semantic surfaces and emits typed secondary-screen intent", async (t) => {
-	await t.app.open();
-	await t.builtIn.open(PaneType.Stage);
-	await t.screenshot.application("bench-application");
-	await t.screenshot.builtIn(PaneType.Stage, "bench-stage-built-in");
-
-	await t.desktop.create("Screenshot Desktop");
-	await t.desktop.openSettingsFor("Screenshot Desktop");
-	await t.screenshot.dialog("Desktop settings", "bench-desktop-dialog");
-	await t.screenshot.application("bench-application-with-portal");
-	await t.desktop.closeSettings();
-
-	const screen = await t.screen.create({
-		name: "Bench output",
-		desktop: "Screenshot Desktop",
-		showDock: false,
-		showPlaybacks: true,
-		showPageControls: true,
-		display: { id: "display-2", name: "Operator display" },
-		bounds: { x: 100, y: 80, width: 1024, height: 768 },
-		fullscreen: false,
-		desiredOpen: true,
-		playbacks: {
-			perRow: 8,
-			rows: [{ first: 41, fader: true, buttons: 3 }],
-			pageMode: "dedicated",
-		},
-	});
-	await screen.expectBridgeAction("open_console_screen");
-	await screen.close();
-	await screen.expectBridgeAction("close_console_screen");
-	await screen.remove();
-});

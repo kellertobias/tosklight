@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **298 root cases across 37 files**.
+Default catalog: **301 root cases across 38 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -312,6 +312,9 @@ Default catalog: **298 root cases across 37 files**.
 | 35-fixture-address-screen.spec.ts | FIXTURE-ADDRESS-001 @supplemental-ui › integrated address screen keeps the complete map and number block reachable | repository contract | @supplemental-ui | fixture-address-screen | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 35-fixture-address-screen.spec.ts | PATCH-PLACEMENT-001 @supplemental-ui › the server commits the independently arranged placement preview | repository contract | @supplemental-ui | fixture-address-screen | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 36-cuelist-and-cue-settings-layout.spec.ts | CUELIST-LAYOUT-001 @supplemental-ui › compact Cue settings stay inline while Cuelist Settings opens as a structured modal | repository contract | @supplemental-ui | cuelist-and-cue-settings-layout | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 37-semantic-desktop-show-clock.spec.ts | BENCH-UI-003 @bench @ui › captures semantic surfaces and emits typed secondary-screen intent | repository contract | @bench @ui | semantic-desktop-show-clock | standard failure evidence | parallel | migrated-semantic-world |
+| 37-semantic-desktop-show-clock.spec.ts | BENCH-SHOW-004 @bench @ui › runs named create, autosave, Save As, revision, and reopen through visible operator controls | repository contract | @bench @ui | semantic-desktop-show-clock | standard failure evidence | parallel | migrated-semantic-world |
+| 37-semantic-desktop-show-clock.spec.ts | BENCH-CLOCK-DMX-001 @bench @ui › uses exact clock boundaries and fixture-aware logical DMX without hidden ticks | repository contract | @bench @ui | semantic-desktop-show-clock | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | @ui narrates the complete Full HD product demo surface in one regression run | repository contract | @ui | product-demo | generated show/video | serial | pending-semantic-migration |
 
 ## Serial generated entrypoints

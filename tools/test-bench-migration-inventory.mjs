@@ -19,9 +19,11 @@ const report = JSON.parse(execFileSync(playwright, [
 const rows = [];
 for (const suite of report.suites) {
 	if (!suite.file || suite.file.includes("/")) continue;
+	const source = fs.readFileSync(path.join(root, "tests", suite.file), "utf8");
 	collect(suite, {
 		file: suite.file,
 		contract: "repository contract",
+		migrated: source.includes("@bench-semantic-world"),
 	});
 }
 
@@ -41,7 +43,7 @@ function collect(suite, context) {
 			family: helperFamily(context.file),
 			artifacts: artifactContract(context.file),
 			constraint: executionConstraint(context.file),
-			status: migrationStatus(surfaces),
+			status: migrationStatus(surfaces, context.migrated),
 		});
 	}
 	for (const child of suite.suites ?? [])
@@ -107,7 +109,8 @@ function tagsIn(title) {
 	return [...title.matchAll(/(^|\s)(@[a-z-]+)/gu)].map((match) => match[2]).join(" ");
 }
 
-function migrationStatus(surfaces) {
+function migrationStatus(surfaces, migrated) {
+	if (migrated) return "migrated-semantic-world";
 	return surfaces.includes("@ui")
 		? "pending-semantic-migration"
 		: "reviewed-low-level-boundary";
