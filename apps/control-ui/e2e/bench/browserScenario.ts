@@ -33,6 +33,7 @@ import { BrowserOutput } from "./outputScenario";
 import type { BuiltInPaneType } from "./paneTypes";
 import { builtInLabels } from "./paneTypes";
 import { BrowserPages, BrowserPreload } from "./pagePreloadScenario";
+import { BrowserPatch } from "./patchScenario";
 import { BrowserPlaybacks } from "./playbackScenario";
 import type { DmxProtocol } from "./protocols";
 import { BrowserTiming } from "./programmerFadeScenario";
@@ -97,6 +98,7 @@ export class BrowserScenarioWorld {
 	readonly playback: BrowserPlaybacks;
 	readonly page: BrowserPages;
 	readonly preload: BrowserPreload;
+	readonly patch: BrowserPatch;
 	readonly dmx: BrowserDmx;
 	readonly output: BrowserOutput;
 	readonly timing: BrowserTiming;
@@ -237,6 +239,7 @@ export class BrowserScenarioWorld {
 			desk,
 			() => this.show.contractIdentity().workingId,
 		);
+		this.patch = new BrowserPatch(api, page, desk);
 		this.dmx = new BrowserDmx(api);
 		this.output = new BrowserOutput(api, desk);
 		this.special = new BrowserProgrammerSpecials(

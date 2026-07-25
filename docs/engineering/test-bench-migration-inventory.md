@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **308 root cases across 42 files**.
+Default catalog: **308 root cases across 43 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -22,11 +22,8 @@ Default catalog: **308 root cases across 42 files**.
 | 01-foundational-dimmers-and-groups.spec.ts | DIM-002 @api › Lightning Desk command reaches the exact rendered output boundary | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 01-foundational-dimmers-and-groups.spec.ts | CMD-001 @api › Fixture and Group default modes toggle while explicit prefixes stay scoped | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 01-foundational-dimmers-and-groups.spec.ts | GROUP-003 @api › derived Group follows source ordering | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 01-foundational-dimmers-and-groups.spec.ts | GROUP-003 @ui › derived Group follows source ordering | docs/testing/01-foundational-dimmers-and-groups.md | @ui | foundational-dimmers-and-groups | standard failure evidence | parallel | pending-semantic-migration |
 | 01-foundational-dimmers-and-groups.spec.ts | GROUP-004 @api › frozen Group survives source edits and keeps unpatched fixtures programmable | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 01-foundational-dimmers-and-groups.spec.ts | GROUP-004 @ui › frozen Group survives source edits and keeps unpatched fixtures programmable | docs/testing/01-foundational-dimmers-and-groups.md | @ui | foundational-dimmers-and-groups | standard failure evidence | parallel | pending-semantic-migration |
 | 01-foundational-dimmers-and-groups.spec.ts | GROUP-005 @api › stored empty Groups remain distinct from missing references | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 01-foundational-dimmers-and-groups.spec.ts | GROUP-005 @ui › stored empty Groups remain distinct from missing references | docs/testing/01-foundational-dimmers-and-groups.md | @ui | foundational-dimmers-and-groups | standard failure evidence | parallel | pending-semantic-migration |
 | 01-foundational-dimmers-and-groups.spec.ts | PROG-001 @api › values retain selection until replacement while leading Plus continues it | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 01-foundational-dimmers-and-groups.spec.ts | PROG-001 @ui › values retain selection until replacement while leading Plus continues it | docs/testing/01-foundational-dimmers-and-groups.md | @ui | foundational-dimmers-and-groups | standard failure evidence | parallel | pending-semantic-migration |
 | 01-foundational-dimmers-and-groups.spec.ts | PROG-002 @api › relative values spread across the live ordered Group | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
@@ -322,6 +319,9 @@ Default catalog: **308 root cases across 42 files**.
 | 41-semantic-foundational-dimmer-command.spec.ts | DIM-001 @bench @ui › ordered Group edits retain their live value and append re-added fixtures | repository contract | @bench @ui | semantic-foundational-dimmer-command | standard failure evidence | parallel | migrated-semantic-world |
 | 41-semantic-foundational-dimmer-command.spec.ts | DIM-002 @bench @ui › Lightning Desk command reaches the exact rendered output boundary | repository contract | @bench @ui | semantic-foundational-dimmer-command | standard failure evidence | parallel | migrated-semantic-world |
 | 41-semantic-foundational-dimmer-command.spec.ts | CMD-001 @bench @ui › Fixture and Group default modes toggle while explicit prefixes stay scoped | repository contract | @bench @ui | semantic-foundational-dimmer-command | standard failure evidence | parallel | migrated-semantic-world |
+| 42-semantic-foundational-groups.spec.ts | GROUP-003 @bench @ui › derived Group follows source ordering | repository contract | @bench @ui | semantic-foundational-groups | standard failure evidence | parallel | migrated-semantic-world |
+| 42-semantic-foundational-groups.spec.ts | GROUP-004 @bench @ui › frozen Group survives source edits and keeps unpatched fixtures programmable | repository contract | @bench @ui | semantic-foundational-groups | standard failure evidence | parallel | migrated-semantic-world |
+| 42-semantic-foundational-groups.spec.ts | GROUP-005 @bench @ui › stored empty Groups remain distinct from missing references | repository contract | @bench @ui | semantic-foundational-groups | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints

@@ -37,6 +37,7 @@ export function registerFrozenAndEmptyGroupPairedScenarios() {
 		id: "GROUP-004",
 		title:
 			"frozen Group survives source edits and keeps unpatched fixtures programmable",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			await loadCompactRig(api, bench, `group-004-paired-${surface}`);
 			return {
@@ -110,6 +111,7 @@ export function registerFrozenAndEmptyGroupPairedScenarios() {
 	}>({
 		id: "GROUP-005",
 		title: "stored empty Groups remain distinct from missing references",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			await loadCompactRig(api, bench, `group-005-paired-${surface}`);
 			await command(api, "DELETE GROUP 4");

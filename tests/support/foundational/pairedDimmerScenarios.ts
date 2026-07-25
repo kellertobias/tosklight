@@ -127,6 +127,7 @@ export function registerDimmerAndDerivedGroupPairedScenarios() {
 	pairedScenario({
 		id: "GROUP-003",
 		title: "derived Group follows source ordering",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			await loadCompactRig(api, bench, `group-003-paired-${surface}`);
 			return { sourceOrder: [12, 1, 2, 8, 4, 5, 6, 7, 9, 10, 11] };
