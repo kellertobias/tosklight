@@ -156,6 +156,7 @@ const supportedCallPaths = new Set([
 	"playback.expect.present",
 	"playback.expect.runtime",
 	"playback.expect.selected",
+	"playback.expectActivatedTogether",
 	"playback.go",
 	"playback.goBack",
 	"playback.off",

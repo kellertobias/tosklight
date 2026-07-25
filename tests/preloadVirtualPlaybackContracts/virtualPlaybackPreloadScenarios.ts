@@ -33,6 +33,7 @@ import {
 const preload004Scenario: PairedScenario<PreloadVirtualPairState> = {
 	id: "PRELOAD-004",
 	title: "virtual GO and TOGGLE alone remain pending and share Programmer Fade",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const prepared = await prepare(
 			api,

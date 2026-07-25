@@ -250,6 +250,21 @@ export class BrowserPlaybacks {
 		return new PlaybackExpectation(this, validInteger(number, "Playback"));
 	}
 
+	async expectActivatedTogether(...numbers: number[]) {
+		if (numbers.length < 2)
+			throw new Error("Shared activation requires at least two Playbacks");
+		await expect
+			.poll(async () => {
+				const timestamps = await Promise.all(
+					numbers.map(
+						async (number) => (await this.runtime(number))?.activated_at,
+					),
+				);
+				return timestamps.every(Boolean) ? new Set(timestamps).size : 0;
+			})
+			.toBe(1);
+	}
+
 	async actionVia(
 		route: RuntimeRoute | "osc",
 		target: PlaybackTarget,
