@@ -85,6 +85,8 @@ build_pages() {
   cp -R "$LIGHT_SAFARI_DIR/." "$LIGHT_PAGES_DIR/safari"
   cp "$LIGHT_MANUAL_PDF" "$LIGHT_PAGES_DIR/tosklight-manual.pdf"
   cp -R "$ROOT/docs/site/." "$LIGHT_PAGES_DIR/"
+  node "$ROOT/tools/semantic-test-docs/cli.mjs" --write \
+    --output-dir "$LIGHT_PAGES_DIR/semantic-tests"
   # Same application icon the operator manual renders in its hero and sidebar.
   cp "$ROOT/apps/control-ui/src-tauri/icons/icon.png" "$LIGHT_PAGES_DIR/icon.png"
   # GitHub Pages otherwise runs the output through Jekyll and drops _-prefixed assets.
@@ -92,7 +94,13 @@ build_pages() {
 
   node "$ROOT/tools/render-landing-page.mjs" "$LIGHT_PAGES_DIR/index.html"
 
-  for required in index.html manual/index.html safari/index.html; do
+  for required in \
+    index.html \
+    manual/index.html \
+    safari/index.html \
+    semantic-tests/semantic-test-catalog.html \
+    semantic-tests/semantic-test-catalog.v1.json
+  do
     [[ -f "$LIGHT_PAGES_DIR/$required" ]] || {
       echo "error: assembled site is missing $required" >&2
       exit 1

@@ -18,6 +18,10 @@ The write command updates:
   contract;
 - `docs/engineering/semantic-test-catalog.html`, the self-contained searchable view.
 
+`npm run pages:generate` also compiles both files into
+`semantic-tests/` inside the assembled GitHub Pages artifact and links the HTML
+catalog from the public landing page.
+
 Pass `--results <playwright-json>` and an explicit alternate `--output-dir`
 directly to `cli.mjs` to merge an existing Playwright JSON report. Run-specific
 status and durations cannot overwrite the deterministic checked artifacts. Observed

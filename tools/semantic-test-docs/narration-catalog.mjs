@@ -169,6 +169,9 @@ const supportedCallPaths = new Set([
 	"playback.via.ui.temp",
 	"preload.release",
 	"preload.start",
+	"preload.commit",
+	"preload.expect.active",
+	"preload.expect.inactive",
 	"preset.expect.absent",
 	"preset.expect.button",
 	"preset.expect.metadata",
@@ -243,10 +246,7 @@ const exactNarrations = new Map([
 		([target]) =>
 			`Open the ToskLight browser application${target ? ` at ${target}` : ""}.`,
 	],
-	[
-		"app.expect.ready",
-		() => "Expect the ToskLight browser application to be ready.",
-	],
+	["app.expect.ready", () => "The ToskLight browser application is ready."],
 	["show.use", ([show]) => `Use the isolated ${show} show.`],
 	["show.create", ([name]) => `Create the show ${name}.`],
 	["show.load", ([show]) => `Load the show ${show}.`],
@@ -258,8 +258,27 @@ const exactNarrations = new Map([
 		([show, revision]) => `Load revision ${revision} of ${show}.`,
 	],
 	["show.resetWorkingCopy", () => "Reset the isolated working copy."],
+	[
+		"show.expect.active",
+		([show]) => `Show → active is ${describeActiveShowReference(show)}.`,
+	],
+	["show.expect.dirty", ([dirty]) => `Show → dirty is ${dirty}.`],
+	[
+		"show.expect.revision",
+		([revision]) => `Show → revision matches ${revision}.`,
+	],
 	["command.execute", ([command]) => `Execute the desk command ${command}.`],
-	["command.expect", ([value]) => `Expect the command line to show ${value}.`],
+	["command.expect", ([value]) => `Command line shows ${value}.`],
+	["expect.toBe", ([actual, expected]) => `${actual} is ${expected}.`],
+	["expect.toEqual", ([actual, expected]) => `${actual} equals ${expected}.`],
+	[
+		"expect.toMatchObject",
+		([actual, expected]) => `${actual} matches ${expected}.`,
+	],
+	[
+		"expect.rejects.toThrow",
+		([operation, error]) => `Calling ${operation} rejects with ${error}.`,
+	],
 	["keypad.press", ([keys]) => `Press keypad keys ${keys}.`],
 	["clock.advanceBy", ([duration]) => `Advance the test clock by ${duration}.`],
 	[
@@ -268,16 +287,12 @@ const exactNarrations = new Map([
 	],
 	[
 		"expectFixtureDMX",
-		([target, expected]) => `Expect ${target} DMX to equal ${expected}.`,
+		([target, expected]) => `${target} DMX equals ${expected}.`,
 	],
-	[
-		"expectFixtureDMXAbsent",
-		([target]) => `Expect ${target} to have no DMX output.`,
-	],
+	["expectFixtureDMXAbsent", ([target]) => `${target} has no DMX output.`],
 	[
 		"expectFixtureValue",
-		([target, expected]) =>
-			`Expect ${target} resolved values to equal ${expected}.`,
+		([target, expected]) => `${target} resolved values equal ${expected}.`,
 	],
 	[
 		"demo.run",
@@ -309,15 +324,53 @@ const exactNarrations = new Map([
 	["screenHandle.remove", () => "Remove the configured secondary screen."],
 	[
 		"screenHandle.expectBridgeAction",
-		([action]) => `Expect the secondary-screen bridge action ${action}.`,
+		([action]) => `Secondary-screen bridge action is ${action}.`,
+	],
+	[
+		"screenHandle.page.expectSelected",
+		([page]) => `Secondary screen → selected page is ${page}.`,
+	],
+	[
+		"screenshot.application",
+		([name]) => `Capture application screenshot ${name}.`,
+	],
+	[
+		"screenshot.builtIn",
+		([pane, name]) => `Capture ${pane} pane screenshot ${name}.`,
+	],
+	[
+		"screenshot.dialog",
+		([dialog, name]) => `Capture ${dialog} dialog screenshot ${name}.`,
 	],
 ]);
 
 const implicitOutcomes = new Map([
 	[
 		"demo.run",
-		"Expect the complete product-demo workflow and its internal semantic assertions to pass.",
+		"Complete product-demo workflow and its internal semantic assertions pass.",
 	],
+]);
+
+const preconditionCallPaths = new Set([
+	"app.expect.ready",
+	"app.open",
+	"show.create",
+	"show.load",
+	"show.loadRevision",
+	"show.resetWorkingCopy",
+	"show.save",
+	"show.saveAs",
+	"show.saveRevision",
+	"show.use",
+	"show.via.ui.loadRevision",
+	"show.via.ui.saveAs",
+	"show.via.ui.saveRevision",
+]);
+
+const toolCallPaths = new Set([
+	"screenshot.application",
+	"screenshot.builtIn",
+	"screenshot.dialog",
 ]);
 
 const routeSurfaces = new Map([
@@ -340,7 +393,11 @@ export function narrateCall(call) {
 	if (!familySurfaces) return undefined;
 
 	const explicit = exactNarrations.get(call.path);
-	const kind = expectationKind(call.path, call.root);
+	const kind = preconditionCallPaths.has(call.path)
+		? "precondition"
+		: toolCallPaths.has(call.path)
+			? "tool"
+			: expectationKind(call.path, call.root);
 	const description = explicit
 		? explicit(call.arguments)
 		: genericNarration(call.path, call.arguments, kind);
@@ -355,6 +412,8 @@ export function narrateCall(call) {
 		surfaces: [...surfaces].sort(),
 		resultType: resultTypeFor(call.path),
 		expectedOutcome: implicitOutcomes.get(call.path),
+		contextLabel: contextLabelFor(call),
+		presentation: presentationFor(call),
 	};
 }
 
@@ -376,14 +435,31 @@ function expectationKind(callPath, root) {
 function genericNarration(callPath, args, kind) {
 	const words = callPath
 		.split(".")
-		.filter((part) => part !== "via")
+		.filter((part) => part !== "via" && part !== "expect")
 		.map(humanize)
 		.join(" → ");
-	const suffix = args.length ? ` with ${args.join(", ")}` : "";
-	return `${kind === "expected-outcome" ? "Expect" : "Perform"} ${words}${suffix}.`;
+	const subject = `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+	if (kind === "expected-outcome")
+		return `${subject}${args.length ? `: ${args.join(", ")}` : ""}.`;
+	return `${subject}${args.length ? ` with ${args.join(", ")}` : ""}.`;
+}
+
+function describeActiveShowReference(value) {
+	const result = /^\$[A-Za-z_$][\w$]* \(result of ([^)]+)\)$/u.exec(
+		value ?? "",
+	);
+	if (!result) return describeShowReference(value);
+	const descriptions = {
+		"show.create": "the created show",
+		"show.loadRevision": "the loaded revision copy",
+		"show.saveAs": "the saved show copy",
+		"show.via.ui.loadRevision": "the loaded revision copy",
+	};
+	return descriptions[result[1]] ?? value;
 }
 
 function humanize(value) {
+	if (/^[A-Z]$/u.test(value)) return value;
 	return value
 		.replace(/([a-z0-9])([A-Z])/gu, "$1 $2")
 		.replaceAll("_", " ")
@@ -397,6 +473,55 @@ function resultTypeFor(callPath) {
 	if (callPath === "desktop.configure") return "desktopBuilder";
 	if (callPath === "screen.create") return "screenHandle";
 	return undefined;
+}
+
+function contextLabelFor(call) {
+	if (call.path !== "show.use") return undefined;
+	const show = call.arguments[0];
+	if (!show || show.includes("<unresolved:")) return undefined;
+	return { kind: "show", label: describeShowReference(show) };
+}
+
+function describeShowReference(show) {
+	const enumMember = /^Show\.([A-Za-z0-9_]+)$/u.exec(show);
+	return (enumMember?.[1] ?? show)
+		.replace(/([a-z0-9])([A-Z])/gu, "$1 $2")
+		.replaceAll("_", " ");
+}
+
+function presentationFor(call) {
+	if (call.path === "desktopBuilder.addPane")
+		return { omitStructuredArguments: true };
+	if (call.path === "desktop.configure") {
+		const label = literalLabel(call.arguments[0]);
+		return label
+			? { badges: [{ kind: "desktop", label }], omitArguments: [0] }
+			: undefined;
+	}
+	if (call.path === "screen.create") {
+		const label = objectStringField(call.arguments[0], "name");
+		return {
+			badges: label ? [{ kind: "screen", label }] : [],
+			omitConfigurationFields: ["name", "display", "bounds"],
+		};
+	}
+	return undefined;
+}
+
+function literalLabel(value) {
+	if (!value) return undefined;
+	try {
+		const parsed = JSON.parse(value);
+		return typeof parsed === "string" ? parsed : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function objectStringField(value, field) {
+	if (field !== "name") return undefined;
+	const match = /(?:^|[{,]\s*)name:\s*("(?:\\.|[^"\\])*")/u.exec(value ?? "");
+	return literalLabel(match?.[1]);
 }
 
 export function catalogFamilies() {

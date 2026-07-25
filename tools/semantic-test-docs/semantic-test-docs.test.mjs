@@ -31,6 +31,8 @@ test("central narration separates actions, outcomes, surfaces, and returned hand
 			surfaces: ["Command line"],
 			resultType: undefined,
 			expectedOutcome: undefined,
+			contextLabel: undefined,
+			presentation: undefined,
 		},
 	);
 	assert.equal(
@@ -40,6 +42,54 @@ test("central narration separates actions, outcomes, surfaces, and returned hand
 			arguments: ["4", "1", "2"],
 		}).kind,
 		"expected-outcome",
+	);
+	assert.deepEqual(
+		narrateCall({
+			path: "show.expect.active",
+			root: "t",
+			arguments: ["$empty (result of show.create)"],
+		}),
+		{
+			kind: "expected-outcome",
+			description: "Show → active is the created show.",
+			surfaces: ["Show files"],
+			resultType: undefined,
+			expectedOutcome: undefined,
+			contextLabel: undefined,
+			presentation: undefined,
+		},
+	);
+	assert.deepEqual(
+		narrateCall({
+			path: "screenshot.application",
+			root: "t",
+			arguments: ['"bench-application"'],
+		}),
+		{
+			kind: "tool",
+			description: 'Capture application screenshot "bench-application".',
+			surfaces: ["Generated artifacts"],
+			resultType: undefined,
+			expectedOutcome: undefined,
+			contextLabel: undefined,
+			presentation: undefined,
+		},
+	);
+	assert.equal(
+		narrateCall({
+			path: "builtIn.open",
+			root: "t",
+			arguments: ["PaneType.Stage"],
+		}).description,
+		"Built in → open with PaneType.Stage.",
+	);
+	assert.equal(
+		narrateCall({
+			path: "expect.toBe",
+			root: "expect",
+			arguments: ["$first.now (from clock.advanceStep)", '"2020-01-01"'],
+		}).description,
+		'$first.now (from clock.advanceStep) is "2020-01-01".',
 	);
 	assert.deepEqual(
 		narrateCall({
@@ -56,6 +106,17 @@ test("central narration separates actions, outcomes, surfaces, and returned hand
 			arguments: ['"Operator"'],
 		}).resultType,
 		"desktopBuilder",
+	);
+	assert.deepEqual(
+		narrateCall({
+			path: "screen.create",
+			root: "t",
+			arguments: ['{ name: "Output", bounds: { x: 10, y: 20 } }'],
+		}).presentation,
+		{
+			badges: [{ kind: "screen", label: "Output" }],
+			omitConfigurationFields: ["name", "display", "bounds"],
+		},
 	);
 });
 
@@ -74,8 +135,10 @@ test("AST compiler preserves dynamic expressions and unknown helpers as diagnost
 	import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
 scenario("EXAMPLE-001", "shows unresolved source", async (t) => {
   await t.app.open();
+  await t.show.use(Show.DefaultStage);
   await t.show.create(\`Dynamic \${crypto.randomUUID()}\`);
   await t.unknown.family(value);
+  await t.speedGroup.C.expect.synchronizedFrom(t.speedGroup.A.group);
   await t.show.expect.dirty(false);
 });
 `,
@@ -95,8 +158,16 @@ scenario("EXAMPLE-001", "shows unresolved source", async (t) => {
 		sourceFiles: [sourceFile],
 	});
 	assert.equal(catalog.scenarioCount, 1);
-	assert.equal(catalog.scenarios[0].steps.length, 3);
-	assert.equal(catalog.scenarios[0].expectedOutcomes.length, 1);
+	assert.equal(catalog.scenarios[0].preconditions.length, 3);
+	assert.equal(catalog.scenarios[0].steps.length, 1);
+	assert.equal(catalog.scenarios[0].expectedOutcomes.length, 2);
+	assert.equal(
+		catalog.scenarios[0].preconditions[0].sourceCode,
+		"t.app.open()",
+	);
+	assert.deepEqual(catalog.scenarios[0].contextLabels, [
+		{ kind: "show", label: "Default Stage" },
+	]);
 	assert.equal(
 		catalog.scenarios[0].migration.status,
 		"migrated-semantic-world",
@@ -107,12 +178,24 @@ scenario("EXAMPLE-001", "shows unresolved source", async (t) => {
 		),
 	);
 	assert.match(
-		catalog.scenarios[0].steps[1].description,
-		/<unresolved: `Dynamic/u,
+		catalog.scenarios[0].preconditions[2].description,
+		/<generated: UUID>/u,
+	);
+	assert.equal(
+		catalog.scenarios[0].expectedOutcomes[0].description,
+		'Speed group → C → synchronized from: "A".',
 	);
 	assert.deepEqual(
 		new Set(catalog.scenarios[0].diagnostics.map(({ code }) => code)),
 		new Set(["unresolved-expression", "unknown-narration"]),
+	);
+	assert.ok(
+		catalog.scenarios[0].diagnostics.some(
+			(diagnostic) =>
+				diagnostic.code === "unresolved-expression" &&
+				diagnostic.expression === "value" &&
+				diagnostic.relatedCall === "unknown.family",
+		),
 	);
 });
 
@@ -191,17 +274,22 @@ ${row}
 
 test("repository compiler finds every marked scenario once and stays deterministic", async () => {
 	const marked = discoverMarkedSpecs(path.join(root, "tests"));
-	assert.equal(marked.length, 10);
 	const first = await compileSemanticTestCatalog({ root });
 	const second = await compileSemanticTestCatalog({ root });
-	assert.equal(first.scenarioCount, 27);
+	assert.ok(first.scenarioCount >= marked.length);
+	assert.deepEqual(
+		new Set(first.scenarios.map((scenario) => scenario.source.file)),
+		new Set(
+			marked.map((file) => path.relative(root, file).split(path.sep).join("/")),
+		),
+	);
 	assert.equal(
 		new Set(
 			first.scenarios.map(
 				(scenario) => `${scenario.source.file}:${scenario.source.line}`,
 			),
 		).size,
-		27,
+		first.scenarioCount,
 	);
 	assert.equal(
 		first.scenarios.filter((scenario) => scenario.id === "PROG-002").length,
@@ -209,11 +297,35 @@ test("repository compiler finds every marked scenario once and stays determinist
 	);
 	assert.ok(
 		first.scenarios.every(
-			(scenario) => scenario.migration.status === "migrated-semantic-world",
+			(scenario) =>
+				scenario.migration.status === "migrated-semantic-world" ||
+				(scenario.migration.status === "unresolved" &&
+					scenario.diagnostics.some((diagnostic) =>
+						diagnostic.code.endsWith("-migration-status"),
+					)),
 		),
 	);
 	assert.ok(
 		first.scenarios.every((scenario) => scenario.expectedOutcomes.length > 0),
+	);
+	const presetScenario = first.scenarios.find(
+		(scenario) => scenario.id === "BENCH-PRESET-001",
+	);
+	assert.ok(presetScenario);
+	assert.ok(
+		presetScenario.expectedOutcomes.some((outcome) =>
+			outcome.description.includes("PresetFamily.Color"),
+		),
+	);
+	assert.ok(
+		presetScenario.diagnostics.every(
+			(diagnostic) => !diagnostic.message.includes("family"),
+		),
+	);
+	assert.ok(
+		presetScenario.expectedOutcomes.some((outcome) =>
+			outcome.description.includes("<observed: t.preset.routeReports.at(-1)>"),
+		),
 	);
 	assert.ok(
 		first.scenarios.every((scenario) =>
@@ -309,15 +421,95 @@ test("HTML is self-contained, searchable, and safely embeds catalog text", () =>
 				source: { file: "tests/example.spec.ts", line: 1 },
 				migration: { status: "migrated-semantic-world" },
 				testedSurfaces: [],
-				steps: [],
+				contextLabels: [{ kind: "show", label: "Default Stage" }],
+				preconditions: [
+					{
+						description: "Open ToskLight.",
+						source: { line: 2 },
+					},
+				],
+				steps: [
+					{
+						kind: "step",
+						description: "Open the output screen.",
+						call: "screen.create",
+						order: 0,
+						source: { line: 3 },
+					},
+					{
+						kind: "tool",
+						description:
+							'Create screen <generated: UUID> with { name: "Output", bounds: { x: 10 }, showPlaybacks: true }, <observed: latest report>, and <unresolved: ({ value }) => values.push(value)>.',
+						call: "screen.create",
+						arguments: [
+							'{ name: "Output", bounds: { x: 10 }, showPlaybacks: true }',
+						],
+						presentation: {
+							badges: [{ kind: "screen", label: "Output" }],
+							omitConfigurationFields: ["name", "bounds"],
+						},
+						sourceCode:
+							't.screen.create({ name: "Output", bounds: { x: 10 } })',
+						order: 1,
+						source: { line: 4 },
+					},
+				],
 				expectedOutcomes: [],
-				diagnostics: [],
+				diagnostics: [
+					{
+						code: "unresolved-expression",
+						expression: "first.now",
+						message: "Property access first.now depends on a runtime value.",
+						source: { line: 3 },
+					},
+				],
 				lastRun: null,
 			},
 		],
 	});
 	assert.match(html, /type="search"/u);
+	assert.match(html, /id="show-tools" type="checkbox"/u);
+	assert.match(html, /id="show-source" type="checkbox"/u);
+	assert.match(html, /aria-label="Test suites and test cases"/u);
+	assert.match(html, /--header-height/u);
+	assert.match(html, /new ResizeObserver\(syncHeaderHeight\)/u);
+	assert.match(html, /<span class="tree-type">Suite<\/span>example\.spec\.ts/u);
+	assert.match(
+		html,
+		/<span class="tree-type">Test<\/span><span class="tree-id">HTML-001/u,
+	);
 	assert.match(html, /application\/json/u);
+	assert.match(html, /Preconditions/u);
+	assert.match(html, /Scenario contract/u);
+	assert.match(html, /kind-tool">Tool/u);
+	assert.match(html, /class="tool-row"/u);
+	assert.match(html, /class="tool-summary"[^>]*>Tool<\/span>/u);
+	assert.match(html, /<table>/u);
+	assert.match(html, /context-chip/u);
+	assert.match(html, /config-code/u);
+	assert.match(html, /json-key/u);
+	assert.match(html, /unresolved-token/u);
+	assert.match(html, /generated-token/u);
+	assert.match(html, /observed-token/u);
+	assert.match(html, /diagnostic-code/u);
+	assert.match(html, /<pre class="source-code"><code>t\.screen\.create/u);
+	const main = /<main id="catalog">([\s\S]+)<\/main>/u.exec(html)?.[1] ?? "";
+	assert.match(main, /screen: Output/u);
+	assert.match(main, /json-key">showPlaybacks/u);
+	assert.doesNotMatch(main, /json-key">(?:name|bounds)/u);
+	assert.match(
+		main,
+		/<span class="unresolved-token">&lt;unresolved: \(\{ value \}\) =&gt; values\.push\(value\)&gt;<\/span>/u,
+	);
+	assert.match(
+		main,
+		/<span class="generated-token">&lt;generated: UUID&gt;<\/span>/u,
+	);
+	assert.match(
+		main,
+		/<span class="observed-token">&lt;observed: latest report&gt;<\/span>/u,
+	);
+	assert.match(main, /class="diagnostic-where"[^>]*>Step<\/a>/u);
 	assert.doesNotMatch(html, /<\/script><script>alert/u);
 	assert.doesNotMatch(html, /<link|src="https?:/u);
 });

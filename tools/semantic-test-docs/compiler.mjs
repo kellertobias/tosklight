@@ -45,6 +45,7 @@ export async function compileSemanticTestCatalog({
 					ast,
 					root,
 					sourceFile,
+					project,
 					inventory,
 					results,
 				}),
@@ -112,7 +113,14 @@ export function readMigrationInventory(file) {
 	return rows;
 }
 
-function compileSourceFile({ ast, root, sourceFile, inventory, results }) {
+function compileSourceFile({
+	ast,
+	root,
+	sourceFile,
+	project,
+	inventory,
+	results,
+}) {
 	const scenarioNames = importedScenarioNames(ast, sourceFile);
 	if (!scenarioNames.size)
 		throw new Error(
@@ -130,7 +138,8 @@ function compileSourceFile({ ast, root, sourceFile, inventory, results }) {
 				root,
 				sourceFile,
 				call: node,
-				helpers,
+				helpers: new Map(helpers),
+				project,
 				inventory,
 				results,
 			}),
@@ -146,6 +155,7 @@ function compileScenario({
 	sourceFile,
 	call,
 	helpers,
+	project,
 	inventory,
 	results,
 }) {
@@ -171,12 +181,17 @@ function compileScenario({
 		sourceFile,
 		root,
 		helpers,
+		project,
+		checker: project.checker,
 		worldNames: new Set([worldParameter.text]),
 		aliases: new Map(),
 		staticBindings: new Map(),
 		helperStack: [],
+		preconditions: [],
 		steps: [],
 		expectedOutcomes: [],
+		contextLabels: [],
+		sequence: { next: 0 },
 		diagnostics,
 		phase: "scenario",
 	};
@@ -206,14 +221,20 @@ function compileScenario({
 	const actualSurfaces = new Set(
 		migration.surfaces.filter((surface) => !surface.startsWith("@")),
 	);
-	for (const item of [...state.steps, ...state.expectedOutcomes])
+	for (const item of [
+		...state.preconditions,
+		...state.steps,
+		...state.expectedOutcomes,
+	])
 		for (const surface of item.surfaces) actualSurfaces.add(surface);
 	return {
 		id: idNode.text,
 		title: titleNode.text,
 		source,
+		preconditions: state.preconditions,
 		steps: state.steps,
 		expectedOutcomes: state.expectedOutcomes,
+		contextLabels: uniqueContextLabels(state.contextLabels),
 		testedSurfaces: [...actualSurfaces].sort(),
 		migration: {
 			status: migration.status,
@@ -231,6 +252,12 @@ function visitExecution(node, state) {
 	const { ast } = state;
 	if (ast.isFunctionDeclaration(node)) return;
 	if (ast.isIfStatement(node)) {
+		const condition = staticPrimitive(node.expression, state);
+		if (typeof condition === "boolean") {
+			const branch = condition ? node.thenStatement : node.elseStatement;
+			if (branch) visitExecution(branch, state);
+			return;
+		}
 		addControlFlowDiagnostic(node.expression, "if/else", state);
 		visitExecution(node.thenStatement, {
 			...state,
@@ -295,6 +322,22 @@ function visitExecution(node, state) {
 		ast.isWhileStatement(node) ||
 		ast.isDoStatement(node)
 	) {
+		if (ast.isForOfStatement(node)) {
+			const iterations = resolveStaticForOfValues(node.expression, state);
+			if (iterations) {
+				for (const [iteration, value] of iterations.entries()) {
+					const iterationState = {
+						...state,
+						aliases: new Map(state.aliases),
+						staticBindings: new Map(state.staticBindings),
+						phase: `${state.phase}:iteration-${iteration + 1}`,
+					};
+					bindForOfInitializer(node.initializer, value, iterationState);
+					visitExecution(node.statement, iterationState);
+				}
+				return;
+			}
+		}
 		state.diagnostics.push({
 			code: "static-control-flow",
 			message: `Control flow ${compact(node.getText(state.sourceFile))} is narrated once; iteration values are not guessed.`,
@@ -307,9 +350,29 @@ function visitExecution(node, state) {
 	}
 	if (ast.isVariableDeclaration(node)) {
 		if (ast.isIdentifier(node.name) && node.initializer) {
+			if (
+				ast.isArrowFunction(node.initializer) ||
+				ast.isFunctionExpression(node.initializer)
+			) {
+				state.helpers.set(node.name.text, {
+					node: node.initializer,
+					capturesWorld: true,
+				});
+				return;
+			}
 			state.staticBindings.set(node.name.text, node.initializer);
 			const initializerCall = unwrapCall(node.initializer, ast);
 			if (initializerCall) {
+				if (
+					ast.isIdentifier(initializerCall.expression) &&
+					state.helpers.has(initializerCall.expression.text)
+				) {
+					expandHelper(initializerCall, state);
+					state.aliases.set(node.name.text, {
+						origin: initializerCall.expression.text,
+					});
+					return;
+				}
 				const emitted = emitSemanticCall(initializerCall, state);
 				if (emitted)
 					state.aliases.set(node.name.text, {
@@ -323,7 +386,15 @@ function visitExecution(node, state) {
 		return;
 	}
 	if (ast.isCallExpression(node)) {
-		if (emitSemanticCall(node, state)) return;
+		if (emitSemanticCall(node, state)) {
+			for (const argument of node.arguments)
+				if (ast.isArrowFunction(argument) || ast.isFunctionExpression(argument))
+					visitExecution(argument.body, {
+						...state,
+						phase: `${state.phase}:callback`,
+					});
+			return;
+		}
 		if (
 			ast.isIdentifier(node.expression) &&
 			state.helpers.has(node.expression.text)
@@ -338,6 +409,7 @@ function visitExecution(node, state) {
 function emitSemanticCall(node, state) {
 	const chain = callChain(node, state);
 	if (!chain) return undefined;
+	const source = location(state.root, state.sourceFile, node);
 	const expressionDiagnostics = [];
 	const args = chain.argumentNodes.map((argument) =>
 		renderExpression(argument, state, expressionDiagnostics),
@@ -346,6 +418,10 @@ function emitSemanticCall(node, state) {
 		state.diagnostics.push({
 			code: diagnostic.code,
 			message: diagnostic.message,
+			expression: diagnostic.expression,
+			relatedCall: chain.path,
+			relatedSource: source,
+			sourceCode: (diagnostic.node ?? node).getText(state.sourceFile),
 			source: location(state.root, state.sourceFile, diagnostic.node ?? node),
 		});
 	const narration = narrateCall({
@@ -353,7 +429,6 @@ function emitSemanticCall(node, state) {
 		root: chain.root,
 		arguments: args,
 	});
-	const source = location(state.root, state.sourceFile, node);
 	const raw = compact(node.getText(state.sourceFile));
 	if (!narration) {
 		state.diagnostics.push({
@@ -362,11 +437,15 @@ function emitSemanticCall(node, state) {
 			source,
 		});
 		const unresolved = {
+			kind: chain.path.includes("expect") ? "expected-outcome" : "step",
 			description: `Unresolved semantic call: ${raw}`,
 			call: chain.path,
+			arguments: args,
 			expression: raw,
+			sourceCode: node.getText(state.sourceFile),
 			surfaces: ["Unresolved"],
 			phase: state.phase,
+			order: state.sequence.next++,
 			source,
 		};
 		(chain.path.includes("expect") ? state.expectedOutcomes : state.steps).push(
@@ -375,22 +454,30 @@ function emitSemanticCall(node, state) {
 		return { path: chain.path };
 	}
 	const item = {
+		kind: narration.kind,
 		description: narration.description,
 		call: chain.path,
+		arguments: args,
+		presentation: narration.presentation,
 		expression: raw,
+		sourceCode: node.getText(state.sourceFile),
 		surfaces: narration.surfaces,
 		phase: state.phase,
+		order: state.sequence.next++,
 		source,
 	};
-	(narration.kind === "expected-outcome"
-		? state.expectedOutcomes
-		: state.steps
-	).push(item);
+	if (narration.kind === "precondition") state.preconditions.push(item);
+	else if (narration.kind === "expected-outcome")
+		state.expectedOutcomes.push(item);
+	else state.steps.push(item);
+	if (narration.contextLabel) state.contextLabels.push(narration.contextLabel);
 	if (narration.expectedOutcome)
 		state.expectedOutcomes.push({
 			...item,
+			kind: "expected-outcome",
 			description: narration.expectedOutcome,
 			phase: `${state.phase}:catalog-outcome`,
+			order: state.sequence.next++,
 		});
 	return { path: chain.path, resultType: narration.resultType };
 }
@@ -440,7 +527,8 @@ function parseCallee(expression, state) {
 
 function expandHelper(call, state) {
 	const name = call.expression.text;
-	const helper = state.helpers.get(name);
+	const helperEntry = state.helpers.get(name);
+	const helper = helperEntry.node;
 	const source = location(state.root, state.sourceFile, call);
 	if (state.helperStack.includes(name)) {
 		state.diagnostics.push({
@@ -467,7 +555,7 @@ function expandHelper(call, state) {
 			staticBindings.set(parameter.name.text, argument);
 		}
 	}
-	if (!receivesWorld) {
+	if (!receivesWorld && !helperEntry.capturesWorld) {
 		state.diagnostics.push({
 			code: "unresolved-local-helper",
 			message: `Local helper call ${compact(call.getText(state.sourceFile))} could not be tied to the scenario world.`,
@@ -489,32 +577,52 @@ function renderExpression(node, state, diagnostics, seen = new Set()) {
 	const { ast, sourceFile } = state;
 	if (ast.isStringLiteral(node) || ast.isNoSubstitutionTemplateLiteral(node))
 		return JSON.stringify(node.text);
+	if (ast.isTemplateExpression(node)) {
+		let value = node.head.text;
+		for (const span of node.templateSpans) {
+			value +=
+				generatedValue(span.expression, ast) ??
+				renderExpression(span.expression, state, diagnostics, seen);
+			value += span.literal.text;
+		}
+		return JSON.stringify(value);
+	}
 	if (ast.isNumericLiteral(node)) return node.text;
+	if (node.kind === ast.SyntaxKind.RegularExpressionLiteral)
+		return node.getText(sourceFile);
 	if (node.kind === ast.SyntaxKind.TrueKeyword) return "true";
 	if (node.kind === ast.SyntaxKind.FalseKeyword) return "false";
 	if (node.kind === ast.SyntaxKind.NullKeyword) return "null";
 	if (ast.isIdentifier(node)) {
+		if (node.text === "undefined") return "undefined";
 		const alias = state.aliases.get(node.text);
 		if (alias) return `$${node.text} (result of ${alias.origin})`;
 		const binding = state.staticBindings.get(node.text);
 		if (binding && !seen.has(node.text)) {
+			if (binding.staticText) return binding.staticText;
 			const nextSeen = new Set(seen).add(node.text);
 			return `${node.text} = ${renderExpression(binding, state, diagnostics, nextSeen)}`;
 		}
 		diagnostics.push({
 			code: "unresolved-expression",
 			message: `Expression ${node.text} is not statically resolved.`,
+			expression: node.text,
 			node,
 		});
 		return `<unresolved: ${node.text}>`;
 	}
 	if (ast.isPropertyAccessExpression(node)) {
 		const raw = compact(node.getText(sourceFile));
+		const semanticConstant = staticSemanticProperty(raw);
+		if (semanticConstant !== undefined) return semanticConstant;
 		const root = leftmostIdentifier(node, ast);
+		const alias = root ? state.aliases.get(root) : undefined;
+		if (alias) return `$${raw} (from ${alias.origin})`;
 		if (root && /^[A-Z]/u.test(root)) return raw;
 		diagnostics.push({
 			code: "unresolved-expression",
 			message: `Property access ${raw} depends on a runtime value.`,
+			expression: raw,
 			node,
 		});
 		return `<unresolved: ${raw}>`;
@@ -532,6 +640,7 @@ function renderExpression(node, state, diagnostics, seen = new Set()) {
 			diagnostics.push({
 				code: "unresolved-expression",
 				message: `Object member ${compact(property.getText(sourceFile))} is not statically resolved.`,
+				expression: compact(property.getText(sourceFile)),
 				node: property,
 			});
 			return `<unresolved: ${compact(property.getText(sourceFile))}>`;
@@ -540,8 +649,51 @@ function renderExpression(node, state, diagnostics, seen = new Set()) {
 	}
 	if (ast.isSpreadElement(node))
 		return `...${renderExpression(node.expression, state, diagnostics, seen)}`;
+	if (ast.isElementAccessExpression(node)) {
+		const collection = resolveStaticNode(node.expression, state);
+		const index = staticPrimitive(node.argumentExpression, state);
+		if (
+			ast.isArrayLiteralExpression(collection) &&
+			typeof index === "number" &&
+			Number.isInteger(index) &&
+			collection.elements[index]
+		)
+			return renderExpression(
+				collection.elements[index],
+				state,
+				diagnostics,
+				seen,
+			);
+	}
+	if (ast.isConditionalExpression(node)) {
+		const condition = staticPrimitive(node.condition, state);
+		if (typeof condition === "boolean")
+			return renderExpression(
+				condition ? node.whenTrue : node.whenFalse,
+				state,
+				diagnostics,
+				seen,
+			);
+	}
+	if (ast.isArrowFunction(node) || ast.isFunctionExpression(node))
+		return "<generated: callback>";
 	if (ast.isCallExpression(node)) {
+		const generated = generatedValue(node, ast);
+		if (generated) return generated;
 		const raw = compact(node.getText(sourceFile));
+		const semanticCall = callChain(node, state);
+		if (semanticCall?.path === "preset.routeReports.at")
+			return `<observed: ${raw}>`;
+		if (
+			semanticCall &&
+			(semanticCall.path === "expect.stringMatching" ||
+				narrateCall({
+					path: semanticCall.path,
+					root: semanticCall.root,
+					arguments: [],
+				}))
+		)
+			return raw;
 		const root = raw.split(/[.(]/u)[0];
 		if (
 			[
@@ -560,6 +712,7 @@ function renderExpression(node, state, diagnostics, seen = new Set()) {
 		diagnostics.push({
 			code: "unresolved-expression",
 			message: `Call expression ${raw} is dynamic and was not executed.`,
+			expression: raw,
 			node,
 		});
 		return `<unresolved: ${raw}>`;
@@ -568,9 +721,28 @@ function renderExpression(node, state, diagnostics, seen = new Set()) {
 	diagnostics.push({
 		code: "unresolved-expression",
 		message: `Expression ${raw} is not statically resolved.`,
+		expression: raw,
 		node,
 	});
 	return `<unresolved: ${raw}>`;
+}
+
+function staticSemanticProperty(raw) {
+	const speedGroup = /^t\.speedGroup\.([A-E])\.group$/u.exec(raw);
+	return speedGroup ? JSON.stringify(speedGroup[1]) : undefined;
+}
+
+function generatedValue(node, ast) {
+	if (
+		!ast.isCallExpression(node) ||
+		node.arguments.length ||
+		!ast.isPropertyAccessExpression(node.expression) ||
+		!ast.isIdentifier(node.expression.expression) ||
+		node.expression.expression.text !== "crypto" ||
+		node.expression.name.text !== "randomUUID"
+	)
+		return undefined;
+	return "<generated: UUID>";
 }
 
 function importedScenarioNames(ast, sourceFile) {
@@ -597,7 +769,10 @@ function localFunctions(ast, sourceFile) {
 			statement.name &&
 			statement.body
 		)
-			functions.set(statement.name.text, statement);
+			functions.set(statement.name.text, {
+				node: statement,
+				capturesWorld: false,
+			});
 	return functions;
 }
 
@@ -607,6 +782,154 @@ function registerLoopBinding(node, state) {
 	for (const declaration of declarationList.declarations)
 		if (state.ast.isIdentifier(declaration.name))
 			state.staticBindings.delete(declaration.name.text);
+}
+
+function resolveStaticForOfValues(expression, state) {
+	const { ast } = state;
+	const value = resolveStaticNode(expression, state);
+	if (ast.isArrayLiteralExpression(value)) return [...value.elements];
+	if (
+		ast.isCallExpression(value) &&
+		!value.arguments.length &&
+		ast.isPropertyAccessExpression(value.expression) &&
+		value.expression.name.text === "entries"
+	) {
+		const collection = resolveStaticNode(value.expression.expression, state);
+		if (ast.isArrayLiteralExpression(collection))
+			return collection.elements.map((element, index) => ({
+				tupleValues: [{ staticText: String(index) }, element],
+			}));
+	}
+	if (
+		ast.isCallExpression(value) &&
+		ast.isPropertyAccessExpression(value.expression) &&
+		value.expression.expression.getText(state.sourceFile) === "Object" &&
+		value.expression.name.text === "values" &&
+		value.arguments.length === 1 &&
+		ast.isIdentifier(value.arguments[0])
+	) {
+		const enumName = value.arguments[0].text;
+		let symbol = state.checker.getSymbolAtLocation(value.arguments[0]);
+		if (!symbol) return undefined;
+		if (symbol.flags & state.ast.SymbolFlags.Alias)
+			symbol = state.checker.getAliasedSymbol(symbol);
+		const declarationHandle = symbol.valueDeclaration ?? symbol.declarations[0];
+		const declaration = declarationHandle?.resolve(state.project);
+		if (!declaration || !ast.isEnumDeclaration(declaration)) return undefined;
+		return declaration.members.map((member) => ({
+			staticText: `${enumName}.${member.name.getText(declaration.getSourceFile())}`,
+		}));
+	}
+	return undefined;
+}
+
+function bindForOfInitializer(initializer, value, state) {
+	const { ast } = state;
+	if (!ast.isVariableDeclarationList(initializer)) return;
+	const declaration = initializer.declarations[0];
+	if (!declaration) return;
+	bindStaticPattern(declaration.name, value, state);
+}
+
+function bindStaticPattern(pattern, value, state) {
+	const { ast } = state;
+	if (ast.isIdentifier(pattern)) {
+		state.staticBindings.set(pattern.text, value);
+		return;
+	}
+	if (!ast.isArrayBindingPattern(pattern)) return;
+	if (value.tupleValues) {
+		for (const [index, binding] of pattern.elements.entries()) {
+			if (!ast.isBindingElement(binding)) continue;
+			const elementValue = value.tupleValues[index];
+			if (elementValue) bindStaticPattern(binding.name, elementValue, state);
+		}
+		return;
+	}
+	const unwrapped = value.staticText
+		? undefined
+		: unwrapStaticExpression(value, ast);
+	if (!unwrapped || !ast.isArrayLiteralExpression(unwrapped)) return;
+	for (const [index, binding] of pattern.elements.entries()) {
+		if (!ast.isBindingElement(binding)) continue;
+		const elementValue = unwrapped.elements[index];
+		if (elementValue) bindStaticPattern(binding.name, elementValue, state);
+	}
+}
+
+function unwrapStaticExpression(node, ast) {
+	let current = node;
+	while (
+		ast.isAsExpression(current) ||
+		ast.isSatisfiesExpression(current) ||
+		ast.isParenthesizedExpression(current)
+	)
+		current = current.expression;
+	return current;
+}
+
+function resolveStaticNode(node, state, seen = new Set()) {
+	const value = unwrapStaticExpression(node, state.ast);
+	if (
+		state.ast.isIdentifier(value) &&
+		value.text !== "undefined" &&
+		!seen.has(value.text)
+	) {
+		const binding = state.staticBindings.get(value.text);
+		if (binding)
+			return resolveStaticNode(binding, state, new Set(seen).add(value.text));
+	}
+	return value;
+}
+
+function staticPrimitive(node, state, seen = new Set()) {
+	if (!node) return undefined;
+	const value = resolveStaticNode(node, state, seen);
+	const { ast } = state;
+	if (value.staticText && /^-?\d+(?:\.\d+)?$/u.test(value.staticText))
+		return Number(value.staticText);
+	if (ast.isNumericLiteral(value)) return Number(value.text);
+	if (ast.isStringLiteral(value) || ast.isNoSubstitutionTemplateLiteral(value))
+		return value.text;
+	if (value.kind === ast.SyntaxKind.TrueKeyword) return true;
+	if (value.kind === ast.SyntaxKind.FalseKeyword) return false;
+	if (value.kind === ast.SyntaxKind.NullKeyword) return null;
+	if (ast.isIdentifier(value) && value.text === "undefined")
+		return staticUndefined;
+	if (ast.isBinaryExpression(value)) {
+		const left = staticPrimitive(value.left, state, seen);
+		const right = staticPrimitive(value.right, state, seen);
+		if (left === undefined || right === undefined) return undefined;
+		switch (value.operatorToken.kind) {
+			case ast.SyntaxKind.EqualsEqualsToken:
+				return looselyEqualStatic(left, right);
+			case ast.SyntaxKind.EqualsEqualsEqualsToken:
+				return normalizeStatic(left) === normalizeStatic(right);
+			case ast.SyntaxKind.ExclamationEqualsToken:
+				return !looselyEqualStatic(left, right);
+			case ast.SyntaxKind.ExclamationEqualsEqualsToken:
+				return normalizeStatic(left) !== normalizeStatic(right);
+			default:
+				return undefined;
+		}
+	}
+	return undefined;
+}
+
+const staticUndefined = Symbol("static undefined");
+
+function normalizeStatic(value) {
+	return value === staticUndefined ? undefined : value;
+}
+
+function looselyEqualStatic(left, right) {
+	const normalizedLeft = normalizeStatic(left);
+	const normalizedRight = normalizeStatic(right);
+	const leftNullish = normalizedLeft === null || normalizedLeft === undefined;
+	const rightNullish =
+		normalizedRight === null || normalizedRight === undefined;
+	if (leftNullish || rightNullish) return leftNullish && rightNullish;
+	return normalizedLeft === normalizedRight;
 }
 
 function addControlFlowDiagnostic(expression, kind, state) {
@@ -670,4 +993,14 @@ function splitMarkdownRow(line) {
 function compact(value) {
 	const text = String(value).replace(/\s+/gu, " ").trim();
 	return text.length > 180 ? `${text.slice(0, 177)}…` : text;
+}
+
+function uniqueContextLabels(labels) {
+	const seen = new Set();
+	return labels.filter((label) => {
+		const key = `${label.kind}\0${label.label}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
 }
