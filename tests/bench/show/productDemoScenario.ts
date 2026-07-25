@@ -662,11 +662,11 @@ async function setEncoderValue(desk: DeskDriver, page: Page, label: string, valu
     await expect(dialog).toBeHidden();
     return;
   }
-  const control = page.locator(".vertical-touch-fader-stack, .programmer-fade-fader").filter({ hasText: label }).first();
+  const control = page.locator(".touch-encoder, .vertical-touch-fader-stack, .programmer-fade-fader").filter({ hasText: label }).first();
   const slot = Number(label.match(/^Enc (\d+)/)?.[1] ?? 0);
   let dialogName = `${label} value`;
   if (await control.isVisible()) {
-    const directButton = control.getByRole("button", { name: "Set value", exact: true });
+    const directButton = control.getByRole("button", { name: /Set Value/i, exact: true });
     await desk.click(await directButton.isVisible() ? directButton : control.getByRole("button").first());
   } else {
     const attribute = label.replace(/^Enc \d+ · /, "");

@@ -1,6 +1,7 @@
 // @bench-semantic-world
 
 import { fixtureRange } from "./bench/command-selection/selectionContract";
+import { fixture } from "./bench/output/fixtureDmx";
 import { scenario } from "./bench/core/scenario";
 import { StoreMode } from "./bench/groups-presets/groupScenario";
 import {
@@ -111,6 +112,46 @@ scenario(
 		await t.clock.advanceBy("3s");
 		await t.expectFixtureDMX(fixtureRange(1, 1), { Intensity: 0 });
 		await t.expectFixtureDMX(fixtureRange(2, 2), { Intensity: 191 });
+	},
+);
+
+scenario(
+	"CROSS-003",
+	"relative software, API, and OSC encoder changes bypass Programmer Fade",
+	async (t) => {
+		await t.show.use(Show.TwelveDimmers);
+		await t.app.open();
+		await t.app.expect.ready();
+		await t.timing.programmerFade.via.api.set("5s");
+
+		await t.selection.fixtures.via.api.item(1);
+		await t.encoder.intensity.dimmer.via.ui.set(0);
+		await t.encoder.intensity.dimmer.via.ui.drag("add", "slow");
+		await t.clock.advanceStep();
+		await t.expectFixtureDMX(fixture(1), { Intensity: 1 });
+		await t.encoder.intensity.dimmer.via.ui.set(0);
+		await t.encoder.intensity.dimmer.via.ui.add(10);
+		await t.clock.advanceStep();
+		await t.expectFixtureDMX(fixture(1), { Intensity: 26 });
+
+		await t.hardware.connect();
+		try {
+			await t.encoder.intensity.dimmer.via.osc.add(1);
+			await t.clock.advanceStep();
+			await t.expectFixtureDMX(fixture(1), { Intensity: 28 });
+		} finally {
+			await t.hardware.disconnect();
+		}
+
+		await t.selection.fixtures.via.api.item(1);
+		await t.encoder.intensity.dimmer.via.api.set(20);
+		await t.selection.fixtures.via.api.item(2);
+		await t.encoder.intensity.dimmer.via.api.set(80);
+		await t.selection.fixtures.via.api.items(1, 2);
+		await t.encoder.intensity.dimmer.via.api.add(10);
+		await t.clock.advanceStep();
+		await t.expectFixtureDMX(fixture(1), { Intensity: 77 });
+		await t.expectFixtureDMX(fixture(2), { Intensity: 230 });
 	},
 );
 

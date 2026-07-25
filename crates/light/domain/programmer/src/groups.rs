@@ -208,6 +208,28 @@ impl ProgrammerRegistry {
             },
         )
     }
+    pub fn set_group_immediate_with_delay(
+        &self,
+        session: SessionId,
+        group_id: String,
+        attribute: AttributeKey,
+        value: AttributeValue,
+        delay_millis: Option<u64>,
+    ) -> bool {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        self.set_group_with_timing(
+            session,
+            group_id,
+            attribute,
+            value,
+            ProgrammerValueTiming {
+                fade: false,
+                fade_millis: None,
+                delay_millis,
+            },
+        )
+    }
     fn set_group_with_fade(
         &self,
         session: SessionId,

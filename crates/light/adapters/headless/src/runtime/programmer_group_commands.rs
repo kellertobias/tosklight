@@ -47,13 +47,12 @@ fn execute_mixed_group_value(
                 unreachable!("all mixed sources were checked as live Groups")
             };
             if programmed.insert(group_id.clone()) {
-                state.programmers.set_group_faded_with_timing(
-                    session.id,
+                set_command_group_intensity(
+                    state,
+                    session,
                     group_id.clone(),
-                    light_core::AttributeKey::intensity(),
                     light_core::AttributeValue::Normalized(percent / 100.0),
-                    timing.fade_millis,
-                    timing.delay_millis,
+                    timing,
                 );
             }
         }
@@ -104,13 +103,12 @@ fn apply_group_value(
                 timing,
             );
         } else {
-            state.programmers.set_group_faded_with_timing(
-                session.id,
+            set_command_group_intensity(
+                state,
+                session,
                 group_id.to_owned(),
-                light_core::AttributeKey::intensity(),
                 light_core::AttributeValue::Spread(points),
-                timing.fade_millis,
-                timing.delay_millis,
+                timing,
             );
         }
         return Ok(());
@@ -142,13 +140,12 @@ fn apply_group_value(
         });
         set_command_fixture_intensities(state, session, values, timing);
     } else {
-        state.programmers.set_group_faded_with_timing(
-            session.id,
+        set_command_group_intensity(
+            state,
+            session,
             group_id.to_owned(),
-            light_core::AttributeKey::intensity(),
             light_core::AttributeValue::Normalized(percent / 100.0),
-            timing.fade_millis,
-            timing.delay_millis,
+            timing,
         );
     }
     Ok(())

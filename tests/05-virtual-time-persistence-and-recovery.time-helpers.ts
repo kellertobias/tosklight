@@ -163,12 +163,10 @@ export async function expectEncoderTarget(
 		).toBeVisible();
 		return;
 	}
-	const encoder = page.locator(".vertical-touch-fader-stack").filter({
+	const encoder = page.locator(".touch-encoder").filter({
 		hasText: "Enc 1 · Dimmer",
 	});
-	await expect(encoder.locator(".vertical-touch-fader > strong")).toHaveText(
-		`${percent}%`,
-	);
+	await expect(encoder.locator("header > strong")).toHaveText(`${percent}%`);
 }
 
 export async function expectFixtureSheetDimmer(
@@ -336,14 +334,14 @@ export async function setDimmerByTouch(
 	page: Page,
 	value: number,
 ): Promise<void> {
-	// A software-only desk renders the first Dimmer encoder as a VerticalTouchFader with
-	// a "Set value" button; a desk with OSC hardware attached renders it as a
+	// A software-only desk renders the first Dimmer encoder as a relative touch encoder;
+	// a desk with OSC hardware attached renders it as a
 	// HardwareEncoderDisplay button instead. Both open an equivalent number-entry dialog,
 	// so drive whichever surface the desk currently shows.
 	const softwareSet = page
-		.locator(".vertical-touch-fader-stack")
+		.locator(".touch-encoder")
 		.filter({ hasText: "Enc 1 · Dimmer" })
-		.getByRole("button", { name: "Set value" });
+		.getByRole("button", { name: "Set Value" });
 	const hardwareEncoder = page.getByRole("button", {
 		name: /^Encoder 1: Dimmer,/,
 	});

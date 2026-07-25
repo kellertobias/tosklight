@@ -19,6 +19,9 @@ pub struct ProgrammingValuesEnvironment {
     /// Group id → resolved ordered-membership size, so value validation can reject
     /// multi-point spreads with more control points than the Group has members.
     pub group_memberships: HashMap<String, usize>,
+    /// Group id → resolved ordered membership. Relative Group intents use this frozen membership
+    /// and the same current-value view as fixture intents.
+    pub group_members: HashMap<String, Vec<FixtureId>>,
     /// One frozen view of the values currently feeding output. Relative steps and linked captures
     /// must all resolve from this same view.
     pub current_values: HashMap<(FixtureId, AttributeKey), AttributeValue>,

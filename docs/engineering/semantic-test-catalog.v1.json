@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "generatedBy": "tools/semantic-test-docs/cli.mjs",
   "sourceMarker": "// @bench-semantic-world",
-  "scenarioCount": 110,
+  "scenarioCount": 111,
   "scenarios": [
     {
       "id": "HIGHLIGHT-006",
@@ -29021,7 +29021,7 @@
       "title": "page changes produce one complete feedback cycle without periodic mutation",
       "source": {
         "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-        "line": 12,
+        "line": 13,
         "column": 1
       },
       "preconditions": [
@@ -29041,7 +29041,7 @@
           "order": 0,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 16,
+            "line": 17,
             "column": 9
           }
         },
@@ -29059,7 +29059,7 @@
           "order": 1,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 17,
+            "line": 18,
             "column": 9
           }
         },
@@ -29077,7 +29077,7 @@
           "order": 2,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 18,
+            "line": 19,
             "column": 9
           }
         }
@@ -29099,7 +29099,7 @@
           "order": 3,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 19,
+            "line": 20,
             "column": 9
           }
         },
@@ -29120,7 +29120,7 @@
           "order": 4,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 20,
+            "line": 21,
             "column": 9
           }
         }
@@ -29144,7 +29144,7 @@
           "order": 5,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 22,
+            "line": 23,
             "column": 9
           }
         },
@@ -29164,7 +29164,7 @@
           "order": 6,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 23,
+            "line": 24,
             "column": 9
           }
         }
@@ -29197,7 +29197,7 @@
       "title": "hardware-equivalent command reaches shared programmer and output",
       "source": {
         "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-        "line": 27,
+        "line": 28,
         "column": 1
       },
       "preconditions": [
@@ -29217,7 +29217,7 @@
           "order": 0,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 31,
+            "line": 32,
             "column": 9
           }
         },
@@ -29235,7 +29235,7 @@
           "order": 1,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 32,
+            "line": 33,
             "column": 9
           }
         },
@@ -29253,7 +29253,7 @@
           "order": 2,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 33,
+            "line": 34,
             "column": 9
           }
         }
@@ -29275,7 +29275,7 @@
           "order": 3,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 35,
+            "line": 36,
             "column": 9
           }
         },
@@ -29295,7 +29295,7 @@
           "order": 4,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 36,
+            "line": 37,
             "column": 9
           }
         }
@@ -29318,7 +29318,7 @@
           "order": 5,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 37,
+            "line": 38,
             "column": 9
           }
         }
@@ -29351,7 +29351,7 @@
       "title": "separate desk subscribers isolate partial commands and unsubscribe independently",
       "source": {
         "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-        "line": 41,
+        "line": 42,
         "column": 1
       },
       "preconditions": [
@@ -29371,7 +29371,7 @@
           "order": 0,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 45,
+            "line": 46,
             "column": 9
           }
         },
@@ -29389,7 +29389,7 @@
           "order": 1,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 46,
+            "line": 47,
             "column": 9
           }
         },
@@ -29407,7 +29407,7 @@
           "order": 2,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 47,
+            "line": 48,
             "column": 9
           }
         }
@@ -29430,7 +29430,7 @@
           "order": 3,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 49,
+            "line": 50,
             "column": 9
           }
         }
@@ -29462,7 +29462,7 @@
       "title": "invalid input is rejected without programmer or output mutation",
       "source": {
         "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-        "line": 53,
+        "line": 54,
         "column": 1
       },
       "preconditions": [
@@ -29482,7 +29482,7 @@
           "order": 0,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 57,
+            "line": 58,
             "column": 9
           }
         },
@@ -29500,7 +29500,7 @@
           "order": 1,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 58,
+            "line": 59,
             "column": 9
           }
         },
@@ -29518,7 +29518,7 @@
           "order": 2,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 59,
+            "line": 60,
             "column": 9
           }
         }
@@ -29540,7 +29540,7 @@
           "order": 3,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 61,
+            "line": 62,
             "column": 9
           }
         }
@@ -29562,7 +29562,7 @@
           "order": 4,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 61,
+            "line": 62,
             "column": 9
           }
         }
@@ -29594,7 +29594,7 @@
       "title": "completed values are user-shared while unfinished commands stay desk-local",
       "source": {
         "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-        "line": 65,
+        "line": 66,
         "column": 1
       },
       "preconditions": [
@@ -29614,7 +29614,7 @@
           "order": 0,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 69,
+            "line": 70,
             "column": 9
           }
         },
@@ -29632,7 +29632,7 @@
           "order": 1,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 70,
+            "line": 71,
             "column": 9
           }
         },
@@ -29650,7 +29650,7 @@
           "order": 2,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 71,
+            "line": 72,
             "column": 9
           }
         }
@@ -29672,7 +29672,7 @@
           "order": 3,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 73,
+            "line": 74,
             "column": 9
           }
         }
@@ -29694,7 +29694,7 @@
           "order": 4,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 73,
+            "line": 74,
             "column": 9
           }
         }
@@ -29726,7 +29726,7 @@
       "title": "page two retargets the same current-page playback-one action",
       "source": {
         "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-        "line": 77,
+        "line": 78,
         "column": 1
       },
       "preconditions": [
@@ -29746,7 +29746,7 @@
           "order": 0,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 81,
+            "line": 82,
             "column": 9
           }
         },
@@ -29764,7 +29764,7 @@
           "order": 1,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 82,
+            "line": 83,
             "column": 9
           }
         },
@@ -29782,7 +29782,7 @@
           "order": 2,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 83,
+            "line": 84,
             "column": 9
           }
         }
@@ -29806,7 +29806,7 @@
           "order": 3,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 84,
+            "line": 85,
             "column": 9
           }
         },
@@ -29827,7 +29827,7 @@
           "order": 4,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 86,
+            "line": 87,
             "column": 9
           }
         },
@@ -29849,7 +29849,7 @@
           "order": 5,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 87,
+            "line": 88,
             "column": 9
           }
         },
@@ -29869,7 +29869,7 @@
           "order": 6,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 88,
+            "line": 89,
             "column": 23
           }
         },
@@ -29890,7 +29890,7 @@
           "order": 7,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 89,
+            "line": 90,
             "column": 9
           }
         },
@@ -29909,7 +29909,7 @@
           "order": 8,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 90,
+            "line": 91,
             "column": 9
           }
         },
@@ -29930,7 +29930,7 @@
           "order": 9,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 91,
+            "line": 92,
             "column": 9
           }
         },
@@ -29952,7 +29952,7 @@
           "order": 10,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 92,
+            "line": 93,
             "column": 9
           }
         },
@@ -29972,7 +29972,7 @@
           "order": 11,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 93,
+            "line": 94,
             "column": 24
           }
         },
@@ -29993,7 +29993,7 @@
           "order": 12,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 94,
+            "line": 95,
             "column": 9
           }
         },
@@ -30012,7 +30012,7 @@
           "order": 13,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 95,
+            "line": 96,
             "column": 9
           }
         },
@@ -30033,7 +30033,7 @@
           "order": 14,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 96,
+            "line": 97,
             "column": 9
           }
         },
@@ -30054,7 +30054,7 @@
           "order": 15,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 99,
+            "line": 100,
             "column": 9
           }
         },
@@ -30074,7 +30074,7 @@
           "order": 16,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 102,
+            "line": 103,
             "column": 9
           }
         },
@@ -30095,7 +30095,7 @@
           "order": 17,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 103,
+            "line": 104,
             "column": 9
           }
         },
@@ -30115,7 +30115,7 @@
           "order": 18,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 104,
+            "line": 105,
             "column": 9
           }
         },
@@ -30136,7 +30136,7 @@
           "order": 19,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 106,
+            "line": 107,
             "column": 9
           }
         },
@@ -30156,7 +30156,7 @@
           "order": 20,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 107,
+            "line": 108,
             "column": 9
           }
         },
@@ -30177,7 +30177,7 @@
           "order": 23,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 110,
+            "line": 111,
             "column": 9
           }
         },
@@ -30197,7 +30197,7 @@
           "order": 24,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 111,
+            "line": 112,
             "column": 9
           }
         }
@@ -30220,7 +30220,7 @@
           "order": 21,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 108,
+            "line": 109,
             "column": 9
           }
         },
@@ -30241,7 +30241,7 @@
           "order": 22,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 109,
+            "line": 110,
             "column": 9
           }
         },
@@ -30262,7 +30262,7 @@
           "order": 25,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 112,
+            "line": 113,
             "column": 9
           }
         },
@@ -30283,7 +30283,7 @@
           "order": 26,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 113,
+            "line": 114,
             "column": 9
           }
         }
@@ -30320,11 +30320,610 @@
       "diagnostics": []
     },
     {
+      "id": "CROSS-003",
+      "title": "relative software, API, and OSC encoder changes bypass Programmer Fade",
+      "source": {
+        "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+        "line": 118,
+        "column": 1
+      },
+      "preconditions": [
+        {
+          "kind": "precondition",
+          "description": "Use the isolated Show.TwelveDimmers show.",
+          "call": "show.use",
+          "arguments": [
+            "Show.TwelveDimmers"
+          ],
+          "expression": "t.show.use(Show.TwelveDimmers)",
+          "sourceCode": "t.show.use(Show.TwelveDimmers)",
+          "surfaces": [
+            "Show files"
+          ],
+          "phase": "scenario",
+          "order": 0,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 122,
+            "column": 9
+          }
+        },
+        {
+          "kind": "precondition",
+          "description": "Open the ToskLight browser application.",
+          "call": "app.open",
+          "arguments": [],
+          "expression": "t.app.open()",
+          "sourceCode": "t.app.open()",
+          "surfaces": [
+            "Browser UI"
+          ],
+          "phase": "scenario",
+          "order": 1,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 123,
+            "column": 9
+          }
+        },
+        {
+          "kind": "precondition",
+          "description": "The ToskLight browser application is ready.",
+          "call": "app.expect.ready",
+          "arguments": [],
+          "expression": "t.app.expect.ready()",
+          "sourceCode": "t.app.expect.ready()",
+          "surfaces": [
+            "Browser UI"
+          ],
+          "phase": "scenario",
+          "order": 2,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 124,
+            "column": 9
+          }
+        }
+      ],
+      "steps": [
+        {
+          "kind": "step",
+          "description": "Timing → programmer fade → api → set with \"5s\".",
+          "call": "timing.programmerFade.via.api.set",
+          "arguments": [
+            "\"5s\""
+          ],
+          "expression": "t.timing.programmerFade.via.api.set(\"5s\")",
+          "sourceCode": "t.timing.programmerFade.via.api.set(\"5s\")",
+          "surfaces": [
+            "Cue timing",
+            "Programmer timing",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 3,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 125,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Selection → fixtures → api → item with 1.",
+          "call": "selection.fixtures.via.api.item",
+          "arguments": [
+            "1"
+          ],
+          "expression": "t.selection.fixtures.via.api.item(1)",
+          "sourceCode": "t.selection.fixtures.via.api.item(1)",
+          "surfaces": [
+            "Selection",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 4,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 127,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Encoder → intensity → dimmer → ui → set with 0.",
+          "call": "encoder.intensity.dimmer.via.ui.set",
+          "arguments": [
+            "0"
+          ],
+          "expression": "t.encoder.intensity.dimmer.via.ui.set(0)",
+          "sourceCode": "t.encoder.intensity.dimmer.via.ui.set(0)",
+          "surfaces": [
+            "Browser UI",
+            "Encoder controls",
+            "Programmer"
+          ],
+          "phase": "scenario",
+          "order": 5,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 128,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Encoder → intensity → dimmer → ui → drag with \"add\", \"slow\".",
+          "call": "encoder.intensity.dimmer.via.ui.drag",
+          "arguments": [
+            "\"add\"",
+            "\"slow\""
+          ],
+          "expression": "t.encoder.intensity.dimmer.via.ui.drag(\"add\", \"slow\")",
+          "sourceCode": "t.encoder.intensity.dimmer.via.ui.drag(\"add\", \"slow\")",
+          "surfaces": [
+            "Browser UI",
+            "Encoder controls",
+            "Programmer"
+          ],
+          "phase": "scenario",
+          "order": 6,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 129,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Advance the test clock by one deterministic step.",
+          "call": "clock.advanceStep",
+          "arguments": [],
+          "expression": "t.clock.advanceStep()",
+          "sourceCode": "t.clock.advanceStep()",
+          "surfaces": [
+            "Test clock"
+          ],
+          "phase": "scenario",
+          "order": 7,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 130,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Encoder → intensity → dimmer → ui → set with 0.",
+          "call": "encoder.intensity.dimmer.via.ui.set",
+          "arguments": [
+            "0"
+          ],
+          "expression": "t.encoder.intensity.dimmer.via.ui.set(0)",
+          "sourceCode": "t.encoder.intensity.dimmer.via.ui.set(0)",
+          "surfaces": [
+            "Browser UI",
+            "Encoder controls",
+            "Programmer"
+          ],
+          "phase": "scenario",
+          "order": 9,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 132,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Encoder → intensity → dimmer → ui → add with 10.",
+          "call": "encoder.intensity.dimmer.via.ui.add",
+          "arguments": [
+            "10"
+          ],
+          "expression": "t.encoder.intensity.dimmer.via.ui.add(10)",
+          "sourceCode": "t.encoder.intensity.dimmer.via.ui.add(10)",
+          "surfaces": [
+            "Browser UI",
+            "Encoder controls",
+            "Programmer"
+          ],
+          "phase": "scenario",
+          "order": 10,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 133,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Advance the test clock by one deterministic step.",
+          "call": "clock.advanceStep",
+          "arguments": [],
+          "expression": "t.clock.advanceStep()",
+          "sourceCode": "t.clock.advanceStep()",
+          "surfaces": [
+            "Test clock"
+          ],
+          "phase": "scenario",
+          "order": 11,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 134,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Connect the simulated attached hardware surface.",
+          "call": "hardware.connect",
+          "arguments": [],
+          "expression": "t.hardware.connect()",
+          "sourceCode": "t.hardware.connect()",
+          "surfaces": [
+            "Attached hardware",
+            "OSC"
+          ],
+          "phase": "scenario",
+          "order": 13,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 137,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Encoder → intensity → dimmer → osc → add with 1.",
+          "call": "encoder.intensity.dimmer.via.osc.add",
+          "arguments": [
+            "1"
+          ],
+          "expression": "t.encoder.intensity.dimmer.via.osc.add(1)",
+          "sourceCode": "t.encoder.intensity.dimmer.via.osc.add(1)",
+          "surfaces": [
+            "Encoder controls",
+            "OSC",
+            "Programmer"
+          ],
+          "phase": "scenario",
+          "order": 14,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 139,
+            "column": 10
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Advance the test clock by one deterministic step.",
+          "call": "clock.advanceStep",
+          "arguments": [],
+          "expression": "t.clock.advanceStep()",
+          "sourceCode": "t.clock.advanceStep()",
+          "surfaces": [
+            "Test clock"
+          ],
+          "phase": "scenario",
+          "order": 15,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 140,
+            "column": 10
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Disconnect the simulated attached hardware surface.",
+          "call": "hardware.disconnect",
+          "arguments": [],
+          "expression": "t.hardware.disconnect()",
+          "sourceCode": "t.hardware.disconnect()",
+          "surfaces": [
+            "Attached hardware",
+            "OSC"
+          ],
+          "phase": "cleanup",
+          "order": 17,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 143,
+            "column": 10
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Selection → fixtures → api → item with 1.",
+          "call": "selection.fixtures.via.api.item",
+          "arguments": [
+            "1"
+          ],
+          "expression": "t.selection.fixtures.via.api.item(1)",
+          "sourceCode": "t.selection.fixtures.via.api.item(1)",
+          "surfaces": [
+            "Selection",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 18,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 146,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Encoder → intensity → dimmer → api → set with 20.",
+          "call": "encoder.intensity.dimmer.via.api.set",
+          "arguments": [
+            "20"
+          ],
+          "expression": "t.encoder.intensity.dimmer.via.api.set(20)",
+          "sourceCode": "t.encoder.intensity.dimmer.via.api.set(20)",
+          "surfaces": [
+            "Encoder controls",
+            "Programmer",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 19,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 147,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Selection → fixtures → api → item with 2.",
+          "call": "selection.fixtures.via.api.item",
+          "arguments": [
+            "2"
+          ],
+          "expression": "t.selection.fixtures.via.api.item(2)",
+          "sourceCode": "t.selection.fixtures.via.api.item(2)",
+          "surfaces": [
+            "Selection",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 20,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 148,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Encoder → intensity → dimmer → api → set with 80.",
+          "call": "encoder.intensity.dimmer.via.api.set",
+          "arguments": [
+            "80"
+          ],
+          "expression": "t.encoder.intensity.dimmer.via.api.set(80)",
+          "sourceCode": "t.encoder.intensity.dimmer.via.api.set(80)",
+          "surfaces": [
+            "Encoder controls",
+            "Programmer",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 21,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 149,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Selection → fixtures → api → items with 1, 2.",
+          "call": "selection.fixtures.via.api.items",
+          "arguments": [
+            "1",
+            "2"
+          ],
+          "expression": "t.selection.fixtures.via.api.items(1, 2)",
+          "sourceCode": "t.selection.fixtures.via.api.items(1, 2)",
+          "surfaces": [
+            "Selection",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 22,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 150,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Encoder → intensity → dimmer → api → add with 10.",
+          "call": "encoder.intensity.dimmer.via.api.add",
+          "arguments": [
+            "10"
+          ],
+          "expression": "t.encoder.intensity.dimmer.via.api.add(10)",
+          "sourceCode": "t.encoder.intensity.dimmer.via.api.add(10)",
+          "surfaces": [
+            "Encoder controls",
+            "Programmer",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 23,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 151,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Advance the test clock by one deterministic step.",
+          "call": "clock.advanceStep",
+          "arguments": [],
+          "expression": "t.clock.advanceStep()",
+          "sourceCode": "t.clock.advanceStep()",
+          "surfaces": [
+            "Test clock"
+          ],
+          "phase": "scenario",
+          "order": 24,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 152,
+            "column": 9
+          }
+        }
+      ],
+      "expectedOutcomes": [
+        {
+          "kind": "expected-outcome",
+          "description": "fixture(1) DMX equals { Intensity: 1 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "fixture(1)",
+            "{ Intensity: 1 }"
+          ],
+          "expression": "t.expectFixtureDMX(fixture(1), { Intensity: 1 })",
+          "sourceCode": "t.expectFixtureDMX(fixture(1), { Intensity: 1 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 8,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 131,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "fixture(1) DMX equals { Intensity: 26 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "fixture(1)",
+            "{ Intensity: 26 }"
+          ],
+          "expression": "t.expectFixtureDMX(fixture(1), { Intensity: 26 })",
+          "sourceCode": "t.expectFixtureDMX(fixture(1), { Intensity: 26 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 12,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 135,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "fixture(1) DMX equals { Intensity: 28 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "fixture(1)",
+            "{ Intensity: 28 }"
+          ],
+          "expression": "t.expectFixtureDMX(fixture(1), { Intensity: 28 })",
+          "sourceCode": "t.expectFixtureDMX(fixture(1), { Intensity: 28 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 16,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 141,
+            "column": 10
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "fixture(1) DMX equals { Intensity: 77 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "fixture(1)",
+            "{ Intensity: 77 }"
+          ],
+          "expression": "t.expectFixtureDMX(fixture(1), { Intensity: 77 })",
+          "sourceCode": "t.expectFixtureDMX(fixture(1), { Intensity: 77 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 25,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 153,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "fixture(2) DMX equals { Intensity: 230 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "fixture(2)",
+            "{ Intensity: 230 }"
+          ],
+          "expression": "t.expectFixtureDMX(fixture(2), { Intensity: 230 })",
+          "sourceCode": "t.expectFixtureDMX(fixture(2), { Intensity: 230 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 26,
+          "source": {
+            "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
+            "line": 154,
+            "column": 9
+          }
+        }
+      ],
+      "contextLabels": [
+        {
+          "kind": "show",
+          "label": "Twelve Dimmers"
+        }
+      ],
+      "testedSurfaces": [
+        "Attached hardware",
+        "Browser UI",
+        "Cue timing",
+        "DMX output",
+        "Encoder controls",
+        "OSC",
+        "Programmer",
+        "Programmer timing",
+        "Selection",
+        "Show files",
+        "Test clock",
+        "Typed API"
+      ],
+      "migration": {
+        "status": "migrated-semantic-world",
+        "contract": "repository contract",
+        "helperFamily": "semantic-osc-api-and-cross-surface",
+        "artifacts": "standard failure evidence",
+        "constraint": "parallel"
+      },
+      "lastRun": null,
+      "diagnostics": []
+    },
+    {
       "id": "API-001",
       "title": "authenticated membership updates preserve the visible atomic Group result",
       "source": {
         "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-        "line": 117,
+        "line": 158,
         "column": 1
       },
       "preconditions": [
@@ -30344,7 +30943,7 @@
           "order": 0,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 121,
+            "line": 162,
             "column": 9
           }
         },
@@ -30362,7 +30961,7 @@
           "order": 1,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 122,
+            "line": 163,
             "column": 9
           }
         },
@@ -30380,7 +30979,7 @@
           "order": 2,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 123,
+            "line": 164,
             "column": 9
           }
         }
@@ -30403,7 +31002,7 @@
           "order": 3,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 125,
+            "line": 166,
             "column": 9
           }
         },
@@ -30425,7 +31024,7 @@
           "order": 4,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 126,
+            "line": 167,
             "column": 9
           }
         }
@@ -30452,7 +31051,7 @@
           "order": 5,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 127,
+            "line": 168,
             "column": 9
           }
         }
@@ -30486,7 +31085,7 @@
       "title": "Group create, merge, and delete remain ordered visible operations",
       "source": {
         "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-        "line": 131,
+        "line": 172,
         "column": 1
       },
       "preconditions": [
@@ -30506,7 +31105,7 @@
           "order": 0,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 135,
+            "line": 176,
             "column": 9
           }
         },
@@ -30524,7 +31123,7 @@
           "order": 1,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 136,
+            "line": 177,
             "column": 9
           }
         },
@@ -30542,7 +31141,7 @@
           "order": 2,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 137,
+            "line": 178,
             "column": 9
           }
         }
@@ -30566,7 +31165,7 @@
           "order": 3,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 139,
+            "line": 180,
             "column": 9
           }
         },
@@ -30588,7 +31187,7 @@
           "order": 4,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 140,
+            "line": 181,
             "column": 9
           }
         },
@@ -30609,7 +31208,7 @@
           "order": 5,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 141,
+            "line": 182,
             "column": 9
           }
         },
@@ -30631,7 +31230,7 @@
           "order": 6,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 142,
+            "line": 183,
             "column": 9
           }
         },
@@ -30652,7 +31251,7 @@
           "order": 8,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 144,
+            "line": 185,
             "column": 9
           }
         }
@@ -30677,7 +31276,7 @@
           "order": 7,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 143,
+            "line": 184,
             "column": 9
           }
         },
@@ -30697,7 +31296,7 @@
           "order": 9,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 145,
+            "line": 186,
             "column": 9
           }
         }
@@ -30731,7 +31330,7 @@
       "title": "equivalent group value agrees across command surfaces",
       "source": {
         "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-        "line": 149,
+        "line": 190,
         "column": 1
       },
       "preconditions": [
@@ -30751,7 +31350,7 @@
           "order": 0,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 153,
+            "line": 194,
             "column": 9
           }
         },
@@ -30769,7 +31368,7 @@
           "order": 1,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 154,
+            "line": 195,
             "column": 9
           }
         },
@@ -30787,7 +31386,7 @@
           "order": 2,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 155,
+            "line": 196,
             "column": 9
           }
         }
@@ -30809,7 +31408,7 @@
           "order": 3,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 157,
+            "line": 198,
             "column": 9
           }
         },
@@ -30829,7 +31428,7 @@
           "order": 4,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 158,
+            "line": 199,
             "column": 9
           }
         }
@@ -30852,7 +31451,7 @@
           "order": 5,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 159,
+            "line": 200,
             "column": 9
           }
         }
@@ -30885,7 +31484,7 @@
       "title": "browser live-reconciles external REST and command-WebSocket mutations",
       "source": {
         "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-        "line": 163,
+        "line": 204,
         "column": 1
       },
       "preconditions": [
@@ -30905,7 +31504,7 @@
           "order": 0,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 167,
+            "line": 208,
             "column": 9
           }
         },
@@ -30923,7 +31522,7 @@
           "order": 1,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 168,
+            "line": 209,
             "column": 9
           }
         },
@@ -30941,7 +31540,7 @@
           "order": 2,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 169,
+            "line": 210,
             "column": 9
           }
         }
@@ -30963,7 +31562,7 @@
           "order": 3,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 171,
+            "line": 212,
             "column": 9
           }
         }
@@ -30985,7 +31584,7 @@
           "order": 4,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 171,
+            "line": 212,
             "column": 9
           }
         },
@@ -31010,7 +31609,7 @@
           "order": 5,
           "source": {
             "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
-            "line": 172,
+            "line": 213,
             "column": 9
           }
         }
@@ -41344,7 +41943,7 @@
     },
     {
       "id": "TIME-002",
-      "title": "touch-set fixture values follow exact programmer-fade boundaries",
+      "title": "touch-set fixture values bypass Programmer Fade at every timing boundary",
       "source": {
         "file": "tests/62-semantic-time-persistence-and-recovery.spec.ts",
         "line": 36,
@@ -41625,8 +42224,8 @@
             "[{ name: \"start\", at: \"0ms\" }, { name: \"midpoint\", at: \"1.5s\" }, { name: \"complete\", at: \"3s\" }]",
             "<generated: callback>"
           ],
-          "expression": "t.clock.at( [ { name: \"start\", at: \"0ms\" }, { name: \"midpoint\", at: \"1.5s\" }, { name: \"complete\", at: \"3s\" }, ], async ({ name }) => { await t.expectFixtureDMX(fixture(1), { Int…",
-          "sourceCode": "t.clock.at(\n\t\t\t[\n\t\t\t\t{ name: \"start\", at: \"0ms\" },\n\t\t\t\t{ name: \"midpoint\", at: \"1.5s\" },\n\t\t\t\t{ name: \"complete\", at: \"3s\" },\n\t\t\t],\n\t\t\tasync ({ name }) => {\n\t\t\t\tawait t.expectFixtureDMX(fixture(1), {\n\t\t\t\t\tIntensity: name === \"start\" ? 0 : name === \"midpoint\" ? 128 : 255,\n\t\t\t\t});\n\t\t\t},\n\t\t)",
+          "expression": "t.clock.at( [ { name: \"start\", at: \"0ms\" }, { name: \"midpoint\", at: \"1.5s\" }, { name: \"complete\", at: \"3s\" }, ], async () => { await t.expectFixtureDMX(fixture(1), { Intensity: …",
+          "sourceCode": "t.clock.at(\n\t\t\t[\n\t\t\t\t{ name: \"start\", at: \"0ms\" },\n\t\t\t\t{ name: \"midpoint\", at: \"1.5s\" },\n\t\t\t\t{ name: \"complete\", at: \"3s\" },\n\t\t\t],\n\t\t\tasync () => {\n\t\t\t\tawait t.expectFixtureDMX(fixture(1), {\n\t\t\t\t\tIntensity: 255,\n\t\t\t\t});\n\t\t\t},\n\t\t)",
           "surfaces": [
             "Test clock"
           ],
@@ -41642,14 +42241,14 @@
       "expectedOutcomes": [
         {
           "kind": "expected-outcome",
-          "description": "fixture(1) DMX equals { Intensity: <unresolved: name === \"start\" ? 0 : name === \"midpoint\" ? 128 : 255> }.",
+          "description": "fixture(1) DMX equals { Intensity: 255 }.",
           "call": "expectFixtureDMX",
           "arguments": [
             "fixture(1)",
-            "{ Intensity: <unresolved: name === \"start\" ? 0 : name === \"midpoint\" ? 128 : 255> }"
+            "{ Intensity: 255 }"
           ],
-          "expression": "t.expectFixtureDMX(fixture(1), { Intensity: name === \"start\" ? 0 : name === \"midpoint\" ? 128 : 255, })",
-          "sourceCode": "t.expectFixtureDMX(fixture(1), {\n\t\t\t\t\tIntensity: name === \"start\" ? 0 : name === \"midpoint\" ? 128 : 255,\n\t\t\t\t})",
+          "expression": "t.expectFixtureDMX(fixture(1), { Intensity: 255, })",
+          "sourceCode": "t.expectFixtureDMX(fixture(1), {\n\t\t\t\t\tIntensity: 255,\n\t\t\t\t})",
           "surfaces": [
             "DMX output"
           ],
@@ -41689,29 +42288,11 @@
         "constraint": "parallel"
       },
       "lastRun": null,
-      "diagnostics": [
-        {
-          "code": "unresolved-expression",
-          "message": "Expression name === \"start\" ? 0 : name === \"midpoint\" ? 128 : 255 is not statically resolved.",
-          "expression": "name === \"start\" ? 0 : name === \"midpoint\" ? 128 : 255",
-          "relatedCall": "expectFixtureDMX",
-          "relatedSource": {
-            "file": "tests/62-semantic-time-persistence-and-recovery.spec.ts",
-            "line": 56,
-            "column": 11
-          },
-          "sourceCode": "name === \"start\" ? 0 : name === \"midpoint\" ? 128 : 255",
-          "source": {
-            "file": "tests/62-semantic-time-persistence-and-recovery.spec.ts",
-            "line": 57,
-            "column": 17
-          }
-        }
-      ]
+      "diagnostics": []
     },
     {
       "id": "TIME-002",
-      "title": "touch-set Group values apply one exact fade to every ordered member",
+      "title": "touch-set Group values bypass Programmer Fade for every ordered member",
       "source": {
         "file": "tests/62-semantic-time-persistence-and-recovery.spec.ts",
         "line": 64,
@@ -41992,8 +42573,8 @@
             "[{ name: \"start\", at: \"0ms\" }, { name: \"complete\", at: \"3s\" }]",
             "<generated: callback>"
           ],
-          "expression": "t.clock.at( [ { name: \"start\", at: \"0ms\" }, { name: \"complete\", at: \"3s\" }, ], async ({ name }) => { for (const number of [1, 2, 3, 4]) await t.expectFixtureDMX(fixture(number),…",
-          "sourceCode": "t.clock.at(\n\t\t\t[\n\t\t\t\t{ name: \"start\", at: \"0ms\" },\n\t\t\t\t{ name: \"complete\", at: \"3s\" },\n\t\t\t],\n\t\t\tasync ({ name }) => {\n\t\t\t\tfor (const number of [1, 2, 3, 4])\n\t\t\t\t\tawait t.expectFixtureDMX(fixture(number), {\n\t\t\t\t\t\tIntensity: name === \"start\" ? 0 : 255,\n\t\t\t\t\t});\n\t\t\t},\n\t\t)",
+          "expression": "t.clock.at( [ { name: \"start\", at: \"0ms\" }, { name: \"complete\", at: \"3s\" }, ], async () => { for (const number of [1, 2, 3, 4]) await t.expectFixtureDMX(fixture(number), { Inten…",
+          "sourceCode": "t.clock.at(\n\t\t\t[\n\t\t\t\t{ name: \"start\", at: \"0ms\" },\n\t\t\t\t{ name: \"complete\", at: \"3s\" },\n\t\t\t],\n\t\t\tasync () => {\n\t\t\t\tfor (const number of [1, 2, 3, 4])\n\t\t\t\t\tawait t.expectFixtureDMX(fixture(number), {\n\t\t\t\t\t\tIntensity: 255,\n\t\t\t\t\t});\n\t\t\t},\n\t\t)",
           "surfaces": [
             "Test clock"
           ],
@@ -42009,14 +42590,14 @@
       "expectedOutcomes": [
         {
           "kind": "expected-outcome",
-          "description": "fixture(number) DMX equals { Intensity: <unresolved: name === \"start\" ? 0 : 255> }.",
+          "description": "fixture(number) DMX equals { Intensity: 255 }.",
           "call": "expectFixtureDMX",
           "arguments": [
             "fixture(number)",
-            "{ Intensity: <unresolved: name === \"start\" ? 0 : 255> }"
+            "{ Intensity: 255 }"
           ],
-          "expression": "t.expectFixtureDMX(fixture(number), { Intensity: name === \"start\" ? 0 : 255, })",
-          "sourceCode": "t.expectFixtureDMX(fixture(number), {\n\t\t\t\t\t\tIntensity: name === \"start\" ? 0 : 255,\n\t\t\t\t\t})",
+          "expression": "t.expectFixtureDMX(fixture(number), { Intensity: 255, })",
+          "sourceCode": "t.expectFixtureDMX(fixture(number), {\n\t\t\t\t\t\tIntensity: 255,\n\t\t\t\t\t})",
           "surfaces": [
             "DMX output"
           ],
@@ -42030,14 +42611,14 @@
         },
         {
           "kind": "expected-outcome",
-          "description": "fixture(number) DMX equals { Intensity: <unresolved: name === \"start\" ? 0 : 255> }.",
+          "description": "fixture(number) DMX equals { Intensity: 255 }.",
           "call": "expectFixtureDMX",
           "arguments": [
             "fixture(number)",
-            "{ Intensity: <unresolved: name === \"start\" ? 0 : 255> }"
+            "{ Intensity: 255 }"
           ],
-          "expression": "t.expectFixtureDMX(fixture(number), { Intensity: name === \"start\" ? 0 : 255, })",
-          "sourceCode": "t.expectFixtureDMX(fixture(number), {\n\t\t\t\t\t\tIntensity: name === \"start\" ? 0 : 255,\n\t\t\t\t\t})",
+          "expression": "t.expectFixtureDMX(fixture(number), { Intensity: 255, })",
+          "sourceCode": "t.expectFixtureDMX(fixture(number), {\n\t\t\t\t\t\tIntensity: 255,\n\t\t\t\t\t})",
           "surfaces": [
             "DMX output"
           ],
@@ -42051,14 +42632,14 @@
         },
         {
           "kind": "expected-outcome",
-          "description": "fixture(number) DMX equals { Intensity: <unresolved: name === \"start\" ? 0 : 255> }.",
+          "description": "fixture(number) DMX equals { Intensity: 255 }.",
           "call": "expectFixtureDMX",
           "arguments": [
             "fixture(number)",
-            "{ Intensity: <unresolved: name === \"start\" ? 0 : 255> }"
+            "{ Intensity: 255 }"
           ],
-          "expression": "t.expectFixtureDMX(fixture(number), { Intensity: name === \"start\" ? 0 : 255, })",
-          "sourceCode": "t.expectFixtureDMX(fixture(number), {\n\t\t\t\t\t\tIntensity: name === \"start\" ? 0 : 255,\n\t\t\t\t\t})",
+          "expression": "t.expectFixtureDMX(fixture(number), { Intensity: 255, })",
+          "sourceCode": "t.expectFixtureDMX(fixture(number), {\n\t\t\t\t\t\tIntensity: 255,\n\t\t\t\t\t})",
           "surfaces": [
             "DMX output"
           ],
@@ -42072,14 +42653,14 @@
         },
         {
           "kind": "expected-outcome",
-          "description": "fixture(number) DMX equals { Intensity: <unresolved: name === \"start\" ? 0 : 255> }.",
+          "description": "fixture(number) DMX equals { Intensity: 255 }.",
           "call": "expectFixtureDMX",
           "arguments": [
             "fixture(number)",
-            "{ Intensity: <unresolved: name === \"start\" ? 0 : 255> }"
+            "{ Intensity: 255 }"
           ],
-          "expression": "t.expectFixtureDMX(fixture(number), { Intensity: name === \"start\" ? 0 : 255, })",
-          "sourceCode": "t.expectFixtureDMX(fixture(number), {\n\t\t\t\t\t\tIntensity: name === \"start\" ? 0 : 255,\n\t\t\t\t\t})",
+          "expression": "t.expectFixtureDMX(fixture(number), { Intensity: 255, })",
+          "sourceCode": "t.expectFixtureDMX(fixture(number), {\n\t\t\t\t\t\tIntensity: 255,\n\t\t\t\t\t})",
           "surfaces": [
             "DMX output"
           ],
@@ -42120,76 +42701,7 @@
         "constraint": "parallel"
       },
       "lastRun": null,
-      "diagnostics": [
-        {
-          "code": "unresolved-expression",
-          "message": "Expression name === \"start\" ? 0 : 255 is not statically resolved.",
-          "expression": "name === \"start\" ? 0 : 255",
-          "relatedCall": "expectFixtureDMX",
-          "relatedSource": {
-            "file": "tests/62-semantic-time-persistence-and-recovery.spec.ts",
-            "line": 84,
-            "column": 12
-          },
-          "sourceCode": "name === \"start\" ? 0 : 255",
-          "source": {
-            "file": "tests/62-semantic-time-persistence-and-recovery.spec.ts",
-            "line": 85,
-            "column": 18
-          }
-        },
-        {
-          "code": "unresolved-expression",
-          "message": "Expression name === \"start\" ? 0 : 255 is not statically resolved.",
-          "expression": "name === \"start\" ? 0 : 255",
-          "relatedCall": "expectFixtureDMX",
-          "relatedSource": {
-            "file": "tests/62-semantic-time-persistence-and-recovery.spec.ts",
-            "line": 84,
-            "column": 12
-          },
-          "sourceCode": "name === \"start\" ? 0 : 255",
-          "source": {
-            "file": "tests/62-semantic-time-persistence-and-recovery.spec.ts",
-            "line": 85,
-            "column": 18
-          }
-        },
-        {
-          "code": "unresolved-expression",
-          "message": "Expression name === \"start\" ? 0 : 255 is not statically resolved.",
-          "expression": "name === \"start\" ? 0 : 255",
-          "relatedCall": "expectFixtureDMX",
-          "relatedSource": {
-            "file": "tests/62-semantic-time-persistence-and-recovery.spec.ts",
-            "line": 84,
-            "column": 12
-          },
-          "sourceCode": "name === \"start\" ? 0 : 255",
-          "source": {
-            "file": "tests/62-semantic-time-persistence-and-recovery.spec.ts",
-            "line": 85,
-            "column": 18
-          }
-        },
-        {
-          "code": "unresolved-expression",
-          "message": "Expression name === \"start\" ? 0 : 255 is not statically resolved.",
-          "expression": "name === \"start\" ? 0 : 255",
-          "relatedCall": "expectFixtureDMX",
-          "relatedSource": {
-            "file": "tests/62-semantic-time-persistence-and-recovery.spec.ts",
-            "line": 84,
-            "column": 12
-          },
-          "sourceCode": "name === \"start\" ? 0 : 255",
-          "source": {
-            "file": "tests/62-semantic-time-persistence-and-recovery.spec.ts",
-            "line": 85,
-            "column": 18
-          }
-        }
-      ]
+      "diagnostics": []
     },
     {
       "id": "SHOW-001",

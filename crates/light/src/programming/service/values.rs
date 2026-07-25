@@ -74,18 +74,30 @@ impl ProgrammingService {
             .transpose()?;
         let planned;
         let mutations = if let Some(intent) = action.command.command.intent() {
+            let active_content = self
+                .programmers
+                .get(session)
+                .map(|state| state.update_content())
+                .unwrap_or_default();
             planned = plan_value_intent(
                 intent,
                 environment
                     .as_ref()
                     .expect("non-clear actions load a values environment"),
-                self.programmers
-                    .get(session)
-                    .map(|state| state.update_content())
-                    .unwrap_or_default()
+                active_content
                     .fixture_values
                     .iter()
                     .map(|value| (value.fixture_id, value.attribute.clone()))
+                    .collect(),
+                active_content
+                    .group_values
+                    .iter()
+                    .map(|value| {
+                        (
+                            (value.group_id.clone(), value.attribute.clone()),
+                            value.value.clone(),
+                        )
+                    })
                     .collect(),
             )?;
             std::borrow::Cow::Owned(planned)
@@ -140,6 +152,13 @@ impl ProgrammingService {
     ) -> bool {
         if command.is_clear() {
             self.programmers.clear_normal_values(session)
+        } else if let Some(intent) = command.intent() {
+            let mutations = mutations.iter().map(domain_mutation).collect::<Vec<_>>();
+            self.programmers.apply_normal_values_grouped(
+                session,
+                &mutations,
+                intent.undo_group.as_deref(),
+            )
         } else {
             let mutations = mutations.iter().map(domain_mutation).collect::<Vec<_>>();
             self.programmers.apply_normal_values(session, &mutations)
@@ -271,7 +290,21 @@ fn plan_value_intent(
     intent: &ProgrammingValueIntent,
     environment: &ProgrammingValuesEnvironment,
     active_values: HashSet<(light_core::FixtureId, light_core::AttributeKey)>,
+    active_group_values: std::collections::HashMap<
+        (String, light_core::AttributeKey),
+        AttributeValue,
+    >,
 ) -> Result<Vec<ProgrammingValueMutation>, ActionError> {
+    if intent
+        .undo_group
+        .as_ref()
+        .is_some_and(|group| group.is_empty() || group.len() > 128)
+    {
+        return Err(ActionError::new(
+            ActionErrorKind::Invalid,
+            "encoder undo_group must contain 1-128 bytes",
+        ));
+    }
     if let ProgrammingValueOperation::RelativeStep(delta) = intent.operation
         && (!delta.is_finite() || delta == 0.0)
     {
@@ -280,7 +313,18 @@ fn plan_value_intent(
             "relative Programmer value step must be finite and non-zero",
         ));
     }
-    let count = intent.fixture_ids.len();
+    let targets_group = intent.group_id.is_some();
+    if targets_group == !intent.fixture_ids.is_empty() {
+        return Err(ActionError::new(
+            ActionErrorKind::Invalid,
+            "Programmer value intent requires either ordered fixture_ids or one group_id",
+        ));
+    }
+    let count = intent
+        .group_id
+        .as_ref()
+        .and_then(|group_id| environment.group_memberships.get(group_id).copied())
+        .unwrap_or(intent.fixture_ids.len());
     if let ProgrammingValueOperation::AbsoluteSet(AttributeValue::Spread(points)) =
         &intent.operation
         && (points.len() < 2
@@ -296,6 +340,34 @@ fn plan_value_intent(
                 points.len()
             ),
         ));
+    }
+    if let Some(group_id) = intent.group_id.as_ref() {
+        let requested = match &intent.operation {
+            ProgrammingValueOperation::AbsoluteSet(value) => value.clone(),
+            ProgrammingValueOperation::RelativeStep(delta) => {
+                let current = active_group_values
+                    .get(&(group_id.clone(), intent.attribute.clone()))
+                    .cloned()
+                    .or_else(|| {
+                        environment.group_members.get(group_id).and_then(|members| {
+                            group_current_value(environment, members, &intent.attribute)
+                        })
+                    })
+                    .ok_or_else(|| {
+                        ActionError::new(
+                            ActionErrorKind::Invalid,
+                            "relative Group value requires a current normalized value",
+                        )
+                    })?;
+                shift_attribute_value(current, *delta)?
+            }
+        };
+        return Ok(vec![ProgrammingValueMutation::SetGroup {
+            group_id: group_id.clone(),
+            attribute: intent.attribute.clone(),
+            value: requested,
+            timing: intent.timing,
+        }]);
     }
     let mut mutations = Vec::new();
     let mut addresses = HashSet::new();
@@ -360,6 +432,48 @@ fn plan_value_intent(
         }
     }
     Ok(mutations)
+}
+
+fn group_current_value(
+    environment: &ProgrammingValuesEnvironment,
+    members: &[light_core::FixtureId],
+    attribute: &light_core::AttributeKey,
+) -> Option<AttributeValue> {
+    let values = members
+        .iter()
+        .map(|fixture_id| {
+            environment
+                .current_values
+                .get(&(*fixture_id, attribute.clone()))
+                .and_then(AttributeValue::normalized)
+        })
+        .collect::<Option<Vec<_>>>()?;
+    match values.as_slice() {
+        [] => None,
+        [value] => Some(AttributeValue::Normalized(*value)),
+        values => Some(AttributeValue::Spread(values.to_vec())),
+    }
+}
+
+fn shift_attribute_value(value: AttributeValue, delta: f32) -> Result<AttributeValue, ActionError> {
+    match value {
+        AttributeValue::Normalized(value) => {
+            Ok(AttributeValue::Normalized((value + delta).clamp(0.0, 1.0)))
+        }
+        AttributeValue::Spread(values) => Ok(AttributeValue::Spread(
+            values
+                .into_iter()
+                .map(|value| (value + delta).clamp(0.0, 1.0))
+                .collect(),
+        )),
+        AttributeValue::Discrete(_)
+        | AttributeValue::ColorXyz(_)
+        | AttributeValue::RawDmx(_)
+        | AttributeValue::RawDmxExact(_) => Err(ActionError::new(
+            ActionErrorKind::Invalid,
+            "relative Group value requires a current normalized value",
+        )),
+    }
 }
 
 fn push_intent_value(

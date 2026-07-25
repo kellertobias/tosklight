@@ -150,9 +150,9 @@ export async function setDimmerByTouch(
 	value: number,
 ): Promise<void> {
 	const encoder = page
-		.locator(".vertical-touch-fader-stack")
+		.locator(".touch-encoder")
 		.filter({ hasText: "Enc 1 · Dimmer" });
-	await encoder.getByRole("button", { name: "Set value" }).click();
+	await encoder.getByRole("button", { name: "Set Value" }).click();
 	const dialog = page.getByRole("dialog", { name: "Enc 1 · Dimmer value" });
 	await expect(dialog).toBeVisible();
 	await page.keyboard.type(String(value));

@@ -7,7 +7,11 @@ interface HardwareParameterActions {
 	programmerTarget(attribute: string): number | undefined;
 	programmerDiscreteTarget(attribute: string): string | undefined;
 	applyParameter(attribute: string, level: number): Promise<unknown>;
-	stepParameter(attribute: string, delta: number): Promise<unknown>;
+	stepParameter(
+		attribute: string,
+		delta: number,
+		undoGroup?: string | null,
+	): Promise<unknown>;
 }
 
 interface AccumulatedEncoderValue {

@@ -79,6 +79,10 @@ impl ValuesSetup {
                 environment: ProgrammingValuesEnvironment {
                     fixture_ids: fixtures.into_iter().collect(),
                     group_memberships: HashMap::from([("front".into(), 3), ("back".into(), 3)]),
+                    group_members: HashMap::from([
+                        ("front".into(), fixtures.to_vec()),
+                        ("back".into(), fixtures.to_vec()),
+                    ]),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -421,8 +425,10 @@ fn value_intent_identity_and_injected_activation_expansion_are_atomic() {
         ProgrammingValuesCommand::ApplyIntent {
             intent: ProgrammingValueIntent {
                 fixture_ids: vec![fixture],
+                group_id: None,
                 attribute: intensity.clone(),
                 operation: ProgrammingValueOperation::AbsoluteSet(AttributeValue::Normalized(0.25)),
+                undo_group: None,
                 timing: Default::default(),
             },
         },
@@ -446,8 +452,10 @@ fn value_intent_identity_and_injected_activation_expansion_are_atomic() {
         ProgrammingValuesCommand::ApplyIntent {
             intent: ProgrammingValueIntent {
                 fixture_ids: vec![fixture],
+                group_id: None,
                 attribute: intensity.clone(),
                 operation: ProgrammingValueOperation::RelativeStep(0.1),
+                undo_group: None,
                 timing: Default::default(),
             },
         },
@@ -504,6 +512,42 @@ fn value_intent_identity_and_injected_activation_expansion_are_atomic() {
     assert!(setup.registry.undo(setup.session));
     let undone = setup.registry.get(setup.session).unwrap();
     assert!(undone.values.is_empty());
+}
+
+#[test]
+fn relative_group_intent_preserves_live_group_scope_and_mixed_member_values() {
+    let mut setup = ValuesSetup::new();
+    let attribute = AttributeKey::intensity();
+    for (fixture, value) in setup.fixtures.into_iter().zip([0.1, 0.4, 0.95]) {
+        setup.ports.environment.current_values.insert(
+            (fixture, attribute.clone()),
+            AttributeValue::Normalized(value),
+        );
+    }
+    let result = setup.handle(
+        "group-relative",
+        0,
+        ProgrammingValuesCommand::ApplyIntent {
+            intent: ProgrammingValueIntent {
+                fixture_ids: Vec::new(),
+                group_id: Some("front".into()),
+                attribute: attribute.clone(),
+                operation: ProgrammingValueOperation::RelativeStep(0.1),
+                undo_group: None,
+                timing: Default::default(),
+            },
+        },
+    );
+    let ProgrammingValuesOutcome::Changed { projection, .. } = result.outcome else {
+        panic!("the Group intent should change one live Group value")
+    };
+    assert!(projection.fixture_values.is_empty());
+    assert_eq!(projection.group_values.len(), 1);
+    assert_eq!(projection.group_values[0].group_id, "front");
+    assert_eq!(
+        projection.group_values[0].value,
+        AttributeValue::Spread(vec![0.2, 0.5, 1.0])
+    );
 }
 
 #[test]

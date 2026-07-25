@@ -57,6 +57,17 @@ impl ProgrammerRegistry {
         session: SessionId,
         mutations: &[NormalProgrammerValueMutation],
     ) -> bool {
+        self.apply_normal_values_grouped(session, mutations, None)
+    }
+
+    /// Apply one recordable Programmer action, optionally coalescing consecutive samples from
+    /// the same continuous encoder gesture into the first sample's Undo checkpoint.
+    pub fn apply_normal_values_grouped(
+        &self,
+        session: SessionId,
+        mutations: &[NormalProgrammerValueMutation],
+        undo_group: Option<&str>,
+    ) -> bool {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();
         self.close_selection_gesture(session);
@@ -73,7 +84,12 @@ impl ProgrammerRegistry {
         if !changed.iter().any(|changed| *changed) {
             return false;
         }
-        state.checkpoint();
+        let continues_group =
+            undo_group.is_some() && state.active_value_undo_group.as_deref() == undo_group;
+        if !continues_group {
+            state.checkpoint();
+        }
+        state.active_value_undo_group = undo_group.map(str::to_owned);
         let changed_at = self.clock.now();
         let mut fixture_batch = FixtureValueBatch::default();
         for (mutation, changed) in mutations.iter().zip(changed) {
@@ -104,6 +120,7 @@ impl ProgrammerRegistry {
             return false;
         }
         state.checkpoint();
+        state.active_value_undo_group = None;
         state.values.clear();
         state.group_values.clear();
         state.last_activity = self.clock.now();
@@ -143,6 +160,7 @@ impl ProgrammerRegistry {
             return Some(transition);
         }
         state.checkpoint();
+        state.active_value_undo_group = None;
         let changed_at = self.clock.now();
         let mut fixture_batch = FixtureValueBatch::default();
         for (mutation, changed) in mutations.iter().zip(changed) {

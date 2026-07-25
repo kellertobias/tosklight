@@ -2,17 +2,22 @@ use super::*;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct CommandTiming {
+    pub(super) fade: bool,
     pub(super) fade_millis: Option<u64>,
     pub(super) delay_millis: Option<u64>,
 }
 
 pub(super) fn programmer_value_timing(state: &AppState, timing: CommandTiming) -> CommandTiming {
+    if timing.fade {
+        return timing;
+    }
+    let configuration = state.configuration.read();
+    if !configuration.command_line_at_uses_programmer_fade {
+        return timing;
+    }
     CommandTiming {
-        fade_millis: Some(
-            timing
-                .fade_millis
-                .unwrap_or_else(|| state.configuration.read().programmer_fade_millis),
-        ),
+        fade: true,
+        fade_millis: Some(configuration.programmer_fade_millis),
         ..timing
     }
 }
@@ -23,18 +28,54 @@ pub(super) fn set_command_fixture_intensities(
     values: impl IntoIterator<Item = (light_core::FixtureId, f32)>,
     timing: CommandTiming,
 ) {
-    state.programmers.set_many_faded_with_timing(
-        session.id,
-        values.into_iter().map(|(fixture_id, value)| {
-            (
-                fixture_id,
-                light_core::AttributeKey::intensity(),
-                light_core::AttributeValue::Normalized(value),
-            )
-        }),
-        timing.fade_millis,
-        timing.delay_millis,
-    );
+    let assignments = values.into_iter().map(|(fixture_id, value)| {
+        (
+            fixture_id,
+            light_core::AttributeKey::intensity(),
+            light_core::AttributeValue::Normalized(value),
+        )
+    });
+    if timing.fade {
+        state.programmers.set_many_faded_with_timing(
+            session.id,
+            assignments,
+            timing.fade_millis,
+            timing.delay_millis,
+        );
+    } else {
+        state.programmers.set_many_immediate_with_delay(
+            session.id,
+            assignments,
+            timing.delay_millis,
+        );
+    }
+}
+
+pub(super) fn set_command_group_intensity(
+    state: &AppState,
+    session: &Session,
+    group_id: String,
+    value: light_core::AttributeValue,
+    timing: CommandTiming,
+) {
+    if timing.fade {
+        state.programmers.set_group_faded_with_timing(
+            session.id,
+            group_id,
+            light_core::AttributeKey::intensity(),
+            value,
+            timing.fade_millis,
+            timing.delay_millis,
+        );
+    } else {
+        state.programmers.set_group_immediate_with_delay(
+            session.id,
+            group_id,
+            light_core::AttributeKey::intensity(),
+            value,
+            timing.delay_millis,
+        );
+    }
 }
 
 pub(super) fn command_time_millis(token: &str) -> Result<u64, String> {
@@ -73,6 +114,7 @@ pub(super) fn extract_command_timing(
             }
             "TIME" => {
                 let (value, used) = command_time_at(tokens, index + 1)?;
+                timing.fade = true;
                 timing.fade_millis = Some(value);
                 index += 1 + used;
             }

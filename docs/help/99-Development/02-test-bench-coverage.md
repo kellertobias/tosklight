@@ -71,6 +71,14 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 - **Oracle:** Inside one programmer, the newer fixture or Group programmer value wins by LTP even when the newer value is lower; release falls back to the remaining active source; cue/playback HTP remains covered separately.
 - **Pass:** Fixture- and group-scoped programmer contributions resolve by LTP within one programmer, while cross-source HTP/LTP arbitration remains isolated in MERGE coverage.
 
+### CROSS-003 — Relative encoders and immediate live timing
+
+- **Starting show:** Fresh Default Stage Show and compact-rig copies with Programmer Fade at five seconds, including mixed and unpatched selections.
+- **Surface:** Software touch encoder zones and Set Value, wheel/keyboard accessibility, hardware-connected display, physical/OSC encoder events, channel faders, typed WebSocket plus HTTP action mirror, Preset recall, and PRELOAD GO.
+- **Actions:** Apply fine/coarse steps, continuous hold-drag, absolute Set Value, hardware/OSC turns, and channel fader movement; record and replay the resulting value; use Preset and PRELOAD as negative timing controls.
+- **Pass:** Encoder and channel-fader output is immediate and carries no explicit `0s` recording override; mixed offsets clamp safely; a drag shares one undo entry; software and hardware feedback agree; Preset and PRELOAD transitions retain Programmer Fade.
+- **Executable scenario:** [TIME-002](../../../tests/05-virtual-time-persistence-and-recovery.spec.ts), encoder component/application tests, and cross-surface encoder coverage.
+
 ### PROG-001 — Selection persists through value entry until replaced or cleared
 
 - **Starting show:** Load canonical `compact-rig.show`, immediately Save As `prog-001.show`, and use the active copy.

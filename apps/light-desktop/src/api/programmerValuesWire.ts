@@ -219,6 +219,7 @@ function encodeAction(
 		return {
 			type: action.action,
 			fixture_ids: [...action.fixtureIds],
+			group_id: action.groupId ?? null,
 			attribute: action.attribute,
 			operation:
 				action.operation.type === "absolute_set"
@@ -230,6 +231,7 @@ function encodeAction(
 							type: "relative_step",
 							delta: action.operation.delta,
 						},
+			undo_group: action.undoGroup ?? null,
 			timing: encodeTiming(action.timing),
 		};
 	if (action.action === "batch")

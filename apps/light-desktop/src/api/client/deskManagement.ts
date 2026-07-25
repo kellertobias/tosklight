@@ -228,6 +228,8 @@ function configurationPatch(
 		backup_retention: configuration.backup_retention,
 		autosave_interval_seconds: configuration.autosave_interval_seconds,
 		programmer_fade_millis: configuration.programmer_fade_millis,
+		command_line_at_uses_programmer_fade:
+			configuration.command_line_at_uses_programmer_fade,
 		sequence_master_fade_millis:
 			configuration.sequence_master_fade_millis,
 		preload_programmer_changes: configuration.preload_programmer_changes,

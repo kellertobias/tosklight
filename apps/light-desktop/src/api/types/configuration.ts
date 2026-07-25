@@ -16,6 +16,7 @@ export interface DeskConfiguration {
 	autosave_interval_seconds: number;
 	speed_groups_bpm: [number, number, number, number, number];
 	programmer_fade_millis: number;
+	command_line_at_uses_programmer_fade?: boolean;
 	sequence_master_fade_millis: number;
 	preload_programmer_changes: boolean;
 	preload_physical_playback_actions: boolean;

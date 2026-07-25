@@ -74,7 +74,7 @@ async fn rest_session_show_and_revision_flow() {
             .next()
             .is_some()
     );
-    let configuration=app.clone().oneshot(Request::post("/api/v2/configuration/update").header(header::CONTENT_TYPE,"application/json").header(header::AUTHORIZATION,format!("Bearer {token}")).body(Body::from(r#"{"request_id":"configuration-test","patch":{"frame_rate_hz":40,"output_bind_ip":"0.0.0.0","osc_bind":null,"art_timecode_bind":null,"backup_retention":5,"programmer_fade_millis":1250,"sequence_master_fade_millis":2500}}"#)).unwrap()).await.unwrap();
+    let configuration=app.clone().oneshot(Request::post("/api/v2/configuration/update").header(header::CONTENT_TYPE,"application/json").header(header::AUTHORIZATION,format!("Bearer {token}")).body(Body::from(r#"{"request_id":"configuration-test","patch":{"frame_rate_hz":40,"output_bind_ip":"0.0.0.0","osc_bind":null,"art_timecode_bind":null,"backup_retention":5,"programmer_fade_millis":1250,"command_line_at_uses_programmer_fade":false,"sequence_master_fade_millis":2500}}"#)).unwrap()).await.unwrap();
     assert_eq!(configuration.status(), StatusCode::OK);
     assert_eq!(state.output_rate.load(Ordering::Relaxed), 40);
     for (index, bpm) in [101, 102, 103, 104].into_iter().enumerate() {
@@ -90,6 +90,10 @@ async fn rest_session_show_and_revision_flow() {
     }
     assert_eq!(state.configuration.read().speed_groups_bpm, [101.0, 102.0, 103.0, 104.0, 15.0]);
     assert_eq!(state.configuration.read().programmer_fade_millis, 1_250);
+    assert!(!state
+        .configuration
+        .read()
+        .command_line_at_uses_programmer_fade);
     assert_eq!(
         state.configuration.read().sequence_master_fade_millis,
         2_500

@@ -180,8 +180,10 @@ describe("Programmer values mutation wire boundary", () => {
 			action: {
 				type: "apply_intent",
 				fixture_ids: [FIXTURE_ID],
+				group_id: null,
 				attribute: "pan",
 				operation: { type: "relative_step", delta: -0.1 },
+				undo_group: null,
 				timing: { fade: true, fade_millis: 500, delay_millis: null },
 			},
 		});

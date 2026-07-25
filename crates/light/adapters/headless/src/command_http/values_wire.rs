@@ -11,12 +11,15 @@ pub(crate) fn values_command(
     Ok(match action {
         wire::ProgrammingValuesAction::ApplyIntent {
             fixture_ids,
+            group_id,
             attribute,
             operation,
+            undo_group,
             timing,
         } => application::ProgrammingValuesCommand::ApplyIntent {
             intent: application::ProgrammingValueIntent {
                 fixture_ids: fixture_ids.into_iter().map(FixtureId).collect(),
+                group_id,
                 attribute: AttributeKey(attribute),
                 operation: match operation {
                     wire::ProgrammingValueOperation::AbsoluteSet { value } => {
@@ -28,6 +31,7 @@ pub(crate) fn values_command(
                         application::ProgrammingValueOperation::RelativeStep(delta)
                     }
                 },
+                undo_group,
                 timing: application_timing(timing),
             },
         },

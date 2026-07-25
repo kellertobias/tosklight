@@ -497,6 +497,9 @@ fn patched_configuration(
     if let Some(value) = patch.programmer_fade_millis {
         configuration.programmer_fade_millis = value;
     }
+    if let Some(value) = patch.command_line_at_uses_programmer_fade {
+        configuration.command_line_at_uses_programmer_fade = value;
+    }
     if let Some(value) = patch.sequence_master_fade_millis {
         configuration.sequence_master_fade_millis = value;
     }

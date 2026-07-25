@@ -101,10 +101,12 @@ export type ProgrammerValuesCommand =
 	| {
 			action: "apply_intent";
 			fixtureIds: readonly string[];
+			groupId?: string | null;
 			attribute: string;
 			operation:
 				| { type: "absolute_set"; value: AttributeValue }
 				| { type: "relative_step"; delta: number };
+			undoGroup?: string | null;
 			timing: ProgrammerValueTiming;
 	  }
 	| ProgrammerValuesMutation
@@ -177,10 +179,12 @@ export interface ProgrammerValuesActions {
 	applyIntent(input: {
 		requestId: string;
 		fixtureIds: readonly string[];
+		groupId?: string | null;
 		attribute: string;
 		operation:
 			| { type: "absolute_set"; value: AttributeValue }
 			| { type: "relative_step"; delta: number };
+		undoGroup?: string | null;
 		timing: ProgrammerValueTiming;
 	}): Promise<ProgrammerValuesActionOutcome | null>;
 	setFixtureValue(

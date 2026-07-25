@@ -72,6 +72,7 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 	applyIntent(input: {
 		requestId: string;
 		fixtureIds: readonly string[];
+		groupId?: string | null;
 		attribute: string;
 		operation:
 			| {
@@ -79,13 +80,16 @@ export class ProgrammerValuesWriter implements ProgrammerValuesActions {
 					value: import("../../api/types/playback").AttributeValue;
 			  }
 			| { type: "relative_step"; delta: number };
+		undoGroup?: string | null;
 		timing: import("./contracts").ProgrammerValueTiming;
 	}) {
 		return this.enqueue(input.requestId, {
 			action: "apply_intent",
 			fixtureIds: input.fixtureIds,
+			groupId: input.groupId,
 			attribute: input.attribute,
 			operation: input.operation,
+			undoGroup: input.undoGroup,
 			timing: input.timing,
 		});
 	}

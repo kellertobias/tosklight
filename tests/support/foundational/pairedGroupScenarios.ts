@@ -161,7 +161,7 @@ export function registerFrozenAndEmptyGroupPairedScenarios() {
 			});
 			await expect(
 				page
-					.locator(".vertical-touch-fader-stack")
+					.locator(".touch-encoder")
 					.filter({ hasText: "Enc 1 · Dimmer" }),
 			).toBeVisible();
 			await setDimmerByTouch(page, 50);

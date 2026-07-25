@@ -99,6 +99,40 @@ fn normal_batch_uses_one_checkpoint_and_skips_exact_writes() {
 }
 
 #[test]
+fn continuous_value_samples_share_one_undo_checkpoint() {
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    let user = UserId::new();
+    let fixture = FixtureId::new();
+    registry.start(session, user);
+
+    assert!(registry.apply_normal_values_grouped(
+        session,
+        &[fixture_set(
+            fixture,
+            "pan",
+            0.51,
+            NormalProgrammerValueTiming::default(),
+        )],
+        Some("encoder-drag-1"),
+    ));
+    assert!(registry.apply_normal_values_grouped(
+        session,
+        &[fixture_set(
+            fixture,
+            "pan",
+            0.55,
+            NormalProgrammerValueTiming::default(),
+        )],
+        Some("encoder-drag-1"),
+    ));
+    assert_eq!(registry.undo_depth(session), Some(1));
+
+    assert!(registry.undo(session));
+    assert!(registry.get(session).unwrap().values.is_empty());
+}
+
+#[test]
 fn normal_actions_bypass_preload_and_clear_preserves_transient_state() {
     let registry = ProgrammerRegistry::default();
     let session = SessionId::new();

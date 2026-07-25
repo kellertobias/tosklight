@@ -78,12 +78,15 @@ export function useProgrammerValuesMutationQueue(
 export function normalizedFixtureMutations(
 	assignments: readonly NormalizedProgrammerAssignment[],
 	programmerFadeMillis: number | undefined,
+	immediate = false,
 ): ProgrammerValuesMutation[] {
-	const timing = {
-		fade: true,
-		fadeMillis: programmerFadeMillis ?? 3_000,
-		delayMillis: null,
-	};
+	const timing = immediate
+		? { fade: false, fadeMillis: null, delayMillis: null }
+		: {
+				fade: true,
+				fadeMillis: programmerFadeMillis ?? 3_000,
+				delayMillis: null,
+			};
 	return assignments.map(({ fixtureId, attribute, value }) => ({
 		action: "set_fixture",
 		fixtureId,

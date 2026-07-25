@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **139 root cases across 52 files**.
+Default catalog: **140 root cases across 52 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -106,6 +106,7 @@ Default catalog: **139 root cases across 52 files**.
 | 55-semantic-osc-api-and-cross-surface.spec.ts | OSC-004 @bench @ui › invalid input is rejected without programmer or output mutation | repository contract | @bench @ui | semantic-osc-api-and-cross-surface | standard failure evidence | parallel | migrated-semantic-world |
 | 55-semantic-osc-api-and-cross-surface.spec.ts | OSC-005 @bench @ui › completed values are user-shared while unfinished commands stay desk-local | repository contract | @bench @ui | semantic-osc-api-and-cross-surface | standard failure evidence | parallel | migrated-semantic-world |
 | 55-semantic-osc-api-and-cross-surface.spec.ts | OSC-006 @bench @ui › page two retargets the same current-page playback-one action | repository contract | @bench @ui | semantic-osc-api-and-cross-surface | standard failure evidence | parallel | migrated-semantic-world |
+| 55-semantic-osc-api-and-cross-surface.spec.ts | CROSS-003 @bench @ui › relative software, API, and OSC encoder changes bypass Programmer Fade | repository contract | @bench @ui | semantic-osc-api-and-cross-surface | standard failure evidence | parallel | migrated-semantic-world |
 | 55-semantic-osc-api-and-cross-surface.spec.ts | API-001 @bench @ui › authenticated membership updates preserve the visible atomic Group result | repository contract | @bench @ui | semantic-osc-api-and-cross-surface | standard failure evidence | parallel | migrated-semantic-world |
 | 55-semantic-osc-api-and-cross-surface.spec.ts | API-002 @bench @ui › Group create, merge, and delete remain ordered visible operations | repository contract | @bench @ui | semantic-osc-api-and-cross-surface | standard failure evidence | parallel | migrated-semantic-world |
 | 55-semantic-osc-api-and-cross-surface.spec.ts | CROSS-001 @bench @ui › equivalent group value agrees across command surfaces | repository contract | @bench @ui | semantic-osc-api-and-cross-surface | standard failure evidence | parallel | migrated-semantic-world |
@@ -133,8 +134,8 @@ Default catalog: **139 root cases across 52 files**.
 | 61-semantic-playback-configuration.spec.ts | PBK-006 @bench @ui › specialized layouts control their authoritative Speed, Group, Grand, and Fade masters | repository contract | @bench @ui | semantic-playback-configuration | standard failure evidence | parallel | migrated-semantic-world |
 | 61-semantic-playback-configuration.spec.ts | PBK-006 @bench @ui › independent overlapping Group Masters use the highest assigned level | repository contract | @bench @ui | semantic-playback-configuration | standard failure evidence | parallel | migrated-semantic-world |
 | 62-semantic-time-persistence-and-recovery.spec.ts | TIME-001 @bench @ui › zero ticks emit current state without advancing behavior time | repository contract | @bench @ui | semantic-time-persistence-and-recovery | standard failure evidence | parallel | migrated-semantic-world |
-| 62-semantic-time-persistence-and-recovery.spec.ts | TIME-002 @bench @ui › touch-set fixture values follow exact programmer-fade boundaries | repository contract | @bench @ui | semantic-time-persistence-and-recovery | standard failure evidence | parallel | migrated-semantic-world |
-| 62-semantic-time-persistence-and-recovery.spec.ts | TIME-002 @bench @ui › touch-set Group values apply one exact fade to every ordered member | repository contract | @bench @ui | semantic-time-persistence-and-recovery | standard failure evidence | parallel | migrated-semantic-world |
+| 62-semantic-time-persistence-and-recovery.spec.ts | TIME-002 @bench @ui › touch-set fixture values bypass Programmer Fade at every timing boundary | repository contract | @bench @ui | semantic-time-persistence-and-recovery | standard failure evidence | parallel | migrated-semantic-world |
+| 62-semantic-time-persistence-and-recovery.spec.ts | TIME-002 @bench @ui › touch-set Group values bypass Programmer Fade for every ordered member | repository contract | @bench @ui | semantic-time-persistence-and-recovery | standard failure evidence | parallel | migrated-semantic-world |
 | 62-semantic-time-persistence-and-recovery.spec.ts | SHOW-001 @bench @ui › operator programming and a named revision survive an abrupt restart | repository contract | @bench @ui | semantic-time-persistence-and-recovery | standard failure evidence | parallel | migrated-semantic-world |
 | 62-semantic-time-persistence-and-recovery.spec.ts | SHOW-003 @bench @ui › a malformed active show remains intact while the operator recovers safely | repository contract | @bench @ui | semantic-time-persistence-and-recovery | standard failure evidence | parallel | migrated-semantic-world |
 | 62-semantic-time-persistence-and-recovery.spec.ts | SHOW-005 @bench @ui › named revisions load as durable, visibly independent copies | repository contract | @bench @ui | semantic-time-persistence-and-recovery | standard failure evidence | parallel | migrated-semantic-world |

@@ -41,8 +41,10 @@ pub enum ProgrammingValueMutation {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProgrammingValueIntent {
     pub fixture_ids: Vec<FixtureId>,
+    pub group_id: Option<String>,
     pub attribute: AttributeKey,
     pub operation: ProgrammingValueOperation,
+    pub undo_group: Option<String>,
     pub timing: ProgrammingValueTiming,
 }
 

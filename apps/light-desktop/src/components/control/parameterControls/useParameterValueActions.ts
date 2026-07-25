@@ -48,19 +48,34 @@ export function useParameterValueActions(projection: ParameterProjection) {
 						{ kind: "normalized", value: level },
 					) ?? Promise.resolve(null),
 			);
-		const mutations = setParameterMutations(projection, attribute, {
-			kind: "normalized",
-			value: level,
-		});
+		const mutations = setParameterMutations(
+			projection,
+			attribute,
+			{ kind: "normalized", value: level },
+			projection.programmerValuesRoute === "normal"
+				? { fade: false, fadeMillis: null, delayMillis: null }
+				: undefined,
+		);
 		return queue.submitLatest(
 			parameterMutationKey(mutations),
 			JSON.stringify(mutations),
 			() => submit(mutations),
 		);
 	};
-	const stepParameter = (attribute: string, delta: number) =>
+	const stepParameter = (
+		attribute: string,
+		delta: number,
+		undoGroup?: string | null,
+	) =>
 		queue.submitBarrier(() =>
-			submitParameterStep(canWriteValues ? actions : null, projection, attribute, delta),
+			submitParameterStep(
+				canWriteValues ? actions : null,
+				projection,
+				attribute,
+				delta,
+				() => crypto.randomUUID(),
+				undoGroup,
+			),
 		);
 	return {
 		canWriteValues,

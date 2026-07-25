@@ -497,7 +497,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
           value: 0.5,
         });
       });
-      const dimmerEncoder = page.locator(".vertical-touch-fader-stack").filter({ hasText: "Enc 1 · Dimmer" });
+      const dimmerEncoder = page.locator(".touch-encoder").filter({ hasText: "Enc 1 · Dimmer" });
       await expect(dimmerEncoder).toContainText("50%");
 
       const artnetMark = bench.artnet.mark();

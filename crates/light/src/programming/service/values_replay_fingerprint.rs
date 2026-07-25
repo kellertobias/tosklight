@@ -51,6 +51,7 @@ fn hash_values_command(hasher: &mut Sha256, command: &ProgrammingValuesCommand) 
             for fixture_id in &intent.fixture_ids {
                 hasher.update(fixture_id.0.as_bytes());
             }
+            hash_optional_bytes(&mut *hasher, intent.group_id.as_deref());
             hash_bytes(hasher, intent.attribute.0.as_bytes());
             match &intent.operation {
                 ProgrammingValueOperation::AbsoluteSet(value) => {
@@ -62,6 +63,7 @@ fn hash_values_command(hasher: &mut Sha256, command: &ProgrammingValuesCommand) 
                     hasher.update(delta.to_bits().to_le_bytes());
                 }
             }
+            hash_optional_bytes(&mut *hasher, intent.undo_group.as_deref());
             hash_value_timing(hasher, intent.timing);
         }
         ProgrammingValuesCommand::SetFixture {
@@ -106,6 +108,16 @@ fn hash_values_command(hasher: &mut Sha256, command: &ProgrammingValuesCommand) 
                 .for_each(|mutation| hash_value_mutation(hasher, mutation));
         }
         ProgrammingValuesCommand::Clear => hasher.update([5]),
+    }
+}
+
+fn hash_optional_bytes(hasher: &mut Sha256, value: Option<&str>) {
+    match value {
+        Some(value) => {
+            hasher.update([1]);
+            hash_bytes(hasher, value.as_bytes());
+        }
+        None => hasher.update([0]),
     }
 }
 

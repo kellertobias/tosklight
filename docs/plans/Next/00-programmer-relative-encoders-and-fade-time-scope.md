@@ -2,9 +2,28 @@
 
 ## Status
 
-**Specification only.** This plan records a future programmer, encoder, touch-control, and timing behavior change. It does not implement UI behavior, programmer behavior, command-line behavior, persistence, API behavior, OSC behavior, hardware behavior, documentation, or executable tests.
+**Implemented.** The refactoring queue plan
+[`../refactoring/finished/00-programmer-relative-encoders-and-fade-time-scope.md`](../refactoring/finished/00-programmer-relative-encoders-and-fade-time-scope.md)
+records the implementation, verification, and commit.
 
 **Priority: first in Next.** Encoder-originated values must become immediate and receive permanent cross-surface regression coverage before later encoder refactoring can change timing behavior.
+
+## Implemented decisions
+
+- Scalar encoders use normalized display-percent units: `1` is the fine step and `10` is the
+  coarse step. Wheel uses the fine step and Shift-wheel uses the coarse step. Existing physical
+  encoder fine/coarse events use the same deltas.
+- Continuous touch drag starts outside an 8 px dead zone, samples every 80 ms, and uses symmetric
+  displacement tiers of 0.25, 1, and 2.5 display points.
+- Scalar values clamp to the normalized `[0, 1]` range. Mixed fixture selections retain their
+  offsets; live Group values retain Group scope and store a shifted spread when member values
+  differ. Indexed/discrete attributes are visibly constrained instead of being treated as
+  normalized or wrapped.
+- Each tap, wheel tick, keyboard activation, or physical encoder event is one undo entry. All
+  accepted samples from one continuous drag carry one server-owned undo-group identity.
+- Command-line `AT` continues to use Programmer Fade by default for persisted compatibility.
+  Settings exposes **AT uses Programmer Fade**; disabling it makes untimed `AT` immediate while
+  retaining explicit `DELAY`. Explicit `TIME` always remains authoritative.
 
 ## Goal
 

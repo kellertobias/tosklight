@@ -44,6 +44,40 @@ fn programmer_fade_starts_from_resolved_playback_underlay_and_release_reveals_it
 }
 
 #[test]
+fn immediate_programmer_value_bypasses_non_zero_master_fade_without_zero_override() {
+    let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+    let clock = Arc::new(ManualClock::new(started));
+    let shared: SharedClock = clock.clone();
+    let programmers = ProgrammerRegistry::with_clock(shared);
+    let session = SessionId::new();
+    programmers.start(session, UserId::new());
+    let (fixture, logical) = fixture();
+    let engine = Engine::new(programmers.clone());
+    engine.set_control_timing([120.0; 5], 5_000, 0);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+
+    programmers.set(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.8),
+    );
+    let stored = &programmers.get(session).unwrap().values[0];
+    assert!(!stored.fade);
+    assert_eq!(stored.fade_millis, None);
+    assert!((normalized(&engine.resolved_values(), logical, "intensity") - 0.8).abs() < 0.001);
+
+    clock.set(started + ChronoDuration::milliseconds(2_500));
+    assert!((normalized(&engine.resolved_values(), logical, "intensity") - 0.8).abs() < 0.001);
+}
+
+#[test]
 fn overlapping_preload_group_fades_keep_edit_order_at_one_commit_timestamp() {
     let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
     let clock = Arc::new(ManualClock::new(started));

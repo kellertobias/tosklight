@@ -447,11 +447,19 @@
             },
             "fixture_ids": {
               "type": "array",
+              "default": [],
               "items": {
                 "type": "string",
                 "format": "uuid"
               },
               "maxItems": 10000
+            },
+            "group_id": {
+              "description": "Live Group target. Exactly one of `fixture_ids` or `group_id` must be supplied.",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "operation": {
               "$ref": "#/$defs/ProgrammingValueOperation"
@@ -465,11 +473,17 @@
             "type": {
               "type": "string",
               "const": "apply_intent"
+            },
+            "undo_group": {
+              "description": "Optional identity shared by samples from one continuous encoder gesture. The server\nkeeps all samples in one Programmer undo entry; taps and wheel ticks omit it.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
             "type",
-            "fixture_ids",
             "attribute",
             "operation"
           ]

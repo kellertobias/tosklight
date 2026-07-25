@@ -103,13 +103,9 @@ export class BrowserDiscreteEncoders {
 		await this.desk.click(
 			this.page.getByRole("button", { name: family, exact: true }),
 		);
-		const control = this.page
-			.locator(".vertical-touch-fader-stack")
-			.filter({
-				has: this.page.getByRole("slider", {
-					name: new RegExp(`^Enc \\d+ · ${escapeRegex(label)}$`),
-				}),
-			});
+		const control = this.page.getByRole("region", {
+			name: new RegExp(`^Enc \\d+ · ${escapeRegex(label)}$`),
+		});
 		await expect(control).toBeVisible();
 		await this.desk.click(
 			control.getByRole("button", {

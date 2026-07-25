@@ -88,6 +88,9 @@ pub struct ProgrammerState {
     pub undo: Vec<Arc<ProgrammerSnapshot>>,
     #[serde(default)]
     pub redo: Vec<Arc<ProgrammerSnapshot>>,
+    /// Runtime-only identity for coalescing samples from one continuous encoder gesture.
+    #[serde(skip)]
+    pub active_value_undo_group: Option<String>,
 }
 
 #[derive(Clone, Debug)]

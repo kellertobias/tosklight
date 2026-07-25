@@ -403,10 +403,8 @@ async function selectFixtures(page: Page, desk: { command(value: string): Promis
 }
 
 async function setDimmerByTouch(page: Page, value: number) {
-  const encoder = page.locator(".vertical-touch-fader-stack").filter({ hasText: "Enc 1 · Dimmer" });
-  const setValue = encoder.getByRole("button", { name: "Set value" });
-  if (await setValue.isVisible()) await setValue.click();
-  else await encoder.locator(".vertical-touch-fader").click();
+  const encoder = page.locator(".touch-encoder").filter({ hasText: "Enc 1 · Dimmer" });
+  await encoder.getByRole("button", { name: "Set Value" }).click();
   await expect(page.getByRole("dialog", { name: "Enc 1 · Dimmer value" })).toBeVisible();
   await page.keyboard.type(String(value));
   await page.keyboard.press("Enter");

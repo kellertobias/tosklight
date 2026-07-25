@@ -35,7 +35,7 @@ scenario(
 
 scenario(
 	"TIME-002",
-	"touch-set fixture values follow exact programmer-fade boundaries",
+	"touch-set fixture values bypass Programmer Fade at every timing boundary",
 	async (t) => {
 		await t.show.use(Show.TwelveDimmers);
 		await t.app.open();
@@ -52,9 +52,9 @@ scenario(
 				{ name: "midpoint", at: "1.5s" },
 				{ name: "complete", at: "3s" },
 			],
-			async ({ name }) => {
+			async () => {
 				await t.expectFixtureDMX(fixture(1), {
-					Intensity: name === "start" ? 0 : name === "midpoint" ? 128 : 255,
+					Intensity: 255,
 				});
 			},
 		);
@@ -63,7 +63,7 @@ scenario(
 
 scenario(
 	"TIME-002",
-	"touch-set Group values apply one exact fade to every ordered member",
+	"touch-set Group values bypass Programmer Fade for every ordered member",
 	async (t) => {
 		await t.show.use(Show.TwelveDimmers);
 		await t.app.open();
@@ -79,10 +79,10 @@ scenario(
 				{ name: "start", at: "0ms" },
 				{ name: "complete", at: "3s" },
 			],
-			async ({ name }) => {
+			async () => {
 				for (const number of [1, 2, 3, 4])
 					await t.expectFixtureDMX(fixture(number), {
-						Intensity: name === "start" ? 0 : 255,
+						Intensity: 255,
 					});
 			},
 		);

@@ -63,6 +63,9 @@ pub(super) struct DeskConfiguration {
     #[serde(default = "default_speed_group_sources")]
     pub(super) speed_group_sources: [SpeedGroupSource; 5],
     pub(super) programmer_fade_millis: u64,
+    /// Preserve the traditional command-line AT fade. When disabled, AT without an explicit TIME
+    /// is immediate and records no per-value zero-second override.
+    pub(super) command_line_at_uses_programmer_fade: bool,
     pub(super) sequence_master_fade_millis: u64,
     pub(super) preload_programmer_changes: bool,
     pub(super) preload_physical_playback_actions: bool,
@@ -123,6 +126,7 @@ impl Default for DeskConfiguration {
             speed_group_sound_to_light: default_sound_to_light(),
             speed_group_sources: default_speed_group_sources(),
             programmer_fade_millis: 3_000,
+            command_line_at_uses_programmer_fade: true,
             sequence_master_fade_millis: 3_000,
             preload_programmer_changes: true,
             preload_physical_playback_actions: true,

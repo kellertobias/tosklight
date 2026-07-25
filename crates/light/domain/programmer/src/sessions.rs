@@ -104,6 +104,7 @@ impl ProgrammerRegistry {
             active_context: None,
             undo: vec![],
             redo: vec![],
+            active_value_undo_group: None,
         };
         self.states.write().insert(session_id, state.clone());
         self.command_contexts

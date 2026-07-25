@@ -11,10 +11,12 @@ export interface ParameterValuesMutationPort {
 	applyIntent?(input: {
 		requestId: string;
 		fixtureIds: readonly string[];
+		groupId?: string | null;
 		attribute: string;
 		operation:
 			| { type: "absolute_set"; value: AttributeValue }
 			| { type: "relative_step"; delta: number };
+		undoGroup?: string | null;
 		timing: ProgrammerValueTiming;
 	}): Promise<unknown>;
 }
@@ -33,8 +35,10 @@ export function setParameterMutations(
 	projection: ParameterProjection,
 	attribute: string,
 	value: AttributeValue,
+	timingOverride?: ProgrammerValueTiming,
 ) {
-	const timing = parameterValueTiming(projection.programmerFadeMillis);
+	const timing =
+		timingOverride ?? parameterValueTiming(projection.programmerFadeMillis);
 	if (projection.selectedGroupId)
 		return [
 			{
@@ -141,8 +145,12 @@ export function submitParameterStep(
 	attribute: string,
 	delta: number,
 	requestId: () => string = () => crypto.randomUUID(),
+	undoGroup?: string | null,
 ) {
-	if (!actions || projection.selectedFixtureIds.length === 0)
+	if (
+		!actions ||
+		(!projection.selectedGroupId && projection.selectedFixtureIds.length === 0)
+	)
 		return Promise.resolve(null);
 	if (!actions.applyIntent) {
 		const base =
@@ -167,10 +175,14 @@ export function submitParameterStep(
 	}
 	return actions.applyIntent({
 		requestId: requestId(),
-		fixtureIds: projection.selectedFixtureIds,
+		fixtureIds: projection.selectedGroupId ? [] : projection.selectedFixtureIds,
+		...(projection.selectedGroupId
+			? { groupId: projection.selectedGroupId }
+			: {}),
 		attribute,
 		operation: { type: "relative_step", delta },
-		timing: parameterValueTiming(projection.programmerFadeMillis),
+		...(undoGroup ? { undoGroup } : {}),
+		timing: immediateParameterTiming(),
 	});
 }
 
@@ -192,8 +204,12 @@ export function submitParameterAbsoluteIntent(
 		fixtureIds: projection.selectedFixtureIds,
 		attribute,
 		operation: { type: "absolute_set", value },
-		timing: parameterValueTiming(projection.programmerFadeMillis),
+		timing: immediateParameterTiming(),
 	});
+}
+
+export function immediateParameterTiming(): ProgrammerValueTiming {
+	return { fade: false, fadeMillis: null, delayMillis: null };
 }
 
 export function parameterMutationKey(

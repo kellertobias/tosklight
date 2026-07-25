@@ -51,6 +51,28 @@ impl ProgrammerRegistry {
         );
     }
 
+    /// Apply an immediate Programmer value after an optional delay. This keeps DELAY
+    /// authoritative even when command-line AT is configured not to use Programmer Fade.
+    pub fn set_many_immediate_with_delay(
+        &self,
+        session: SessionId,
+        assignments: impl IntoIterator<Item = (FixtureId, AttributeKey, AttributeValue)>,
+        delay_millis: Option<u64>,
+    ) {
+        let mutation_gate = self.mutation_gate(session);
+        let _mutation_guard = mutation_gate.lock();
+        self.set_many_with_checkpoint(
+            session,
+            assignments,
+            true,
+            ProgrammerValueTiming {
+                fade: false,
+                fade_millis: None,
+                delay_millis,
+            },
+        );
+    }
+
     /// Complete a momentary/timed action without creating a second Undo point. The active edge
     /// already captured the pre-action state; Undo after the inactive edge therefore returns to
     /// that state instead of unexpectedly firing the action again.

@@ -307,10 +307,9 @@ describe("ParameterControls projection lifecycle", () => {
 		];
 
 		render(<ParameterControls />);
-		const fader = screen.getByRole("slider", { name: "Enc 1 · Dimmer" });
-		expect(fader).toHaveValue("25");
-		fireEvent.input(fader, { target: { value: "50" } });
-		fireEvent.pointerUp(fader);
+		const encoder = screen.getByRole("region", { name: "Enc 1 · Dimmer" });
+		expect(encoder).toHaveTextContent("25%");
+		fireEvent.click(screen.getByRole("button", { name: "+10" }));
 
 		expect(preloadValuesActions.batch).toHaveBeenCalledWith({
 			requestId: expect.any(String),
@@ -319,7 +318,7 @@ describe("ParameterControls projection lifecycle", () => {
 					action: "set_fixture",
 					fixtureId: "fixture-1",
 					attribute: "intensity",
-					value: { kind: "normalized", value: 0.5 },
+					value: { kind: "normalized", value: 0.35 },
 					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 				},
 			],
@@ -453,7 +452,7 @@ describe("ParameterControls hardware encoders", () => {
 			fixtureIds: ["fixture-1"],
 			attribute: "intensity",
 			operation: { type: "relative_step", delta: 0.01 },
-			timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+			timing: { fade: false, fadeMillis: null, delayMillis: null },
 		});
 		window.dispatchEvent(
 			new CustomEvent("light:encoder-action", {
@@ -466,7 +465,7 @@ describe("ParameterControls hardware encoders", () => {
 				fixtureIds: ["fixture-1"],
 				attribute: "intensity",
 				operation: { type: "relative_step", delta: 0.1 },
-				timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+				timing: { fade: false, fadeMillis: null, delayMillis: null },
 			}),
 		);
 
@@ -594,7 +593,7 @@ describe("ParameterControls hardware encoders", () => {
 				fixtureIds: ["fixture-1"],
 				attribute: "tilt",
 				operation: { type: "relative_step", delta: -0.1 },
-				timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+				timing: { fade: false, fadeMillis: null, delayMillis: null },
 			}),
 		);
 
@@ -643,7 +642,7 @@ describe("ParameterControls hardware encoders", () => {
 				type: "absolute_set",
 				value: { kind: "spread", value: [0, 0.5] },
 			},
-			timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
+			timing: { fade: false, fadeMillis: null, delayMillis: null },
 		});
 	});
 });
@@ -851,11 +850,11 @@ describe("ParameterControls Group targets and alignment", () => {
 		render(<ParameterControls />);
 
 		expect(
-			screen.getByRole("slider", { name: "Enc 1 · Dimmer" }),
+			screen.getByRole("region", { name: "Enc 1 · Dimmer" }),
 		).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Position" }));
 		expect(
-			screen.getByRole("slider", { name: "Enc 1 · Pan" }),
+			screen.getByRole("region", { name: "Enc 1 · Pan" }),
 		).toBeInTheDocument();
 		expect(legacyPlaybackAccess).not.toHaveBeenCalled();
 	});

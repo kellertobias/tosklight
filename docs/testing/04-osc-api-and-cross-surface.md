@@ -243,6 +243,14 @@ Before each variant's action, mark its event/OSC/UDP observers. After the accept
 
 **Pass condition:** The browser is a live view of server state and does not rely on optimistic local state after external changes.
 
+## CROSS-003 — Relative encoders are immediate and share one authority
+
+- **Starting state:** Load a fresh working show with a patched scalar fixture, an unpatched fixture with its retained profile, a mixed multi-fixture selection, and Programmer Fade set to five seconds.
+- **Actions:** Tap each software encoder step zone; open Set Value from the center without changing the value; hold-drag at two displacements; use wheel, Shift-wheel, keyboard focus, attached hardware turn, and OSC turn; repeat against an unpatched fixture; move a channel fader; recall a Preset; run PRELOAD GO; record the encoder-authored value and play the Cue.
+- **Oracle:** Programmer projection and undo depth, Fixture Sheet and Stage projections, immediate engine value, Art-Net/sACN output at operation time and intermediate virtual times, WebSocket/HTTP outcomes, OSC feedback, recorded value timing, and Cue playback timing.
+- **Pass:** Scalar steps use repeatable one- and ten-point deltas, mixed offsets are preserved and clamped, one continuous drag is one undo entry, Set Value is the only absolute encoder path, indexed values are visibly constrained, every encoder/channel-fader surface is immediate with no stored `0s` override, the recorded Cue uses normal fallback timing, and Preset recall plus PRELOAD GO still use Programmer Fade.
+- **Executable coverage:** root Playwright TIME-002 and encoder cross-surface scenarios, `TouchEncoder.test.tsx`, parameter mutation tests, and focused Programmer/application tests.
+
 ## Highlight and Step Through boundary coverage
 
 Focused server, fixture, engine, and control-surface tests cover Highlight without inventing a client-local step model:

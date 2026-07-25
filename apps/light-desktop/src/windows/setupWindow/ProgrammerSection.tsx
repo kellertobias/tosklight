@@ -84,6 +84,35 @@ function PreloadSettings({
 	);
 }
 
+function CommandLineTimingSettings({
+	controller,
+}: {
+	controller: SetupWindowController;
+}) {
+	const { draft } = controller;
+	if (!draft) return null;
+	return (
+		<article>
+			<header>
+				<b>Command line timing</b>
+				<small>Explicit TIME always remains authoritative.</small>
+			</header>
+			<FormLayout labelPlacement="side">
+				<SwitchField
+					label="AT uses Programmer Fade"
+					checked={draft.command_line_at_uses_programmer_fade ?? true}
+					onChange={(event) =>
+						controller.editDraft({
+							...draft,
+							command_line_at_uses_programmer_fade: event.target.checked,
+						})
+					}
+				/>
+			</FormLayout>
+		</article>
+	);
+}
+
 export function ProgrammerSection({
 	controller,
 }: {
@@ -114,6 +143,7 @@ export function ProgrammerSection({
 					/>
 				</article>
 				<PatchHighlightSettings controller={controller} />
+				<CommandLineTimingSettings controller={controller} />
 				<h3 className="setup-subsection-title">Preload</h3>
 				<PreloadSettings controller={controller} />
 				{controller.programmerSettingsError && (

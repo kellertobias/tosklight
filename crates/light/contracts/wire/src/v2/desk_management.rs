@@ -49,6 +49,9 @@ pub struct ConfigurationPatch {
     pub programmer_fade_millis: Option<u64>,
     #[serde(default)]
     #[ts(optional = nullable)]
+    pub command_line_at_uses_programmer_fade: Option<bool>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
     #[ts(type = "number")]
     pub sequence_master_fade_millis: Option<u64>,
     #[serde(default)]

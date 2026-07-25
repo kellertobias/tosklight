@@ -9,9 +9,14 @@ pub(super) fn values_environment(state: &AppState) -> ProgrammingValuesEnvironme
     let snapshot = state.engine.snapshot();
     let mut current_values = default_values(&snapshot.fixtures);
     current_values.extend(state.engine.resolved_values());
+    let group_members = resolved_group_members(&snapshot.groups);
     ProgrammingValuesEnvironment {
         fixture_ids: fixture_ids(&snapshot.fixtures),
-        group_memberships: group_memberships(&snapshot.groups),
+        group_memberships: group_members
+            .iter()
+            .map(|(id, members)| (id.clone(), members.len()))
+            .collect(),
+        group_members,
         current_values,
         supported_attributes: supported_attributes(&snapshot.fixtures),
         activation_links: HashMap::new(),
@@ -100,7 +105,9 @@ fn fixture_ids(fixtures: &[light_fixture::PatchedFixture]) -> HashSet<FixtureId>
         .collect()
 }
 
-fn group_memberships(groups: &[light_programmer::GroupDefinition]) -> HashMap<String, usize> {
+fn resolved_group_members(
+    groups: &[light_programmer::GroupDefinition],
+) -> HashMap<String, Vec<FixtureId>> {
     let by_id = groups
         .iter()
         .map(|group| (group.id.clone(), group.clone()))
@@ -110,10 +117,9 @@ fn group_memberships(groups: &[light_programmer::GroupDefinition]) -> HashMap<St
         .map(|group| {
             // Unresolvable derived groups fall back to the stored membership so the
             // group stays addressable; the mutation itself still validates elsewhere.
-            let size = light_programmer::resolve_group(&group.id, &by_id)
-                .map(|fixtures| fixtures.len())
-                .unwrap_or(group.fixtures.len());
-            (group.id.clone(), size)
+            let members = light_programmer::resolve_group(&group.id, &by_id)
+                .unwrap_or_else(|_| group.fixtures.clone());
+            (group.id.clone(), members)
         })
         .collect()
 }

@@ -431,8 +431,8 @@ describe("window selection projections", () => {
 					attribute: "intensity",
 					value: { kind: "normalized", value: 0.42 },
 					timing: {
-						fade: true,
-						fadeMillis: 3_000,
+						fade: false,
+						fadeMillis: null,
 						delayMillis: null,
 					},
 				},

@@ -163,7 +163,7 @@ describe("parameter value mutation builders", () => {
 			fixtureIds: ["fixture-3", "fixture-1", "fixture-2"],
 			attribute: "intensity",
 			operation: { type: "relative_step", delta: -0.1 },
-			timing: { fade: true, fadeMillis: 1_250, delayMillis: null },
+			timing: { fade: false, fadeMillis: null, delayMillis: null },
 		});
 	});
 
@@ -188,7 +188,30 @@ describe("parameter value mutation builders", () => {
 				type: "absolute_set",
 				value: { kind: "spread", value: [0, 0.5, 1] },
 			},
-			timing: { fade: true, fadeMillis: 1_250, delayMillis: null },
+			timing: { fade: false, fadeMillis: null, delayMillis: null },
+		});
+	});
+
+	it("submits a live Group tick as one server-owned Group intent", async () => {
+		const actions = {
+			batch: vi.fn(),
+			applyIntent: vi.fn(async () => ({ status: "changed" })),
+		};
+		await submitParameterStep(
+			actions,
+			projection({ selectedGroupId: "front" }),
+			"intensity",
+			0.01,
+			() => "group-step-1",
+		);
+		expect(actions.batch).not.toHaveBeenCalled();
+		expect(actions.applyIntent).toHaveBeenCalledWith({
+			requestId: "group-step-1",
+			fixtureIds: [],
+			groupId: "front",
+			attribute: "intensity",
+			operation: { type: "relative_step", delta: 0.01 },
+			timing: { fade: false, fadeMillis: null, delayMillis: null },
 		});
 	});
 });

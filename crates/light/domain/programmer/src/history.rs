@@ -43,6 +43,7 @@ impl ProgrammerState {
         self.highlight = false;
         self.active_context = snapshot.active_context;
         self.last_activity = now;
+        self.active_value_undo_group = None;
     }
 
     pub(crate) fn checkpoint(&mut self) {

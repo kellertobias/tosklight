@@ -1,5 +1,5 @@
 import { HardwareEncoderDisplay } from "../HardwareEncoderDisplay";
-import { VerticalTouchFader } from "../VerticalTouchFader";
+import { TouchEncoder } from "../TouchEncoder";
 import { formatNormalizedValue, parameterLabels } from "./model";
 import type { ParameterController } from "./useParameterController";
 
@@ -92,33 +92,25 @@ function EncoderSurface({
 			/>
 		);
 	return (
-		<VerticalTouchFader
+		<TouchEncoder
 			label={`Enc ${index + 1} · ${label}`}
-			value={value * 100}
+			value={value}
 			display={discrete ?? display}
 			accentColor={attributeColor(attribute)}
 			mode={controller.dynamicsMode ? "Dynamics" : undefined}
-			directInput
 			disabled={!controller.canWriteValues}
-			actions={
-				hasScopedValue
-					? [
-							{
-								id: "release",
-								label: "Release",
-								"aria-label": `Release ${parameterLabels[attribute] ?? attribute}`,
-								disabled: !controller.canWriteValues,
-								onClick: () => void controller.releaseParameter(attribute),
-							},
-						]
-					: []
+			indexed={Boolean(discrete)}
+			canRelease={hasScopedValue}
+			onStep={(delta, undoGroup) =>
+				void controller.stepParameter(attribute, delta, undoGroup)
 			}
-			onChange={(next) => void controller.applyParameter(attribute, next / 100)}
-			onChangeRange={
+			onSet={(next) => void controller.applyParameter(attribute, next)}
+			onSetRange={
 				discrete || !controller.canWriteValues
 					? undefined
 					: (points) => void controller.applyParameterRange(attribute, points)
 			}
+			onRelease={() => void controller.releaseParameter(attribute)}
 		/>
 	);
 }

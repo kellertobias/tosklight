@@ -120,10 +120,20 @@ pub enum ProgrammingValuesAction {
     /// One application-owned fixture/head value intent. The server resolves ordered spreads,
     /// relative steps, and any configured linked-attribute captures atomically.
     ApplyIntent {
+        #[serde(default)]
         #[schemars(length(max = 10_000))]
         fixture_ids: Vec<Uuid>,
+        /// Live Group target. Exactly one of `fixture_ids` or `group_id` must be supplied.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        group_id: Option<String>,
         attribute: String,
         operation: ProgrammingValueOperation,
+        /// Optional identity shared by samples from one continuous encoder gesture. The server
+        /// keeps all samples in one Programmer undo entry; taps and wheel ticks omit it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        undo_group: Option<String>,
         #[serde(default)]
         timing: ProgrammingValueTiming,
     },

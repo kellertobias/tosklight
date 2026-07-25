@@ -245,7 +245,7 @@ export class BrowserCrossSurface {
 		});
 		await expect(
 			this.page
-				.locator(".vertical-touch-fader-stack")
+				.locator(".touch-encoder")
 				.filter({ hasText: "Enc 1 · Dimmer" }),
 		).toContainText("50%");
 		await this.bench.tick(3_000);

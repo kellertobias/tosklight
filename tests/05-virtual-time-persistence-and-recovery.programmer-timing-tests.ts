@@ -47,10 +47,10 @@ export function registerFixtureTimingTest(): void {
 
 			await expectEncoderTarget(page, 100);
 			await bench.tick(0);
-			await expectFixtureSheetDimmer(page, 1, 0);
+			await expectFixtureSheetDimmer(page, 1, 100);
 			await desk.recordStep(
-				"PROGRAMMER TARGET 100% · RESOLVED 0%",
-				"The touch encoder has jumped immediately to 100%, while Fixture Sheet and actual DMX remain at the start of the three-second Programmer Fade.",
+				"ENCODER TARGET AND OUTPUT 100% IMMEDIATELY",
+				"The encoder Set Value action bypasses the non-zero Programmer Fade for live output.",
 			);
 			await expect
 				.poll(async () => {
@@ -59,9 +59,12 @@ export function registerFixtureTimingTest(): void {
 							candidate.fixture_id === fixtureId &&
 							candidate.attribute === "intensity",
 					);
-					return value?.fade_millis;
+					return {
+						fade: value?.fade,
+						fadeMillis: value?.fade_millis ?? null,
+					};
 				})
-				.toBe(3_000);
+				.toEqual({ fade: false, fadeMillis: null });
 
 			const cue = await recordFirstCuelistThroughUi(api, page);
 			const change = cue.changes.find(
@@ -69,10 +72,9 @@ export function registerFixtureTimingTest(): void {
 					candidate.fixture_id === fixtureId &&
 					candidate.attribute === "intensity",
 			);
-			expect(change).toMatchObject({
-				value: { kind: "normalized", value: 1 },
-				fade_millis: 3_000,
-			});
+			expect(change.value).toEqual({ kind: "normalized", value: 1 });
+			expect(change.fade).toBe(false);
+			expect(change.fade_millis ?? null).toBeNull();
 
 			await clearProgrammerValues(api, {
 				surface: "api",
@@ -116,27 +118,31 @@ export function registerGroupTimingTest(): void {
 			await bench.tick(0);
 			await openFixtures(page);
 			for (const number of [1, 2, 3, 4])
-				await expectFixtureSheetDimmer(page, number, 0);
+				await expectFixtureSheetDimmer(page, number, 100);
 			await desk.recordStep(
-				"GROUP TARGET 100% · MEMBERS RESOLVED 0%",
-				"The Group touch encoder has jumped immediately to 100%, while every member and actual DMX remain at the start of the three-second Programmer Fade.",
+				"GROUP ENCODER TARGET AND OUTPUT 100% IMMEDIATELY",
+				"The Group encoder Set Value action bypasses the non-zero Programmer Fade for live output.",
 			);
 			await expect
 				.poll(
-					async () =>
-						(await programmer(api)).group_values["3"]?.intensity?.fade_millis,
+					async () => {
+						const value = (await programmer(api)).group_values["3"]?.intensity;
+						return {
+							fade: value?.fade,
+							fadeMillis: value?.fade_millis ?? null,
+						};
+					},
 				)
-				.toBe(3_000);
+				.toEqual({ fade: false, fadeMillis: null });
 
 			const cue = await recordFirstCuelistThroughUi(api, page);
 			const change = cue.group_changes.find(
 				(candidate: any) =>
 					candidate.group_id === "3" && candidate.attribute === "intensity",
 			);
-			expect(change).toMatchObject({
-				value: { kind: "normalized", value: 1 },
-				fade_millis: 3_000,
-			});
+			expect(change.value).toEqual({ kind: "normalized", value: 1 });
+			expect(change.fade).toBe(false);
+			expect(change.fade_millis ?? null).toBeNull();
 
 			await clearProgrammerValues(api, {
 				surface: "api",

@@ -249,6 +249,36 @@ fn command_line_contract_supports_subsets_preset_lifecycle_and_cue_list_creation
 }
 
 #[test]
+fn command_line_at_timing_setting_preserves_default_and_explicit_time_semantics() {
+    let scenario = CommandContractScenario::new();
+    assert!(scenario
+        .state
+        .configuration
+        .read()
+        .command_line_at_uses_programmer_fade);
+
+    {
+        let mut configuration = scenario.state.configuration.write();
+        configuration.programmer_fade_millis = 5_000;
+        configuration.command_line_at_uses_programmer_fade = false;
+    }
+    execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50 DELAY 1")
+        .unwrap();
+    let programmer = scenario.state.programmers.get(scenario.session.id).unwrap();
+    let immediate = &programmer.group_values["1"][&light_core::AttributeKey::intensity()];
+    assert!(!immediate.fade);
+    assert_eq!(immediate.fade_millis, None);
+    assert_eq!(immediate.delay_millis, Some(1_000));
+
+    execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 75 TIME 2").unwrap();
+    let programmer = scenario.state.programmers.get(scenario.session.id).unwrap();
+    let explicit = &programmer.group_values["1"][&light_core::AttributeKey::intensity()];
+    assert!(explicit.fade);
+    assert_eq!(explicit.fade_millis, Some(2_000));
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[test]
 fn new_cuelist_and_playback_record_is_one_active_show_batch() {
     let scenario = CommandContractScenario::new();
     execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();

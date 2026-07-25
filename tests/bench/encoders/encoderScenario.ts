@@ -76,11 +76,30 @@ class ApiNormalizedEncoderPort implements NormalizedEncoderPort {
 	}
 }
 
-class VisibleAbsoluteEncoderPort implements AbsoluteEncoderPort {
+class VisibleEncoderPort implements NormalizedEncoderPort {
 	constructor(private readonly encoder: NormalizedEncoder) {}
 
 	set(value: number | ProgrammerExpression): Promise<void> {
 		return this.encoder.execute("set", value, "ui");
+	}
+
+	add(steps: number): Promise<void> {
+		return this.encoder.execute("add", steps, "ui");
+	}
+
+	subtract(steps: number): Promise<void> {
+		return this.encoder.execute("subtract", steps, "ui");
+	}
+
+	release(): Promise<void> {
+		return this.encoder.release();
+	}
+
+	drag(
+		direction: "add" | "subtract",
+		rate: "slow" | "fast",
+	): Promise<void> {
+		return this.encoder.drag(direction, rate);
 	}
 }
 
@@ -99,7 +118,7 @@ class OscRelativeEncoderPort implements RelativeEncoderPort {
 export class NormalizedEncoder implements NormalizedEncoderPort {
 	readonly via = {
 		api: new ApiNormalizedEncoderPort(this),
-		ui: new VisibleAbsoluteEncoderPort(this),
+		ui: new VisibleEncoderPort(this),
 		osc: new OscRelativeEncoderPort(this),
 	};
 
@@ -108,6 +127,10 @@ export class NormalizedEncoder implements NormalizedEncoderPort {
 		readonly group: EncoderGroup,
 		readonly key: string,
 	) {}
+
+	drag(direction: "add" | "subtract", rate: "slow" | "fast"): Promise<void> {
+		return this.owner.drag(this, direction, rate);
+	}
 
 	set(value: number | ProgrammerExpression): Promise<void> {
 		return this.owner.unqualified(this, "set", value);
@@ -188,6 +211,38 @@ export class BrowserEncoders {
 		});
 	}
 
+	async drag(
+		encoder: NormalizedEncoder,
+		direction: "add" | "subtract",
+		rate: "slow" | "fast",
+	): Promise<void> {
+		const catalog = encoderCatalogEntry(encoder.group, encoder.key);
+		await this.desk.recordStep(
+			"ENCODER DRAG",
+			`${rate} continuous ${direction} on ${catalog.familyLabel} ${catalog.label}.`,
+		);
+		await this.desk.click(
+			this.page.getByRole("button", {
+				name: catalog.familyLabel,
+				exact: true,
+			}),
+		);
+		const control = this.softwareControl(catalog.label);
+		await expect(control).toBeVisible();
+		const box = await control.boundingBox();
+		if (!box) throw new Error("Visible touch encoder has no pointer box");
+		const start = { x: box.x + box.width / 2, y: box.y + 14 };
+		const displacement = rate === "slow" ? 20 : 90;
+		await this.page.mouse.move(start.x, start.y);
+		await this.page.mouse.down();
+		await this.page.mouse.move(
+			start.x,
+			start.y + (direction === "add" ? -displacement : displacement),
+		);
+		await this.page.waitForTimeout(120);
+		await this.page.mouse.up();
+	}
+
 	async unqualified(
 		encoder: NormalizedEncoder,
 		operation: EncoderOperation,
@@ -233,11 +288,19 @@ export class BrowserEncoders {
 			`${operation} ${catalog.familyLabel} ${catalog.label} through the ${route.toUpperCase()} route.`,
 		);
 		if (route === "ui") {
-			if (operation !== "set")
-				throw new Error(
-					"Visible relative encoder detents require attached hardware and are not available through the software value-entry route",
+			if (operation === "set")
+				await this.visibleSet(
+					catalog.familyLabel,
+					catalog.label,
+					value as AttributeValue,
 				);
-			await this.visibleSet(catalog.familyLabel, catalog.label, value as AttributeValue);
+			else
+				await this.visibleStep(
+					catalog.familyLabel,
+					catalog.label,
+					operation,
+					value as number,
+				);
 			return;
 		}
 		if (route === "osc") {
@@ -261,23 +324,16 @@ export class BrowserEncoders {
 		operation: EncoderOperation,
 		value: AttributeValue | number,
 	): Promise<void> {
-		const [selection, bootstrap, configurationResponse] = await Promise.all([
+		const [selection, bootstrap] = await Promise.all([
 			this.selection.observe(),
 			this.api.request<{ active_show: { id: string } | null }>(
 				"GET",
 				"/api/v2/bootstrap",
 			),
-			this.api.request<{
-				configuration?: { programmer_fade_millis: number };
-				programmer_fade_millis?: number;
-			}>("GET", "/api/v2/configuration"),
 		]);
 		if (!bootstrap.active_show) throw new Error("No active Show");
 		if (selection.selected.length === 0)
 			throw new Error("Encoder action requires a non-empty Fixture selection");
-		const configuration =
-			configurationResponse.configuration ?? configurationResponse;
-		const fadeMillis = configuration.programmer_fade_millis ?? 0;
 		await applyProgrammerSelectionValue(this.api, {
 			surface: "api",
 			showId: bootstrap.active_show.id,
@@ -294,8 +350,8 @@ export class BrowserEncoders {
 								0.01,
 						},
 			timing: {
-				fade: fadeMillis > 0,
-				fadeMillis: fadeMillis > 0 ? fadeMillis : null,
+				fade: false,
+				fadeMillis: null,
 				delayMillis: null,
 			},
 		});
@@ -334,9 +390,9 @@ export class BrowserEncoders {
 			throw new Error(
 				`${family} ${label} is not present on the live software encoder page`,
 			);
-		await this.desk.click(
-			control.getByRole("button", { name: "Set value", exact: true }),
-		);
+		await control
+			.getByRole("button", { name: "Set Value", exact: true })
+			.click();
 		const dialog = this.page.getByRole("dialog", {
 			name: new RegExp(`^Enc \\d+ · ${escapeRegex(label)} value$`),
 		});
@@ -348,14 +404,32 @@ export class BrowserEncoders {
 		await expect(dialog).toBeHidden();
 	}
 
+	private async visibleStep(
+		family: string,
+		label: string,
+		operation: "add" | "subtract",
+		steps: number,
+	): Promise<void> {
+		await this.desk.click(
+			this.page.getByRole("button", { name: family, exact: true }),
+		);
+		const control = this.softwareControl(label);
+		await expect(control).toBeVisible();
+		const sign = operation === "add" ? "+" : "−";
+		for (let tens = Math.floor(steps / 10); tens > 0; tens -= 1)
+			await this.desk.click(
+				control.getByRole("button", { name: `${sign}10`, exact: true }),
+			);
+		for (let ones = steps % 10; ones > 0; ones -= 1)
+			await this.desk.click(
+				control.getByRole("button", { name: `${sign}1`, exact: true }),
+			);
+	}
+
 	private softwareControl(label: string): Locator {
-		return this.page
-			.locator(".vertical-touch-fader-stack")
-			.filter({
-				has: this.page.getByRole("slider", {
-					name: new RegExp(`^Enc \\d+ · ${escapeRegex(label)}$`),
-				}),
-			});
+		return this.page.getByRole("region", {
+			name: new RegExp(`^Enc \\d+ · ${escapeRegex(label)}$`),
+		});
 	}
 
 	private group<T extends string>(
