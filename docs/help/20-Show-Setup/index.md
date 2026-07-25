@@ -9,3 +9,4 @@ Recommended order:
 3. [Fixtures and Patch](01-fixtures-and-patch.md)
 4. [Stage Positions and Scenery](04-stage-positions-and-scenery.md)
 5. [Groups and Presets](05-groups-and-presets.md)
+6. [Attribute Reference and Activation Examples](06-attribute-reference-and-activation.md)
