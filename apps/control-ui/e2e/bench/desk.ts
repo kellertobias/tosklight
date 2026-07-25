@@ -12,6 +12,7 @@ export class DeskDriver {
   private baseUrl = "";
   private auditRevision = 0;
   private controllableDesktop?: ControllableDesktopDriver;
+  private readonly semanticStepObservers = new Set<(step: { title: string; description: string }) => void>();
 
   constructor(
     readonly page: Page,
@@ -218,6 +219,7 @@ export class DeskDriver {
   /** Adds a human-readable chapter card to visual recordings without affecting fast test runs. */
   async recordStep(title: string, description: string): Promise<void> {
     this.recordingStep = { title, description };
+    for (const observer of this.semanticStepObservers) observer({ title, description });
     if (process.env.LIGHT_VISUAL_RECORDING !== "1" || !this.recordingInstalled || this.page.isClosed()) return;
     if (await this.page.locator("#light-catalog-recording").count() === 0) {
       await this.renderRecordingOverlay();
@@ -228,6 +230,11 @@ export class DeskDriver {
     }, { title, description });
     const pause = Number(process.env.LIGHT_VISUAL_STEP_PAUSE ?? 1_200);
     if (Number.isFinite(pause) && pause > 0) await this.page.waitForTimeout(pause);
+  }
+
+  observeSemanticSteps(observer: (step: { title: string; description: string }) => void): () => void {
+    this.semanticStepObservers.add(observer);
+    return () => this.semanticStepObservers.delete(observer);
   }
 
   private async installRecordingOverlay(): Promise<void> {

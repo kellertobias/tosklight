@@ -43,6 +43,7 @@ import type { SelectionTarget } from "./selectionContract";
 import { BrowserSelection } from "./selectionScenario";
 import { BrowserShows } from "./showScenario";
 import { BrowserSpeedGroups } from "./speedGroupScenario";
+import { BrowserRecipes } from "./recipeScenario";
 
 export interface ScreenConfigurationIntent {
 	name: string;
@@ -99,6 +100,14 @@ export class BrowserScenarioWorld {
 	readonly timing: BrowserTiming;
 	readonly speedGroup: BrowserSpeedGroups;
 	readonly special: BrowserProgrammerSpecials;
+	readonly recipe: BrowserRecipes;
+	readonly routeSeed: string;
+	private readonly semanticTrace: Array<{ title: string; description: string }> = [];
+	private readonly stopObservingSteps: () => void;
+	private readonly testInfo: TestInfo;
+	private readonly evidencePage: Page;
+	private readonly evidenceApi: ApiDriver;
+	private readonly evidenceDesk: DeskDriver;
 	readonly expect: {
 		dmx: (universe: number) => DmxUniverseExpectation;
 		outputPacket: (
@@ -124,6 +133,21 @@ export class BrowserScenarioWorld {
 		initialShow: TestShow,
 		testInfo: TestInfo,
 	) {
+		this.testInfo = testInfo;
+		this.evidencePage = page;
+		this.evidenceApi = api;
+		this.evidenceDesk = desk;
+		const configuredSeed = process.env.LIGHT_TEST_ROUTE_SEED?.trim();
+		const baseSeed = configuredSeed || crypto.randomUUID();
+		this.routeSeed = [
+			baseSeed,
+			testInfo.project.name,
+			testInfo.title,
+			`retry=${testInfo.retry}`,
+		].join(":");
+		this.stopObservingSteps = desk.observeSemanticSteps((step) =>
+			this.semanticTrace.push(step),
+		);
 		const attach = async (name: string, body: Buffer) => {
 			const safeName = artifactName(name);
 			await testInfo.attach(safeName, { body, contentType: "image/png" });
@@ -147,7 +171,7 @@ export class BrowserScenarioWorld {
 			this.hardware,
 			page,
 			desk,
-			`${testInfo.workerIndex}:${testInfo.title}`,
+			`${this.routeSeed}:selection`,
 		);
 		this.encoder = new BrowserEncoders(
 			api,
@@ -155,7 +179,7 @@ export class BrowserScenarioWorld {
 			page,
 			desk,
 			this.hardware,
-			`${testInfo.workerIndex}:${testInfo.title}:encoder`,
+			`${this.routeSeed}:encoder`,
 		);
 		this.highlight = new BrowserHighlight(page, api, this.hardware);
 		this.group = new BrowserGroups(
@@ -166,7 +190,7 @@ export class BrowserScenarioWorld {
 			coreSelection,
 			this.hardware,
 			() => this.show.contractIdentity().workingId,
-			`${testInfo.workerIndex}:${testInfo.title}:group`,
+			`${this.routeSeed}:group`,
 		);
 		this.preset = new BrowserPresets(
 			api,
@@ -175,7 +199,7 @@ export class BrowserScenarioWorld {
 			this.command,
 			this.hardware,
 			() => this.show.contractIdentity().workingId,
-			`${testInfo.workerIndex}:${testInfo.title}:preset`,
+			`${this.routeSeed}:preset`,
 		);
 		this.record = new BrowserRecording(
 			api,
@@ -223,14 +247,17 @@ export class BrowserScenarioWorld {
 			page,
 			desk,
 			this.hardware,
-			`${testInfo.workerIndex}:${testInfo.title}:timing`,
+			`${this.routeSeed}:timing`,
 		);
 		this.speedGroup = new BrowserSpeedGroups(
 			api,
 			page,
 			desk,
 			bench,
-			`${testInfo.workerIndex}:${testInfo.title}`,
+			`${this.routeSeed}:speed-group`,
+		);
+		this.recipe = new BrowserRecipes(this, (observer) =>
+			desk.observeSemanticSteps(observer),
 		);
 		const outputPackets = new BrowserOutputPackets(bench);
 		this.expect = {
@@ -245,6 +272,76 @@ export class BrowserScenarioWorld {
 		this.expectFixtureDMX = (target, expected) =>
 			fixtureDmx.expect(target, expected);
 		this.expectFixtureDMXAbsent = (target) => fixtureDmx.expectAbsent(target);
+	}
+
+	async finish(failure?: unknown): Promise<void> {
+		this.stopObservingSteps();
+		const routes = {
+			seed: this.routeSeed,
+			selection: this.selection.routeReports,
+			encoder: this.encoder.routeReports,
+			group: this.group.routeReports,
+			preset: this.preset.routeReports,
+			programmerFade: this.timing.programmerFade.routeReports,
+			speedGroup: this.speedGroup.reports,
+			recipes: this.recipe.reports,
+		};
+		await this.testInfo.attach("bench-route-report.json", {
+			body: Buffer.from(JSON.stringify(routes, null, 2)),
+			contentType: "application/json",
+		});
+		console.info(
+			`[bench routes] seed=${this.routeSeed} actions=${
+				this.selection.routeReports.length +
+				this.encoder.routeReports.length +
+				this.group.routeReports.length +
+				this.preset.routeReports.length
+			}`,
+		);
+		if (failure === undefined) return;
+		const evidence: Record<string, unknown> = {
+			seed: this.routeSeed,
+			error: failure instanceof Error
+				? { name: failure.name, message: failure.message, stack: failure.stack }
+				: String(failure),
+			semanticActions: this.semanticTrace,
+		};
+		try {
+			evidence.show = this.show.contractIdentity();
+		} catch (reason) {
+			evidence.show = { unavailable: String(reason) };
+		}
+		try {
+			evidence.desktop = await this.evidenceDesk.session();
+		} catch (reason) {
+			evidence.desktop = { unavailable: String(reason) };
+		}
+		try {
+			evidence.selection = await this.selection.observe();
+		} catch (reason) {
+			evidence.selection = { unavailable: String(reason) };
+		}
+		try {
+			evidence.programmers = await this.evidenceApi.request(
+				"GET",
+				"/api/v2/programmers",
+			);
+		} catch (reason) {
+			evidence.programmers = { unavailable: String(reason) };
+		}
+		try {
+			await this.testInfo.attach("bench-application-failure.png", {
+				body: await this.evidencePage.screenshot(),
+				contentType: "image/png",
+			});
+		} catch {
+			// Playwright may already have closed the page; its configured failure
+			// screenshot remains available in that case.
+		}
+		await this.testInfo.attach("bench-semantic-failure.json", {
+			body: Buffer.from(JSON.stringify(evidence, null, 2)),
+			contentType: "application/json",
+		});
 	}
 }
 

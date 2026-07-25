@@ -30,6 +30,14 @@ export function scenario(
 			show,
 			testInfo,
 		);
-		await callback(world);
+		let failure: unknown;
+		try {
+			await callback(world);
+		} catch (reason) {
+			failure = reason;
+			throw reason;
+		} finally {
+			await world.finish(failure);
+		}
 	});
 }
