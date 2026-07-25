@@ -1,4 +1,4 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
 import { loadCanonicalCopy, object, putObject } from "./support/catalog";
 
 test("CUELIST-LAYOUT-001 @supplemental-ui › compact Cue settings stay inline while Cuelist Settings opens as a structured modal", async ({ api, bench, desk, page }) => {

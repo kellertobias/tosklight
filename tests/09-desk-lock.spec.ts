@@ -1,5 +1,5 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
 
 interface ProgrammerProjection {
 	session_id: string;

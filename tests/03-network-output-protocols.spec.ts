@@ -1,19 +1,19 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
 import {
   duplicatePatchedFixtures,
   readPatchSnapshot,
   setFixtureAddressThroughApi,
   setFixtureAddressThroughSoftware,
 } from "./support/operator";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
-import { DmxReceiver } from "../apps/control-ui/e2e/bench/protocols";
+import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
+import { DmxReceiver } from "../apps/control-ui/e2e/bench/core/protocols";
 import {
   batchProgrammerValues,
   releaseProgrammerFixtureValue,
   setProgrammerFixtureValue,
   type ProgrammerValuesMutation,
-} from "../apps/control-ui/e2e/bench/programmerValues";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+} from "../apps/control-ui/e2e/bench/programmer/programmerValues";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
 import {
   fixtureIdsByNumber,
   loadCanonicalCopy,

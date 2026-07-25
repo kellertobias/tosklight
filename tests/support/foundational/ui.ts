@@ -1,5 +1,5 @@
-import type { ApiDriver } from "../../../apps/control-ui/e2e/bench/api";
-import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
+import type { ApiDriver } from "../../../apps/control-ui/e2e/bench/core/api";
+import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
 import type { Page } from "../../../apps/control-ui/node_modules/@playwright/test/index.js";
 import { expectSelectedNumbers } from "./apiState";
 import { executeProgrammerCommand, storeGroup } from "../operator";

@@ -1,9 +1,9 @@
 // @bench-semantic-world
 
-import { PlaybackButton } from "../apps/control-ui/e2e/bench/playbackScenario";
-import { scenario } from "../apps/control-ui/e2e/bench/scenario";
-import { fixture } from "../apps/control-ui/e2e/bench/selectionContract";
-import { Show } from "../apps/control-ui/e2e/bench/showScenario";
+import { PlaybackButton } from "../apps/control-ui/e2e/bench/playbacks/playbackScenario";
+import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
+import { fixture } from "../apps/control-ui/e2e/bench/command-selection/selectionContract";
+import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
 
 scenario(
 	"CUE-003",

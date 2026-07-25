@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ControllableHostedFilePickerDriver } from "../../e2e/bench/hostedFilePicker";
+import { ControllableHostedFilePickerDriver } from "../../e2e/bench/window-system/hostedFilePicker";
 import { HOSTED_PICKER_TEST_CONTROL } from "../windows/fileManagerWindow/controllableHostedPicker";
 
 afterEach(() => {

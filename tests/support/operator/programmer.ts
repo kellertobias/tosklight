@@ -1,10 +1,10 @@
 import type {
 	ApiDriver,
 	CommandOperationResponse,
-} from "../../../apps/control-ui/e2e/bench/api";
-import type { LightBench } from "../../../apps/control-ui/e2e/bench/lightBench";
-import type { OscHardware } from "../../../apps/control-ui/e2e/bench/protocols";
-import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
+} from "../../../apps/control-ui/e2e/bench/core/api";
+import type { LightBench } from "../../../apps/control-ui/e2e/bench/core/lightBench";
+import type { OscHardware } from "../../../apps/control-ui/e2e/bench/core/protocols";
+import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
 import type { Page } from "../../../apps/control-ui/node_modules/@playwright/test/index.js";
 import {
 	oscProgrammerActionForKey,

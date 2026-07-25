@@ -1,6 +1,6 @@
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
-import { expect } from "../apps/control-ui/e2e/bench/fixtures";
-import type { LightBench } from "../apps/control-ui/e2e/bench/lightBench";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
+import { expect } from "../apps/control-ui/e2e/bench/core/fixtures";
+import type { LightBench } from "../apps/control-ui/e2e/bench/core/lightBench";
 import { fixtureIdsByNumber, objects, putObject } from "./support/catalog";
 import { configurePlaybackSlot } from "./support/playbackTopology";
 

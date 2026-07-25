@@ -1,6 +1,6 @@
 import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
-import { ControllableHostedFilePickerDriver } from "../apps/control-ui/e2e/bench/hostedFilePicker";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { ControllableHostedFilePickerDriver } from "../apps/control-ui/e2e/bench/window-system/hostedFilePicker";
 import fs from "node:fs/promises";
 import path from "node:path";
 

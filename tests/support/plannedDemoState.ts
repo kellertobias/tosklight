@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import type { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
+import type { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
 import type { FixtureDefinition, FixtureProfile, PatchedFixture } from "../../apps/control-ui/src/api/types";
 import { toWireFixture } from "../../apps/control-ui/src/api/PatchTransport";
 import { fixtureDefinitionsFromProfiles } from "../../apps/control-ui/src/components/setup/fixtureProfileModel";

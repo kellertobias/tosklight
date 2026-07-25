@@ -19,7 +19,7 @@ test("marked scenarios may use only the public semantic world", () => {
 	assert.deepEqual(
 		scanSemanticWorldSource("tests/migrated.spec.ts", `
 			// ${semanticWorldMarker}
-			import { scenario } from "../apps/control-ui/e2e/bench/scenario";
+			import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
 			scenario("EXAMPLE-001", "uses intent", async (t) => {
 				await t.show.use(Show.Empty);
 				await t.app.open();
@@ -33,7 +33,7 @@ test("marked scenarios reject every private interaction family", () => {
 	const failures = scanSemanticWorldSource("tests/migrated.spec.ts", `
 		// ${semanticWorldMarker}
 		import type { Page } from "@playwright/test";
-		import { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+		import { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
 		fetch("/api/v2/output/dmx");
 		page.locator(".private").click(1, 2);
 		const fixtureId = "private";

@@ -1,5 +1,5 @@
-import type { BenchUiContext } from "../../apps/control-ui/e2e/bench/fixtures";
-import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
+import type { BenchUiContext } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
 import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,

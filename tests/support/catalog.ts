@@ -1,10 +1,10 @@
 import fs from "node:fs/promises";
 import type { Page } from "../../apps/control-ui/node_modules/@playwright/test/index.js";
-import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
+import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
 import {
   commandLineOwnership,
   type ApiDriver,
-} from "../../apps/control-ui/e2e/bench/api";
+} from "../../apps/control-ui/e2e/bench/core/api";
 import { executeProgrammerCommand } from "./operator";
 
 export interface VersionedObject<T = Record<string, any>> {

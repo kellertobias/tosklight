@@ -1,12 +1,12 @@
 // @bench-semantic-world
 
-import { scenario } from "../apps/control-ui/e2e/bench/scenario";
+import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
 import {
 	fixture,
 	fixtureRange,
 	group,
-} from "../apps/control-ui/e2e/bench/selectionContract";
-import { Show } from "../apps/control-ui/e2e/bench/showScenario";
+} from "../apps/control-ui/e2e/bench/command-selection/selectionContract";
+import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
 
 scenario(
 	"DIM-001",

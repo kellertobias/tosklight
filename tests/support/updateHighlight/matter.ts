@@ -1,4 +1,4 @@
-import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
+import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
 import { objects, putObject } from "../catalog";
 import { configurePlaybackSlot } from "../playbackTopology";
 

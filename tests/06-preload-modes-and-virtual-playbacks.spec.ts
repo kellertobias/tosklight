@@ -1,4 +1,4 @@
-import { test } from "../apps/control-ui/e2e/bench/fixtures";
+import { test } from "../apps/control-ui/e2e/bench/core/fixtures";
 import { registerCaptureMaskScenarios } from "./preloadVirtualPlaybackContracts/captureMaskScenarios";
 import { registerCombinedPreloadScenarios } from "./preloadVirtualPlaybackContracts/combinedPreloadScenarios";
 import { registerLayoutPersistenceScenarios } from "./preloadVirtualPlaybackContracts/layoutPersistenceScenarios";

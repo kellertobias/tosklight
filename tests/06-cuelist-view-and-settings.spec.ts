@@ -1,8 +1,8 @@
 import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
-import { deleteCue } from "../apps/control-ui/e2e/bench/cueDeletion";
-import { expect, test, type BenchUiContext } from "../apps/control-ui/e2e/bench/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
+import { deleteCue } from "../apps/control-ui/e2e/bench/playbacks/cueDeletion";
+import { expect, test, type BenchUiContext } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
 import { activeShowId, fixtureIdsByNumber, loadCanonicalCopy, object, putObject } from "./support/catalog";
 
 test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {

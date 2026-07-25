@@ -1,8 +1,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import net from "node:net";
 import type { Locator } from "../apps/control-ui/node_modules/@playwright/test/index.js";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
-import { ControllableHardwareOscDriver } from "../apps/control-ui/e2e/bench/hardwareControls";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { ControllableHardwareOscDriver } from "../apps/control-ui/e2e/bench/hardware/hardwareControls";
 
 let hardwareServer: ChildProcessWithoutNullStreams | undefined;
 let hardwareUrl = "";

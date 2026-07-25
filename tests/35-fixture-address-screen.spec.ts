@@ -1,4 +1,4 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
 import { loadCanonicalCopy } from "./support/catalog";
 import { readPatchSnapshot } from "./support/operator/patch";
 

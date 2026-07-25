@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
 import type { Page } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });

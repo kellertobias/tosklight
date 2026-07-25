@@ -1,10 +1,10 @@
 import fs from "node:fs/promises";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
-import { mapExistingPlaybackToSlot } from "../apps/control-ui/e2e/bench/mapExistingPlaybackToSlot";
-import { setOutputRuntime } from "../apps/control-ui/e2e/bench/outputRuntime";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
-import { clearProgrammerValues } from "../apps/control-ui/e2e/bench/programmerValues";
-import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/programmingSelection";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { mapExistingPlaybackToSlot } from "../apps/control-ui/e2e/bench/playbacks/mapExistingPlaybackToSlot";
+import { setOutputRuntime } from "../apps/control-ui/e2e/bench/output/outputRuntime";
+import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
+import { clearProgrammerValues } from "../apps/control-ui/e2e/bench/programmer/programmerValues";
+import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/command-selection/programmingSelection";
 import {
 	installGroupCue,
 	playbackRuntime,

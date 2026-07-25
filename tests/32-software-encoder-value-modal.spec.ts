@@ -1,5 +1,5 @@
 import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
 import { expectProgrammer, fixtureIdsByNumber, loadCanonicalCopy, normalized, pressCommand } from "./support/catalog";
 
 // PROG-002 surface parity (docs/plans/Next/50): the software-only layout's encoder

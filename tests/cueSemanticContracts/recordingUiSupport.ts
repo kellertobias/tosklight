@@ -1,6 +1,6 @@
-import type { BenchUiContext } from "../../apps/control-ui/e2e/bench/fixtures";
-import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
-import { clearProgrammerValues } from "../../apps/control-ui/e2e/bench/programmerValues";
+import type { BenchUiContext } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { clearProgrammerValues } from "../../apps/control-ui/e2e/bench/programmer/programmerValues";
 import { object, objects, putObject } from "../support/catalog";
 import {
 	emptyPlaybackPage,

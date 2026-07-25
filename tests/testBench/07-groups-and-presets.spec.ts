@@ -1,12 +1,12 @@
-import { PaneType } from "../../apps/control-ui/e2e/bench/paneTypes";
-import { scenario } from "../../apps/control-ui/e2e/bench/scenario";
+import { PaneType } from "../../apps/control-ui/e2e/bench/window-system/paneTypes";
+import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
 import {
 	groupRange,
-} from "../../apps/control-ui/e2e/bench/selectionContract";
+} from "../../apps/control-ui/e2e/bench/command-selection/selectionContract";
 import {
 	StoreMode,
-} from "../../apps/control-ui/e2e/bench/groupScenario";
-import { Show } from "../../apps/control-ui/e2e/bench/showScenario";
+} from "../../apps/control-ui/e2e/bench/groups-presets/groupScenario";
+import { Show } from "../../apps/control-ui/e2e/bench/show/showScenario";
 
 scenario(
 	"BENCH-GROUP-001",

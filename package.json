@@ -30,7 +30,7 @@
     "test": "bash tools/test.sh unit",
     "test:unit": "bash tools/test.sh unit",
     "test:architecture": "bash tools/test.sh architecture",
-    "test:bench-types": "tsc --noEmit --pretty false --strict --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022,DOM --skipLibCheck apps/control-ui/e2e/bench/paneTypes.typecheck.ts",
+    "test:bench-types": "tsc --noEmit --pretty false --strict --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022,DOM --skipLibCheck apps/control-ui/e2e/bench/window-system/paneTypes.typecheck.ts",
     "test:e2e": "bash tools/test.sh e2e",
     "test:e2e-api": "bash tools/test.sh e2e-api",
     "test:e2e-ui": "bash tools/test.sh e2e-ui",

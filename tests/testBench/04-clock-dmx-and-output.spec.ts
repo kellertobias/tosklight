@@ -1,5 +1,5 @@
-import { BrowserClock } from "../../apps/control-ui/e2e/bench/clockScenario";
-import { expect, test } from "../../apps/control-ui/e2e/bench/fixtures";
+import { BrowserClock } from "../../apps/control-ui/e2e/bench/core/clockScenario";
+import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
 import {
 	installTimeCuelists,
 	restartPlaybackRun,

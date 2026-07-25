@@ -1,8 +1,8 @@
-import { scenario } from "../../apps/control-ui/e2e/bench/scenario";
+import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
 import {
 	RestartMode,
 	Show,
-} from "../../apps/control-ui/e2e/bench/showScenario";
+} from "../../apps/control-ui/e2e/bench/show/showScenario";
 
 scenario(
 	"BENCH-SHOW-005",

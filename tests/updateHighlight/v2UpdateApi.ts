@@ -1,4 +1,4 @@
-import type { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
+import type { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
 
 interface LegacyTarget {
 	family: { type: "cue" | "preset" | "group" };

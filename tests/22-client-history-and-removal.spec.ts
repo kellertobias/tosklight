@@ -1,5 +1,5 @@
-import { test, expect } from "../apps/control-ui/e2e/bench/fixtures";
-import { ApiDriver, type Session } from "../apps/control-ui/e2e/bench/api";
+import { test, expect } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { ApiDriver, type Session } from "../apps/control-ui/e2e/bench/core/api";
 
 type ClientSummary = {
   client_id: string;

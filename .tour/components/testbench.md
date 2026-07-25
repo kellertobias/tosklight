@@ -30,7 +30,7 @@ Start with the smallest relevant check and widen by risk.
 
 ## pairedScenario
 
-`apps/control-ui/e2e/bench/pairedScenario.ts`:
+`apps/control-ui/e2e/bench/core/pairedScenario.ts`:
 
 ```ts
 pairedScenario({ id, title, arrange, api, ui, assert })
@@ -124,9 +124,9 @@ enforces.
 ## Read first
 
 1. `docs/testing/README.md`
-2. `apps/control-ui/e2e/bench/pairedScenario.ts`
-3. `apps/control-ui/e2e/bench/fixtures.ts`
-4. `apps/control-ui/e2e/bench/lightBench.ts`
+2. `apps/control-ui/e2e/bench/core/pairedScenario.ts`
+3. `apps/control-ui/e2e/bench/core/fixtures.ts`
+4. `apps/control-ui/e2e/bench/core/lightBench.ts`
 5. `tests/support/operator/programmer.ts`
 6. `tests/support/catalog.ts`
 7. `playwright.config.ts`

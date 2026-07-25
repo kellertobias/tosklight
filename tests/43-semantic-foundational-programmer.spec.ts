@@ -1,13 +1,13 @@
 // @bench-semantic-world
 
-import { StoreMode } from "../apps/control-ui/e2e/bench/groupScenario";
-import { PaneType } from "../apps/control-ui/e2e/bench/paneTypes";
-import { scenario } from "../apps/control-ui/e2e/bench/scenario";
+import { StoreMode } from "../apps/control-ui/e2e/bench/groups-presets/groupScenario";
+import { PaneType } from "../apps/control-ui/e2e/bench/window-system/paneTypes";
+import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
 import {
 	fixture,
 	fixtureRange,
-} from "../apps/control-ui/e2e/bench/selectionContract";
-import { Show } from "../apps/control-ui/e2e/bench/showScenario";
+} from "../apps/control-ui/e2e/bench/command-selection/selectionContract";
+import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
 
 scenario(
 	"PROG-001",

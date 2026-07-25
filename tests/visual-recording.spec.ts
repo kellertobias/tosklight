@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
 import artifactResolver from "../tools/artifact-paths.cjs";
 
 const { artifactPaths } = artifactResolver;

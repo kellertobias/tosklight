@@ -1,8 +1,8 @@
 import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import fs from "node:fs/promises";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
+import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
 
 interface VersionedObject<T = Record<string, unknown>> {
   kind: string;

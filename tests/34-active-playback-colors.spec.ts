@@ -1,4 +1,4 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
 import { loadCanonicalCopy, putObject } from "./support/catalog";
 
 test("PLAYBACK-COLOR-001 @supplemental-ui › runtime strengthens configured color while selection stays separate", async ({ api, bench, desk, page }) => {

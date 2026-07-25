@@ -1,4 +1,4 @@
-import { expect, test } from "../../../apps/control-ui/e2e/bench/fixtures";
+import { expect, test } from "../../../apps/control-ui/e2e/bench/core/fixtures";
 import type { FoundationalCase } from "./case";
 import {
 	command,

@@ -1,11 +1,11 @@
-import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
-import { recallPreset } from "../../../apps/control-ui/e2e/bench/presetRecall";
+import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
+import { recallPreset } from "../../../apps/control-ui/e2e/bench/groups-presets/presetRecall";
 import {
 	releaseProgrammerFixtureValue,
 	releaseProgrammerGroupValue,
 	setProgrammerFixtureValue,
 	setProgrammerGroupValue,
-} from "../../../apps/control-ui/e2e/bench/programmerValues";
+} from "../../../apps/control-ui/e2e/bench/programmer/programmerValues";
 import type { FoundationalCase } from "./case";
 import {
 	command,

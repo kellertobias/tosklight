@@ -67,10 +67,10 @@ An ID whose complete primary action is a harness boundary or packaged-process ow
 | Pass | Fail | The server contract is intact; investigate UI selectors, interaction semantics, WebSocket synchronization, or rendering. |
 | Fail | Pass | Treat as an invalid pairing or an API-only regression; the variants may not be exercising the same operation. |
 
-Use `pairedScenario(...)` from `apps/control-ui/e2e/bench/pairedScenario.ts` to register both variants. New cross-surface catalog scenarios must not be added as a lone `test(...)`. OSC, Art-Net packet-layout, packaged-desktop, CSS/layout, and test-bench self-tests may add `@osc`, `@wire`, `@desktop`, or `@bench` coverage, but these are supplemental checks rather than substitutes for the API/UI pair when the behavior exists on both surfaces.
+Use `pairedScenario(...)` from `apps/control-ui/e2e/bench/core/pairedScenario.ts` to register both variants. New cross-surface catalog scenarios must not be added as a lone `test(...)`. OSC, Art-Net packet-layout, packaged-desktop, CSS/layout, and test-bench self-tests may add `@osc`, `@wire`, `@desktop`, or `@bench` coverage, but these are supplemental checks rather than substitutes for the API/UI pair when the behavior exists on both surfaces.
 
 Browser-only operator contracts use `scenario(...)` from
-`apps/control-ui/e2e/bench/scenario.ts`. Its callback receives typed `app`, `builtIn`,
+`apps/control-ui/e2e/bench/core/scenario.ts`. Its callback receives typed `app`, `builtIn`,
 `desktop`, `screen`, and `screenshot` intents: scenario authors name operator surfaces,
 Desktop pane types, stable kebab-case pane slugs, and 24 × 18 grid rectangles without
 querying selectors, pixel coordinates, runtime pane IDs, or browser globals. Pane handles

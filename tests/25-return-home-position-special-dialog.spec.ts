@@ -1,7 +1,7 @@
-import { expect } from "../apps/control-ui/e2e/bench/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
-import { batchProgrammerValues } from "../apps/control-ui/e2e/bench/programmerValues";
-import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/programmingSelection";
+import { expect } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
+import { batchProgrammerValues } from "../apps/control-ui/e2e/bench/programmer/programmerValues";
+import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/command-selection/programmingSelection";
 import { loadCanonicalCopy, programmer } from "./support/catalog";
 
 type Assignment = { fixture_id: string; attribute: "pan" | "tilt"; value: number };

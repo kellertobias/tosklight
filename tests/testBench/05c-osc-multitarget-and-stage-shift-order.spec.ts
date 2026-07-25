@@ -1,11 +1,11 @@
-import type { StageShiftSelectionResult } from "../../apps/control-ui/e2e/bench/selectionVisibleStageScenario";
-import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
-import { PaneType } from "../../apps/control-ui/e2e/bench/paneTypes";
-import { scenario } from "../../apps/control-ui/e2e/bench/scenario";
+import type { StageShiftSelectionResult } from "../../apps/control-ui/e2e/bench/command-selection/selectionVisibleStageScenario";
+import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { PaneType } from "../../apps/control-ui/e2e/bench/window-system/paneTypes";
+import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
 import {
 	fixture,
 	fixtureRange,
-} from "../../apps/control-ui/e2e/bench/selectionContract";
+} from "../../apps/control-ui/e2e/bench/command-selection/selectionContract";
 
 scenario(
 	"BENCH-SELECTION-ROUTES-004",

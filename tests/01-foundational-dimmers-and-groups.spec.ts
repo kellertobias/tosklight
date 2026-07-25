@@ -1,9 +1,9 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
 import {
 	clearProgrammerValues,
 	releaseProgrammerFixtureValue,
-} from "../apps/control-ui/e2e/bench/programmerValues";
+} from "../apps/control-ui/e2e/bench/programmer/programmerValues";
 import {
 	command,
 	expectProgrammer,

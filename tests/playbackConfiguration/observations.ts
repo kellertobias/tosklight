@@ -1,4 +1,4 @@
-import type { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
+import type { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
 import { playbackAt } from "./api";
 import type {
 	PlaybackCheckpoint,

@@ -2,23 +2,23 @@
 
 import {
 	fixture as dmxFixture,
-} from "../apps/control-ui/e2e/bench/fixtureDmx";
-import { expect } from "../apps/control-ui/e2e/bench/fixtures";
+} from "../apps/control-ui/e2e/bench/output/fixtureDmx";
+import { expect } from "../apps/control-ui/e2e/bench/core/fixtures";
 import {
 	StoreMode,
-} from "../apps/control-ui/e2e/bench/groupScenario";
-import { PaneType } from "../apps/control-ui/e2e/bench/paneTypes";
+} from "../apps/control-ui/e2e/bench/groups-presets/groupScenario";
+import { PaneType } from "../apps/control-ui/e2e/bench/window-system/paneTypes";
 import {
 	PresetFamily,
-} from "../apps/control-ui/e2e/bench/presetScenario";
-import { scenario } from "../apps/control-ui/e2e/bench/scenario";
+} from "../apps/control-ui/e2e/bench/groups-presets/presetScenario";
+import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
 import {
 	dereferencedGroup,
 	fixture,
 	group,
 	groupRange,
-} from "../apps/control-ui/e2e/bench/selectionContract";
-import { Show } from "../apps/control-ui/e2e/bench/showScenario";
+} from "../apps/control-ui/e2e/bench/command-selection/selectionContract";
+import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
 
 scenario(
 	"BENCH-COMMAND-SELECTION-002",

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Page } from "@playwright/test";
-import { BrowserSessionHandoff } from "../../../e2e/bench/sessionHandoff";
+import { BrowserSessionHandoff } from "../../../e2e/bench/core/sessionHandoff";
 
 describe("browser session handoff authority", () => {
 	it("clears a prior document before accepting its replacement", async () => {

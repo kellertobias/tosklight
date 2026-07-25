@@ -1,10 +1,10 @@
 // @bench-semantic-world
 
-import { CueRecordMode } from "../apps/control-ui/e2e/bench/cuePlaybackScenario";
-import { StoreMode as GroupStoreMode } from "../apps/control-ui/e2e/bench/groupScenario";
-import { scenario } from "../apps/control-ui/e2e/bench/scenario";
-import { fixtureRange } from "../apps/control-ui/e2e/bench/selectionContract";
-import { Show } from "../apps/control-ui/e2e/bench/showScenario";
+import { CueRecordMode } from "../apps/control-ui/e2e/bench/playbacks/cuePlaybackScenario";
+import { StoreMode as GroupStoreMode } from "../apps/control-ui/e2e/bench/groups-presets/groupScenario";
+import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
+import { fixtureRange } from "../apps/control-ui/e2e/bench/command-selection/selectionContract";
+import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
 
 scenario(
 	"CUE-008",

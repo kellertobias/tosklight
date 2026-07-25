@@ -1,14 +1,14 @@
 import {
 	fixture as dmxFixture,
-} from "../../apps/control-ui/e2e/bench/fixtureDmx";
-import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
-import { scenario } from "../../apps/control-ui/e2e/bench/scenario";
+} from "../../apps/control-ui/e2e/bench/output/fixtureDmx";
+import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
 import {
 	fixture,
 	fixtureRange,
-} from "../../apps/control-ui/e2e/bench/selectionContract";
-import { Show } from "../../apps/control-ui/e2e/bench/showScenario";
-import { ProgrammerToken } from "../../apps/control-ui/e2e/bench/encoderCatalog";
+} from "../../apps/control-ui/e2e/bench/command-selection/selectionContract";
+import { Show } from "../../apps/control-ui/e2e/bench/show/showScenario";
+import { ProgrammerToken } from "../../apps/control-ui/e2e/bench/encoders/encoderCatalog";
 
 scenario(
 	"BENCH-ENCODER-002",

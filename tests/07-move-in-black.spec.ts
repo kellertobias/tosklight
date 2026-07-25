@@ -1,5 +1,5 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
 import { activeShowId, loadCanonicalCopy, object, objects, putObject } from "./support/catalog";
 
 interface MibState {

@@ -1,8 +1,8 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
-import type { BenchUiContext } from "../apps/control-ui/e2e/bench/fixtures";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
+import type { BenchUiContext } from "../apps/control-ui/e2e/bench/core/fixtures";
 import { loadCanonicalCopy } from "./support/catalog";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
 
 const portableConfiguration = {
   enabled: true,

@@ -1,6 +1,6 @@
 // @bench-semantic-world
 
-import { scenario } from "../apps/control-ui/e2e/bench/scenario";
+import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
 
 scenario(
 	"BENCH-PRODUCT-DEMO-001",

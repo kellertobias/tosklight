@@ -1,4 +1,4 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
 import { loadCanonicalCopy } from "./support/catalog";
 
 test("WORKFLOW-COLOR-001 @supplemental-ui › Record red and Update amber remain distinct with and without hardware", async ({ api, bench, desk, page }) => {

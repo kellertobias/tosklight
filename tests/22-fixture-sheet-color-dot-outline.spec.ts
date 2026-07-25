@@ -1,5 +1,5 @@
 import type { Page, TestInfo } from "@playwright/test";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
 import { loadCanonicalCopy } from "./support/catalog";
 
 const states = [

@@ -1,8 +1,8 @@
-import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
+import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
 import {
 	type PairedScenario,
 	pairedScenario,
-} from "../../apps/control-ui/e2e/bench/pairedScenario";
+} from "../../apps/control-ui/e2e/bench/core/pairedScenario";
 import { object, objects, putObject } from "../support/catalog";
 import {
 	activePlayback,

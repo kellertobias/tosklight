@@ -3,7 +3,7 @@ import {
 	type BenchUiContext,
 	expect,
 	test,
-} from "../../apps/control-ui/e2e/bench/fixtures";
+} from "../../apps/control-ui/e2e/bench/core/fixtures";
 import type { Locator } from "../../apps/control-ui/node_modules/@playwright/test/index.js";
 import { fixtureDefinitionFromProfileMode } from "../../apps/control-ui/src/components/setup/fixtureProfileModel";
 import {

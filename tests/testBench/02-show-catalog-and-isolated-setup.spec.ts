@@ -1,14 +1,14 @@
 import fs from "node:fs/promises";
-import { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
-import { DeskDriver } from "../../apps/control-ui/e2e/bench/desk";
-import { expect, test } from "../../apps/control-ui/e2e/bench/fixtures";
-import { LightBench } from "../../apps/control-ui/e2e/bench/lightBench";
-import { scenario } from "../../apps/control-ui/e2e/bench/scenario";
+import { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
+import { DeskDriver } from "../../apps/control-ui/e2e/bench/core/desk";
+import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { LightBench } from "../../apps/control-ui/e2e/bench/core/lightBench";
+import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
 import {
 	BrowserShows,
 	defineShow,
 	Show,
-} from "../../apps/control-ui/e2e/bench/showScenario";
+} from "../../apps/control-ui/e2e/bench/show/showScenario";
 
 const staleCompactRig = defineShow("stale-compact-rig", (show) => {
 	show.from(Show.CompactRig).requires({

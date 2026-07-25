@@ -1,5 +1,5 @@
 import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
 
 test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
   test("TEXT-015 @ui › two editors reflect clean saves, surface dirty conflicts, persist association, and recover a deleted file", async ({

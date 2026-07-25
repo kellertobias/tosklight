@@ -1,9 +1,9 @@
-import { test, expect } from "../../apps/control-ui/e2e/bench/fixtures";
-import { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
-import { LightBench } from "../../apps/control-ui/e2e/bench/lightBench";
-import { scenario } from "../../apps/control-ui/e2e/bench/scenario";
-import { fixtureRange } from "../../apps/control-ui/e2e/bench/selectionContract";
-import { Show } from "../../apps/control-ui/e2e/bench/showCatalog";
+import { test, expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
+import { LightBench } from "../../apps/control-ui/e2e/bench/core/lightBench";
+import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
+import { fixtureRange } from "../../apps/control-ui/e2e/bench/command-selection/selectionContract";
+import { Show } from "../../apps/control-ui/e2e/bench/show/showCatalog";
 
 scenario(
 	"BENCH-RECIPE-001",

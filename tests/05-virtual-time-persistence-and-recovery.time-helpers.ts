@@ -1,8 +1,8 @@
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
-import type { DeskDriver } from "../apps/control-ui/e2e/bench/desk";
-import { expect } from "../apps/control-ui/e2e/bench/fixtures";
-import type { LightBench } from "../apps/control-ui/e2e/bench/lightBench";
-import type { OscHardware } from "../apps/control-ui/e2e/bench/protocols";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
+import type { DeskDriver } from "../apps/control-ui/e2e/bench/core/desk";
+import { expect } from "../apps/control-ui/e2e/bench/core/fixtures";
+import type { LightBench } from "../apps/control-ui/e2e/bench/core/lightBench";
+import type { OscHardware } from "../apps/control-ui/e2e/bench/core/protocols";
 import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import { normalized, programmer } from "./support/catalog";
 

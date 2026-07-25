@@ -1,7 +1,7 @@
-import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
-import { scenario } from "../../apps/control-ui/e2e/bench/scenario";
-import { Show } from "../../apps/control-ui/e2e/bench/showScenario";
-import { SpeedGroup } from "../../apps/control-ui/e2e/bench/speedGroupScenario";
+import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
+import { Show } from "../../apps/control-ui/e2e/bench/show/showScenario";
+import { SpeedGroup } from "../../apps/control-ui/e2e/bench/playbacks/speedGroupScenario";
 
 scenario(
 	"BENCH-CUE-FADE-001",

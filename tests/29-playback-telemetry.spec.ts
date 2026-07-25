@@ -1,5 +1,5 @@
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
 import { fixtureIdsByNumber, loadCanonicalCopy, putObject } from "./support/catalog";
 
 // Maintainer requirement (docs/engineering/api-rules.md §1: volatile state is pushed,

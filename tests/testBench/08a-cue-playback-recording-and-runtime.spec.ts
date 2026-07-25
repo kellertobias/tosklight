@@ -1,10 +1,10 @@
-import { expect } from "../../apps/control-ui/e2e/bench/fixtures";
+import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
 import {
 	PlaybackButton,
 	PlaybackFader,
-} from "../../apps/control-ui/e2e/bench/playbackScenario";
-import { scenario } from "../../apps/control-ui/e2e/bench/scenario";
-import { Show } from "../../apps/control-ui/e2e/bench/showScenario";
+} from "../../apps/control-ui/e2e/bench/playbacks/playbackScenario";
+import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
+import { Show } from "../../apps/control-ui/e2e/bench/show/showScenario";
 
 scenario(
 	"BENCH-CUE-PLAYBACK-002",

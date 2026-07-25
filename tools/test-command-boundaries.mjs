@@ -26,7 +26,7 @@ export const COMPATIBILITY_FAMILIES = Object.freeze([
 ]);
 
 /** The bench API driver owns the centralized WebSocket sender, so it is not a scenario call site. */
-export const CENTRALIZED_SENDER = "apps/control-ui/e2e/bench/api.ts";
+export const CENTRALIZED_SENDER = "apps/control-ui/e2e/bench/core/api.ts";
 
 const LEGACY_HELPER = /\bexecuteLegacyCommandLine\b/gu;
 const DIRECT_ACTION_COMMAND =

@@ -1,8 +1,8 @@
-import type { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
+import type { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
 import {
 	type BenchUiContext,
 	expect,
-} from "../../apps/control-ui/e2e/bench/fixtures";
+} from "../../apps/control-ui/e2e/bench/core/fixtures";
 import {
 	activePlayback,
 	createCueList,

@@ -1,5 +1,5 @@
 import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
 
 test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
   test("MANUAL-019 @ui › saved workspaces are Desktops while physical control surfaces remain desks", async ({ api, bench, desk, page }) => {

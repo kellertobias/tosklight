@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
 import {
 	arrangeMalformedRecovery,
 	assertMigrationSnapshot,

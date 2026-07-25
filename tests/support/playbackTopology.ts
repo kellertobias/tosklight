@@ -1,4 +1,4 @@
-import type { ApiDriver } from "../../apps/control-ui/e2e/bench/api";
+import type { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
 import type { PlaybackRuntimeSnapshot } from "../../apps/control-ui/src/api/generated/light-wire";
 import { HttpPlaybackTopologyTransport } from "../../apps/control-ui/src/api/PlaybackTopologyTransport";
 import { encodePlaybackTopologyRequest } from "../../apps/control-ui/src/api/playbackTopologyWire";

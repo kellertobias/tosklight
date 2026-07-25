@@ -1,4 +1,4 @@
-import { expect } from "../../../apps/control-ui/e2e/bench/fixtures";
+import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
 import type { Page } from "../../../apps/control-ui/node_modules/@playwright/test/index.js";
 import {
 	executeProgrammerCommand,

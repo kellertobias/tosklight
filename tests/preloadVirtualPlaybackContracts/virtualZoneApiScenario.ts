@@ -1,9 +1,9 @@
-import type { Session } from "../../apps/control-ui/e2e/bench/api";
+import type { Session } from "../../apps/control-ui/e2e/bench/core/api";
 import {
 	type BenchContractContext,
 	expect,
 	test,
-} from "../../apps/control-ui/e2e/bench/fixtures";
+} from "../../apps/control-ui/e2e/bench/core/fixtures";
 import { object, putObject } from "../support/catalog";
 import {
 	activePlayback,

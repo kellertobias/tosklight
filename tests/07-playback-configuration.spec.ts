@@ -1,4 +1,4 @@
-import { test } from "../apps/control-ui/e2e/bench/fixtures";
+import { test } from "../apps/control-ui/e2e/bench/core/fixtures";
 import {
 	registerPbk001PairedScenario,
 	registerPbk001PhysicalControlsScenario,

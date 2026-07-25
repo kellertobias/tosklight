@@ -1,6 +1,6 @@
-import { expect, test } from "../../apps/control-ui/e2e/bench/fixtures";
-import { pairedScenario } from "../../apps/control-ui/e2e/bench/pairedScenario";
-import { applySpeedGroupRuntimeAction } from "../../apps/control-ui/e2e/bench/speedGroupRuntime";
+import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { pairedScenario } from "../../apps/control-ui/e2e/bench/core/pairedScenario";
+import { applySpeedGroupRuntimeAction } from "../../apps/control-ui/e2e/bench/playbacks/speedGroupRuntime";
 import {
 	armSet,
 	authoritativeMasterObservation,

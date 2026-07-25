@@ -137,7 +137,7 @@ a false repair.
 ```
 
 Steps 5 to 11 are identical for all three. Only 1 to 4 differ. `pairedScenario` in
-`apps/control-ui/e2e/bench/pairedScenario.ts` keeps that true.
+`apps/control-ui/e2e/bench/core/pairedScenario.ts` keeps that true.
 
 ## Exercises
 

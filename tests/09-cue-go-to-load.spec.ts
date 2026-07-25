@@ -1,6 +1,6 @@
-import { expect, test, type BenchUiContext } from "../apps/control-ui/e2e/bench/fixtures";
-import { ApiDriver } from "../apps/control-ui/e2e/bench/api";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
+import { expect, test, type BenchUiContext } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
+import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
 import { fixtureIdsByNumber, loadCanonicalCopy, object, pressCommand, putObject } from "./support/catalog";
 
 test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {

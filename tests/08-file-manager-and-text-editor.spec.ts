@@ -1,5 +1,5 @@
 import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
 
 test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
   test("FILE-001 @api › default root is confined and supports revision-safe UTF-8 text", async ({ api }) => {

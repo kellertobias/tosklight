@@ -3,15 +3,15 @@ import {
 	type BenchUiContext,
 	expect,
 	test,
-} from "../../apps/control-ui/e2e/bench/fixtures";
+} from "../../apps/control-ui/e2e/bench/core/fixtures";
 import {
 	type PairedScenario,
 	pairedScenario,
-} from "../../apps/control-ui/e2e/bench/pairedScenario";
+} from "../../apps/control-ui/e2e/bench/core/pairedScenario";
 import {
 	enterProgrammerPreload,
 	goProgrammerPreload,
-} from "../../apps/control-ui/e2e/bench/programmerPreloadLifecycle";
+} from "../../apps/control-ui/e2e/bench/programmer/programmerPreloadLifecycle";
 import { loadCanonicalCopy, programmer } from "../support/catalog";
 import {
 	activePlayback,

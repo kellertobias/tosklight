@@ -1,7 +1,7 @@
-import { scenario } from "../../apps/control-ui/e2e/bench/scenario";
+import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
 import {
 	fixture,
-} from "../../apps/control-ui/e2e/bench/selectionContract";
+} from "../../apps/control-ui/e2e/bench/command-selection/selectionContract";
 
 scenario(
 	"BENCH-COMMAND-SELECTION-001",

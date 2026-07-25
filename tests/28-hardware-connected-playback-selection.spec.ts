@@ -1,9 +1,9 @@
 import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
-import { setProgrammerFixtureValue } from "../apps/control-ui/e2e/bench/programmerValues";
-import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/programmingSelection";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
+import { setProgrammerFixtureValue } from "../apps/control-ui/e2e/bench/programmer/programmerValues";
+import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/command-selection/programmingSelection";
 import { fixtureIdsByNumber, loadCanonicalCopy, object, objects, programmer, putObject } from "./support/catalog";
 
 type Prepared = { firstCuelist: string; secondCuelist: string; showId: string };

@@ -1,12 +1,12 @@
-import { BrowserScenarioWorld } from "../../apps/control-ui/e2e/bench/browserScenario";
-import { DeskDriver } from "../../apps/control-ui/e2e/bench/desk";
-import { expect, test } from "../../apps/control-ui/e2e/bench/fixtures";
-import { PaneType } from "../../apps/control-ui/e2e/bench/paneTypes";
-import { scenario } from "../../apps/control-ui/e2e/bench/scenario";
+import { BrowserScenarioWorld } from "../../apps/control-ui/e2e/bench/core/browserScenario";
+import { DeskDriver } from "../../apps/control-ui/e2e/bench/core/desk";
+import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { PaneType } from "../../apps/control-ui/e2e/bench/window-system/paneTypes";
+import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
 import {
 	fixture,
 	fixtureRange,
-} from "../../apps/control-ui/e2e/bench/selectionContract";
+} from "../../apps/control-ui/e2e/bench/command-selection/selectionContract";
 
 scenario(
 	"BENCH-SELECTION-ROUTES-002",

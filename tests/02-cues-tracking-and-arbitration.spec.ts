@@ -1,7 +1,7 @@
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/api";
-import { expect, test } from "../apps/control-ui/e2e/bench/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/pairedScenario";
-import { applySpeedGroupRuntimeAction } from "../apps/control-ui/e2e/bench/speedGroupRuntime";
+import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
+import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
+import { applySpeedGroupRuntimeAction } from "../apps/control-ui/e2e/bench/playbacks/speedGroupRuntime";
 import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
 import { fixtureIdsByNumber, loadCanonicalCopy, object, objects, putObject } from "./support/catalog";
 
