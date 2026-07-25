@@ -160,6 +160,12 @@ The flow enforces these rules:
 - Programmer, Playback, Preload, and future Dynamics produce semantic attribute values; they never write DMX directly.
 - Highlight remains a transient overlay and is never recorded into Programmer or Cue data.
 - Programmer LTP and Playback arbitration remain distinct.
+- Group Masters are independent HTP intensity limiters, never LTP or lowest-takes-
+  precedence limiters and never parents or masters of one another. Only Groups that are
+  actually assigned as Group Master playbacks participate. Ordinary overlapping Group
+  membership does not suppress output, and overlapping active Group Masters contribute
+  by HTP: the highest applicable Group Master level wins before the Grand Master is
+  applied once above it.
 - Recording and Update pass through `ActiveShowService`; the render engine never writes persistence.
 - The render engine receives immutable compiled-show and contribution snapshots.
 - UI and OSC feedback derive from authoritative projections, never client-local approximations.
@@ -384,6 +390,13 @@ These are architectural tests using fakes, not production feature implementation
 - Operator-facing UI actions are immediate or show explicit pending, loading, progress, success, failure, cancellation, and retry states appropriate to the operation.
 - Invalid active shows still enter actionable recovery without destroying the original.
 - Preserve unpatched fixtures, stored-empty Groups, missing Group IDs, ordered selections, Programmer LTP, Playback arbitration, Preload, Highlight, Update, Move in Black, route termination, safe shutdown, and first post-restart output.
+- Prove Group Master overlap with a six-fixture source Group split into the stored
+  `[DIV] 2` and `[DIV] 2 [+] 1` selections: programming the even selection to 100% and
+  raising its assigned Group Master produces output. Membership in the original source
+  Group does not limit it when that Group has no assigned Group Master; if that source
+  Group is also assigned, its master combines by HTP rather than serial multiplication,
+  LTP, or lowest-takes-precedence. Only the Grand Master remains above the resolved
+  Group Master level.
 - Add contract coverage for command concurrency, primary/secondary session closure, reconnect gaps, atomic revision failure, unknown stored objects, fixture-profile upgrades, selective imports, and adapter lifecycle.
 - Event contract coverage proves that manual and automatic transitions publish the same semantic event once, a running Chaser updates subscribed Cue views without polling, narrow subscriptions receive only requested topics, reconnect gaps repair from an authoritative snapshot, and high-rate replaceable updates are coalesced without losing safety, error, or discrete transition events.
 - A fake animated value source, fake external-device adapter, and fake Macro runtime must plug in without modifying existing transport adapters, render arbitration, or output drivers.
