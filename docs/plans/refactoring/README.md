@@ -90,11 +90,13 @@ in-suite, both green in isolation).
 01–02 quick wins and the deferred CUE-011 bug, with 02b re-architecting persistence to
 write-behind autosave (api-rules §8) on top of 02's event/revision guarantees;
 03–06 server-owned show logic (§7),
-with 03b adopting `Next/50` (deterministic multi-point spread rule — cheapest while the
+with 03b adopting `Done/50` (deterministic multi-point spread rule — cheapest while the
 spread paths are being consolidated anyway) and 09b adopting the one refactoring-shaped
 item of `Next/64` (remove the direct programmer encoder type before migrating encoder
 paths to WS);
-07–08 small api-rules compliance enablers; 09–11 desk live control onto the WebSocket;
+07–08 small api-rules compliance enablers; 09–11 desk live control onto the WebSocket,
+with 10 adopting the atomic server-owned multi-attribute mutation seam from `Next/71`
+while leaving activation configuration and behavior in that feature plan;
 12 route de-scoping; 13–21 the v1 retirement tail (events first, then data surfaces,
 biggest one — 16 objects — in the middle); 22 capstone facade deletion; 23 housekeeping.
 Dependencies are noted inside each chunk (e.g. 05 after 03; 10–11 after 09; 17 after 16;

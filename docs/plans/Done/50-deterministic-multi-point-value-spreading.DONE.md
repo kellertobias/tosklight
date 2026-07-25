@@ -2,11 +2,18 @@
 
 ## Status
 
-**Specification only.** This minor feature defines deterministic multi-point spread behavior and the coverage required to prove it. It does not implement runtime behavior, executable tests, or operator-help changes.
+**Implementation status: Complete.** The deterministic multi-point spread resolver,
+cross-surface acceptance coverage, software encoder modal parity, and operator-help
+updates are implemented through the refactoring chunks linked below. This file remains
+the normative behavior and compatibility reference.
 
-**Adopted into the refactoring queue (2026-07-23):** implemented as chunk
-[`docs/plans/refactoring/pending/03b-deterministic-multi-point-spread-resolver.md`](../refactoring/pending/03b-deterministic-multi-point-spread-resolver.md),
-sequenced with the server-side spread consolidation. This file remains the normative spec.
+**Adopted into the refactoring queue and completed (2026-07-23):** implemented as
+chunk
+[`docs/plans/refactoring/done/03b-deterministic-multi-point-spread-resolver.md`](../refactoring/done/03b-deterministic-multi-point-spread-resolver.md),
+with follow-up acceptance chunks
+[`03b-b`](../refactoring/done/03b-b-spread-acceptance-surfaces.md) and
+[`03b-c`](../refactoring/done/03b-c-software-encoder-modal-thru-parity.md). This file
+remains the normative spec and compatibility reference.
 
 ## Goal
 

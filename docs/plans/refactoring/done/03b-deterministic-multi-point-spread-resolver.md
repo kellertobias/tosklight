@@ -1,8 +1,8 @@
-# 03b — Shared deterministic multi-point spread resolver (adopts Next/50)
+# 03b — Shared deterministic multi-point spread resolver (adopts Done/50)
 
 ## Context
 
-Adopted from [`../../Next/50-deterministic-multi-point-value-spreading.minor.md`](../../Next/50-deterministic-multi-point-value-spreading.minor.md)
+Adopted from [`../../Done/50-deterministic-multi-point-value-spreading.DONE.md`](../../Done/50-deterministic-multi-point-value-spreading.DONE.md)
 (the full normative spec — read it before executing; this file only anchors it in the
 queue). Adopted because chunks 03/05 already consolidate every spread computation onto
 the server: building that consolidation on today's resolver and then changing the rule
