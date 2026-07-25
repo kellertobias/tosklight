@@ -1,7 +1,7 @@
 > [!CAUTION]
 > **NOT YET IMPLEMENTABLE — STOP.** This file records exploratory product ideas, not an implementation-ready specification. If asked to implement it while this warning remains, refuse the implementation and explicitly warn that the Macro language, host API, permissions, lifecycle, scheduling, persistence, UI, failure behavior, and acceptance criteria have not been settled. Implementation may begin only after the user edits this document, removes this gate, resolves the open decisions, and marks the plan **IMPLEMENTABLE**.
 
-# Macros and Scheduled Macros
+# Macros
 
 ## Status and intent
 
@@ -67,21 +67,11 @@ The exact prompt UI, OSC reachability, ownership, and multi-user behavior remain
 
 The behavior of duplicate triggers, re-entry, parallel instances, cancellation when a source releases, and Cue tracking must be decided before implementation.
 
-## Scheduled Macros
+## Scheduled Macro execution
 
-A scheduled Macro is specifically a wall-clock trigger. The current direction includes:
+Wall-clock scheduling is owned by [Schedules](../Next/53-schedules.md). Once Macros exist, that plan's **Start Macro** action starts a Macro by stable Macro identity through the same `MacroService` used by manual, Cue, Playback, Timecode, HTTP, OSC, or other supported Macro triggers.
 
-- daily execution at a configured local time; and
-- one-time execution at a specific date and time.
-
-Schedules are expected to be portable show objects referencing a Macro by stable ID. A schedule is active only while its owning show is active and the desk is running.
-
-Each schedule should eventually declare its missed-run policy:
-
-- skip an occurrence missed while the desk or show was inactive; or
-- execute the most recent missed occurrence once after the desk and owning show become active.
-
-The implementation must store timezone and occurrence identity explicitly so daylight-saving changes and restarts cannot execute an occurrence twice. Exact timezone editing, clock correction, catch-up limits, and restart behavior remain unresolved.
+This Macro plan must therefore define the Macro runtime side of scheduled execution: stable Macro identity, source context, duplicate-trigger policy, permissions, cancellation, failure reporting, and interaction with long-running instances. It must not duplicate the Schedule trigger model, timezone policy, missed-run policy, occurrence identity, or scheduler persistence.
 
 ## Architectural expectations
 
@@ -92,7 +82,7 @@ The major refactor should leave these extension points without implementing Macr
 - revisioned Show commands for position changes and other portable mutations;
 - a typed event stream and correlation IDs;
 - a supervised task and cancellation boundary outside the render loop;
-- a shared monotonic runtime scheduler plus a distinct wall-clock scheduling service;
+- a shared monotonic runtime scheduler for Macro timers, plus compatibility with the distinct wall-clock Schedule service;
 - an application-owned HTTP client port;
 - typed operator interaction requests and responses;
 - selective cross-show import with dependency handling; and
@@ -113,11 +103,11 @@ At minimum, the following must be decided before this plan becomes implementable
 7. Error handling, retry, partial completion, audit, logging, and operator-visible diagnostics.
 8. Parallel execution, duplicate triggers, re-entry, nesting, and deadlock prevention.
 9. Cue, Playback, Timecode, and other trigger semantics.
-10. Scheduled-Macro timezone, missed-run, clock-change, duplicate-prevention, and recovery behavior.
+10. Scheduled Macro start semantics, duplicate-trigger behavior, source context, and failure/cancellation behavior; wall-clock trigger, timezone, missed-run, clock-change, occurrence identity, and scheduler recovery behavior remain owned by [Schedules](../Next/53-schedules.md).
 11. Cross-show import, dependency discovery, conflicts, and reference rewriting.
 12. Editing, validation, syntax feedback, debugging, and safe test workflow.
 13. Persistence migrations and behavior when a runtime or language version is unavailable.
-14. Literal acceptance scenarios covering manual, Cue, Timecode, scheduled, interactive, long-running, HTTP, failure, restart, and cancellation paths.
+14. Literal acceptance scenarios covering manual, Cue, Timecode, Schedule-triggered, interactive, long-running, HTTP, failure, restart, and cancellation paths.
 
 ## Gate for future implementation
 
