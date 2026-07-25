@@ -7,6 +7,12 @@ Store, Update, Preload, Clear, Undo, keypad, and context-menu routing with expli
 
 Estimated effort: 0.4–0.7 Codex day.
 
+## Queue dependency
+
+Pending, blocked until plan 02 stabilizes reusable callback contracts, application adapters,
+modal ownership, and the hardware/software component split. This plan changes the same desktop
+controls, modal paths, interaction stories, and focused UI verification.
+
 ## Required work
 
 1. Characterize active-surface precedence and every software, keyboard, context-click, OSC, and

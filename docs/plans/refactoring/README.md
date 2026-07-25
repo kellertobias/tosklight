@@ -30,14 +30,14 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 | 04 | [Empty-selection object target selection](pending/04-empty-selection-object-target-selection.md) | Waiting for stable application pool adapters from plan 02. |
 | 05 | [Warm frontend state for instant surface switching](pending/05-warm-frontend-state-for-instant-switching.md) | Waiting for stable frontend provider and Storybook-harness boundaries from plan 02. |
 | 06 | [Exclusive active-show mutation boundary](pending/06-exclusive-active-show-mutation-boundary.md) | Route every active-show write through one transaction owner. |
-| 07 | [Typed commands, events, and Highlight service](pending/07-typed-commands-events-and-highlight-service.md) | Remove the remaining string/JSON compatibility transport and duplicate Highlight orchestration. |
-| 08 | [Typed control-surface interaction routing](pending/08-typed-control-surface-interaction-routing.md) | Remove DOM-discovered SET, Store, Update, and keypad routing. |
-| 09 | [Patch performance benchmarks](pending/09-patch-performance-benchmarks.md) | Retain server and visible-UI timing evidence for Patch. |
-| 10 | [Complete shared control-surface contracts](pending/10-complete-shared-control-surface-contracts.md) | Share stable OSC, layout, Highlight, and playback intent contracts between applications. |
-| 11 | [Packaged operator and reference-hardware verification](pending/11-packaged-operator-and-reference-hardware-verification.md) | Finish visual, packaged-app, output, Mac, and low-power evidence. |
-| 12 | [Typed active-show object contracts](pending/12-typed-active-show-object-contracts.md) | Remove generic JSON from application-level active-show mutations and events. |
-| 13 | [Capability-owned application state](pending/13-capability-owned-application-state.md) | Replace the large raw-lock `AppState` container with capability-owned resources. |
-| 14 | [Modular desktop host](pending/14-modular-desktop-host.md) | Leave the Tauri entry point as composition only. |
+| 07 | [Typed commands, events, and Highlight service](pending/07-typed-commands-events-and-highlight-service.md) | Waiting for stable desktop providers, generated-client consumers, and frontend verification after plan 02. |
+| 08 | [Typed control-surface interaction routing](pending/08-typed-control-surface-interaction-routing.md) | Waiting for plan 02's component callback and modal/interaction boundaries. |
+| 09 | [Patch performance benchmarks](pending/09-patch-performance-benchmarks.md) | Waiting for plan 02 and plan 05's stable client-store and visible-paint path. |
+| 10 | [Complete shared control-surface contracts](pending/10-complete-shared-control-surface-contracts.md) | Waiting for plans 07–08 to stabilize typed command and interaction names. |
+| 11 | [Packaged operator and reference-hardware verification](pending/11-packaged-operator-and-reference-hardware-verification.md) | Waiting for the accepted frontend and access to the required reference hardware. |
+| 12 | [Typed active-show object contracts](pending/12-typed-active-show-object-contracts.md) | Waiting for plan 07's final semantic event and generated-client boundaries. |
+| 13 | [Capability-owned application state](pending/13-capability-owned-application-state.md) | Waiting for plan 07's mutation/event owners, as required by the plan. |
+| 14 | [Modular desktop host](pending/14-modular-desktop-host.md) | Next independent plan; leave the Tauri entry point as composition only. |
 
 Product-roadmap work under `docs/plans/Next` and `docs/plans/Later` remains separate unless a queue
 file explicitly links it as its behavior contract.
@@ -48,6 +48,6 @@ Plans under `pending/storybook changes/` form one frontend-owned lane. A `.WORKI
 its active ownership. That lane may run concurrently with the lowest-numbered unblocked plan only
 when its files, contracts, runtime state, and verification do not overlap.
 
-Plan 02 is currently active in that lane. Plans 03–05 record explicit dependencies on its shared
-pool, application-adapter, or provider boundaries. Plan 06 is therefore the next independent
-numbered plan.
+Plan 02 is currently active in that lane. Plans 03–05 and 07–13 record explicit dependencies on
+its shared components, application adapters, providers, generated consumers, or downstream typed
+contracts. Plan 06 completed independently; plan 14 is the next independent numbered plan.

@@ -7,6 +7,12 @@ Close operational evidence that cannot be established by unit tests or a develop
 Estimated effort: 0.5–1 Codex day plus access to the reference Mac, attached controls, and
 Pi-class hardware.
 
+## Queue dependency
+
+Pending, blocked until plan 02's frontend is accepted and its screenshot/visual harness is stable.
+Completion also requires the named reference Mac, attached controls, and Pi-class host; development
+or mocked evidence cannot substitute for those acceptance surfaces.
+
 ## Required work
 
 1. Stabilize the serial visual-catalog capture harness and finish every catalog case.

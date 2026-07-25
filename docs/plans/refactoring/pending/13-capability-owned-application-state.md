@@ -8,6 +8,11 @@ performed capability by capability rather than as one untestable rewrite.
 
 Estimated effort: 1–2 Codex days after plans 06 and 07 establish mutation and event owners.
 
+## Queue dependency
+
+Pending. Plan 06 is complete, but plan 07's event and Highlight owners remain blocked on the active
+Storybook lane. Do not split `AppState` before both required ownership boundaries exist.
+
 ## Required work
 
 1. Inventory every `AppState` field, lock, owner, mutation path, query path, lifecycle, and

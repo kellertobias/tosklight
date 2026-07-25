@@ -8,6 +8,12 @@ application service.
 
 Estimated effort: 1.3–2 Codex days.
 
+## Queue dependency
+
+Pending, blocked until plan 02 stabilizes desktop provider/store consumers, generated-client
+contracts, architecture checks, and frontend verification. Required work 4–5 edits those exact
+surfaces, so this plan must not run concurrently with the active Storybook lane.
+
 ## Required work
 
 1. Inventory every production `WsCommand { command: String, payload: Value }` caller/handler and

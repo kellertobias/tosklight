@@ -8,6 +8,12 @@ importing another application's internals.
 
 Estimated effort: 0.3–0.6 Codex day.
 
+## Queue dependency
+
+Pending, blocked until plans 07 and 08 establish the final typed command, event, Highlight, and
+interaction names that this cross-application package must expose. Starting earlier would create a
+second temporary compatibility contract.
+
 ## Required work
 
 1. Inventory stable shared keypad IDs, OSC action/path mappings, Highlight actions, playback

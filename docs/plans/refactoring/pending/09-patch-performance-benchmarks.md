@@ -7,6 +7,12 @@ Retain end-to-end evidence for the Patch mutation budgets already specified in
 
 Estimated effort: 1–2 Codex days.
 
+## Queue dependency
+
+Pending, blocked until plan 02's Patch presentation/adapters and plan 05's client-store warm-up and
+visible-paint path are stable. The benchmark must measure the accepted production path rather than
+an adapter or component structure still being replaced.
+
 ## Required work
 
 1. Add warmed single-fixture and 100-fixture `PatchFixtures` benchmarks through the real
