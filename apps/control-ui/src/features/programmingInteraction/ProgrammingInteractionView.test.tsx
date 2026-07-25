@@ -16,6 +16,7 @@ import type {
 import {
 	ProgrammingInteractionViewProvider,
 	useProgrammingCommandLineView,
+	useProgrammingDeleteCommandActive,
 	useProgrammingPendingCommandChoiceView,
 	useProgrammingSelectionActions,
 } from "./ProgrammingInteractionView";
@@ -64,6 +65,11 @@ function CommandProbe({
 	onRender();
 	const command = useProgrammingCommandLineView(visible);
 	return <span>{command?.text ?? (visible ? "Loading" : "Hidden")}</span>;
+}
+
+function DeleteCommandProbe() {
+	const active = useProgrammingDeleteCommandActive();
+	return <span>{active ? "Delete armed" : "Delete inactive"}</span>;
 }
 
 function SurfaceProbe({ active }: { active: boolean }) {
@@ -228,6 +234,43 @@ describe("ProgrammingInteractionViewProvider", () => {
 		);
 
 		expect(onRender).toHaveBeenCalledTimes(renderCount);
+	});
+
+	it("arms pane-title deletion only for the exact shared DELETE command", async () => {
+		const store = new ProgrammingInteractionStore();
+		const transport = new FakeProgrammingTransport();
+		render(
+			<ProgrammingInteractionViewProvider
+				showId={SHOW_ID}
+				deskId={DESK_ID}
+				store={store}
+				transport={transport}
+				loadSnapshot={async () => programmingSnapshot()}
+			>
+				<DeleteCommandProbe />
+			</ProgrammingInteractionViewProvider>,
+		);
+		await screen.findByText("Delete inactive");
+
+		act(() =>
+			transport.emit({
+				type: "event",
+				sequence: 20,
+				correlationId: null,
+				change: commandChange({ revision: 2, text: "DELETE" }),
+			}),
+		);
+		expect(screen.getByText("Delete armed")).toBeInTheDocument();
+
+		act(() =>
+			transport.emit({
+				type: "event",
+				sequence: 21,
+				correlationId: null,
+				change: commandChange({ revision: 3, text: "DELETE 1" }),
+			}),
+		);
+		expect(screen.getByText("Delete inactive")).toBeInTheDocument();
 	});
 
 	it("observes pending choice without rerendering for ordinary command edits", async () => {

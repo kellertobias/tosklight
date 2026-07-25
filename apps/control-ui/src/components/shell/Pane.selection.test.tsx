@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PaneModel } from "../../types";
 import { Pane } from "./Pane";
@@ -8,9 +8,14 @@ const selectionView = vi.hoisted(() =>
 		enabled ? { selected: ["fixture-a", "fixture-b"] } : null,
 	),
 );
+const deleteCommandActive = vi.hoisted(() => vi.fn(() => false));
+const commandLineReset = vi.hoisted(() => vi.fn(() => Promise.resolve(true)));
+const dispatch = vi.hoisted(() => vi.fn());
 
 vi.mock("../../features/programmingInteraction/ProgrammingInteractionView", () => ({
 	useProgrammingSelectionView: selectionView,
+	useProgrammingDeleteCommandActive: deleteCommandActive,
+	useProgrammingCommandLineActions: () => ({ reset: commandLineReset }),
 }));
 vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({
@@ -19,7 +24,7 @@ vi.mock("../../state/AppContext", () => ({
 			stageView: "2d",
 			presetFamily: "Intensity",
 		},
-		dispatch: vi.fn(),
+		dispatch,
 	}),
 }));
 vi.mock("../../windows/WindowRegistry", () => ({
@@ -27,13 +32,33 @@ vi.mock("../../windows/WindowRegistry", () => ({
 		stage: () => <div>Stage body</div>,
 		fixtures: () => <div>Fixture body</div>,
 		groups: () => <div>Group body</div>,
+		file_manager: () => <div>File Manager body</div>,
 	},
 }));
 vi.mock("../common", () => ({ Button: () => null }));
 vi.mock("../shared/SourceLegend", () => ({ SourceLegend: () => null }));
 vi.mock("../window-kit", () => ({
-	WindowHeader: ({ info }: { info?: { primary: React.ReactNode } }) => (
-		<header>{info?.primary}</header>
+	WindowHeader: ({
+		info,
+		onTitleClick,
+		titleActionLabel,
+	}: {
+		info?: { primary: React.ReactNode };
+		onTitleClick?: () => void;
+		titleActionLabel?: string;
+	}) => (
+		<header>
+			{info?.primary}
+			{onTitleClick && (
+				<button
+					type="button"
+					aria-label={titleActionLabel}
+					onClick={onTitleClick}
+				>
+					Title action
+				</button>
+			)}
+		</header>
 	),
 }));
 vi.mock("./PaneChromeContext", () => ({
@@ -55,6 +80,10 @@ function pane(kind: PaneModel["kind"]): PaneModel {
 afterEach(() => {
 	cleanup();
 	selectionView.mockClear();
+	deleteCommandActive.mockReset();
+	deleteCommandActive.mockReturnValue(false);
+	commandLineReset.mockClear();
+	dispatch.mockClear();
 });
 
 describe("Pane selection scope", () => {
@@ -80,5 +109,27 @@ describe("Pane selection scope", () => {
 			<Pane pane={pane("groups")} active maximized={false} editing={false} />,
 		);
 		expect(selectionView).toHaveBeenLastCalledWith(false);
+	});
+
+	it("removes the pane from its title and clears the shared command when DELETE is active", () => {
+		deleteCommandActive.mockReturnValue(true);
+		render(
+			<Pane
+				pane={pane("file_manager")}
+				active
+				maximized={false}
+				editing={false}
+			/>,
+		);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Remove File Manager pane" }),
+		);
+
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "REMOVE_PANE",
+			id: "file_manager",
+		});
+		expect(commandLineReset).toHaveBeenCalledOnce();
 	});
 });

@@ -12,6 +12,15 @@ describe("window kit", () => {
     const header = container.querySelector(".ui-window-header")!;
     expect([...header.children].indexOf(screen.getByText("Search control").parentElement!)).toBeLessThan([...header.children].indexOf(container.querySelector(".ui-window-action-groups")!));
   });
+  it("makes an armed window-title action pointer and keyboard operable", () => {
+    const remove = vi.fn();
+    render(<WindowHeader title="Fixture Sheet" onTitleClick={remove} titleActionLabel="Remove Fixture Sheet pane" />);
+    const title = screen.getByRole("button", { name: "Remove Fixture Sheet pane" });
+    fireEvent.click(title);
+    fireEvent.keyDown(title, { key: "Enter" });
+    fireEvent.keyDown(title, { key: " " });
+    expect(remove).toHaveBeenCalledTimes(3);
+  });
   it("switches settings tabs and closes", () => {
     const close = vi.fn();
     render(<WindowSettings title="Pane Settings" tabs={[{ id: "pane", label: "Pane Settings", content: "Size" },{ id: "pool", label: "Pool", content: "Family" }]} onClose={close} />);

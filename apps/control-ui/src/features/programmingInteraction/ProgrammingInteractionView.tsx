@@ -231,6 +231,20 @@ export function useProgrammingCommandLineView(enabled = true, observe = true) {
 	);
 }
 
+export function useProgrammingDeleteCommandActive(enabled = true) {
+	useProgrammingCapabilityView("commandLine", enabled);
+	return useProgrammingSelector(
+		useCallback(
+			(state: ProgrammingInteractionState) =>
+				enabled &&
+				state.commandLine?.text.trim().toUpperCase() === "DELETE",
+			[enabled],
+		),
+		Object.is,
+		enabled,
+	);
+}
+
 /**
  * Whether scoped command-line authority is installed for the current scope.
  *

@@ -40,7 +40,7 @@ function WindowActionButton({ action }: { action: WindowAction }) {
   >{action.label}</Button>;
 }
 
-export function WindowHeader({ title, info, search, toolbar, actions = [], settings, onSettings, dragHandleProps }: {
+export function WindowHeader({ title, info, search, toolbar, actions = [], settings, onSettings, dragHandleProps, onTitleClick, titleActionLabel }: {
   title: ReactNode;
   info?: WindowInfo;
   search?: ReactNode;
@@ -49,9 +49,23 @@ export function WindowHeader({ title, info, search, toolbar, actions = [], setti
   settings?: boolean;
   onSettings?: (anchor: HTMLElement) => void;
   dragHandleProps?: React.HTMLAttributes<HTMLElement>;
+  onTitleClick?: () => void;
+  titleActionLabel?: string;
 }) {
   return <header className="ui-window-header" {...dragHandleProps}>
-    <strong className="ui-window-title">{title}</strong>
+    <strong
+      className={`ui-window-title ${onTitleClick ? "ui-window-title-action" : ""}`}
+      role={onTitleClick ? "button" : undefined}
+      tabIndex={onTitleClick ? 0 : undefined}
+      aria-label={onTitleClick ? titleActionLabel : undefined}
+      onPointerDown={onTitleClick ? (event) => event.stopPropagation() : undefined}
+      onClick={onTitleClick}
+      onKeyDown={onTitleClick ? (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onTitleClick();
+      } : undefined}
+    >{title}</strong>
     {info && <span className="ui-window-info"><b>{info.primary}</b>{info.secondary != null && <small>{info.secondary}</small>}</span>}
     <span className="ui-window-header-spacer" />
     {search && <div className="ui-window-header-search">{search}</div>}
