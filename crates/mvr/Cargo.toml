@@ -11,3 +11,5 @@ thiserror.workspace = true
 uuid.workspace = true
 zip.workspace = true
 
+[lints]
+workspace = true

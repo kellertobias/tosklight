@@ -57,3 +57,6 @@ tokio = { workspace = true, features = ["test-util"] }
 
 [target.'cfg(unix)'.dependencies]
 xattr = "1.6"
+
+[lints]
+workspace = true

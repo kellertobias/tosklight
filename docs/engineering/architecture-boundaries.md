@@ -33,6 +33,19 @@ control-ui / HTTP / WebSocket / OSC / MIDI / Matter adapters
 These rules are checked by `npm run test:architecture`. An intentional boundary change must update
 this contract and the checker in the same commit.
 
+## Workspace lint inheritance
+
+Every Cargo workspace member must declare:
+
+```toml
+[lints]
+workspace = true
+```
+
+Rust and Clippy policy belongs in the root `[workspace.lints]` tables. The architecture check reads
+the actual members returned by `cargo metadata` and fails if any member does not inherit that
+policy. This prevents a newly added crate from silently compiling without workspace lint rules.
+
 ## Action context
 
 Every application mutation carries an `ActionContext` with stable desk, user, session, source-surface, correlation, and request identities plus the expected revision when the target is revisioned. Adapters may derive this context from HTTP authentication, the shared desk OSC session, attached hardware, a scheduler, or a future Macro host. They may not invent a second ownership model for the use case.

@@ -16,6 +16,9 @@ import {
 import {
   scanSemanticWorldFiles,
 } from "./test-semantic-world-boundaries.mjs";
+import {
+  workspaceLintInheritanceFailures,
+} from "./cargo-workspace-lints.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
@@ -47,6 +50,8 @@ function rustDependencyDirections() {
   const workspaceIds = new Set(metadata.workspace_members);
   const workspacePackages = metadata.packages.filter((candidate) => workspaceIds.has(candidate.id));
   const workspaceNames = new Set(workspacePackages.map((candidate) => candidate.name));
+
+  for (const failure of workspaceLintInheritanceFailures(metadata)) fail(failure);
 
   for (const packageMetadata of workspacePackages) {
     const manifest = relative(packageMetadata.manifest_path);
