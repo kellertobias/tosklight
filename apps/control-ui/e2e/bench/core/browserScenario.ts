@@ -12,6 +12,7 @@ import {
 import { BrowserRoutedSelection } from "../command-selection/routedSelectionScenario";
 import type { SelectionTarget } from "../command-selection/selectionContract";
 import { BrowserSelection } from "../command-selection/selectionScenario";
+import { BrowserAttachedEncoders } from "../encoders/attachedEncoderScenario";
 import { BrowserEncoders } from "../encoders/encoderScenario";
 import { BrowserGroups } from "../groups-presets/groupScenario";
 import { BrowserPresets } from "../groups-presets/presetScenario";
@@ -20,6 +21,7 @@ import {
 	type SimulatedHardware,
 	simulatedHardware,
 } from "../hardware/hardwareScenario";
+import { BrowserHardwareSimulator } from "../hardware/hardwareSimulatorScenario";
 import { BrowserDmx, type DmxUniverseExpectation } from "../output/dmxScenario";
 import {
 	type FixtureDMXExpectation,
@@ -53,6 +55,7 @@ import { BrowserProgrammerSpecials } from "../programmer/programmerSpecialScenar
 import { BrowserProductDemo } from "../show/productDemoScenario";
 import { BrowserShows } from "../show/showScenario";
 import { BrowserPatch } from "../show-setup/patchScenario";
+import { BrowserSystemIntegrations } from "../show-setup/systemIntegrationScenario";
 import { BrowserFiles } from "../specific-features/fileTextScenario";
 import { BrowserDeskLock } from "../window-system/deskLockScenario";
 import { BrowserDesktops } from "../window-system/desktopScenario";
@@ -109,7 +112,9 @@ export class BrowserScenarioWorld {
 	readonly keypad: BrowserKeypad;
 	readonly selection: BrowserRoutedSelection;
 	readonly encoder: BrowserEncoders;
+	readonly attachedEncoder: BrowserAttachedEncoders;
 	readonly hardware: SimulatedHardware;
+	readonly hardwareSimulator: BrowserHardwareSimulator;
 	readonly crossSurface: BrowserCrossSurface;
 	readonly highlight: BrowserHighlight;
 	readonly group: BrowserGroups;
@@ -124,6 +129,7 @@ export class BrowserScenarioWorld {
 	readonly moveInBlack: BrowserMoveInBlack;
 	readonly playbackConfiguration: BrowserPlaybackConfiguration;
 	readonly patch: BrowserPatch;
+	readonly systemIntegration: BrowserSystemIntegrations;
 	readonly dmx: BrowserDmx;
 	readonly output: BrowserOutput;
 	readonly timing: BrowserTiming;
@@ -202,6 +208,7 @@ export class BrowserScenarioWorld {
 		this.command = new BrowserCommands(api, desk, page);
 		this.keypad = new BrowserKeypad(desk, page);
 		this.hardware = simulatedHardware(bench, api);
+		this.hardwareSimulator = new BrowserHardwareSimulator(page);
 		this.crossSurface = new BrowserCrossSurface(
 			api,
 			bench,
@@ -229,6 +236,7 @@ export class BrowserScenarioWorld {
 			this.hardware,
 			`${this.routeSeed}:encoder`,
 		);
+		this.attachedEncoder = new BrowserAttachedEncoders(api, bench, page);
 		this.highlight = new BrowserHighlight(page, api, this.hardware);
 		this.group = new BrowserGroups(
 			api,
@@ -304,6 +312,7 @@ export class BrowserScenarioWorld {
 			() => this.show.contractIdentity().workingId,
 		);
 		this.patch = new BrowserPatch(api, page, desk);
+		this.systemIntegration = new BrowserSystemIntegrations(api, page);
 		this.dmx = new BrowserDmx(api);
 		this.output = new BrowserOutput(api, desk, page);
 		this.programmer = new BrowserProgrammer(api);
@@ -312,6 +321,8 @@ export class BrowserScenarioWorld {
 			page,
 			desk,
 			coreSelection,
+			this.hardware,
+			() => this.show.contractIdentity().workingId,
 		);
 		this.timing = new BrowserTiming(
 			api,

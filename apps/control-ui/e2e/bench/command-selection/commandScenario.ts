@@ -39,10 +39,12 @@ export class BrowserCommands {
 	private readonly ui: CommandAdapter;
 	private readonly apiRoute: CommandAdapter;
 	readonly via: { ui: CommandActionSurface; api: CommandActionSurface };
+	readonly history: BrowserCommandHistory;
 
 	constructor(api: ApiDriver, desk: DeskDriver, page?: Page) {
 		this.ui = new CommandAdapter("ui", api, desk, page);
 		this.apiRoute = new CommandAdapter("api", api, desk, page);
+		this.history = new BrowserCommandHistory(api, desk, page);
 		this.via = {
 			ui: new CommandActionSurface(this.ui),
 			api: new CommandActionSurface(this.apiRoute),
@@ -63,6 +65,72 @@ export class BrowserCommands {
 
 	expect(text: CommandExpectation): Promise<void> {
 		return this.ui.expect(text);
+	}
+}
+
+type CommandHistoryEntry = {
+	command: string;
+	status: "accepted" | "rejected";
+	feedback: string;
+};
+
+export class BrowserCommandHistory {
+	constructor(
+		private readonly api: ApiDriver,
+		private readonly desk: DeskDriver,
+		private readonly page?: Page,
+	) {}
+
+	async expectAcceptedAndRejected(): Promise<void> {
+		const page = this.browser();
+		await this.enter("FIXTURE 1 AT 25");
+		await this.enter("FIXTURE 1 AT 101");
+		await expect.poll(async () => (await this.entries()).length).toBe(2);
+
+		const input = page.getByRole("textbox", {
+			name: "Command line",
+			exact: true,
+		});
+		await this.desk.click(input);
+		const panel = page.getByRole("dialog", {
+			name: "Command line history",
+			exact: true,
+		});
+		await expect(panel).toBeVisible();
+		await expect(panel.locator(".command-history-entry")).toHaveCount(2);
+		const entries = await this.entries();
+		expect(
+			entries.map(({ command, status }) => ({ command, status })),
+		).toEqual([
+			{ command: "FIXTURE 1 AT 101", status: "rejected" },
+			{ command: "FIXTURE 1 AT 25", status: "accepted" },
+		]);
+		expect(entries[0]?.feedback).toMatch(/within 0-100/i);
+		expect(entries[1]?.feedback).toBe("Applied to 1 target(s)");
+	}
+
+	private async enter(value: string): Promise<void> {
+		const page = this.browser();
+		const input = page.getByRole("textbox", {
+			name: "Command line",
+			exact: true,
+		});
+		if (
+			await input.evaluate((element) => element.classList.contains("completed"))
+		)
+			await this.desk.click(page.locator(".command-escape:visible").first());
+		await input.fill(value);
+		await input.press("Enter");
+	}
+
+	private entries(): Promise<CommandHistoryEntry[]> {
+		return this.api.request("GET", "/api/v2/command-history");
+	}
+
+	private browser(): Page {
+		if (!this.page)
+			throw new Error("Command history requires a browser page");
+		return this.page;
 	}
 }
 

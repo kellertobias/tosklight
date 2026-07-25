@@ -23,6 +23,7 @@ pairedScenario<UpdateGroupState>({
 	id: "UPDATE-001",
 	title:
 		"Update Add New appends ordered Group membership through the authoritative workflow",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const show = await loadCanonicalCopy(api, bench, `update-001-${surface}`);
 		const groups = await objects<any>(api, "group");

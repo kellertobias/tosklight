@@ -1,5 +1,8 @@
-import type { Page } from "@playwright/test";
-import type { HighlightAction, HighlightState } from "../../../src/api/types/desk";
+import { expect, type Page } from "@playwright/test";
+import type {
+	HighlightAction,
+	HighlightState,
+} from "../../../src/api/types/desk";
 import type { ApiDriver } from "../core/api";
 import type { OscHardware } from "../core/protocols";
 
@@ -127,7 +130,11 @@ export class BrowserHighlight {
 		osc: HighlightControl;
 	};
 
-	constructor(page: Page, api: ApiDriver, hardware: Pick<OscHardware, "send">) {
+	constructor(
+		page: Page,
+		private readonly api: ApiDriver,
+		hardware: Pick<OscHardware, "send">,
+	) {
 		this.via = {
 			ui: new HighlightControl(highlightUiPort(page, api)),
 			api: new HighlightControl(highlightApiPort(api)),
@@ -147,6 +154,30 @@ export class BrowserHighlight {
 
 	toggle() {
 		return this.via.ui.toggle();
+	}
+
+	async expectSelection(...numbers: number[]): Promise<void> {
+		const fixtures = new Map(
+			(await this.api.patch()).fixtures.map((fixture) => [
+				fixture.fixture_id,
+				fixture.fixture_number,
+			]),
+		);
+		await expect
+			.poll(async () => {
+				const states = await this.api.request<
+					Array<{ session_id: string; selected: string[] }>
+				>("GET", "/api/v2/programmers");
+				const state = states.find(
+					(candidate) => candidate.session_id === this.api.session?.session_id,
+				);
+				return state?.selected.map((id) => fixtures.get(id)) ?? [];
+			})
+			.toEqual(numbers);
+	}
+
+	waitForControlDebounce(): Promise<void> {
+		return new Promise((resolve) => setTimeout(resolve, 175));
 	}
 }
 

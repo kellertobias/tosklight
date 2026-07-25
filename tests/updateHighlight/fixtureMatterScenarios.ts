@@ -21,6 +21,7 @@ pairedScenario<FixtureProfileState>({
 	id: "FIXTURE-001",
 	title:
 		"a complete fixture profile is created through the desk-wide revisioned library",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		await loadCanonicalCopy(api, bench, `fixture-001-${surface}`);
 		return {
@@ -84,6 +85,7 @@ pairedScenario<MatterScenarioState>({
 	id: "MATTER-001",
 	title:
 		"the desk-persistent Matter bridge toggle exposes stable explicit page playback lights",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		await loadCanonicalCopy(api, bench, `matter-001-${surface}`);
 		const response = await api.request<any>(

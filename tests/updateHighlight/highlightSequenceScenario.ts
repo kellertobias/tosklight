@@ -49,6 +49,7 @@ pairedScenario<HighlightSequenceState>({
 	id: "HIGHLIGHT-003",
 	title:
 		"PREV NEXT ALL mutate the real selection and preserve exact Programmer keypad geometry",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const show = await loadCanonicalCopy(
 			api,

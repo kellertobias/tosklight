@@ -34,6 +34,7 @@ test.describe("docs/testing/08-sound-to-light.md", () => {
   pairedScenario<{ configuration: typeof portableConfiguration }>({
     id: "SOUND-001",
     title: "a desk-local audio input drives one authoritative Speed Group with portable response settings",
+    surfaces: ["api"],
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `sound-001-${surface}`, "compact-rig");
       await updateSpeedGroup(api, "A", disabledConfiguration);

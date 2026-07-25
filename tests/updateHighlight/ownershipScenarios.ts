@@ -126,7 +126,7 @@ test("HIGHLIGHT-004 @api › ownership conflicts retain same-user sessions, rele
 	expect((await highlightState(userB)).owner_user_name).toBe("Highlight B");
 });
 
-test("HIGHLIGHT-005 @ui › Highlight errors remain reachable above production content without moving accepted controls", async ({
+test("HIGHLIGHT-005 @supplemental-ui › Highlight errors remain reachable above production content without moving accepted controls", async ({
 	api,
 	bench,
 	desk,

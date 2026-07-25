@@ -236,6 +236,62 @@ export class BrowserPlaybacks {
 		return this.selectVia("ui", number);
 	}
 
+	async nameTargetCuelist(number: number, name: string) {
+		number = validInteger(number, "Playback");
+		const nextName = name.trim();
+		if (!nextName) throw new Error("Cuelist name must not be empty");
+		const definition = await this.requiredDefinition(number);
+		if (definition.body.target.type !== "cue_list")
+			throw new Error(`Playback ${number} does not target a Cuelist`);
+		const cueListId = definition.body.target.cue_list_id;
+		const cueList = await this.api.showObject<any>(
+			this.showId(),
+			"cue_list",
+			cueListId,
+		);
+		if (!cueList) throw new Error(`Cuelist ${cueListId} is absent`);
+		await this.api.seedShowObject(
+			this.showId(),
+			"cue_list",
+			cueListId,
+			{ ...cueList.body, name: nextName },
+			cueList.revision,
+		);
+	}
+
+	async selectFromHardwareCard(number: number) {
+		number = validInteger(number, "Playback");
+		if (!this.hardware.connected)
+			throw new Error(
+				"Hardware-card selection requires hardware.connect() first",
+			);
+		await this.desk.recordStep(
+			"HARDWARE PLAYBACK SELECT",
+			`Select concrete Playback ${number} from its attached-hardware card header.`,
+		);
+		const definition = await this.requiredDefinition(number);
+		if (definition.body.target.type !== "cue_list")
+			throw new Error(`Playback ${number} does not target a Cuelist`);
+		const cueList = await this.api.showObject<any>(
+			this.showId(),
+			"cue_list",
+			definition.body.target.cue_list_id,
+		);
+		if (!cueList)
+			throw new Error(
+				`Cuelist ${definition.body.target.cue_list_id} is absent`,
+			);
+		const card = await this.visibleCard(number);
+		await expect(
+			card.getByRole("button", { name: /Playback representation/ }),
+		).toHaveCount(0);
+		await this.desk.click(card.locator("header b"));
+		await expect(this.page.locator(".ui-window-header")).toContainText(
+			`Cuelist ${number} · ${cueList.body.name}`,
+		);
+		await this.expect(number).selected();
+	}
+
 	fader(number: number, value: number) {
 		return this.faderVia("ui", number, value);
 	}
@@ -293,10 +349,13 @@ export class BrowserPlaybacks {
 		} else if (route === "ui") {
 			if (action === PlaybackButton.Release)
 				throw new Error("Playback release has no default visible button");
-			const button = (await this.visibleCardFor(target, number)).getByRole("button", {
-				name: playbackButtonLabel(action),
-				exact: true,
-			});
+			const button = (await this.visibleCardFor(target, number)).getByRole(
+				"button",
+				{
+					name: playbackButtonLabel(action),
+					exact: true,
+				},
+			);
 			if (["flash", "swap"].includes(action)) {
 				if (pressed) {
 					await button.hover();

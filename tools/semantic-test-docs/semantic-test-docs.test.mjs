@@ -291,10 +291,10 @@ test("repository compiler finds every marked scenario once and stays determinist
 		).size,
 		first.scenarioCount,
 	);
-	assert.equal(
-		first.scenarios.filter((scenario) => scenario.id === "PROG-002").length,
-		2,
-	);
+		assert.equal(
+			first.scenarios.filter((scenario) => scenario.id === "PROG-002").length,
+			8,
+		);
 	assert.ok(
 		first.scenarios.every(
 			(scenario) =>

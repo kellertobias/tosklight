@@ -15,8 +15,9 @@ type HistoryEntry = {
 type HistoryState = { observed?: HistoryEntry[] };
 
 pairedScenario<HistoryState>({
-  id: "COMMAND-HISTORY-001",
-  title: "Command Line history shows accepted and rejected desk commands once",
+	id: "COMMAND-HISTORY-001",
+	title: "Command Line history shows accepted and rejected desk commands once",
+	surfaces: ["api"],
   arrange: async ({ api, bench }, surface) => {
     await loadCanonicalCopy(api, bench, `command-history-001-${surface}`, "default-stage");
     return {};

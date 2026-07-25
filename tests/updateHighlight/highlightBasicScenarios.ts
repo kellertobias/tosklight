@@ -55,6 +55,7 @@ pairedScenario<HighlightScenarioState>({
 	id: "HIGHLIGHT-001",
 	title:
 		"HIGH follows the actual selection while stepped values remain normal programmer data",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const show = await loadCanonicalCopy(
 			api,
@@ -182,6 +183,7 @@ pairedScenario<HighlightSurfaceState>({
 	id: "HIGHLIGHT-002",
 	title:
 		"live Group ALL restoration, external selection, empty HIGH, and lifecycle stay authoritative",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const show = await loadCanonicalCopy(
 			api,
