@@ -21,7 +21,7 @@ env:
 
 jobs:
   metadata:
-    name: Release metadata
+    name: Release / Select version
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -62,7 +62,7 @@ jobs:
           fi
 
   quality:
-    name: Formatting, linting, and Hardware Controls
+    name: Checks / Linting
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -98,21 +98,17 @@ jobs:
           npm ci --prefix apps/hardware-controls
           npm ci --prefix apps/control-ui
 
+      - name: Build the embedded Control UI
+        run: npm run build --prefix apps/control-ui
+
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
 
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --locked
 
-      - name: Verify Hardware Controls
-        working-directory: apps/hardware-controls
-        run: |
-          npm run typecheck
-          npm test
-          npm run build
-
   unit:
-    name: Unit and architecture tests
+    name: Tests / Unit and architecture
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -143,15 +139,15 @@ jobs:
       - run: npm run test:unit
 
   e2e:
-    name: Playwright (${{ matrix.suite }})
+    name: Tests / Playwright / ${{ matrix.label }}
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { suite: api, shard: 1/1, artifact: api }
-          - { suite: ui, shard: 1/1, artifact: ui }
-          - { suite: supplemental, shard: 1/1, artifact: supplemental }
+          - { label: API, suite: api, shard: 1/1, artifact: api }
+          - { label: UI, suite: ui, shard: 1/1, artifact: ui }
+          - { label: Supplemental, suite: supplemental, shard: 1/1, artifact: supplemental }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -194,7 +190,7 @@ jobs:
           if-no-files-found: ignore
 
   benchmark:
-    name: Large-show mutation benchmark
+    name: Tests / Server performance regression
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -209,7 +205,21 @@ jobs:
         with:
           key: benchmark
 
-      - name: Enforce the low-power mutation gate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/control-ui/package-lock.json
+            apps/hardware-controls/package-lock.json
+
+      - name: Build the embedded Control UI
+        run: |
+          npm ci --prefix apps/hardware-controls
+          npm ci --prefix apps/control-ui
+          npm run build --prefix apps/control-ui
+
+      - name: Reject large-show mutation performance regressions
         run: >-
           cargo run --release --locked -p light-server --bin light-benchmark
           --no-default-features --
@@ -218,7 +228,7 @@ jobs:
           --hardware-label "GitHub Actions ubuntu-22.04"
 
   desktop-smoke:
-    name: macOS desktop smoke test
+    name: Tests / Desktop smoke / macOS
     runs-on: macos-14
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -256,7 +266,7 @@ jobs:
           if-no-files-found: ignore
 
   manual:
-    name: Operator manual
+    name: Documentation / Operator manual
     needs: metadata
     runs-on: ubuntu-22.04
     env:
@@ -290,7 +300,7 @@ jobs:
           if-no-files-found: error
 
   visual-assets:
-    name: Screenshots and product demo
+    name: Documentation / Screenshots and product demo
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [metadata, unit, e2e]
     runs-on: ubuntu-22.04
@@ -354,7 +364,7 @@ jobs:
           if-no-files-found: ignore
 
   build:
-    name: Release archive (${{ matrix.label }})
+    name: Build / Release archive / ${{ matrix.label }}
     if: github.event_name != 'pull_request'
     needs: metadata
     runs-on: ${{ matrix.runner }}
@@ -511,7 +521,7 @@ jobs:
           if-no-files-found: error
 
   pages-build:
-    name: Assemble GitHub Pages
+    name: Documentation / Assemble static website
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [metadata, manual, visual-assets]
     runs-on: ubuntu-22.04
@@ -565,7 +575,7 @@ jobs:
           path: ${{ steps.site.outputs.path }}
 
   release:
-    name: Tag and publish GitHub release
+    name: Release / Tag and publish
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
       - metadata
@@ -646,7 +656,7 @@ jobs:
           test "$(git rev-list -n 1 "v$VERSION")" = "$GITHUB_SHA"
 
   pages-deploy:
-    name: Deploy GitHub Pages
+    name: Documentation / Deploy GitHub Pages
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [release, pages-build]
     runs-on: ubuntu-22.04
