@@ -1,4 +1,4 @@
-# ToskLight Media Core: Application Behavior and Cross-Repository Target Architecture
+# Media Server Application Behavior
 
 This document defines what ToskLight Media Core is, how the current application behaves, which declared capabilities are not complete yet, and how a new implementation should be structured from the beginning.
 
@@ -11,7 +11,7 @@ The current C++/openFrameworks application remains the implementation reference 
 
 ## Plan status
 
-**Later — specification only.** This document is the canonical future plan at `docs/plans/Later/62-media-server-integration-and-rust-migration.md` in `/Users/keller/repos/light`. It does not authorize Media production implementation, changes to the active Light refactor, protocol replacement, or desk UI integration. Move it to `docs/plans/Next` only after the target-baseline entry gate in this plan has been approved.
+**Later — specification only.** This document is the canonical Media Server behavior plan at `docs/plans/Later/Media-Server/02-media-server-application-behavior.md` in `/Users/keller/repos/light`. It does not authorize Media production implementation, changes to the active Light refactor, protocol replacement, or desk UI integration. Move the relevant chunk to `docs/plans/Next` only after the target-baseline entry gate in this plan has been approved.
 
 ## Status vocabulary
 
@@ -924,7 +924,7 @@ The following map prevents ambiguous ownership during implementation. Target pat
 | `apps/lighting-console` | No target application | Retain only valuable packet captures, protocol fixtures, and interoperability scenarios as automated tests |
 | `media/` configuration and representative library data | versioned migration tool plus target test fixtures | Never copy operator data into Git; copy only sanitized deterministic fixtures and implement explicit config/catalog migration |
 | CMake/openFrameworks/vendor/build artifacts | No direct target | Use only as implementation evidence; select Rust dependencies through target architecture and license review |
-| Earlier draft of this document in the Media repository | this canonical `docs/plans/Later/62-media-server-integration-and-rust-migration.md` | Move into Light during planning; after the integration baseline is approved, promote it to `Next` and split stable engineering contracts into `docs/engineering/media/` as implementation requires |
+| Earlier draft of this document in the Media repository | this canonical `docs/plans/Later/Media-Server/02-media-server-application-behavior.md` plus [Media Server Rust Architecture](02b-media-server-rust-architecture.md) | Move into Light during planning; after the integration baseline is approved, promote the relevant chunk to `Next` and split stable engineering contracts into `docs/engineering/media/` as implementation requires |
 
 ### Source-of-truth transition
 
@@ -941,4 +941,4 @@ There is no bidirectional code synchronization. If the source application change
 
 ## Continued
 
-The target Rust architecture, verification architecture, migration plan and rebuild order, open decisions, and research basis continue in [62b-media-server-rust-architecture.md](62b-media-server-rust-architecture.md).
+The target Rust architecture, verification architecture, migration plan and rebuild order, open decisions, and research basis continue in [Media Server Rust Architecture](02b-media-server-rust-architecture.md).

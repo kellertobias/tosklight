@@ -1,6 +1,6 @@
-# ToskLight Media Core: Target Rust Architecture and Migration Plan
+# Media Server Rust Architecture and Migration Plan
 
-Continuation of [62-media-server-integration-and-rust-migration.md](62-media-server-integration-and-rust-migration.md) (application behavior and cross-repository target architecture). Split at the size limit; the two files form one plan.
+Continuation of [Media Server Application Behavior](02-media-server-application-behavior.md). The two files form the Media Server rebuild chunk.
 
 ## Target Rust architecture
 
