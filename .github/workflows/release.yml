@@ -73,7 +73,12 @@ jobs:
           targets: ${{ matrix.target }}
 
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm, cache-dependency-path: apps/control-ui/package-lock.json }
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/control-ui/package-lock.json
+            apps/hardware-controls/package-lock.json
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -95,7 +100,13 @@ jobs:
           pip install ziglang
           cargo install cargo-zigbuild --locked
 
-      - name: Install UI dependencies
+      # The control UI typechecks its attached-hardware integration tests, which import
+      # the sibling Hardware Controls source and therefore resolve dependencies there.
+      - name: Install Hardware Controls dependencies
+        working-directory: apps/hardware-controls
+        run: npm ci
+
+      - name: Install Control UI dependencies
         working-directory: apps/control-ui
         run: npm ci
 
