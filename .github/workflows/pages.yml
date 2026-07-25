@@ -31,7 +31,16 @@ jobs:
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
-        with: { node-version: 22 }
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/control-ui/package-lock.json
+
+      # The semantic test catalog uses TypeScript's static AST API from the control UI
+      # package. A fresh Pages runner has no workspace dependencies until this install.
+      - name: Install semantic catalog dependencies
+        working-directory: apps/control-ui
+        run: npm ci
 
       - uses: actions/setup-python@v5
         with:
