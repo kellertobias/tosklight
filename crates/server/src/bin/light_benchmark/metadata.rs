@@ -32,7 +32,7 @@ pub fn capture(hardware_label: Option<&str>) -> ReferenceMetadata {
         operating_system: std::env::consts::OS,
         architecture: std::env::consts::ARCH,
         rustc_version: command_output("rustc", &["--version"]),
-        package_version: env!("CARGO_PKG_VERSION"),
+        package_version: option_env!("LIGHT_RELEASE_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")),
         build_profile: if cfg!(debug_assertions) {
             "debug"
         } else {

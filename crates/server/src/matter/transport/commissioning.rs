@@ -24,7 +24,7 @@ pub(super) fn basic_info(
         hw_ver: 1,
         hw_ver_str: "1",
         sw_ver: 1,
-        sw_ver_str: env!("CARGO_PKG_VERSION"),
+        sw_ver_str: option_env!("LIGHT_RELEASE_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")),
         serial_no: &identity.serial,
         unique_id: &identity.serial,
         device_name: "ToskLight",

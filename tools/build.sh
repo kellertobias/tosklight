@@ -76,7 +76,16 @@ build_safari() {
 # Assemble the deployable public site. The landing page sits at the root and links
 # into the two generated subdirectories; nothing here reaches outside $LIGHT_PAGES_DIR.
 build_pages() {
-  build_manual
+  if [[ "${LIGHT_REUSE_MANUAL:-0}" == "1" ]]; then
+    for required in "$LIGHT_MANUAL_PDF" "$LIGHT_MANUAL_HTML_DIR/index.html" "$LIGHT_MANUAL_HTML_ARCHIVE"; do
+      [[ -f "$required" ]] || {
+        echo "error: LIGHT_REUSE_MANUAL=1 but the manual artifact is missing: $required" >&2
+        exit 1
+      }
+    done
+  else
+    build_manual
+  fi
   build_safari
 
   rm -rf "$LIGHT_PAGES_DIR"

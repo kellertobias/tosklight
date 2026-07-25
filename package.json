@@ -33,7 +33,7 @@
     "test:semantic-test-docs": "node --test tools/semantic-test-docs/*.test.mjs",
     "docs:semantic-tests:write": "node tools/semantic-test-docs/cli.mjs --write",
     "docs:semantic-tests:check": "node tools/semantic-test-docs/cli.mjs --check",
-    "test:bench-types": "tsc --noEmit --pretty false --strict --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022,DOM --skipLibCheck apps/control-ui/e2e/bench/window-system/paneTypes.typecheck.ts",
+    "test:bench-types": "apps/control-ui/node_modules/.bin/tsc --noEmit --pretty false --strict --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022,DOM --skipLibCheck apps/control-ui/e2e/bench/window-system/paneTypes.typecheck.ts",
     "test:e2e": "bash tools/test.sh e2e",
     "test:e2e-api": "bash tools/test.sh e2e-api",
     "test:e2e-ui": "bash tools/test.sh e2e-ui",
@@ -45,14 +45,14 @@
     "test:demo": "bash tools/test.sh demo",
     "test:desktop-smoke": "bash tools/test.sh desktop-smoke",
     "test:all": "bash tools/test.sh all",
-    "release": "semantic-release"
+    "release": "node tools/run-semantic-release.mjs",
+    "release:dry-run": "node tools/run-semantic-release.mjs --dry-run"
   },
   "devDependencies": {
-    "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/commit-analyzer": "^13.0.0",
-    "@semantic-release/exec": "^6.0.3",
-    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^11.0.0",
     "@semantic-release/release-notes-generator": "^14.0.3",
+    "conventional-changelog-conventionalcommits": "^9.1.0",
     "semantic-release": "^24.2.3"
   }
 }

@@ -2,12 +2,14 @@
 // Stamp the workspace version into the assembled landing page and build its screenshot
 // gallery from the help screenshots that `npm run test:help-screenshots` regenerates.
 
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { artifactPaths } from "./artifact-paths.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SCREENSHOTS = resolve(ROOT, "docs/help/assets/screenshots");
+const DEMO_DIRECTORY = resolve(artifactPaths.visual, "product-demo");
 
 // Curated tour of the desk, in the order an operator meets these surfaces. Paths are
 // relative to docs/help/assets/screenshots and are always the current generated files.
@@ -33,6 +35,10 @@ const PLATFORMS = [
     note: "Apple Silicon (M1 and later). Intel Macs are not supported.",
     assets: [
       { kind: "Desktop application", file: (v) => `tosklight-${v}-macos-arm64.zip` },
+      {
+        kind: "Hardware Controls application",
+        file: (v) => `tosklight-hardware-controls-${v}-macos-arm64.zip`,
+      },
       { kind: "Standalone server", file: (v) => `light-server-${v}-macos-arm64.zip` },
     ],
   },
@@ -72,9 +78,15 @@ if (!target) {
 const siteRoot = dirname(target);
 
 const cargo = readFileSync(resolve(ROOT, "Cargo.toml"), "utf8");
-const version = /\[workspace\.package\][^[]*?\nversion = "([^"]*)"/.exec(cargo)?.[1];
+const version =
+  process.env.LIGHT_RELEASE_VERSION ??
+  /\[workspace\.package\][^[]*?\nversion = "([^"]*)"/.exec(cargo)?.[1];
 if (!version) {
   console.error("error: could not read [workspace.package] version from Cargo.toml");
+  process.exit(1);
+}
+if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(version)) {
+  console.error(`error: release version is not valid SemVer: ${version}`);
   process.exit(1);
 }
 
@@ -118,10 +130,43 @@ const downloads = PLATFORMS.map(({ title, note, assets }) => {
   );
 }).join("\n        ");
 
+const demoSources = [
+  {
+    source: resolve(DEMO_DIRECTORY, "tosklight-product-demo-h265.mp4"),
+    file: "tosklight-product-demo-h265.mp4",
+    type: "video/mp4",
+  },
+  {
+    source: resolve(DEMO_DIRECTORY, "tosklight-product-demo.webm"),
+    file: "tosklight-product-demo.webm",
+    type: "video/webm",
+  },
+].filter(({ source }) => existsSync(source));
+
+if (process.env.LIGHT_REQUIRE_DEMO_VIDEO === "1" && !demoSources.length) {
+  console.error(`error: product-demo video artifact is missing below ${DEMO_DIRECTORY}`);
+  process.exit(1);
+}
+
+let demo = `<p class="section-lede">The generated product demo is not available in this local Pages build.</p>`;
+if (demoSources.length) {
+  mkdirSync(resolve(siteRoot, "media"), { recursive: true });
+  for (const { source, file } of demoSources) {
+    copyFileSync(source, resolve(siteRoot, "media", file));
+  }
+  const sources = demoSources
+    .map(({ file, type }) => `<source src="media/${file}" type="${type}">`)
+    .join("");
+  demo =
+    `<video class="product-demo" controls preload="metadata">${sources}` +
+    `Your browser does not support the generated product-demo video.</video>`;
+}
+
 let page = readFileSync(target, "utf8");
 for (const [placeholder, replacement] of [
   ["__VERSION__", version],
   ["__GALLERY__", figures],
+  ["__DEMO__", demo],
   ["__DOWNLOADS__", downloads],
   ["__RELEASE_URL__", releaseUrl],
 ]) {
