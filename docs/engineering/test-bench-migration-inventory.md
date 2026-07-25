@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **308 root cases across 43 files**.
+Default catalog: **308 root cases across 44 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -25,14 +25,9 @@ Default catalog: **308 root cases across 43 files**.
 | 01-foundational-dimmers-and-groups.spec.ts | GROUP-004 @api › frozen Group survives source edits and keeps unpatched fixtures programmable | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 01-foundational-dimmers-and-groups.spec.ts | GROUP-005 @api › stored empty Groups remain distinct from missing references | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 01-foundational-dimmers-and-groups.spec.ts | PROG-001 @api › values retain selection until replacement while leading Plus continues it | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 01-foundational-dimmers-and-groups.spec.ts | PROG-001 @ui › values retain selection until replacement while leading Plus continues it | docs/testing/01-foundational-dimmers-and-groups.md | @ui | foundational-dimmers-and-groups | standard failure evidence | parallel | pending-semantic-migration |
 | 01-foundational-dimmers-and-groups.spec.ts | PROG-002 @api › relative values spread across the live ordered Group | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 01-foundational-dimmers-and-groups.spec.ts | PROG-002 @ui › relative values spread across the live ordered Group | docs/testing/01-foundational-dimmers-and-groups.md | @ui | foundational-dimmers-and-groups | standard failure evidence | parallel | pending-semantic-migration |
-| 01-foundational-dimmers-and-groups.spec.ts | PROG-002 @ui › fixture ranges and retained selections spread through the desk command line | docs/testing/01-foundational-dimmers-and-groups.md | @ui | foundational-dimmers-and-groups | standard failure evidence | parallel | pending-semantic-migration |
 | 01-foundational-dimmers-and-groups.spec.ts | PROG-003 @api › newer fixture intensity wins LTP and releases back to its Group value | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 01-foundational-dimmers-and-groups.spec.ts | PROG-003 @ui › newer fixture intensity wins LTP and releases back to its Group value | docs/testing/01-foundational-dimmers-and-groups.md | @ui | foundational-dimmers-and-groups | standard failure evidence | parallel | pending-semantic-migration |
 | 01-foundational-dimmers-and-groups.spec.ts | PROG-004 @api › Clear removes selection first and programmer values second | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 01-foundational-dimmers-and-groups.spec.ts | PROG-004 @ui › Clear removes selection first and programmer values second | docs/testing/01-foundational-dimmers-and-groups.md | @ui | foundational-dimmers-and-groups | standard failure evidence | parallel | pending-semantic-migration |
 | 01-foundational-dimmers-and-groups.spec.ts | DIM-001 @supplemental › exhaustive API add, subtract, deletion, and dependency boundaries | docs/testing/01-foundational-dimmers-and-groups.md | @supplemental | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 01-foundational-dimmers-and-groups.spec.ts | DIM-002 @supplemental › repeated API fade endpoint and UDP stability | docs/testing/01-foundational-dimmers-and-groups.md | @supplemental | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 01-foundational-dimmers-and-groups.spec.ts | DIM-002 @supplemental › repeated visible keypad fade endpoint | docs/testing/01-foundational-dimmers-and-groups.md | @supplemental | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
@@ -322,6 +317,11 @@ Default catalog: **308 root cases across 43 files**.
 | 42-semantic-foundational-groups.spec.ts | GROUP-003 @bench @ui › derived Group follows source ordering | repository contract | @bench @ui | semantic-foundational-groups | standard failure evidence | parallel | migrated-semantic-world |
 | 42-semantic-foundational-groups.spec.ts | GROUP-004 @bench @ui › frozen Group survives source edits and keeps unpatched fixtures programmable | repository contract | @bench @ui | semantic-foundational-groups | standard failure evidence | parallel | migrated-semantic-world |
 | 42-semantic-foundational-groups.spec.ts | GROUP-005 @bench @ui › stored empty Groups remain distinct from missing references | repository contract | @bench @ui | semantic-foundational-groups | standard failure evidence | parallel | migrated-semantic-world |
+| 43-semantic-foundational-programmer.spec.ts | PROG-001 @bench @ui › values retain selection until replacement while leading Plus continues it | repository contract | @bench @ui | semantic-foundational-programmer | standard failure evidence | parallel | migrated-semantic-world |
+| 43-semantic-foundational-programmer.spec.ts | PROG-002 @bench @ui › relative values spread across the live ordered Group | repository contract | @bench @ui | semantic-foundational-programmer | standard failure evidence | parallel | migrated-semantic-world |
+| 43-semantic-foundational-programmer.spec.ts | PROG-002 @bench @ui › fixture ranges and retained selections spread through the desk command line | repository contract | @bench @ui | semantic-foundational-programmer | standard failure evidence | parallel | migrated-semantic-world |
+| 43-semantic-foundational-programmer.spec.ts | PROG-003 @bench @ui › newer fixture intensity wins LTP and releases back to its Group value | repository contract | @bench @ui | semantic-foundational-programmer | standard failure evidence | parallel | migrated-semantic-world |
+| 43-semantic-foundational-programmer.spec.ts | PROG-004 @bench @ui › Clear removes selection first and programmer values second | repository contract | @bench @ui | semantic-foundational-programmer | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints

@@ -21,6 +21,7 @@ export function registerProgrammerPairedScenarios() {
 		id: "PROG-001",
 		title:
 			"values retain selection until replacement while leading Plus continues it",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			await loadCompactRig(api, bench, `prog-001-paired-${surface}`);
 			return {};
@@ -58,6 +59,7 @@ export function registerProgrammerPairedScenarios() {
 	pairedScenario<{ initialSlots: number[]; order: number[] }>({
 		id: "PROG-002",
 		title: "relative values spread across the live ordered Group",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			await loadCompactRig(api, bench, `prog-002-paired-${surface}`);
 			await overwriteGroupByNumbers(api, "1", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);

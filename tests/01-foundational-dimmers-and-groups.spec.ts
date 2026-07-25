@@ -38,53 +38,11 @@ test.describe(FOUNDATIONAL_SCENARIOS, () => {
 	registerFrozenAndEmptyGroupPairedScenarios();
 	registerProgrammerPairedScenarios();
 
-	test("PROG-002 @ui › fixture ranges and retained selections spread through the desk command line", async ({
-		api,
-		bench,
-		desk,
-		page,
-	}) => {
-		await loadCompactRig(api, bench, "prog-002-fixture-command-ui");
-		await desk.open(api.baseUrl);
-
-		await pressCommandAndWait(
-			page,
-			"1 THRU 5 AT 20 THRU 50",
-			"F1 THRU 5 AT 20 THRU 50",
-		);
-		await expectSlotsAfterTick(
-			bench,
-			3_000,
-			[51, 70, 89, 108, 128, 0, 0, 0, 0, 0, 0, 0],
-		);
-
-		await pressCommandAndWait(page, "1 THRU 5", "F1 THRU 5");
-		await pressCommandAndWait(page, "AT 0 THRU 50", "AT 0 THRU 50");
-		await expectSlotsAfterTick(
-			bench,
-			3_000,
-			[0, 32, 64, 96, 128, 0, 0, 0, 0, 0, 0, 0],
-		);
-
-		// Deterministic multi-point anchor rule: every control point lands on a real fixture
-		// (normative five-item vector for 100 THRU 0 THRU 100).
-		await pressCommandAndWait(page, "1 THRU 5", "F1 THRU 5");
-		await pressCommandAndWait(
-			page,
-			"AT 100 THRU 0 THRU 100",
-			"AT 100 THRU 0 THRU 100",
-		);
-		await expectSlotsAfterTick(
-			bench,
-			3_000,
-			[255, 128, 0, 128, 255, 0, 0, 0, 0, 0, 0, 0],
-		);
-	});
-
 	pairedScenario<{ overrideSlots: number[]; fixture: string; showId: string }>({
 		id: "PROG-003",
 		title:
 			"newer fixture intensity wins LTP and releases back to its Group value",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			const showId = await loadCompactRig(
 				api,
@@ -143,6 +101,7 @@ test.describe(FOUNDATIONAL_SCENARIOS, () => {
 	}>({
 		id: "PROG-004",
 		title: "Clear removes selection first and programmer values second",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			const showId = await loadCompactRig(
 				api,
