@@ -53,7 +53,10 @@ import { BrowserProgrammerSpecials } from "../programmer/programmerSpecialScenar
 import { BrowserProductDemo } from "../show/productDemoScenario";
 import { BrowserShows } from "../show/showScenario";
 import { BrowserPatch } from "../show-setup/patchScenario";
+import { BrowserFiles } from "../specific-features/fileTextScenario";
+import { BrowserDeskLock } from "../window-system/deskLockScenario";
 import { BrowserDesktops } from "../window-system/desktopScenario";
+import { BrowserOperatorShell } from "../window-system/operatorShellScenario";
 import type { BuiltInPaneType } from "../window-system/paneTypes";
 import { builtInLabels } from "../window-system/paneTypes";
 import type { ApiDriver } from "./api";
@@ -94,6 +97,8 @@ export interface ScreenHandle {
 
 export class BrowserScenarioWorld {
 	readonly desktop: BrowserDesktops;
+	readonly operatorShell: BrowserOperatorShell;
+	readonly deskLock: BrowserDeskLock;
 	readonly app: BrowserApplication;
 	readonly builtIn: BrowserBuiltIns;
 	readonly screenshot: BrowserScreenshots;
@@ -126,6 +131,7 @@ export class BrowserScenarioWorld {
 	readonly speedGroup: BrowserSpeedGroups;
 	readonly special: BrowserProgrammerSpecials;
 	readonly recipe: BrowserRecipes;
+	readonly files: BrowserFiles;
 	readonly routeSeed: string;
 	private readonly semanticTrace: Array<{
 		title: string;
@@ -185,8 +191,10 @@ export class BrowserScenarioWorld {
 			await testInfo.attach(safeName, { body, contentType: "image/png" });
 		};
 		this.app = new BrowserApplication(page, desk, bench.baseUrl);
+		this.deskLock = new BrowserDeskLock(api, bench, page, desk);
 		this.builtIn = new BrowserBuiltIns(page);
 		this.desktop = new BrowserDesktops(page, attach);
+		this.operatorShell = new BrowserOperatorShell(api, bench, page, desk);
 		this.screenshot = new BrowserScreenshots(page, attach, this.builtIn);
 		this.screen = new BrowserScreens(page, desk, api);
 		this.show = new BrowserShows(api, bench, desk, initialShow, page);
@@ -322,6 +330,7 @@ export class BrowserScenarioWorld {
 		this.recipe = new BrowserRecipes(this, (observer) =>
 			desk.observeSemanticSteps(observer),
 		);
+		this.files = new BrowserFiles(api, page, desk, bench);
 		const outputPackets = new BrowserOutputPackets(bench);
 		this.expect = {
 			dmx: (universe) => this.dmx.expect(universe),

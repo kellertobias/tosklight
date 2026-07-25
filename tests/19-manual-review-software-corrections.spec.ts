@@ -2,7 +2,7 @@ import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/
 import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
 
 test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
-  test("MANUAL-019 @ui › saved workspaces are Desktops while physical control surfaces remain desks", async ({ api, bench, desk, page }) => {
+  test("MANUAL-019 @supplemental-ui › saved workspaces are Desktops while physical control surfaces remain desks", async ({ api, bench, desk, page }) => {
     const physicalDesk = { ...api.session!.desk };
     const sessionId = api.session!.session_id;
     await desk.open(api.baseUrl);
@@ -74,7 +74,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await expect(page.locator(".ui-window-title")).toHaveText("Desk Setup");
   });
 
-  test("MANUAL-019 @ui › fixture browsers share title-bar search and readable name/detail alignment", async ({ api, desk, page }) => {
+  test("MANUAL-019 @supplemental-ui › fixture browsers share title-bar search and readable name/detail alignment", async ({ api, desk, page }) => {
     await desk.open(api.baseUrl);
     await desk.recordStep("ADD FIXTURE", "Open the patch fixture browser; search belongs to its title bar and names align opposite their metadata.");
 
@@ -104,7 +104,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await expect(page.locator(".fixture-library-detail dd").first()).toHaveCSS("text-align", "right");
   });
 
-  test("MANUAL-019 @ui › every operator file field opens the confined picker with its own extension contract", async ({ api, desk, page }) => {
+  test("MANUAL-019 @supplemental-ui › every operator file field opens the confined picker with its own extension contract", async ({ api, desk, page }) => {
     const configuration = await api.request<any>("GET", "/api/v2/configuration");
     await api.request("PUT", "/api/v2/configuration", {
       ...configuration.configuration,
@@ -177,7 +177,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
   // implement the responsive cue-editor contract that keeps the full Title/Fade/Delay/Trigger
   // fields visible; on the tested pane it falls back to the compact settings view, hiding the
   // labelled fields this case asserts. Unskip once the full cue-properties layout is built.
-  test.skip("MANUAL-019 @ui › the dedicated Cues pane keeps the cue editor visible without a delete action", async ({ api, desk, page }) => {
+  test.skip("MANUAL-019 @supplemental-ui › the dedicated Cues pane keeps the cue editor visible without a delete action", async ({ api, desk, page }) => {
     const bootstrap = await api.request<any>("GET", "/api/v2/bootstrap", undefined, false);
     const cueListId = crypto.randomUUID();
     await api.seedShowObject(bootstrap.active_show.id, "cue_list", cueListId, {
@@ -219,7 +219,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
   // not implemented yet — the versioned Outputs route editor (Add/Edit/Remove route dialog),
   // the DMX pane as a route-editor-free selected-channel monitor, and the Stage scenery model
   // without a separate scene-asset workflow. Unskip as each of those surfaces is built.
-  test.skip("MANUAL-019 @ui › Help stays two-column, DMX is a selected-channel monitor, and Stage Add Element opens a chooser", async ({ api, desk, page }) => {
+  test.skip("MANUAL-019 @supplemental-ui › Help stays two-column, DMX is a selected-channel monitor, and Stage Add Element opens a chooser", async ({ api, desk, page }) => {
     const bootstrap = await api.request<any>("GET", "/api/v2/bootstrap", undefined, false);
     const showId = bootstrap.active_show.id as string;
     await api.seedShowObject(showId, "route", "manual-existing", {
@@ -290,7 +290,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await expect(stage.getByRole("button", { name: "Add element", exact: true })).toHaveCount(0);
   });
 
-  test("MANUAL-019 @ui › Development stays out of operator panes and remains available through Desk Status", async ({ api, desk, page }) => {
+  test("MANUAL-019 @supplemental-ui › Development stays out of operator panes and remains available through Desk Status", async ({ api, desk, page }) => {
     await desk.open(api.baseUrl);
     await desk.recordStep("OPERATOR PANE CATALOG", "Development is not an operator pane choice on a new Desktop.");
     await page.getByRole("button", { name: "DESKTOPS", exact: true }).click();
@@ -317,7 +317,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
   // — a root-confined .show selection under Shows & recovery that rejects non-show files and
   // opens the chosen indexed show through a safe blackout — is not implemented yet. Unskip
   // once that recovery browser surface exists.
-  test.skip("MANUAL-019 @ui › Shows & recovery loads a root-confined .show selection with safe blackout", async ({ api, desk, page }) => {
+  test.skip("MANUAL-019 @supplemental-ui › Shows & recovery loads a root-confined .show selection with safe blackout", async ({ api, desk, page }) => {
     const bootstrap = await api.request<any>("GET", "/api/v2/bootstrap", undefined, false);
     const source = await fetch(`${api.baseUrl}/api/v2/shows/${bootstrap.active_show.id}/download`, {
       headers: { authorization: `Bearer ${api.session!.token}` },

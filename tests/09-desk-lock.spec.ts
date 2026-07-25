@@ -6,12 +6,8 @@ interface ProgrammerProjection {
 	command_line: string;
 }
 
-interface DeskSessionProjection {
-	desk: { osc_alias: string };
-}
-
 test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
-	test("LOCK-001 @ui @api @osc › PIN lock covers every screen and drops every desk input without changing output", async ({ api, bench, desk, page }) => {
+	test("LOCK-001 @supplemental @api @osc › PIN lock covers every screen and drops every desk input without changing output", async ({ api, bench, desk, page }) => {
 		await desk.open(bench.baseUrl);
 		const pageDeskSession = await desk.session();
 		const otherDeskSession = await api.request<typeof pageDeskSession>("POST", "/api/v2/sessions", {
@@ -81,86 +77,9 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
 		}
 	});
 
-	test("LOCK-001 @ui › button mode has no PIN and uses the readable fallback lock screen", async ({ api, bench, desk, page }) => {
-		await desk.open(bench.baseUrl);
-		api.session = await desk.session();
-		await api.request("PUT", "/api/v2/desk-lock", {
-			message: "",
-			wallpaper: "https://invalid.example.test/unavailable-lock-screen.png",
-			unlock_mode: "button",
-			pin: null,
-		});
-		await page.getByRole("button", { name: /Open show menu/ }).click();
-		await page.getByRole("button", { name: "Lock Desk", exact: true }).click();
-		const lock = page.getByRole("dialog", { name: "Desk locked" });
-		await expect(lock).toBeVisible();
-		await expect(lock).toContainText("This desk is locked.");
-		await expect(lock.getByLabel("PIN")).toHaveCount(0);
-		await lock.getByRole("button", { name: "Unlock Desk" }).click();
-		await expect(lock).toBeHidden();
-	});
-
-	test("LOCK-001 @ui › Screens owns shortcut configuration and the Desk Lock settings modal", async ({ api, bench, desk, page }) => {
-		await desk.open(bench.baseUrl);
-		api.session = await desk.session();
-		await page.getByRole("button", { name: /Open show menu/ }).click();
-		await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
-		await page.locator(".setup-window nav").getByRole("button", { name: "Screens & playback", exact: true }).click();
-
-		const defaultScreen = page.locator(".default-screen-settings");
-		const undo = page.getByRole("button", { name: "Undo", exact: true });
-		await expect(undo).toBeDisabled();
-		await expect(page.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(0);
-
-		await defaultScreen.getByRole("button", { name: "Configure Playbacks", exact: true }).click();
-		await page.getByRole("button", { name: "Close playback configuration" }).click();
-		await expect(undo).toBeDisabled();
-		await page.locator(".setup-window nav").getByRole("button", { name: "Network & Inputs", exact: true }).click();
-		await page.locator(".setup-window nav").getByRole("button", { name: "Screens & playback", exact: true }).click();
-		await expect(undo).toBeDisabled();
-
-		const originalAlias = await defaultScreen.getByLabel("OSC alias").inputValue();
-		const changedAlias = `${originalAlias}-undo`;
-		await defaultScreen.getByLabel("OSC alias").fill(changedAlias);
-		await expect(undo).toBeEnabled();
-		await expect.poll(() => currentDeskAlias(api)).toBe(changedAlias);
-
-		await page.locator(".setup-window nav").getByRole("button", { name: "Network & Inputs", exact: true }).click();
-		await page.locator(".setup-window nav").getByRole("button", { name: "Screens & playback", exact: true }).click();
-		await expect(undo).toBeEnabled();
-		await undo.click();
-		await expect(defaultScreen.getByLabel("OSC alias")).toHaveValue(originalAlias);
-		await expect(undo).toBeDisabled();
-		await expect.poll(() => currentDeskAlias(api)).toBe(originalAlias);
-
-		const shortcuts = defaultScreen.getByRole("switch", { name: "Enable software keyboard shortcuts" });
-		await expect(shortcuts).toBeChecked();
-		await shortcuts.locator("..").locator(".ui-switch-track").click();
-		await expect(shortcuts).not.toBeChecked();
-		await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("light.desk-controls") ?? "{}").regularNumberShortcuts)).toBe(false);
-
-		await page.getByRole("button", { name: "Desk Lock", exact: true }).click();
-		const settings = page.getByRole("dialog", { name: "Desk Lock" });
-		const titleBar = settings.locator(":scope > .ui-modal-titlebar");
-		await expect(titleBar.getByRole("button", { name: "Save Lock Configuration" })).toBeVisible();
-		await settings.getByLabel("Lock message").fill("Stand by for the operator");
-		await titleBar.getByRole("button", { name: "Save Lock Configuration" }).click();
-		await expect(settings).toBeHidden();
-		await expect.poll(async () => (await api.request<any>("GET", "/api/v2/desk-lock")).message).toBe("Stand by for the operator");
-	});
 });
 
 async function commandLine(api: ApiDriver): Promise<string> {
 	const programmers = await api.request<ProgrammerProjection[]>("GET", "/api/v2/programmers");
 	return programmers.find((programmer) => programmer.session_id === api.session?.session_id)?.command_line ?? "";
-}
-
-async function currentDeskAlias(api: ApiDriver): Promise<string> {
-	const deskId = api.session?.desk.id;
-	if (!deskId) throw new Error("Expected an authenticated desk session");
-	const session = await api.request<DeskSessionProjection>("POST", "/api/v2/sessions", {
-		username: "Operator",
-		desk_id: deskId,
-	}, false);
-	return session.desk.osc_alias;
 }
