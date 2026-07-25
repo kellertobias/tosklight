@@ -2,8 +2,12 @@
 
 ## Status and source contract
 
-Pending. Implement
+Pending, blocked until plan 02's application pool adapters and shared pool intent contracts are
+stable. Implement
 [`../../Next/56-empty-selection-preset-and-effect-target-selection.md`](../../Next/56-empty-selection-preset-and-effect-target-selection.md).
+
+Do not run this plan concurrently with the active Storybook lane: it changes the same production
+pool surfaces, adapters, interaction stories, and focused UI verification.
 
 Estimated effort: 0.5–1 Codex day.
 

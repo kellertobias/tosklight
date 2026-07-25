@@ -2,10 +2,31 @@
 
 ## Status and source contract
 
-Pending. Component ownership, geometry, package boundaries, and Storybook-first sequencing are
-defined by
-[`../../Next/58-shared-frontend-libraries.md`](../../Next/58-shared-frontend-libraries.md).
+Working in the concurrent Storybook lane. This plan no longer blocks the independent numbered
+backend queue. Component ownership, geometry, package boundaries, and Storybook-first sequencing
+are defined by
+[`../../../Next/58-shared-frontend-libraries.md`](../../../Next/58-shared-frontend-libraries.md).
 This queue item adds the required documentation-screenshot migration after accepted stories exist.
+
+The current workspace and Storybook location decision is recorded in
+[`storybook-application-components.WORKING.md`](storybook-application-components.WORKING.md).
+The UI library moves to `apps/ui-library`, and the contained Storybook application renders both
+library stories and production `apps/light-desktop` components through deterministic providers.
+
+## Queue separation
+
+This work has an explicit operator-review checkpoint and is being completed by the frontend
+component agent. Keeping it in the numbered queue's single `doing/` slot would serialize unrelated
+backend refactoring without protecting any shared files or runtime state.
+
+Until this Storybook lane is accepted and its application adoption is stable:
+
+- plan 03 waits because it changes the shared pool-card and pool-grid presentation contracts;
+- plan 04 waits because it changes application pool adapters and cross-surface pool interaction;
+- plan 05 waits because it changes frontend providers, stores, hydration, and Storybook harness
+  boundaries; and
+- plan 06 is the first independent numbered plan and may proceed concurrently because it owns the
+  server-side active-show mutation boundary and its focused backend verification.
 
 Estimated effort: 2–4 Codex days, including application adoption and screenshot migration.
 
@@ -13,8 +34,8 @@ Estimated effort: 2–4 Codex days, including application adoption and screensho
 
 ### Extract production components
 
-1. Recreate `packages/ui` as a tracked workspace package from existing production sources—not from
-   the generated `dist/` or `storybook-static/` remnants currently ignored in that directory.
+1. Create `apps/ui-library` as a tracked workspace package from existing production sources—not
+   from generated `dist/` or `storybook-static/` remnants.
 2. Characterize current labels, CSS cascade, 24×18 grid geometry, pointer/touch/keyboard behavior,
    modal stacking, Fixture Sheet tables, faders, encoders, playbacks, and pool grids.
 3. Move directly reusable components and split coupled components into package views plus
@@ -47,7 +68,8 @@ Estimated effort: 2–4 Codex days, including application adoption and screensho
 
 ## Acceptance and verification
 
-- `packages/ui` has tracked source, package tests, typecheck, Storybook build, and explicit exports.
+- `apps/ui-library` has tracked source, package tests, typecheck, Storybook build, and explicit
+  exports while retaining the package identity `@tosklight/ui`.
 - Every reusable component rendered in Storybook is the same implementation consumed by an app.
 - Mock stories cover software and hardware presentation where both exist.
 - A clean CI run regenerates the complete screenshot manifest without launching the Light server.
@@ -58,3 +80,26 @@ Estimated effort: 2–4 Codex days, including application adoption and screensho
 
 Do not create the integration worktree or switch the live app before the extracted Storybook
 components have been tested, reviewed, and accepted.
+
+## Review checkpoint
+
+The pre-adoption package is ready for operator review:
+
+```sh
+npm run test:ui-package
+npm run test:storybook
+npm run storybook
+```
+
+The stories cover production controls and forms, keyboard and numpad input, Window Kit
+compositions, the real 24×18 desktop geometry, Fixture Sheet row states, software and hardware
+faders, touch and hardware encoders, nested modals, touch and hardware playbacks, and group,
+preset, and cuelist cards. They use package-owned deterministic models and make no REST or
+WebSocket requests. The Storybook manager, docs canvas, and story canvas use the application's
+authoritative `--bg` token (`#07090c`), and the Storybook gate compares the package token with the
+desktop application token and the computed rendered background.
+
+Compatibility modules and thin adapters keep the current application paths building during this
+review phase. Per the source contract, full live-application adoption, screenshot-manifest
+creation, Help screenshot CI migration, and removal of superseded app-local presentation code are
+blocked until this checkpoint is explicitly accepted.

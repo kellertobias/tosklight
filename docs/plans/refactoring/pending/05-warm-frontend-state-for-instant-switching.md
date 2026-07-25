@@ -9,6 +9,13 @@ warm-up has completed.
 
 Estimated effort: 1–2 Codex days.
 
+## Queue dependency
+
+Pending, blocked until plan 02 stabilizes frontend provider, component-adapter, and deterministic
+Storybook harness boundaries. Do not run it concurrently with the active Storybook lane: it changes
+the same application contexts, stores, provider composition, window activation paths, and
+frontend verification runtime.
+
 ## Current evidence
 
 - `ShowObjectsSession` hydrates only active view scopes and marks collections dormant when the last

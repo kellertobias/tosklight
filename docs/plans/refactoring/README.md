@@ -25,10 +25,10 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 |---:|---|---|
 | 00 | [Programmer relative encoders and fade-time scope](pending/00-programmer-relative-encoders-and-fade-time-scope.md) | Implement the existing cross-surface encoder behavior contract. |
 | 01 | [Unpatched fixtures from Add Fixture](pending/01-unpatched-fixtures-on-add-fixture.md) | Implement the existing **Empty** address workflow. |
-| 02 | [Shared frontend components and deterministic screenshots](pending/02-shared-frontend-components-and-storybook-screenshots.md) | Extract production UI into `packages/ui`, validate it in Storybook, then make accepted stories the documentation screenshot source. |
-| 03 | [Consistent pool-object colors](pending/03-consistent-pool-object-colors.md) | Implement the shared pool color language. |
-| 04 | [Empty-selection object target selection](pending/04-empty-selection-object-target-selection.md) | Make populated Presets and Effect-like objects select their stored targets on the first empty-selection tap. |
-| 05 | [Warm frontend state for instant surface switching](pending/05-warm-frontend-state-for-instant-switching.md) | Load active state first, warm the remaining app model in the background, and reconcile it through events. |
+| 02 | [Shared frontend components and deterministic screenshots](pending/storybook%20changes/02-shared-frontend-components-and-storybook-screenshots.WORKING.md) | Concurrent Storybook lane; move the UI library to `apps/ui-library`, validate production components in Storybook, then make accepted stories the documentation screenshot source. |
+| 03 | [Consistent pool-object colors](pending/03-consistent-pool-object-colors.md) | Waiting for accepted shared pool primitives from plan 02. |
+| 04 | [Empty-selection object target selection](pending/04-empty-selection-object-target-selection.md) | Waiting for stable application pool adapters from plan 02. |
+| 05 | [Warm frontend state for instant surface switching](pending/05-warm-frontend-state-for-instant-switching.md) | Waiting for stable frontend provider and Storybook-harness boundaries from plan 02. |
 | 06 | [Exclusive active-show mutation boundary](pending/06-exclusive-active-show-mutation-boundary.md) | Route every active-show write through one transaction owner. |
 | 07 | [Typed commands, events, and Highlight service](pending/07-typed-commands-events-and-highlight-service.md) | Remove the remaining string/JSON compatibility transport and duplicate Highlight orchestration. |
 | 08 | [Typed control-surface interaction routing](pending/08-typed-control-surface-interaction-routing.md) | Remove DOM-discovered SET, Store, Update, and keypad routing. |
@@ -41,3 +41,13 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 
 Product-roadmap work under `docs/plans/Next` and `docs/plans/Later` remains separate unless a queue
 file explicitly links it as its behavior contract.
+
+## Concurrent Storybook lane
+
+Plans under `pending/storybook changes/` form one frontend-owned lane. A `.WORKING.md` suffix marks
+its active ownership. That lane may run concurrently with the lowest-numbered unblocked plan only
+when its files, contracts, runtime state, and verification do not overlap.
+
+Plan 02 is currently active in that lane. Plans 03–05 record explicit dependencies on its shared
+pool, application-adapter, or provider boundaries. Plan 06 is therefore the next independent
+numbered plan.

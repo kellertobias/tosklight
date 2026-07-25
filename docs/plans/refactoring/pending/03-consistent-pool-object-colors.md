@@ -2,9 +2,12 @@
 
 ## Status and source contract
 
-Pending. Implement
+Pending, blocked on plan 02's accepted shared pool-card and pool-grid primitives. Implement
 [`../../Next/55-consistent-pool-object-colors.md`](../../Next/55-consistent-pool-object-colors.md)
 after shared pool primitives exist.
+
+Do not run this plan concurrently with the active Storybook lane: it changes the same pool
+presentation contracts, styles, stories, screenshots, and component tests.
 
 Estimated effort: 0.5–1 Codex day.
 
