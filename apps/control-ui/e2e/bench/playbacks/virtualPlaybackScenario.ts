@@ -14,6 +14,15 @@ interface PlaybackPageBody {
 	slots?: Record<string, number>;
 }
 
+interface VirtualPlaybackZone {
+	name: string;
+	slots: number[];
+}
+
+interface VirtualPlaybackZoneSnapshot {
+	desks: Record<string, Record<string, VirtualPlaybackZone[]>>;
+}
+
 export class BrowserVirtualPlaybacks {
 	readonly expect = {
 		cells: async (pane: VirtualPlaybackPane, count: number) =>
@@ -22,6 +31,8 @@ export class BrowserVirtualPlaybacks {
 			),
 		button: async (pane: VirtualPlaybackPane, cell: number, label: string) =>
 			expect(this.cell(pane, cell)).toContainText(label),
+		zones: async (zones: VirtualPlaybackZone[]) =>
+			expect(await this.zones()).toEqual(zones),
 	};
 
 	constructor(
@@ -99,6 +110,35 @@ export class BrowserVirtualPlaybacks {
 		await expect(dialog).toBeHidden();
 	}
 
+	async createExclusionZone(
+		pane: VirtualPlaybackPane,
+		name: string,
+		cells: number[],
+	): Promise<void> {
+		if (cells.length < 2)
+			throw new Error("A Virtual Playback exclusion zone needs two cells");
+		await this.page.keyboard.down("Shift");
+		try {
+			for (const cell of cells) await this.desk.click(this.cell(pane, cell));
+		} finally {
+			await this.page.keyboard.up("Shift");
+		}
+		await this.desk.click(
+			this.pane(pane).getByRole("button", {
+				name: "Create Exclusion Zone",
+				exact: true,
+			}),
+		);
+		const dialog = this.page.getByRole("dialog", {
+			name: "Create Exclusion Zone",
+		});
+		await dialog.getByLabel("Zone name").fill(name);
+		await this.desk.click(
+			dialog.getByRole("button", { name: "Create zone", exact: true }),
+		);
+		await expect(dialog).toBeHidden();
+	}
+
 	async activate(pane: VirtualPlaybackPane, cell: number): Promise<void> {
 		await this.desk.click(this.cell(pane, cell));
 	}
@@ -153,6 +193,23 @@ export class BrowserVirtualPlaybacks {
 		return this.pane(pane).getByRole("button", {
 			name: new RegExp(`Virtual playback page 1 cell ${validCell(cell)} empty`),
 		});
+	}
+
+	private async zones(): Promise<VirtualPlaybackZone[]> {
+		if (!this.api.session)
+			throw new Error("Virtual Playback zones require an API session");
+		const response = await this.api.request<VirtualPlaybackZoneSnapshot>(
+			"GET",
+			"/api/v2/virtual-playback-exclusion-zones",
+			undefined,
+			true,
+			undefined,
+			{ showId: this.showId() },
+		);
+		return Object.values(response.desks[this.api.session.desk.id] ?? {})
+			.flat()
+			.map((zone) => ({ name: zone.name, slots: [...zone.slots] }))
+			.sort((left, right) => left.name.localeCompare(right.name));
 	}
 }
 

@@ -19,6 +19,7 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 	id: "VPB-007",
 	title:
 		"named Virtual Playback exclusion zones are inert on creation and authoritative on activation",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const prepared = await prepare(
 			api,

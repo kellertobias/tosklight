@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **309 root cases across 56 files**.
+Default catalog: **309 root cases across 57 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -175,7 +175,6 @@ Default catalog: **309 root cases across 56 files**.
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-006 @supplemental › API timestamp boundaries, source ownership, and event idempotency | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-006 @supplemental-ui › combined controls expose pending state and asymmetric long-press release | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental-ui | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | VPB-007 @api › named Virtual Playback exclusion zones are inert on creation and authoritative on activation | docs/testing/06-preload-modes-and-virtual-playbacks.md | @api | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 06-preload-modes-and-virtual-playbacks.spec.ts | VPB-007 @ui › named Virtual Playback exclusion zones are inert on creation and authoritative on activation | docs/testing/06-preload-modes-and-virtual-playbacks.md | @ui | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | pending-semantic-migration |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | VPB-007 @supplemental @osc @restart › show-level zone snapshots retain isolated desk partitions across every transport | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental @osc @restart | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | VPB-007 @supplemental-ui › Settings edits hidden membership and reload restores it | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental-ui | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 07-move-in-black.spec.ts | MIB-001 @api › a dark fixture prepositions for its next lit Cue | docs/testing/02-cues-tracking-and-arbitration.md | @api | move-in-black | standard failure evidence | parallel | reviewed-low-level-boundary |
@@ -323,6 +322,7 @@ Default catalog: **309 root cases across 56 files**.
 | 53-semantic-programmer-preload.spec.ts | PRELOAD-001 @bench @ui › programmer-only Preload stays blind, commits, and releases | repository contract | @bench @ui | semantic-programmer-preload | standard failure evidence | parallel | migrated-semantic-world |
 | 54-semantic-physical-playback-preload.spec.ts | PRELOAD-002 @bench @ui › physical Playback Preload preserves all seven ordered action verbs | repository contract | @bench @ui | semantic-physical-playback-preload | standard failure evidence | parallel | migrated-semantic-world |
 | 55-semantic-virtual-playback-layout.spec.ts | PRELOAD-003 @bench @ui › Virtual Playbacks use a persisted pane-native 2×2 grid and real GO/TOGGLE playbacks | repository contract | @bench @ui | semantic-virtual-playback-layout | standard failure evidence | parallel | migrated-semantic-world |
+| 56-semantic-virtual-playback-exclusion-zone.spec.ts | VPB-007 @bench @ui › named Virtual Playback exclusion zones are inert on creation and authoritative on activation | repository contract | @bench @ui | semantic-virtual-playback-exclusion-zone | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints

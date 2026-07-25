@@ -15,6 +15,7 @@ const expectationWords = new Set([
 	"runtime",
 	"selected",
 	"unpatched",
+	"zones",
 ]);
 
 const worldFamilies = {
@@ -250,8 +251,10 @@ const supportedCallPaths = new Set([
 	"virtualPlayback.activate",
 	"virtualPlayback.assignSource",
 	"virtualPlayback.configureTopButton",
+	"virtualPlayback.createExclusionZone",
 	"virtualPlayback.expect.button",
 	"virtualPlayback.expect.cells",
+	"virtualPlayback.expect.zones",
 	"virtualPlayback.reload",
 ]);
 
