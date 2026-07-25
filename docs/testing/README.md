@@ -15,8 +15,8 @@ scenarios exercise it.
   wire timing. Do not repeat an operator workflow through the API when its UI
   scenario already verifies the same authoritative state.
 - Treat OSC and attached hardware as UI input surfaces and cover them in an
-  `@ui` semantic scenario. Use `@desktop` only for packaged-app lifecycle
-  behavior that requires a native bundle.
+  `@ui` semantic scenario. Native bundle launchability is verified by the
+  GitHub Actions build matrix rather than by a separate Playwright surface.
 - Never edit the canonical shows. `show.use(...)` creates an isolated working
   copy with a fresh session, Programmer, virtual clock, receivers, and OSC
   subscriptions for every scenario.
@@ -113,7 +113,9 @@ npm run test:semantic-test-docs
 
 Use `./test record` for the narrated visual catalog and `./test demo` for the
 maintained product walkthrough. Browser Playwright coverage does not claim
-packaged Tauri or native OS-window coverage.
+packaged Tauri or native OS-window coverage; each GitHub Actions desktop build
+launches its newly built application for five seconds and fails on an early
+exit.
 
 Regenerate maintained indexes after scenario changes:
 

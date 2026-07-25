@@ -38,7 +38,7 @@ exact OSC address and feedback sequence.
 | Playback/Programmer/render semantics | Owning domain/application tests and a deterministic bench scenario observing authoritative runtime and output | Current-page/explicit-page, timing, Preload, Highlight, HTP/LTP, Cue tracking, or automatic advance changes |
 | Art-Net/sACN/output scheduler | `crates/light/domain/output/tests/`, engine tests, and focused receiver scenarios under `tests/` | Socket delivery, shutdown, first frame, overload health, or capacity changes |
 | Files/MVR/media | Owning unit/integration tests and focused HTTP/UI acceptance scenario | Confinement, archive portability, CITP/socket behavior, long-running feedback, or desktop picker behavior changes |
-| Tauri/window/process lifecycle | Browser-adapter unit tests first, then `npm run test:desktop-smoke` | Native launch, child-server ownership, additional screens, shutdown, bundle assets, or stale-bundle behavior changes |
+| Tauri/window/process lifecycle | Browser-adapter and focused Rust tests; regular `@ui` Playwright for visible behavior | The GitHub Actions release matrix launches each newly built desktop application and rejects an early exit |
 | Manual/help | Markdown review and `npm run manual`; screenshot workflow only when intentionally refreshing images | Operator-facing layout or the documented UI changed |
 | Dependency/module boundary | `npm run test:architecture` | Always before committing a structural slice |
 
@@ -138,10 +138,14 @@ failing application assertion; rerun the same command unrestricted and report bo
 For native behavior:
 
 ```sh
-npm run test:desktop-smoke
 npm run open
 curl -fsS http://127.0.0.1:5000/api/v2/readiness
 ```
+
+The GitHub Actions release matrix additionally launches the freshly built
+macOS, Linux, and Windows desktop binaries for five seconds. That probe is
+CI-only and rejects any application that exits before the workflow terminates
+it.
 
 After `npm run open`, inspect `.artifacts/runtime/light-data/light-headless.log`. If readiness is
 healthy but the UI appears stuck, time `/api/v2/readiness` and `/api/v2/bootstrap` separately and
@@ -181,6 +185,6 @@ npm run test:e2e -- tests/<focused-spec>.spec.ts --grep '<scenario-id>'
 ```
 
 Before final release handoff, widen to the applicable unrestricted socket tests, all Playwright
-surfaces, Hardware Controls tests/build, `npm run test:desktop-smoke`, release benchmarks, manual
-build, and `npm run open` operator-path verification. Compare failures by stable scenario ID and behavior,
+surfaces, Hardware Controls tests/build, release benchmarks, manual build, the CI-only packaged
+desktop launch probes, and `npm run open` operator-path verification. Compare failures by stable scenario ID and behavior,
 not only by raw failure count.

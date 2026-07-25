@@ -19,7 +19,12 @@ export type BenchUiContext = BenchContractContext &
 	Pick<PlaywrightTestArgs, "page">;
 
 const extendedTest = base.extend<TestFixtures>({
-	bench: async ({}, use, testInfo) => {
+	bench: async (
+		// biome-ignore lint/correctness/noEmptyPattern: Playwright fixture callbacks require destructuring.
+		{},
+		use,
+		testInfo,
+	) => {
 		const bench = new LightBench();
 		await bench.start(testInfo.workerIndex);
 		try {
@@ -68,7 +73,7 @@ const extendedTest = base.extend<TestFixtures>({
 	},
 });
 
-const primarySurface = /@(api|ui|desktop)\b/u;
+const primarySurface = /@(api|ui)\b/u;
 const retiredSurface = /@(supplemental(?:-api|-ui)?|osc|restart|wire)\b/u;
 
 const registerClassifiedTest: NonNullable<
@@ -78,7 +83,7 @@ const registerClassifiedTest: NonNullable<
 	if (typeof title === "string" && !primarySurface.test(title)) {
 		if (retiredSurface.test(title)) return undefined;
 		throw new Error(
-			`Playwright test "${title}" has no primary @api, @ui, or @desktop surface`,
+			`Playwright test "${title}" has no primary @api or @ui surface`,
 		);
 	}
 	return Reflect.apply(target, thisArgument, argumentsList);

@@ -5,8 +5,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
-	CENTRALIZED_SENDER,
 	baselineFor,
+	CENTRALIZED_SENDER,
 	evaluateTestCommandBoundaries,
 	scanTestCommandBoundaries,
 } from "./test-command-boundaries.mjs";
@@ -24,7 +24,7 @@ const repositoryRoot = path.resolve(
 	"..",
 );
 
-test("Playwright exposes only UI, API-exception, and desktop suites", () => {
+test("Playwright exposes only UI and API-exception suites", () => {
 	const packageManifest = JSON.parse(
 		fs.readFileSync(path.join(repositoryRoot, "package.json"), "utf8"),
 	);
@@ -38,7 +38,10 @@ test("Playwright exposes only UI, API-exception, and desktop suites", () => {
 	);
 
 	assert.equal(packageManifest.scripts["test:e2e-supplemental"], undefined);
+	assert.equal(packageManifest.scripts["test:desktop-smoke"], undefined);
 	assert.doesNotMatch(workflow, /Supplemental|test:e2e-supplemental/u);
+	assert.doesNotMatch(workflow, /^\s{2}desktop-smoke:/mu);
+	assert.match(workflow, /node tools\/ci-smoke-built-desktop\.mjs/u);
 	assert.doesNotMatch(pairedScenario, /\btest\s*\(/u);
 });
 

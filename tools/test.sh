@@ -10,7 +10,7 @@ HARDWARE_UI="$ROOT/apps/light-hardware-controls"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
 # Backs the root package.json test scripts; invoke via `npm run test:<name>`.
-usage(){ echo "Usage: npm run test:{unit|architecture|e2e|e2e-api|e2e-ui|app-icons|artifact-paths|help-screenshots|record|demo|desktop-smoke|all}"; }
+usage(){ echo "Usage: npm run test:{unit|architecture|e2e|e2e-api|e2e-ui|app-icons|artifact-paths|help-screenshots|record|demo|all}"; }
 build_e2e(){ (cd "$UI" && npm run build); cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features; }
 architecture(){
   node --test "$ROOT/tools/cargo-workspace-lints.test.mjs"
@@ -40,15 +40,6 @@ demo(){
   node "$ROOT/tools/encode-product-demo.mjs"
 }
 help_screenshots(){ build_e2e; (cd "$UI" && LIGHT_HELP_SCREENSHOTS=1 npm run test:e2e -- 02-help-screenshots.spec.ts --workers=1 "$@"); }
-desktop_smoke(){
-  [[ "$(uname -s)" == Darwin ]] || { echo "desktop-smoke requires macOS" >&2; exit 2; }
-  build_e2e
-  node "$ROOT/tools/write-tauri-artifact-config.mjs" control "$CONTROL_TAURI_CONFIG"
-  (cd "$UI" && npm run tauri:build -- --debug --bundles app --config "$CONTROL_TAURI_CONFIG")
-  cp "$CARGO_TARGET_DIR/debug/light-headless" "$CARGO_TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-headless"
-  (cd "$UI" && LIGHT_DESKTOP_SMOKE=1 npm run test:e2e -- 05-desktop-process-integration.spec.ts --workers=1)
-}
-
 command="${1:-}"; shift || true
 case "$command" in
   app-icons) node "$ROOT/tools/test-app-icons.mjs" ;;
@@ -61,7 +52,6 @@ case "$command" in
   help-screenshots) help_screenshots "$@" ;;
   record) record "$@" ;;
   demo) demo "$@" ;;
-  desktop-smoke) desktop_smoke ;;
   all) unit; e2e "$@" ;;
   *) usage >&2; exit 2 ;;
 esac

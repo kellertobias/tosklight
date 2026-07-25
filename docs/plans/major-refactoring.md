@@ -400,7 +400,7 @@ These are architectural tests using fakes, not production feature implementation
 - Add contract coverage for command concurrency, primary/secondary session closure, reconnect gaps, atomic revision failure, unknown stored objects, fixture-profile upgrades, selective imports, and adapter lifecycle.
 - Event contract coverage proves that manual and automatic transitions publish the same semantic event once, a running Chaser updates subscribed Cue views without polling, narrow subscriptions receive only requested topics, reconnect gaps repair from an authoritative snapshot, and high-rate replaceable updates are coalesced without losing safety, error, or discrete transition events.
 - A fake animated value source, fake external-device adapter, and fake Macro runtime must plug in without modifying existing transport adapters, render arbitration, or output drivers.
-- At every stage run formatting, Clippy, Rust tests, TypeScript checks, frontend tests and build, focused UI/API/OSC coverage, and desktop smoke tests.
+- At every stage run formatting, Clippy, Rust tests, TypeScript checks, frontend tests and build, focused UI/API/OSC coverage, and the CI desktop launch probes.
 - Socket-based CITP and output tests run in normal CI or an unrestricted local environment.
 - Methods and modules are split by responsibility, abstraction level, ownership, and test boundary rather than an arbitrary line limit.
 

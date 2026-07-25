@@ -347,7 +347,7 @@ Before removing app-local implementations:
 2. Existing operator labels, geometry, window placement, scrolling, and hardware/software mode boundaries are unchanged.
 3. Fixture Sheet keyboard and row-state behavior remains intact.
 4. Fader, encoder, playback, and pool interactions still reach the same app controllers and mutations.
-5. Real desktop smoke and focused Playwright coverage pass for changed workflows.
+5. Focused Playwright coverage and the CI desktop launch probes pass for changed workflows.
 
 ## Acceptance coverage
 

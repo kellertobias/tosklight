@@ -11,15 +11,13 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **141 root cases across 53 files**.
+Default catalog: **139 root cases across 52 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 02-cue-semantic-contracts.spec.ts | MERGE-001 @api › two programmer identities arbitrate by priority, HTP magnitude, and stable LTP edit time | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 04-osc-api-and-cross-surface.spec.ts | API-003 @api › revisioned command-line HTTP is atomic and replay-safe | docs/testing/04-osc-api-and-cross-surface.md | @api | osc-api-and-cross-surface | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 04-osc-api-and-cross-surface.spec.ts | API-004 @api › multiplexed WebSocket command-edit envelope contract | docs/testing/04-osc-api-and-cross-surface.md | @api | osc-api-and-cross-surface | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 05-desktop-process-integration.spec.ts | DESKTOP-001 @desktop › packaged app owns and terminates its exact child server | docs/testing/05-virtual-time-persistence-and-recovery.md · packaged desktop | @desktop | desktop-process-integration | standard failure evidence | macOS desktop | reviewed-low-level-boundary |
-| 05-desktop-process-integration.spec.ts | DESKTOP-002 @desktop › packaged app never adopts or terminates an independent server | docs/testing/05-virtual-time-persistence-and-recovery.md · packaged desktop | @desktop | desktop-process-integration | standard failure evidence | macOS desktop | reviewed-low-level-boundary |
 | 05-virtual-time-persistence-and-recovery.spec.ts | MATTER-002 @api @restart › desk enablement survives show changes and restart while advertised playbacks follow the active show | docs/testing/05-virtual-time-persistence-and-recovery.md | @api @restart | virtual-time-persistence-and-recovery | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 05-virtual-time-persistence-and-recovery.spec.ts | TIME-003 @api @wire › chaser and phaser phase use virtual timestamps across incremental, speed, pause, and week jumps | docs/testing/05-virtual-time-persistence-and-recovery.md | @api @wire | virtual-time-persistence-and-recovery | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 05-virtual-time-persistence-and-recovery.spec.ts | SHOW-002 @api @restart › before-atomic-replacement fixture recovers as one complete old or new SQLite revision | docs/testing/05-virtual-time-persistence-and-recovery.md | @api @restart | virtual-time-persistence-and-recovery | standard failure evidence | parallel | reviewed-low-level-boundary |

@@ -30,7 +30,6 @@ npm run test:unit                  # architecture + tsc/vite + cargo + vitest
 npm run test:e2e-api               # Playwright @api, no browser
 npm run test:e2e-ui                # Playwright @ui, real Chrome
 npm run test:e2e -- [spec]            # everything, or one focused spec
-npm run test:desktop-smoke         # packaged .app process integration (macOS)
 npm run test:help-screenshots      # regenerate help images — only when intentional
 npm run test:all                   # unit then e2e
 
@@ -85,7 +84,6 @@ code.**
 | `npm run test:e2e -- [args]` | Builds the UI and server, then Playwright with the root config. |
 | `npm run test:e2e-api` | Playwright `--grep '@api'`. API-only contracts and constructed failure, persistence, concurrency, and wire conditions that cannot be driven truthfully through UI. |
 | `npm run test:e2e-ui` | Playwright `--grep '@ui'`. Real Chrome operator workflows, including OSC and attached-hardware surfaces. |
-| `npm run test:desktop-smoke` | macOS only. Builds the Tauri debug bundle, copies the server binary in, runs `tests/05-desktop-process-integration.spec.ts` with `LIGHT_DESKTOP_SMOKE=1`. |
 | `npm run test:help-screenshots` | **Wipes and regenerates** `docs/help/assets/screenshots/`. Only run when intentionally refreshing images, and review the diffs visually. |
 | `npm run test:record` | Serial narrated video of the whole catalog, assembled with ffmpeg into `.artifacts/test/visual-inspection/`. |
 | `npm run test:demo` | The product walkthrough; refreshes `assets/demo.show`. |
@@ -203,7 +201,7 @@ Start with the smallest relevant check, then widen by risk.
 | Frontend logic | `npm test` in `apps/light-desktop`, then `npm run test:unit` |
 | Operator-visible behaviour, including OSC and attached hardware | `npm run test:e2e-ui`, or `npm run test:e2e -- tests/<spec>.spec.ts` |
 | API-only failure construction, restart, migration, or wire behaviour | `npm run test:e2e-api` |
-| Desktop lifecycle, native windows, server supervision | `npm run test:desktop-smoke` |
+| Desktop lifecycle, native windows, server supervision | Focused Rust/Tauri tests locally; the GitHub Actions release build probes the newly built desktop process on macOS, Linux, and Windows |
 | `docs/help/` content | `npm run dev` to check live help, then `npm run manual` |
 | Panes, or anything the help images show | `npm run test:help-screenshots`, then review diffs visually |
 | Real operator behaviour, before handoff | `npm run open` |
@@ -243,14 +241,14 @@ any path for a script with `npm run artifact-path -- NAME`.
 
 ## CI
 
-`.github/workflows/test.yml`:
+`.github/workflows/release.yml`:
 
 | Job | Runner | Runs |
 | --- | --- | --- |
-| `unit` | ubuntu | `npm run test:unit` |
-| `e2e` | ubuntu, sharded matrix over API-only and UI/OSC coverage | `npm run test:e2e-*`, uploading `.artifacts/test/results` on failure |
-| `desktop-smoke` | macos-14 | `npm run test:desktop-smoke` |
+| `unit` | Ubuntu | `npm run test:unit` |
+| `e2e` | Ubuntu, sharded over API exceptions and UI/OSC coverage | `npm run test:e2e-*`, uploading `.artifacts/test/results` |
+| `build` | macOS, Linux, Windows | Builds release artifacts, then launches each newly built desktop application for five seconds and fails if it exits early |
 
-Manual and release CI runs on Forgejo (`.forgejo/workflows/manual.yml`): the manual builds on PR and
-main, and on `v*` tags the PDF and HTML archive are attached to the release. PR builds never receive
-credentials.
+The launch probe is intentionally CI-only. Local `npm run open` and
+`npm run bundle` behavior is unchanged and does not automatically launch an
+application merely to validate a build.

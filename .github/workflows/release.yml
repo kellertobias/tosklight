@@ -217,40 +217,6 @@ jobs:
           --seconds 1 --warmup-seconds 0 --mutation-gate
           --hardware-label "GitHub Actions ubuntu-22.04"
 
-  desktop-smoke:
-    name: Tests / Desktop smoke / macOS
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.sha }}
-
-      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
-        with:
-          toolchain: stable
-
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
-        with:
-          key: desktop-smoke
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install workspace dependencies
-        run: npm ci
-
-      - run: npm run test:desktop-smoke
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: failure()
-        with:
-          name: desktop-smoke-data
-          path: .artifacts/build/cargo/debug/bundle/macos
-          if-no-files-found: ignore
-
   manual:
     name: Documentation / Operator manual
     needs: metadata
@@ -408,7 +374,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
-            libgtk-3-dev libsoup-3.0-dev libasound2-dev build-essential
+            libgtk-3-dev libsoup-3.0-dev libasound2-dev build-essential xvfb
 
       - name: Install the cross-compilation toolchain
         if: matrix.cross
@@ -438,6 +404,27 @@ jobs:
           config="$RUNNER_TEMP/tauri-control-release.json"
           node tools/write-tauri-artifact-config.mjs control "$config"
           npm run --prefix apps/light-desktop tauri:build -- --target ${{ matrix.target }} --config "$config"
+
+      - name: Bundle the headless application into the macOS app
+        if: runner.os == 'macOS' && matrix.desktop
+        shell: bash
+        run: >-
+          cp
+          ".artifacts/build/cargo/${{ matrix.target }}/release/light-headless"
+          ".artifacts/build/cargo/${{ matrix.target }}/release/bundle/macos/ToskLight.app/Contents/MacOS/light-headless"
+
+      - name: Smoke-test the built desktop application
+        if: matrix.desktop
+        shell: bash
+        env:
+          LIGHT_DESKTOP_SMOKE_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            xvfb-run -a node tools/ci-smoke-built-desktop.mjs
+          else
+            node tools/ci-smoke-built-desktop.mjs
+          fi
 
       - name: Build the Hardware Controls application
         if: matrix.slug == 'macos-arm64'
@@ -555,7 +542,6 @@ jobs:
       - unit
       - e2e
       - benchmark
-      - desktop-smoke
       - manual
       - visual-assets
       - build

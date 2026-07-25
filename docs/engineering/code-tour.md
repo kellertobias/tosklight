@@ -10,8 +10,9 @@ behind the layout.
 - Root `package.json` is the supported build, test, package, manual, and desktop entry point.
   `npm run open` builds both Tauri applications and the server, starts the canonical development
   server, and opens ToskLight.
-- `npm run test:*` composes architecture, unit, Playwright, screenshot, and desktop-smoke
-  workflows. See the [test map](test-map.md) before choosing a broad command.
+- `npm run test:*` composes architecture, unit, Playwright, and screenshot
+  workflows. GitHub Actions additionally probes each newly built desktop
+  application. See the [test map](test-map.md) before choosing a broad command.
 - `tools/check-architecture.mjs` enforces Rust dependency direction, the thin server entry point,
   closed Playback ownership, and TypeScript wire-boundary imports.
 - `tools/check-source-size.mjs` applies the source-size ratchet used during the refactor.
