@@ -6,8 +6,9 @@ import type {
 	CueList,
 	PlaybackDefinition,
 } from "../../../src/api/types/playback";
-import type { ApiDriver } from "../core/api";
 import type { BrowserCommands } from "../command-selection/commandScenario";
+import type { ApiDriver } from "../core/api";
+import { type ClockDuration, parseClockDuration } from "../core/clockScenario";
 import type { DeskDriver } from "../core/desk";
 
 export enum CueRecordMode {
@@ -279,6 +280,27 @@ class CueExpectation {
 	) {
 		expect(await this.owner.cue(this.playback, this.cue)).toMatchObject(
 			expected,
+		);
+	}
+
+	async groupValueTiming(
+		group: number,
+		attribute: string,
+		expected: { fade: ClockDuration; delay?: ClockDuration | null },
+	) {
+		const cue = await this.owner.cue(this.playback, this.cue);
+		expect(cue).toBeDefined();
+		const change = (cue?.group_changes ?? []).find(
+			(candidate) =>
+				candidate.group_id === String(validInteger(group, "Group")) &&
+				candidate.attribute === attribute,
+		);
+		expect(change).toBeDefined();
+		expect(change?.fade_millis).toBe(parseClockDuration(expected.fade));
+		expect(change?.delay_millis).toBe(
+			expected.delay == null
+				? expected.delay
+				: parseClockDuration(expected.delay),
 		);
 	}
 }

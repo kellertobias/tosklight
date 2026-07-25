@@ -3,15 +3,10 @@ import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,
 	object,
-	pressCommand,
 	putObject,
 } from "../support/catalog";
 import {
-	cueListIdForPlayback,
-	currentProgrammer,
 	fixtureCue,
-	groupCue,
-	installCompactGroups,
 	installPlaybackSequence,
 	playbackState,
 	registerPairedCueScenario,
@@ -128,6 +123,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 	id: "CUE-004",
 	title:
 		"per-value timing overrides Cue fallback and Force Cue Timing is reversible",
+	surfaces: ["api"],
 	arrange: () => ({ completed: false }),
 	api: async ({ api, bench }, state) => {
 		await loadCanonicalCopy(api, bench, "cue-004-value-timing", "compact-rig");
@@ -228,71 +224,6 @@ registerPairedCueScenario<{ completed: boolean }>({
 		expect(await visualizationLevel(api, fixtures[4], "intensity")).toBeCloseTo(
 			0.8,
 			5,
-		);
-		state.completed = true;
-	},
-	ui: async ({ api, bench, desk, page }, state) => {
-		await loadCanonicalCopy(
-			api,
-			bench,
-			"cue-004-005-visible-command-timing",
-			"compact-rig",
-		);
-		await installCompactGroups(api);
-		await installPlaybackSequence(api, 1, [groupCue(10, [])]);
-		const configuration = await api.request<any>(
-			"GET",
-			"/api/v2/configuration",
-		);
-		await api.request("PUT", "/api/v2/configuration", {
-			...configuration,
-			programmer_fade_millis: 9_000,
-			sequence_master_fade_millis: 0,
-		});
-		await desk.open(bench.baseUrl);
-
-		await pressCommand(page, "GROUP 1 AT 50 TIME 2", "G1 AT 50 TIME 2");
-		await expect
-			.poll(
-				async () =>
-					(await currentProgrammer(api)).group_values["1"].intensity
-						.fade_millis,
-			)
-			.toBe(2_000);
-		expect(
-			(await currentProgrammer(api)).group_values["1"].intensity.delay_millis,
-		).toBeUndefined();
-		await pressCommand(
-			page,
-			"RECORD SET 1 CUE 1 TIME 3",
-			"RECORD SET 1 CUE 1 TIME 3",
-		);
-		await expect
-			.poll(
-				async () =>
-					(
-						await object<any>(
-							api,
-							"cue_list",
-							await cueListIdForPlayback(api, 1),
-						)
-					).body.cues.length,
-			)
-			.toBe(2);
-		const stored = await object<any>(
-			api,
-			"cue_list",
-			await cueListIdForPlayback(api, 1),
-		);
-		expect(stored.body.cues.find((cue: any) => cue.number === 1)).toMatchObject(
-			{
-				number: 1,
-				fade_millis: 3_000,
-				trigger: { type: "manual" },
-				group_changes: [
-					{ group_id: "1", attribute: "intensity", fade_millis: 2_000 },
-				],
-			},
 		);
 		state.completed = true;
 	},

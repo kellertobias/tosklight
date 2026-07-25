@@ -67,6 +67,7 @@ const supportedCallPaths = new Set([
 	"command.expect",
 	"cue.expect.metadata",
 	"cue.expect.present",
+	"cue.expect.groupValueTiming",
 	"cue.goto",
 	"demo.run",
 	"desktop.closeSettings",
