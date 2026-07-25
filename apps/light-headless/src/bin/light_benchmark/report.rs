@@ -36,6 +36,9 @@ pub struct ScenarioReport {
     pub expectation: Expectation,
     pub universes: u16,
     pub slots_per_universe: u16,
+    pub fixture_count: usize,
+    pub fixtures_per_universe: u16,
+    pub fixture_footprint: u16,
     pub configured_rate_hz: u16,
     pub warmup_ticks: u64,
     pub warmup_elapsed_seconds: f64,
@@ -85,7 +88,7 @@ pub struct ContributionSources {
     pub programmer_fixture_values: bool,
     pub static_group_programming: bool,
     pub playback_attribute_phaser: bool,
-    pub exclusive_phaser_dmx_slot: u16,
+    pub exclusive_phaser_fixture_channel: u16,
     pub phaser_slot_has_static_or_programmer_value: bool,
     pub programmer_slot_fraction: &'static str,
 }

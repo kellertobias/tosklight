@@ -18,6 +18,8 @@
         --text: #e8ecf4;
         --muted: #9aa5b8;
         --accent: #ffb020;
+        --healthy: #39d98a;
+        --degraded: #ff6b6b;
       }
       * { box-sizing: border-box; }
       body {
@@ -144,6 +146,21 @@
       .signing-note { margin: 1.5rem 0 0; color: var(--muted); font-size: 0.85rem; }
       a.version { text-decoration: none; }
       a.version:hover { border-color: var(--accent); color: var(--text); }
+      .performance-status {
+        padding: 1.25rem;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-left-width: 0.4rem;
+        border-radius: 0.7rem;
+      }
+      .performance-status strong { display: block; font-size: 1.05rem; }
+      .performance-status p { margin: 0.35rem 0; color: var(--muted); }
+      .performance-status a { font-size: 0.9rem; }
+      .performance-healthy { border-left-color: var(--healthy); }
+      .performance-healthy strong { color: var(--healthy); }
+      .performance-degraded { border-left-color: var(--degraded); }
+      .performance-degraded strong { color: var(--degraded); }
+      .performance-unknown { border-left-color: var(--muted); }
       footer {
         padding: 2.5rem 0 4rem;
         border-top: 1px solid var(--edge);
@@ -190,6 +207,10 @@
           <h2>Downloads →</h2>
           <p>Desktop application and standalone server builds for macOS, Windows, and Linux.</p>
         </a>
+        <a class="card" href="#performance">
+          <h2>Release performance →</h2>
+          <p>The measured 32-universe, 100 Hz health of the current release artifact.</p>
+        </a>
       </div>
 
       <section>
@@ -233,6 +254,15 @@
           Builds are not code-signed. On macOS, open the app once via right-click → Open; on
           Windows, choose “More info” → “Run anyway” at the SmartScreen prompt.
         </p>
+      </section>
+
+      <section id="performance">
+        <h2>Release performance</h2>
+        <p class="section-lede">
+          Measured after publication using the released Linux benchmark artifact. A degraded
+          result is visible here but never retracts or blocks the release.
+        </p>
+        __PERFORMANCE__
       </section>
 
       <section>

@@ -10,6 +10,7 @@ import { artifactPaths } from "./artifact-paths.mjs";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SCREENSHOTS = resolve(ROOT, "docs/help/assets/screenshots");
 const DEMO_DIRECTORY = resolve(artifactPaths.visual, "product-demo");
+const PERFORMANCE_STATUS_FILE = process.env.LIGHT_PERFORMANCE_STATUS_FILE;
 
 // Curated tour of the desk, in the order an operator meets these surfaces. Paths are
 // relative to docs/help/assets/screenshots and are always the current generated files.
@@ -130,6 +131,43 @@ const downloads = PLATFORMS.map(({ title, note, assets }) => {
   );
 }).join("\n        ");
 
+const knownPerformanceStates = new Set(["healthy", "degraded", "unknown"]);
+let performance = {
+  schema_version: 1,
+  status: "unknown",
+  summary: "No performance result is available for this release.",
+  release: { version, url: releaseUrl },
+};
+if (PERFORMANCE_STATUS_FILE && existsSync(PERFORMANCE_STATUS_FILE)) {
+  try {
+    const candidate = JSON.parse(readFileSync(PERFORMANCE_STATUS_FILE, "utf8"));
+    if (knownPerformanceStates.has(candidate.status) && typeof candidate.summary === "string") {
+      performance = candidate;
+    }
+  } catch {
+    // The public site must remain deployable when an infrastructure failure produced
+    // an invalid status artifact. The explicit unknown state preserves that distinction.
+  }
+}
+mkdirSync(resolve(siteRoot, "performance"), { recursive: true });
+writeFileSync(
+  resolve(siteRoot, "performance", "status.json"),
+  `${JSON.stringify(performance, null, 2)}\n`,
+);
+const performanceLabel = {
+  healthy: "Performance healthy",
+  degraded: "Performance degraded",
+  unknown: "Performance unknown",
+}[performance.status];
+const performanceDetails =
+  typeof performance.release?.url === "string" ? performance.release.url : releaseUrl;
+const performanceMarkup =
+  `<div class="performance-status performance-${escape(performance.status)}">` +
+  `<strong>${escape(performanceLabel)}</strong>` +
+  `<p>${escape(performance.summary)}</p>` +
+  `<a href="${escape(performanceDetails)}">Release details and benchmark report →</a>` +
+  `</div>`;
+
 const demoSources = [
   {
     source: resolve(DEMO_DIRECTORY, "tosklight-product-demo-h265.mp4"),
@@ -169,6 +207,7 @@ for (const [placeholder, replacement] of [
   ["__DEMO__", demo],
   ["__DOWNLOADS__", downloads],
   ["__RELEASE_URL__", releaseUrl],
+  ["__PERFORMANCE__", performanceMarkup],
 ]) {
   if (!page.includes(placeholder)) {
     console.error(`error: ${target} has no ${placeholder} placeholder`);

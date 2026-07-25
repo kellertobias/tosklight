@@ -88,6 +88,7 @@ mod tests {
             expectation: Expectation::LowPowerGoal,
             universes: 1,
             rate_hz: 40,
+            fixtures_per_universe: 1,
         };
         let scenario = BenchmarkScenario::build(config, ProtocolSelection::ArtNet, None).unwrap();
         let report = measure(&scenario, 0, config.rate_hz, 2).unwrap();

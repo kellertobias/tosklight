@@ -495,9 +495,12 @@ plan that remain incomplete or lack retained acceptance evidence:
 - Functional Patch tests prove batching, atomicity, the 2,000-mode contract, and absence of
   unrelated refreshes, but no retained release benchmark proves the required single-fixture and
   100-fixture server/UI p95 budgets with payload and phase timings.
-- Output benchmark tooling exists, but no retained reference-hardware result proves the
-  32-universe/100 Hz floor or records complete target and low-power evidence. CPU usage,
-  allocation rate, production socket delivery, and some phase splits remain unmeasured.
+- Release CI now measures the published Linux benchmark artifact without blocking the release:
+  it tests 1,024 fixtures across 32 full universes at 100 Hz, conditionally doubles density to
+  2,048 fixtures after a pass, attaches the report to the release, and publishes
+  healthy/degraded/unknown status on Pages. A retained run will first exist after the next
+  release, and fixed reference-hardware evidence, CPU usage, allocation rate, production socket
+  delivery, and some phase splits remain outstanding.
 - The complete serial visual catalog and final real packaged-desktop/operator-hardware verification
   remain outstanding.
 - The non-blocking 400-line file and 20-line function design goals continue to identify possible

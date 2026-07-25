@@ -107,6 +107,7 @@ build_pages() {
     index.html \
     manual/index.html \
     safari/index.html \
+    performance/status.json \
     semantic-tests/semantic-test-catalog.html \
     semantic-tests/semantic-test-catalog.v1.json
   do

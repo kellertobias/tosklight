@@ -24,7 +24,6 @@ pub const SLOTS_PER_UNIVERSE: u16 = 512;
 pub const PROGRAMMER_ASSIGNMENT_DIVISOR: usize = 4;
 pub const SAMPLED_ASSIGNMENT_DIVISOR: usize = 8;
 pub const SAMPLED_BATCH_COUNT: usize = 4;
-pub const ANIMATED_SLOT: u16 = SLOTS_PER_UNIVERSE - 1;
 pub const GROUP_ID: &str = "benchmark.static-group";
 
 pub struct BenchmarkScenario {
@@ -32,6 +31,8 @@ pub struct BenchmarkScenario {
     pub clock: Arc<ManualClock>,
     pub logical_start: chrono::DateTime<Utc>,
     pub universes: u16,
+    pub fixture_count: usize,
+    pub fixture_footprint: u16,
     pub packet_count: usize,
     programmers: ProgrammerRegistry,
 }
@@ -51,17 +52,31 @@ impl BenchmarkScenario {
         let session = SessionId(fixed_uuid(0x20, 1));
         programmers.start(session, UserId(fixed_uuid(0x21, 1)));
 
-        let fixture_ids = (1..=config.universes)
-            .map(|universe| FixtureId(fixed_uuid(0x30, u64::from(universe))))
+        let fixture_footprint = SLOTS_PER_UNIVERSE / config.fixtures_per_universe;
+        let fixture_count =
+            usize::from(config.universes) * usize::from(config.fixtures_per_universe);
+        let fixture_ids = (1..=fixture_count)
+            .map(|number| FixtureId(fixed_uuid(0x30, number as u64)))
             .collect::<Vec<_>>();
-        let definition = packed_definition()?;
+        let definition = packed_definition(fixture_footprint)?;
         let fixtures = fixture_ids
             .iter()
             .enumerate()
-            .map(|(index, fixture_id)| packed_fixture(*fixture_id, index as u16 + 1, &definition))
+            .map(|(index, fixture_id)| {
+                let fixture_index = index as u16;
+                let universe = fixture_index / config.fixtures_per_universe + 1;
+                let index_in_universe = fixture_index % config.fixtures_per_universe;
+                packed_fixture(
+                    *fixture_id,
+                    index as u32 + 1,
+                    universe,
+                    index_in_universe * fixture_footprint + 1,
+                    &definition,
+                )
+            })
             .collect::<Vec<_>>();
-        let group = static_group(&fixture_ids);
-        let (cue_list, playback) = playback();
+        let group = static_group(&fixture_ids, fixture_footprint);
+        let (cue_list, playback) = playback(fixture_footprint);
         let routes = routes(config.universes, protocol, loopback_destination);
         let packet_count = routes.len();
         let engine = Engine::new(programmers.clone());
@@ -82,19 +97,29 @@ impl BenchmarkScenario {
                 action: PoolPlaybackAction::Go,
             })
             .map_err(|error| format!("activate benchmark playback: {error}"))?;
-        programmers.set_many(session, programmer_assignments(&fixture_ids));
+        programmers.set_many(
+            session,
+            programmer_assignments(&fixture_ids, fixture_footprint),
+        );
         Ok(Self {
             engine,
             clock,
             logical_start,
             universes: config.universes,
+            fixture_count,
+            fixture_footprint,
             packet_count,
             programmers,
         })
     }
 
     pub fn sampled_batches(&self, at: chrono::DateTime<Utc>) -> Vec<ContributionBatch> {
-        sampled_batches(&self.engine, &self.programmers, at)
+        sampled_batches(
+            &self.engine,
+            &self.programmers,
+            at,
+            animated_slot(self.fixture_footprint),
+        )
     }
 }
 
@@ -102,6 +127,7 @@ fn sampled_batches(
     engine: &Engine,
     programmers: &ProgrammerRegistry,
     at: chrono::DateTime<Utc>,
+    animated_slot: u16,
 ) -> Vec<ContributionBatch> {
     let mut buckets = (0..SAMPLED_BATCH_COUNT)
         .map(|_| Vec::new())
@@ -122,7 +148,7 @@ fn sampled_batches(
     for contribution in engine
         .playback_contributions_at(at)
         .into_iter()
-        .filter(|contribution| contribution.value.attribute != slot_attribute(ANIMATED_SLOT))
+        .filter(|contribution| contribution.value.attribute != slot_attribute(animated_slot))
         .step_by(SAMPLED_ASSIGNMENT_DIVISOR)
     {
         buckets[index % SAMPLED_BATCH_COUNT].push(ContributionSample::replacing_playback(
@@ -135,20 +161,20 @@ fn sampled_batches(
     buckets.into_iter().map(ContributionBatch::new).collect()
 }
 
-fn packed_definition() -> Result<light_fixture::FixtureDefinition, String> {
+fn packed_definition(footprint: u16) -> Result<light_fixture::FixtureDefinition, String> {
     let mut profile = FixtureProfile::blank();
     profile.id = FixtureId(fixed_uuid(0x40, 1));
     profile.revision = 1;
     profile.manufacturer = "ToskLight Benchmark".into();
-    profile.name = "Fully packed 512-slot fixture".into();
-    profile.short_name = "Packed512".into();
+    profile.name = format!("Fully packed {footprint}-slot fixture");
+    profile.short_name = format!("Packed{footprint}");
     let mode_id = {
         let mode = &mut profile.modes[0];
         mode.id = fixed_uuid(0x41, 1);
-        mode.splits[0].footprint = SLOTS_PER_UNIVERSE;
+        mode.splits[0].footprint = footprint;
         mode.heads[0].id = fixed_uuid(0x42, 1);
         let head_id = mode.heads[0].id;
-        mode.channels = (0..SLOTS_PER_UNIVERSE)
+        mode.channels = (0..footprint)
             .map(|slot| FixtureChannel {
                 id: fixed_uuid(0x43, u64::from(slot) + 1),
                 head_id,
@@ -180,21 +206,23 @@ fn packed_definition() -> Result<light_fixture::FixtureDefinition, String> {
 
 fn packed_fixture(
     fixture_id: FixtureId,
+    fixture_number: u32,
     universe: u16,
+    address: u16,
     definition: &light_fixture::FixtureDefinition,
 ) -> PatchedFixture {
     PatchedFixture {
         fixture_id,
-        fixture_number: Some(u32::from(universe)),
+        fixture_number: Some(fixture_number),
         virtual_fixture_number: None,
-        name: format!("Packed universe {universe}"),
+        name: format!("Packed fixture {fixture_number}"),
         definition: definition.clone(),
         universe: Some(universe),
-        address: Some(1),
+        address: Some(address),
         split_patches: vec![SplitPatch {
             split: 1,
             universe: Some(universe),
-            address: Some(1),
+            address: Some(address),
         }],
         layer_id: "default".into(),
         direct_control: None,
@@ -208,12 +236,12 @@ fn packed_fixture(
     }
 }
 
-fn static_group(fixtures: &[FixtureId]) -> GroupDefinition {
+fn static_group(fixtures: &[FixtureId], fixture_footprint: u16) -> GroupDefinition {
     GroupDefinition {
         id: GROUP_ID.into(),
         name: "Benchmark static Group".into(),
         fixtures: fixtures.to_vec(),
-        programming: static_slots()
+        programming: static_slots(fixture_footprint)
             .map(|slot| {
                 (
                     slot_attribute(slot),
@@ -226,7 +254,7 @@ fn static_group(fixtures: &[FixtureId]) -> GroupDefinition {
     }
 }
 
-fn playback() -> (CueList, PlaybackDefinition) {
+fn playback(fixture_footprint: u16) -> (CueList, PlaybackDefinition) {
     let cue_list_id = CueListId(fixed_uuid(0x50, 1));
     let cue = Cue {
         id: fixed_uuid(0x51, 1),
@@ -237,7 +265,7 @@ fn playback() -> (CueList, PlaybackDefinition) {
         delay_millis: 0,
         trigger: CueTrigger::Manual,
         cue_only: false,
-        group_changes: static_slots()
+        group_changes: static_slots(fixture_footprint)
             .map(|slot| GroupCueChange {
                 group_id: GROUP_ID.into(),
                 attribute: slot_attribute(slot),
@@ -252,7 +280,7 @@ fn playback() -> (CueList, PlaybackDefinition) {
         phasers: vec![AttributePhaser {
             fixture_ids: vec![],
             group_ids: vec![GROUP_ID.into()],
-            attribute: slot_attribute(ANIMATED_SLOT),
+            attribute: slot_attribute(animated_slot(fixture_footprint)),
             phaser: Phaser {
                 mode: PhaserMode::Absolute,
                 steps: vec![
@@ -318,14 +346,16 @@ fn playback() -> (CueList, PlaybackDefinition) {
 
 fn programmer_assignments(
     fixtures: &[FixtureId],
+    fixture_footprint: u16,
 ) -> impl Iterator<Item = (FixtureId, AttributeKey, AttributeValue)> + '_ {
+    let animated_slot = animated_slot(fixture_footprint);
     fixtures
         .iter()
         .enumerate()
-        .flat_map(|(fixture_index, fixture_id)| {
-            (0..SLOTS_PER_UNIVERSE)
+        .flat_map(move |(fixture_index, fixture_id)| {
+            (0..fixture_footprint)
                 .filter(move |slot| {
-                    *slot != ANIMATED_SLOT
+                    *slot != animated_slot
                         && (fixture_index + usize::from(*slot)) % PROGRAMMER_ASSIGNMENT_DIVISOR == 0
                 })
                 .map(move |slot| {
@@ -338,8 +368,13 @@ fn programmer_assignments(
         })
 }
 
-fn static_slots() -> impl Iterator<Item = u16> {
-    (0..SLOTS_PER_UNIVERSE).filter(|slot| *slot != ANIMATED_SLOT)
+fn static_slots(fixture_footprint: u16) -> impl Iterator<Item = u16> {
+    let animated_slot = animated_slot(fixture_footprint);
+    (0..fixture_footprint).filter(move |slot| *slot != animated_slot)
+}
+
+pub(super) const fn animated_slot(fixture_footprint: u16) -> u16 {
+    fixture_footprint - 1
 }
 
 fn routes(

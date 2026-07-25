@@ -7,7 +7,7 @@ use crate::light_benchmark::{
         RunConfiguration, ScenarioReport, coverage,
     },
     scenario::{
-        ANIMATED_SLOT, BenchmarkScenario, PROGRAMMER_ASSIGNMENT_DIVISOR, SLOTS_PER_UNIVERSE,
+        BenchmarkScenario, PROGRAMMER_ASSIGNMENT_DIVISOR, SLOTS_PER_UNIVERSE, animated_slot,
     },
     statistics::distribution,
 };
@@ -26,10 +26,13 @@ const SOURCE_NAME: &str = "ToskLight output benchmark";
 pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
     let mut scenarios = Vec::with_capacity(arguments.profiles.len());
     for profile in &arguments.profiles {
-        let config = profile.config();
+        let mut config = profile.config();
+        if let Some(fixtures_per_universe) = arguments.fixtures_per_universe {
+            config.fixtures_per_universe = fixtures_per_universe;
+        }
         eprintln!(
-            "benchmarking {:?}: {} fully packed universes at {} Hz",
-            profile, config.universes, config.rate_hz
+            "benchmarking {:?}: {} fully packed universes, {} fixtures per universe at {} Hz",
+            profile, config.universes, config.fixtures_per_universe, config.rate_hz
         );
         scenarios.push(run_scenario(arguments, config)?);
     }
@@ -39,7 +42,7 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
         .then(crate::light_benchmark::mutation::run)
         .transpose()?;
     Ok(BenchmarkReport {
-        schema_version: 2,
+        schema_version: 3,
         benchmark: "tosklight_render_to_protocol_encoding_pipeline",
         reference: metadata::capture(arguments.hardware_label.as_deref()),
         configuration: RunConfiguration {
@@ -153,6 +156,9 @@ fn run_scenario(arguments: &Arguments, config: ProfileConfig) -> Result<Scenario
         expectation: config.expectation,
         universes: config.universes,
         slots_per_universe: SLOTS_PER_UNIVERSE,
+        fixture_count: scenario.fixture_count,
+        fixtures_per_universe: config.fixtures_per_universe,
+        fixture_footprint: scenario.fixture_footprint,
         configured_rate_hz: config.rate_hz,
         warmup_ticks,
         warmup_elapsed_seconds: warmup_elapsed.as_secs_f64(),
@@ -189,7 +195,7 @@ fn run_scenario(arguments: &Arguments, config: ProfileConfig) -> Result<Scenario
             programmer_fixture_values: true,
             static_group_programming: true,
             playback_attribute_phaser: true,
-            exclusive_phaser_dmx_slot: ANIMATED_SLOT + 1,
+            exclusive_phaser_fixture_channel: animated_slot(scenario.fixture_footprint) + 1,
             phaser_slot_has_static_or_programmer_value: false,
             programmer_slot_fraction: match PROGRAMMER_ASSIGNMENT_DIVISOR {
                 4 => "1/4",

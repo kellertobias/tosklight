@@ -29,6 +29,7 @@ pub struct ProfileConfig {
     pub expectation: Expectation,
     pub universes: u16,
     pub rate_hz: u16,
+    pub fixtures_per_universe: u16,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -56,6 +57,7 @@ pub struct Arguments {
     pub warmup_seconds: u64,
     pub hardware_label: Option<String>,
     pub mutation_gate: bool,
+    pub fixtures_per_universe: Option<u16>,
 }
 
 pub enum ParseOutcome {
@@ -78,24 +80,28 @@ impl BenchmarkProfile {
                 expectation: Expectation::RequiredFloor,
                 universes: 32,
                 rate_hz: 100,
+                fixtures_per_universe: 1,
             },
             Self::Target => ProfileConfig {
                 profile: self,
                 expectation: Expectation::TargetGoal,
                 universes: 64,
                 rate_hz: 120,
+                fixtures_per_universe: 1,
             },
             Self::LowPower4 => ProfileConfig {
                 profile: self,
                 expectation: Expectation::LowPowerGoal,
                 universes: 4,
                 rate_hz: 40,
+                fixtures_per_universe: 1,
             },
             Self::LowPower8 => ProfileConfig {
                 profile: self,
                 expectation: Expectation::LowPowerGoal,
                 universes: 8,
                 rate_hz: 40,
+                fixtures_per_universe: 1,
             },
         }
     }
@@ -121,6 +127,7 @@ impl Default for Arguments {
             warmup_seconds: DEFAULT_WARMUP_SECONDS,
             hardware_label: None,
             mutation_gate: false,
+            fixtures_per_universe: None,
         }
     }
 }
@@ -164,6 +171,20 @@ impl Arguments {
                     parsed.hardware_label = Some(label);
                 }
                 "--mutation-gate" => parsed.mutation_gate = true,
+                "--fixtures-per-universe" => {
+                    let value = parse_bounded_u64(
+                        &required_value(&mut arguments, &argument)?,
+                        1,
+                        128,
+                        "fixtures per universe",
+                    )? as u16;
+                    if 512 % value != 0 {
+                        return Err(
+                            "fixtures per universe must divide the 512 DMX slots evenly".into()
+                        );
+                    }
+                    parsed.fixtures_per_universe = Some(value);
+                }
                 "--help" | "-h" => return Ok(ParseOutcome::Help),
                 _ => return Err(format!("unknown argument: {argument}")),
             }
@@ -182,8 +203,9 @@ impl Arguments {
            --transport encode-only|loopback\n\
            --seconds N                 Measurement duration, 1-300 (default: 5)\n\
            --warmup-seconds N          Unpaced warmup duration, 0-60 (default: 1)\n\
-          --hardware-label TEXT       Reference-machine description included in JSON\n\
-          --mutation-gate             Run the large-show incremental mutation gate\n\
+          --hardware-label TEXT        Reference-machine description included in JSON\n\
+          --fixtures-per-universe N    Equal-size fixtures filling every universe (1-128)\n\
+          --mutation-gate              Run the large-show incremental mutation gate\n\
           -h, --help\n"
     }
 }
@@ -261,6 +283,8 @@ mod tests {
             "2",
             "--hardware-label",
             "Test host",
+            "--fixtures-per-universe",
+            "32",
             "--mutation-gate",
         ]);
         assert_eq!(arguments.profiles, vec![BenchmarkProfile::HardFloor]);
@@ -269,6 +293,7 @@ mod tests {
         assert_eq!(arguments.seconds, 7);
         assert_eq!(arguments.warmup_seconds, 2);
         assert_eq!(arguments.hardware_label.as_deref(), Some("Test host"));
+        assert_eq!(arguments.fixtures_per_universe, Some(32));
         assert!(arguments.mutation_gate);
     }
 
@@ -277,6 +302,8 @@ mod tests {
         assert!(Arguments::parse(["--universes".into(), "64".into()]).is_err());
         assert!(Arguments::parse(["--seconds".into(), "0".into()]).is_err());
         assert!(Arguments::parse(["--protocol".into(), "udp".into()]).is_err());
+        assert!(Arguments::parse(["--fixtures-per-universe".into(), "3".into()]).is_err());
+        assert!(Arguments::parse(["--fixtures-per-universe".into(), "256".into()]).is_err());
     }
 
     #[test]

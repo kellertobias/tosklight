@@ -182,41 +182,6 @@ jobs:
             .artifacts/test/results
           if-no-files-found: ignore
 
-  benchmark:
-    name: Tests / Server performance regression
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.sha }}
-
-      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
-        with:
-          toolchain: stable
-
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
-        with:
-          key: benchmark
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Build the embedded Control UI
-        run: |
-          npm ci
-          npm run build --prefix apps/light-desktop
-
-      - name: Reject large-show mutation performance regressions
-        run: >-
-          cargo run --release --locked -p light-headless --bin light-benchmark
-          --no-default-features --
-          --profile low-power-4 --protocol artnet --transport encode-only
-          --seconds 1 --warmup-seconds 0 --mutation-gate
-          --hardware-label "GitHub Actions ubuntu-22.04"
-
   manual:
     name: Documentation / Operator manual
     needs: metadata
@@ -397,6 +362,13 @@ jobs:
             ${{ matrix.cargo_flags }} \
             -p light-headless --bin light-headless
 
+      - name: Build the release performance probe
+        if: matrix.slug == 'linux-amd64'
+        shell: bash
+        run: >-
+          cargo build --release --locked --target ${{ matrix.target }}
+          --no-default-features -p light-headless --bin light-benchmark
+
       - name: Build the ToskLight desktop application
         if: matrix.desktop
         shell: bash
@@ -449,6 +421,9 @@ jobs:
           stage="$(mktemp -d)/light-headless-$version-$SLUG"
           mkdir -p "$stage"
           cp ".artifacts/build/cargo/$TARGET/release/$HEADLESS_BINARY" "$stage/"
+          if [[ "$SLUG" == "linux-amd64" ]]; then
+            cp ".artifacts/build/cargo/$TARGET/release/light-benchmark" "$stage/"
+          fi
           cp -R assets/fixture-library "$stage/fixture-library"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             (cd "$(dirname "$stage")" && 7z a -tzip "$OLDPWD/$out/light-headless-$version-$SLUG.zip" "$(basename "$stage")")
@@ -486,12 +461,13 @@ jobs:
   pages-build:
     name: Documentation / Assemble static website
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [metadata, manual, visual-assets]
+    needs: [metadata, manual, visual-assets, release-performance]
     runs-on: ubuntu-22.04
     env:
       LIGHT_RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
       LIGHT_REQUIRE_DEMO_VIDEO: "1"
       LIGHT_REUSE_MANUAL: "1"
+      LIGHT_PERFORMANCE_STATUS_FILE: .artifacts/performance/status.json
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -522,6 +498,11 @@ jobs:
           name: product-demo
           path: .artifacts/test/visual-inspection/product-demo
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-performance
+          path: .artifacts/performance
+
       - name: Assemble the public site
         run: npm run pages:generate
 
@@ -541,11 +522,9 @@ jobs:
       - quality
       - unit
       - e2e
-      - benchmark
       - manual
       - visual-assets
       - build
-      - pages-build
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -591,6 +570,8 @@ jobs:
           do
             test -f ".artifacts/release/$required"
           done
+          unzip -Z1 ".artifacts/release/light-headless-$VERSION-linux-amd64.zip" |
+            grep -Eq '/light-benchmark$'
           (cd .artifacts/release && sha256sum * > SHA256SUMS)
 
       - name: Create the tag-only semantic release
@@ -614,10 +595,133 @@ jobs:
           git fetch --force --tags origin
           test "$(git rev-list -n 1 "v$VERSION")" = "$GITHUB_SHA"
 
+  release-performance:
+    name: Release / Measure published artifact
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [metadata, release]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.metadata.outputs.version }}
+      RELEASE_CREATED: ${{ needs.metadata.outputs.release }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Measure the published release or reuse its latest status
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=".artifacts/performance"
+          mkdir -p "$out"
+          release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}"
+
+          if [[ "$RELEASE_CREATED" == "true" ]]; then
+            archive="light-headless-${VERSION}-linux-amd64.zip"
+            gh release download "v${VERSION}" --pattern "$archive" --dir "$RUNNER_TEMP"
+            mkdir -p "$RUNNER_TEMP/release-performance"
+            unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP/release-performance"
+            benchmark="$(find "$RUNNER_TEMP/release-performance" -type f -name light-benchmark -print -quit)"
+            if [[ -n "$benchmark" ]]; then
+              chmod +x "$benchmark"
+              node tools/run-release-performance.mjs \
+                --binary "$benchmark" \
+                --output-dir "$out" \
+                --version "$VERSION" \
+                --commit "$GITHUB_SHA" \
+                --release-url "$release_url" \
+                --hardware-label "GitHub Actions ubuntu-22.04"
+            fi
+
+            if [[ ! -f "$out/status.json" ]]; then
+              node -e '
+                const fs = require("node:fs");
+                fs.writeFileSync(process.argv[1], JSON.stringify({
+                  schema_version: 1,
+                  status: "unknown",
+                  summary: "The published benchmark artifact could not be executed.",
+                  generated_at: new Date().toISOString(),
+                  release: { version: process.env.VERSION, commit: process.env.GITHUB_SHA, url: process.argv[2] }
+                }, null, 2) + "\n");
+              ' "$out/status.json" "$release_url"
+            fi
+
+            cp "$out/status.json" "$out/tosklight-performance-status-${VERSION}.json"
+            (cd "$out" && zip -q "tosklight-performance-report-${VERSION}.zip" ./*.json ./*.log ./*.md 2>/dev/null || \
+              zip -q "tosklight-performance-report-${VERSION}.zip" ./*.json)
+            gh release upload "v${VERSION}" --clobber \
+              "$out/tosklight-performance-status-${VERSION}.json#Performance status" \
+              "$out/tosklight-performance-report-${VERSION}.zip#Detailed performance report"
+          else
+            gh release download "v${VERSION}" \
+              --pattern "tosklight-performance-status-${VERSION}.json" \
+              --dir "$out" || true
+            if [[ -f "$out/tosklight-performance-status-${VERSION}.json" ]]; then
+              cp "$out/tosklight-performance-status-${VERSION}.json" "$out/status.json"
+            else
+              node -e '
+                const fs = require("node:fs");
+                fs.writeFileSync(process.argv[1], JSON.stringify({
+                  schema_version: 1,
+                  status: "unknown",
+                  summary: "No performance report is attached to the current release.",
+                  generated_at: new Date().toISOString(),
+                  release: { version: process.env.VERSION, commit: process.env.GITHUB_SHA, url: process.argv[2] }
+                }, null, 2) + "\n");
+              ' "$out/status.json" "$release_url"
+            fi
+          fi
+
+          if [[ -f "$out/summary.md" ]]; then
+            cat "$out/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            node -e '
+              const status = require("./" + process.argv[1]);
+              console.log(`## Release performance\n\n**${status.status.toUpperCase()}** — ${status.summary}`);
+            ' "$out/status.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Ensure a publishable performance status
+        if: always()
+        shell: bash
+        run: |
+          if [[ ! -f .artifacts/performance/status.json ]]; then
+            mkdir -p .artifacts/performance
+            node -e '
+              const fs = require("node:fs");
+              fs.writeFileSync(process.argv[1], JSON.stringify({
+                schema_version: 1,
+                status: "unknown",
+                summary: "The performance assessment encountered an infrastructure error.",
+                generated_at: new Date().toISOString(),
+                release: {
+                  version: process.env.VERSION,
+                  commit: process.env.GITHUB_SHA,
+                  url: `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/tag/v${process.env.VERSION}`
+                }
+              }, null, 2) + "\n");
+            ' .artifacts/performance/status.json
+          fi
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: release-performance
+          path: .artifacts/performance
+          if-no-files-found: error
+
   pages-deploy:
     name: Documentation / Deploy GitHub Pages
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [release, pages-build]
+    needs: [pages-build]
     runs-on: ubuntu-22.04
     permissions:
       contents: read
