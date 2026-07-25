@@ -5,10 +5,7 @@ import type {
 	PlaybackSnapshot,
 } from "../../src/api/types/playback";
 import type { ApiDriver } from "./api";
-import {
-	playbackLocation,
-	validInteger,
-} from "./cuePlaybackScenario";
+import { playbackLocation, validInteger } from "./cuePlaybackScenario";
 import type { DeskDriver } from "./desk";
 import type { SimulatedHardware } from "./hardwareScenario";
 
@@ -52,7 +49,10 @@ export function currentPagePlayback(slot: number): PlaybackTarget {
 	return { kind: "current_page", slot: validInteger(slot, "Playback slot") };
 }
 
-export function explicitPagePlayback(page: number, slot: number): PlaybackTarget {
+export function explicitPagePlayback(
+	page: number,
+	slot: number,
+): PlaybackTarget {
 	return {
 		kind: "explicit_page",
 		page: validInteger(page, "Playback Page"),
@@ -149,7 +149,9 @@ class PlaybackExpectation {
 
 	async runtime(expected: Record<string, unknown>) {
 		const { master, ...rest } = expected;
-		await expect.poll(() => this.owner.runtime(this.number)).toMatchObject(rest);
+		await expect
+			.poll(() => this.owner.runtime(this.number))
+			.toMatchObject(rest);
 		if (typeof master === "number")
 			await expect
 				.poll(async () => (await this.owner.runtime(this.number))?.master)
@@ -163,9 +165,9 @@ class PlaybackExpectation {
 	}
 
 	async configuration(expected: Partial<PlaybackDefinition>) {
-		expect((await this.owner.requiredDefinition(this.number)).body).toMatchObject(
-			expected,
-		);
+		expect(
+			(await this.owner.requiredDefinition(this.number)).body,
+		).toMatchObject(expected);
 	}
 }
 
@@ -282,7 +284,10 @@ export class BrowserPlaybacks {
 			await this.api.playbackNumberAction(number, "master", {
 				value: value / 100,
 			});
-		else await (await this.visibleCard(number)).getByRole("slider").fill(String(value));
+		else
+			await (await this.visibleCard(number))
+				.getByRole("slider")
+				.fill(String(value));
 	}
 
 	async configure(number: number, definition: PlaybackConfiguration) {
@@ -321,7 +326,9 @@ export class BrowserPlaybacks {
 					...current.body,
 					...(definition.name == null ? {} : { name: definition.name }),
 					...(definition.color == null ? {} : { color: definition.color }),
-					...(definition.buttons == null ? {} : { buttons: definition.buttons }),
+					...(definition.buttons == null
+						? {}
+						: { buttons: definition.buttons }),
 					...(definition.fader == null ? {} : { fader: definition.fader }),
 				},
 			},
@@ -343,7 +350,10 @@ export class BrowserPlaybacks {
 	}
 
 	snapshot() {
-		return this.api.request<PlaybackSnapshot>("GET", "/api/v2/playback-overview");
+		return this.api.request<PlaybackSnapshot>(
+			"GET",
+			"/api/v2/playback-overview",
+		);
 	}
 
 	async runtime(number: number) {
@@ -353,6 +363,7 @@ export class BrowserPlaybacks {
 	}
 
 	private async visibleCard(number: number): Promise<Locator> {
+		await this.open();
 		const location = await playbackLocation(this.api, this.showId(), number);
 		const card = this.page.locator(
 			`.playback-fader-bank [data-playback-slot="${location.slot}"]:visible`,

@@ -45,6 +45,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	id: "CUE-008",
 	title:
 		"blind Preload records the same Cue without activating playback or output",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const show = await loadCanonicalCopy(
 			api,
@@ -149,6 +150,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	id: "CUE-001",
 	title:
 		"Record targets playbacks while decimal insertion and Record operations preserve tracking",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const show = await loadCanonicalCopy(
 			api,

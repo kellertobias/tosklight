@@ -153,6 +153,11 @@ export class CommandAdapter {
 			await this.expect(text);
 		} else {
 			const page = this.browser();
+			const groupKey = keypadLocator(page, "GRP");
+			if (!(await groupKey.isVisible())) {
+				await this.desk.click(page.locator(".mode-toggle"));
+				await expect(groupKey).toBeVisible();
+			}
 			await this.desk.click(keypadLocator(page, "ESC"));
 			const target = await this.commandLine().inputValue();
 			for (const key of commandKeys(text, target))

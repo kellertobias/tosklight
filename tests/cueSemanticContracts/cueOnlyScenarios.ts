@@ -31,6 +31,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	id: "CUE-002",
 	title:
 		"Cue-only restoration reconstructs identically for sequential GO and direct jumps",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const show = await loadCanonicalCopy(
 			api,

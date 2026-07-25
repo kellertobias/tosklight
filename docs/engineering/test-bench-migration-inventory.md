@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **308 root cases across 44 files**.
+Default catalog: **308 root cases across 45 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -52,11 +52,8 @@ Default catalog: **308 root cases across 44 files**.
 | 01-foundational-dimmers-and-groups.spec.ts | PROG-003 @supplemental › visible higher/lower LTP and scoped release permutations | docs/testing/01-foundational-dimmers-and-groups.md | @supplemental | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 01-foundational-dimmers-and-groups.spec.ts | PROG-004 @supplemental › direct API clear-stage boundary | docs/testing/01-foundational-dimmers-and-groups.md | @supplemental | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 02-cue-semantic-contracts.spec.ts | CUE-008 @api › blind Preload records the same Cue without activating playback or output | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 02-cue-semantic-contracts.spec.ts | CUE-008 @ui › blind Preload records the same Cue without activating playback or output | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cue-semantic-contracts | standard failure evidence | parallel | pending-semantic-migration |
 | 02-cue-semantic-contracts.spec.ts | CUE-001 @api › Record targets playbacks while decimal insertion and Record operations preserve tracking | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 02-cue-semantic-contracts.spec.ts | CUE-001 @ui › Record targets playbacks while decimal insertion and Record operations preserve tracking | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cue-semantic-contracts | standard failure evidence | parallel | pending-semantic-migration |
 | 02-cue-semantic-contracts.spec.ts | CUE-002 @api › Cue-only restoration reconstructs identically for sequential GO and direct jumps | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 02-cue-semantic-contracts.spec.ts | CUE-002 @ui › Cue-only restoration reconstructs identically for sequential GO and direct jumps | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cue-semantic-contracts | standard failure evidence | parallel | pending-semantic-migration |
 | 02-cue-semantic-contracts.spec.ts | CUE-003 @api › GO, pause, resume, back, and release use exact application-time boundaries | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 02-cue-semantic-contracts.spec.ts | CUE-003 @ui › GO, pause, resume, back, and release use exact application-time boundaries | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cue-semantic-contracts | standard failure evidence | parallel | pending-semantic-migration |
 | 02-cue-semantic-contracts.spec.ts | CUE-004 @api › per-value timing overrides Cue fallback and Force Cue Timing is reversible | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
@@ -322,6 +319,9 @@ Default catalog: **308 root cases across 44 files**.
 | 43-semantic-foundational-programmer.spec.ts | PROG-002 @bench @ui › fixture ranges and retained selections spread through the desk command line | repository contract | @bench @ui | semantic-foundational-programmer | standard failure evidence | parallel | migrated-semantic-world |
 | 43-semantic-foundational-programmer.spec.ts | PROG-003 @bench @ui › newer fixture intensity wins LTP and releases back to its Group value | repository contract | @bench @ui | semantic-foundational-programmer | standard failure evidence | parallel | migrated-semantic-world |
 | 43-semantic-foundational-programmer.spec.ts | PROG-004 @bench @ui › Clear removes selection first and programmer values second | repository contract | @bench @ui | semantic-foundational-programmer | standard failure evidence | parallel | migrated-semantic-world |
+| 44-semantic-cue-recording-and-reconstruction.spec.ts | CUE-008 @bench @ui › blind Preload records the same Cue without activating playback or output | repository contract | @bench @ui | semantic-cue-recording-and-reconstruction | standard failure evidence | parallel | migrated-semantic-world |
+| 44-semantic-cue-recording-and-reconstruction.spec.ts | CUE-001 @bench @ui › Record targets playbacks while decimal insertion and Record operations preserve tracking | repository contract | @bench @ui | semantic-cue-recording-and-reconstruction | standard failure evidence | parallel | migrated-semantic-world |
+| 44-semantic-cue-recording-and-reconstruction.spec.ts | CUE-002 @bench @ui › Cue-only restoration reconstructs identically for sequential GO and direct jumps | repository contract | @bench @ui | semantic-cue-recording-and-reconstruction | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints

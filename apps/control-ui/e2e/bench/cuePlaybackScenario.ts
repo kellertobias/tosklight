@@ -1,7 +1,11 @@
 import { expect, type Page } from "@playwright/test";
 import { HttpCueTransferTransport } from "../../src/api/CueTransferTransport";
 import type { CueMoveCopyChoice } from "../../src/api/generated/light-wire";
-import type { Cue, CueList, PlaybackDefinition } from "../../src/api/types/playback";
+import type {
+	Cue,
+	CueList,
+	PlaybackDefinition,
+} from "../../src/api/types/playback";
 import type { ApiDriver } from "./api";
 import type { BrowserCommands } from "./commandScenario";
 import type { DeskDriver } from "./desk";
@@ -62,6 +66,60 @@ export class BrowserRecording {
 		return this.cueVia("ui", intent);
 	}
 
+	async append(playback: number) {
+		const location = await playbackLocation(
+			this.api,
+			this.showId(),
+			validInteger(playback, "Playback"),
+		);
+		const before = await this.cueListForPlayback(playback);
+		const target = this.page.getByRole("button", {
+			name: `Playback representation page ${location.page} playback ${location.slot}`,
+			exact: true,
+		});
+		if (!(await target.isVisible())) {
+			await this.desk.click(this.page.locator(".mode-toggle"));
+			await expect(target).toBeVisible();
+		}
+		await this.desk.click(
+			this.page.locator(".global-store-button:visible").first(),
+		);
+		await this.desk.click(target);
+		await expect
+			.poll(async () => (await this.cueListForPlayback(playback)).revision)
+			.toBeGreaterThan(before.revision);
+	}
+
+	async cueOnly(checked: boolean) {
+		await this.ensureCommandSurface();
+		await this.desk.recordStep(
+			"RECORD SETTINGS",
+			`${checked ? "Enable" : "Disable"} Cue only through the visible Record settings.`,
+		);
+		const record = this.page.getByRole("button", {
+			name: /REC(?: ARMED)?/,
+			exact: true,
+		});
+		await record.hover();
+		await this.page.mouse.down();
+		await this.page.waitForTimeout(700);
+		await this.page.mouse.up();
+		const dialog = this.page.locator(".store-settings-modal");
+		await expect(dialog).toBeVisible();
+		const cueOnly = dialog.getByLabel("Cue only");
+		if ((await cueOnly.isChecked()) !== checked)
+			await this.desk.click(
+				dialog.locator("label").filter({ hasText: "Cue only" }),
+			);
+		if (checked) await expect(cueOnly).toBeChecked();
+		else await expect(cueOnly).not.toBeChecked();
+		await this.desk.click(
+			dialog.getByRole("button", { name: "Done", exact: true }),
+		);
+		await expect(dialog).toBeHidden();
+		await this.page.waitForTimeout(1_000);
+	}
+
 	async playbackVia(route: CommandRoute, slot: number) {
 		validInteger(slot, "Playback slot");
 		if (route === "api")
@@ -77,7 +135,9 @@ export class BrowserRecording {
 			await this.desk.click(this.page.locator(".mode-toggle"));
 			await expect(target).toBeVisible();
 		}
-		await this.desk.click(this.page.locator(".global-store-button:visible").first());
+		await this.desk.click(
+			this.page.locator(".global-store-button:visible").first(),
+		);
 		await this.desk.click(target);
 		let playbackNumber: number | undefined;
 		await expect
@@ -119,7 +179,9 @@ export class BrowserRecording {
 			.join(" ");
 		await this.commands.via[route].execute(command);
 		await expect
-			.poll(async () => (await this.cueListForPlayback(intent.playback)).revision)
+			.poll(
+				async () => (await this.cueListForPlayback(intent.playback)).revision,
+			)
 			.toBeGreaterThan(before.revision);
 	}
 
@@ -144,7 +206,8 @@ export class BrowserRecording {
 		const set = this.page.locator(
 			'.programmer-number-block [data-keypad-key="SET"]:visible',
 		);
-		if (!(await set.isVisible())) await this.desk.click(this.page.locator(".mode-toggle"));
+		if (!(await set.isVisible()))
+			await this.desk.click(this.page.locator(".mode-toggle"));
 		await expect(set).toBeVisible();
 	}
 }
@@ -164,11 +227,23 @@ class CueSurface {
 	}
 
 	move(playback: number, cue: number, destination: number) {
-		return this.owner.transferVia(this.route, "MOVE", playback, cue, destination);
+		return this.owner.transferVia(
+			this.route,
+			"MOVE",
+			playback,
+			cue,
+			destination,
+		);
 	}
 
 	copy(playback: number, cue: number, destination: number) {
-		return this.owner.transferVia(this.route, "COPY", playback, cue, destination);
+		return this.owner.transferVia(
+			this.route,
+			"COPY",
+			playback,
+			cue,
+			destination,
+		);
 	}
 
 	goto(playback: number, cue: number) {
@@ -199,8 +274,12 @@ class CueExpectation {
 		expect(await this.owner.cue(this.playback, this.cue)).toBeUndefined();
 	}
 
-	async metadata(expected: Partial<Pick<Cue, "name" | "fade_millis" | "delay_millis">>) {
-		expect(await this.owner.cue(this.playback, this.cue)).toMatchObject(expected);
+	async metadata(
+		expected: Partial<Pick<Cue, "name" | "fade_millis" | "delay_millis">>,
+	) {
+		expect(await this.owner.cue(this.playback, this.cue)).toMatchObject(
+			expected,
+		);
 	}
 }
 
@@ -251,11 +330,19 @@ export class BrowserCues {
 	}
 
 	async updateVia(route: CommandRoute, playback: number, cue: number) {
-		await this.mutate(route, playback, `UPDATE ${await this.address(playback)} CUE ${formatCueNumber(cue)}`);
+		await this.mutate(
+			route,
+			playback,
+			`UPDATE ${await this.address(playback)} CUE ${formatCueNumber(cue)}`,
+		);
 	}
 
 	async deleteVia(route: CommandRoute, playback: number, cue: number) {
-		await this.mutate(route, playback, `DELETE ${await this.address(playback)} CUE ${formatCueNumber(cue)}`);
+		await this.mutate(
+			route,
+			playback,
+			`DELETE ${await this.address(playback)} CUE ${formatCueNumber(cue)}`,
+		);
 	}
 
 	async transferVia(
@@ -294,7 +381,11 @@ export class BrowserCues {
 			});
 		}
 		await expect
-			.poll(async () => (await cueListForPlayback(this.api, this.showId(), playback)).revision)
+			.poll(
+				async () =>
+					(await cueListForPlayback(this.api, this.showId(), playback))
+						.revision,
+			)
 			.toBeGreaterThan(before.revision);
 	}
 
@@ -326,7 +417,11 @@ export class BrowserCues {
 		if (route === "ui") await this.ensureCommandSurface();
 		await this.commands.via[route].execute(command);
 		await expect
-			.poll(async () => (await cueListForPlayback(this.api, this.showId(), playback)).revision)
+			.poll(
+				async () =>
+					(await cueListForPlayback(this.api, this.showId(), playback))
+						.revision,
+			)
 			.toBeGreaterThan(before.revision);
 	}
 
@@ -339,18 +434,23 @@ export class BrowserCues {
 		const set = this.page.locator(
 			'.programmer-number-block [data-keypad-key="SET"]:visible',
 		);
-		if (!(await set.isVisible())) await this.desk.click(this.page.locator(".mode-toggle"));
+		if (!(await set.isVisible()))
+			await this.desk.click(this.page.locator(".mode-toggle"));
 		await expect(set).toBeVisible();
 	}
 
 	private session() {
-		if (!this.api.session) throw new Error("Cue helper requires an API session");
+		if (!this.api.session)
+			throw new Error("Cue helper requires an API session");
 		return this.api.session;
 	}
-
 }
 
-export async function playbackLocation(api: ApiDriver, showId: string, number: number) {
+export async function playbackLocation(
+	api: ApiDriver,
+	showId: string,
+	number: number,
+) {
 	validInteger(number, "Playback");
 	const pages = await api.showObjects<any>(showId, "playback_page");
 	for (const page of pages)
@@ -360,7 +460,11 @@ export async function playbackLocation(api: ApiDriver, showId: string, number: n
 	throw new Error(`Playback ${number} is not mapped to a page`);
 }
 
-export async function cueListForPlayback(api: ApiDriver, showId: string, number: number) {
+export async function cueListForPlayback(
+	api: ApiDriver,
+	showId: string,
+	number: number,
+) {
 	const playback = await api.showObject<PlaybackDefinition>(
 		showId,
 		"playback",
