@@ -25,15 +25,14 @@ function reportFailures(failures) {
   console.error("size error: split new/grown violations; after reducing legacy violations, run with --ratchet");
 }
 
-function reportSuccess(result, scan) {
+function reportSuccess(result) {
   console.log(
     `Source size ratchet is valid: ${result.violations.files.length} legacy files above ${LIMITS.file} lines; ` +
     `${result.violations.functions.length} legacy functions above ${LIMITS.function} lines.`,
   );
   console.log(
     `Source size goals: ${result.goals.files} files above ${LIMITS.fileGoal} lines; ` +
-    `${result.goals.functions} functions above ${LIMITS.functionGoal} lines. ` +
-    `${scan.exemptions.length} machine-managed files exempt.`,
+    `${result.goals.functions} functions above ${LIMITS.functionGoal} lines.`,
   );
 }
 
@@ -56,4 +55,4 @@ if (command === "--ratchet") {
   console.error(`size error: unknown argument ${command}`);
   process.exit(2);
 }
-reportSuccess(result, scan);
+reportSuccess(result);

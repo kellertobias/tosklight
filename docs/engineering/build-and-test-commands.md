@@ -164,12 +164,11 @@ Limits from `tools/source-size/config.mjs`:
 | File | 1200 lines | 400 lines |
 | Function | 150 lines | 20 lines |
 
-Files are enumerated with `git ls-files --cached --others --exclude-standard`. Per-language function
-scanners exist for Rust, JavaScript/TypeScript, Python, and shell.
-
-**Exemptions are deliberately narrow** — machine-managed lockfiles, Tauri `gen/schemas/*.json`,
-generated wire schemas, and standalone prototypes under `experiments/`. Test sources are exempt from
-the hard limits but still reported against the goals.
+Files are enumerated with `git ls-files --cached --others --exclude-standard`, then restricted to
+`.ts`, `.tsx`, `.js`, `.rs`, and `.py` files under `apps/`, `crates/`, and `packages/`. Any nested
+`assets/`, `artifacts/`, `docs/`, or `experiments/` directory is excluded. JSON, Markdown, shell,
+repository-level tests, and all other paths and extensions are outside this check. Test sources
+within the included roots are exempt from the hard limits but still reported against the goals.
 
 The **ratchet** (`tools/source-size/baseline.json`) is currently empty: zero legacy violations
 remain, so any new oversized file or function fails immediately. After genuinely reducing a

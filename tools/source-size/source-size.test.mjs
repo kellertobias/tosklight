@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { exemptionReason, isTestSource } from "./config.mjs";
+import { isSourcePath, isTestSource } from "./config.mjs";
 import { scanJavaScriptFunctions } from "./javascript.mjs";
 import { scanPythonFunctions } from "./python.mjs";
 import { baselineFor, evaluateRatcheting, serializeBaseline } from "./ratchet.mjs";
@@ -14,24 +14,33 @@ test("logical lines count a final unterminated line", () => {
   assert.equal(logicalLineCount("one\ntwo\n"), 2);
 });
 
-test("only machine-managed locks, generated schemas, and experiments are exempt", () => {
-  assert.equal(exemptionReason("Cargo.lock"), "machine-managed lockfile");
-  assert.equal(exemptionReason("apps/a/package-lock.json"), "machine-managed lockfile");
-  assert.equal(
-    exemptionReason("apps/a/src-tauri/gen/schemas/desktop-schema.json"),
-    "Tauri-generated schema JSON",
-  );
-  assert.equal(
-    exemptionReason("crates/wire/schemas/v2-events/event-server-message.schema.json"),
-    "Rust-generated wire schema JSON",
-  );
-  assert.equal(
-    exemptionReason("experiments/dynamics-editor/app.js"),
-    "isolated experiment prototype",
-  );
-  assert.equal(exemptionReason("fixtures/schema.json"), undefined);
-  assert.equal(exemptionReason("docs/generated.md"), undefined);
-  assert.equal(exemptionReason("apps/control-ui/src/experiments/panel.tsx"), undefined);
+test("only code files in production source roots are scanned", () => {
+  for (const repositoryPath of [
+    "apps/control-ui/src/App.tsx",
+    "apps/control-ui/src/api.ts",
+    "apps/control-ui/scripts/setup.js",
+    "crates/server/src/main.rs",
+    "packages/tools/check.py",
+  ]) {
+    assert.equal(isSourcePath(repositoryPath), true, repositoryPath);
+  }
+
+  for (const repositoryPath of [
+    "Cargo.lock",
+    "apps/control-ui/package.json",
+    "apps/control-ui/README.md",
+    "apps/control-ui/src/style.css",
+    "apps/control-ui/assets/config.js",
+    "apps/control-ui/artifacts/report.ts",
+    "apps/control-ui/docs/example.tsx",
+    "apps/control-ui/experiments/panel.tsx",
+    "docs/generated.ts",
+    "experiments/dynamics-editor/app.js",
+    "tests/large.spec.ts",
+    "tools/check-source-size.mjs",
+  ]) {
+    assert.equal(isSourcePath(repositoryPath), false, repositoryPath);
+  }
 });
 
 test("test sources are identified without exempting them from goal reporting", () => {
