@@ -182,6 +182,27 @@ fn numbered_objects_reject_non_numeric_storage_identity() {
     }
 }
 
+#[test]
+fn layout_and_patch_families_preserve_the_complete_lossless_candidate() {
+    let request = json!({
+        "known": {"nested": true},
+        "future_extension": [1, 2, 3],
+    });
+    for kind in [
+        ActiveShowObjectKind::PatchLayer,
+        ActiveShowObjectKind::StageLayout,
+        ActiveShowObjectKind::UserLayout,
+    ] {
+        let mutation = mutation(kind, "main", request.clone());
+        assert_eq!(
+            normalize_body(None, &mutation, &request).unwrap(),
+            request,
+            "{} must preserve its route-prepared lossless body",
+            kind.as_str()
+        );
+    }
+}
+
 fn normalize(existing: &Value, kind: ActiveShowObjectKind, id: &str, request: Value) -> Value {
     let mutation = mutation(kind, id, request.clone());
     normalize_body(Some(existing), &mutation, &request).unwrap()

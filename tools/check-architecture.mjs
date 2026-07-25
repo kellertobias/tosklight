@@ -127,6 +127,35 @@ function activeShowMutationDirections() {
   for (const forbidden of [".put_object(", "refresh_command_show", "load_engine_snapshot"])
     if (source.includes(forbidden))
       fail(`Update must route active-show writes through ActiveShowService, not ${forbidden}`);
+
+  const adapterRoot = path.join(repositoryRoot, "crates/light/adapters/headless/src");
+  const directMutation = /\.(?:put_object|delete_object|mutate_objects_atomically|apply_portable_transaction|put_user_layout)\s*\(/u;
+  const deliberateBoundaries = new Set([
+    // The ActiveShowService unit of work is the one production active-show commit owner.
+    "crates/light/adapters/headless/src/runtime/active_show_adapter.rs",
+    // Default-show creation writes a new library file, never the loaded active show.
+    "crates/light/adapters/headless/src/default_show/seed.rs",
+    // MVR apply is a deliberately separate whole-import boundary.
+    "crates/light/adapters/headless/src/runtime/mvr_apply_store.rs",
+    // Show loading commits compatibility migrations before installing the loaded show.
+    "crates/light/adapters/headless/src/runtime/show_compile.rs",
+    // The generic object endpoint retains inactive-library and isolated test-seed writes.
+    "crates/light/adapters/headless/src/runtime/object_api.rs",
+    // Preload writes directly only when its target show is not active.
+    "crates/light/adapters/headless/src/runtime/store_api.rs",
+  ]);
+  for (const file of walk(adapterRoot).filter((candidate) => candidate.endsWith(".rs"))) {
+    const name = relative(file);
+    if (
+      name.includes("/tests/") ||
+      name.endsWith("/tests.rs") ||
+      name.endsWith("_tests.rs") ||
+      deliberateBoundaries.has(name)
+    )
+      continue;
+    if (directMutation.test(fs.readFileSync(file, "utf8")))
+      fail(`${name} writes ShowStore directly outside the ActiveShowService or a deliberate library/import boundary`);
+  }
 }
 
 function playbackOwnershipBoundaries() {

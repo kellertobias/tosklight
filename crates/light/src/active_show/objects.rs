@@ -143,6 +143,9 @@ fn normalize_body(
     match mutation.kind {
         ActiveShowObjectKind::CueList => normalize_cue_list(existing, mutation, request),
         ActiveShowObjectKind::Group => normalize_group(existing, mutation, request),
+        ActiveShowObjectKind::PatchLayer
+        | ActiveShowObjectKind::StageLayout
+        | ActiveShowObjectKind::UserLayout => Ok(request.clone()),
         ActiveShowObjectKind::Playback => normalize_playback(existing, mutation, request),
         ActiveShowObjectKind::PlaybackPage => normalize_playback_page(existing, mutation, request),
         ActiveShowObjectKind::Preset => normalize_preset(existing, mutation, request),

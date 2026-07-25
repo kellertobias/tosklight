@@ -1,6 +1,5 @@
 //! Typed v2 intent routes for remaining production show-object writers.
 
-use super::object_api::{activate_object_change, validate_object_candidate};
 use super::show_objects_v2::{active_entry, object_record, validate_request_id};
 use super::*;
 use crate::tolerant_json::TolerantJson;
@@ -60,16 +59,41 @@ async fn user_layout_action(
     if let Some(window_settings) = patch.window_settings {
         object.insert("windowSettings".into(), window_settings);
     }
-    let outcome = commit_direct_object(
+    let action = active_show_object_action(
+        operator_action_context(&session, light_application::ActionSource::Http)
+            .with_request_id(&request.request_id),
+        show_id,
+        vec![put_active_show_object(
+            light_application::ActiveShowObjectKind::UserLayout,
+            object_id.clone(),
+            expected_revision,
+            body,
+        )],
+    );
+    let (result, _activation) =
+        run_active_show_object_action_async(&state, _activation, action).await?;
+    let change = result
+        .changes
+        .first()
+        .expect("one user-layout mutation returns one change");
+    emit(
+        &state,
+        "show_object_changed",
+        serde_json::json!({
+            "show_id":show_id,
+            "kind":"user_layout",
+            "id":object_id,
+            "revision":change.object_revision
+        }),
+    );
+    let outcome = committed_outcome(
         &state,
         show_id,
         "user_layout",
         &object_id,
-        body,
-        expected_revision,
         request.request_id,
-    )
-    .await?;
+        Some(result.event_sequence),
+    )?;
     replay.insert(key, replay_action, outcome.clone());
     Ok(Json(outcome))
 }
@@ -106,16 +130,41 @@ async fn patch_layer_action(
     object.insert("id".into(), layer_id.clone().into());
     object.insert("name".into(), layer.name.into());
     object.insert("order".into(), layer.order.into());
-    let outcome = commit_direct_object(
+    let action = active_show_object_action(
+        operator_action_context(&session, light_application::ActionSource::Http)
+            .with_request_id(&request.request_id),
+        show_id,
+        vec![put_active_show_object(
+            light_application::ActiveShowObjectKind::PatchLayer,
+            layer_id.clone(),
+            expected_revision,
+            body,
+        )],
+    );
+    let (result, _activation) =
+        run_active_show_object_action_async(&state, _activation, action).await?;
+    let change = result
+        .changes
+        .first()
+        .expect("one patch-layer mutation returns one change");
+    emit(
+        &state,
+        "show_object_changed",
+        serde_json::json!({
+            "show_id":show_id,
+            "kind":"patch_layer",
+            "id":layer_id,
+            "revision":change.object_revision
+        }),
+    );
+    let outcome = committed_outcome(
         &state,
         show_id,
         "patch_layer",
         &layer_id,
-        body,
-        expected_revision,
         request.request_id,
-    )
-    .await?;
+        Some(result.event_sequence),
+    )?;
     replay.insert(key, replay_action, outcome.clone());
     Ok(Json(outcome))
 }
@@ -334,37 +383,6 @@ fn append_dynamic(
         }
     }));
     Ok(())
-}
-
-async fn commit_direct_object(
-    state: &AppState,
-    show_id: light_core::ShowId,
-    kind: &str,
-    object_id: &str,
-    body: serde_json::Value,
-    expected_revision: u64,
-    request_id: String,
-) -> Result<wire::ShowObjectActionOutcome, ApiError> {
-    let entry = active_entry(state, show_id)?;
-    let body = super::object_normalization::normalize_object_body(state, kind, object_id, body)?;
-    validate_object_candidate(state, &entry, kind, object_id, &body, true)?;
-    backup_show(state, &entry)?;
-    let revision = ShowStore::open(&entry.path)
-        .map_err(ApiError::store)?
-        .put_object(kind, object_id, &body, expected_revision)
-        .map_err(ApiError::store)?;
-    activate_object_change(state, &entry, kind, &body).await?;
-    emit(
-        state,
-        "show_object_changed",
-        serde_json::json!({
-            "show_id":show_id,
-            "kind":kind,
-            "id":object_id,
-            "revision":revision
-        }),
-    );
-    committed_outcome(state, show_id, kind, object_id, request_id, None)
 }
 
 fn committed_outcome(

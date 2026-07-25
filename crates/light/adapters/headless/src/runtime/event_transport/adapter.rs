@@ -293,9 +293,12 @@ fn wire_show_object_change(change: &application::ActiveShowObjectChange) -> wire
         kind: match change.kind {
             application::ActiveShowObjectKind::CueList => wire::ShowObjectKind::CueList,
             application::ActiveShowObjectKind::Group => wire::ShowObjectKind::Group,
+            application::ActiveShowObjectKind::PatchLayer => wire::ShowObjectKind::PatchLayer,
             application::ActiveShowObjectKind::Playback => wire::ShowObjectKind::Playback,
             application::ActiveShowObjectKind::PlaybackPage => wire::ShowObjectKind::PlaybackPage,
             application::ActiveShowObjectKind::Preset => wire::ShowObjectKind::Preset,
+            application::ActiveShowObjectKind::StageLayout => wire::ShowObjectKind::StageLayout,
+            application::ActiveShowObjectKind::UserLayout => wire::ShowObjectKind::UserLayout,
         },
         object_id: change.object_id.clone(),
         object_revision: change.object_revision,

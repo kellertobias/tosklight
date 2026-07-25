@@ -586,7 +586,7 @@ export type OutputRuntimeChange = { projection: OutputRuntimeProjection, };
 
 export type OutputRuntimeSnapshot = { cursor: EventSnapshotCursor, projection: OutputRuntimeProjection, };
 
-export type ShowObjectKind = "cue_list" | "group" | "playback" | "playback_page" | "preset";
+export type ShowObjectKind = "cue_list" | "group" | "patch_layer" | "playback" | "playback_page" | "preset" | "stage_layout" | "user_layout";
 
 export type ShowObjectChange = { kind: ShowObjectKind, object_id: string, object_revision: number, body: unknown | null, deleted: boolean, };
 

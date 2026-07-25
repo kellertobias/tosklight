@@ -120,7 +120,11 @@ fn wire_kind(
         app::ActiveShowObjectKind::CueList => Ok(wire::ProgrammingUpdateObjectKind::CueList),
         app::ActiveShowObjectKind::Preset => Ok(wire::ProgrammingUpdateObjectKind::Preset),
         app::ActiveShowObjectKind::Group => Ok(wire::ProgrammingUpdateObjectKind::Group),
-        app::ActiveShowObjectKind::Playback | app::ActiveShowObjectKind::PlaybackPage => {
+        app::ActiveShowObjectKind::PatchLayer
+        | app::ActiveShowObjectKind::Playback
+        | app::ActiveShowObjectKind::PlaybackPage
+        | app::ActiveShowObjectKind::StageLayout
+        | app::ActiveShowObjectKind::UserLayout => {
             Err(internal("Update returned an unrelated show object kind"))
         }
     }

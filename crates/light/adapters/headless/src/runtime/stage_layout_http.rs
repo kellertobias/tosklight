@@ -6,9 +6,9 @@
 //! active show's `stage_layout/main` object. Edits carry a client `request_id` absorbed by a
 //! replay window (api-rules §3).
 
-use super::object_normalization::normalize_object_body;
+use super::show_objects_v2::active_entry;
 use super::*;
-use axum::extract::rejection::JsonRejection;
+use crate::tolerant_json::TolerantJson;
 use light_wire::v2::stage_layout::{
     StageLayoutAction, StageLayoutActionOutcome, StageLayoutActionRequest,
     StageLayoutErrorResponse, StagePositionAxis,
@@ -23,13 +23,13 @@ pub(super) fn router() -> Router<AppState> {
 
 async fn stage_layout_action(
     State(state): State<AppState>,
+    context: ShowContext,
     headers: HeaderMap,
-    request: Result<Json<StageLayoutActionRequest>, JsonRejection>,
+    TolerantJson(request): TolerantJson<StageLayoutActionRequest>,
 ) -> Result<Response, StageLayoutHttpError> {
     let session = authenticate(&state, &headers).map_err(StageLayoutHttpError::api)?;
-    let Json(request) =
-        request.map_err(|error| StageLayoutHttpError::bad_request(error.body_text()))?;
     validate_request(&request)?;
+    let show_id = context.resolve(&state).map_err(StageLayoutHttpError::api)?;
     let key = ReplayKey {
         desk_id: session.desk.id,
         session_id: session.id.0,
@@ -43,12 +43,7 @@ async fn stage_layout_action(
     {
         return Ok(json_with_etag(replayed.revision, replayed));
     }
-    let entry = state
-        .active_show
-        .read()
-        .clone()
-        .ok_or_else(|| StageLayoutHttpError::conflict("no show is active"))?;
-    let show_id = entry.id;
+    let entry = active_entry(&state, show_id).map_err(StageLayoutHttpError::api)?;
     let store = ShowStore::open(&entry.path)
         .map_err(|error| StageLayoutHttpError::api(ApiError::store(error)))?;
     let (_, object) = store
@@ -83,24 +78,25 @@ async fn stage_layout_action(
             changed: false,
         }
     } else {
-        let body = normalize_object_body(&state, "stage_layout", "main", body)
-            .map_err(StageLayoutHttpError::api)?;
-        super::object_api::validate_object_candidate(
-            &state,
-            &entry,
-            "stage_layout",
-            "main",
-            &body,
-            true,
-        )
-        .map_err(StageLayoutHttpError::api)?;
-        backup_show(&state, &entry).map_err(StageLayoutHttpError::api)?;
-        let revision = store
-            .put_object("stage_layout", "main", &body, expected)
-            .map_err(|error| StageLayoutHttpError::api(ApiError::store(error)))?;
-        super::object_api::activate_object_change(&state, &entry, "stage_layout", &body)
-            .await
-            .map_err(StageLayoutHttpError::api)?;
+        let action = active_show_object_action(
+            operator_action_context(&session, light_application::ActionSource::Http)
+                .with_request_id(&request.request_id),
+            show_id,
+            vec![put_active_show_object(
+                light_application::ActiveShowObjectKind::StageLayout,
+                "main",
+                expected,
+                body,
+            )],
+        );
+        let (result, _activation) =
+            run_active_show_object_action_async(&state, _activation, action)
+                .await
+                .map_err(StageLayoutHttpError::api)?;
+        let change = result
+            .changes
+            .first()
+            .expect("one stage-layout mutation returns one change");
         emit(
             &state,
             "show_object_changed",
@@ -108,12 +104,12 @@ async fn stage_layout_action(
                 "show_id": show_id,
                 "kind": "stage_layout",
                 "id": "main",
-                "revision": revision
+                "revision": change.object_revision
             }),
         );
         StageLayoutActionOutcome {
             request_id: request.request_id.clone(),
-            revision,
+            revision: change.object_revision,
             moved_fixture_ids: moved,
             replayed: false,
             changed: true,

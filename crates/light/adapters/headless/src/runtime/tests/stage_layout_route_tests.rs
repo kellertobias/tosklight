@@ -45,14 +45,23 @@ async fn read_stage_layout(app: &Router, token: &str, show_id: &str) -> serde_js
 }
 
 async fn post_stage_layout_action(app: &Router, token: &str, body: &serde_json::Value) -> Response {
+    post_stage_layout_action_with_show(app, token, None, body).await
+}
+
+async fn post_stage_layout_action_with_show(
+    app: &Router,
+    token: &str,
+    show_id: Option<&str>,
+    body: &serde_json::Value,
+) -> Response {
+    let mut request = Request::post("/api/v2/stage-layout/actions")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json");
+    if let Some(show_id) = show_id {
+        request = request.header("x-tosk-show", show_id);
+    }
     app.clone()
-        .oneshot(
-            Request::post("/api/v2/stage-layout/actions")
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(body.to_string()))
-                .unwrap(),
-        )
+        .oneshot(request.body(Body::from(body.to_string())).unwrap())
         .await
         .unwrap()
 }
@@ -108,6 +117,7 @@ async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order
     )
     .await;
     let events = subscribe_facade_events(&state);
+    let application_cursor = state.application_events.latest_sequence();
 
     let response = post_stage_layout_action(
         &app,
@@ -125,6 +135,11 @@ async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order
     );
     let revision = outcome["revision"].as_u64().unwrap();
     assert!(revision > seeded);
+    assert_eq!(
+        state.application_events.latest_sequence(),
+        application_cursor + 1,
+        "one stage-layout commit publishes one semantic application event"
+    );
 
     let layout = read_stage_layout(&app, &token, show_id).await;
     let positions3d = &layout["body"]["positions3d"];
@@ -182,11 +197,17 @@ async fn move_selection_replays_on_request_id_and_rejects_reuse_for_a_different_
     let request = move_request("replay-1", &[fixture], "y", 2.0);
     let first = json(post_stage_layout_action(&app, &token, &request).await).await;
     assert_eq!(first["changed"], true);
+    let committed_cursor = state.application_events.latest_sequence();
     let replayed = post_stage_layout_action(&app, &token, &request).await;
     assert_eq!(replayed.status(), StatusCode::OK);
     let replayed = json(replayed).await;
     assert_eq!(replayed["replayed"], true);
     assert_eq!(replayed["revision"], first["revision"]);
+    assert_eq!(
+        state.application_events.latest_sequence(),
+        committed_cursor,
+        "a replay must not publish another semantic event"
+    );
     let layout = read_stage_layout(&app, &token, show_id).await;
     assert_eq!(
         layout["body"]["positions3d"][fixture.to_string()]["y"],
@@ -243,6 +264,25 @@ async fn move_selection_validates_requests_and_tolerates_unknown_fields() {
     )
     .await;
 
+    let other_show_id = Uuid::new_v4().to_string();
+    let mismatched_show = post_stage_layout_action_with_show(
+        &app,
+        &token,
+        Some(&other_show_id),
+        &move_request("wrong-show", &[fixture], "x", 1.0),
+    )
+    .await;
+    assert_eq!(mismatched_show.status(), StatusCode::CONFLICT);
+
+    let malformed_show = post_stage_layout_action_with_show(
+        &app,
+        &token,
+        Some("not-a-uuid"),
+        &move_request("malformed-show", &[fixture], "x", 1.0),
+    )
+    .await;
+    assert_eq!(malformed_show.status(), StatusCode::BAD_REQUEST);
+
     let empty_selection = post_stage_layout_action(
         &app,
         &token,
@@ -262,6 +302,7 @@ async fn move_selection_validates_requests_and_tolerates_unknown_fields() {
     let accepted = post_stage_layout_action(&app, &token, &tolerant).await;
     assert_eq!(accepted.status(), StatusCode::OK);
     assert_eq!(json(accepted).await["changed"], true);
+    let committed_cursor = state.application_events.latest_sequence();
 
     // A zero delta and a selection without any stored position both change nothing.
     let zero = json(
@@ -280,6 +321,11 @@ async fn move_selection_validates_requests_and_tolerates_unknown_fields() {
     )
     .await;
     assert_eq!(unknown_only["changed"], false);
+    assert_eq!(
+        state.application_events.latest_sequence(),
+        committed_cursor,
+        "no-change stage actions must not publish semantic events"
+    );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

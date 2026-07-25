@@ -325,9 +325,12 @@ pub struct ShowObjectChange {
 pub enum ShowObjectKind {
     CueList,
     Group,
+    PatchLayer,
     Playback,
     PlaybackPage,
     Preset,
+    StageLayout,
+    UserLayout,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

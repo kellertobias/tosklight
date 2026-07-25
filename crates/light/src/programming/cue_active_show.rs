@@ -91,7 +91,11 @@ fn projection_for_kind(
         ActiveShowObjectKind::CueList => Some(&result.projections.cue_list),
         ActiveShowObjectKind::Playback => result.projections.playback.as_ref(),
         ActiveShowObjectKind::PlaybackPage => result.projections.page.as_ref(),
-        ActiveShowObjectKind::Group | ActiveShowObjectKind::Preset => None,
+        ActiveShowObjectKind::Group
+        | ActiveShowObjectKind::PatchLayer
+        | ActiveShowObjectKind::Preset
+        | ActiveShowObjectKind::StageLayout
+        | ActiveShowObjectKind::UserLayout => None,
     }
 }
 

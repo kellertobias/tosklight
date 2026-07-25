@@ -3314,9 +3314,12 @@
       "enum": [
         "cue_list",
         "group",
+        "patch_layer",
         "playback",
         "playback_page",
-        "preset"
+        "preset",
+        "stage_layout",
+        "user_layout"
       ]
     },
     "ShowObjectsChange": {

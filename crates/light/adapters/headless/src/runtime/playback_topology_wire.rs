@@ -335,7 +335,11 @@ fn wire_kind(
         Input::CueList => Ok(Output::CueList),
         Input::Playback => Ok(Output::Playback),
         Input::PlaybackPage => Ok(Output::PlaybackPage),
-        Input::Group | Input::Preset => Err(application::ActionError::new(
+        Input::Group
+        | Input::PatchLayer
+        | Input::Preset
+        | Input::StageLayout
+        | Input::UserLayout => Err(application::ActionError::new(
             application::ActionErrorKind::Internal,
             "Playback topology returned an unrelated object kind",
         )),
