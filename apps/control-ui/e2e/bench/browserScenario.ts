@@ -32,6 +32,7 @@ import {
 import { BrowserOutput } from "./outputScenario";
 import type { BuiltInPaneType } from "./paneTypes";
 import { builtInLabels } from "./paneTypes";
+import { BrowserPages, BrowserPreload } from "./pagePreloadScenario";
 import { BrowserPlaybacks } from "./playbackScenario";
 import type { DmxProtocol } from "./protocols";
 import { BrowserTiming } from "./programmerFadeScenario";
@@ -61,6 +62,10 @@ export interface ScreenConfigurationIntent {
 
 export interface ScreenHandle {
 	readonly name: string;
+	readonly page: {
+		select(number: number): Promise<void>;
+		expectSelected(number: number): Promise<void>;
+	};
 	open(): Promise<void>;
 	close(): Promise<void>;
 	remove(): Promise<void>;
@@ -86,6 +91,8 @@ export class BrowserScenarioWorld {
 	readonly record: BrowserRecording;
 	readonly cue: BrowserCues;
 	readonly playback: BrowserPlaybacks;
+	readonly page: BrowserPages;
+	readonly preload: BrowserPreload;
 	readonly dmx: BrowserDmx;
 	readonly output: BrowserOutput;
 	readonly timing: BrowserTiming;
@@ -123,7 +130,7 @@ export class BrowserScenarioWorld {
 		this.builtIn = new BrowserBuiltIns(page);
 		this.desktop = new BrowserDesktops(page, attach);
 		this.screenshot = new BrowserScreenshots(page, attach, this.builtIn);
-		this.screen = new BrowserScreens(page, desk);
+		this.screen = new BrowserScreens(page, desk, api);
 		this.show = new BrowserShows(api, bench, desk, initialShow, page);
 		this.clock = new BrowserClock(bench, desk);
 		this.command = new BrowserCommands(api, desk, page);
@@ -183,6 +190,19 @@ export class BrowserScenarioWorld {
 			() => this.show.contractIdentity().workingId,
 		);
 		this.playback = new BrowserPlaybacks(
+			api,
+			page,
+			desk,
+			this.hardware,
+			() => this.show.contractIdentity().workingId,
+		);
+		this.page = new BrowserPages(
+			api,
+			page,
+			desk,
+			() => this.show.contractIdentity().workingId,
+		);
+		this.preload = new BrowserPreload(
 			api,
 			page,
 			desk,
@@ -296,12 +316,17 @@ export class BrowserScreenshots {
 }
 
 class BrowserScreenHandle implements ScreenHandle {
+	readonly page: ScreenPageHandle;
+
 	constructor(
 		readonly name: string,
 		private readonly runtimeId: string,
-		private readonly page: Page,
+		private readonly browser: Page,
+		api: ApiDriver,
 		private readonly actions: readonly ControllableDesktopAction[],
-	) {}
+	) {
+		this.page = new ScreenPageHandle(api, runtimeId);
+	}
 
 	async open(): Promise<void> {
 		const card = this.card();
@@ -330,7 +355,35 @@ class BrowserScreenHandle implements ScreenHandle {
 	}
 
 	private card(): Locator {
-		return this.page.locator(`[data-screen-id="${this.runtimeId}"]`);
+		return this.browser.locator(`[data-screen-id="${this.runtimeId}"]`);
+	}
+}
+
+class ScreenPageHandle {
+	constructor(
+		private readonly api: ApiDriver,
+		private readonly screenId: string,
+	) {}
+
+	async select(number: number): Promise<void> {
+		if (!Number.isSafeInteger(number) || number < 1)
+			throw new Error("Playback Page numbers start at 1");
+		await this.api.request("POST", "/api/v2/screens/actions", {
+			request_id: crypto.randomUUID(),
+			action: { type: "set_page", screen_id: this.screenId, page: number },
+		});
+		await this.expectSelected(number);
+	}
+
+	async expectSelected(number: number): Promise<void> {
+		await expect
+			.poll(async () => {
+				const snapshot = await this.api.request<{
+					active_pages: Record<string, number>;
+				}>("GET", "/api/v2/screens");
+				return snapshot.active_pages[this.screenId];
+			})
+			.toBe(number);
 	}
 }
 
@@ -338,6 +391,7 @@ export class BrowserScreens {
 	constructor(
 		private readonly page: Page,
 		private readonly desk: DeskDriver,
+		private readonly api: ApiDriver,
 	) {}
 
 	async create(
@@ -385,6 +439,7 @@ export class BrowserScreens {
 			configuration.name,
 			runtimeId,
 			this.page,
+			this.api,
 			control.actions,
 		);
 		if (configuration.desiredOpen) await handle.open();

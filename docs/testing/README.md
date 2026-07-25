@@ -179,6 +179,16 @@ GO, GO BACK, ON, OFF, TOGGLE, RELEASE, selection, and normalized fader values th
 `.via.ui` and `.via.api` routes. Typed configuration captures current Page, Playback, and Show
 revision authority before applying button, fader, name, and color changes.
 
+Page and Preload scenarios use `page` and `preload`. Page helpers create and rename Pages, map
+existing Playbacks, select through the visible Page chooser or desk API, and distinguish
+`currentPagePlayback(slot)` from `explicitPagePlayback(page, slot)` and concrete Playback
+numbers. Secondary-screen handles expose their own independent Page authority, so a scenario can
+change a dedicated screen without moving the Main desk Page. Preload helpers enter, inspect,
+populate, commit, clear, and release the exact current-user capture authority. Momentary
+Playback helpers expose explicit `press()`, `release()`, and `hold(...)` phases for Flash, Temp,
+and Swap. The visible route performs a real pointer hold; the OSC route sends both button phases
+to a configured current- or explicit-page address.
+
 The runner exposes separate commands so CI classifies failures clearly:
 
 - `./test e2e-api`

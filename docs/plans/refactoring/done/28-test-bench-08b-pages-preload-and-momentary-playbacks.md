@@ -30,3 +30,25 @@ temporary Playback gesture surface.
   types.
 - Temporary controls retain gesture phases on every declared route.
 - Preload helpers expose authoritative pending and committed state.
+
+## Result
+
+- Added typed concrete, current-Page, explicit-Page, and independent-screen Page targets.
+- Added Page creation, naming, mapping, UI/API selection, and dedicated secondary-screen
+  assertions.
+- Added authoritative Preload lifecycle and pending-value helpers.
+- Added Flash, Temp, and Swap press/release/hold helpers with real browser pointer gestures and
+  subscribed OSC routes.
+- Added focused scenarios proving Page authority boundaries, Preload pending/commit behavior,
+  and browser-touch plus OSC momentary phases.
+
+Verification:
+
+- `npm run test:e2e -- tests/testBench/08b-pages-preload-and-momentary-playbacks.spec.ts`
+  — 2 passed.
+- `npm run test:e2e` — 323 passed, 9 skipped.
+- `npm --prefix apps/control-ui run typecheck` — passed.
+- `npm run test:bench-types` — passed.
+- `npm run test:architecture` — passed.
+- `node tools/check-source-size.mjs` — passed.
+- `git diff --check` — passed.

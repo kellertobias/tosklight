@@ -10,6 +10,7 @@ import {
 	validInteger,
 } from "./cuePlaybackScenario";
 import type { DeskDriver } from "./desk";
+import type { SimulatedHardware } from "./hardwareScenario";
 
 export enum PlaybackButton {
 	Go = "go",
@@ -17,6 +18,9 @@ export enum PlaybackButton {
 	On = "on",
 	Off = "off",
 	Toggle = "toggle",
+	Flash = "flash",
+	Temp = "temp",
+	Swap = "swap",
 	Release = "release",
 }
 
@@ -39,18 +43,61 @@ export interface PlaybackConfiguration {
 
 type RuntimeRoute = "ui" | "api";
 
+export type PlaybackTarget =
+	| number
+	| { kind: "current_page"; slot: number }
+	| { kind: "explicit_page"; page: number; slot: number };
+
+export function currentPagePlayback(slot: number): PlaybackTarget {
+	return { kind: "current_page", slot: validInteger(slot, "Playback slot") };
+}
+
+export function explicitPagePlayback(page: number, slot: number): PlaybackTarget {
+	return {
+		kind: "explicit_page",
+		page: validInteger(page, "Playback Page"),
+		slot: validInteger(slot, "Playback slot"),
+	};
+}
+
+class MomentaryPlayback {
+	constructor(
+		private readonly owner: BrowserPlaybacks,
+		private readonly route: RuntimeRoute | "osc",
+		private readonly target: PlaybackTarget,
+		private readonly action: "flash" | "temp" | "swap",
+	) {}
+
+	press() {
+		return this.owner.actionVia(this.route, this.target, this.action, true);
+	}
+
+	release() {
+		return this.owner.actionVia(this.route, this.target, this.action, false);
+	}
+
+	async hold(callback: () => Promise<void>) {
+		await this.press();
+		try {
+			await callback();
+		} finally {
+			await this.release();
+		}
+	}
+}
+
 class PlaybackSurface {
 	constructor(
 		private readonly owner: BrowserPlaybacks,
 		private readonly route: RuntimeRoute,
 	) {}
 
-	go(number: number) {
-		return this.owner.actionVia(this.route, number, PlaybackButton.Go);
+	go(target: PlaybackTarget) {
+		return this.owner.actionVia(this.route, target, PlaybackButton.Go);
 	}
 
-	goBack(number: number) {
-		return this.owner.actionVia(this.route, number, PlaybackButton.GoBack);
+	goBack(target: PlaybackTarget) {
+		return this.owner.actionVia(this.route, target, PlaybackButton.GoBack);
 	}
 
 	on(number: number) {
@@ -75,6 +122,18 @@ class PlaybackSurface {
 
 	fader(number: number, value: number) {
 		return this.owner.faderVia(this.route, number, value);
+	}
+
+	flash(target: PlaybackTarget) {
+		return new MomentaryPlayback(this.owner, this.route, target, "flash");
+	}
+
+	temp(target: PlaybackTarget) {
+		return new MomentaryPlayback(this.owner, this.route, target, "temp");
+	}
+
+	swap(target: PlaybackTarget) {
+		return new MomentaryPlayback(this.owner, this.route, target, "swap");
 	}
 }
 
@@ -114,12 +173,23 @@ export class BrowserPlaybacks {
 	readonly via = {
 		ui: new PlaybackSurface(this, "ui"),
 		api: new PlaybackSurface(this, "api"),
+		osc: {
+			flash: (target: PlaybackTarget) =>
+				new MomentaryPlayback(this, "osc", target, "flash"),
+			temp: (target: PlaybackTarget) =>
+				new MomentaryPlayback(this, "osc", target, "temp"),
+			swap: (target: PlaybackTarget) =>
+				new MomentaryPlayback(this, "osc", target, "swap"),
+			go: (target: PlaybackTarget) =>
+				this.actionVia("osc", target, PlaybackButton.Go),
+		},
 	};
 
 	constructor(
 		private readonly api: ApiDriver,
 		private readonly page: Page,
 		private readonly desk: DeskDriver,
+		private readonly hardware: SimulatedHardware,
 		private readonly showId: () => string,
 	) {}
 
@@ -155,25 +225,43 @@ export class BrowserPlaybacks {
 		return this.faderVia("ui", number, value);
 	}
 
+	async open() {
+		if (await this.page.locator(".playback-fader-bank").isVisible()) return;
+		await this.desk.click(this.page.locator(".mode-toggle"));
+		await expect(this.page.locator(".playback-fader-bank")).toBeVisible();
+	}
+
 	expect(number: number) {
 		return new PlaybackExpectation(this, validInteger(number, "Playback"));
 	}
 
-	async actionVia(route: RuntimeRoute, number: number, action: PlaybackButton) {
-		number = validInteger(number, "Playback");
+	async actionVia(
+		route: RuntimeRoute | "osc",
+		target: PlaybackTarget,
+		action: PlaybackButton | "flash" | "temp" | "swap",
+		pressed = true,
+	) {
+		const number =
+			typeof target === "number"
+				? validInteger(target, "Playback")
+				: await this.playbackNumber(target);
 		if (route === "api") {
 			const wireAction = action === PlaybackButton.GoBack ? "go-minus" : action;
-			await this.api.playbackNumberAction(number, wireAction);
-		} else {
+			await this.apiAction(target, wireAction, pressed);
+		} else if (route === "ui") {
 			if (action === PlaybackButton.Release)
 				throw new Error("Playback release has no default visible button");
-			await this.desk.click(
-				(await this.visibleCard(number)).getByRole("button", {
-					name: playbackButtonLabel(action),
-					exact: true,
-				}),
-			);
-		}
+			const button = (await this.visibleCard(number)).getByRole("button", {
+				name: playbackButtonLabel(action),
+				exact: true,
+			});
+			if (["flash", "temp", "swap"].includes(action)) {
+				if (pressed) {
+					await button.hover();
+					await this.page.mouse.down();
+				} else await this.page.mouse.up();
+			} else await this.desk.click(button);
+		} else await this.oscAction(target, number, action, pressed);
 	}
 
 	async selectVia(route: RuntimeRoute, number: number) {
@@ -273,6 +361,70 @@ export class BrowserPlaybacks {
 		return card;
 	}
 
+	private apiAction(target: PlaybackTarget, action: string, pressed: boolean) {
+		const input = { pressed };
+		if (typeof target === "number")
+			return this.api.playbackNumberAction(target, action, input);
+		if (target.kind === "current_page")
+			return this.api.currentPagePlaybackAction(target.slot, action, input);
+		return this.api.explicitPagePlaybackAction(
+			target.page,
+			target.slot,
+			action,
+			input,
+		);
+	}
+
+	private async playbackNumber(target: Exclude<PlaybackTarget, number>) {
+		const page =
+			target.kind === "explicit_page"
+				? target.page
+				: (await this.snapshot()).active_page;
+		const object = await this.api.showObject<any>(
+			this.showId(),
+			"playback_page",
+			String(page),
+		);
+		const number = object?.body.slots[String(target.slot)];
+		if (typeof number !== "number")
+			throw new Error(`Playback Page ${page} slot ${target.slot} is empty`);
+		return number;
+	}
+
+	private async oscAction(
+		target: PlaybackTarget,
+		number: number,
+		action: PlaybackButton | "flash" | "temp" | "swap",
+		pressed: boolean,
+	) {
+		if (!this.hardware.connected)
+			throw new Error("Playback OSC route requires hardware.connect()");
+		const definition = await this.requiredDefinition(number);
+		const button = definition.body.buttons.indexOf(
+			action === PlaybackButton.GoBack ? "go_minus" : (action as any),
+		);
+		if (button < 0)
+			throw new Error(`Playback ${number} has no configured ${action} button`);
+		const alias = this.session().desk.osc_alias;
+		const address =
+			typeof target !== "number" && target.kind === "current_page"
+				? `/light/${alias}/page-playback/${target.slot}/button/${button + 1}`
+				: await this.explicitOscAddress(target, number, button + 1);
+		await this.hardware.send(address, [pressed]);
+	}
+
+	private async explicitOscAddress(
+		target: PlaybackTarget,
+		number: number,
+		button: number,
+	) {
+		const location =
+			typeof target === "number"
+				? await playbackLocation(this.api, this.showId(), number)
+				: target;
+		return `/light/playback/${location.page}/${location.slot}/button/${button}`;
+	}
+
 	private session() {
 		if (!this.api.session)
 			throw new Error("Playback helper requires an API session");
@@ -287,6 +439,9 @@ function playbackButtonLabel(action: PlaybackButton) {
 		[PlaybackButton.On]: "ON",
 		[PlaybackButton.Off]: "OFF",
 		[PlaybackButton.Toggle]: "TOGGLE",
+		[PlaybackButton.Flash]: "FLASH",
+		[PlaybackButton.Temp]: "TEMP",
+		[PlaybackButton.Swap]: "SWAP",
 	};
 	const label = labels[action];
 	if (!label) throw new Error(`Playback ${action} has no visible button label`);
