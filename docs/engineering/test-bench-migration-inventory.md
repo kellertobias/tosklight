@@ -11,12 +11,11 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **308 root cases across 40 files**.
+Default catalog: **308 root cases across 41 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 00-generate-show-files.spec.ts | SHOW-000 @api › Save As produces independent reusable show files | docs/testing/00-generate-show-files.md | @api | generate-show-files | generated show/video | serial | reviewed-low-level-boundary |
-| 00-generate-show-files.spec.ts | SHOW-000 @ui › Save As produces independent reusable show files | docs/testing/00-generate-show-files.md | @ui | generate-show-files | generated show/video | serial | pending-semantic-migration |
 | 00-generate-show-files.spec.ts | SHOW-000 @supplemental › direct API Save As and named-revision permutations | docs/testing/00-generate-show-files.md | @supplemental | generate-show-files | generated show/video | serial | reviewed-low-level-boundary |
 | 00-generate-show-files.spec.ts | SHOW-000 @supplemental › extended visible Group-properties and alternate-gesture workflow | docs/testing/00-generate-show-files.md | @supplemental | generate-show-files | generated show/video | serial | reviewed-low-level-boundary |
 | 01-foundational-dimmers-and-groups.spec.ts | DIM-001 @api › ordered Group edits retain their live value and append re-added fixtures | docs/testing/01-foundational-dimmers-and-groups.md | @api | foundational-dimmers-and-groups | standard failure evidence | parallel | reviewed-low-level-boundary |
@@ -322,6 +321,7 @@ Default catalog: **308 root cases across 40 files**.
 | 39-semantic-playback-and-osc.spec.ts | BENCH-CUE-PLAYBACK-001 @bench @ui › visible recording and typed runtime actions preserve Cue timing and concrete Playback identity | repository contract | @bench @ui | semantic-playback-and-osc | standard failure evidence | parallel | migrated-semantic-world |
 | 39-semantic-playback-and-osc.spec.ts | BENCH-PAGE-PLAYBACK-001 @bench @ui › current and explicit Page targets retain distinct Playback authority | repository contract | @bench @ui | semantic-playback-and-osc | standard failure evidence | parallel | migrated-semantic-world |
 | 39-semantic-playback-and-osc.spec.ts | BENCH-SELECTION-ROUTES-001 @bench @ui › visible panes, keypad, API, and OSC converge on the ordered selection oracle | repository contract | @bench @ui | semantic-playback-and-osc | standard failure evidence | parallel | migrated-semantic-world |
+| 40-semantic-generate-show-files.spec.ts | SHOW-000 @bench @ui › Save As produces independent reusable show files | repository contract | @bench @ui | semantic-generate-show-files | generated show/video | serial | migrated-semantic-world |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints

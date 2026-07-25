@@ -45,35 +45,39 @@ class ShowActionSurface {
 		private readonly adapter: ShowOperatorAdapter,
 	) {}
 
-	create(name: string): Promise<ShowHandle> {
-		return this.adapter.create(name);
+	async create(name: string): Promise<ShowHandle> {
+		return this.owner.adopt(await this.adapter.create(name));
 	}
 
-	load(target: ShowTarget): Promise<ShowHandle> {
-		return this.adapter.load(this.owner.resolveTarget(target));
+	async load(target: ShowTarget): Promise<ShowHandle> {
+		return this.owner.adopt(
+			await this.adapter.load(this.owner.resolveTarget(target)),
+		);
 	}
 
 	save(): Promise<ShowHandle> {
 		return this.adapter.save();
 	}
 
-	saveAs(name: string): Promise<ShowHandle> {
-		return this.adapter.saveAs(name);
+	async saveAs(name: string): Promise<ShowHandle> {
+		return this.owner.adopt(await this.adapter.saveAs(name));
 	}
 
 	saveRevision(name: string): Promise<number> {
 		return this.adapter.saveRevision(name);
 	}
 
-	loadRevision(target: ShowTarget, revision: number): Promise<ShowHandle> {
-		return this.adapter.loadRevision(
-			this.owner.resolveTarget(target),
-			revision,
+	async loadRevision(target: ShowTarget, revision: number): Promise<ShowHandle> {
+		return this.owner.adopt(
+			await this.adapter.loadRevision(
+				this.owner.resolveTarget(target),
+				revision,
+			),
 		);
 	}
 
-	loadCleanDefault(): Promise<ShowHandle> {
-		return this.adapter.loadCleanDefault();
+	async loadCleanDefault(): Promise<ShowHandle> {
+		return this.owner.adopt(await this.adapter.loadCleanDefault());
 	}
 }
 
@@ -206,6 +210,19 @@ export class BrowserShows {
 		await this.routeOutputs(replacement.id);
 		this.current = { ...current, workingId: replacement.id, workingName };
 		await this.resetBenchState();
+	}
+
+	adopt(handle: ShowHandle): ShowHandle {
+		if (!this.current) return handle;
+		const target = resolveShowHandle(handle);
+		if (!target.id)
+			throw new Error(`Show action did not return an id for "${target.name}"`);
+		this.current = {
+			...this.current,
+			workingId: target.id,
+			workingName: target.name,
+		};
+		return handle;
 	}
 
 	/** Framework-contract inspection only; scenario authors should use semantic expectations. */

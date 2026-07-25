@@ -37,6 +37,7 @@ test.describe("docs/testing/00-generate-show-files.md", () => {
   pairedScenario<Show000State>({
     id: "SHOW-000",
     title: "Save As produces independent reusable show files",
+    surfaces: ["api"],
     arrange: async ({ api }, surface) => {
       const suffix = `${surface}-${crypto.randomUUID()}`;
       const canonical = await createCanonicalShows(api);
