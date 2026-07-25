@@ -83,3 +83,24 @@ scenario(
 		await t.expect.selection(fixture(1), fixture(2), fixture(3), fixture(4), fixture(5));
 	},
 );
+
+scenario(
+	"BENCH-ENCODER-004",
+	"OSC relative detents resolve Tilt from the live attached-hardware slot",
+	async (t) => {
+		await t.show.use(Show.DefaultStage);
+		await t.app.open();
+		await t.app.expect.ready();
+		await t.show.expect.active(Show.DefaultStage);
+		await t.selection.fixtures.via.fixtureSheet.item(101);
+		await t.expect.selection(fixture(101));
+		await t.hardware.connect();
+		try {
+			await t.encoder.position.tilt.via.osc.add(1);
+			await t.clock.advanceBy("3s");
+			await t.expectFixtureDMX(dmxFixture(101), { Tilt: 131 });
+		} finally {
+			await t.hardware.disconnect();
+		}
+	},
+);

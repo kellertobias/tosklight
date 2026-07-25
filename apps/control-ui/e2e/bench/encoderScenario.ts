@@ -15,10 +15,12 @@ import {
 	encoderCatalogEntry,
 	normalizedEncoderValue,
 } from "./encoderCatalog";
+import { BrowserOscEncoderRoute } from "./encoderOscScenario";
+import type { SimulatedHardware } from "./hardwareScenario";
 import { applyProgrammerSelectionValue } from "./programmerValues";
 import type { BrowserSelection } from "./selectionScenario";
 
-type EncoderRoute = "api" | "ui";
+type EncoderRoute = "api" | "ui" | "osc";
 type EncoderOperation = "set" | "add" | "subtract";
 
 export interface EncoderRouteReport {
@@ -37,29 +39,58 @@ export interface NormalizedEncoderPort {
 	subtract(steps: number): Promise<void>;
 }
 
-class ExplicitNormalizedEncoderPort implements NormalizedEncoderPort {
+export interface AbsoluteEncoderPort {
+	set(value: number | ProgrammerExpression): Promise<void>;
+}
+
+export interface RelativeEncoderPort {
+	add(steps: number): Promise<void>;
+	subtract(steps: number): Promise<void>;
+}
+
+class ApiNormalizedEncoderPort implements NormalizedEncoderPort {
 	constructor(
 		private readonly encoder: NormalizedEncoder,
-		private readonly route: EncoderRoute,
 	) {}
 
 	set(value: number | ProgrammerExpression): Promise<void> {
-		return this.encoder.execute("set", value, this.route);
+		return this.encoder.execute("set", value, "api");
 	}
 
 	add(steps: number): Promise<void> {
-		return this.encoder.execute("add", steps, this.route);
+		return this.encoder.execute("add", steps, "api");
 	}
 
 	subtract(steps: number): Promise<void> {
-		return this.encoder.execute("subtract", steps, this.route);
+		return this.encoder.execute("subtract", steps, "api");
+	}
+}
+
+class VisibleAbsoluteEncoderPort implements AbsoluteEncoderPort {
+	constructor(private readonly encoder: NormalizedEncoder) {}
+
+	set(value: number | ProgrammerExpression): Promise<void> {
+		return this.encoder.execute("set", value, "ui");
+	}
+}
+
+class OscRelativeEncoderPort implements RelativeEncoderPort {
+	constructor(private readonly encoder: NormalizedEncoder) {}
+
+	add(steps: number): Promise<void> {
+		return this.encoder.execute("add", steps, "osc");
+	}
+
+	subtract(steps: number): Promise<void> {
+		return this.encoder.execute("subtract", steps, "osc");
 	}
 }
 
 export class NormalizedEncoder implements NormalizedEncoderPort {
 	readonly via = {
-		api: new ExplicitNormalizedEncoderPort(this, "api"),
-		ui: new ExplicitNormalizedEncoderPort(this, "ui"),
+		api: new ApiNormalizedEncoderPort(this),
+		ui: new VisibleAbsoluteEncoderPort(this),
+		osc: new OscRelativeEncoderPort(this),
 	};
 
 	constructor(
@@ -100,12 +131,14 @@ export class BrowserEncoders {
 	readonly focus: EncoderGroupTree<FocusAttribute>;
 	readonly routeReports: EncoderRouteReport[] = [];
 	private actionIndex = 0;
+	private readonly osc: BrowserOscEncoderRoute;
 
 	constructor(
 		private readonly api: ApiDriver,
 		private readonly selection: BrowserSelection,
 		private readonly page: Page,
 		private readonly desk: DeskDriver,
+		private readonly hardware: SimulatedHardware,
 		private readonly seed: string,
 	) {
 		this.intensity = this.group(EncoderGroup.Intensity, IntensityAttribute);
@@ -114,6 +147,7 @@ export class BrowserEncoders {
 		this.beam = this.group(EncoderGroup.Beam, BeamAttribute);
 		this.shapers = this.group(EncoderGroup.Shapers, ShapersAttribute);
 		this.focus = this.group(EncoderGroup.Focus, FocusAttribute);
+		this.osc = new BrowserOscEncoderRoute(api, page, desk, hardware);
 	}
 
 	async unqualified(
@@ -122,7 +156,11 @@ export class BrowserEncoders {
 		value: number | ProgrammerExpression,
 	): Promise<void> {
 		const candidates: EncoderRoute[] =
-			operation === "set" ? ["api", "ui"] : ["api"];
+			operation === "set"
+				? ["api", "ui"]
+				: this.hardware.connected
+					? ["api", "osc"]
+					: ["api"];
 		const actionIndex = this.actionIndex++;
 		const selected =
 			candidates[stableIndex(`${this.seed}:${actionIndex}`, candidates.length)];
@@ -162,6 +200,19 @@ export class BrowserEncoders {
 					"Visible relative encoder detents require attached hardware and are not available through the software value-entry route",
 				);
 			await this.visibleSet(catalog.familyLabel, catalog.label, value as AttributeValue);
+			return;
+		}
+		if (route === "osc") {
+			if (operation === "set")
+				throw new Error(
+					"OSC encoder turns are relative; use the explicit API or visible value-entry route for absolute values",
+				);
+			await this.osc.detents(
+				catalog.familyLabel,
+				catalog.label,
+				operation,
+				value as number,
+			);
 			return;
 		}
 		await this.apiMutation(catalog.attribute, operation, value);

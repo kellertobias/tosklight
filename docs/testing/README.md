@@ -128,8 +128,14 @@ Normalized Programmer encoders are available through the enum-backed
 `.subtract(steps)` apply relative one-percent detents through the typed API intent. Explicit
 `.via.api` and `.via.ui` routes constrain the surface; the visible route resolves the live family
 and software encoder without exposing labels or physical slots to scenario bodies. Unqualified
-actions record their seed, action index, candidates, and selected route. Hardware, discrete,
-special-dialog, and Programmer Fade routes remain in refactoring chunks 06b and 06c.
+actions record their seed, action index, candidates, and selected route.
+When simulated hardware is connected, normalized encoders also expose relative
+`.via.osc.add(steps)` and `.via.osc.subtract(steps)` detents. The adapter activates the visible
+family, resolves the logical attribute from the live attached-hardware display instead of assuming
+a physical slot, sends one detent at a time, and waits for each authoritative Programmer revision.
+The OSC port is relative-only at the type level. Profile-derived discrete and special-dialog
+controls, Programmer Fade, and undecided encoder press/page semantics remain queued in refactoring
+chunks 06c–06e.
 
 The runner exposes separate commands so CI classifies failures clearly:
 

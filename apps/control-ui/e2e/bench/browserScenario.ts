@@ -129,6 +129,7 @@ export class BrowserScenarioWorld {
 			coreSelection,
 			page,
 			desk,
+			this.hardware,
 			`${testInfo.workerIndex}:${testInfo.title}:encoder`,
 		);
 		this.highlight = new BrowserHighlight(page, api, this.hardware);
