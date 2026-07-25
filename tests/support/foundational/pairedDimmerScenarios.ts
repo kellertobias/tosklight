@@ -23,6 +23,7 @@ export function registerDimmerAndDerivedGroupPairedScenarios() {
 		id: "DIM-001",
 		title:
 			"ordered Group edits retain their live value and append re-added fixtures",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			await loadCompactRig(api, bench, `dim-001-paired-${surface}`);
 			return {};
@@ -61,6 +62,7 @@ export function registerDimmerAndDerivedGroupPairedScenarios() {
 	pairedScenario({
 		id: "DIM-002",
 		title: "Lightning Desk command reaches the exact rendered output boundary",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			await loadCompactRig(api, bench, `dim-002-paired-${surface}`);
 			return {};
@@ -84,6 +86,7 @@ export function registerDimmerAndDerivedGroupPairedScenarios() {
 		id: "CMD-001",
 		title:
 			"Fixture and Group default modes toggle while explicit prefixes stay scoped",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			await loadCompactRig(api, bench, `cmd-001-paired-${surface}`);
 			return {};
