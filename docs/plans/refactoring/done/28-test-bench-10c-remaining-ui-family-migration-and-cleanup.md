@@ -22,3 +22,14 @@ last orphaned compatibility helpers.
 - Every retained low-level boundary is documented and narrow.
 - The full browser suite, architecture/unit gates, recording catalog, product
   demo, and parallel isolation stress gate pass.
+
+## Result
+
+Split on 2026-07-25 after the generated 10a inventory reached the cleanup phase.
+
+- The remaining scope is 110 pending UI rows across 26 root files.
+- Work is divided into five non-overlapping children: show/foundational,
+  Cue/Playback, network/OSC/restart, files/lock/operator shell, and final
+  operator controls/orphan cleanup.
+- The final child retains the global no-pending-row, full unit/browser,
+  recording, demo, author-guide, and orphan-removal gates.
