@@ -17,7 +17,12 @@ import {
 } from "./encoderCatalog";
 import { BrowserOscEncoderRoute } from "./encoderOscScenario";
 import type { SimulatedHardware } from "./hardwareScenario";
-import { applyProgrammerSelectionValue } from "./programmerValues";
+import {
+	applyProgrammerSelectionValue,
+	batchProgrammerValues,
+	clearProgrammerValues,
+} from "./programmerValues";
+import { BrowserDiscreteEncoders } from "./discreteEncoderScenario";
 import type { BrowserSelection } from "./selectionScenario";
 
 type EncoderRoute = "api" | "ui" | "osc";
@@ -37,6 +42,7 @@ export interface NormalizedEncoderPort {
 	set(value: number | ProgrammerExpression): Promise<void>;
 	add(steps: number): Promise<void>;
 	subtract(steps: number): Promise<void>;
+	release(): Promise<void>;
 }
 
 export interface AbsoluteEncoderPort {
@@ -63,6 +69,10 @@ class ApiNormalizedEncoderPort implements NormalizedEncoderPort {
 
 	subtract(steps: number): Promise<void> {
 		return this.encoder.execute("subtract", steps, "api");
+	}
+
+	release(): Promise<void> {
+		return this.encoder.release();
 	}
 }
 
@@ -111,6 +121,10 @@ export class NormalizedEncoder implements NormalizedEncoderPort {
 		return this.owner.unqualified(this, "subtract", steps);
 	}
 
+	release(): Promise<void> {
+		return this.owner.releaseAttribute(this);
+	}
+
 	execute(
 		operation: EncoderOperation,
 		value: number | ProgrammerExpression,
@@ -129,6 +143,7 @@ export class BrowserEncoders {
 	readonly beam: EncoderGroupTree<BeamAttribute>;
 	readonly shapers: EncoderGroupTree<ShapersAttribute>;
 	readonly focus: EncoderGroupTree<FocusAttribute>;
+	readonly discrete: BrowserDiscreteEncoders;
 	readonly routeReports: EncoderRouteReport[] = [];
 	private actionIndex = 0;
 	private readonly osc: BrowserOscEncoderRoute;
@@ -147,7 +162,30 @@ export class BrowserEncoders {
 		this.beam = this.group(EncoderGroup.Beam, BeamAttribute);
 		this.shapers = this.group(EncoderGroup.Shapers, ShapersAttribute);
 		this.focus = this.group(EncoderGroup.Focus, FocusAttribute);
+		this.discrete = new BrowserDiscreteEncoders(api, selection, desk, page);
 		this.osc = new BrowserOscEncoderRoute(api, page, desk, hardware);
+	}
+
+	async releaseAttribute(encoder: NormalizedEncoder): Promise<void> {
+		const catalog = encoderCatalogEntry(encoder.group, encoder.key);
+		const context = await this.programmerContext();
+		await batchProgrammerValues(this.api, {
+			surface: "api",
+			showId: context.showId,
+			mutations: context.fixtureIds.map((fixtureId) => ({
+				action: "release_fixture",
+				fixtureId,
+				attribute: catalog.attribute,
+			})),
+		});
+	}
+
+	async clear(): Promise<void> {
+		const context = await this.programmerContext();
+		await clearProgrammerValues(this.api, {
+			surface: "api",
+			showId: context.showId,
+		});
 	}
 
 	async unqualified(
@@ -261,6 +299,26 @@ export class BrowserEncoders {
 				delayMillis: null,
 			},
 		});
+	}
+
+	private async programmerContext(): Promise<{
+		showId: string;
+		fixtureIds: string[];
+	}> {
+		const [selection, bootstrap] = await Promise.all([
+			this.selection.observe(),
+			this.api.request<{ active_show: { id: string } | null }>(
+				"GET",
+				"/api/v2/bootstrap",
+			),
+		]);
+		if (!bootstrap.active_show) throw new Error("No active Show");
+		if (selection.selected.length === 0)
+			throw new Error("Encoder action requires a non-empty Fixture selection");
+		return {
+			showId: bootstrap.active_show.id,
+			fixtureIds: selection.selected,
+		};
 	}
 
 	private async visibleSet(

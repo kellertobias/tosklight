@@ -145,6 +145,20 @@ underlying range input. Every route waits for the shared configuration value bef
 `double()`, `half()`, and `off()` apply the corresponding time-master semantics, while
 `currentMillis()` exposes the normalized assertion value.
 
+Profile-derived discrete Programmer values are available through
+`encoder.discrete.choices(attribute)`, `.set(attribute, semanticId)`, `.release(attribute)`,
+`.releaseVisible(attribute)`, and `.clear()`. Choices come from fixed and indexed functions on the
+selected fixtures' embedded profile revisions, retain stable semantic IDs, and target only
+compatible selected fixtures. They are not flattened into a global fixture-independent enum.
+Normalized encoder ports also expose `release()`, while `encoder.clear()` clears the Programmer
+through the shared values authority.
+
+Existing special controls are grouped under `special`: Position Return Home and alignment, Beam
+and Shapers attributes discovered from the selected patch, and compatible profile-derived Control
+actions. Visible helpers press the production family tabs, dialogs, buttons, and pointer faders.
+API alignment and Control helpers use the same command boundaries as the production client; Control
+actions serialize compatible fixtures across the active-show transition barrier.
+
 The runner exposes separate commands so CI classifies failures clearly:
 
 - `./test e2e-api`

@@ -24,3 +24,20 @@ actions without pretending that fixture-specific values form one global enum.
 - Focused visible and API scenarios for one profile-derived discrete value and each existing
   special-action family.
 - TypeScript, architecture, and full Playwright regression gates.
+
+## Result
+
+- Added a selection-scoped discrete catalog derived from fixed and indexed functions in the
+  portable profile snapshot. Scenario authors use semantic IDs and labels; compatible fixture
+  identities remain internal and mixed incompatible selections do not receive unsupported values.
+- Added semantic discrete set, API and visible release, and clear controls, plus normalized encoder
+  release and Programmer clear operations. Writes preserve the current Programmer Fade timing.
+- Added `special` helpers for visible Position Return Home and alignment, profile-available Beam
+  and Shapers pointer controls, and compatible Control actions. API alignment and Control routes
+  follow the production command boundary, with fixture Control mutations serialized across the
+  active-show transition barrier.
+- Added pure catalog coverage for mixed fixtures and stable logical-head identity, plus focused
+  browser scenarios backed by a synthetic portable profile. This covers fixed/indexed values even
+  though the currently shipped fixture packages do not yet contain such functions.
+- Architecture, catalog/type tests, the frontend build, and both focused browser scenarios pass.
+  The full Playwright regression completed with 314 passed, 9 skipped, and no failures.

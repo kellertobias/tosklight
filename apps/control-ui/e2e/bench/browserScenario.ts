@@ -29,6 +29,7 @@ import type { BuiltInPaneType } from "./paneTypes";
 import { builtInLabels } from "./paneTypes";
 import type { DmxProtocol } from "./protocols";
 import { BrowserTiming } from "./programmerFadeScenario";
+import { BrowserProgrammerSpecials } from "./programmerSpecialScenario";
 import { BrowserRoutedSelection } from "./routedSelectionScenario";
 import type { SelectionTarget } from "./selectionContract";
 import { BrowserSelection } from "./selectionScenario";
@@ -76,6 +77,7 @@ export class BrowserScenarioWorld {
 	readonly dmx: BrowserDmx;
 	readonly output: BrowserOutput;
 	readonly timing: BrowserTiming;
+	readonly special: BrowserProgrammerSpecials;
 	readonly expect: {
 		dmx: (universe: number) => DmxUniverseExpectation;
 		outputPacket: (
@@ -137,6 +139,12 @@ export class BrowserScenarioWorld {
 		this.highlight = new BrowserHighlight(page, api, this.hardware);
 		this.dmx = new BrowserDmx(api);
 		this.output = new BrowserOutput(api, desk);
+		this.special = new BrowserProgrammerSpecials(
+			api,
+			page,
+			desk,
+			coreSelection,
+		);
 		this.timing = new BrowserTiming(
 			api,
 			page,

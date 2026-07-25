@@ -665,6 +665,27 @@ export class ApiDriver {
     return this.sendCompatibilityCommandLine(request.command);
   }
 
+  alignProgrammerSelection(
+    attribute: "pan" | "tilt",
+    mode: "left" | "right" | "center" | "out",
+    from = 0,
+    to = 1,
+  ): Promise<CommandResponse> {
+    return this.command("programmer.align", { attribute, mode, from, to });
+  }
+
+  controlFixtureAction(
+    fixtureId: string,
+    actionId: string,
+    active: boolean,
+  ): Promise<CommandResponse> {
+    return this.command("programmer.control_action", {
+      fixture_id: fixtureId,
+      action_id: actionId,
+      active,
+    });
+  }
+
   /** Raw textual WebSocket command envelope. Private so new scenarios cannot reach it directly. */
   private async sendCompatibilityCommandLine(command: string): Promise<CommandResponse> {
     return this.command("programmer.execute", { value: command });

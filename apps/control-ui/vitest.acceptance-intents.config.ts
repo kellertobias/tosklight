@@ -6,6 +6,7 @@ export default defineConfig({
 		include: [
 			"e2e/bench/clockScenario.test.ts",
 			"e2e/bench/commandScenario.test.ts",
+			"e2e/bench/discreteEncoderScenario.test.ts",
 			"e2e/bench/cueDeletion.test.ts",
 			"e2e/bench/dmxScenario.test.ts",
 			"e2e/bench/fixtureDmx.test.ts",
