@@ -1,16 +1,171 @@
 # ToskLight refactoring — execution record (DONE)
 
-> **Archived 2026-07-23.** This plan was executed to completion (P1–P4, D1–D4). The follow-up
-> work now lives in the chunk queue at [`../refactoring/README.md`](../refactoring/README.md).
+> **Finalized 2026-07-25.** P1–P4, D1–D4, the complete numbered chunk queue, the semantic
+> Playwright bench, and the final documentation/tooling cleanup are complete. The queue contains
+> 130 archived result documents and has zero files in `pending/` or `doing/`.
 
-Single source of truth for finishing the refactoring on branch `refactoring`. The architectural
-intent lives in [`../major-refactoring.md`](../major-refactoring.md); this file is the current state,
-the remaining chunks, and the decisions needed to finish independently. Older trackers
-(`refactoring-progress.md`, `refactoring-verification-log.md`, `e2e-failure-diagnosis.md`, the root
-`REFACTORING-HANDOFF.md`, `PLAYBACK-RUNTIME-DESK-SCOPE-REFACTOR.md`) are superseded and folded in
-here; their detail is in git history.
+This is the final execution summary for the major ToskLight refactoring. Architectural intent
+lives in [`../major-refactoring.md`](../major-refactoring.md); the implemented boundaries and
+engineering handoff live in:
 
-## Working rules
+- [`../../engineering/architecture-overview.md`](../../engineering/architecture-overview.md)
+- [`../../engineering/architecture-boundaries.md`](../../engineering/architecture-boundaries.md)
+- [`../../engineering/api-rules.md`](../../engineering/api-rules.md)
+- [`../../engineering/code-tour.md`](../../engineering/code-tour.md)
+- [`../../engineering/extension-recipes.md`](../../engineering/extension-recipes.md)
+- [`../../engineering/test-map.md`](../../engineering/test-map.md)
+- [`../../testing/README.md`](../../testing/README.md)
+
+Older trackers (`refactoring-progress.md`, `refactoring-verification-log.md`,
+`e2e-failure-diagnosis.md`, the root `REFACTORING-HANDOFF.md`, and
+`PLAYBACK-RUNTIME-DESK-SCOPE-REFACTOR.md`) are superseded and folded into this record; their detail
+remains in git history.
+
+## Final outcome
+
+The refactoring changed ToskLight from a prototype-shaped application with broad client/server
+facades, duplicated mutation paths, mixed ownership, large UI modules, v1 compatibility routes,
+and selector-heavy browser tests into an application with explicit domain/application ownership,
+intent-shaped v2 APIs, typed live-control messages, scoped frontend boundaries, deterministic
+persistence, enforceable architecture rules, and an operator-semantic acceptance bench.
+
+The work was incremental: every numbered chunk retained a passing, reviewable state and recorded
+its own result under [`../refactoring/done/`](../refactoring/done/). Persisted show compatibility,
+the command-line and OSC contracts, desk-local interaction state, shared programmer semantics,
+unpatched fixtures, ordered and intentionally empty Groups, current-page versus explicit-page
+Playback addressing, and safe malformed-show recovery remained compatibility boundaries throughout.
+
+### Architecture and ownership
+
+- Server handlers and transport adapters now delegate to application-owned services instead of
+  duplicating show, Programmer, Playback, patch, and persistence policy.
+- `ActionContext` carries desk, user, session, surface, correlation, request, and expected-revision
+  identity through mutations. Show revision conflicts are explicit and recoverable.
+- Group, Preset, Cue, Playback, Preload, Highlight, patch, output, file, help, configuration, and
+  fixture-library behavior use typed capability boundaries rather than a broad server facade.
+- The Control UI no longer depends on the old `ServerProvider`/v1 client facade. Scoped stores and
+  feature boundaries own server state, loading, error, retry, and mutation feedback.
+- Workspace dependency direction is machine-checked. Every Cargo member inherits the root Rust and
+  Clippy policy, and architecture checks reject future crates that omit it.
+
+### API, events, and live control
+
+- The remaining v1 REST and event WebSocket surfaces were inventoried, migrated, and retired.
+- Runtime lifecycle, sessions/bootstrap, show library, show objects, Playback topology, screen and
+  control-desk configuration, fixture library, media/output, files/help, and desk management moved
+  to intent-shaped v2 routes.
+- Command edits and semantic events share the multiplexed v2 WebSocket. Playback, Programmer,
+  topology, Preset, command-line, programming-interaction, Speed Group, output, and runtime actions
+  use typed live-control messages instead of direct client-local reducers or generic mutation
+  endpoints.
+- Unknown wire fields are accepted and logged at tolerant compatibility boundaries. Optional show
+  guards and explicit context headers prevent accidental cross-show mutations without inventing a
+  second ownership model.
+- OSC remains a frozen public control contract and converges on the same authoritative desk state as
+  the UI and WebSocket paths.
+
+### Show data, persistence, and engine behavior
+
+- Show persistence is write-behind and interval-driven, with deferred commits, bounded dirty
+  subgraphs, atomic revision behavior, and explicit failure/repair handling.
+- Cue editing, renumbering, deletion, tracking, merge/coexistence, timing, trigger selection,
+  navigation, and Cuelist settings preserve runtime identity and persisted behavior.
+- Parameter, Position, Color, and multi-point range spreading are server-owned. The shared
+  deterministic anchor rule is used across command line, software encoders, attached hardware, and
+  Color gestures.
+- Patch address assignment, Stage layout/drag persistence, exclusion zones, independent overlapping
+  Group Masters, Move in Black, Preload capture modes, virtual Playbacks, and Playback configuration
+  have one authoritative implementation path.
+- Legacy programmer `frozen_group` selection restores tolerantly to dereferenced fixture sources.
+  Virtual-dimmer metadata is derived from the raw fixture profile snapshot, while the one-way
+  intensity × colour output rule remains pinned by engine coverage.
+- Show mutation compilation is limited to affected subgraphs rather than recompiling unrelated
+  state.
+
+### Control UI and operator behavior
+
+- Oversized setup and window workflows were split into cohesive feature modules with explicit
+  loading and actionable error state.
+- Pane/window infrastructure, Console screens, patch boundaries, special Programmer controls,
+  command history, software and attached encoders, hardware simulator controls, Playback selection,
+  Highlight, Update, Matter, Sound-to-Light, files, Help, Desk Lock, and recovery workflows have
+  focused ownership and regression coverage.
+- Exact `DELETE` can remove a configured pane through an accessible title action while respecting
+  unsaved-state guards and clearing the shared command line.
+- Hardware encoder labels wrap rather than silently truncating operator-facing attribute names.
+- The generated product-demo show was migrated to the current schema and the complete Full HD demo
+  workflow passes.
+
+### Semantic Playwright bench
+
+- `apps/control-ui/e2e/bench/` is organized by operator area: command/selection, encoders,
+  Groups/Presets, hardware, output, Playbacks, Programmer, show, show setup, specific features, and
+  window system.
+- Scenario authors use typed semantic intents for shows, Desktops, panes, selection, encoders,
+  Groups, Presets, Cues, Playbacks, pages, Preload, time, DMX, OSC, screenshots, and recovery. They
+  do not need CSS selectors, raw route strings, fixture UUIDs, pointer coordinates, physical encoder
+  slots, or mutable show internals.
+- Visible UI, touch, API, OSC, wire, restart, and harness routes are explicit. Unqualified routes
+  use reproducible seeds and report their chosen adapter.
+- The migration inventory covers **309 root cases with zero pending rows**. The generated semantic
+  catalog covers **110 marked scenarios** and has self-contained JSON and HTML outputs.
+- The final 22 pending operator-control rows were migrated into area-owned helpers; the orphaned
+  software-encoder wrapper was removed, and only narrow protocol/exhaustive boundaries remain
+  supplemental.
+
+## Final verification evidence
+
+The figures below record the final refactoring run rather than claiming that every optional future
+feature exists.
+
+| Gate | Final evidence |
+| --- | --- |
+| Rust workspace | Full workspace test run passed. A first sandboxed run hit only the expected media socket bind restriction; the complete rerun with loopback permission passed, including the server suite (469 passed, 1 ignored). |
+| Control UI unit tests | 283 files, **2,007 tests passed**. |
+| TypeScript/build | Control UI `tsc --noEmit` and Vite production build passed repeatedly. The root unit wrapper once stopped because a concurrent tooling change temporarily removed root `tsc`; the equivalent app-local typecheck passed. |
+| Architecture/tooling | Cargo lint inheritance, semantic-doc compiler, dependency directions, source-size ratchet, command boundaries, closed bench bindings, and semantic-world boundaries all passed through `npm run test:architecture`. |
+| Source-size ratchet | **0** legacy files above 1,200 lines and **0** legacy functions above 150 lines. The non-blocking design goals still report 167 production files above 400 lines and 5,960 functions above 20 lines. |
+| Semantic documentation | Compiler tests **8/8 passed**; generated documentation covers **110** scenarios. |
+| Migration inventory | **309** root cases covered; **0 pending**. |
+| Focused final migration | **25/25 passed** across system integrations, hardware simulator/operator controls, and special-dialog/hardware Playback selection. |
+| API E2E | **86 passed, 1 skipped**. |
+| UI E2E | Broad four-worker run: **131 passed, 3 timing-sensitive failures**. The three failing areas were rerun together with four workers and passed **14/14**, including the compatibility fix found by the broad run. |
+| Supplemental E2E | **110 passed, 6 intentionally skipped**. |
+| Product demo | Full narrated Full HD scenario **1/1 passed**; the H.265 artifact was encoded successfully. |
+| Visual catalog | The serial capture reached **197 passed, 7 skipped** and assembled 64 videos before it was stopped after five capture-only five-second interaction failures; 129 cases did not run. GROUP-005 and both TIME-002 cases were already documented suite flakes; UPDATE-002 and retained PLAYBACK-SELECT supplemental coverage also missed capture windows. Every affected normal API/UI/supplemental path passed. |
+
+The visual-catalog result is the only incomplete final gate. It is recorded as test-infrastructure
+timing debt rather than hidden or misreported as a product regression. The normal parallel suites,
+focused reruns, semantic inventory, and product demo provide the binding acceptance evidence for
+the refactoring.
+
+## Final tooling and handoff
+
+- `docs/testing/README.md` is the concise test-author guide and the semantic catalog is generated
+  deterministically.
+- The source-size scanner now examines production JavaScript/TypeScript, Rust, and Python beneath
+  `apps/`, `crates/`, and `packages/`, excluding documentation, assets, artifacts, and experiments.
+- The repository includes a Rust-for-TypeScript engineering tour, updated architecture/code-tour
+  documentation, extension recipes, API rules, build/test commands, and a test map.
+- Release automation was moved to clearly named GitHub Actions jobs and the product remains marked
+  as pre-release software.
+- Completed feature plans were archived, superseded plans were consolidated, and future product
+  work (Dynamics, Media Server, visualizer, relative encoders, attribute activation, Highlight
+  look, fixture-sheet improvements, Playback auto-Off, and related roadmap items) remains separate
+  from the completed refactoring.
+
+## Remaining work outside this refactoring
+
+- Improve or redesign serial visual recording so normal five-second interaction polls remain stable
+  under high-bitrate video capture, then run the complete 338-case catalog without interruption.
+- Continue reducing the non-blocking 400-line/20-line source-size design goals where a cohesive
+  boundary exists; the hard ratchet is already clean.
+- Implement only the separately approved product plans under `docs/plans/Next/` and
+  `docs/plans/Later/`. Their presence is not unfinished refactoring.
+- Continue real packaged-desktop and operator-hardware verification where a browser harness cannot
+  truthfully prove native window/process ownership.
+
+## Historical working rules
 
 - Read `AGENTS.md` first — persistence/compatibility rules are load-bearing. `docs/help/**` is the
   source of truth for operator behavior; `docs/testing/**` + root `tests/` are the acceptance
@@ -26,7 +181,7 @@ here; their detail is in git history.
   `tests/support/plannedDemoState.ts`, `apps/control-ui/src/windows/builtInStageModels.ts`,
   `apps/control-ui/src/windows/stage3dScene.test.ts`, the `assets/**`, `package*.json`, `.gitignore`.
 
-## Current state (2026-07-22, evening — P1–P4 executed)
+## First completion milestone (2026-07-22 — P1–P4 executed)
 
 - Baseline (pre-refactor) 174 passed / 88 failed → **266 passed / 20 skipped** now. The only
   failing test is the user-dirty `product-demo` whole-app run.
@@ -107,7 +262,10 @@ gap is architectural.
   dereferenced to individual fixtures, with **no reference back**. A group recorded from a DEGRP'd
   selection stores the individual fixtures (no `frozen_from`).
 
-## Remaining chunks
+## Historical final-session chunks (all completed)
+
+The following sections preserve the diagnosis and execution instructions used during the first
+completion milestone. They are historical context; none remains in the active queue.
 
 ### P1 — DEGRP / group-selection consistency (engine bug; must fix)
 DEGRP is implemented two ways. Keypad `GROUP GROUP <id>`
