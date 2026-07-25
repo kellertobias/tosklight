@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **309 root cases across 55 files**.
+Default catalog: **309 root cases across 56 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -162,7 +162,6 @@ Default catalog: **309 root cases across 55 files**.
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-002 @supplemental › API queue ordering, live Flash/fader exclusions, and timing | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-002 @supplemental-ui › physical controls expose all verbs and live exclusions | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental-ui | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-003 @api › Virtual Playbacks use a persisted pane-native 2×2 grid and real GO/TOGGLE playbacks | docs/testing/06-preload-modes-and-virtual-playbacks.md | @api | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-003 @ui › Virtual Playbacks use a persisted pane-native 2×2 grid and real GO/TOGGLE playbacks | docs/testing/06-preload-modes-and-virtual-playbacks.md | @ui | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | pending-semantic-migration |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-004 @api › virtual GO and TOGGLE alone remain pending and share Programmer Fade | docs/testing/06-preload-modes-and-virtual-playbacks.md | @api | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-004 @ui › virtual GO and TOGGLE alone remain pending and share Programmer Fade | docs/testing/06-preload-modes-and-virtual-playbacks.md | @ui | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | pending-semantic-migration |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-004 @supplemental › API disabled-domain behavior and exact virtual transition timing | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
@@ -323,6 +322,7 @@ Default catalog: **309 root cases across 55 files**.
 | 52-semantic-cue-deletion.spec.ts | CUE-013 @bench @ui › deleting the active Cue holds output and anchors GO around the surviving Cues | repository contract | @bench @ui | semantic-cue-deletion | standard failure evidence | parallel | migrated-semantic-world |
 | 53-semantic-programmer-preload.spec.ts | PRELOAD-001 @bench @ui › programmer-only Preload stays blind, commits, and releases | repository contract | @bench @ui | semantic-programmer-preload | standard failure evidence | parallel | migrated-semantic-world |
 | 54-semantic-physical-playback-preload.spec.ts | PRELOAD-002 @bench @ui › physical Playback Preload preserves all seven ordered action verbs | repository contract | @bench @ui | semantic-physical-playback-preload | standard failure evidence | parallel | migrated-semantic-world |
+| 55-semantic-virtual-playback-layout.spec.ts | PRELOAD-003 @bench @ui › Virtual Playbacks use a persisted pane-native 2×2 grid and real GO/TOGGLE playbacks | repository contract | @bench @ui | semantic-virtual-playback-layout | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints

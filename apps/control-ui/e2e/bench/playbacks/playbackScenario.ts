@@ -33,6 +33,8 @@ export interface PlaybackConfiguration {
 	name?: string;
 	color?: string;
 	autoOff?: boolean;
+	buttonCount?: 0 | 1 | 2 | 3;
+	hasFader?: boolean;
 	buttons?: [
 		Exclude<PlaybackButton, PlaybackButton.Release>,
 		Exclude<PlaybackButton, PlaybackButton.Release>,
@@ -360,6 +362,12 @@ export class BrowserPlaybacks {
 					...(definition.autoOff == null
 						? {}
 						: { auto_off: definition.autoOff }),
+					...(definition.buttonCount == null
+						? {}
+						: { button_count: definition.buttonCount }),
+					...(definition.hasFader == null
+						? {}
+						: { has_fader: definition.hasFader }),
 					...(definition.buttons == null
 						? {}
 						: { buttons: definition.buttons }),

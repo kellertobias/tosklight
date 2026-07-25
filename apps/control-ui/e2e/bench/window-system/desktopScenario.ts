@@ -36,10 +36,14 @@ export class DesktopConfiguration {
 		readonly name: string,
 	) {}
 
-	addPane<T extends OperatorPaneType>(type: T, placement: PanePlacement): PaneHandle<T> {
+	addPane<T extends OperatorPaneType>(
+		type: T,
+		placement: PanePlacement,
+		configuration?: PaneConfiguration<T>,
+	): PaneHandle<T> {
 		validatePlacement(placement, this.panes.map((pane) => pane.placement));
 		const handle = this.desktop.createHandle(type, placement.slug, this);
-		this.panes.push({ type, placement, handle } as PaneDefinition);
+		this.panes.push({ type, placement, configuration, handle } as PaneDefinition);
 		return handle;
 	}
 
@@ -345,6 +349,11 @@ async function applyPaneConfiguration<T extends PaneType>(page: Page, type: T, c
 		await dialog.getByRole("tab", { name: "Pool" }).click();
 		if (options.family) await dialog.getByRole("button", { name: String(options.family === PresetFamily.Mixed ? "Mixed" : options.family), exact: true }).click();
 		await setSwitch(dialog, "Enable pool colors", options.poolColors);
+	}
+	if (type === "virtual_playbacks") {
+		await dialog.getByRole("tab", { name: "Virtual Playbacks" }).click();
+		if (options.rows !== undefined) await dialog.getByLabel("Rows").fill(String(options.rows));
+		if (options.columns !== undefined) await dialog.getByLabel("Columns").fill(String(options.columns));
 	}
 	if (options.showGroupShortcuts !== undefined) {
 		await dialog.getByRole("tab", { name: "Shortcuts" }).click();

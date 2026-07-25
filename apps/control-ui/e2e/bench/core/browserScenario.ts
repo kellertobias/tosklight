@@ -42,6 +42,7 @@ import {
 import { BrowserPages, BrowserPreload } from "../playbacks/pagePreloadScenario";
 import { BrowserPlaybacks } from "../playbacks/playbackScenario";
 import { BrowserSpeedGroups } from "../playbacks/speedGroupScenario";
+import { BrowserVirtualPlaybacks } from "../playbacks/virtualPlaybackScenario";
 import { BrowserHighlight } from "../programmer/highlightScenario";
 import { BrowserTiming } from "../programmer/programmerFadeScenario";
 import { BrowserProgrammer } from "../programmer/programmerPriority";
@@ -108,6 +109,7 @@ export class BrowserScenarioWorld {
 	readonly record: BrowserRecording;
 	readonly cue: BrowserCues;
 	readonly playback: BrowserPlaybacks;
+	readonly virtualPlayback: BrowserVirtualPlaybacks;
 	readonly page: BrowserPages;
 	readonly preload: BrowserPreload;
 	readonly patch: BrowserPatch;
@@ -245,6 +247,13 @@ export class BrowserScenarioWorld {
 			page,
 			desk,
 			this.hardware,
+			() => this.show.contractIdentity().workingId,
+		);
+		this.virtualPlayback = new BrowserVirtualPlaybacks(
+			api,
+			page,
+			desk,
+			this.desktop,
 			() => this.show.contractIdentity().workingId,
 		);
 		this.page = new BrowserPages(

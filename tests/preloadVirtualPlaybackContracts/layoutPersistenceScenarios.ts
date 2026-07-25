@@ -22,6 +22,7 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 	id: "PRELOAD-003",
 	title:
 		"Virtual Playbacks use a persisted pane-native 2×2 grid and real GO/TOGGLE playbacks",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const specs: PlaybackSpec[] = [
 			{

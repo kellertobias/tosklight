@@ -2,6 +2,7 @@ const expectationWords = new Set([
 	"absent",
 	"active",
 	"button",
+	"cells",
 	"configuration",
 	"dirty",
 	"empty",
@@ -50,6 +51,7 @@ const worldFamilies = {
 	special: ["Programmer"],
 	speedGroup: ["Speed Groups"],
 	timing: ["Programmer timing", "Cue timing"],
+	virtualPlayback: ["Browser UI", "Virtual Playbacks"],
 };
 
 const returnedFamilies = {
@@ -245,6 +247,12 @@ const supportedCallPaths = new Set([
 	"speedGroup.E.expect.bpm",
 	"timing.cueFade.set",
 	"timing.programmerFade.via.api.set",
+	"virtualPlayback.activate",
+	"virtualPlayback.assignSource",
+	"virtualPlayback.configureTopButton",
+	"virtualPlayback.expect.button",
+	"virtualPlayback.expect.cells",
+	"virtualPlayback.reload",
 ]);
 
 const exactNarrations = new Map([
