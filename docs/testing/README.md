@@ -134,7 +134,8 @@ When simulated hardware is connected, normalized encoders also expose relative
 family, resolves the logical attribute from the live attached-hardware display instead of assuming
 a physical slot, sends one detent at a time, and waits for each authoritative Programmer revision.
 The OSC port is relative-only at the type level. Profile-derived discrete and special-dialog
-controls plus undecided encoder press/page semantics remain queued in refactoring chunks 06d–06e.
+controls, attached encoder press/press-turn behavior, and Encoder 7 NAV traversal are covered by
+the corresponding typed helpers and focused browser/OSC scenarios.
 
 Programmer Fade is available through `timing.programmerFade`. `set("4s")` records a seeded choice
 between eligible routes; `.via.api`, `.via.valueEntry`, `.via.fader`, and connected `.via.osc`
@@ -158,6 +159,15 @@ and Shapers attributes discovered from the selected patch, and compatible profil
 actions. Visible helpers press the production family tabs, dialogs, buttons, and pointer faders.
 API alignment and Control helpers use the same command boundaries as the production client; Control
 actions serialize compatible fixtures across the active-show transition barrier.
+
+Groups and Presets use `group` and `preset` helpers. Group recording takes the `StoreMode` enum,
+preserves ordered membership, distinguishes stored empty from absent, and exposes live and
+dereferenced selection through the shared selection contract. Presets take an explicit
+`PresetFamily`; Mixed remains its own family, including its compatible legacy plain-number storage
+identity. Both helpers expose truthful `.via.pool`, `.via.keypad`, `.via.api`, and `.via.osc`
+routes, synchronize OSC keys against command-line feedback, and normalize assertions through
+portable show objects. Unqualified multi-route actions choose reproducibly and retain a route
+report containing their seed, action index, candidates, and selected route.
 
 The runner exposes separate commands so CI classifies failures clearly:
 

@@ -19,6 +19,7 @@ import {
 } from "./fixtureDmx";
 import { type SimulatedHardware, simulatedHardware } from "./hardwareScenario";
 import { BrowserHighlight } from "./highlightScenario";
+import { BrowserGroups } from "./groupScenario";
 import type { LightBench, TestShow } from "./lightBench";
 import {
 	BrowserOutputPackets,
@@ -29,6 +30,7 @@ import type { BuiltInPaneType } from "./paneTypes";
 import { builtInLabels } from "./paneTypes";
 import type { DmxProtocol } from "./protocols";
 import { BrowserTiming } from "./programmerFadeScenario";
+import { BrowserPresets } from "./presetScenario";
 import { BrowserProgrammerSpecials } from "./programmerSpecialScenario";
 import { BrowserRoutedSelection } from "./routedSelectionScenario";
 import type { SelectionTarget } from "./selectionContract";
@@ -74,6 +76,8 @@ export class BrowserScenarioWorld {
 	readonly encoder: BrowserEncoders;
 	readonly hardware: SimulatedHardware;
 	readonly highlight: BrowserHighlight;
+	readonly group: BrowserGroups;
+	readonly preset: BrowserPresets;
 	readonly dmx: BrowserDmx;
 	readonly output: BrowserOutput;
 	readonly timing: BrowserTiming;
@@ -137,6 +141,25 @@ export class BrowserScenarioWorld {
 			`${testInfo.workerIndex}:${testInfo.title}:encoder`,
 		);
 		this.highlight = new BrowserHighlight(page, api, this.hardware);
+		this.group = new BrowserGroups(
+			api,
+			page,
+			desk,
+			this.command,
+			coreSelection,
+			this.hardware,
+			() => this.show.contractIdentity().workingId,
+			`${testInfo.workerIndex}:${testInfo.title}:group`,
+		);
+		this.preset = new BrowserPresets(
+			api,
+			page,
+			desk,
+			this.command,
+			this.hardware,
+			() => this.show.contractIdentity().workingId,
+			`${testInfo.workerIndex}:${testInfo.title}:preset`,
+		);
 		this.dmx = new BrowserDmx(api);
 		this.output = new BrowserOutput(api, desk);
 		this.special = new BrowserProgrammerSpecials(
