@@ -20,3 +20,13 @@ is the acceptance contract.
 - Generated show names and paths, ordered Group semantics, unpatched-fixture
   behavior, and Programmer LTP/relative behavior remain unchanged.
 - Focused API/UI cases, architecture, inventory, and parallel stress pass.
+
+## Result
+
+Split on 2026-07-25.
+
+- `10c1a` owns the one serial generated-show UI case.
+- `10c1b` owns the 11 foundational UI cases and their shared paired-registration
+  changes.
+- This keeps generated artifacts independent from the foundational helper
+  migration while preserving the original combined scope.
