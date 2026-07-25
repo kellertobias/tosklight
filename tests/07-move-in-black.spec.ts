@@ -12,6 +12,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
   pairedScenario<MibState>({
     id: "MIB-001",
     title: "a dark fixture prepositions for its next lit Cue",
+    surfaces: ["api"],
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `mib-001-${surface}`, "default-stage");
       const patch = await api.patch();

@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **309 root cases across 60 files**.
+Default catalog: **309 root cases across 61 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -175,7 +175,6 @@ Default catalog: **309 root cases across 60 files**.
 | 06-preload-modes-and-virtual-playbacks.spec.ts | VPB-007 @supplemental @osc @restart › show-level zone snapshots retain isolated desk partitions across every transport | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental @osc @restart | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | VPB-007 @supplemental-ui › Settings edits hidden membership and reload restores it | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental-ui | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 07-move-in-black.spec.ts | MIB-001 @api › a dark fixture prepositions for its next lit Cue | docs/testing/02-cues-tracking-and-arbitration.md | @api | move-in-black | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 07-move-in-black.spec.ts | MIB-001 @ui › a dark fixture prepositions for its next lit Cue | docs/testing/02-cues-tracking-and-arbitration.md | @ui | move-in-black | standard failure evidence | parallel | pending-semantic-migration |
 | 07-move-in-black.spec.ts | MIB-001 @wire › resolved light blocks MIB and every return to dark restarts the full safety delay | docs/testing/02-cues-tracking-and-arbitration.md | @wire | move-in-black | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 07-move-in-black.spec.ts | MIB-001 @wire › dark-Cue look-ahead retargets live edits and cancels when the future lit Cue disappears | docs/testing/02-cues-tracking-and-arbitration.md | @wire | move-in-black | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 07-playback-configuration.spec.ts | PBK-001 @api › Set inspection resolves one playback identity and Close is mutation-free | docs/testing/07-playback-configuration.md | @api | playback-configuration | standard failure evidence | parallel | reviewed-low-level-boundary |
@@ -323,6 +322,7 @@ Default catalog: **309 root cases across 60 files**.
 | 57-semantic-virtual-playback-preload.spec.ts | PRELOAD-004 @bench @ui › virtual GO and TOGGLE alone remain pending and share Programmer Fade | repository contract | @bench @ui | semantic-virtual-playback-preload | standard failure evidence | parallel | migrated-semantic-world |
 | 58-semantic-preload-capture-mask.spec.ts | PRELOAD-005 @bench @ui › all eight capture-domain switch masks persist independently | repository contract | @bench @ui | semantic-preload-capture-mask | standard failure evidence | parallel | migrated-semantic-world |
 | 59-semantic-combined-preload.spec.ts | PRELOAD-006 @bench @ui › combined Preload commits atomically and releases only programmer data | repository contract | @bench @ui | semantic-combined-preload | standard failure evidence | parallel | migrated-semantic-world |
+| 60-semantic-move-in-black.spec.ts | MIB-001 @bench @ui › a dark fixture prepositions for its next lit Cue | repository contract | @bench @ui | semantic-move-in-black | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints
