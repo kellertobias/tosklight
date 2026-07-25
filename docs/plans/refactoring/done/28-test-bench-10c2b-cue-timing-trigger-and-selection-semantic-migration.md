@@ -18,3 +18,11 @@ Migrate the five ordinary Cue timing, trigger, and implicit-selection UI cases.
   implicit Cuelist selection, and explicit-zero tracking retain exact boundaries.
 - Paired API halves and supplemental boundaries remain unchanged.
 - Focused API/UI cases, architecture, inventory, and parallel stress pass.
+
+## Result
+
+- Re-verified the five pending rows and their independent fixture/oracle
+  boundaries.
+- Split execution into `10c2b1` for the two application-time and per-value
+  timing cases, and `10c2b2` for trigger scheduling plus implicit-selection and
+  explicit-zero tracking.
