@@ -21,7 +21,7 @@ import {
 } from "./support/catalog";
 
 export function registerFixtureTimingTest(): void {
-	test("TIME-002 @ui › touch-set fixture timing is stored and replayed as resolved light and DMX", async ({
+	test("TIME-002 @supplemental-ui › touch-set fixture timing is stored and replayed as resolved light and DMX", async ({
 		api,
 		bench,
 		desk,
@@ -91,7 +91,7 @@ export function registerFixtureTimingTest(): void {
 }
 
 export function registerGroupTimingTest(): void {
-	test("TIME-002 @ui › touch-set Group timing is stored and replayed for every member", async ({
+	test("TIME-002 @supplemental-ui › touch-set Group timing is stored and replayed for every member", async ({
 		api,
 		bench,
 		desk,

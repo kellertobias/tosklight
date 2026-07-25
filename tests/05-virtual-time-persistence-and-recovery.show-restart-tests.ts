@@ -36,6 +36,7 @@ export function registerShow001PairedScenario(): void {
 		id: "SHOW-001",
 		title:
 			"operator programming and a named revision produce the durable restart state",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			const copy = await loadCanonicalCopy(api, bench, `show-001-${surface}`);
 			await setProgrammerFade(api, 0, 3_000);

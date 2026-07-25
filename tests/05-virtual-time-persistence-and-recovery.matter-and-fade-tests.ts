@@ -114,6 +114,7 @@ export function registerZeroTickScenario(): void {
 	pairedScenario<HardwareState>({
 		id: "TIME-001",
 		title: "zero ticks emit current state without advancing behavior time",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			await loadCanonicalCopy(api, bench, `time-001-${surface}`);
 			expect(
@@ -157,6 +158,7 @@ export function registerFadeBoundaryScenario(): void {
 	pairedScenario<{ fixtureId: string } & HardwareState>({
 		id: "TIME-002",
 		title: "all programmer-fade boundaries are exact",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) => {
 			await loadCanonicalCopy(api, bench, `time-002-${surface}`);
 			return { fixtureId: (await fixtureIdsByNumber(api))[1] };

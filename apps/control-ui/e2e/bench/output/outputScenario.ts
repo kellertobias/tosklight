@@ -1,6 +1,8 @@
+import type { Page } from "@playwright/test";
 import type { OutputRuntimeActionOutcome } from "../../../src/features/outputRuntime/contracts";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
+import { BrowserNetworkOutput } from "./networkOutputScenario";
 import { setOutputRuntime } from "./outputRuntime";
 
 export interface PauseDynamicsControl {
@@ -12,10 +14,15 @@ export interface PauseDynamicsControl {
 
 /** Global output actions with explicit authority and control-surface semantics. */
 export class BrowserOutput {
+	readonly network: BrowserNetworkOutput;
+
 	constructor(
 		private readonly api: ApiDriver,
 		private readonly desk: DeskDriver,
-	) {}
+		page: Page,
+	) {
+		this.network = new BrowserNetworkOutput(api, page, desk);
+	}
 
 	async grandMaster(level: number): Promise<OutputRuntimeActionOutcome> {
 		await this.desk.recordStep(

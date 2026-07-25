@@ -630,6 +630,7 @@ export function registerRevisionCopyScenario(): void {
 	pairedScenario<RevisionCopyState>({
 		id: "SHOW-005",
 		title: "named revisions load as durable, visibly independent copies",
+		surfaces: ["api"],
 		arrange: arrangeRevisionCopy,
 		api: exerciseRevisionCopyApi,
 		ui: exerciseRevisionCopyUi,

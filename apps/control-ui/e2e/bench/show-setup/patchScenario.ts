@@ -1,12 +1,14 @@
-import type { Page } from "@playwright/test";
-import {
-	expectFixtureUnpatched,
-	setFixtureAddressThroughSoftware,
-} from "../../../../../tests/support/operator/patch";
+import { expect, type Page } from "@playwright/test";
 import {
 	openPatch,
 	patchFixtureRow,
 } from "../../../../../tests/support/foundational/ui";
+import {
+	duplicatePatchedFixtures,
+	expectFixtureUnpatched,
+	readPatchSnapshot,
+	setFixtureAddressThroughSoftware,
+} from "../../../../../tests/support/operator/patch";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
 
@@ -15,6 +17,10 @@ class PatchActionSurface {
 
 	unpatch(number: number): Promise<void> {
 		return this.owner.unpatchThroughSoftware(number);
+	}
+
+	address(number: number, address: string): Promise<void> {
+		return this.owner.setAddressThroughSoftware(number, address);
 	}
 }
 
@@ -27,6 +33,15 @@ class PatchExpectation {
 	unpatched(): Promise<void> {
 		return this.owner.expectUnpatched(this.number);
 	}
+
+	address(address: string): Promise<void> {
+		return this.owner.expectAddress(this.number, address);
+	}
+}
+
+export interface PatchConflictHandle {
+	readonly anchor: number;
+	readonly candidate: number;
 }
 
 /** Public semantic Patch actions used by browser acceptance scenarios. */
@@ -41,6 +56,28 @@ export class BrowserPatch {
 
 	expect(number: number): PatchExpectation {
 		return new PatchExpectation(this, validFixtureNumber(number));
+	}
+
+	async prepareAddressConflict(): Promise<PatchConflictHandle> {
+		const source = (await readPatchSnapshot(this.api)).fixtures.find(
+			(fixture) => fixture.fixture_number === 1,
+		);
+		if (!source) throw new Error("Canonical show is missing Fixture 1");
+		await duplicatePatchedFixtures(this.api, source.fixture_id, [
+			{
+				fixtureId: crypto.randomUUID(),
+				fixtureNumber: 901,
+				name: "Atomic Anchor",
+				address: "2.1",
+			},
+			{
+				fixtureId: crypto.randomUUID(),
+				fixtureNumber: 902,
+				name: "Atomic Candidate",
+				address: "2.2",
+			},
+		]);
+		return { anchor: 901, candidate: 902 };
 	}
 
 	async unpatchThroughSoftware(number: number): Promise<void> {
@@ -59,12 +96,56 @@ export class BrowserPatch {
 		await this.expectUnpatched(number);
 	}
 
+	async setAddressThroughSoftware(
+		number: number,
+		address: string,
+	): Promise<void> {
+		number = validFixtureNumber(number);
+		await this.desk.recordStep(
+			"PATCH",
+			`Set Fixture ${number} to ${address} through the visible Fixture Address workflow.`,
+		);
+		await openPatch(this.page);
+		const row = patchFixtureRow(this.page, number);
+		await setFixtureAddressThroughSoftware({
+			page: this.page,
+			addressCell: row.locator(".patch-address"),
+			address,
+		});
+	}
+
+	async keepOldAddressAfterConflict(): Promise<void> {
+		const conflict = this.page.getByRole("dialog", { name: "Patch conflict" });
+		await expect(conflict).toBeVisible();
+		await this.desk.click(
+			conflict.getByRole("button", {
+				name: "Keep old patch / mode",
+				exact: true,
+			}),
+		);
+		await expect(conflict).toBeHidden();
+	}
+
 	async expectUnpatched(number: number): Promise<void> {
 		const fixture = (await this.api.patch()).fixtures.find(
 			(candidate) => candidate.fixture_number === validFixtureNumber(number),
 		);
-		if (!fixture) throw new Error(`Fixture ${number} is not patched into the show`);
+		if (!fixture)
+			throw new Error(`Fixture ${number} is not patched into the show`);
 		await expectFixtureUnpatched(this.api, fixture.fixture_id);
+	}
+
+	async expectAddress(number: number, address: string): Promise<void> {
+		const fixture = (await readPatchSnapshot(this.api)).fixtures.find(
+			(candidate) => candidate.fixture_number === validFixtureNumber(number),
+		);
+		if (!fixture) throw new Error(`Fixture ${number} is absent`);
+		const [universe, slot] = address.split(".").map(Number);
+		expect(fixture.split_patches).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ universe, address: slot }),
+			]),
+		);
 	}
 }
 

@@ -293,7 +293,7 @@ export class BrowserPlaybacks {
 		} else if (route === "ui") {
 			if (action === PlaybackButton.Release)
 				throw new Error("Playback release has no default visible button");
-			const button = (await this.visibleCard(number)).getByRole("button", {
+			const button = (await this.visibleCardFor(target, number)).getByRole("button", {
 				name: playbackButtonLabel(action),
 				exact: true,
 			});
@@ -424,6 +424,19 @@ export class BrowserPlaybacks {
 		const location = await playbackLocation(this.api, this.showId(), number);
 		const card = this.page.locator(
 			`.playback-fader-bank [data-playback-slot="${location.slot}"]:visible`,
+		);
+		await expect(card).toBeVisible();
+		return card;
+	}
+
+	private async visibleCardFor(
+		target: PlaybackTarget,
+		number: number,
+	): Promise<Locator> {
+		if (typeof target === "number") return this.visibleCard(number);
+		await this.open();
+		const card = this.page.locator(
+			`.playback-fader-bank [data-playback-slot="${target.slot}"]:visible`,
 		);
 		await expect(card).toBeVisible();
 		return card;

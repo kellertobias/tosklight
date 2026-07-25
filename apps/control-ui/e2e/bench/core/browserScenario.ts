@@ -15,6 +15,7 @@ import { BrowserSelection } from "../command-selection/selectionScenario";
 import { BrowserEncoders } from "../encoders/encoderScenario";
 import { BrowserGroups } from "../groups-presets/groupScenario";
 import { BrowserPresets } from "../groups-presets/presetScenario";
+import { BrowserCrossSurface } from "../hardware/crossSurfaceScenario";
 import {
 	type SimulatedHardware,
 	simulatedHardware,
@@ -104,6 +105,7 @@ export class BrowserScenarioWorld {
 	readonly selection: BrowserRoutedSelection;
 	readonly encoder: BrowserEncoders;
 	readonly hardware: SimulatedHardware;
+	readonly crossSurface: BrowserCrossSurface;
 	readonly highlight: BrowserHighlight;
 	readonly group: BrowserGroups;
 	readonly preset: BrowserPresets;
@@ -192,6 +194,14 @@ export class BrowserScenarioWorld {
 		this.command = new BrowserCommands(api, desk, page);
 		this.keypad = new BrowserKeypad(desk, page);
 		this.hardware = simulatedHardware(bench, api);
+		this.crossSurface = new BrowserCrossSurface(
+			api,
+			bench,
+			page,
+			desk,
+			this.command,
+			() => this.show.contractIdentity().workingId,
+		);
 		const coreSelection = new BrowserSelection(api);
 		this.selection = new BrowserRoutedSelection(
 			coreSelection,
@@ -287,7 +297,7 @@ export class BrowserScenarioWorld {
 		);
 		this.patch = new BrowserPatch(api, page, desk);
 		this.dmx = new BrowserDmx(api);
-		this.output = new BrowserOutput(api, desk);
+		this.output = new BrowserOutput(api, desk, page);
 		this.programmer = new BrowserProgrammer(api);
 		this.special = new BrowserProgrammerSpecials(
 			api,
@@ -332,6 +342,7 @@ export class BrowserScenarioWorld {
 
 	async finish(failure?: unknown): Promise<void> {
 		this.stopObservingSteps();
+		await this.output.network.close();
 		const routes = {
 			seed: this.routeSeed,
 			selection: this.selection.routeReports,

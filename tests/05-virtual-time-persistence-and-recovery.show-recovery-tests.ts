@@ -97,6 +97,7 @@ export function registerMalformedRecoveryScenario(): void {
 		id: "SHOW-003",
 		title:
 			"a malformed active show stays intact while the operator opens a valid recovery show",
+		surfaces: ["api"],
 		arrange: async ({ api, bench }, surface) =>
 			arrangeMalformedRecovery(api, bench, surface),
 		api: async ({ api }, state) => {

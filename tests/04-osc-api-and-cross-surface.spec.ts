@@ -66,6 +66,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
   pairedScenario<OscSubscriptionState>({
     id: "OSC-001",
     title: "page changes produce one complete feedback cycle without periodic mutation",
+    surfaces: ["api"],
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `osc-001-${surface}`);
       await installPlayback(api);
@@ -123,6 +124,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
   pairedScenario<OscIsolationState>({
     id: "OSC-003",
     title: "separate desk subscribers isolate partial commands and unsubscribe independently",
+    surfaces: ["api"],
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `osc-003-${surface}`);
       const second = await createSession(api, crypto.randomUUID());
@@ -190,6 +192,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
   pairedScenario<{}>({
     id: "OSC-004",
     title: "invalid input is rejected without programmer or output mutation",
+    surfaces: ["api"],
     arrange: async ({ api, bench }, surface) => { await loadCanonicalCopy(api, bench, `osc-004-${surface}`); return {}; },
     api: async ({ api }) => {
       await expect(api.executeCommandLine("NOT A COMMAND")).rejects.toThrow("fixture number is invalid");
@@ -211,6 +214,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
   pairedScenario<SharedProgrammerState>({
     id: "OSC-005",
     title: "completed values are user-shared while unfinished commands stay desk-local",
+    surfaces: ["api"],
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `osc-005-${surface}`);
       await ensureGroupSeven(api);
@@ -254,6 +258,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
   pairedScenario<PagePlaybackState>({
     id: "OSC-006",
     title: "page two retargets the same current-page playback-one action",
+    surfaces: ["api"],
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `osc-006-${surface}`);
       return installPlayback(api);
@@ -292,6 +297,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
   pairedScenario<RevisionConflictState>({
     id: "API-001",
     title: "authenticated membership updates reject stale revisions atomically",
+    surfaces: ["api"],
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `api-001-${surface}`);
       const group = await object(api, "group", "3");
@@ -318,6 +324,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
   pairedScenario<{ auditBefore: number; showId: string }>({
     id: "API-002",
     title: "Group CRUD produces ordered audit and object events",
+    surfaces: ["api"],
     arrange: async ({ api, bench }, surface) => {
       const show = await loadCanonicalCopy(api, bench, `api-002-${surface}`);
       return {
@@ -443,6 +450,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
   pairedScenario<CrossMutationState>({
     id: "CROSS-002",
     title: "browser live-reconciles the contract's external REST and command-WebSocket mutations",
+    surfaces: ["api"],
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `cross-002-${surface}`);
       const group = await object(api, "group", "3");
@@ -818,6 +826,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 function registerGroupOutputPair(id: string, percent: number, byte: number, title: string) {
   pairedScenario<{ showId: string }>({
     id, title,
+    surfaces: ["api"],
     arrange: async ({ api, bench }, surface) => {
       const show = await loadCanonicalCopy(api, bench, `${id.toLowerCase()}-${surface}`);
       return { showId: show.id };
