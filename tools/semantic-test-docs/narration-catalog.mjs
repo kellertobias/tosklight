@@ -53,6 +53,7 @@ const worldFamilies = {
 };
 
 const returnedFamilies = {
+	cueEditor: ["Browser UI", "Cues"],
 	desktopBuilder: ["Browser UI", "Desktop layout"],
 	screenHandle: ["Secondary screen"],
 };
@@ -78,7 +79,15 @@ const supportedCallPaths = new Set([
 	"cue.expect.groupValueTiming",
 	"cue.configure",
 	"cue.goto",
+	"cue.openEditor",
+	"cue.reopenEditor",
 	"cue.transferChoice.cancel",
+	"cueEditor.edit",
+	"cueEditor.expect.selected",
+	"cueEditor.expect.structure",
+	"cueEditor.inspectSettings",
+	"cueEditor.reject",
+	"cueEditor.select",
 	"demo.run",
 	"desktop.closeSettings",
 	"desktop.configure",
@@ -375,6 +384,8 @@ function humanize(value) {
 }
 
 function resultTypeFor(callPath) {
+	if (callPath === "cue.openEditor" || callPath === "cue.reopenEditor")
+		return "cueEditor";
 	if (callPath === "desktop.configure") return "desktopBuilder";
 	if (callPath === "screen.create") return "screenHandle";
 	return undefined;

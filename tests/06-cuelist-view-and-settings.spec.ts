@@ -11,6 +11,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
   pairedScenario<{ completed: boolean }>({
     id: "CUE-011",
     title: "Cue edits and atomic renumber preserve runtime identity, output, and persisted bytes",
+    surfaces: ["api"],
     arrange: () => ({ completed: false }),
     api: async ({ api, bench }, state) => {
       const show = await loadCanonicalCopy(api, bench, "cue-011-api", "compact-rig");

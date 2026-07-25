@@ -27,6 +27,170 @@ export interface CueListConfiguration {
 }
 
 type CommandRoute = "ui" | "api";
+type CueTriggerLabel = "GO" | "FOLLOW" | "TIME";
+
+export interface CueEditorValues {
+	name?: string;
+	fade?: string;
+	delay?: string;
+	trigger?: CueTriggerLabel;
+	triggerTime?: string;
+}
+
+class CueEditorExpectation {
+	constructor(private readonly owner: CueEditor) {}
+
+	async structure() {
+		await expect(this.owner.window()).toBeVisible();
+		await expect(this.owner.page.locator(".cue-table thead th")).toHaveText([
+			"Preview",
+			"No.",
+			"Name",
+			"Trigger",
+			"Fade",
+		]);
+		await expect(this.owner.page.locator(".cue-table thead")).not.toContainText(
+			"Status",
+		);
+		await expect(
+			this.owner.page.locator(".cue-settings-compact-fallback"),
+		).toBeHidden();
+	}
+
+	async selected(cue: number, values: CueEditorValues = {}) {
+		const row = this.owner.row(cue);
+		await expect(row).toHaveClass(/selected/);
+		await expect(
+			this.owner.page.getByText(`Selected Cue · ${formatCueNumber(cue)}`, {
+				exact: true,
+			}),
+		).toBeVisible();
+		if (values.name != null)
+			await expect(this.owner.field("Title")).toHaveValue(values.name);
+		if (values.fade != null)
+			await expect(this.owner.field("Fade")).toHaveValue(values.fade);
+		if (values.delay != null)
+			await expect(this.owner.field("Delay")).toHaveValue(values.delay);
+		if (values.triggerTime != null)
+			await expect(this.owner.field("Trigger time")).toHaveValue(
+				values.triggerTime,
+			);
+	}
+}
+
+export class CueEditor {
+	readonly expect = new CueEditorExpectation(this);
+
+	constructor(
+		readonly page: Page,
+		private readonly desk: DeskDriver,
+		private readonly api: ApiDriver,
+		private readonly showId: string,
+		private readonly cueListId: string,
+		private readonly cueListName: string,
+	) {}
+
+	async select(cue: number) {
+		await this.desk.recordStep(
+			`SELECT CUE ${formatCueNumber(cue)} IN CUELIST VIEW`,
+			"Select the Cue row without changing playback output.",
+		);
+		await this.desk.click(this.row(cue));
+		await this.expect.selected(cue);
+	}
+
+	async edit(cue: number, values: CueEditorValues) {
+		await this.select(cue);
+		await this.desk.recordStep(
+			`EDIT CUE ${formatCueNumber(cue)}`,
+			"Edit the selected Cue through the visible Cuelist View fields.",
+		);
+		if (values.name != null) await this.commit("Title", values.name);
+		if (values.fade != null) await this.commit("Fade", values.fade);
+		if (values.delay != null) await this.commit("Delay", values.delay);
+		if (values.trigger != null) await this.chooseTrigger(values.trigger);
+		if (values.triggerTime != null)
+			await this.commit("Trigger time", values.triggerTime);
+	}
+
+	async reject(cue: number, values: CueEditorValues) {
+		await this.select(cue);
+		if (values.fade != null) {
+			await this.field("Fade").fill(values.fade);
+			await this.field("Fade").press("Enter");
+		}
+		await expect(
+			this.page
+				.getByRole("alert")
+				.filter({ hasText: "Cue edit was not saved" }),
+		).toBeVisible();
+	}
+
+	async inspectSettings() {
+		await this.desk.click(
+			this.page.getByRole("button", {
+				name: "Cuelist Settings",
+				exact: true,
+			}),
+		);
+		const dialog = this.page.getByRole("dialog", {
+			name: "Cuelist Settings",
+		});
+		await expect(dialog).toContainText(this.cueListName);
+		await this.desk.click(
+			dialog.getByRole("button", {
+				name: "Close Cuelist Settings",
+				exact: true,
+			}),
+		);
+		await expect(dialog).toBeHidden();
+	}
+
+	window() {
+		return this.page.locator(".cue-table");
+	}
+
+	row(cue: number) {
+		return this.page.locator(".cue-table tbody tr").filter({
+			has: this.page
+				.locator("td")
+				.nth(1)
+				.getByText(formatCueNumber(cue), { exact: true }),
+		});
+	}
+
+	field(label: string) {
+		return this.page.getByLabel(label, { exact: true });
+	}
+
+	private async commit(label: string, value: string) {
+		const before = await this.revision();
+		const field = this.field(label);
+		await field.fill(value);
+		await field.press("Enter");
+		await expect.poll(() => this.revision()).toBeGreaterThan(before);
+	}
+
+	private async chooseTrigger(next: CueTriggerLabel) {
+		const before = await this.revision();
+		const scope = this.page.locator(".cue-properties");
+		await scope
+			.getByRole("button", { name: /^(GO|FOLLOW|TIME)$/, exact: true })
+			.click();
+		await this.page.getByRole("option", { name: next, exact: true }).click();
+		await expect.poll(() => this.revision()).toBeGreaterThan(before);
+	}
+
+	private async revision() {
+		const object = await this.api.showObject<CueList>(
+			this.showId,
+			"cue_list",
+			this.cueListId,
+		);
+		if (!object) throw new Error(`Cuelist ${this.cueListId} is absent`);
+		return object.revision;
+	}
+}
 
 class CueTransferChoice {
 	constructor(
@@ -411,6 +575,55 @@ export class BrowserCues {
 
 	transferChoice(operation: "COPY" | "MOVE") {
 		return new CueTransferChoice(this.page, this.desk, operation);
+	}
+
+	async openEditor(playback: number) {
+		const cueList = await cueListForPlayback(this.api, this.showId(), playback);
+		const playbackObject = await this.api.showObject<PlaybackDefinition>(
+			this.showId(),
+			"playback",
+			String(playback),
+		);
+		if (!playbackObject) throw new Error(`Playback ${playback} is absent`);
+		await this.page.setViewportSize({ width: 1280, height: 1100 });
+		const shift = this.page.getByRole("button", {
+			name: "SHIFT",
+			exact: true,
+		});
+		if (!(await shift.isVisible().catch(() => false)))
+			await this.desk.click(this.page.locator(".mode-toggle"));
+		await this.desk.recordStep(
+			`OPEN ${cueList.body.name} IN CUELIST VIEW`,
+			"Open the assigned Cuelist from the visible Cuelist Pool.",
+		);
+		await this.desk.click(shift);
+		await this.desk.click(
+			this.page.getByRole("button", { name: "4", exact: true }),
+		);
+		await expect(this.page.locator(".cuelist-pool-window")).toBeVisible();
+		await this.desk.click(
+			this.page.locator(".cuelist-card").filter({
+				hasText: playbackObject.body.name,
+			}),
+		);
+		await expect(this.page.locator(".cue-table")).toBeVisible();
+		return new CueEditor(
+			this.page,
+			this.desk,
+			this.api,
+			this.showId(),
+			cueList.id,
+			cueList.body.name,
+		);
+	}
+
+	async reopenEditor(playback: number) {
+		await this.api.openShow(this.showId(), { transition: "hold_current" });
+		await this.page.reload();
+		await expect(this.page.locator(".connection-cover")).toBeHidden({
+			timeout: 10_000,
+		});
+		return this.openEditor(playback);
 	}
 
 	async configure(playback: number, configuration: CueListConfiguration) {

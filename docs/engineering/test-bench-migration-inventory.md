@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **308 root cases across 50 files**.
+Default catalog: **308 root cases across 51 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -151,7 +151,6 @@ Default catalog: **308 root cases across 50 files**.
 | 05-virtual-time-persistence-and-recovery.spec.ts | SHOW-005 @api › named revisions load as durable, visibly independent copies | docs/testing/05-virtual-time-persistence-and-recovery.md | @api | virtual-time-persistence-and-recovery | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 05-virtual-time-persistence-and-recovery.spec.ts | SHOW-005 @ui › named revisions load as durable, visibly independent copies | docs/testing/05-virtual-time-persistence-and-recovery.md | @ui | virtual-time-persistence-and-recovery | standard failure evidence | parallel | pending-semantic-migration |
 | 06-cuelist-view-and-settings.spec.ts | CUE-011 @api › Cue edits and atomic renumber preserve runtime identity, output, and persisted bytes | docs/testing/02-cues-tracking-and-arbitration.md | @api | cuelist-view-and-settings | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 06-cuelist-view-and-settings.spec.ts | CUE-011 @ui › Cue edits and atomic renumber preserve runtime identity, output, and persisted bytes | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cuelist-view-and-settings | standard failure evidence | parallel | pending-semantic-migration |
 | 06-cuelist-view-and-settings.spec.ts | CUE-011 @supplemental-ui › Renumber is one revision, preserves stable Cue/runtime identity, and rejects every invalid path | docs/testing/02-cues-tracking-and-arbitration.md | @supplemental-ui | cuelist-view-and-settings | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-cuelist-view-and-settings.spec.ts | CUE-013 @api › deleting the active Cue holds output and anchors GO/GO minus without hidden Cue data | docs/testing/02-cues-tracking-and-arbitration.md | @api | cuelist-view-and-settings | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-cuelist-view-and-settings.spec.ts | CUE-013 @ui › deleting the active Cue holds output and anchors GO/GO minus without hidden Cue data | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cuelist-view-and-settings | standard failure evidence | parallel | pending-semantic-migration |
@@ -322,6 +321,7 @@ Default catalog: **308 root cases across 50 files**.
 | 49-semantic-cue-transfer-speed-and-navigation.spec.ts | CUE-009 @bench @ui › explicit Plain/Status Move/Copy choices preserve both independent axes | repository contract | @bench @ui | semantic-cue-transfer-speed-and-navigation | standard failure evidence | parallel | migrated-semantic-world |
 | 49-semantic-cue-transfer-speed-and-navigation.spec.ts | CMD-002 @bench @ui › Speed Group commands address, synchronize, display, and manually unlink all five groups | repository contract | @bench @ui | semantic-cue-transfer-speed-and-navigation | standard failure evidence | parallel | migrated-semantic-world |
 | 49-semantic-cue-transfer-speed-and-navigation.spec.ts | CUE-014 @bench @ui › Cue Go To and Load preserve desk-local selection and authoritative output controls | repository contract | @bench @ui | semantic-cue-transfer-speed-and-navigation | standard failure evidence | parallel | migrated-semantic-world |
+| 50-semantic-cue-editing.spec.ts | CUE-011 @bench @ui › Cuelist View edits preserve Cue identity, runtime selection, and persisted values | repository contract | @bench @ui | semantic-cue-editing | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints
