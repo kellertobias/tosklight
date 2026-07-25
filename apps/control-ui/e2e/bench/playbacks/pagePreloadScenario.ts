@@ -12,6 +12,7 @@ import {
 	releaseProgrammerPreload,
 } from "../programmer/programmerPreloadLifecycle";
 import { mapExistingPlaybackToSlot } from "./mapExistingPlaybackToSlot";
+import type { BrowserPlaybacks } from "./playbackScenario";
 
 type PageRoute = "ui" | "api";
 type PreloadRoute = "ui" | "api";
@@ -28,6 +29,22 @@ export type PreloadCaptureMask = Pick<
 	PreloadCaptureConfiguration,
 	"programmer" | "physicalPlaybacks" | "virtualPlaybacks"
 >;
+
+export interface PendingPreloadExpectation {
+	groupIds: string[];
+	playbackActions: Array<[number, string, string]>;
+}
+
+interface ProgrammerPreloadProjection {
+	session_id: string;
+	preload_group_pending: Record<string, unknown>;
+	preload_group_active: Record<string, Record<string, { changed_at?: string }>>;
+	preload_playback_pending: Array<{
+		playback_number: number;
+		action: string;
+		surface: string;
+	}>;
+}
 
 class PageSurface {
 	constructor(
@@ -329,10 +346,31 @@ export class BrowserPreload {
 		api: new PreloadSurface(this, "api"),
 	};
 	readonly expect = {
-		active: async () => expect(await this.active()).toBe(true),
-		inactive: async () => expect(await this.active()).toBe(false),
+		active: async () => expect.poll(() => this.active()).toBe(true),
+		inactive: async () => expect.poll(() => this.active()).toBe(false),
 		pendingPlaybackActions: async (actions: readonly string[]) =>
 			expect(await this.pendingPlaybackActions()).toEqual(actions),
+		pending: async (expected: PendingPreloadExpectation) =>
+			expect.poll(() => this.pending()).toEqual(expected),
+		atomicCommit: async (groupId: string, playbacks: number[]) => {
+			if (playbacks.length < 1)
+				throw new Error("Atomic Preload commit requires a Playback");
+			await expect
+				.poll(async () => {
+					const programmer = await this.programmer();
+					const groupTimestamp =
+						programmer.preload_group_active[groupId]?.intensity?.changed_at;
+					const playbackTimestamps = await Promise.all(
+						playbacks.map(
+							async (number) =>
+								(await this.playbacks.runtime(number))?.activated_at,
+						),
+					);
+					const timestamps = [groupTimestamp, ...playbackTimestamps];
+					return timestamps.every(Boolean) ? new Set(timestamps).size : 0;
+				})
+				.toBe(1);
+		},
 	};
 
 	constructor(
@@ -340,6 +378,7 @@ export class BrowserPreload {
 		private readonly page: Page,
 		private readonly desk: DeskDriver,
 		private readonly showId: () => string,
+		private readonly playbacks: BrowserPlaybacks,
 	) {}
 
 	start() {
@@ -402,7 +441,6 @@ export class BrowserPreload {
 				this.page.getByRole("button", { name: /^PRELOAD GO\b/ }),
 			);
 		if (route === "api") await this.expect.inactive();
-		else await this.expect.active();
 	}
 
 	async clearVia(route: PreloadRoute) {
@@ -481,18 +519,34 @@ export class BrowserPreload {
 	}
 
 	private async pendingPlaybackActions() {
+		return (await this.programmer()).preload_playback_pending.map(
+			(entry) => entry.action,
+		);
+	}
+
+	private async pending(): Promise<PendingPreloadExpectation> {
+		const programmer = await this.programmer();
+		return {
+			groupIds: Object.keys(programmer.preload_group_pending).sort(),
+			playbackActions: programmer.preload_playback_pending.map((entry) => [
+				entry.playback_number,
+				entry.action,
+				entry.surface,
+			]),
+		};
+	}
+
+	private async programmer(): Promise<ProgrammerPreloadProjection> {
 		const sessionId = this.session().session_id;
-		const programmers = await this.api.request<
-			Array<{
-				session_id: string;
-				preload_playback_pending: Array<{ action: string }>;
-			}>
-		>("GET", "/api/v2/programmers");
+		const programmers = await this.api.request<ProgrammerPreloadProjection[]>(
+			"GET",
+			"/api/v2/programmers",
+		);
 		const programmer =
 			programmers.find((candidate) => candidate.session_id === sessionId) ??
 			programmers[0];
 		if (!programmer) throw new Error("No Programmer projection is available");
-		return programmer.preload_playback_pending.map((entry) => entry.action);
+		return programmer;
 	}
 
 	private intent() {

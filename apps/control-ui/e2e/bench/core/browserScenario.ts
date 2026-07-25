@@ -267,6 +267,7 @@ export class BrowserScenarioWorld {
 			page,
 			desk,
 			() => this.show.contractIdentity().workingId,
+			this.playback,
 		);
 		this.patch = new BrowserPatch(api, page, desk);
 		this.dmx = new BrowserDmx(api);

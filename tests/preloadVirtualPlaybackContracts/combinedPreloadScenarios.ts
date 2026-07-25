@@ -42,6 +42,7 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 	id: "PRELOAD-006",
 	title:
 		"combined Preload commits atomically and releases only programmer data",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		const show = await loadCanonicalCopy(
 			api,

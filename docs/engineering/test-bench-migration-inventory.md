@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **309 root cases across 59 files**.
+Default catalog: **309 root cases across 60 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -169,7 +169,6 @@ Default catalog: **309 root cases across 59 files**.
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-005 @supplemental › every mask keeps disabled domains live and enabled domains blind | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-005 @supplemental-ui › Settings visibly reloads every independent switch mask | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental-ui | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-006 @api › combined Preload commits atomically and releases only programmer data | docs/testing/06-preload-modes-and-virtual-playbacks.md | @api | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-006 @ui › combined Preload commits atomically and releases only programmer data | docs/testing/06-preload-modes-and-virtual-playbacks.md | @ui | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | pending-semantic-migration |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-006 @supplemental › API timestamp boundaries, source ownership, and event idempotency | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | PRELOAD-006 @supplemental-ui › combined controls expose pending state and asymmetric long-press release | docs/testing/06-preload-modes-and-virtual-playbacks.md | @supplemental-ui | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 06-preload-modes-and-virtual-playbacks.spec.ts | VPB-007 @api › named Virtual Playback exclusion zones are inert on creation and authoritative on activation | docs/testing/06-preload-modes-and-virtual-playbacks.md | @api | preload-modes-and-virtual-playbacks | standard failure evidence | parallel | reviewed-low-level-boundary |
@@ -323,6 +322,7 @@ Default catalog: **309 root cases across 59 files**.
 | 56-semantic-virtual-playback-exclusion-zone.spec.ts | VPB-007 @bench @ui › named Virtual Playback exclusion zones are inert on creation and authoritative on activation | repository contract | @bench @ui | semantic-virtual-playback-exclusion-zone | standard failure evidence | parallel | migrated-semantic-world |
 | 57-semantic-virtual-playback-preload.spec.ts | PRELOAD-004 @bench @ui › virtual GO and TOGGLE alone remain pending and share Programmer Fade | repository contract | @bench @ui | semantic-virtual-playback-preload | standard failure evidence | parallel | migrated-semantic-world |
 | 58-semantic-preload-capture-mask.spec.ts | PRELOAD-005 @bench @ui › all eight capture-domain switch masks persist independently | repository contract | @bench @ui | semantic-preload-capture-mask | standard failure evidence | parallel | migrated-semantic-world |
+| 59-semantic-combined-preload.spec.ts | PRELOAD-006 @bench @ui › combined Preload commits atomically and releases only programmer data | repository contract | @bench @ui | semantic-combined-preload | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints
