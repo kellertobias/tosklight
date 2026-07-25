@@ -7,16 +7,27 @@ import { compileSemanticTestCatalog } from "./compiler.mjs";
 import { readPlaywrightResults } from "./playwright-results.mjs";
 import { renderHtml } from "./render-html.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const root = path.resolve(
+	path.dirname(fileURLToPath(import.meta.url)),
+	"../..",
+);
 
 const options = parseArguments(process.argv.slice(2));
 if (options.results && !options.outputDirectory)
 	throw new Error(
 		"--results requires --output-dir so run-specific data cannot overwrite the deterministic checked catalog",
 	);
+const canonicalOutputDirectory = path.join(root, "docs/engineering");
 const outputDirectory = options.outputDirectory
 	? path.resolve(options.outputDirectory)
-	: path.join(root, "docs/engineering");
+	: canonicalOutputDirectory;
+if (
+	options.results &&
+	isWithinDirectory(canonicalOutputDirectory, outputDirectory)
+)
+	throw new Error(
+		"--results output must be outside docs/engineering so run-specific data cannot overwrite or pollute the deterministic checked catalog",
+	);
 const jsonFile = path.join(outputDirectory, "semantic-test-catalog.v1.json");
 const htmlFile = path.join(outputDirectory, "semantic-test-catalog.html");
 const catalog = await compileSemanticTestCatalog({
@@ -66,11 +77,13 @@ function parseArguments(args) {
 			mode = argument.slice(2);
 		} else if (argument === "--results") {
 			results = args[index + 1];
-			if (!results) throw new Error("--results requires a Playwright JSON file");
+			if (!results)
+				throw new Error("--results requires a Playwright JSON file");
 			index += 1;
 		} else if (argument === "--output-dir") {
 			outputDirectory = args[index + 1];
-			if (!outputDirectory) throw new Error("--output-dir requires a directory");
+			if (!outputDirectory)
+				throw new Error("--output-dir requires a directory");
 			index += 1;
 		} else {
 			throw new Error(`Unknown argument: ${argument}`);
@@ -85,4 +98,12 @@ function parseArguments(args) {
 
 function relative(file) {
 	return path.relative(root, file).split(path.sep).join("/");
+}
+
+function isWithinDirectory(parent, candidate) {
+	const relation = path.relative(parent, candidate);
+	return (
+		relation === "" ||
+		(!relation.startsWith(`..${path.sep}`) && relation !== "..")
+	);
 }

@@ -191,36 +191,74 @@ const supportedCallPaths = new Set([
 ]);
 
 const exactNarrations = new Map([
-	["app.open", ([target]) => `Open the ToskLight browser application${target ? ` at ${target}` : ""}.`],
-	["app.expect.ready", () => "Expect the ToskLight browser application to be ready."],
+	[
+		"app.open",
+		([target]) =>
+			`Open the ToskLight browser application${target ? ` at ${target}` : ""}.`,
+	],
+	[
+		"app.expect.ready",
+		() => "Expect the ToskLight browser application to be ready.",
+	],
 	["show.use", ([show]) => `Use the isolated ${show} show.`],
 	["show.create", ([name]) => `Create the show ${name}.`],
 	["show.load", ([show]) => `Load the show ${show}.`],
 	["show.save", () => "Save the active show."],
 	["show.saveAs", ([name]) => `Save the active show as ${name}.`],
 	["show.saveRevision", ([name]) => `Save a named show revision ${name}.`],
-	["show.loadRevision", ([show, revision]) => `Load revision ${revision} of ${show}.`],
+	[
+		"show.loadRevision",
+		([show, revision]) => `Load revision ${revision} of ${show}.`,
+	],
 	["show.resetWorkingCopy", () => "Reset the isolated working copy."],
 	["command.execute", ([command]) => `Execute the desk command ${command}.`],
 	["command.expect", ([value]) => `Expect the command line to show ${value}.`],
 	["keypad.press", ([keys]) => `Press keypad keys ${keys}.`],
 	["clock.advanceBy", ([duration]) => `Advance the test clock by ${duration}.`],
-	["clock.advanceStep", () => "Advance the test clock by one deterministic step."],
-	["expectFixtureDMX", ([target, expected]) => `Expect ${target} DMX to equal ${expected}.`],
-	["expectFixtureDMXAbsent", ([target]) => `Expect ${target} to have no DMX output.`],
-	["demo.run", () => "Run the complete narrated Full HD product-demo workflow and its internal semantic assertions."],
-	["hardware.connect", () => "Connect the simulated attached hardware surface."],
-	["hardware.disconnect", () => "Disconnect the simulated attached hardware surface."],
+	[
+		"clock.advanceStep",
+		() => "Advance the test clock by one deterministic step.",
+	],
+	[
+		"expectFixtureDMX",
+		([target, expected]) => `Expect ${target} DMX to equal ${expected}.`,
+	],
+	[
+		"expectFixtureDMXAbsent",
+		([target]) => `Expect ${target} to have no DMX output.`,
+	],
+	[
+		"demo.run",
+		() =>
+			"Run the complete narrated Full HD product-demo workflow and its internal semantic assertions.",
+	],
+	[
+		"hardware.connect",
+		() => "Connect the simulated attached hardware surface.",
+	],
+	[
+		"hardware.disconnect",
+		() => "Disconnect the simulated attached hardware surface.",
+	],
 	["selection.clear", () => "Clear the current selection."],
-	["encoder.clear", () => "Clear Programmer values through the encoder intent."],
+	[
+		"encoder.clear",
+		() => "Clear Programmer values through the encoder intent.",
+	],
 	["preload.start", () => "Start blind Preload programming."],
 	["preload.release", () => "Release blind Preload programming."],
-	["desktopBuilder.addPane", ([type, geometry]) => `Add the ${type} pane with layout ${geometry}.`],
+	[
+		"desktopBuilder.addPane",
+		([type, geometry]) => `Add the ${type} pane with layout ${geometry}.`,
+	],
 	["desktopBuilder.apply", () => "Apply the configured Desktop layout."],
 	["screenHandle.open", () => "Open the configured secondary screen."],
 	["screenHandle.close", () => "Close the configured secondary screen."],
 	["screenHandle.remove", () => "Remove the configured secondary screen."],
-	["screenHandle.expectBridgeAction", ([action]) => `Expect the secondary-screen bridge action ${action}.`],
+	[
+		"screenHandle.expectBridgeAction",
+		([action]) => `Expect the secondary-screen bridge action ${action}.`,
+	],
 ]);
 
 const implicitOutcomes = new Map([
@@ -275,7 +313,8 @@ function expectationKind(callPath, root) {
 		callPath.startsWith("expectFixture") ||
 		callPath.includes(".expect.") ||
 		callPath.split(".").at(-1).startsWith("expect")
-	) return "expected-outcome";
+	)
+		return "expected-outcome";
 	const terminal = callPath.split(".").at(-1);
 	return expectationWords.has(terminal) && callPath.includes("expect")
 		? "expected-outcome"

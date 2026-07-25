@@ -4,7 +4,8 @@ export function readPlaywrightResults(file) {
 	if (!file) return new Map();
 	const report = JSON.parse(fs.readFileSync(file, "utf8"));
 	const results = new Map();
-	for (const suite of report.suites ?? []) collectSuite(suite, results, suite.file);
+	for (const suite of report.suites ?? [])
+		collectSuite(suite, results, suite.file);
 	return results;
 }
 
@@ -15,16 +16,18 @@ function collectSuite(suite, results, inheritedFile) {
 		if (!identity) continue;
 		const attempts = (spec.tests ?? []).flatMap((test) => test.results ?? []);
 		const last = attempts.at(-1);
-		const statuses = (spec.tests ?? []).map((test) => test.status).filter(Boolean);
+		const statuses = (spec.tests ?? [])
+			.map((test) => test.status)
+			.filter(Boolean);
 		const status = statuses.includes("unexpected")
 			? "failed"
-			: statuses.includes("skipped")
-				? "skipped"
-				: statuses.includes("flaky")
-					? "flaky"
-				: statuses.length
+			: statuses.includes("flaky")
+				? "flaky"
+				: statuses.includes("expected")
 					? "passed"
-					: last?.status ?? "unknown";
+					: statuses.length && statuses.every((value) => value === "skipped")
+						? "skipped"
+						: (last?.status ?? "unknown");
 		const value = {
 			status,
 			durationMs: attempts.reduce(

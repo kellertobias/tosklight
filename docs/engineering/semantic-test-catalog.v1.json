@@ -216,8 +216,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Desktop layout",
         "Generated artifacts",
@@ -484,8 +482,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Show files"
       ],
@@ -666,8 +662,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "DMX output",
         "Semantic oracle",
         "Test clock"
@@ -989,8 +983,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Attached hardware",
         "Browser UI",
         "Highlight",
@@ -1248,8 +1240,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "DMX output",
         "Encoder controls",
@@ -1499,8 +1489,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Groups",
         "Selection",
@@ -2048,8 +2036,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Attached hardware",
         "Browser UI",
         "Command keypad",
@@ -2508,8 +2494,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Cue runtime",
         "Cue timing",
@@ -3027,8 +3011,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Cue timing",
         "Encoder controls",
@@ -3414,8 +3396,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Attached hardware",
         "Browser UI",
         "Command keypad",
@@ -3955,8 +3935,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command keypad",
         "Desktop layout",
@@ -4107,8 +4085,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command line",
         "DMX output",
@@ -4298,8 +4274,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command line",
         "DMX output",
@@ -4511,8 +4485,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command keypad",
         "Command line",
@@ -4745,8 +4717,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command line",
         "Desktop layout",
@@ -5097,8 +5067,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command line",
         "DMX output",
@@ -5511,8 +5479,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command line",
         "DMX output",
@@ -5677,8 +5643,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command line",
         "DMX output",
@@ -5974,8 +5938,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command line",
         "DMX output",
@@ -6243,8 +6205,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command line",
         "DMX output",
@@ -6484,8 +6444,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command line",
         "DMX output",
@@ -6685,8 +6643,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command keypad",
         "Command line",
@@ -6958,8 +6914,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command line",
         "DMX output",
@@ -7548,8 +7502,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command line",
         "Cue runtime",
@@ -8112,8 +8064,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Command line",
         "Cue runtime",
@@ -8661,8 +8611,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Cue timing",
         "DMX output",
@@ -8729,8 +8677,6 @@
         }
       ],
       "testedSurfaces": [
-        "@bench",
-        "@ui",
         "Browser UI",
         "Generated artifacts"
       ],

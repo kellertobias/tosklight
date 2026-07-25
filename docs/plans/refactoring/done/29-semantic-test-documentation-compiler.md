@@ -47,15 +47,19 @@ Completed on 2026-07-25.
   Forty-nine dynamic-expression and control-flow diagnostics remain intentionally
   visible; no helper path is missing from the narration catalog.
 - Added optional Playwright JSON result merging to a required alternate output
-  directory, keeping observed last-run state separate from expected outcomes and out of
-  the checked source-only artifacts.
+  directory outside `docs/engineering`, keeping observed last-run state separate from
+  expected outcomes and out of the checked source-only artifacts. Mixed-project
+  aggregation uses failed, flaky, passed, then all-skipped precedence.
 - Added write/check/test npm commands and made the architecture gate enforce both
-  generated outputs statically. The previous Playwright-backed inventory check remains
-  available as an explicit generator but is no longer part of the architecture gate.
+  generated outputs statically while retaining the existing Playwright-backed migration
+  inventory stale check.
+- Updated the compiler and migration-inventory documentation for the area-organized
+  `apps/control-ui/e2e/bench` paths. Execution tags remain inventory metadata and are
+  not presented as tested operator surfaces.
 
 Verification:
 
-- semantic documentation tests: 7 passed;
+- semantic documentation tests: 8 passed;
 - semantic documentation write/check: 27 scenarios, deterministic and current;
 - architecture gate: passed, including 27 supporting Node architecture tests and the
   source-size ratchet;
@@ -63,4 +67,6 @@ Verification:
 - bench TypeScript contract: passed;
 - `git diff --check`: passed.
 
-No Playwright process, browser, Light server, or desktop application was started.
+The compiler and its focused tests did not import or execute Playwright test modules,
+launch a browser, start a Light server, or open the desktop application. The retained
+migration-inventory architecture check used Playwright's static `--list` catalog.

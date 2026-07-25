@@ -17,9 +17,9 @@ export async function compileSemanticTestCatalog({
 	sourceFiles,
 }) {
 	const ast = await loadTypeScriptAst();
-	const files = (
-		sourceFiles ?? discoverMarkedSpecs(path.join(root, "tests"))
-	).map((file) => path.resolve(file)).sort();
+	const files = (sourceFiles ?? discoverMarkedSpecs(path.join(root, "tests")))
+		.map((file) => path.resolve(file))
+		.sort();
 	const inventory = readMigrationInventory(inventoryFile);
 	const scenarios = [];
 	const api = new ast.API({ cwd: root });
@@ -30,7 +30,9 @@ export async function compileSemanticTestCatalog({
 			const project = snapshot.getDefaultProjectForFile(file);
 			const sourceFile = project?.program.getSourceFile(file);
 			if (!sourceFile)
-				throw new Error(`TypeScript did not return an AST for ${relative(root, file)}`);
+				throw new Error(
+					`TypeScript did not return an AST for ${relative(root, file)}`,
+				);
 			const syntaxDiagnostics = project.program.getSyntacticDiagnostics(file);
 			if (syntaxDiagnostics.length)
 				throw new Error(
@@ -57,7 +59,9 @@ export async function compileSemanticTestCatalog({
 	for (const scenario of scenarios) {
 		const key = `${scenario.source.file}:${scenario.source.line}`;
 		if (occurrenceKeys.has(key))
-			throw new Error(`Semantic scenario occurrence was compiled twice: ${key}`);
+			throw new Error(
+				`Semantic scenario occurrence was compiled twice: ${key}`,
+			);
 		occurrenceKeys.add(key);
 	}
 	return {
@@ -74,7 +78,9 @@ export function discoverMarkedSpecs(testsRoot) {
 		.readdirSync(testsRoot, { withFileTypes: true })
 		.filter((entry) => entry.isFile() && entry.name.endsWith(".spec.ts"))
 		.map((entry) => path.join(testsRoot, entry.name))
-		.filter((file) => fs.readFileSync(file, "utf8").includes(semanticWorldMarker));
+		.filter((file) =>
+			fs.readFileSync(file, "utf8").includes(semanticWorldMarker),
+		);
 }
 
 export function readMigrationInventory(file) {
@@ -155,7 +161,9 @@ function compileScenario({
 		);
 	const worldParameter = callback.parameters[0]?.name;
 	if (!worldParameter || !ast.isIdentifier(worldParameter))
-		throw new Error(`${source.file}:${source.line} scenario world parameter is not static`);
+		throw new Error(
+			`${source.file}:${source.line} scenario world parameter is not static`,
+		);
 
 	const diagnostics = [];
 	const state = {
@@ -178,7 +186,9 @@ function compileScenario({
 		inventory.get(inventoryKey(source.file, idNode.text, titleNode.text)) ?? [];
 	if (matches.length !== 1) {
 		diagnostics.push({
-			code: matches.length ? "ambiguous-migration-status" : "missing-migration-status",
+			code: matches.length
+				? "ambiguous-migration-status"
+				: "missing-migration-status",
 			message: matches.length
 				? `Migration inventory contains ${matches.length} matching rows; status is unresolved.`
 				: "No exact source, ID, and title match exists in the generated migration inventory.",
@@ -193,7 +203,9 @@ function compileScenario({
 		artifacts: "unresolved",
 		constraint: "unresolved",
 	};
-	const actualSurfaces = new Set(migration.surfaces);
+	const actualSurfaces = new Set(
+		migration.surfaces.filter((surface) => !surface.startsWith("@")),
+	);
 	for (const item of [...state.steps, ...state.expectedOutcomes])
 		for (const surface of item.surfaces) actualSurfaces.add(surface);
 	return {
@@ -288,7 +300,8 @@ function visitExecution(node, state) {
 			message: `Control flow ${compact(node.getText(state.sourceFile))} is narrated once; iteration values are not guessed.`,
 			source: location(state.root, state.sourceFile, node),
 		});
-		if ("initializer" in node && node.initializer) registerLoopBinding(node, state);
+		if ("initializer" in node && node.initializer)
+			registerLoopBinding(node, state);
 		visitExecution(node.statement, state);
 		return;
 	}
@@ -356,10 +369,9 @@ function emitSemanticCall(node, state) {
 			phase: state.phase,
 			source,
 		};
-		(chain.path.includes("expect")
-			? state.expectedOutcomes
-			: state.steps
-		).push(unresolved);
+		(chain.path.includes("expect") ? state.expectedOutcomes : state.steps).push(
+			unresolved,
+		);
 		return { path: chain.path };
 	}
 	const item = {
@@ -444,7 +456,11 @@ function expandHelper(call, state) {
 	for (const [index, parameter] of helper.parameters.entries()) {
 		if (!state.ast.isIdentifier(parameter.name)) continue;
 		const argument = call.arguments[index];
-		if (argument && state.ast.isIdentifier(argument) && state.worldNames.has(argument.text)) {
+		if (
+			argument &&
+			state.ast.isIdentifier(argument) &&
+			state.worldNames.has(argument.text)
+		) {
 			worldNames.add(parameter.name.text);
 			receivesWorld = true;
 		} else if (argument) {
@@ -562,10 +578,8 @@ function importedScenarioNames(ast, sourceFile) {
 	for (const statement of sourceFile.statements) {
 		if (!ast.isImportDeclaration(statement)) continue;
 		if (!ast.isStringLiteral(statement.moduleSpecifier)) continue;
-		if (
-			!statement.moduleSpecifier.text.endsWith("/e2e/bench/scenario") &&
-			!statement.moduleSpecifier.text.endsWith("/e2e/bench/core/scenario")
-		) continue;
+		if (!statement.moduleSpecifier.text.endsWith("/e2e/bench/core/scenario"))
+			continue;
 		const bindings = statement.importClause?.namedBindings;
 		if (!bindings || !ast.isNamedImports(bindings)) continue;
 		for (const element of bindings.elements)
@@ -578,7 +592,11 @@ function importedScenarioNames(ast, sourceFile) {
 function localFunctions(ast, sourceFile) {
 	const functions = new Map();
 	for (const statement of sourceFile.statements)
-		if (ast.isFunctionDeclaration(statement) && statement.name && statement.body)
+		if (
+			ast.isFunctionDeclaration(statement) &&
+			statement.name &&
+			statement.body
+		)
 			functions.set(statement.name.text, statement);
 	return functions;
 }
@@ -624,7 +642,9 @@ function walk(node, visitor) {
 }
 
 function location(root, sourceFile, node) {
-	const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+	const position = sourceFile.getLineAndCharacterOfPosition(
+		node.getStart(sourceFile),
+	);
 	return {
 		file: relative(root, sourceFile.fileName),
 		line: position.line + 1,

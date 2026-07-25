@@ -84,7 +84,7 @@ ${ignoredEntrypoints.map((row) => `| ${row.map(cell).join(" | ")} |`).join("\n")
 
 | Current helper family | Classification | Migration rule |
 | --- | --- | --- |
-| \`apps/control-ui/e2e/bench/*Scenario.ts\` adapters | keep internal | Public semantic world delegates to these; scenario files do not import them directly. |
+| \`apps/control-ui/e2e/bench/**/*Scenario.ts\` adapters | keep internal | Public semantic world delegates to these; scenario files do not import them directly. |
 | Normalized assertion/oracle modules under \`tests/support\` | wrap temporarily | Keep shared state and wire assertions while operator actions move to semantic helpers. |
 | Root-spec Page/Locator, ApiDriver, and raw transport helpers | replace | Add or improve a public semantic helper, then mark the migrated root spec \`${semanticMarker()}\`. |
 | CSS/pane-id, coordinate, fixture-UUID, encoder-slot, and mutable show-object helpers | remove after final consumer | Do not reproduce them in migrated scenarios; delete only after repository search proves no consumers. |
