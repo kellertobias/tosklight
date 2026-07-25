@@ -4,6 +4,9 @@
 
 <h1 align="center">ToskLight</h1>
 
+> [!CAUTION]
+> **ToskLight is not yet even a release candidate.** You are welcome to test the published releases, but the code is still unstable and may break with every new version.
+
 `tosk-light` is a show-lighting desk, engine, and control server for programming fixtures, groups, cue lists, playback faders, and Art-Net/sACN output from one portable show file. The operator UI is built around a command line, live programmer, fixture sheet, 3D stage view, cue list pool, and playback section so the same show can be edited from the desktop app or browser-connected desks.
 
 Start with the [quickstart help](docs/help/00-quickstart.markdown) or browse the full [operator help](docs/help).
