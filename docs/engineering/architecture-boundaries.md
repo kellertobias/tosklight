@@ -15,7 +15,7 @@ Dependencies point inward from transports to use cases and domains:
 control-ui / HTTP / WebSocket / OSC / MIDI / Matter adapters
                               |
                               v
-                     light-server composition
+                     light-headless composition
                       /                   \
                      v                     v
             light-application          light-wire
@@ -25,9 +25,9 @@ control-ui / HTTP / WebSocket / OSC / MIDI / Matter adapters
 ```
 
 - `light-wire` owns versioned serialized request, response, outcome, error, event, and subscription DTOs. It has no dependency on another workspace crate and contains no application behavior.
-- `light-application` owns use cases, action context, application events, event delivery policy, and ports. It may depend on domain crates, but never on `light-wire`, `light-server`, a desktop host, or a concrete transport.
-- Domain crates under `crates/` do not depend on `light-application`, `light-wire`, `light-server`, or a desktop host. They expose stable domain models, commands, queries, and immutable projections.
-- `light-server` is the composition root. Its feature adapters authenticate, decode, normalize, invoke one application use case, and translate the typed result. Business rules do not belong in routers or transport callbacks.
+- `light-application` owns use cases, action context, application events, event delivery policy, and ports. It may depend on domain crates, but never on `light-wire`, `light-headless`, a desktop host, or a concrete transport.
+- Domain crates under `crates/` do not depend on `light-application`, `light-wire`, `light-headless`, or a desktop host. They expose stable domain models, commands, queries, and immutable projections.
+- `light-headless` is the composition root. Its feature adapters authenticate, decode, normalize, invoke one application use case, and translate the typed result. Business rules do not belong in routers or transport callbacks.
 - Generated TypeScript wire DTOs are transport-boundary types. Frontend feature and view models must not become aliases for serialized DTOs; the API layer validates and maps decoded data before feature code consumes it.
 
 These rules are checked by `npm run test:architecture`. An intentional boundary change must update

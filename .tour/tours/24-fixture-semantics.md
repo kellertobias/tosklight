@@ -18,8 +18,8 @@ separate is what lets one Programmer action work across different fixture modes.
 
 ## Package and immutable revision
 
-`crates/fixture/src/package/` validates `.toskfixture` archives, profiles, icons, photographs, and
-GLB models. `crates/fixture/src/profile/` owns modes, logical heads, semantic attributes, attribute
+`crates/shared/fixture/src/package/` validates `.toskfixture` archives, profiles, icons, photographs, and
+GLB models. `crates/shared/fixture/src/profile/` owns modes, logical heads, semantic attributes, attribute
 groups, activation groups, channels, splits/functions, defaults, Highlight values, resolution,
 color calibration, and geometry.
 
@@ -28,7 +28,7 @@ the portable show; a later library edit never silently changes an existing show.
 
 ## Patch record
 
-`crates/application/src/show_patch/` validates fixture numbers, stable fixture/head identities,
+`crates/light/src/show_patch/` validates fixture numbers, stable fixture/head identities,
 selected mode, universe/address, split assignments, multipatch, stage transform, Highlight
 overrides, and profile references as one batch.
 
@@ -37,8 +37,8 @@ selectable, programmable, groupable, recordable, and visible.
 
 ## Compilation
 
-`crates/fixture/src/portable_patch/compiler.rs` resolves the selected mode and logical-head
-topology. `crates/application/src/show_compiler/patch.rs` places the compiled fixtures in the
+`crates/shared/fixture/src/portable_patch/compiler.rs` resolves the selected mode and logical-head
+topology. `crates/light/src/show_compiler/patch.rs` places the compiled fixtures in the
 immutable `EngineSnapshot`.
 
 Semantic attributes are addressed by fixture or logical head plus attribute. Attribute groups
@@ -47,8 +47,8 @@ Neither is a DMX slot number.
 
 ## Projection to DMX
 
-`crates/engine/src/profile_projection.rs` and `profile_projection_plan.rs` map resolved semantic
-values through the selected mode. `crates/fixture/src/profile/encoding_plan.rs` handles channel
+`crates/light/domain/engine/src/profile_projection.rs` and `profile_projection_plan.rs` map resolved semantic
+values through the selected mode. `crates/shared/fixture/src/profile/encoding_plan.rs` handles channel
 functions, inversion, transfer curves, virtual intensity, exact raw values, and MSB-first fine
 bytes. Splits and multipatch affect binding without changing the semantic Programmer value.
 
@@ -63,6 +63,6 @@ profiles migrate to deduplicated snapshots without losing selected modes or unkn
 
 ## Exercise
 
-Open one profile test in `crates/fixture/src/profile/tests/resolution.rs`. Starting from its
+Open one profile test in `crates/shared/fixture/src/profile/tests/resolution.rs`. Starting from its
 semantic normalized value, calculate the expected coarse/fine bytes, then verify the encoding
 assertion.

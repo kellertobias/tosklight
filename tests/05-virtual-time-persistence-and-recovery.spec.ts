@@ -1,4 +1,4 @@
-import { test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { test } from "./bench/core/fixtures";
 import {
 	registerCompatibleProfileMigrationTest,
 	registerFreshProfileStartupTest,

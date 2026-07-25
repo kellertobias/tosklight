@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 export function readPrivateBoundarySources(repositoryRoot) {
-  return ["tests", "apps/control-ui/e2e"]
+  return ["tests", "apps/light-desktop/e2e"]
     .flatMap((directory) => walk(path.join(repositoryRoot, directory)))
     .filter((file) => /\.[cm]?tsx?$/u.test(file))
     .map((file) => ({

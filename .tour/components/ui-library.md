@@ -8,7 +8,7 @@ order: 20
 # UI Library
 
 There is no tracked shared UI package or Storybook configuration. The primitives live inside
-`apps/control-ui`.
+`apps/light-desktop`.
 `docs/plans/Next/58-shared-frontend-libraries.md` specifies the intended split into a
 component/window-system library plus an app-layout library, but it is specification only.
 
@@ -19,13 +19,13 @@ Knowing that saves searching for `@tosklight/ui` source that does not exist. Ign
 
 | Path | Contents |
 | --- | --- |
-| `apps/control-ui/src/components/window-kit/` | `WindowKit.tsx` (window chrome and pane primitives), `SelectionList.tsx`, `index.ts` |
-| `apps/control-ui/src/components/common/` | `controls.tsx`, `FaderControls.tsx`, `ModalPortal.tsx`, `ModalTitleBar.tsx`, `SearchBar.tsx`, `TouchSelect.tsx`; barrel at `index.ts` |
-| `apps/control-ui/src/components/common/controls/` | `foundation.tsx`, `formFields.tsx`, `textInputs.tsx`, `choices.tsx`, `pickers.tsx`, `InputModal.tsx` |
-| `apps/control-ui/src/components/shell/` | App and desk layout — `AppShell`, `DeskGrid`, `Pane`, `PaneChromeContext`, `WorkspaceView` |
-| `apps/control-ui/src/components/shared/` | Semi-generic domain widgets — `SourceValue`, `SourceLegend`, `GroupStrip`, `FixtureColorDot`, `RecordModeDialog` |
+| `apps/light-desktop/src/components/window-kit/` | `WindowKit.tsx` (window chrome and pane primitives), `SelectionList.tsx`, `index.ts` |
+| `apps/light-desktop/src/components/common/` | `controls.tsx`, `FaderControls.tsx`, `ModalPortal.tsx`, `ModalTitleBar.tsx`, `SearchBar.tsx`, `TouchSelect.tsx`; barrel at `index.ts` |
+| `apps/light-desktop/src/components/common/controls/` | `foundation.tsx`, `formFields.tsx`, `textInputs.tsx`, `choices.tsx`, `pickers.tsx`, `InputModal.tsx` |
+| `apps/light-desktop/src/components/shell/` | App and desk layout — `AppShell`, `DeskGrid`, `Pane`, `PaneChromeContext`, `WorkspaceView` |
+| `apps/light-desktop/src/components/shared/` | Semi-generic domain widgets — `SourceValue`, `SourceLegend`, `GroupStrip`, `FixtureColorDot`, `RecordModeDialog` |
 
-`apps/hardware-controls/src/components/` has its own unshared `ControlButton.tsx` and
+`apps/light-hardware-controls/src/components/` has its own unshared `ControlButton.tsx` and
 `TouchFader.tsx`. That duplication is one thing the extraction would resolve.
 
 ## Live catalog
@@ -39,14 +39,14 @@ writing a new control.
 
 ## Visual system
 
-`apps/control-ui/src/styles/` holds eight CSS layers imported in cascade order by `src/styles.css`.
-Order matters. Further global sheets sit at `apps/control-ui/src/*.css`: `window-kit.css`,
+`apps/light-desktop/src/styles/` holds eight CSS layers imported in cascade order by `src/styles.css`.
+Order matters. Further global sheets sit at `apps/light-desktop/src/*.css`: `window-kit.css`,
 `hardware.css`, `chrome.css`, `help.css`, `workflow-themes.css`, `playback-colors.css`,
 `hardware-dense.css`, `fixture-address.css`, `cuelist-settings-layout.css`, `product-demo.css`.
 
 ## Shared code
 
-One file: `apps/shared/programmerKeypad.ts` (71 lines) — the `SoftwareKey` union, the
+One file: `packages/light-controls/src/programmerKeypad.ts` (71 lines) — the `SoftwareKey` union, the
 `numericPadLayout` physical key layout, and `oscProgrammerActionForKey`.
 
 Consumed via relative paths, with no package or alias, by the control UI keypad, the hardware
@@ -78,4 +78,4 @@ exists.
 3. `src/components/common/controls/foundation.tsx`
 4. `src/components/common/index.ts` — the barrel shows what is public
 5. `src/styles.css` — cascade order
-6. `apps/shared/programmerKeypad.ts`
+6. `packages/light-controls/src/programmerKeypad.ts`

@@ -18,35 +18,35 @@ must produce the same tracked look as playing Cues 1 through 8.
 
 ## Stored data and compilation
 
-`crates/playback/src/model/cue.rs` owns stored Cue values, timing, trigger, and block/release
-semantics. `crates/playback/src/cue_tracking.rs` compiles sparse Cue changes into the tracked state
+`crates/light/domain/playback/src/model/cue.rs` owns stored Cue values, timing, trigger, and block/release
+semantics. `crates/light/domain/playback/src/cue_tracking.rs` compiles sparse Cue changes into the tracked state
 needed for arbitrary navigation. Recording enters through
-`crates/application/src/programming/service/cue_recording.rs`; the active-show candidate and
-lossless transaction live under `crates/application/src/programming/cue_active_show/`.
+`crates/light/src/programming/service/cue_recording.rs`; the active-show candidate and
+lossless transaction live under `crates/light/src/programming/cue_active_show/`.
 
 Portable Cue data is authority. The compiled tracking table is a replaceable runtime projection.
 
 ## GO and direct navigation
 
 Surface adapters resolve a current-page or explicit Playback address, then submit
-`crates/application/src/playback/command.rs` to `playback/service.rs`. The domain controls in
-`crates/playback/src/controls/navigation.rs` choose GO, GO minus, pause, resume, GOTO, or Load.
+`crates/light/src/playback/command.rs` to `playback/service.rs`. The domain controls in
+`crates/light/domain/playback/src/controls/navigation.rs` choose GO, GO minus, pause, resume, GOTO, or Load.
 They do not replay intervening operator actions.
 
-`crates/playback/src/runtime/` installs the selected Cue and creates transitions.
-`crates/playback/src/contribution/` produces semantic fixture/head/attribute contributions for the
+`crates/light/domain/playback/src/runtime/` installs the selected Cue and creates transitions.
+`crates/light/domain/playback/src/contribution/` produces semantic fixture/head/attribute contributions for the
 engine. Backward navigation and direct jumps use the same compiled tracking authority.
 
 ## Values that disappear
 
 A missing value usually tracks. An explicit off, release, block, or asserted value changes that
 rule. Intensity contributions participate in HTP; non-intensity lanes use LTP/ownership.
-`crates/playback/src/arbitration.rs` and `crates/engine/src/` keep those rules separate from
+`crates/light/domain/playback/src/arbitration.rs` and `crates/light/domain/engine/src/` keep those rules separate from
 Programmer LTP.
 
 Move in Black is a dark-fixture transition policy, not stored stage authority. Its regression path
 is `tests/07-move-in-black.spec.ts`. Automatic FOLLOW, TIME, and Chaser advances originate in
-`crates/playback/src/automatic.rs`, return through the render boundary, and publish the same typed
+`crates/light/domain/playback/src/automatic.rs`, return through the render boundary, and publish the same typed
 Playback event as manual navigation.
 
 ## Failure path

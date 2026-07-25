@@ -1,5 +1,5 @@
-import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../../../apps/control-ui/e2e/bench/core/pairedScenario";
+import { expect } from "../../bench/core/fixtures";
+import { pairedScenario } from "../../bench/core/pairedScenario";
 import { storeGroup } from "../operator";
 import {
 	command,

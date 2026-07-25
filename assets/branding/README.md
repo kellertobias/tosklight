@@ -18,7 +18,7 @@ python3 tools/import_tosklight_brand.py /path/to/approved-artwork.svg
 The platform-specific macOS, Windows, PNG, iOS, and Android application assets are generated from `assets/branding/tosklight-app-icon.png` with the Tauri icon generator:
 
 ```sh
-cd apps/control-ui
+cd apps/light-desktop
 npm run tauri icon ../../assets/branding/tosklight-app-icon.png
 ```
 

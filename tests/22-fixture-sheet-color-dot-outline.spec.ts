@@ -1,5 +1,5 @@
 import type { Page, TestInfo } from "@playwright/test";
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { expect, test } from "./bench/core/fixtures";
 import { loadCanonicalCopy } from "./support/catalog";
 
 const states = [
@@ -9,7 +9,7 @@ const states = [
   ["mixed", "linear-gradient(90deg, rgb(255, 0, 0) 50%, rgb(0, 0, 255) 50%)"],
 ] as const;
 
-test("FIXTURE-SHEET-001 @bench › resolved-color dots retain their fill and geometry in software and hardware layouts", async ({ api, bench, desk, page }, testInfo) => {
+test("FIXTURE-SHEET-001 @bench @ui › resolved-color dots retain their fill and geometry in software and hardware layouts", async ({ api, bench, desk, page }, testInfo) => {
   await loadCanonicalCopy(api, bench, "fixture-sheet-001", "default-stage");
   await page.setViewportSize({ width: 1600, height: 1100 });
   await desk.open(api.baseUrl);

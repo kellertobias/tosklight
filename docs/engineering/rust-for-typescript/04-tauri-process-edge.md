@@ -6,11 +6,11 @@ Read [Rust language basics](01-language-basics.md) before this guide. The CodeSa
 ## What Tauri is here
 
 Tauri is the native host around the React UI. It is not ToskLight's application or domain layer.
-`apps/control-ui/src-tauri/` owns native windows, menus, the child-server process, and a small set
-of native commands. The sibling `apps/hardware-controls/src-tauri/` owns native UDP OSC.
+`apps/light-desktop/src-tauri/` owns native windows, menus, the child-server process, and a small set
+of native commands. The sibling `apps/light-hardware-controls/src-tauri/` owns native UDP OSC.
 
 The frontend depends on `DesktopBridge` in
-`apps/control-ui/src/platform/desktop/types.ts`, not directly on Tauri globals. The Tauri adapter
+`apps/light-desktop/src/platform/desktop/types.ts`, not directly on Tauri globals. The Tauri adapter
 implements that interface, while the browser adapter makes the UI testable without a native host.
 
 ## Command attributes and registration
@@ -69,7 +69,7 @@ code at compile time.
 
 ## Process and window ownership
 
-The main Tauri app launches and supervises the sibling `light-server`. Closing the application must
+The main Tauri app launches and supervises the sibling `light-headless`. Closing the application must
 not orphan that process. Secondary windows borrow the primary session; closing one must not destroy
 the authoritative desk session.
 

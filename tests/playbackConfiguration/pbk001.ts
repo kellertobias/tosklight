@@ -1,6 +1,6 @@
-import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../../apps/control-ui/e2e/bench/core/pairedScenario";
-import type { Locator } from "../../apps/control-ui/node_modules/@playwright/test/index.js";
+import { expect, test } from "../bench/core/fixtures";
+import { pairedScenario } from "../bench/core/pairedScenario";
+import type { Locator } from "@playwright/test";
 import {
 	addVirtualPlaybackPane,
 	armSet,
@@ -21,7 +21,7 @@ import {
 import type {
 	PlaybackConfigurationObservation,
 	PreparedShow,
-} from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
+} from "../bench/playbacks/playback-configuration/models";
 
 type Pbk001State = PreparedShow & {
 	before: Awaited<ReturnType<typeof inertSnapshot>>;

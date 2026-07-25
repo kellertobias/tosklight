@@ -68,12 +68,12 @@ per-fixture values.
 
 ## 5 — Typing
 
-- Every body validates against the typed wire contract (`crates/wire`, generated client
+- Every body validates against the typed wire contract (`crates/light/contracts/wire`, generated client
   types). A mismatch returns a clear 4xx error naming the field — the server never crashes
   on bad input.
 - **Additional/unknown properties are accepted, and logged server-side** — never rejected.
   Server routes use the shared `TolerantJson<T>` extractor in
-  `crates/server/src/tolerant_json.rs` to log route and field paths without logging values.
+  `crates/light/adapters/headless/src/tolerant_json.rs` to log route and field paths without logging values.
   (Existing `deny_unknown_fields` wire types are brought into compliance as they are
   touched.)
 
@@ -134,5 +134,6 @@ per-fixture values.
   per-mutation file copy. Deferring the remaining WAL commit would make reads and undo require a
   parallel in-memory persistence system without removing the dominant compile cost.
 - Events, revisions, replay windows, undo, runtime installation, and the WAL commit retain one
-  ordered mutation boundary. See
-  `docs/plans/refactoring/done/02b-c-deferred-show-commits.RESOLVED.md` for the decision record.
+  ordered mutation boundary. The completed write-behind investigation is retained in the
+  [major-refactoring execution record](../plans/major-refactoring.md#consolidated-execution-record);
+  its detailed incremental decision document remains available in git history.

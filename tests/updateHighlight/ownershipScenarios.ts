@@ -1,6 +1,6 @@
-import { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
-import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { replaceProgrammingSelection } from "../../apps/control-ui/e2e/bench/command-selection/programmingSelection";
+import { ApiDriver } from "../bench/core/api";
+import { expect, test } from "../bench/core/fixtures";
+import { replaceProgrammingSelection } from "../bench/command-selection/programmingSelection";
 import { loadCanonicalCopy, programmer } from "../support/catalog";
 import {
 	assertReachableAlert,

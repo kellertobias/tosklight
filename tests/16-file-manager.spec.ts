@@ -1,14 +1,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { ControllableHostedFilePickerDriver } from "../apps/control-ui/e2e/bench/window-system/hostedFilePicker";
+import { expect, test } from "./bench/core/fixtures";
+import { ControllableHostedFilePickerDriver } from "./bench/window-system/hostedFilePicker";
 import type {
 	Locator,
 	Page,
-} from "../apps/control-ui/node_modules/@playwright/test/index.js";
+} from "@playwright/test";
 
 test.describe("docs/testing/09-file-manager-and-text-editor.md", () => {
-	test("FILE-016 @api › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts", async ({
+	test("FILE-016 @api @failure-mode › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts", async ({
 		api,
 		bench,
 		request,

@@ -1,8 +1,8 @@
-import type { ApiDriver } from "../../../apps/control-ui/e2e/bench/core/api";
-import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
-import { goCueListPlayback } from "../../../apps/control-ui/e2e/bench/playbacks/playbackRuntimeAction";
-import { recallPreset } from "../../../apps/control-ui/e2e/bench/groups-presets/presetRecall";
-import { clearProgrammerValues } from "../../../apps/control-ui/e2e/bench/programmer/programmerValues";
+import type { ApiDriver } from "../../bench/core/api";
+import { expect } from "../../bench/core/fixtures";
+import { goCueListPlayback } from "../../bench/playbacks/playbackRuntimeAction";
+import { recallPreset } from "../../bench/groups-presets/presetRecall";
+import { clearProgrammerValues } from "../../bench/programmer/programmerValues";
 import type { FoundationalCase } from "./case";
 import {
 	command,

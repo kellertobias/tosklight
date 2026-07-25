@@ -201,10 +201,10 @@ Cue {
 
 ## Existing implementation seams
 
-- `apps/control-ui/src/windows/CuelistWindow.tsx` currently owns both Cuelist Pool and Cuelist View rendering. Split its right-side editor/settings concerns into focused components when the single-file view becomes difficult to test.
-- `apps/control-ui/src/api/types.ts` currently exposes `CueList.mode`, numeric `priority`, boolean `looped`, `speed_group`, and Cue timing fields. Extend the types before wiring controls.
-- `crates/playback/src/lib.rs` owns `Cue`, `CueTrigger`, `CueListMode`, `CueList`, chaser timing, wrap progression, and HTP/LTP arbitration. New behavior must be engine-owned rather than simulated by the browser.
-- `crates/server/src/main.rs` and the show-object persistence path must accept revision-checked Cue/Cuelist updates and propagate them into the live playback engine without restarting the show.
+- `apps/light-desktop/src/windows/CuelistWindow.tsx` currently owns both Cuelist Pool and Cuelist View rendering. Split its right-side editor/settings concerns into focused components when the single-file view becomes difficult to test.
+- `apps/light-desktop/src/api/types.ts` currently exposes `CueList.mode`, numeric `priority`, boolean `looped`, `speed_group`, and Cue timing fields. Extend the types before wiring controls.
+- `crates/light/domain/playback/src/lib.rs` owns `Cue`, `CueTrigger`, `CueListMode`, `CueList`, chaser timing, wrap progression, and HTP/LTP arbitration. New behavior must be engine-owned rather than simulated by the browser.
+- `crates/light/adapters/headless/src/main.rs` and the show-object persistence path must accept revision-checked Cue/Cuelist updates and propagate them into the live playback engine without restarting the show.
 - The server/show transaction seam owns Renumber Cues so the browser sends one starting number and expected revision rather than rewriting each Cue independently.
 - Playback runtime needs a deleted-active navigation anchor that survives the Cuelist object mutation until GO, GO minus, Off, or release resolves it.
 - The Stage preview thumbnail generation in `CuelistWindow.tsx` remains the source for the Preview column and must continue to reconstruct tracked Cue state rather than showing only each Cue's delta.

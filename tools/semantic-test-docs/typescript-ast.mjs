@@ -7,7 +7,7 @@ const repositoryRoot = path.resolve(
 	"../..",
 );
 const controlUiRequire = createRequire(
-	path.join(repositoryRoot, "apps/control-ui/package.json"),
+	path.join(repositoryRoot, "apps/light-desktop/package.json"),
 );
 
 let modules;

@@ -38,8 +38,8 @@ All editor surfaces use the same server revisions and file-operation notificatio
 
 The executable checks for this behavior are split by boundary:
 
-- `cargo test -p light-server file_manager` covers path confinement, operations, conflict choices, trash behavior, range streaming, notes, thumbnails, removable-root snapshots, and compatibility defaults.
-- `cargo test -p light-server discovery_adapters_cover_macos_linux_and_windows_mount_layouts` covers representative removable-drive discovery input for all three supported desktop platforms.
+- `cargo test -p light-headless file_manager` covers path confinement, operations, conflict choices, trash behavior, range streaming, notes, thumbnails, removable-root snapshots, and compatibility defaults.
+- `cargo test -p light-headless discovery_adapters_cover_macos_linux_and_windows_mount_layouts` covers representative removable-drive discovery input for all three supported desktop platforms.
 - The focused Control UI tests cover picker constraints, system-fallback gating, form integration, Text Editor modes and read-only behavior, multi-window routing, disconnect recovery, and UI state.
 - `./test e2e tests/15-text-editor.spec.ts` and `./test e2e tests/16-file-manager.spec.ts` exercise the real browser/server boundary, including same-desk OSC routing.
 

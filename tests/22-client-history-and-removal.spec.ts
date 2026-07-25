@@ -1,5 +1,5 @@
-import { test, expect } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { ApiDriver, type Session } from "../apps/control-ui/e2e/bench/core/api";
+import { test, expect } from "./bench/core/fixtures";
+import { ApiDriver, type Session } from "./bench/core/api";
 
 type ClientSummary = {
   client_id: string;
@@ -13,7 +13,7 @@ type ClientSummary = {
 test.describe("docs/plans/Done/22-client-history-and-removal.DONE.md", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("CLIENT-001 @restart › client presence, history, removal, and clean re-registration remain desk-local", async ({ api, bench, desk, page, show }) => {
+  test("CLIENT-001 @ui @restart › client presence, history, removal, and clean re-registration remain desk-local", async ({ api, bench, desk, page, show }) => {
     test.setTimeout(90_000);
     const clientB = crypto.randomUUID();
     const sessionB = await createSession(bench.baseUrl, clientB);

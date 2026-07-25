@@ -14,10 +14,10 @@ shipped code, plus the checklist a slice has to pass.
 
 Show Objects is the most complete migrated slice:
 
-- `crates/application/src/active_show/`, events in `crates/application/src/event/`
-- `crates/wire/src/v2/`
-- `crates/server/src/runtime/` (`*_v2.rs`, `*_http.rs`, `*_wire.rs`)
-- `apps/control-ui/src/features/showObjects/`
+- `crates/light/src/active_show/`, events in `crates/light/src/event/`
+- `crates/light/contracts/wire/src/v2/`
+- `crates/light/adapters/headless/src/runtime/` (`*_v2.rs`, `*_http.rs`, `*_wire.rs`)
+- `apps/light-desktop/src/features/showObjects/`
 
 ## Steps
 
@@ -33,7 +33,7 @@ In the relevant domain crate. No transport types, no `light-wire`, no HTTP.
 
 ### 3. Command family and service
 
-`crates/application/src/<capability>/`:
+`crates/light/src/<capability>/`:
 
 - commands implementing `ApplicationCommand` with their own `type Value`
 - an outcome union covering changed, no-change, replay, and conflict
@@ -52,24 +52,24 @@ manual command.
 
 ### 5. Wire DTOs
 
-`crates/wire/src/v2/<capability>.rs`, deriving `Serialize, Deserialize, JsonSchema, TS`, with
+`crates/light/contracts/wire/src/v2/<capability>.rs`, deriving `Serialize, Deserialize, JsonSchema, TS`, with
 `deny_unknown_fields` on requests. Then:
 
 ```sh
 cargo run -p light-wire --example generate-contracts
 ```
 
-Commit the regenerated `light-wire.ts` and schemas. `crates/wire/tests/generated_contracts.rs` fails
+Commit the regenerated `light-wire.ts` and schemas. `crates/light/contracts/wire/tests/generated_contracts.rs` fails
 if you skip this.
 
 ### 6. Server adapter
 
-`crates/server/src/runtime/<capability>_v2.rs` plus router registration. DTO to command, event to
+`crates/light/adapters/headless/src/runtime/<capability>_v2.rs` plus router registration. DTO to command, event to
 wire. Nothing else.
 
 ### 7. Frontend slice
 
-`apps/control-ui/src/features/<capability>/`:
+`apps/light-desktop/src/features/<capability>/`:
 
 | File | Role |
 | --- | --- |

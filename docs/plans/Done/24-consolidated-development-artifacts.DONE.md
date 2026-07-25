@@ -34,7 +34,7 @@ Use purpose-based subdirectories so that individual classes of output can be ins
 
 The mapping replaces the current repository-root `target/`, `.pnpm-store/`, `output/`, `artifacts/`, `light-data/`, `test-results/`, `playwright-report/`, `coverage/`, and `tmp/` locations. Equivalent generated directories owned by individual workspace packages should use the appropriate shared subtree where their tools allow an output path to be configured reliably.
 
-`crates/output/` is Rust source code and is explicitly outside this feature. Installed application data, user-selected show locations, system temporary directories, and external tool caches outside the checkout are also outside this consolidation.
+`crates/light/domain/output/` is Rust source code and is explicitly outside this feature. Installed application data, user-selected show locations, system temporary directories, and external tool caches outside the checkout are also outside this consolidation.
 
 Package installation trees such as `node_modules/` may remain beside their package manifests when Node resolution requires them. The package-manager content-addressed store and downloadable cache belong under `.artifacts/cache/`; this feature does not require changing package managers solely to eliminate a tool-required `node_modules/` directory.
 

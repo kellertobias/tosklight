@@ -1,8 +1,8 @@
-import type { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
+import type { ApiDriver } from "../bench/core/api";
 import {
 	type BenchUiContext,
 	expect,
-} from "../../apps/control-ui/e2e/bench/core/fixtures";
+} from "../bench/core/fixtures";
 import {
 	activePlayback,
 	createCueList,
@@ -15,7 +15,7 @@ import {
 	prepareShow,
 	updatePlayback,
 } from "./helpers";
-import type { PreparedShow } from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
+import type { PreparedShow } from "../bench/playbacks/playback-configuration/models";
 
 interface LifecycleArrangement {
 	prepared: PreparedShow;

@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { expect, test } from "./bench/core/fixtures";
 import artifactResolver from "../tools/artifact-paths.cjs";
 
 const { artifactPaths } = artifactResolver;
@@ -70,7 +70,7 @@ test("records the complete desk with OSC and DMX observers", async ({ api, bench
   }
 });
 
-async function installRecordingOverlay(page: import("../apps/control-ui/node_modules/@playwright/test/index.js").Page) {
+async function installRecordingOverlay(page: import("@playwright/test").Page) {
   await page.addStyleTag({ content: `
     #root{position:fixed!important;left:0;top:0;width:1440px;height:1080px;transform:scale(.75);transform-origin:top left}
     #light-recording-overlay{position:fixed;z-index:999999;inset:0 0 0 1080px;background:#080b10;color:#e9f0f7;font:18px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;display:grid;grid-template-rows:auto auto 1fr 1fr;gap:14px;padding:22px;box-sizing:border-box;border-left:3px solid #1bd6ec}
@@ -84,7 +84,7 @@ async function installRecordingOverlay(page: import("../apps/control-ui/node_mod
   });
 }
 
-async function stage(page: import("../apps/control-ui/node_modules/@playwright/test/index.js").Page, title: string, copy: string, sent: string[], feedback: Array<{ address: string; arguments: unknown[] }>, dmx: DmxState) {
+async function stage(page: import("@playwright/test").Page, title: string, copy: string, sent: string[], feedback: Array<{ address: string; arguments: unknown[] }>, dmx: DmxState) {
   const command = await page.getByLabel("Command line").inputValue().catch(() => "—");
   await page.evaluate(({ title, copy, sent, feedback, dmx, command }) => {
     document.querySelector("#record-stage")!.textContent = title; document.querySelector("#record-copy")!.textContent = copy; document.querySelector("#record-command")!.textContent = `Desk command: ${command || "—"}`;
@@ -101,4 +101,4 @@ async function dmxState(api: any, bench: any): Promise<DmxState> {
   const art = bench.artnet.packets.at(-1); const sacn = bench.sacn.packets.at(-1);
   return { logical, artnet: { sequence: art?.sequence ?? 0, slots: Array.from(art?.slots.slice(0, 6) ?? Array(6).fill(0)) }, sacn: { sequence: sacn?.sequence ?? 0, slots: Array.from(sacn?.slots.slice(0, 6) ?? Array(6).fill(0)) } };
 }
-async function pause(page: import("../apps/control-ui/node_modules/@playwright/test/index.js").Page, millis: number) { await page.waitForTimeout(millis); }
+async function pause(page: import("@playwright/test").Page, millis: number) { await page.waitForTimeout(millis); }

@@ -1,15 +1,15 @@
 import type {
 	ApiDriver,
 	CommandOperationResponse,
-} from "../../../apps/control-ui/e2e/bench/core/api";
-import type { LightBench } from "../../../apps/control-ui/e2e/bench/core/lightBench";
-import type { OscHardware } from "../../../apps/control-ui/e2e/bench/core/protocols";
-import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
-import type { Page } from "../../../apps/control-ui/node_modules/@playwright/test/index.js";
+} from "../../bench/core/api";
+import type { LightBench } from "../../bench/core/lightBench";
+import type { OscHardware } from "../../bench/core/protocols";
+import { expect } from "../../bench/core/fixtures";
+import type { Page } from "@playwright/test";
 import {
 	oscProgrammerActionForKey,
 	type SoftwareKey,
-} from "../../../apps/shared/programmerKeypad";
+} from "@tosklight/light-controls/programmer-keypad";
 
 export type ProgrammerSurface =
 	| { via: "command-line"; api: ApiDriver }

@@ -26,17 +26,17 @@ exact OSC address and feedback sequence.
 | Change | First evidence | Widen when |
 | --- | --- | --- |
 | Rust value, parser, reducer, codec, arbitration | Adjacent `#[cfg(test)]` module or the owning crate's `tests/`; `cargo test -p <crate> --no-default-features <filter>` | The value crosses a service, transport, persistence, or output boundary |
-| Application command/service/event | Feature tests under `crates/application/src/<feature>/tests*`; `cargo test -p light-application --no-default-features <filter>` | A server adapter, event subscriber, active-show transaction, or automatic source invokes it |
-| Portable-show transaction or migration | `crates/show/src/portable/` tests plus compiler/service tests in `crates/application/src/show_compiler/` or the owning capability | Old files, unknown fields, Save As, recovery, runtime replacement, or concurrent revisions are affected |
-| Desk schema/session recovery | `crates/show/src/desk/` tests and focused server startup/session tests | Reconnect, restart, user/client deletion, screens, or active-show selection are affected |
+| Application command/service/event | Feature tests under `crates/light/src/<feature>/tests*`; `cargo test -p light-application --no-default-features <filter>` | A server adapter, event subscriber, active-show transaction, or automatic source invokes it |
+| Portable-show transaction or migration | `crates/shared/show/src/portable/` tests plus compiler/service tests in `crates/light/src/show_compiler/` or the owning capability | Old files, unknown fields, Save As, recovery, runtime replacement, or concurrent revisions are affected |
+| Desk schema/session recovery | `crates/shared/show/src/desk/` tests and focused server startup/session tests | Reconnect, restart, user/client deletion, screens, or active-show selection are affected |
 | Wire DTO/schema/generation | `cargo test -p light-wire --no-default-features`; generated-artifact test | Any server or frontend mapping changes |
-| Server router/auth/adapter | Focused module under `crates/server/src/runtime/tests/`; `cargo test -p light-server --lib --no-default-features <filter>` | The contract needs a real socket, process lifecycle, OSC, or cross-surface proof |
-| Frontend decoder/transport | Co-located tests in `apps/control-ui/src/api/`; `(cd apps/control-ui && npm test -- <file>)` | Reconnect, malformed events, authentication, or browser network behavior changes |
-| Frontend store/session/hook | Co-located tests under `apps/control-ui/src/features/`; assert revision ordering, wrong-scope rejection, optimistic rollback, subscription lifetime, and gap repair | A production pane consumes the projection or visible latency/rerender behavior changes |
+| Server router/auth/adapter | Focused module under `crates/light/adapters/headless/src/runtime/tests/`; `cargo test -p light-headless --lib --no-default-features <filter>` | The contract needs a real socket, process lifecycle, OSC, or cross-surface proof |
+| Frontend decoder/transport | Co-located tests in `apps/light-desktop/src/api/`; `(cd apps/light-desktop && npm test -- <file>)` | Reconnect, malformed events, authentication, or browser network behavior changes |
+| Frontend store/session/hook | Co-located tests under `apps/light-desktop/src/features/`; assert revision ordering, wrong-scope rejection, optimistic rollback, subscription lifetime, and gap repair | A production pane consumes the projection or visible latency/rerender behavior changes |
 | Component wording, state, or gesture | React Testing Library/Vitest next to the component | Geometry, focus, pointer/touch behavior, software/hardware layout, or end-to-end intent is part of acceptance |
-| OSC or attached hardware | Exact OSC Playwright scenario plus `apps/hardware-controls` reducer/surface tests | Server feedback, aliases, press/release ordering, desk sharing, or native UDP lifecycle changes |
+| OSC or attached hardware | Exact OSC Playwright scenario plus `apps/light-hardware-controls` reducer/surface tests | Server feedback, aliases, press/release ordering, desk sharing, or native UDP lifecycle changes |
 | Playback/Programmer/render semantics | Owning domain/application tests and a deterministic bench scenario observing authoritative runtime and output | Current-page/explicit-page, timing, Preload, Highlight, HTP/LTP, Cue tracking, or automatic advance changes |
-| Art-Net/sACN/output scheduler | `crates/output/tests/`, engine tests, and focused receiver scenarios under `tests/` | Socket delivery, shutdown, first frame, overload health, or capacity changes |
+| Art-Net/sACN/output scheduler | `crates/light/domain/output/tests/`, engine tests, and focused receiver scenarios under `tests/` | Socket delivery, shutdown, first frame, overload health, or capacity changes |
 | Files/MVR/media | Owning unit/integration tests and focused HTTP/UI acceptance scenario | Confinement, archive portability, CITP/socket behavior, long-running feedback, or desktop picker behavior changes |
 | Tauri/window/process lifecycle | Browser-adapter unit tests first, then `npm run test:desktop-smoke` | Native launch, child-server ownership, additional screens, shutdown, bundle assets, or stale-bundle behavior changes |
 | Manual/help | Markdown review and `npm run manual`; screenshot workflow only when intentionally refreshing images | Operator-facing layout or the documented UI changed |
@@ -47,11 +47,11 @@ exact OSC address and feedback sequence.
 Pure domain rules stay close to the module. Cross-module public boundaries belong in crate-level
 integration tests where available:
 
-- `crates/engine/tests/` covers automatic transition publication through the engine boundary;
-- `crates/playback/tests/` covers automatic runtime behavior;
-- `crates/output/tests/` covers codecs, routes, network behavior, and scheduler characterization;
-- `crates/wire/tests/generated_contracts.rs` rejects stale generated files; and
-- `crates/server/src/runtime/tests/` is split by router, service adapter, migration, session, OSC,
+- `crates/light/domain/engine/tests/` covers automatic transition publication through the engine boundary;
+- `crates/light/domain/playback/tests/` covers automatic runtime behavior;
+- `crates/light/domain/output/tests/` covers codecs, routes, network behavior, and scheduler characterization;
+- `crates/light/contracts/wire/tests/generated_contracts.rs` rejects stale generated files; and
+- `crates/light/adapters/headless/src/runtime/tests/` is split by router, service adapter, migration, session, OSC,
   output, and operational flow while the server library remains one crate.
 
 Do not assert correctness by acquiring a service's private mutex or registry. Use a command,
@@ -63,7 +63,7 @@ Useful focused commands are:
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p light-application --no-default-features
-cargo test -p light-server --lib --no-default-features runtime::event_transport::tests
+cargo test -p light-headless --lib --no-default-features runtime::event_transport::tests
 cargo test -p light-wire --no-default-features
 ```
 
@@ -76,7 +76,7 @@ Control-UI tests are co-located with API decoders, feature stores/sessions, cont
 components, windows, and desktop adapters. Run from the package directory:
 
 ```sh
-cd apps/control-ui
+cd apps/light-desktop
 npm run typecheck
 npm test -- src/features/showObjects/ShowObjectsSession.test.ts
 npm test
@@ -87,7 +87,7 @@ Hardware Controls has an independent package and native host. Its reducer, OSC p
 settings, and focused surfaces must be tested separately:
 
 ```sh
-cd apps/hardware-controls
+cd apps/light-hardware-controls
 npm run typecheck
 npm test
 npm run build
@@ -99,7 +99,7 @@ should prove that unrelated updates preserve selector identity and do not notify
 
 ## Playwright bench and intent helpers
 
-`apps/control-ui/e2e/bench/` provides an isolated server, authenticated API driver, real browser,
+`tests/bench/` provides an isolated server, authenticated API driver, real browser,
 deterministic clock, Art-Net/sACN receivers, OSC hardware simulator, process restart/fault controls,
 and failure artifacts. `pairedScenario` registers independent `@api` and `@ui` cases with one
 stable scenario ID and shared final oracle; it does not disguise one surface as the other.
@@ -122,12 +122,11 @@ Focused Playwright commands from the repository root are:
 
 ```sh
 npm run test:e2e -- tests/04-osc-api-and-cross-surface.spec.ts --grep 'OSC-002'
-npm run test:e2e-api -- tests/01-foundational-dimmers-and-groups.spec.ts --grep 'GROUP-004'
-npm run test:e2e-ui -- tests/01-foundational-dimmers-and-groups.spec.ts --grep 'PROG-001'
-npm run test:e2e-supplemental -- tests/05-virtual-time-persistence-and-recovery.spec.ts
+npm run test:e2e-api -- tests/05-virtual-time-persistence-and-recovery.spec.ts --grep 'SHOW-002'
+npm run test:e2e-ui -- tests/42-semantic-foundational-groups.spec.ts --grep 'GROUP-004'
 ```
 
-Use `cd apps/control-ui && npm run test:e2e -- --list` to confirm test discovery after moving or
+Use `cd apps/light-desktop && npm run test:e2e -- --list` to confirm test discovery after moving or
 splitting a specification.
 
 ## Network, desktop, and benchmark evidence
@@ -144,14 +143,14 @@ npm run open
 curl -fsS http://127.0.0.1:5000/api/v2/readiness
 ```
 
-After `npm run open`, inspect `.artifacts/runtime/light-data/light-server.log`. If readiness is
+After `npm run open`, inspect `.artifacts/runtime/light-data/light-headless.log`. If readiness is
 healthy but the UI appears stuck, time `/api/v2/readiness` and `/api/v2/bootstrap` separately and
 confirm the bundle opened by `build` before changing UI code.
 
 The release-only render-through-encoding benchmark is:
 
 ```sh
-cargo run --release -p light-server --bin light-benchmark -- \
+cargo run --release -p light-headless --bin light-benchmark -- \
   --profile all --protocol both --transport encode-only \
   --mutation-gate --hardware-label 'describe CPU, memory, OS, and power mode'
 ```

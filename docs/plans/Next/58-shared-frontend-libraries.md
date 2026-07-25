@@ -10,7 +10,7 @@ The Control UI already contains the authoritative ToskLight controls, window chr
 
 The package must therefore be created primarily by extracting the existing implementation. Storybook must render those extracted components, not parallel approximations of them.
 
-Not every file under `apps/control-ui/src/components` can move unchanged. Some components combine reusable rendering with application state, server access, feature controllers, persisted desk layout, or Tauri integration. Those components need a view/controller split: the existing visual and interaction surface moves into the package, while a thin application adapter retains product state and mutations.
+Not every file under `apps/light-desktop/src/components` can move unchanged. Some components combine reusable rendering with application state, server access, feature controllers, persisted desk layout, or Tauri integration. Those components need a view/controller split: the existing visual and interaction surface moves into the package, while a thin application adapter retains product state and mutations.
 
 ## Goal
 
@@ -53,7 +53,7 @@ Temporary modules at old Control UI paths may re-export package components durin
 - focused unit and component tests for package behavior; and
 - public exports organized by component family.
 
-### `apps/control-ui` owns
+### `apps/light-desktop` owns
 
 - `useApp`, `useServer`, feature contexts, stores, and reducers;
 - `WindowRegistry` and the set of windows available in ToskLight;
@@ -65,13 +65,13 @@ Temporary modules at old Control UI paths may re-export package components durin
 - mutations invoked by package callbacks; and
 - complete workflow composition for concrete ToskLight windows and dialogs.
 
-The UI package must never import from `apps/control-ui`. It should use React and ReactDOM as peer dependencies and must not introduce a second React runtime.
+The UI package must never import from `apps/light-desktop`. It should use React and ReactDOM as peer dependencies and must not introduce a second React runtime.
 
 ## Extraction inventory
 
 ### 1. Foundations, buttons, and forms
 
-Extract the existing controls exposed through `apps/control-ui/src/components/common/controls.tsx` and its `common/controls` modules:
+Extract the existing controls exposed through `apps/light-desktop/src/components/common/controls.tsx` and its `common/controls` modules:
 
 - `Button`, including current variants, active and disabled states, icon-only use, loading state, and size and width options;
 - `FormLayout`, `FormField`, side-label and top-label arrangements, grouped fields, help text, required state, and validation or error presentation;

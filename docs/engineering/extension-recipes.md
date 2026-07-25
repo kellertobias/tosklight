@@ -22,7 +22,7 @@ wire, adapter, event, snapshot, store, view, and tests land together.
    crate. A domain crate must not import `light-application`, `light-wire`, HTTP, WebSocket, Tauri,
    or a concrete store/driver.
 3. **Add one bounded application service.** Create or extend a focused module under
-   `crates/application/src/<capability>/`. Define typed commands, immutable projections, results,
+   `crates/light/src/<capability>/`. Define typed commands, immutable projections, results,
    errors, and dependency-injected ports. Carry `ActionContext`; use `expected_revision` and
    `request_id` where the operation can conflict or retry. The service, not an adapter, owns
    ordering and idempotency.
@@ -30,31 +30,31 @@ wire, adapter, event, snapshot, store, view, and tests land together.
    `PortableShowTransaction` and pass through `ActiveShowService`. Desk-installation fields use a
    typed `DeskStore` operation and desk-schema migration. Runtime-only fields do not acquire a
    database merely for convenience.
-5. **Publish a semantic event once.** Extend `crates/application/src/event/model.rs` with a bounded
+5. **Publish a semantic event once.** Extend `crates/light/src/event/model.rs` with a bounded
    payload and stable `EventObject` route. Choose `Lossless` for discrete transitions, safety,
    errors, and outcomes; use `Replaceable` only for a current projection or telemetry. Publish
    after authoritative state changes and outside timing-critical domain locks.
 6. **Define the wire DTO.** Add versioned request, outcome, error, projection, snapshot, and event
-   DTOs under `crates/wire/src/v2/`. Register every checked-in TypeScript/schema artifact in
-   `crates/wire/src/generation.rs`, then run:
+   DTOs under `crates/light/contracts/wire/src/v2/`. Register every checked-in TypeScript/schema artifact in
+   `crates/light/contracts/wire/src/generation.rs`, then run:
 
    ```sh
    cargo run -p light-wire --example generate-contracts
    cargo test -p light-wire --no-default-features
    ```
 
-7. **Write a thin server adapter.** Add a feature router under `crates/server/src/runtime/`, compose
-   it in `crates/server/src/runtime/http_router.rs`, authenticate and normalize addressing, map DTOs
+7. **Write a thin server adapter.** Add a feature router under `crates/light/adapters/headless/src/runtime/`, compose
+   it in `crates/light/adapters/headless/src/runtime/http_router.rs`, authenticate and normalize addressing, map DTOs
    to application types, invoke one service, and map the result back. Add the event conversion in
-   `crates/server/src/runtime/event_transport/adapter.rs` or a focused submodule. No business rule
+   `crates/light/adapters/headless/src/runtime/event_transport/adapter.rs` or a focused submodule. No business rule
    or second state machine belongs here.
 8. **Provide authoritative repair.** A subscribed projection needs a snapshot containing the full
    requested scope and an event cursor captured at a coherent boundary. Define stable subscription
    identities by capability and object, not by component name or URL. A gap is repaired by
    installing the snapshot first and acknowledging that exact cursor second.
 9. **Build the frontend boundary.** Generated wire DTOs may be imported only below
-   `apps/control-ui/src/api/`. Decode untrusted JSON there and map it to feature contracts. Under
-   `apps/control-ui/src/features/<capability>/`, separate `contracts`, `store`, `session`,
+   `apps/light-desktop/src/api/`. Decode untrusted JSON there and map it to feature contracts. Under
+   `apps/light-desktop/src/features/<capability>/`, separate `contracts`, `store`, `session`,
    `transport`, and React view/hooks. Follow `features/showObjects/` and
    `features/playbackRuntime/` for scoped hydration and `features/patch/` for optimistic mutation.
 10. **Make visibility own subscription.** A mounted view activates only the capability/object IDs it
@@ -91,14 +91,14 @@ When commands already converge but clients still poll, the minimum safe slice is
 9. Add network and render tests proving that an inactive view has no subscription/poll, unrelated
    topics are ignored, a relevant event becomes visible without a broad GET, and a gap repairs.
 10. Remove the replaced interval and event-triggered broad refresh from
-    `apps/control-ui/src/features/server/`.
+    `apps/light-desktop/src/features/server/`.
 
 ## Add a portable object to Selective Show Import
 
 Do not create a feature-specific copy endpoint.
 
 1. Define the object's stable key and every owned identity/reference location in
-   `crates/application/src/selective_import/references/`. The current registry is the
+   `crates/light/src/selective_import/references/`. The current registry is the
    `RegisteredObjectKind` match in `references/mod.rs`; add a schema-specific descriptor in
    `references/descriptors.rs` or its own focused module.
 2. List fixture-profile and managed-asset references explicitly. Never guess dependencies by
@@ -123,7 +123,7 @@ implementation. Once it is explicitly made implementable, use these boundaries:
 - Keep phase, pause, restart, hidden/suppressed, and per-Playback instance state in a supervised
   runtime service outside `light-engine` and the output scheduler.
 - Resolve each fixture/logical-head and attribute lane independently. The runtime samples a finite
-  immutable `ContributionBatch` using `crates/engine/src/contribution_batch.rs`; it does not write
+  immutable `ContributionBatch` using `crates/light/domain/engine/src/contribution_batch.rs`; it does not write
   DMX or call a protocol driver.
 - Submit Programmer, Preload, and Cue assignments through their existing semantic contribution
   boundaries. Static/fixed competition uses ordinary priority and ownership, not special cases in
@@ -132,7 +132,7 @@ implementation. Once it is explicitly made implementable, use these boundaries:
   only to the selected definition/instances. High-frequency phase display must be an explicit
   bounded telemetry stream or client interpolation, never one event per DMX sample.
 
-The architecture proof is in `crates/engine/src/tests/contribution_batches.rs`: fake stateful,
+The architecture proof is in `crates/light/domain/engine/src/tests/contribution_batches.rs`: fake stateful,
 two-attribute, and fixed sources use ordinary arbitration. It deliberately defines no production
 Dynamic behavior.
 
@@ -143,7 +143,7 @@ currently forbids a Macro product. Once language, sandbox, capabilities, persist
 interaction, scheduling, and acceptance behavior are specified:
 
 - Implement the selected language behind `MacroRuntime` in
-  `crates/application/src/macro_runtime/service.rs`; keep the language adapter outside domain and
+  `crates/light/src/macro_runtime/service.rs`; keep the language adapter outside domain and
   render crates.
 - Expose only the capability-scoped `MacroHost`. Its backend authorizes queries, typed application
   actions, event waits, operator input, and audited HTTP. A runtime must not receive database,
@@ -154,11 +154,11 @@ interaction, scheduling, and acceptance behavior are specified:
 - Persist definitions and schedules as separate portable objects with explicit dependencies and
   selective-import descriptors. Runtime instances and waits are transient unless a future spec
   defines a safe checkpoint.
-- Use `crates/application/src/scheduling/` to keep monotonic waits distinct from wall-clock schedule
+- Use `crates/light/src/scheduling/` to keep monotonic waits distinct from wall-clock schedule
   metadata. Timezone, occurrence identity, skip/catch-up, and duplicate prevention remain product
   policy, not generic scheduler guesses.
 
-The tests under `crates/application/src/macro_runtime/tests/` and `scheduling/tests.rs` are fake
+The tests under `crates/light/src/macro_runtime/tests/` and `scheduling/tests.rs` are fake
 extension proofs. They do not select a language or authorize a production host API.
 
 ## Future external-device adapter seam
@@ -171,7 +171,7 @@ offline/retry behavior, and acceptance criteria are specified:
    and transient connection/health state.
 2. Extend compiled fixture output with semantic `ExternalDeviceIntent` values; never translate an
    external fixture into pretend DMX slots.
-3. Implement `ExternalDeviceAdapter` from `crates/output/src/external.rs` in a concrete adapter
+3. Implement `ExternalDeviceAdapter` from `crates/light/domain/output/src/external.rs` in a concrete adapter
    layer. Group immutable intents by adapter and revision, schedule application outside the render
    loop, and keep retry/backpressure from blocking DMX.
 4. Keep desired desk state and `ExternalDeviceObservation` separate until the product spec chooses
@@ -183,4 +183,4 @@ offline/retry behavior, and acceptance criteria are specified:
    adapter, retry/offline behavior is bounded, and observed values cannot feed back into desired
    state accidentally.
 
-The fake in `crates/output/src/external.rs` proves only the desired/observed/DMX separation.
+The fake in `crates/light/domain/output/src/external.rs` proves only the desired/observed/DMX separation.

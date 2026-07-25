@@ -132,7 +132,7 @@ test("AST compiler preserves dynamic expressions and unknown helpers as diagnost
 	fs.writeFileSync(
 		sourceFile,
 		`// @bench-semantic-world
-	import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
+	import { scenario } from "../bench/core/scenario";
 scenario("EXAMPLE-001", "shows unresolved source", async (t) => {
   await t.app.open();
   await t.show.use(Show.DefaultStage);
@@ -211,7 +211,7 @@ test("ambiguous or missing migration rows stay unresolved and branches stay visi
 	fs.writeFileSync(
 		sourceFile,
 		`// @bench-semantic-world
-	import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
+	import { scenario } from "../bench/core/scenario";
 scenario("STATUS-001", "ambiguous row", async (t) => {
   if (runtime.enabled) await t.group.stroe(1);
   else await t.app.open();

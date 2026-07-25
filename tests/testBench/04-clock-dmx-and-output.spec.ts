@@ -1,11 +1,11 @@
-import { BrowserClock } from "../../apps/control-ui/e2e/bench/core/clockScenario";
-import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { BrowserClock } from "../bench/core/clockScenario";
+import { expect, test } from "../bench/core/fixtures";
 import {
 	installTimeCuelists,
 	restartPlaybackRun,
 } from "../05-virtual-time-persistence-and-recovery.playback-helpers";
 
-test("BENCH-CLOCK-DMX-002 @bench @wire › free run drives changing production-scheduler frames and freezes before the next action", async ({
+test("BENCH-CLOCK-DMX-002 @bench @api @wire › free run drives changing production-scheduler frames and freezes before the next action", async ({
 	api,
 	bench,
 	desk,

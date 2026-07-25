@@ -1,8 +1,8 @@
-import { test } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { test } from "../bench/core/fixtures";
 import {
 	type PairedScenario,
 	pairedScenario,
-} from "../../apps/control-ui/e2e/bench/core/pairedScenario";
+} from "../bench/core/pairedScenario";
 
 export * from "./contractAssertions";
 export * from "./playbackFixtures";

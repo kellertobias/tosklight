@@ -7,7 +7,7 @@ order: 10
 
 # Control UI
 
-`apps/control-ui/` — React 19, Vite, TypeScript. Around 866 source files. Runs as the Tauri desktop
+`apps/light-desktop/` — React 19, Vite, TypeScript. Around 866 source files. Runs as the Tauri desktop
 app and in a browser.
 
 It presents authoritative desk and show state and turns operator gestures into typed actions. It is

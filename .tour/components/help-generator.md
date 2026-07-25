@@ -39,7 +39,7 @@ Build-enforced rules:
 
 ## In-app help
 
-`crates/server/src/help.rs` embeds `docs/help` with `#[derive(RustEmbed)]` and serves:
+`crates/light/adapters/headless/src/help.rs` embeds `docs/help` with `#[derive(RustEmbed)]` and serves:
 
 - `GET /api/v2/help` — catalog tree
 - `GET /api/v2/help/topics/{*id}`
@@ -48,8 +48,8 @@ Build-enforced rules:
 Debug builds prefer a live on-disk `docs/help` (`live_help_dir()`), so edits show up immediately.
 Release builds serve the embedded copy.
 
-Frontend: `apps/control-ui/src/windows/HelpWindow.tsx`, `helpMarkdown.ts`,
-`apps/control-ui/src/api/client/help.ts`, `apps/control-ui/src/help.css`.
+Frontend: `apps/light-desktop/src/windows/HelpWindow.tsx`, `helpMarkdown.ts`,
+`apps/light-desktop/src/api/client/help.ts`, `apps/light-desktop/src/help.css`.
 
 ## npm run manual
 
@@ -124,7 +124,7 @@ npm run test:help-screenshots    # only if images need refreshing
 ## Read first
 
 1. `docs/help/99-Development/04-manual-and-help-screenshots.md`
-2. `crates/server/src/help.rs`
+2. `crates/light/adapters/headless/src/help.rs`
 3. `tools/manual/source.py`
 4. `tools/verify_manual.py`
 5. `tests/02-help-screenshots.spec.ts`

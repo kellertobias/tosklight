@@ -1,4 +1,4 @@
-import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
+import { expect } from "../../bench/core/fixtures";
 
 export async function expectSlotsAfterTick(
 	bench: any,

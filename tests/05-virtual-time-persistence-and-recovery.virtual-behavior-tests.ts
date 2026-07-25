@@ -1,4 +1,4 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { expect, test } from "./bench/core/fixtures";
 import {
 	installTimeCuelists,
 	playbackRuntime,
@@ -15,7 +15,7 @@ import {
 } from "./support/catalog";
 
 export function registerVirtualBehaviorTest(): void {
-	test("TIME-003 @wire › chaser and phaser phase use virtual timestamps across incremental, speed, pause, and week jumps", async ({
+	test("TIME-003 @api @wire › chaser and phaser phase use virtual timestamps across incremental, speed, pause, and week jumps", async ({
 		api,
 		bench,
 	}) => {

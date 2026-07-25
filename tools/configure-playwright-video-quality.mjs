@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import process from "node:process";
 import { repositoryRoot } from "./artifact-paths.mjs";
 
-const require = createRequire(path.join(repositoryRoot, "apps/control-ui/package.json"));
+const require = createRequire(path.join(repositoryRoot, "package.json"));
 const playwrightPackage = require.resolve("playwright-core/package.json");
 const coreBundle = path.join(path.dirname(playwrightPackage), "lib/coreBundle.js");
 const bitrate = process.env.LIGHT_PLAYWRIGHT_VIDEO_BITRATE ?? "12M";

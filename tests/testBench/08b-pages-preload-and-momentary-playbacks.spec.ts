@@ -1,10 +1,10 @@
-import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { expect } from "../bench/core/fixtures";
 import {
 	explicitPagePlayback,
 	PlaybackButton,
-} from "../../apps/control-ui/e2e/bench/playbacks/playbackScenario";
-import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
-import { Show } from "../../apps/control-ui/e2e/bench/show/showScenario";
+} from "../bench/playbacks/playbackScenario";
+import { scenario } from "../bench/core/scenario";
+import { Show } from "../bench/show/showScenario";
 
 scenario(
 	"BENCH-PRELOAD-MOMENTARY-001",

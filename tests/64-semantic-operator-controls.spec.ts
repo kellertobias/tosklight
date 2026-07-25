@@ -1,9 +1,9 @@
 // @bench-semantic-world
 
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
-import { ProgrammerToken } from "../apps/control-ui/e2e/bench/encoders/encoderCatalog";
-import { fixture } from "../apps/control-ui/e2e/bench/output/fixtureDmxContract";
-import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
+import { scenario } from "./bench/core/scenario";
+import { ProgrammerToken } from "./bench/encoders/encoderCatalog";
+import { fixture } from "./bench/output/fixtureDmxContract";
+import { Show } from "./bench/show/showScenario";
 
 scenario(
 	"COMMAND-HISTORY-001",

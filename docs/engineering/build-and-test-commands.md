@@ -18,7 +18,7 @@ the steps in the right order. Run `npm run` to list every script.
 ## Quick reference
 
 ```sh
-npm run dev                        # server + Tauri app with UI hot reload
+npm run dev                        # Light headless + Tauri app with UI hot reload
 npm run open                 # debug builds, stop old instances, open the app
 npm run manual               # PDF and HTML manuals from docs/help
 npm run bundle [install]    # release artifacts for macOS, Windows, Linux
@@ -40,12 +40,12 @@ cargo fmt                                              # never standalone rustfm
 
 ## `npm run dev`
 
-Hot-reload development loop. Starts `cargo run -p light-server` in the foreground against the
+Hot-reload development loop. Starts `cargo run -p light-headless` in the foreground against the
 artifact data directory and `assets/fixture-library`, waits for readiness, then runs the control-UI
 Tauri dev server.
 
 UI and Tauri changes hot-reload. **Rust changes require restarting `npm run dev`.** It traps EXIT/INT/TERM
-so the server is killed with it.
+so the headless process is killed with it.
 
 Open `http://127.0.0.1:5000`. A new desk contains one enabled `Operator` user.
 
@@ -53,7 +53,7 @@ Open `http://127.0.0.1:5000`. A new desk contains one enabled `Operator` user.
 
 | Command | What it does |
 | --- | --- |
-| `npm run open` | The authoritative desktop path. Checks runtime migration, stops running instances (launchd + `light-server`/`ToskLight`/vite), writes Tauri configs, `npm ci` in both apps, builds the control UI, builds `light-server`, builds both Tauri debug bundles, copies the server binary into `ToskLight.app/Contents/MacOS/light-server`, submits the server as launchd job `de.tokenet.tosklight.dev-server`, waits for readiness, **verifies the launchd PID owns that readiness**, and opens the app. |
+| `npm run open` | The authoritative desktop path. Checks runtime migration, stops running instances (launchd + `light-headless`/`ToskLight`/vite), writes Tauri configs, runs the root workspace install, builds the control UI, builds `light-headless`, builds both Tauri debug bundles, copies the headless binary into `ToskLight.app/Contents/MacOS/light-headless`, submits it as launchd job `de.tokenet.tosklight.dev-server`, waits for readiness, **verifies the launchd PID owns that readiness**, and opens the app. |
 | `npm run manual` | Auto-provisions a pinned Python venv at `.artifacts/cache/manual-venv`, then builds and verifies the PDF and the HTML manual. See the [manual authoring guide](../help/99-Development/04-manual-and-help-screenshots.md). |
 | `npm run bundle` | Cross-platform release. macOS universal binary via `lipo`, plus Windows `x86_64-pc-windows-gnu` and Linux `x86_64`/`aarch64-unknown-linux-musl` via `cargo zigbuild`. Release Tauri bundles for both apps; each server zipped with `assets/fixture-library`. Requires `cargo, npm, ditto, zip, lipo, rustup, cargo-zigbuild, zig`. |
 | `npm run bundle:install` | The above, then install into `~/Applications` and open. |
@@ -68,7 +68,7 @@ After `npm run open`:
 curl -fsS http://127.0.0.1:5000/api/v2/readiness
 ```
 
-Check `.artifacts/runtime/light-data/light-server.log` first for app-owned startup problems. If
+Check `.artifacts/runtime/light-data/light-headless.log` first for app-owned startup problems. If
 readiness is healthy but the app looks stuck, time `/api/v2/readiness` and `/api/v2/bootstrap`
 separately.
 
@@ -80,11 +80,11 @@ code.**
 | Command | What it runs |
 | --- | --- |
 | `npm run test:architecture` | `tools/check-architecture.mjs`, the source-size unit tests, and `tools/check-source-size.mjs`. See [below](#what-test-architecture-actually-checks). |
-| `npm run test:unit` | `architecture` → control-UI `npm run build` (`tsc --noEmit && vite build`) → `cargo test --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features` → `npm test` (vitest). |
+| `npm run test:unit` | `architecture` → root bench type/unit tests → both Light frontends' `tsc`/Vite builds → `cargo test --workspace --exclude light-desktop --exclude light-hardware-controls --no-default-features` → both Light frontends' Vitest suites. |
+| `npm run test:bench-unit` | Root Vitest coverage for the reusable helpers under `tests/bench`. |
 | `npm run test:e2e -- [args]` | Builds the UI and server, then Playwright with the root config. |
-| `npm run test:e2e-api` | Playwright `--grep '@api'`. Process-level, no browser. |
-| `npm run test:e2e-ui` | Playwright `--grep '@ui'`. Real Chrome. |
-| `npm run test:e2e-supplemental` | `--grep-invert '@api\|@ui'` — the `@osc`, `@wire`, `@restart`, `@desktop`, `@bench` tags. |
+| `npm run test:e2e-api` | Playwright `--grep '@api'`. API-only contracts and constructed failure, persistence, concurrency, and wire conditions that cannot be driven truthfully through UI. |
+| `npm run test:e2e-ui` | Playwright `--grep '@ui'`. Real Chrome operator workflows, including OSC and attached-hardware surfaces. |
 | `npm run test:desktop-smoke` | macOS only. Builds the Tauri debug bundle, copies the server binary in, runs `tests/05-desktop-process-integration.spec.ts` with `LIGHT_DESKTOP_SMOKE=1`. |
 | `npm run test:help-screenshots` | **Wipes and regenerates** `docs/help/assets/screenshots/`. Only run when intentionally refreshing images, and review the diffs visually. |
 | `npm run test:record` | Serial narrated video of the whole catalog, assembled with ffmpeg into `.artifacts/test/visual-inspection/`. |
@@ -98,13 +98,13 @@ Test layering:
 | Layer | Where | Runner |
 | --- | --- | --- |
 | Rust unit/integration | each crate's `tests/` or feature-local modules | cargo |
-| TS unit/component | `apps/control-ui/src/**/*.test.ts(x)` (jsdom + Testing Library) | vitest |
+| TS unit/component | `apps/light-desktop/src/**/*.test.ts(x)` and `tests/bench/**/*.test.ts` | vitest |
 | Type/build gate | `tsc --noEmit && vite build` | tsc/vite |
-| Acceptance | root `tests/`, using the bench in `apps/control-ui/e2e/bench/` | Playwright |
+| Acceptance | root `tests/`, using the bench in `tests/bench/` | Playwright |
 
 There is no tracked `@tosklight/ui` package or Storybook configuration. Presentation primitives
-are app-local under `apps/control-ui/src/components/common/` and
-`apps/control-ui/src/components/window-kit/`. Their supported replacement contract is:
+are app-local under `apps/light-desktop/src/components/common/` and
+`apps/light-desktop/src/components/window-kit/`. Their supported replacement contract is:
 
 ```sh
 npm run test:unit     # component tests plus Control UI typecheck and production build
@@ -132,25 +132,25 @@ Five checks. Every failure is collected and reported as `architecture error: …
 
 1. **Rust dependency directions** — parsed from `cargo metadata`.
    - `light-wire` may depend on **no** workspace crate.
-   - `light-application` must not depend on `light-wire`, `light-server`, or either UI crate.
-   - Any other `crates/*` except `light-server` must not depend on `light-application`,
-     `light-wire`, or `light-server`.
-   - `light-server` **must** depend on both `light-application` and `light-wire` — it is the
-     composition root.
-2. **Thin server entry point** — `crates/server/src/main.rs` is at most 10 non-empty lines, must
-   contain `light_server::run().await`, and must not mention `Router`, `AppState`, `TcpListener`, or
+   - `light-application` must not depend on wire, headless runtime, runnable apps, or UI crates.
+   - Crates under `crates/light/domain` and `crates/shared` must not depend outward on application,
+     wire, headless runtime, or runnable app crates.
+   - `light-headless-runtime` composes `light-application` and `light-wire`.
+   - `light-headless` depends on the runtime adapter and remains the runnable composition root.
+2. **Thin headless entry point** — `apps/light-headless/src/main.rs` is at most 10 non-empty lines, must
+   contain `light_headless_runtime::run().await`, and must not mention `Router`, `AppState`, `TcpListener`, or
    `tokio::spawn`.
-3. **Active-show mutation direction** — `crates/server/src/runtime/update_plans.rs` must not contain
+3. **Active-show mutation direction** — `crates/light/adapters/headless/src/runtime/update_plans.rs` must not contain
    `.put_object(`, `refresh_command_show`, or `load_engine_snapshot`. Writes route through
    `ActiveShowService`; a router never writes SQLite.
-4. **Closed Playback ownership** — no `pub fn playback(` in `crates/engine/src`, no
-   `pub fn operation_lock(` in `crates/application/src/playback`, and no `engine.playback()` or
-   `playback_action_lock` anywhere in `crates/application/src` or `crates/server/src` (tests
+4. **Closed Playback ownership** — no `pub fn playback(` in `crates/light/domain/engine/src`, no
+   `pub fn operation_lock(` in `crates/light/src/playback`, and no `engine.playback()` or
+   `playback_action_lock` anywhere in `crates/light/src` or `crates/light/adapters/headless/src` (tests
    excluded). Callers use typed commands and immutable projections.
 5. **TypeScript dependency directions** —
-   - `apps/control-ui/src/api/generated/light-wire.ts` must exist, must start with the generated
+   - `apps/light-desktop/src/api/generated/light-wire.ts` must exist, must start with the generated
      header, and must contain no local imports.
-   - Only files under `apps/control-ui/src/api/` may import it. A component importing wire DTOs
+   - Only files under `apps/light-desktop/src/api/` may import it. A component importing wire DTOs
      fails with *"imports wire DTOs directly; map them at the API boundary"*.
    - At least one consumer must exist.
    - Nothing under `src/api/` may import from `src/components/` or `src/windows/`.
@@ -183,7 +183,7 @@ Split by responsibility, abstraction level, ownership, and test boundary — not
 
 ### Related contract check
 
-Not part of `npm run test:architecture`, but the same family: `crates/wire/tests/generated_contracts.rs`
+Not part of `npm run test:architecture`, but the same family: `crates/light/contracts/wire/tests/generated_contracts.rs`
 re-renders every generated artifact in memory and asserts byte equality with the checked-in files,
 so a stale `light-wire.ts` fails `cargo test` (and therefore `npm run test:unit`). Regenerate with:
 
@@ -200,9 +200,9 @@ Start with the smallest relevant check, then widen by risk.
 | Module boundaries, crate deps, file sizes | `npm run test:architecture` |
 | Rust domain or application logic | `cargo test -p <crate>`, then `npm run test:unit` |
 | Wire DTOs | regenerate contracts, then `npm run test:unit` |
-| Frontend logic | `npm test` in `apps/control-ui`, then `npm run test:unit` |
-| Operator-visible behaviour | `npm run test:e2e-api` and `npm run test:e2e-ui`, or `npm run test:e2e -- tests/<spec>.spec.ts` |
-| OSC, restart, or wire behaviour | `npm run test:e2e-supplemental` |
+| Frontend logic | `npm test` in `apps/light-desktop`, then `npm run test:unit` |
+| Operator-visible behaviour, including OSC and attached hardware | `npm run test:e2e-ui`, or `npm run test:e2e -- tests/<spec>.spec.ts` |
+| API-only failure construction, restart, migration, or wire behaviour | `npm run test:e2e-api` |
 | Desktop lifecycle, native windows, server supervision | `npm run test:desktop-smoke` |
 | `docs/help/` content | `npm run dev` to check live help, then `npm run manual` |
 | Panes, or anything the help images show | `npm run test:help-screenshots`, then review diffs visually |
@@ -232,7 +232,7 @@ Everything reproducible lives under ignored `.artifacts/`:
 .artifacts/cache/manual-venv      manual generator venv
 .artifacts/generated/manual/      PDF, HTML site, deployable ZIP
 .artifacts/release/               release binaries and app zips
-.artifacts/runtime/light-data/    local desk data + light-server.log
+.artifacts/runtime/light-data/    local desk data + light-headless.log
 .artifacts/test/results/          Playwright output
 .artifacts/test/playwright-report/
 .artifacts/test/visual-inspection/
@@ -248,7 +248,7 @@ any path for a script with `npm run artifact-path -- NAME`.
 | Job | Runner | Runs |
 | --- | --- | --- |
 | `unit` | ubuntu | `npm run test:unit` |
-| `e2e` | ubuntu, sharded matrix over `api`/`ui`/`supplemental` | `npm run test:e2e-*`, uploading `.artifacts/test/results` on failure |
+| `e2e` | ubuntu, sharded matrix over API-only and UI/OSC coverage | `npm run test:e2e-*`, uploading `.artifacts/test/results` on failure |
 | `desktop-smoke` | macos-14 | `npm run test:desktop-smoke` |
 
 Manual and release CI runs on Forgejo (`.forgejo/workflows/manual.yml`): the manual builds on PR and

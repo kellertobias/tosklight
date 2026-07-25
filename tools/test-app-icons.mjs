@@ -15,8 +15,8 @@ const requiredIcons = [
 ];
 
 const applications = [
-  path.join(repositoryRoot, "apps/control-ui/src-tauri"),
-  path.join(repositoryRoot, "apps/hardware-controls/src-tauri"),
+  path.join(repositoryRoot, "apps/light-desktop/src-tauri"),
+  path.join(repositoryRoot, "apps/light-hardware-controls/src-tauri"),
 ];
 
 for (const application of applications) {

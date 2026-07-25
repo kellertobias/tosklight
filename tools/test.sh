@@ -5,12 +5,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/artifact-paths.sh"
 source "$ROOT/tools/artifact-maintenance.sh"
 light_init_artifact_paths "$ROOT"
-UI="$ROOT/apps/control-ui"
+UI="$ROOT/apps/light-desktop"
+HARDWARE_UI="$ROOT/apps/light-hardware-controls"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
 # Backs the root package.json test scripts; invoke via `npm run test:<name>`.
-usage(){ echo "Usage: npm run test:{unit|architecture|e2e|e2e-api|e2e-ui|e2e-supplemental|app-icons|artifact-paths|help-screenshots|record|demo|desktop-smoke|all}"; }
-build_e2e(){ (cd "$UI" && npm run build); cargo build --manifest-path "$ROOT/Cargo.toml" -p light-server --no-default-features; }
+usage(){ echo "Usage: npm run test:{unit|architecture|e2e|e2e-api|e2e-ui|app-icons|artifact-paths|help-screenshots|record|demo|desktop-smoke|all}"; }
+build_e2e(){ (cd "$UI" && npm run build); cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features; }
 architecture(){
   node --test "$ROOT/tools/cargo-workspace-lints.test.mjs"
   node --test "$ROOT/tools/semantic-test-docs/"*.test.mjs
@@ -21,11 +22,10 @@ architecture(){
   node --test "$ROOT/tools/test-semantic-world-boundaries.test.mjs"
   node "$ROOT/tools/check-source-size.mjs"
 }
-unit(){ architecture; (cd "$ROOT" && npm run test:bench-types); (cd "$UI" && npm run build); cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-control-ui --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); }
+unit(){ architecture; (cd "$ROOT" && npm run test:bench-types); (cd "$ROOT" && npm run test:bench-unit); (cd "$UI" && npm run build); (cd "$HARDWARE_UI" && npm run build); cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-desktop --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); (cd "$HARDWARE_UI" && npm test); }
 e2e(){ build_e2e; (cd "$UI" && npm run test:e2e -- "$@"); }
 e2e_api(){ e2e --grep '@api' "$@"; }
 e2e_ui(){ e2e --grep '@ui' "$@"; }
-e2e_supplemental(){ e2e --pass-with-no-tests --grep-invert '@api|@ui' "$@"; }
 record(){
   build_e2e
   local status=0
@@ -45,7 +45,7 @@ desktop_smoke(){
   build_e2e
   node "$ROOT/tools/write-tauri-artifact-config.mjs" control "$CONTROL_TAURI_CONFIG"
   (cd "$UI" && npm run tauri:build -- --debug --bundles app --config "$CONTROL_TAURI_CONFIG")
-  cp "$CARGO_TARGET_DIR/debug/light-server" "$CARGO_TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-server"
+  cp "$CARGO_TARGET_DIR/debug/light-headless" "$CARGO_TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-headless"
   (cd "$UI" && LIGHT_DESKTOP_SMOKE=1 npm run test:e2e -- 05-desktop-process-integration.spec.ts --workers=1)
 }
 
@@ -58,7 +58,6 @@ case "$command" in
   e2e) e2e "$@" ;;
   e2e-api) e2e_api "$@" ;;
   e2e-ui) e2e_ui "$@" ;;
-  e2e-supplemental) e2e_supplemental "$@" ;;
   help-screenshots) help_screenshots "$@" ;;
   record) record "$@" ;;
   demo) demo "$@" ;;

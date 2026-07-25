@@ -1,6 +1,6 @@
-import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../../apps/control-ui/e2e/bench/core/pairedScenario";
-import { applySpeedGroupRuntimeAction } from "../../apps/control-ui/e2e/bench/playbacks/speedGroupRuntime";
+import { expect, test } from "../bench/core/fixtures";
+import { pairedScenario } from "../bench/core/pairedScenario";
+import { applySpeedGroupRuntimeAction } from "../bench/playbacks/speedGroupRuntime";
 import {
 	armSet,
 	authoritativeMasterObservation,
@@ -19,7 +19,7 @@ import {
 	selectTrigger,
 	setSpeedRates,
 } from "./helpers";
-import type { PreparedShow } from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
+import type { PreparedShow } from "../bench/playbacks/playback-configuration/models";
 import { runPbk006ActionMatrixScenario } from "./pbk006ActionMatrix";
 
 export function registerPbk006PairedScenario(): void {

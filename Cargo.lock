@@ -2629,16 +2629,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "light-control-ui"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
-]
-
-[[package]]
 name = "light-core"
 version = "0.1.0"
 dependencies = [
@@ -2646,6 +2636,16 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "uuid",
+]
+
+[[package]]
+name = "light-desktop"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
 ]
 
 [[package]]
@@ -2692,6 +2692,75 @@ dependencies = [
  "tauri",
  "tauri-build",
  "uuid",
+]
+
+[[package]]
+name = "light-headless"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "light-application",
+ "light-core",
+ "light-engine",
+ "light-fixture",
+ "light-headless-runtime",
+ "light-output",
+ "light-playback",
+ "light-programmer",
+ "light-show",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "light-headless-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-io",
+ "axum",
+ "base64 0.22.1",
+ "bytes",
+ "chrono",
+ "embassy-futures",
+ "embassy-time-queue-utils",
+ "futures-lite",
+ "http-body-util",
+ "if-addrs",
+ "image",
+ "light-application",
+ "light-control",
+ "light-core",
+ "light-engine",
+ "light-fixture",
+ "light-media",
+ "light-mvr",
+ "light-output",
+ "light-playback",
+ "light-programmer",
+ "light-show",
+ "light-wire",
+ "parking_lot",
+ "rand 0.8.7",
+ "rs-matter",
+ "rusqlite",
+ "rust-embed",
+ "serde",
+ "serde_ignored",
+ "serde_json",
+ "sha2 0.10.9",
+ "socket2 0.5.10",
+ "tokio",
+ "tokio-util",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "xattr",
 ]
 
 [[package]]
@@ -2747,54 +2816,6 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
-]
-
-[[package]]
-name = "light-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-io",
- "axum",
- "base64 0.22.1",
- "bytes",
- "chrono",
- "embassy-futures",
- "embassy-time-queue-utils",
- "futures-lite",
- "http-body-util",
- "if-addrs",
- "image",
- "light-application",
- "light-control",
- "light-core",
- "light-engine",
- "light-fixture",
- "light-media",
- "light-mvr",
- "light-output",
- "light-playback",
- "light-programmer",
- "light-show",
- "light-wire",
- "parking_lot",
- "rand 0.8.7",
- "rs-matter",
- "rusqlite",
- "rust-embed",
- "serde",
- "serde_ignored",
- "serde_json",
- "sha2 0.10.9",
- "socket2 0.5.10",
- "tokio",
- "tokio-util",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "xattr",
 ]
 
 [[package]]

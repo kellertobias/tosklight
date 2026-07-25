@@ -7,14 +7,14 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output = path.join(root, "docs/engineering/test-bench-migration-inventory.md");
-const playwright = path.join(root, "apps/control-ui/node_modules/.bin/playwright");
+const playwright = path.join(root, "node_modules/.bin/playwright");
 const report = JSON.parse(execFileSync(playwright, [
 	"test",
 	"--config",
 	path.join(root, "playwright.config.ts"),
 	"--list",
 	"--reporter=json",
-], { cwd: path.join(root, "apps/control-ui"), encoding: "utf8" }));
+], { cwd: root, encoding: "utf8" }));
 
 const rows = [];
 for (const suite of report.suites) {
@@ -84,7 +84,7 @@ ${ignoredEntrypoints.map((row) => `| ${row.map(cell).join(" | ")} |`).join("\n")
 
 | Current helper family | Classification | Migration rule |
 | --- | --- | --- |
-| \`apps/control-ui/e2e/bench/**/*Scenario.ts\` adapters | keep internal | Public semantic world delegates to these; scenario files do not import them directly. |
+| \`tests/bench/**/*Scenario.ts\` adapters | keep internal | Public semantic world delegates to these; scenario files do not import them directly. |
 | Normalized assertion/oracle modules under \`tests/support\` | wrap temporarily | Keep shared state and wire assertions while operator actions move to semantic helpers. |
 | Root-spec Page/Locator, ApiDriver, and raw transport helpers | replace | Add or improve a public semantic helper, then mark the migrated root spec \`${semanticMarker()}\`. |
 | CSS/pane-id, coordinate, fixture-UUID, encoder-slot, and mutable show-object helpers | remove after final consumer | Do not reproduce them in migrated scenarios; delete only after repository search proves no consumers. |

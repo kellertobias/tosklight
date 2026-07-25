@@ -7,8 +7,8 @@ order: 50
 
 # Engine and Output
 
-`crates/engine/`, `crates/output/`, `crates/playback/`, `crates/programmer/`, `crates/core/`,
-`crates/fixture/`, `crates/control/`, and `crates/server/src/runtime/output_scheduler.rs`.
+`crates/light/domain/engine/`, `crates/light/domain/output/`, `crates/light/domain/playback/`, `crates/light/domain/programmer/`, `crates/shared/core/`,
+`crates/shared/fixture/`, `crates/light/domain/control/`, and `crates/light/adapters/headless/src/runtime/output_scheduler.rs`.
 
 This is the real-time half of the system.
 
@@ -28,13 +28,13 @@ future dynamics   ┘   transitions (fade, delay, MIB, masters) + Highlight over
                   external intents ─→ device adapter seam
 ```
 
-## crates/core
+## crates/shared/core
 
 `AttributeKey`, `AttributeValue`, `AttributeDescriptor`, `MergeMode`, `TimedValue`, `Xyz`,
 `ATTRIBUTE_REGISTRY`, the clock family (`ApplicationClock`, `SharedClock`, `SystemClock`,
 `ManualClock`, `EngineClock`), and the newtype IDs.
 
-## crates/engine
+## crates/light/domain/engine
 
 27 top-level modules. The ones that matter most:
 
@@ -49,9 +49,9 @@ future dynamics   ┘   transitions (fade, delay, MIB, masters) + Highlight over
 
 The engine receives immutable compiled-show and contribution snapshots. It does not own animation
 state, does not read the fixture library, and does not write persistence. CI bans
-`pub fn playback(` from `crates/engine/src`.
+`pub fn playback(` from `crates/light/domain/engine/src`.
 
-## crates/playback
+## crates/light/domain/playback
 
 Cue models, tracking, live runtime, automatic transitions, phasers, HTP/LTP arbitration.
 `PlaybackEngine`, `resolve`, `PlaybackMutation`, `PlaybackRuntimeEffect`,
@@ -60,13 +60,13 @@ Cue models, tracking, live runtime, automatic transitions, phasers, HTP/LTP arbi
 `PlaybackRuntimeEffect` carries the domain-owned `None` / `Transient` / `Durable` distinction that
 makes no-change a first-class result.
 
-## crates/programmer
+## crates/light/domain/programmer
 
 User-scoped selection and Programmer state, shared across a user's sessions. `ProgrammerRegistry`
 (clone shares state through 14 `Arc<RwLock<…>>` fields), `ProgrammerState`, `CommandLineState`,
 `GroupDefinition`, `resolve_group`, `HighlightRegistry`, `ProgrammerCaptureMode`.
 
-## crates/output
+## crates/light/domain/output
 
 `DmxFrame` and `DMX_SLOTS`, `OutputRoute`, `Protocol`, `DeliveryMode`, `OutputHealth`,
 `run_scheduler` and `run_scheduler_dynamic`, `ArtNetDriver`, `SacnDriver`, `NetworkOutput`, and the
@@ -74,13 +74,13 @@ User-scoped selection and Programmer state, shared across a user's sessions. `Pr
 
 `OutputDriver` is an `#[async_trait]` object with a default `terminate` implemented via `send`.
 
-## crates/control
+## crates/light/domain/control
 
 Normalized control input: MIDI, RTP-MIDI, OSC, Art-Net, timecode. `ControlInput` is an async trait.
 The `native-midi` feature is on by default and pulls in `midir`; portable Linux builds omit it
 because it depends on the target machine's ALSA library.
 
-## crates/fixture
+## crates/shared/fixture
 
 Profiles, modes, channels, packages, the desk library, patch models and validation, colour
 calibration, DMX encoding. `PatchedFixtureCompiler<R>`, `FixtureProfileRevisionResolver`,
@@ -88,7 +88,7 @@ calibration, DMX encoding. `PatchedFixtureCompiler<R>`, `FixtureProfileRevisionR
 
 ## Timing loop
 
-`crates/server/src/runtime/output_scheduler.rs`. Each tick: render, leave the domain locks, publish
+`crates/light/adapters/headless/src/runtime/output_scheduler.rs`. Each tick: render, leave the domain locks, publish
 automatic semantic transitions, send encoded routes. Publishing after releasing the locks keeps a
 slow subscriber from stalling a frame.
 
@@ -100,7 +100,7 @@ slow subscriber from stalling a frame.
 | Target | 64 fully packed universes at 120 Hz |
 | Low power | 4–8 universes at 40 Hz on Pi-class hardware |
 
-Benchmark: `crates/server/src/bin/light-benchmark.rs`, release builds only, documented hardware,
+Benchmark: `crates/light/adapters/headless/src/bin/light-benchmark.rs`, release builds only, documented hardware,
 reporting p50/p95/p99, dropped ticks, CPU, allocation rate, and per-stage time split.
 
 Never on the tick: full-show cloning, broad mutex contention, JSON serialization, frontend
@@ -108,14 +108,14 @@ projection work, fixture-library reads, persistence, blocking adapters.
 
 ## Read first
 
-1. `crates/core/src/attributes.rs`
-2. `crates/core/src/clock.rs`
-3. `crates/engine/src/runtime_generation.rs`
-4. `crates/engine/src/engine.rs`
-5. `crates/engine/src/lifecycle.rs`
-6. `crates/engine/src/contribution_batch.rs`
-7. `crates/playback/src/arbitration.rs`
-8. `crates/output/src/scheduler.rs` and `delivery/driver.rs`
-9. `crates/server/src/runtime/output_scheduler.rs`
+1. `crates/shared/core/src/attributes.rs`
+2. `crates/shared/core/src/clock.rs`
+3. `crates/light/domain/engine/src/runtime_generation.rs`
+4. `crates/light/domain/engine/src/engine.rs`
+5. `crates/light/domain/engine/src/lifecycle.rs`
+6. `crates/light/domain/engine/src/contribution_batch.rs`
+7. `crates/light/domain/playback/src/arbitration.rs`
+8. `crates/light/domain/output/src/scheduler.rs` and `delivery/driver.rs`
+9. `crates/light/adapters/headless/src/runtime/output_scheduler.rs`
 
 Most of the interesting Rust in this repository is in these crates — see the Rust by Example tour.

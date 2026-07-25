@@ -20,10 +20,9 @@ This is not a minor polish item. It belongs in the first-priority Next plan, [Pr
 
 ### Remove direct programmer encoder type
 
-**Adopted into the refactoring queue (2026-07-23)** as
-[`docs/plans/refactoring/pending/09b-remove-direct-programmer-encoder-type.md`](../refactoring/pending/09b-remove-direct-programmer-encoder-type.md)
-(cheaper before the encoder paths migrate to WebSocket frames). The other items in this
-plan remain feature work here.
+**Adopted into and completed during the major refactoring (2026-07-23).** The result is recorded in
+the [consolidated execution record](../major-refactoring.md#consolidated-execution-record). The
+other items in this plan remain feature work here.
 
 The direct programmer encoder type should be removed again. Fixed actions such as Lamp On, Lamp Off, Reset, and similar preset generation should be handled through special dialogs or through the DMX/timecode/master-macro surface, not as a direct encoder type.
 

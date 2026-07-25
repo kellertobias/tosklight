@@ -1,8 +1,8 @@
-import { fixture as dmxFixture } from "../../apps/control-ui/e2e/bench/output/fixtureDmx";
-import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
-import { fixture } from "../../apps/control-ui/e2e/bench/command-selection/selectionContract";
-import { Show } from "../../apps/control-ui/e2e/bench/show/showScenario";
+import { fixture as dmxFixture } from "../bench/output/fixtureDmx";
+import { expect } from "../bench/core/fixtures";
+import { scenario } from "../bench/core/scenario";
+import { fixture } from "../bench/command-selection/selectionContract";
+import { Show } from "../bench/show/showScenario";
 
 scenario(
 	"BENCH-PROGRAMMER-FADE-001",

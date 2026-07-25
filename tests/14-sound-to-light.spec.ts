@@ -1,8 +1,8 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
-import type { BenchUiContext } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { expect, test } from "./bench/core/fixtures";
+import { pairedScenario } from "./bench/core/pairedScenario";
+import type { BenchUiContext } from "./bench/core/fixtures";
 import { loadCanonicalCopy } from "./support/catalog";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
+import type { ApiDriver } from "./bench/core/api";
 
 const portableConfiguration = {
   enabled: true,
@@ -131,7 +131,7 @@ async function configureFromRecordedAudio({ api, bench, desk, page }: BenchUiCon
   await live.getByRole("button", { name: "Close Speed Group settings" }).click();
 }
 
-async function setRange(locator: import("../apps/control-ui/node_modules/@playwright/test/index.js").Locator, value: number) {
+async function setRange(locator: import("@playwright/test").Locator, value: number) {
   const minimum = Number(await locator.getAttribute("min"));
   const maximum = Number(await locator.getAttribute("max"));
   const step = Number(await locator.getAttribute("step"));
@@ -159,7 +159,7 @@ async function updateSpeedGroup(
   });
 }
 
-async function installRecordedKickInput(page: import("../apps/control-ui/node_modules/@playwright/test/index.js").Page) {
+async function installRecordedKickInput(page: import("@playwright/test").Page) {
   await page.addInitScript(() => {
     class FakeTrack extends EventTarget { stop() {} }
     class FakeStream {

@@ -33,14 +33,14 @@ introduced, treat that as a documentation defect.
 
 Read the implementation in this order:
 
-1. `crates/core/src/lib.rs` and `attributes.rs` — newtypes, enums, and serde.
-2. `crates/show/src/error.rs` and `show_store.rs` — typed errors, borrowing, and revisioned writes.
-3. `crates/application/src/action.rs` — typed commands and action context.
-4. `crates/output/src/scheduler.rs` and `delivery/driver.rs` — async scheduling and cancellation.
-5. `crates/application/src/event/bus.rs` — shared state, weak references, and channels.
-6. `crates/engine/src/runtime_generation.rs`, `engine.rs`, and `lifecycle.rs` — coherent snapshots,
+1. `crates/shared/core/src/lib.rs` and `attributes.rs` — newtypes, enums, and serde.
+2. `crates/shared/show/src/error.rs` and `show_store.rs` — typed errors, borrowing, and revisioned writes.
+3. `crates/light/src/action.rs` — typed commands and action context.
+4. `crates/light/domain/output/src/scheduler.rs` and `delivery/driver.rs` — async scheduling and cancellation.
+5. `crates/light/src/event/bus.rs` — shared state, weak references, and channels.
+6. `crates/light/domain/engine/src/runtime_generation.rs`, `engine.rs`, and `lifecycle.rs` — coherent snapshots,
    `ArcSwap`, and typestate.
-7. `apps/control-ui/src/platform/desktop/` and `apps/control-ui/src-tauri/src/` — the typed native
+7. `apps/light-desktop/src/platform/desktop/` and `apps/light-desktop/src-tauri/src/` — the typed native
    bridge.
 
 For the native application map, continue with the **Tauri Desktop Apps** component page.

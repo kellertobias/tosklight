@@ -1,27 +1,27 @@
 import {
 	BrowserDiscreteEncoders,
 	type DiscreteChoice,
-} from "../../apps/control-ui/e2e/bench/encoders/discreteEncoderScenario";
-import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { BrowserProgrammerSpecials } from "../../apps/control-ui/e2e/bench/programmer/programmerSpecialScenario";
-import { BrowserSelection } from "../../apps/control-ui/e2e/bench/command-selection/selectionScenario";
+} from "../bench/encoders/discreteEncoderScenario";
+import { expect, test } from "../bench/core/fixtures";
+import { BrowserProgrammerSpecials } from "../bench/programmer/programmerSpecialScenario";
+import { BrowserSelection } from "../bench/command-selection/selectionScenario";
 import {
 	blankFixtureProfile,
 	fixtureDefinitionFromProfileMode,
-} from "../../apps/control-ui/src/components/setup/fixtureProfileModel";
+} from "../../apps/light-desktop/src/components/setup/fixtureProfileModel";
 import type {
 	ChannelFunction,
 	FixtureChannel,
 	FixtureProfile,
-} from "../../apps/control-ui/src/api/types";
+} from "../../apps/light-desktop/src/api/types";
 import {
 	loadCanonicalCopy,
 	objects,
 	programmer,
 	putObject,
 } from "../support/catalog";
-import { replaceProgrammingSelection } from "../../apps/control-ui/e2e/bench/command-selection/programmingSelection";
-import { applyProgrammerSelectionValue } from "../../apps/control-ui/e2e/bench/programmer/programmerValues";
+import { replaceProgrammingSelection } from "../bench/command-selection/programmingSelection";
+import { applyProgrammerSelectionValue } from "../bench/programmer/programmerValues";
 
 test("BENCH-DISCRETE-SPECIAL-001 @bench @ui › profile-derived discrete values remain semantic through API set and visible release", async ({
 	api,

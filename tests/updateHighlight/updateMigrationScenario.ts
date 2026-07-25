@@ -2,9 +2,9 @@ import {
 	type BenchUiContext,
 	expect,
 	test,
-} from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { setProgrammerFixtureValue } from "../../apps/control-ui/e2e/bench/programmer/programmerValues";
-import { replaceProgrammingSelection } from "../../apps/control-ui/e2e/bench/command-selection/programmingSelection";
+} from "../bench/core/fixtures";
+import { setProgrammerFixtureValue } from "../bench/programmer/programmerValues";
+import { replaceProgrammingSelection } from "../bench/command-selection/programmingSelection";
 import {
 	loadCanonicalCopy,
 	object,

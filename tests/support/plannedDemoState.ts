@@ -1,9 +1,9 @@
 import fs from "node:fs/promises";
-import type { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
-import type { FixtureDefinition, FixtureProfile, PatchedFixture } from "../../apps/control-ui/src/api/types";
-import { toWireFixture } from "../../apps/control-ui/src/api/PatchTransport";
-import { fixtureDefinitionsFromProfiles } from "../../apps/control-ui/src/components/setup/fixtureProfileModel";
-import { patchedFixtureCandidate } from "../../apps/control-ui/src/features/patch/model";
+import type { ApiDriver } from "../bench/core/api";
+import type { FixtureDefinition, FixtureProfile, PatchedFixture } from "../../apps/light-desktop/src/api/types";
+import { toWireFixture } from "../../apps/light-desktop/src/api/PatchTransport";
+import { fixtureDefinitionsFromProfiles } from "../../apps/light-desktop/src/components/setup/fixtureProfileModel";
+import { patchedFixtureCandidate } from "../../apps/light-desktop/src/features/patch/model";
 
 interface VersionedObject<T = Record<string, any>> {
   id: string;

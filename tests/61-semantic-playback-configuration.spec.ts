@@ -1,9 +1,9 @@
 // @bench-semantic-world
 
-import { fixture } from "../apps/control-ui/e2e/bench/command-selection/selectionContract";
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
-import { StoreMode as GroupStoreMode } from "../apps/control-ui/e2e/bench/groups-presets/groupScenario";
-import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
+import { fixture } from "./bench/command-selection/selectionContract";
+import { scenario } from "./bench/core/scenario";
+import { StoreMode as GroupStoreMode } from "./bench/groups-presets/groupScenario";
+import { Show } from "./bench/show/showScenario";
 
 scenario(
 	"PBK-001",

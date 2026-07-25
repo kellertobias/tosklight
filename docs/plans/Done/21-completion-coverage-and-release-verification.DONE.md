@@ -275,7 +275,7 @@ This follow-up was marked complete after all of the following passed from the sa
 ./test e2e tests/05-virtual-time-persistence-and-recovery.spec.ts --workers=1 --grep 'SHOW-005|FIXTURE-001'
 ./test e2e tests/11-update-highlight-fixture-profiles-and-matter.spec.ts --workers=1
 ./test desktop-smoke
-cargo test -p light-server --no-default-features --bin light-server matter::transport::tests::commissionable_network_transport_smoke -- --ignored --test-threads=1
+cargo test -p light-headless --no-default-features --bin light-headless matter::transport::tests::commissionable_network_transport_smoke -- --ignored --test-threads=1
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 git diff --check

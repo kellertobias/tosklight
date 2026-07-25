@@ -1,14 +1,14 @@
-import { closeWebSocket } from "../../apps/control-ui/e2e/bench/core/api";
-import { deleteCue } from "../../apps/control-ui/e2e/bench/playbacks/cueDeletion";
-import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { closeWebSocket } from "../bench/core/api";
+import { deleteCue } from "../bench/playbacks/cueDeletion";
+import { expect } from "../bench/core/fixtures";
 import {
 	enterProgrammerPreload,
 	releaseProgrammerPreload,
-} from "../../apps/control-ui/e2e/bench/programmer/programmerPreloadLifecycle";
+} from "../bench/programmer/programmerPreloadLifecycle";
 import {
 	clearProgrammerValues,
 	setProgrammerGroupValue,
-} from "../../apps/control-ui/e2e/bench/programmer/programmerValues";
+} from "../bench/programmer/programmerValues";
 import {
 	loadCanonicalCopy,
 	object,

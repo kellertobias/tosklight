@@ -1,5 +1,5 @@
-import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../../apps/control-ui/e2e/bench/core/pairedScenario";
+import { expect, test } from "../bench/core/fixtures";
+import { pairedScenario } from "../bench/core/pairedScenario";
 import {
 	armSet,
 	choosePlaybackColor,
@@ -20,7 +20,7 @@ import {
 import type {
 	PlaybackConfigurationObservation,
 	PreparedShow,
-} from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
+} from "../bench/playbacks/playback-configuration/models";
 import { runPbk002AtomicConfigurationScenario } from "./pbk002Atomic";
 
 type Pbk002State = PreparedShow & {

@@ -35,11 +35,11 @@ future Macros ┘                     show compiler   event bus
 
 | Layer | Path | Constraint |
 | --- | --- | --- |
-| Adapters | `crates/server/`, UI transports | Parse, authenticate, translate. No business rules. |
-| Application | `crates/application/` | Transport-independent use cases. Owns state, exposes commands and immutable projections. |
+| Adapters | `crates/light/adapters/headless/`, UI transports | Parse, authenticate, translate. No business rules. |
+| Application | `crates/light/` | Transport-independent use cases. Owns state, exposes commands and immutable projections. |
 | Domain | `crates/{core,fixture,playback,programmer,output,control,show,media,mvr}` | No HTTP, WebSocket, SQLite, or Tauri. |
-| Wire | `crates/wire/` | Leaf. Versioned DTOs only. |
-| Frontend | `apps/control-ui/`, `apps/hardware-controls/` | Renders authoritative projections. |
+| Wire | `crates/light/contracts/wire/` | Leaf. Versioned DTOs only. |
+| Frontend | `apps/light-desktop/`, `apps/light-hardware-controls/` | Renders authoritative projections. |
 
 Dependency direction is checked in CI by `tools/check-architecture.mjs`.
 

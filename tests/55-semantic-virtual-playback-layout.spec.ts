@@ -1,9 +1,9 @@
 // @bench-semantic-world
 
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
-import { PlaybackButton } from "../apps/control-ui/e2e/bench/playbacks/playbackScenario";
-import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
-import { PaneType } from "../apps/control-ui/e2e/bench/window-system/paneTypes";
+import { scenario } from "./bench/core/scenario";
+import { PlaybackButton } from "./bench/playbacks/playbackScenario";
+import { Show } from "./bench/show/showScenario";
+import { PaneType } from "./bench/window-system/paneTypes";
 
 scenario(
 	"PRELOAD-003",

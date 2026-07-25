@@ -99,8 +99,8 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 
 ### PLAYBACK-SELECT-001 — Hardware-connected playback card ownership
 
-- **Starting show:** Load canonical `default-stage.show`, immediately Save As separate paired and supplemental working copies, and use the active copy.
-- **Surface:** Paired authenticated playback selection and a hardware-connected playback card, with supplemental pointer, fader, button, Record, page-picker, Group, and OSC actions.
+- **Starting show:** Load canonical `default-stage.show`, immediately Save As an isolated working copy, and use the active copy.
+- **Surface:** The hardware-connected playback UI, including pointer, fader, button, Record, page-picker, Group, and OSC actions; API reads provide the authoritative oracle.
 - **Actions:** Select a Cuelist card through its display-only label area, operate its real GO button and fader, Record to that card, select the same slot on another explicit page, return to page 1, select a Group card, and repeat Group selection through its attached-hardware button.
 - **Oracle:** Desk-selected playback number, opened concrete Cuelist View, exact target Cuelist revision, unchanged other Cuelist, current programmer Group selection, persistent identity across page changes, and absence of nested representation buttons.
 - **Pass:** The card owns one selection action, real controls remain independent outside Record, Cuelist and Group workflows stay distinct, Record makes the whole card target the concrete page/playback without operating its controls, and UI, API, and OSC converge on the same desk-local selected playback.
@@ -108,8 +108,8 @@ Configure two enabled routes for logical universe 1: Art-Net universe 1 to the b
 
 ### COMMAND-HISTORY-001 — Inspect and reuse recent desk commands
 
-- **Starting show:** Load canonical `default-stage.show`, immediately Save As separate paired and supplemental working copies, and use the active copy.
-- **Surface:** Paired authenticated command execution and production Command Line history panel, with supplemental software, reconnect, hardware-connected, and OSC paths.
+- **Starting show:** Load canonical `default-stage.show`, immediately Save As an isolated working copy, and use the active copy.
+- **Surface:** The production Command Line history UI across software, reconnect, hardware-connected, and OSC paths; API reads provide the authoritative oracle.
 - **Actions:** Execute one accepted and one rejected command, open history without changing the unfinished input, inspect and explicitly reuse an entry, prove Enter remains required, close by button/Escape/outside press, reload, then execute through attached OSC hardware.
 - **Oracle:** Desk-scoped newest-first entries with status, feedback, time, and source; exact current input; unchanged command-control geometry; panel bounds above the controls; retained same-process reconnect state; and one later entry only after reused Enter.
 - **Pass:** Completed commands appear once with actionable context, inspection and dismissal are mutation-free, reuse is non-executing, the last 50 entries survive reconnect but not server restart, sensitive command terms are redacted, and all named input surfaces converge.

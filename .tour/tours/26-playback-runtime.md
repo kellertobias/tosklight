@@ -19,21 +19,21 @@ Cue/transition are different lifetimes.
 ## Addressing
 
 Software, OSC, attached hardware, and HTTP adapters resolve either current-page Playback N or
-explicit Page P / Playback N. `crates/application/src/playback/command.rs` preserves that distinction
+explicit Page P / Playback N. `crates/light/src/playback/command.rs` preserves that distinction
 through the service boundary. A page change retargets only current-page addressing.
 
 ## Controls and runtime
 
-`crates/playback/src/controls/` owns GO, pause, resume, back, GOTO, Load, On, Off, Flash, Temp, Swap,
-fader, and X-fade semantics. `crates/playback/src/runtime/` owns active/loaded Cue, transitions,
+`crates/light/domain/playback/src/controls/` owns GO, pause, resume, back, GOTO, Load, On, Off, Flash, Temp, Swap,
+fader, and X-fade semantics. `crates/light/domain/playback/src/runtime/` owns active/loaded Cue, transitions,
 Chaser phase, and replaceable telemetry.
 
-Manual controls and `crates/playback/src/automatic.rs` produce the same semantic transition.
-`crates/application/src/playback/event.rs` publishes after the domain lock is released.
+Manual controls and `crates/light/domain/playback/src/automatic.rs` produce the same semantic transition.
+`crates/light/src/playback/event.rs` publishes after the domain lock is released.
 
 ## Contributions and arbitration
 
-`crates/playback/src/contribution/` turns tracked Cue state into fixture/head/attribute
+`crates/light/domain/playback/src/contribution/` turns tracked Cue state into fixture/head/attribute
 contributions. The engine merges them with Programmer, Preload, Highlight, and other sources:
 
 - intensity normally uses HTP;
@@ -49,10 +49,10 @@ Move in Black and fades are transition policies over the reconstructed Cue state
 
 ## Projection and feedback
 
-`crates/application/src/playback/projection.rs` provides immutable runtime state. Typed event
+`crates/light/src/playback/projection.rs` provides immutable runtime state. Typed event
 routes let a visible Cuelist or Playback subscribe narrowly; high-rate fader progress uses bounded
 telemetry rather than one lossless event per render sample. The frontend implementation starts in
-`apps/control-ui/src/features/playbackRuntime/`.
+`apps/light-desktop/src/features/playbackRuntime/`.
 
 OSC feedback maps the same projection to the frozen hardware indices. It never reads browser-local
 selection or guesses that a command succeeded.

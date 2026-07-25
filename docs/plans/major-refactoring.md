@@ -48,8 +48,8 @@ flowchart LR
 
 ## Current architectural pressure
 
-- `crates/server/src/main.rs` is currently the application as well as the process entry point. It combines startup, 93 routes, sessions, Programmer, Playback, show mutation, migration, OSC, Matter, output, media, files, events, and more than eight thousand lines of inline tests.
-- `apps/control-ui/src/api/ServerContext.tsx` combines transport, authentication, reconnection, event routing, cached server state, optimistic mutations, errors, and almost every feature command in one context exposed to most of the UI.
+- `crates/light/adapters/headless/src/main.rs` is currently the application as well as the process entry point. It combines startup, 93 routes, sessions, Programmer, Playback, show mutation, migration, OSC, Matter, output, media, files, events, and more than eight thousand lines of inline tests.
+- `apps/light-desktop/src/api/ServerContext.tsx` combines transport, authentication, reconnection, event routing, cached server state, optimistic mutations, errors, and almost every feature command in one context exposed to most of the UI.
 - Rust wire types, handwritten TypeScript types, generic JSON show objects, string WebSocket commands, and OSC paths form parallel interfaces that can drift.
 - REST, WebSocket, command-line, OSC, MIDI mappings, Matter, and UI paths frequently reproduce orchestration instead of adapting into one authoritative application action.
 - Fixture, Programmer, Playback, Show, Control, Output, and Engine crates contain useful domains, but their public facades expose mutable internals or mix stable models with transport and runtime adapters.
@@ -76,7 +76,7 @@ The objective is not merely to shorten these files. The refactor must create own
 
 ### Server and wire contracts
 
-- Make `crates/server/src/main.rs` a thin configuration and lifecycle entry point.
+- Make `crates/light/adapters/headless/src/main.rs` a thin configuration and lifecycle entry point.
 - Move routers, startup, shutdown, scheduling, OSC, WebSocket, Matter, media, files, and output orchestration into feature-owned server-library modules.
 - Add `light-wire` containing versioned request, response, command, outcome, error, and event DTOs plus schemas.
 - Generate checked-in TypeScript definitions from the wire contract and verify the generated files in CI.
@@ -414,3 +414,112 @@ These are architectural tests using fakes, not production feature implementation
 - Device-observed versus desk-desired value authority remains a future fixture-feature decision.
 - Internal Rust and TypeScript APIs and REST/WebSocket v1 may break. Visible UI behavior, OSC, and persisted user data remain compatibility surfaces.
 - Existing unrelated working-tree changes must remain untouched and be excluded from refactor commits.
+
+## Consolidated execution record
+
+This section is the durable summary of the major-refactoring execution. The former
+`docs/plans/refactoring/` queue contained 130 incremental plans and result documents. Those
+documents were useful while the work was active, but duplicated the final architecture and test
+documentation after completion. They were removed on 2026-07-25; their exact contents remain
+available in git history.
+
+The refactoring was executed incrementally while preserving the operator-facing desk contract,
+OSC compatibility, persisted show compatibility, unpatched fixtures, stored-empty and ordered
+Groups, Programmer LTP behavior, current-page versus explicit-page Playback addressing, and
+malformed-show recovery.
+
+### Delivered outcome
+
+- Introduced application and wire boundaries with typed action context, outcomes, errors,
+  generated TypeScript contracts, checked-in schemas, and dependency-direction checks.
+- Migrated runtime lifecycle, show-library and show-object operations, Playback topology,
+  Programmer operations, patching, fixture-library access, configuration, output, files, Help,
+  screens, and desk management to v2 capability-oriented interfaces.
+- Added lossless show handling, unknown-object preservation, selective cross-show import,
+  revision conflicts, atomic mutation behavior, targeted compilation, and interval-gated recovery
+  checkpoints.
+- Preserved Cue editing, timing, tracking, triggers, Move in Black, Preload, Highlight, Update,
+  virtual Playbacks, Stage layout, patch placement, deterministic multi-point spreading, and
+  independent overlapping Group Master HTP behavior.
+- Replaced the former broad frontend provider with scoped feature state and explicit connection,
+  loading, error, retry, optimistic-update, and sequence-repair behavior for the migrated
+  capabilities.
+- Added future-extension seams and fake-based architecture coverage for animated attribute
+  sources, fixed/stomp contributions, external fixtures, Macros, schedules, managed assets, and
+  timeline operations. These tests prove extension boundaries; they do not ship those future
+  products.
+- Organized the semantic Playwright bench under `tests/bench/` by command and selection,
+  encoders, Groups and Presets, hardware, output, Playbacks, Programmer, show and show setup,
+  specific features, and window system.
+- Migrated 309 root acceptance cases with zero pending inventory rows and generated semantic
+  documentation for 110 marked scenarios.
+
+### Verification snapshot
+
+The final execution run recorded the following evidence:
+
+| Gate | Result |
+| --- | --- |
+| Rust workspace | Full workspace passed; the server suite included 469 passed and 1 ignored after rerunning outside the socket-restricted sandbox. |
+| Frontend unit tests | 283 files and 2,007 tests passed. |
+| TypeScript and production build | Frontend type-check and Vite production build passed. |
+| Architecture checks | Dependency direction, Cargo lint inheritance, generated contracts, command boundaries, source-size ratchets, closed bench bindings, and semantic-world boundaries passed. |
+| Source-size hard ratchet | No production file remained above 1,200 lines and no function remained above 150 lines. |
+| Semantic documentation | Compiler tests passed 8/8 and generated documentation covered 110 scenarios. |
+| Focused final migration | 25/25 cases passed. |
+| API end-to-end | 86 passed and 1 skipped. |
+| UI end-to-end | 131 passed with 3 timing-sensitive failures; the affected group rerun passed 14/14. |
+| Supplemental end-to-end | 110 passed and 6 intentionally skipped. |
+| Product demo | The complete narrated Full HD scenario passed and produced its H.265 artifact. |
+| Visual catalog | 197 passed and 7 skipped; capture stopped after 5 capture-window failures, leaving 129 cases unrun. |
+
+The visual-catalog result is capture-harness debt rather than a hidden product regression: the
+affected normal API, UI, and supplemental paths passed. It nevertheless remains incomplete
+verification and must not be described as a complete 338-case recording run.
+
+### Known incomplete or separately tracked work
+
+The execution closed the incremental queue, but a later audit identified requirements from this
+plan that remain incomplete or lack retained acceptance evidence:
+
+- Some server orchestration still depends on a large shared state container and raw lock-bearing
+  compatibility access.
+- Not every active-show writer is routed exclusively through `ActiveShowService`; some
+  capability adapters still reproduce parts of validation, backup, persistence, runtime install,
+  and event publication.
+- String-plus-JSON compatibility commands and facade notifications remain on parts of the
+  WebSocket/event path, with some frontend event handling still causing broad follow-up reads.
+- Highlight HTTP and OSC paths do not yet share one bounded application service.
+- Some interaction routing still discovers SET/keypad behavior through the DOM, and the planned
+  shared TypeScript control-surface-contract boundary is not yet complete.
+- Functional Patch tests prove batching, atomicity, the 2,000-mode contract, and absence of
+  unrelated refreshes, but no retained release benchmark proves the required single-fixture and
+  100-fixture server/UI p95 budgets with payload and phase timings.
+- Output benchmark tooling exists, but no retained reference-hardware result proves the
+  32-universe/100 Hz floor or records complete target and low-power evidence. CPU usage,
+  allocation rate, production socket delivery, and some phase splits remain unmeasured.
+- The complete serial visual catalog and final real packaged-desktop/operator-hardware verification
+  remain outstanding.
+- The non-blocking 400-line file and 20-line function design goals continue to identify possible
+  cohesive extractions; the enforceable hard source-size ratchet is clean.
+
+Dynamics, full Timecode, Macro language/runtime selection, scheduled Macros, `FAT`, and
+bidirectional external fixtures remain deliberately separate product work. Their absence is not an
+unfinished refactoring implementation.
+
+### Durable handoff documentation
+
+Living architecture and development guidance is maintained in:
+
+- [`../engineering/architecture-overview.md`](../engineering/architecture-overview.md)
+- [`../engineering/architecture-boundaries.md`](../engineering/architecture-boundaries.md)
+- [`../engineering/state-ownership.md`](../engineering/state-ownership.md)
+- [`../engineering/api-rules.md`](../engineering/api-rules.md)
+- [`../engineering/code-tour.md`](../engineering/code-tour.md)
+- [`../engineering/extension-recipes.md`](../engineering/extension-recipes.md)
+- [`../engineering/test-map.md`](../engineering/test-map.md)
+- [`../testing/README.md`](../testing/README.md)
+
+The deleted per-chunk documents are historical evidence, not living documentation. Use this
+consolidated record for status and the engineering documents above for current implementation
+rules.

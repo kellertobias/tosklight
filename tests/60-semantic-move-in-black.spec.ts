@@ -1,8 +1,8 @@
 // @bench-semantic-world
 
-import { fixture } from "../apps/control-ui/e2e/bench/command-selection/selectionContract";
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
-import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
+import { fixture } from "./bench/command-selection/selectionContract";
+import { scenario } from "./bench/core/scenario";
+import { Show } from "./bench/show/showScenario";
 
 scenario(
 	"MIB-001",

@@ -1,5 +1,5 @@
-import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../../apps/control-ui/e2e/bench/core/pairedScenario";
+import { expect, test } from "../bench/core/fixtures";
+import { pairedScenario } from "../bench/core/pairedScenario";
 import {
 	activePlayback,
 	createCueList,
@@ -21,7 +21,7 @@ import {
 import type {
 	PlaybackCheckpoint,
 	PreparedShow,
-} from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
+} from "../bench/playbacks/playback-configuration/models";
 
 type Pbk004State = PreparedShow & {
 	timings: string;

@@ -1,19 +1,20 @@
-import { defineConfig } from "./apps/control-ui/node_modules/@playwright/test/index.js";
+import { defineConfig } from "@playwright/test";
 import artifactResolver from "./tools/artifact-paths.cjs";
 
 const { artifactPaths } = artifactResolver;
 
 const visualRecording = process.env.LIGHT_VISUAL_RECORDING === "1";
 const helpScreenshots = process.env.LIGHT_HELP_SCREENSHOTS === "1";
+const benchUnitTests = /bench\/.*\.test\.ts/;
 
 export default defineConfig({
   testDir: "./tests",
   timeout: visualRecording ? 300_000 : 30_000,
   testIgnore: visualRecording
-    ? /02-help-screenshots\.spec\.ts/
+    ? [benchUnitTests, /02-help-screenshots\.spec\.ts/]
     : helpScreenshots
-      ? /visual-recording\.spec\.ts/
-      : [/visual-recording\.spec\.ts/, /02-help-screenshots\.spec\.ts/],
+      ? [benchUnitTests, /visual-recording\.spec\.ts/]
+      : [benchUnitTests, /visual-recording\.spec\.ts/, /02-help-screenshots\.spec\.ts/],
   fullyParallel: true,
   workers: 4,
   retries: process.env.CI ? 2 : 0,

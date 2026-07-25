@@ -14,16 +14,16 @@ the root acceptance suite protect the path.
 
 ## 1. The keypress
 
-`apps/control-ui/src/components/control/` — numeric pad and command bar.
+`apps/light-desktop/src/components/control/` — numeric pad and command bar.
 
-The keypad model is shared: `apps/shared/programmerKeypad.ts` defines the `SoftwareKey` union and
+The keypad model is shared: `packages/light-controls/src/programmerKeypad.ts` defines the `SoftwareKey` union and
 `numericPadLayout`, used by the control UI, the hardware app, and the Playwright bench.
 
 The UI does not interpret `GROUP 1 AT 50`. It emits logical keys.
 
 ## 2. The optimistic write
 
-`apps/control-ui/src/features/programmingInteraction/commandLineWriter.ts`
+`apps/light-desktop/src/features/programmingInteraction/commandLineWriter.ts`
 
 A latest-wins writer gives immediate feedback, bounds slow writes to one in flight plus the newest
 pending value, and waits for accepted writes before ENTER. The feedback is an overlay; authority
@@ -40,11 +40,11 @@ POST /api/v2/command-line/execute                    HTTP/integrator ENTER twin
 The established desk WebSocket already owns ordering and desk/session context. HTTP uses the
 optional `X-Tosk-Desk` context header. OSC sends the frozen
 `/light/<desk>/programmer/<action>` address with true/false key phases. DTOs come from
-`apps/control-ui/src/api/generated/light-wire.ts`, which is generated and checked in.
+`apps/light-desktop/src/api/generated/light-wire.ts`, which is generated and checked in.
 
 ## 4. The adapter
 
-`crates/server/src/command_http/`
+`crates/light/adapters/headless/src/command_http/`
 
 Parses, authenticates, resolves the desk, builds an `ActionContext` (desk, user, session, source
 surface, request ID, expected revision), and hands a typed command to the application.
@@ -53,12 +53,12 @@ No command grammar, no LTP rule, no group resolution live here.
 
 ## 5. The application boundary
 
-`crates/application/src/programming/`
+`crates/light/src/programming/`
 
 One authenticated, ordered boundary. It serializes typed commands per desk, so a UI keypress, an OSC
 tap, and an HTTP request cannot interleave into an incoherent command line.
 
-The contract is in `crates/application/src/action.rs`:
+The contract is in `crates/light/src/action.rs`:
 
 ```rust
 pub trait ApplicationCommand: Send + 'static {
@@ -71,9 +71,9 @@ Each command declares its own result type. There is no process-wide command enum
 
 ## 6. Selection, Groups, and Programmer LTP
 
-`crates/programmer/src/command_line/` parses the accumulated keys.
-`crates/programmer/src/groups.rs` expands Group 1 to its ordered logical heads.
-`crates/programmer/src/values.rs` applies the value under LTP.
+`crates/light/domain/programmer/src/command_line/` parses the accumulated keys.
+`crates/light/domain/programmer/src/groups.rs` expands Group 1 to its ordered logical heads.
+`crates/light/domain/programmer/src/values.rs` applies the value under LTP.
 
 None of this knows a WebSocket exists.
 
@@ -84,14 +84,14 @@ receives no physical output binding.
 ## 7. The outcome
 
 `ActionOutcome<T>` carries the value, the authoritative revision, and an event sequence only if an
-event was emitted (`crates/application/src/action.rs`).
+event was emitted (`crates/light/src/action.rs`).
 
 A repeated On, a same-value master write, or a zero-time crossfade endpoint returns no-change:
 nothing published, nothing persisted.
 
 ## 8. The event
 
-`crates/application/src/event/bus.rs`
+`crates/light/src/event/bus.rs`
 
 One semantic transition, one typed event, carrying a monotonic sequence, event time, source surface,
 correlation identity, and enough identity to re-request the projection. The bus does not know about
@@ -99,7 +99,7 @@ WebSockets; adapters translate.
 
 ## 9. Into the engine
 
-`crates/engine/src/` — the values become a contribution. Arbitration resolves it against playback
+`crates/light/domain/engine/src/` — the values become a contribution. Arbitration resolves it against playback
 contributions (HTP/LTP/ownership), transitions apply fade, delay, MIB, and masters, and the
 Highlight overlay sits on top. The result is resolved semantic fixture values.
 
@@ -108,16 +108,16 @@ Highlight overlay sits on top. The result is resolved semantic fixture values.
 Fixture projection maps semantic values onto DMX channels — mode, fine bytes, splits, multipatch,
 logical heads.
 
-`crates/server/src/runtime/output_scheduler.rs` ticks: render, leave the domain locks, publish
+`crates/light/adapters/headless/src/runtime/output_scheduler.rs` ticks: render, leave the domain locks, publish
 automatic transitions, send encoded routes. Publishing after releasing the locks keeps a slow
 subscriber from stalling a frame.
 
 ## 11. Back to the screen
 
-`crates/server/src/runtime/event_transport/adapter.rs` turns the typed event into a wire message on
+`crates/light/adapters/headless/src/runtime/event_transport/adapter.rs` turns the typed event into a wire message on
 `/api/v2/events`.
 
-`apps/control-ui/src/api/*Transport.ts` decodes and validates it. The feature store reconciles it
+`apps/light-desktop/src/api/*Transport.ts` decodes and validates it. The feature store reconciles it
 against the overlay from step 2, handling either arrival order, because the HTTP outcome and the
 WebSocket event race. If the sequence had a gap, the store repairs from a snapshot.
 
@@ -137,7 +137,7 @@ a false repair.
 ```
 
 Steps 5 to 11 are identical for all three. Only 1 to 4 differ. `pairedScenario` in
-`apps/control-ui/e2e/bench/core/pairedScenario.ts` keeps that true.
+`tests/bench/core/pairedScenario.ts` keeps that true.
 
 ## Exercises
 

@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
+import { expect, test } from "./bench/core/fixtures";
+import { pairedScenario } from "./bench/core/pairedScenario";
 import {
 	arrangeMalformedRecovery,
 	assertMigrationSnapshot,
@@ -21,7 +21,7 @@ export function registerAtomicRecoveryTests(): void {
 		"during-temporary-write",
 		"after-replacement-before-cleanup",
 	] as const) {
-		test(`SHOW-002 @restart › supplemental ${fault} fixture recovers as one complete old or new SQLite revision`, async ({
+		test(`SHOW-002 @api @restart › ${fault} fixture recovers as one complete old or new SQLite revision`, async ({
 			api,
 			bench,
 		}) => {
@@ -256,7 +256,7 @@ export function registerLegacyMigrationTests(): void {
 		// re-derived at load, never written back — this case must leave the show file
 		// byte-identical. Every other case normalizes the legacy fields with one write.
 		const byteStable = migration === "virtual-dimmer-metadata";
-		test(`SHOW-004 @restart › supplemental ${migration} legacy fields ${byteStable ? "self-heal by re-derivation and stay byte-stable" : "normalize once and stay byte/revision stable"}`, async ({
+		test(`SHOW-004 @api @restart › ${migration} legacy fields ${byteStable ? "self-heal by re-derivation and stay byte-stable" : "normalize once and stay byte/revision stable"}`, async ({
 			api,
 			bench,
 		}) => {

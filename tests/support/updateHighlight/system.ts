@@ -2,11 +2,11 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
+import { expect } from "../../bench/core/fixtures";
 import type {
 	Locator,
 	Page,
-} from "../../../apps/control-ui/node_modules/@playwright/test/index.js";
+} from "@playwright/test";
 
 const sqlite = promisify(execFile);
 

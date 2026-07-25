@@ -17,7 +17,7 @@ A bounded, named request to change state — `ProgrammerCommand`, `PlaybackComma
 A new capability adds its own command family rather than extending a shared enum or adding a
 string-plus-JSON message. Serialization belongs only in transport adapters.
 
-Defined in `crates/application/src/action.rs`.
+Defined in `crates/light/src/action.rs`.
 
 ## Action context
 
@@ -40,7 +40,7 @@ means the logic belongs in the service.
 
 ## Application service
 
-A transport-independent use-case owner in `crates/application/`.
+A transport-independent use-case owner in `crates/light/`.
 
 Services own their state and locks, exposing [commands](glossary:typed-command) and immutable
 [projections](glossary:projection) — never their underlying mutexes or registries. They may depend
@@ -59,7 +59,7 @@ sequence *only when an event was actually emitted*.
 
 Adapters depend on the application layer, which depends on domain crates. `light-wire` is a leaf
 depending on nothing. Domain crates never depend on `light-application`, `light-wire`, or
-`light-server`.
+`light-headless`.
 
 Enforced in CI by `tools/check-architecture.mjs` against `cargo metadata` — not by convention.
 
@@ -109,7 +109,7 @@ fade value.
 
 ## Event bus
 
-Application-owned publication, in `crates/application/src/event/`.
+Application-owned publication, in `crates/light/src/event/`.
 
 The render engine must not know about WebSocket clients, frontend stores, or OSC serialization. Domain services publish typed events; [adapters](glossary:adapter) translate them.
 
@@ -167,7 +167,7 @@ and writing it back would destroy what it did not understand — an operator's w
 
 The fix: raw object bodies are stored as JSON and preserved verbatim. A typed mutation computes a
 **before/after delta** and applies it to the raw value. See
-`crates/application/src/lossless_json.rs`.
+`crates/light/src/lossless_json.rs`.
 
 ## Transaction
 
@@ -191,7 +191,7 @@ A [typestate](glossary:typestate) pattern. Preparing a runtime snapshot is falli
 free; installing it **consumes** the prepared value and cannot fail.
 
 This is why persistence can never get ahead of the engine and why a failed compile cannot leave a
-half-installed show. See `crates/engine/src/lifecycle.rs`.
+half-installed show. See `crates/light/domain/engine/src/lifecycle.rs`.
 
 ## Typestate
 
@@ -207,7 +207,7 @@ An idempotent retry. Requests carry a request ID; a retried request already appl
 ## Wire DTO
 
 A versioned serialized data-transfer object crossing the process boundary, living only in
-`crates/wire/src/v2/`. Not a domain type and not a frontend view model.
+`crates/light/contracts/wire/src/v2/`. Not a domain type and not a frontend view model.
 
 `light-wire` depends on no workspace crate, so the domain can never accidentally start speaking
 transport.
@@ -220,14 +220,14 @@ TypeScript definitions and JSON Schemas generated from the Rust DTOs and checked
 cargo run -p light-wire --example generate-contracts
 ```
 
-Never hand-edit `apps/control-ui/src/api/generated/light-wire.ts`. A test re-renders every artifact
+Never hand-edit `apps/light-desktop/src/api/generated/light-wire.ts`. A test re-renders every artifact
 in memory and asserts byte equality, so a stale file fails `cargo test`. Schemas are
 **direction-aware**: requests generated for deserialize, responses and events for serialize.
 
 ## Transport boundary
 
 The one place untrusted bytes become trusted types: decode and validate in
-`apps/control-ui/src/api/`, then map to view models.
+`apps/light-desktop/src/api/`, then map to view models.
 
 Only files under `src/api/` may import [wire DTOs](glossary:wire-dto); a component doing so fails
 the build. Nothing under `src/api/` may import from `src/components/` or `src/windows/`. Frontend

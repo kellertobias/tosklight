@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/control-ui/src-tauri/icons/icon.png" alt="ToskLight application icon" width="96" height="96">
+  <img src="apps/light-desktop/src-tauri/icons/icon.png" alt="ToskLight application icon" width="96" height="96">
 </p>
 
 <h1 align="center">ToskLight</h1>
@@ -7,7 +7,7 @@
 > [!CAUTION]
 > **ToskLight is not yet even a release candidate.** You are welcome to test the published releases, but the code is still unstable and may break with every new version.
 
-`tosk-light` is a show-lighting desk, engine, and control server for programming fixtures, groups, cue lists, playback faders, and Art-Net/sACN output from one portable show file. The operator UI is built around a command line, live programmer, fixture sheet, 3D stage view, cue list pool, and playback section so the same show can be edited from the desktop app or browser-connected desks.
+`tosk-light` is a show-lighting desk, engine, and headless control application for programming fixtures, groups, cue lists, playback faders, and Art-Net/sACN output from one portable show file. The operator UI is built around a command line, live programmer, fixture sheet, 3D stage view, cue list pool, and playback section so the same show can be edited from the desktop app or browser-connected desks.
 
 Start with the [quickstart help](docs/help/00-quickstart.markdown) or browse the full [operator help](docs/help).
 
@@ -15,7 +15,7 @@ Start with the [quickstart help](docs/help/00-quickstart.markdown) or browse the
 
 ![Light Cuelist detail with playback faders and group masters](docs/help/assets/screenshots/cuelist-playback.png)
 
-## Run the server
+## Run Light headless
 
 ```sh
 npm run dev
@@ -28,7 +28,7 @@ Set `LIGHT_DESK_TOKEN` when exposing the server on a LAN. API clients then send 
 ## Development and builds
 
 ```sh
-npm run dev                    # server + Tauri app with UI hot reload
+npm run dev                    # Light headless + Tauri app with UI hot reload
 npm run open             # debug builds, stop old instances, and open the app
 npm run manual           # PDF and deployable HTML manuals from docs/help Markdown
 npm run bundle          # self-contained server ZIPs for macOS, Windows, Linux AMD64, and Linux ARM64
@@ -50,7 +50,7 @@ Repository-owned assets live under `assets/`. The transferable shipped
 fixture packages are in `assets/fixture-library/`; a successful `npm run test:demo`
 atomically refreshes the completed portable show at `assets/demo.show`.
 
-`npm run bundle` ships the web UI inside each `light-server` binary. It creates a
+`npm run bundle` ships the web UI inside each `light-headless` binary. It creates a
 universal macOS binary plus Windows, Linux AMD64, and Linux ARM64 binaries in
 `.artifacts/release/`; Linux binaries are statically linked. Building the non-macOS
 targets requires `zig`, `cargo-zigbuild`, and the Rust targets named by the
@@ -114,18 +114,18 @@ Show objects use the kinds `patched_fixture`, `cue_list`, and `route` for the li
 All persisted-data changes are also governed by the [backward-compatibility acceptance criteria](docs/acceptance-criteria.md). A feature is not complete until legacy-file behavior is migrated and tested, or the compatibility requirement has been explicitly decided with the operator.
 
 The repository does not currently ship a standalone UI package or Storybook. Reusable presentation
-primitives live in `apps/control-ui/src/components/common/` and
-`apps/control-ui/src/components/window-kit/`; their executable gates are the Control UI component
+primitives live in `apps/light-desktop/src/components/common/` and
+`apps/light-desktop/src/components/window-kit/`; their executable gates are the Control UI component
 tests, typecheck/production build in `npm run test:unit`, and the real-browser coverage in
 `npm run test:e2e-ui`.
 
 ```sh
 cargo test --workspace --no-fail-fast
 cargo clippy --workspace --all-targets -- -D warnings
-cargo run --release -p light-server --bin light-benchmark --no-default-features -- \
+cargo run --release -p light-headless --bin light-benchmark --no-default-features -- \
   --profile all --protocol artnet --transport encode-only --seconds 5 \
   --mutation-gate --hardware-label "machine model, CPU, RAM and power mode"
-cd apps/control-ui && npm run typecheck && npm test -- --run && npm run build && npm run test:e2e
+cd apps/light-desktop && npm run typecheck && npm test -- --run && npm run build && npm run test:e2e
 ```
 
 The release-only benchmark emits JSON for the 32-universe/100 Hz hard floor, the

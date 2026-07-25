@@ -2,7 +2,7 @@ import {
 	type BenchUiContext,
 	expect,
 	test,
-} from "../../apps/control-ui/e2e/bench/core/fixtures";
+} from "../bench/core/fixtures";
 import {
 	activePlayback,
 	activeVirtualPane,

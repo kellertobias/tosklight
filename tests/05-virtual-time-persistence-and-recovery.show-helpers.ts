@@ -2,10 +2,10 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import { promisify } from "node:util";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
-import { expect } from "../apps/control-ui/e2e/bench/core/fixtures";
-import type { LightBench } from "../apps/control-ui/e2e/bench/core/lightBench";
-import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
+import type { ApiDriver } from "./bench/core/api";
+import { expect } from "./bench/core/fixtures";
+import type { LightBench } from "./bench/core/lightBench";
+import type { Page } from "@playwright/test";
 import {
 	installSequence,
 	playback,

@@ -1,5 +1,5 @@
-import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
-import type { Page } from "../../../apps/control-ui/node_modules/@playwright/test/index.js";
+import { expect } from "../../bench/core/fixtures";
+import type { Page } from "@playwright/test";
 import {
 	executeProgrammerCommand,
 	type ProgrammerSurface,

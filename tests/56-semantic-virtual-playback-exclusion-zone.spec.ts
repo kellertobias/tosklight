@@ -1,10 +1,10 @@
 // @bench-semantic-world
 
-import { fixture } from "../apps/control-ui/e2e/bench/command-selection/selectionContract";
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
-import { PlaybackButton } from "../apps/control-ui/e2e/bench/playbacks/playbackScenario";
-import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
-import { PaneType } from "../apps/control-ui/e2e/bench/window-system/paneTypes";
+import { fixture } from "./bench/command-selection/selectionContract";
+import { scenario } from "./bench/core/scenario";
+import { PlaybackButton } from "./bench/playbacks/playbackScenario";
+import { Show } from "./bench/show/showScenario";
+import { PaneType } from "./bench/window-system/paneTypes";
 
 scenario(
 	"VPB-007",

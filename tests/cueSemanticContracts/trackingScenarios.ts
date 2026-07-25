@@ -1,9 +1,9 @@
-import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { deleteCue } from "../../apps/control-ui/e2e/bench/playbacks/cueDeletion";
+import { expect, test } from "../bench/core/fixtures";
+import { deleteCue } from "../bench/playbacks/cueDeletion";
 import {
 	clearProgrammerValues,
 	setProgrammerFixtureValue,
-} from "../../apps/control-ui/e2e/bench/programmer/programmerValues";
+} from "../bench/programmer/programmerValues";
 import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,

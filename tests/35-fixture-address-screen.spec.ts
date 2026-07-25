@@ -1,8 +1,8 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { expect, test } from "./bench/core/fixtures";
 import { loadCanonicalCopy } from "./support/catalog";
 import { readPatchSnapshot } from "./support/operator/patch";
 
-test("FIXTURE-ADDRESS-001 @supplemental-ui › integrated address screen keeps the complete map and number block reachable", async ({ api, bench, desk, page }) => {
+test("FIXTURE-ADDRESS-001 @ui › integrated address screen keeps the complete map and number block reachable", async ({ api, bench, desk, page }) => {
   await loadCanonicalCopy(api, bench, "fixture-address-001", "default-stage");
   await desk.open(api.baseUrl);
   await page.getByRole("button", { name: /Open show menu/ }).click();
@@ -33,7 +33,7 @@ test("FIXTURE-ADDRESS-001 @supplemental-ui › integrated address screen keeps t
   await expect(patchAddress).toHaveText(originalAddress ?? "");
 });
 
-test("PATCH-PLACEMENT-001 @supplemental-ui › the server commits the independently arranged placement preview", async ({
+test("PATCH-PLACEMENT-001 @ui › the server commits the independently arranged placement preview", async ({
   api,
   bench,
   desk,

@@ -1,14 +1,14 @@
 import fs from "node:fs/promises";
-import { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
-import { DeskDriver } from "../../apps/control-ui/e2e/bench/core/desk";
-import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { LightBench } from "../../apps/control-ui/e2e/bench/core/lightBench";
-import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
+import { ApiDriver } from "../bench/core/api";
+import { DeskDriver } from "../bench/core/desk";
+import { expect, test } from "../bench/core/fixtures";
+import { LightBench } from "../bench/core/lightBench";
+import { scenario } from "../bench/core/scenario";
 import {
 	BrowserShows,
 	defineShow,
 	Show,
-} from "../../apps/control-ui/e2e/bench/show/showScenario";
+} from "../bench/show/showScenario";
 
 const staleCompactRig = defineShow("stale-compact-rig", (show) => {
 	show.from(Show.CompactRig).requires({
@@ -52,7 +52,7 @@ scenario(
 	},
 );
 
-test("BENCH-SHOW-003 @bench › concurrent catalogs isolate data, mutation, reset, and cleanup", async ({
+test("BENCH-SHOW-003 @bench @api › concurrent catalogs isolate data, mutation, reset, and cleanup", async ({
 	api,
 	bench,
 	desk,

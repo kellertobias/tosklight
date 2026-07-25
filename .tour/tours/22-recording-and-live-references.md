@@ -22,7 +22,7 @@ that state becomes portable show data.
 Preload, and mutation-only history. Highlight is a separate transient overlay and is never included
 in a record candidate.
 
-Group recording enters `crates/application/src/programming/service/group_recording.rs`; Preset and
+Group recording enters `crates/light/src/programming/service/group_recording.rs`; Preset and
 Cue paths sit beside it under `programming/service/`. Each action carries desk/user/session source,
 request identity, and the show revision it observed.
 
@@ -38,7 +38,7 @@ choice affects spread recall and must happen before the record transaction is bu
 ## Candidate and commit
 
 Capability code resolves the target, update mode, filters, dependencies, and exact owned delta.
-`crates/application/src/programming/*_active_show.rs` prepares the lossless object change and sends
+`crates/light/src/programming/*_active_show.rs` prepares the lossless object change and sends
 it through `ActiveShowService`. Concurrent additions are assigned by the server at execution time;
 stale revisions repair and reapply instead of force-overwriting.
 
@@ -52,7 +52,7 @@ Group/Preset recall returns to the Programmer authority. Cue playback contribute
 runtime. Update analyzes which live objects own the current values and presents explicit targets;
 it does not rewrite every object visible on stage.
 
-`crates/application/src/programming/update/` owns target analysis and typed changes. The UI
+`crates/light/src/programming/update/` owns target analysis and typed changes. The UI
 presentation is a workflow over that authority, not a second record algorithm.
 
 ## Failure path

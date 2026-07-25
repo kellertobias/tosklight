@@ -83,9 +83,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            apps/control-ui/package-lock.json
-            apps/hardware-controls/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install native Rust and desktop development files
         run: |
@@ -94,13 +92,11 @@ jobs:
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libgtk-3-dev libsoup-3.0-dev libasound2-dev build-essential
 
-      - name: Install frontend dependencies
-        run: |
-          npm ci --prefix apps/hardware-controls
-          npm ci --prefix apps/control-ui
+      - name: Install workspace dependencies
+        run: npm ci
 
       - name: Build the embedded Control UI
-        run: npm run build --prefix apps/control-ui
+        run: npm run build --prefix apps/light-desktop
 
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
@@ -128,14 +124,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            apps/control-ui/package-lock.json
-            apps/hardware-controls/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - name: Install frontend dependencies
-        run: |
-          npm ci --prefix apps/hardware-controls
-          npm ci --prefix apps/control-ui
+      - name: Install workspace dependencies
+        run: npm ci
 
       - run: npm run test:unit
 
@@ -147,8 +139,10 @@ jobs:
       matrix:
         include:
           - { label: API, suite: api, shard: 1/1, artifact: api }
-          - { label: UI, suite: ui, shard: 1/1, artifact: ui }
-          - { label: Supplemental, suite: supplemental, shard: 1/1, artifact: supplemental }
+          - { label: UI (1/4), suite: ui, shard: 1/4, artifact: ui-1 }
+          - { label: UI (2/4), suite: ui, shard: 2/4, artifact: ui-2 }
+          - { label: UI (3/4), suite: ui, shard: 3/4, artifact: ui-3 }
+          - { label: UI (4/4), suite: ui, shard: 4/4, artifact: ui-4 }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -166,20 +160,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            apps/control-ui/package-lock.json
-            apps/hardware-controls/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - name: Install frontend dependencies
-        run: |
-          npm ci --prefix apps/hardware-controls
-          npm ci --prefix apps/control-ui
+      - name: Install workspace dependencies
+        run: npm ci
 
       - name: Install Chrome for Playwright
-        working-directory: apps/control-ui
         run: npx playwright install --with-deps chrome
 
-      - run: npm run test:e2e-${{ matrix.suite }} -- --shard=${{ matrix.shard }}
+      # Each Playwright worker launches its own browser, Rust server, UDP listeners,
+      # and isolated show. Keep one worker per runner to prevent local port/timing
+      # contention; the matrix shards retain parallel throughput across runners.
+      - run: npm run test:e2e-${{ matrix.suite }} -- --shard=${{ matrix.shard }} --workers=1
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
@@ -210,19 +202,16 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            apps/control-ui/package-lock.json
-            apps/hardware-controls/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Build the embedded Control UI
         run: |
-          npm ci --prefix apps/hardware-controls
-          npm ci --prefix apps/control-ui
-          npm run build --prefix apps/control-ui
+          npm ci
+          npm run build --prefix apps/light-desktop
 
       - name: Reject large-show mutation performance regressions
         run: >-
-          cargo run --release --locked -p light-server --bin light-benchmark
+          cargo run --release --locked -p light-headless --bin light-benchmark
           --no-default-features --
           --profile low-power-4 --protocol artnet --transport encode-only
           --seconds 1 --warmup-seconds 0 --mutation-gate
@@ -248,14 +237,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            apps/control-ui/package-lock.json
-            apps/hardware-controls/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - name: Install frontend dependencies
-        run: |
-          npm ci --prefix apps/hardware-controls
-          npm ci --prefix apps/control-ui
+      - name: Install workspace dependencies
+        run: npm ci
 
       - run: npm run test:desktop-smoke
 
@@ -322,17 +307,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            apps/control-ui/package-lock.json
-            apps/hardware-controls/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - name: Install frontend dependencies
-        run: |
-          npm ci --prefix apps/hardware-controls
-          npm ci --prefix apps/control-ui
+      - name: Install workspace dependencies
+        run: npm ci
 
       - name: Install Chrome and video tooling
-        working-directory: apps/control-ui
         run: |
           npx playwright install --with-deps chrome
           sudo apt-get install -y ffmpeg
@@ -379,19 +359,19 @@ jobs:
             runner: macos-14
             target: aarch64-apple-darwin
             slug: macos-arm64
-            server_binary: light-server
+            headless_binary: light-headless
             desktop: true
           - label: Linux (x86_64)
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             slug: linux-amd64
-            server_binary: light-server
+            headless_binary: light-headless
             desktop: true
           - label: Linux (ARM64 / Raspberry Pi)
             runner: ubuntu-22.04
             target: aarch64-unknown-linux-musl
             slug: linux-arm64
-            server_binary: light-server
+            headless_binary: light-headless
             desktop: false
             cross: true
             cargo_flags: --no-default-features
@@ -399,7 +379,7 @@ jobs:
             runner: windows-2022
             target: x86_64-pc-windows-msvc
             slug: windows-amd64
-            server_binary: light-server.exe
+            headless_binary: light-headless.exe
             desktop: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -416,9 +396,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            apps/control-ui/package-lock.json
-            apps/hardware-controls/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
@@ -438,23 +416,20 @@ jobs:
           pip install ziglang
           cargo install cargo-zigbuild --locked
 
-      - name: Install frontend dependencies
+      - name: Install workspace dependencies
         shell: bash
-        run: |
-          npm ci --prefix apps/hardware-controls
-          npm ci --prefix apps/control-ui
+        run: npm ci
 
-      - name: Build the Control UI bundle
-        working-directory: apps/control-ui
-        run: npm run build
+      - name: Build the Light desktop UI bundle
+        run: npm run build --prefix apps/light-desktop
 
-      - name: Build the standalone server
+      - name: Build the standalone Light headless application
         shell: bash
         run: |
           ${{ matrix.cross && 'cargo zigbuild' || 'cargo build' }} \
             --release --locked --target ${{ matrix.target }} \
             ${{ matrix.cargo_flags }} \
-            -p light-server --bin light-server
+            -p light-headless --bin light-headless
 
       - name: Build the ToskLight desktop application
         if: matrix.desktop
@@ -462,7 +437,7 @@ jobs:
         run: |
           config="$RUNNER_TEMP/tauri-control-release.json"
           node tools/write-tauri-artifact-config.mjs control "$config"
-          npm run --prefix apps/control-ui tauri:build -- --target ${{ matrix.target }} --config "$config"
+          npm run --prefix apps/light-desktop tauri:build -- --target ${{ matrix.target }} --config "$config"
 
       - name: Build the Hardware Controls application
         if: matrix.slug == 'macos-arm64'
@@ -470,28 +445,28 @@ jobs:
         run: |
           config="$RUNNER_TEMP/tauri-hardware-release.json"
           node tools/write-tauri-artifact-config.mjs hardware "$config"
-          npm run --prefix apps/hardware-controls tauri:build -- --target ${{ matrix.target }} --config "$config"
+          npm run --prefix apps/light-hardware-controls tauri:build -- --target ${{ matrix.target }} --config "$config"
 
       - name: Stage release artifacts
         shell: bash
         env:
           SLUG: ${{ matrix.slug }}
           TARGET: ${{ matrix.target }}
-          SERVER_BINARY: ${{ matrix.server_binary }}
+          HEADLESS_BINARY: ${{ matrix.headless_binary }}
         run: |
           set -euo pipefail
           version="$LIGHT_RELEASE_VERSION"
           out=".artifacts/release"
           mkdir -p "$out"
 
-          stage="$(mktemp -d)/light-server-$version-$SLUG"
+          stage="$(mktemp -d)/light-headless-$version-$SLUG"
           mkdir -p "$stage"
-          cp ".artifacts/build/cargo/$TARGET/release/$SERVER_BINARY" "$stage/"
+          cp ".artifacts/build/cargo/$TARGET/release/$HEADLESS_BINARY" "$stage/"
           cp -R assets/fixture-library "$stage/fixture-library"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            (cd "$(dirname "$stage")" && 7z a -tzip "$OLDPWD/$out/light-server-$version-$SLUG.zip" "$(basename "$stage")")
+            (cd "$(dirname "$stage")" && 7z a -tzip "$OLDPWD/$out/light-headless-$version-$SLUG.zip" "$(basename "$stage")")
           else
-            (cd "$(dirname "$stage")" && zip -q -r "$OLDPWD/$out/light-server-$version-$SLUG.zip" "$(basename "$stage")")
+            (cd "$(dirname "$stage")" && zip -q -r "$OLDPWD/$out/light-headless-$version-$SLUG.zip" "$(basename "$stage")")
           fi
 
           bundle=".artifacts/build/cargo/$TARGET/release/bundle"
@@ -540,14 +515,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            apps/control-ui/package-lock.json
-            apps/hardware-controls/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - name: Install semantic catalog dependencies
-        run: |
-          npm ci --prefix apps/hardware-controls
-          npm ci --prefix apps/control-ui
+      - name: Install workspace dependencies
+        run: npm ci
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -622,14 +593,14 @@ jobs:
         run: |
           set -euo pipefail
           for required in \
-            "light-server-$VERSION-macos-arm64.zip" \
+            "light-headless-$VERSION-macos-arm64.zip" \
             "tosklight-$VERSION-macos-arm64.zip" \
             "tosklight-hardware-controls-$VERSION-macos-arm64.zip" \
-            "light-server-$VERSION-linux-amd64.zip" \
+            "light-headless-$VERSION-linux-amd64.zip" \
             "tosklight-$VERSION-linux-amd64.AppImage" \
             "tosklight-$VERSION-linux-amd64.deb" \
-            "light-server-$VERSION-linux-arm64.zip" \
-            "light-server-$VERSION-windows-amd64.zip" \
+            "light-headless-$VERSION-linux-arm64.zip" \
+            "light-headless-$VERSION-windows-amd64.zip" \
             "tosklight-$VERSION-windows-amd64-setup.exe"
           do
             test -f ".artifacts/release/$required"

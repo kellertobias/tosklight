@@ -2,19 +2,19 @@
 
 import {
 	CueRecordMode,
-} from "../apps/control-ui/e2e/bench/playbacks/cuePlaybackScenario";
-import { PaneType } from "../apps/control-ui/e2e/bench/window-system/paneTypes";
+} from "./bench/playbacks/cuePlaybackScenario";
+import { PaneType } from "./bench/window-system/paneTypes";
 import {
 	currentPagePlayback,
 	explicitPagePlayback,
-} from "../apps/control-ui/e2e/bench/playbacks/playbackScenario";
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
+} from "./bench/playbacks/playbackScenario";
+import { scenario } from "./bench/core/scenario";
 import {
 	fixture,
 	fixtureRange,
 	groupRange,
-} from "../apps/control-ui/e2e/bench/command-selection/selectionContract";
-import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
+} from "./bench/command-selection/selectionContract";
+import { Show } from "./bench/show/showScenario";
 
 scenario(
 	"BENCH-CUE-PLAYBACK-001",

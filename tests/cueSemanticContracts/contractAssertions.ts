@@ -1,9 +1,9 @@
-import type { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
+import type { ApiDriver } from "../bench/core/api";
 import {
 	type BenchContractContext,
 	type BenchUiContext,
 	expect,
-} from "../../apps/control-ui/e2e/bench/core/fixtures";
+} from "../bench/core/fixtures";
 import { object } from "../support/catalog";
 
 export async function setSequenceMasterFade(api: ApiDriver, millis: number) {

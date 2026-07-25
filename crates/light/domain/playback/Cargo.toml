@@ -1,0 +1,17 @@
+[package]
+name = "light-playback"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+chrono.workspace = true
+light-core = { path = "../../../shared/core" }
+serde.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -16,10 +16,10 @@ test("logical lines count a final unterminated line", () => {
 
 test("only code files in production source roots are scanned", () => {
   for (const repositoryPath of [
-    "apps/control-ui/src/App.tsx",
-    "apps/control-ui/src/api.ts",
-    "apps/control-ui/scripts/setup.js",
-    "crates/server/src/main.rs",
+    "apps/light-desktop/src/App.tsx",
+    "apps/light-desktop/src/api.ts",
+    "apps/light-desktop/scripts/setup.js",
+    "crates/light/adapters/headless/src/main.rs",
     "packages/tools/check.py",
   ]) {
     assert.equal(isSourcePath(repositoryPath), true, repositoryPath);
@@ -27,13 +27,13 @@ test("only code files in production source roots are scanned", () => {
 
   for (const repositoryPath of [
     "Cargo.lock",
-    "apps/control-ui/package.json",
-    "apps/control-ui/README.md",
-    "apps/control-ui/src/style.css",
-    "apps/control-ui/assets/config.js",
-    "apps/control-ui/artifacts/report.ts",
-    "apps/control-ui/docs/example.tsx",
-    "apps/control-ui/experiments/panel.tsx",
+    "apps/light-desktop/package.json",
+    "apps/light-desktop/README.md",
+    "apps/light-desktop/src/style.css",
+    "apps/light-desktop/assets/config.js",
+    "apps/light-desktop/artifacts/report.ts",
+    "apps/light-desktop/docs/example.tsx",
+    "apps/light-desktop/experiments/panel.tsx",
     "docs/generated.ts",
     "experiments/dynamics-editor/app.js",
     "tests/large.spec.ts",
@@ -45,12 +45,12 @@ test("only code files in production source roots are scanned", () => {
 
 test("test sources are identified without exempting them from goal reporting", () => {
   assert.equal(isTestSource("tests/large.spec.ts"), true);
-  assert.equal(isTestSource("crates/server/tests/runtime.rs"), true);
-  assert.equal(isTestSource("apps/control-ui/e2e/bench/fixture.ts"), true);
-  assert.equal(isTestSource("apps/control-ui/src/Panel.test.tsx"), true);
-  assert.equal(isTestSource("apps/control-ui/src/__tests__/Panel.tsx"), true);
-  assert.equal(isTestSource("apps/control-ui/src/Panel.tsx"), false);
-  assert.equal(isTestSource("crates/server/src/runtime.rs"), false);
+  assert.equal(isTestSource("crates/light/adapters/headless/tests/runtime.rs"), true);
+  assert.equal(isTestSource("tests/bench/fixture.ts"), true);
+  assert.equal(isTestSource("apps/light-desktop/src/Panel.test.tsx"), true);
+  assert.equal(isTestSource("apps/light-desktop/src/__tests__/Panel.tsx"), true);
+  assert.equal(isTestSource("apps/light-desktop/src/Panel.tsx"), false);
+  assert.equal(isTestSource("crates/light/adapters/headless/src/runtime.rs"), false);
 });
 
 test("Rust scanner ignores literals and nested comments", () => {

@@ -19,10 +19,10 @@ The client does not expand them into N writes.
 ## Input and canonical control points
 
 Both encoder dialogs use the shared THRU submission path in
-`apps/control-ui/src/components/input/ModalInputControls.tsx`. Software and hardware layouts send
+`apps/light-desktop/src/components/input/ModalInputControls.tsx`. Software and hardware layouts send
 the same `SetSelection` mutation with ordered fixture IDs and control points.
 
-`crates/application/src/programming/` validates the request and resolves Group membership.
+`crates/light/src/programming/` validates the request and resolves Group membership.
 `light_core::attributes::spread_position` is the single interpolation primitive. Multiple control
 points are sampled deterministically over the normalized selection position; invalid point/member
 combinations fail before mutation.
@@ -53,12 +53,12 @@ client/server fan-out.
 
 Executable landmarks:
 
-- `crates/engine/src/tests/spread_recall.rs`
-- `crates/server/src/runtime/tests/spread_recall_tests.rs`
-- `crates/server/src/runtime/tests/spread_compatibility_tests.rs`
+- `crates/light/domain/engine/src/tests/spread_recall.rs`
+- `crates/light/adapters/headless/src/runtime/tests/spread_recall_tests.rs`
+- `crates/light/adapters/headless/src/runtime/tests/spread_compatibility_tests.rs`
 - `tests/31-hardware-connected-encoders.spec.ts`
 
 ## Exercise
 
 For five members and points `[1, 0, 1]`, calculate the expected normalized values. Then inspect
-`crates/core/src/attributes.rs` and the engine recall test to confirm the midpoint and ordering.
+`crates/shared/core/src/attributes.rs` and the engine recall test to confirm the midpoint and ordering.

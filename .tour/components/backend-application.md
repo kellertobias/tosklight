@@ -7,34 +7,34 @@ order: 40
 
 # Backend and Application Layer
 
-`crates/server/`, `crates/application/`, `crates/wire/`, `crates/show/`. Rust 2024 edition,
+`crates/light/adapters/headless/`, `crates/light/`, `crates/light/contracts/wire/`, `crates/shared/show/`. Rust 2024 edition,
 `resolver = "3"`, workspace-wide `unsafe_code = "forbid"`.
 
 ## Layering
 
 ```
-crates/server       adapters: Axum HTTP/WebSocket, OSC, Matter, media, files, scheduler
+crates/light/adapters/headless       adapters: Axum HTTP/WebSocket, OSC, Matter, media, files, scheduler
        ↓
-crates/application  transport-independent use cases
+crates/light  transport-independent use cases
        ↓
 crates/{core, fixture, playback, programmer, output, control, show, media, mvr}
                     domain — no transport
 ```
 
-`crates/wire` is a leaf: it depends on no workspace crate, and no domain crate depends on it.
+`crates/light/contracts/wire` is a leaf: it depends on no workspace crate, and no domain crate depends on it.
 
 `tools/check-architecture.mjs` enforces this against `cargo metadata`:
 
 - `light-wire` may depend on no workspace crate.
-- `light-application` must not depend on `light-wire`, `light-server`, or either UI crate.
-- Any other `crates/*` except `light-server` must not depend on `light-application`, `light-wire`,
-  or `light-server`.
-- `light-server` must depend on both `light-application` and `light-wire`, as the composition root.
+- `light-application` must not depend on `light-wire`, `light-headless`, or either UI crate.
+- Any other `crates/*` except `light-headless` must not depend on `light-application`, `light-wire`,
+  or `light-headless`.
+- `light-headless` must depend on both `light-application` and `light-wire`, as the composition root.
 
-## crates/server
+## crates/light/adapters/headless
 
 `src/main.rs` is a thin entry point and CI enforces it: at most 10 non-empty lines, must contain
-`light_server::run().await`, must not mention `Router`, `AppState`, `TcpListener`, or
+`light_headless_runtime::run().await`, must not mention `Router`, `AppState`, `TcpListener`, or
 `tokio::spawn`. `src/lib.rs` is 8 lines.
 
 | Path | Role |
@@ -55,10 +55,10 @@ Two more CI-enforced boundaries:
 
 - `src/runtime/update_plans.rs` must not contain `.put_object(`, `refresh_command_show`, or
   `load_engine_snapshot`. Writes route through `ActiveShowService`.
-- No `engine.playback()` or `playback_action_lock` in `crates/application/src` or
-  `crates/server/src`.
+- No `engine.playback()` or `playback_action_lock` in `crates/light/src` or
+  `crates/light/adapters/headless/src`.
 
-## crates/application
+## crates/light
 
 Start at `src/lib.rs`, which exports the supported service surface.
 
@@ -79,7 +79,7 @@ Start at `src/lib.rs`, which exports the supported service surface.
 Ports are injected via the `*Ports` trait family, using associated types where static dispatch fits.
 `ShowPatchPorts` and `SelectiveShowImportPorts` are supertraits of `ActiveShowPorts`.
 
-## crates/show
+## crates/shared/show
 
 - `src/portable/` — lossless `.show` documents, atomically revised. `PortableShowDocument`,
   `PortableShowTransaction`, `PortableShowCommit`, `PortableShowRevision`.
@@ -91,10 +91,10 @@ Ports are injected via the `*Ports` trait family, using associated types where s
 ## Adding a capability
 
 1. Domain types and rules in the relevant domain crate.
-2. A bounded command family and service in `crates/application/` with injected ports.
+2. A bounded command family and service in `crates/light/` with injected ports.
 3. Typed events on the event bus.
-4. Versioned DTOs in `crates/wire/src/v2/`, then regenerate contracts.
-5. A thin adapter in `crates/server/` mapping DTO to command and event to wire.
+4. Versioned DTOs in `crates/light/contracts/wire/src/v2/`, then regenerate contracts.
+5. A thin adapter in `crates/light/adapters/headless/` mapping DTO to command and event to wire.
 6. A feature slice in the control UI.
 
 `docs/engineering/extension-recipes.md` has the full recipe. Do not add a field to a shared struct
@@ -102,14 +102,14 @@ or a branch to a broad refresh path.
 
 ## Read first
 
-1. `crates/application/src/lib.rs`
-2. `crates/application/src/action.rs`
-3. `crates/application/src/event/bus.rs`
-4. `crates/application/src/active_show/ports.rs`
-5. `crates/show/src/show_store.rs`
-6. `crates/application/src/lossless_json.rs`
-7. `crates/server/src/runtime/http_router.rs`
-8. `crates/wire/src/v2/events.rs`
+1. `crates/light/src/lib.rs`
+2. `crates/light/src/action.rs`
+3. `crates/light/src/event/bus.rs`
+4. `crates/light/src/active_show/ports.rs`
+5. `crates/shared/show/src/show_store.rs`
+6. `crates/light/src/lossless_json.rs`
+7. `crates/light/adapters/headless/src/runtime/http_router.rs`
+8. `crates/light/contracts/wire/src/v2/events.rs`
 9. `tools/check-architecture.mjs`
 
 ## Verify

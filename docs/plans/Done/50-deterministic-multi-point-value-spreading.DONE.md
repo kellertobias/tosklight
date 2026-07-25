@@ -7,13 +7,11 @@ cross-surface acceptance coverage, software encoder modal parity, and operator-h
 updates are implemented through the refactoring chunks linked below. This file remains
 the normative behavior and compatibility reference.
 
-**Adopted into the refactoring queue and completed (2026-07-23):** implemented as
-chunk
-[`docs/plans/refactoring/done/03b-deterministic-multi-point-spread-resolver.md`](../refactoring/done/03b-deterministic-multi-point-spread-resolver.md),
-with follow-up acceptance chunks
-[`03b-b`](../refactoring/done/03b-b-spread-acceptance-surfaces.md) and
-[`03b-c`](../refactoring/done/03b-c-software-encoder-modal-thru-parity.md). This file
-remains the normative spec and compatibility reference.
+**Adopted into the major refactoring and completed (2026-07-23):** the shared resolver,
+cross-surface acceptance coverage, and software-encoder modal parity are summarized in the
+[consolidated execution record](../major-refactoring.md#consolidated-execution-record). The former
+incremental chunk documents remain available in git history. This file remains the normative spec
+and compatibility reference.
 
 ## Goal
 

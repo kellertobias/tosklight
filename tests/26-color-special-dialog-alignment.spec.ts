@@ -1,12 +1,12 @@
-import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/command-selection/programmingSelection";
-import { expect } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
-import { batchProgrammerValues } from "../apps/control-ui/e2e/bench/programmer/programmerValues";
+import { replaceProgrammingSelection } from "./bench/command-selection/programmingSelection";
+import { expect } from "./bench/core/fixtures";
+import { pairedScenario } from "./bench/core/pairedScenario";
+import { batchProgrammerValues } from "./bench/programmer/programmerValues";
 import { loadCanonicalCopy, programmer } from "./support/catalog";
 
 type PickerColor = { hue: number; saturation: number; brightness: number };
 
-// Test-owned oracle mirroring the server's color-range contract (crates/core
+// Test-owned oracle mirroring the server's color-range contract (crates/shared/core
 // `color_range_color` + `hsv_to_rgb`, expanded per supported channel): open arcs pin both
 // endpoints, interior fixtures interpolate hue along the gesture's travel and saturation
 // linearly, and every color uses the end brightness.

@@ -1,8 +1,8 @@
-import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
+import { expect } from "../../bench/core/fixtures";
 import type {
 	Locator,
 	Page,
-} from "../../../apps/control-ui/node_modules/@playwright/test/index.js";
+} from "@playwright/test";
 import { objects, programmer } from "../catalog";
 
 export interface HighlightFixture {

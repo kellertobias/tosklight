@@ -1,4 +1,4 @@
-import type { BenchUiContext } from "../../../apps/control-ui/e2e/bench/core/fixtures";
+import type { BenchUiContext } from "../../bench/core/fixtures";
 
 export interface FoundationalCase {
 	title: string;

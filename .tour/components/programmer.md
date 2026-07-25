@@ -82,17 +82,17 @@ is skipped rather than materialised.
 
 | Concern | Path |
 | --- | --- |
-| Programmer state, selection, values, history, command state | `crates/programmer/src/` |
-| Command-line parsing | `crates/programmer/src/command_line/` |
-| Group resolution | `crates/programmer/src/groups.rs` |
-| Highlight registry | `crates/programmer/src/highlight/` |
-| Typed use cases — the boundary every surface crosses | `crates/application/src/programming/` |
-| Command-line HTTP adapter | `crates/server/src/command_http/` |
-| Command line and keypad UI | `apps/control-ui/src/components/control/` |
-| Shared keypad model | `apps/shared/programmerKeypad.ts` |
-| Scoped frontend stores | `apps/control-ui/src/features/programmingInteraction/`, `programmerValues/`, `programmerPreloadValues/`, `programmerCaptureMode/`, `programmerLifecycle/` |
+| Programmer state, selection, values, history, command state | `crates/light/domain/programmer/src/` |
+| Command-line parsing | `crates/light/domain/programmer/src/command_line/` |
+| Group resolution | `crates/light/domain/programmer/src/groups.rs` |
+| Highlight registry | `crates/light/domain/programmer/src/highlight/` |
+| Typed use cases — the boundary every surface crosses | `crates/light/src/programming/` |
+| Command-line HTTP adapter | `crates/light/adapters/headless/src/command_http/` |
+| Command line and keypad UI | `apps/light-desktop/src/components/control/` |
+| Shared keypad model | `packages/light-controls/src/programmerKeypad.ts` |
+| Scoped frontend stores | `apps/light-desktop/src/features/programmingInteraction/`, `programmerValues/`, `programmerPreloadValues/`, `programmerCaptureMode/`, `programmerLifecycle/` |
 
-`crates/application/src/programming/` is one authenticated, ordered boundary. It serializes typed
+`crates/light/src/programming/` is one authenticated, ordered boundary. It serializes typed
 commands per desk, so a UI keypress, an OSC tap, and an HTTP request cannot interleave into an
 incoherent command line. Adapter-owned interactions cross the same gate.
 
@@ -115,8 +115,8 @@ Use `pairedScenario` so the same assertion runs against both the API and the UI.
 ## Read first
 
 1. `docs/help/30-Programmer/01-command-line.md`
-2. `crates/programmer/src/lib.rs`
-3. `crates/programmer/src/command_line/`
-4. `crates/application/src/programming/`
-5. `apps/shared/programmerKeypad.ts`
+2. `crates/light/domain/programmer/src/lib.rs`
+3. `crates/light/domain/programmer/src/command_line/`
+4. `crates/light/src/programming/`
+5. `packages/light-controls/src/programmerKeypad.ts`
 6. `tests/support/operator/programmer.ts`

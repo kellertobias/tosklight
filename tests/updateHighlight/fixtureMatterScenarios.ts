@@ -1,6 +1,6 @@
-import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../../apps/control-ui/e2e/bench/core/pairedScenario";
-import { blankFixtureProfile } from "../../apps/control-ui/src/components/setup/fixtureProfileModel";
+import { expect } from "../bench/core/fixtures";
+import { pairedScenario } from "../bench/core/pairedScenario";
+import { blankFixtureProfile } from "../../apps/light-desktop/src/components/setup/fixtureProfileModel";
 import { loadCanonicalCopy } from "../support/catalog";
 import { assignFaderlessMatterPlayback } from "../support/updateHighlight/matter";
 

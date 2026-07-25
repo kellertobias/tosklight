@@ -11,10 +11,15 @@
   "engines": {
     "node": ">=22"
   },
+  "workspaces": [
+    "apps/light-desktop",
+    "apps/light-hardware-controls",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "bash tools/dev.sh both",
     "dev:ui": "bash tools/dev.sh ui",
-    "dev:server": "bash tools/dev.sh server",
+    "dev:headless": "bash tools/dev.sh headless",
     "dev:app": "bash tools/dev.sh app",
     "codesafari": "bash tools/build.sh codesafari",
     "open": "bash tools/build.sh open",
@@ -31,13 +36,13 @@
     "test:unit": "bash tools/test.sh unit",
     "test:architecture": "bash tools/test.sh architecture",
     "test:semantic-test-docs": "node --test tools/semantic-test-docs/*.test.mjs",
+    "test:bench-unit": "vitest run tests/bench",
     "docs:semantic-tests:write": "node tools/semantic-test-docs/cli.mjs --write",
     "docs:semantic-tests:check": "node tools/semantic-test-docs/cli.mjs --check",
-    "test:bench-types": "apps/control-ui/node_modules/.bin/tsc --noEmit --pretty false --strict --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022,DOM --skipLibCheck apps/control-ui/e2e/bench/window-system/paneTypes.typecheck.ts",
+    "test:bench-types": "node_modules/.bin/tsc --noEmit --pretty false --strict --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022,DOM --skipLibCheck tests/bench/window-system/paneTypes.typecheck.ts",
     "test:e2e": "bash tools/test.sh e2e",
     "test:e2e-api": "bash tools/test.sh e2e-api",
     "test:e2e-ui": "bash tools/test.sh e2e-ui",
-    "test:e2e-supplemental": "bash tools/test.sh e2e-supplemental",
     "test:app-icons": "bash tools/test.sh app-icons",
     "test:artifact-paths": "bash tools/test.sh artifact-paths",
     "test:help-screenshots": "bash tools/test.sh help-screenshots",
@@ -49,10 +54,13 @@
     "release:dry-run": "node tools/run-semantic-release.mjs --dry-run"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@semantic-release/commit-analyzer": "^13.0.0",
     "@semantic-release/github": "^11.0.0",
     "@semantic-release/release-notes-generator": "^14.0.3",
     "conventional-changelog-conventionalcommits": "^9.1.0",
-    "semantic-release": "^24.2.3"
+    "semantic-release": "^24.2.3",
+    "typescript": "latest",
+    "vitest": "^4.1.10"
   }
 }

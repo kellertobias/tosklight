@@ -9,13 +9,14 @@ scenarios exercise it.
 
 - Use `scenario(...)` for operator-visible browser behavior that can be written
   entirely through the public semantic world.
-- Keep an `@api`, `@osc`, `@wire`, `@restart`, `@desktop`, or
-  `@supplemental-ui` test when raw transport, process control, persisted
-  corruption, packaged-app ownership, or exact low-level geometry is the
-  behavior under test.
-- Use `pairedScenario(...)` only while an independent API action and its
-  operator UI adapter still share one oracle. Do not manufacture UI coverage
-  by hiding an API mutation behind an open browser.
+- Keep an `@api` test only when the behavior cannot be driven truthfully
+  through production UI: raw transport contracts, constructed failure modes,
+  persisted corruption, migration/restart boundaries, concurrency, or exact
+  wire timing. Do not repeat an operator workflow through the API when its UI
+  scenario already verifies the same authoritative state.
+- Treat OSC and attached hardware as UI input surfaces and cover them in an
+  `@ui` semantic scenario. Use `@desktop` only for packaged-app lifecycle
+  behavior that requires a native bundle.
 - Never edit the canonical shows. `show.use(...)` creates an isolated working
   copy with a fresh session, Programmer, virtual clock, receivers, and OSC
   subscriptions for every scenario.
@@ -25,9 +26,9 @@ scenarios exercise it.
 ```ts
 // @bench-semantic-world
 
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
-import { fixtureRange } from "../apps/control-ui/e2e/bench/output/fixtureDmxContract";
-import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
+import { scenario } from "../tests/bench/core/scenario";
+import { fixtureRange } from "../tests/bench/output/fixtureDmxContract";
+import { Show } from "../tests/bench/show/showScenario";
 
 scenario("DIMMER-101", "Record and run a look", async (t) => {
 	await t.show.use(Show.CompactRig);
@@ -110,10 +111,9 @@ node tools/test-bench-migration-inventory.mjs --check
 npm run test:semantic-test-docs
 ```
 
-Use `./test e2e-supplemental` for retained low-level boundaries, `./test record`
-for the narrated visual catalog, and `./test demo` for the maintained product
-walkthrough. Browser Playwright coverage does not claim packaged Tauri or
-native OS-window coverage.
+Use `./test record` for the narrated visual catalog and `./test demo` for the
+maintained product walkthrough. Browser Playwright coverage does not claim
+packaged Tauri or native OS-window coverage.
 
 Regenerate maintained indexes after scenario changes:
 

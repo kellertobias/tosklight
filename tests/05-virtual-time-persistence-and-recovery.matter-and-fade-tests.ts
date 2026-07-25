@@ -1,5 +1,5 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
+import { expect, test } from "./bench/core/fixtures";
+import { pairedScenario } from "./bench/core/pairedScenario";
 import { assignMatterRestartPlayback } from "./05-virtual-time-persistence-and-recovery.playback-helpers";
 import {
 	assertFadeBoundaries,
@@ -18,7 +18,7 @@ import {
 import { fixtureIdsByNumber, loadCanonicalCopy } from "./support/catalog";
 
 export function registerMatterRestartTest(): void {
-	test("MATTER-002 @restart › desk enablement survives show changes and restart while advertised playbacks follow the active show", async ({
+	test("MATTER-002 @api @restart › desk enablement survives show changes and restart while advertised playbacks follow the active show", async ({
 		api,
 		bench,
 	}) => {

@@ -42,18 +42,18 @@ Start narrow, then widen according to risk:
 cargo fmt --all -- --check
 cargo run -p light-fixture --bin fixture-package -- validate assets/fixture-library/*.toskfixture
 cargo test -p light-fixture
-cargo check -p light-server
-(cd apps/control-ui && npm run typecheck)
-(cd apps/control-ui && npm test -- --run src/windows/stage3dScene.test.ts)
+cargo check -p light-headless
+npm run typecheck --workspace @tosklight/light-desktop
+npm test --workspace @tosklight/light-desktop -- --run src/windows/stage3dScene.test.ts
 npm run test:unit
 ```
 
 Build and start an isolated server with both a temporary desk directory and the repository package directory:
 
 ```sh
-cargo build -p light-server
+cargo build -p light-headless
 fixture_verify_dir=$(mktemp -d)
-target/debug/light-server \
+target/debug/light-headless \
   --data-dir "$fixture_verify_dir" \
   --fixture-package-dir "$PWD/assets/fixture-library" \
   --bind 127.0.0.1:5011 \

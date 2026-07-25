@@ -1,11 +1,11 @@
-import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
+import { expect } from "../bench/core/fixtures";
+import { scenario } from "../bench/core/scenario";
 import {
 	builtInPaneTypes,
 	PaneType,
 	PresetFamily,
 	StageView,
-} from "../../apps/control-ui/e2e/bench/window-system/paneTypes";
+} from "../bench/window-system/paneTypes";
 
 scenario("BENCH-UI-001", "opens the application and every operator Built-in by typed intent", async (t) => {
 	await t.app.open();

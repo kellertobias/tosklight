@@ -1,6 +1,6 @@
-import { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
+import { ApiDriver } from "./bench/core/api";
+import { expect, test } from "./bench/core/fixtures";
+import { pairedScenario } from "./bench/core/pairedScenario";
 import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,

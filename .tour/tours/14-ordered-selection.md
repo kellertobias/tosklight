@@ -18,16 +18,16 @@ highlight cache.
 ## Four input surfaces
 
 Visible Stage/Fixture Sheet gestures, command-line tokens, and exact OSC key phases converge on
-`crates/application/src/programming/service/selection.rs`. The frontend's optimistic layer is
-`apps/control-ui/src/features/programmingInteraction/selectionWriter.ts`; it predicts feedback but
+`crates/light/src/programming/service/selection.rs`. The frontend's optimistic layer is
+`apps/light-desktop/src/features/programmingInteraction/selectionWriter.ts`; it predicts feedback but
 does not become authority.
 
-The command parser and stable expression live in `crates/programmer/src/command_line.rs` and
-`crates/programmer/src/selection.rs`. Fixture and logical-head identities survive recompilation.
+The command parser and stable expression live in `crates/light/domain/programmer/src/command_line.rs` and
+`crates/light/domain/programmer/src/selection.rs`. Fixture and logical-head identities survive recompilation.
 
 ## Groups and ranges
 
-`crates/programmer/src/groups.rs` resolves a Group in stored membership order. A stored empty Group
+`crates/light/domain/programmer/src/groups.rs` resolves a Group in stored membership order. A stored empty Group
 is a valid object with zero members. An absent Group is an error when addressed directly. Missing
 IDs inside a range are skipped rather than invented as empty Groups.
 
@@ -49,7 +49,7 @@ The selection transition is published before the related show/runtime projection
 software and OSC surfaces see the correct target for the following value. A reconnect or sequence
 gap installs the authoritative selection snapshot; it never replays local keypresses.
 
-`apps/control-ui/src/features/programmingInteraction/selectionPrediction.ts` and
+`apps/light-desktop/src/features/programmingInteraction/selectionPrediction.ts` and
 `selectionWriter.ts` reject late work after desk/session/show replacement.
 
 ## Unpatched fixtures
@@ -59,6 +59,6 @@ groupable, and recordable; only fixture projection omits physical output.
 
 ## Exercise
 
-Read `crates/programmer/src/tests/selection_and_sessions.rs` and
+Read `crates/light/domain/programmer/src/tests/selection_and_sessions.rs` and
 `tests/support/foundational/supplementalGroups.ts`. For the sequence Group 1, subtract Fixture 2,
 add Group 2, then DEGRP, write the expected stable identity order before checking the assertions.

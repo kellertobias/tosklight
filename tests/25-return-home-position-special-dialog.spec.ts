@@ -1,7 +1,7 @@
-import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/command-selection/programmingSelection";
-import { expect } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
-import { batchProgrammerValues } from "../apps/control-ui/e2e/bench/programmer/programmerValues";
+import { replaceProgrammingSelection } from "./bench/command-selection/programmingSelection";
+import { expect } from "./bench/core/fixtures";
+import { pairedScenario } from "./bench/core/pairedScenario";
+import { batchProgrammerValues } from "./bench/programmer/programmerValues";
 import { loadCanonicalCopy, programmer } from "./support/catalog";
 
 type Assignment = {

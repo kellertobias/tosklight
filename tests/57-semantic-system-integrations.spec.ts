@@ -1,8 +1,8 @@
 // @bench-semantic-world
 
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
-import { StoreMode } from "../apps/control-ui/e2e/bench/groups-presets/groupScenario";
-import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
+import { scenario } from "./bench/core/scenario";
+import { StoreMode } from "./bench/groups-presets/groupScenario";
+import { Show } from "./bench/show/showScenario";
 
 scenario(
 	"UPDATE-001",

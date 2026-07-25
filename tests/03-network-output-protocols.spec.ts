@@ -1,13 +1,13 @@
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
-import { DmxReceiver } from "../apps/control-ui/e2e/bench/core/protocols";
+import type { ApiDriver } from "./bench/core/api";
+import { expect, test } from "./bench/core/fixtures";
+import { pairedScenario } from "./bench/core/pairedScenario";
+import { DmxReceiver } from "./bench/core/protocols";
 import {
 	batchProgrammerValues,
 	type ProgrammerValuesMutation,
 	releaseProgrammerFixtureValue,
 	setProgrammerFixtureValue,
-} from "../apps/control-ui/e2e/bench/programmer/programmerValues";
+} from "./bench/programmer/programmerValues";
 import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,
@@ -1241,7 +1241,7 @@ async function expectSunstripVirtualDimmers(
 	for (let index = 0; index < 10; index += 1) {
 		// Mirrors the schema-v2 engine: the colour channel quantizes to raw first, then the
 		// virtual-dimmer intensity scale (an f32 widened to f64) multiplies the raw value once
-		// (crates/fixture/src/profile/resolution.rs scale_channel_raw).
+		// (crates/shared/fixture/src/profile/resolution.rs scale_channel_raw).
 		const expected = Math.round(255 * Math.fround((index + 1) / 10));
 		expect(logical.slice(start + index * 3, start + index * 3 + 3)).toEqual([
 			expected,
@@ -1256,7 +1256,7 @@ async function expectSunstripVirtualDimmers(
 
 // Mirrors the engine's normalized→raw path: the f64 value is narrowed to f32, scaled by
 // the resolution maximum in f32 arithmetic, rounded, and only then inverted around the
-// maximum (crates/fixture/src/profile/resolution.rs normalized_raw + scale_channel_raw).
+// maximum (crates/shared/fixture/src/profile/resolution.rs normalized_raw + scale_channel_raw).
 function encodeSixteenBit(value: number, invert: boolean): number {
 	const normalized = Math.fround(Math.max(0, Math.min(1, value)));
 	const raw = Math.round(Math.fround(normalized * 65_535));

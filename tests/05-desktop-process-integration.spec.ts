@@ -1,13 +1,13 @@
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
-import playwright from "../apps/control-ui/node_modules/@playwright/test/index.js";
+import playwright from "@playwright/test";
 
 const { test } = playwright;
 
 const exec = promisify(execFile);
 const ROOT = path.resolve(import.meta.dirname, "..");
-const DESKTOP_SMOKE = path.join(ROOT, "apps/control-ui/e2e/desktop-smoke.mjs");
+const DESKTOP_SMOKE = path.join(ROOT, "apps/light-desktop/e2e/desktop-smoke.mjs");
 const enabled = process.env.LIGHT_DESKTOP_SMOKE === "1";
 
 test.describe("docs/testing/05-virtual-time-persistence-and-recovery.md · packaged desktop", () => {

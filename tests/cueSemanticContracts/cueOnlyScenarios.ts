@@ -1,8 +1,8 @@
-import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { expect } from "../bench/core/fixtures";
 import {
 	clearProgrammerValues,
 	setProgrammerGroupValue,
-} from "../../apps/control-ui/e2e/bench/programmer/programmerValues";
+} from "../bench/programmer/programmerValues";
 import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,

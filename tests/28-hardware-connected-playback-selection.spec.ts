@@ -1,12 +1,12 @@
-import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/command-selection/programmingSelection";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
-import { setProgrammerFixtureValue } from "../apps/control-ui/e2e/bench/programmer/programmerValues";
+import { replaceProgrammingSelection } from "./bench/command-selection/programmingSelection";
+import type { ApiDriver } from "./bench/core/api";
+import { expect, test } from "./bench/core/fixtures";
+import { pairedScenario } from "./bench/core/pairedScenario";
+import { setProgrammerFixtureValue } from "./bench/programmer/programmerValues";
 import type {
 	Locator,
 	Page,
-} from "../apps/control-ui/node_modules/@playwright/test/index.js";
+} from "@playwright/test";
 import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,

@@ -1,5 +1,5 @@
-import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../../apps/control-ui/e2e/bench/core/pairedScenario";
+import { expect, test } from "../bench/core/fixtures";
+import { pairedScenario } from "../bench/core/pairedScenario";
 import {
 	activePlayback,
 	armSet,
@@ -19,7 +19,7 @@ import {
 	programmer,
 	setFirstButton,
 } from "./helpers";
-import type { PreparedShow } from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
+import type { PreparedShow } from "../bench/playbacks/playback-configuration/models";
 
 type Pbk003State = PreparedShow & {
 	runtimeBeforeSelect?: any;

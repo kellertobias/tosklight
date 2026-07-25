@@ -1,0 +1,18 @@
+[package]
+name = "light-output"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+light-core = { path = "../../../shared/core" }
+serde.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

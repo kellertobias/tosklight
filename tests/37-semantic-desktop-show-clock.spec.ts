@@ -1,13 +1,13 @@
 // @bench-semantic-world
 
-import { expect } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { expect } from "./bench/core/fixtures";
 import {
 	fixture,
 	fixtureRange,
-} from "../apps/control-ui/e2e/bench/output/fixtureDmx";
-import { PaneType } from "../apps/control-ui/e2e/bench/window-system/paneTypes";
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
-import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
+} from "./bench/output/fixtureDmx";
+import { PaneType } from "./bench/window-system/paneTypes";
+import { scenario } from "./bench/core/scenario";
+import { Show } from "./bench/show/showScenario";
 
 scenario(
 	"BENCH-UI-003",

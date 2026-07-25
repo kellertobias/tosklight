@@ -18,7 +18,7 @@ Authorities: `docs/testing/README.md` for the acceptance contract and notation,
 | Layer | Where | Command |
 | --- | --- | --- |
 | Rust unit and integration | each crate's `tests/` or feature-local modules | `npm run test:unit` |
-| TS unit and component | `apps/control-ui/src/**/*.test.ts(x)`, jsdom and Testing Library | `npm run test:unit` |
+| TS unit and component | `apps/light-desktop/src/**/*.test.ts(x)`, jsdom and Testing Library | `npm run test:unit` |
 | Type and build gate | `tsc --noEmit && vite build` | `npm run test:unit` |
 | Architecture | `tools/check-architecture.mjs`, `tools/check-source-size.mjs` | `npm run test:architecture` |
 | e2e-api `@api` | root `tests/`, no browser | `npm run test:e2e-api` |
@@ -30,7 +30,7 @@ Start with the smallest relevant check and widen by risk.
 
 ## pairedScenario
 
-`apps/control-ui/e2e/bench/core/pairedScenario.ts`:
+`tests/bench/core/pairedScenario.ts`:
 
 ```ts
 pairedScenario({ id, title, arrange, api, ui, assert })
@@ -42,11 +42,11 @@ oracle, each on its own fresh show. That is how surface parity is proven rather 
 
 ## The bench
 
-`apps/control-ui/e2e/bench/`:
+`tests/bench/`:
 
 | File | Provides |
 | --- | --- |
-| `lightBench.ts` | Per-worker temp data dir, free TCP/UDP port allocation, spawns `light-server`, `restart()`, graceful shutdown via `POST /api/v2/shutdown`, abrupt SIGKILL, Art-Net and sACN receivers, OSC hardware factory, virtual clock cursor, `createTwelveDimmerShow()`, failure artifacts |
+| `lightBench.ts` | Per-worker temp data dir, free TCP/UDP port allocation, spawns `light-headless`, `restart()`, graceful shutdown via `POST /api/v2/shutdown`, abrupt SIGKILL, Art-Net and sACN receivers, OSC hardware factory, virtual clock cursor, `createTwelveDimmerShow()`, failure artifacts |
 | `api.ts` | `ApiDriver`: login, revision and ETag validation, `getCommandLine`, `replaceCommandLine`, `sendCommandKey`, `executeCommandLine`, typed `command<T>()` over the versioned command WebSocket |
 | `desk.ts` | `DeskDriver`: browser desk facade. `open(baseUrl)` waits out the connection cover and banner and pins the desk alias. Also the recording and narration overlay |
 | `protocols.ts` | `DmxReceiver` (`bind()`, `nextAfter(mark, "artnet"\|"sacn", universe)`), `OscHardware` (`connect`, `subscribe`, `send`, `mark()`, `expectAfter`), `encodeOscMessage` |
@@ -80,7 +80,7 @@ type ProgrammerSurface =
 - The OSC surface is real OSC: `withOscProgrammer` owns the subscribe and unsubscribe lifecycle
   against `session.desk.osc_alias`, `tapOscKey` sends explicit `true` then `false` phases, and each
   phase waits for the command-line feedback message after a receiver mark. No sleeps. Action names
-  come from `oscProgrammerActionForKey` in `apps/shared/programmerKeypad.ts`, the same mapping the
+  come from `oscProgrammerActionForKey` in `packages/light-controls/src/programmerKeypad.ts`, the same mapping the
   app uses.
 
 Also `groups.ts` (`storeGroup` via pool or programmer) and `patch.ts` (drives the real Fixture
@@ -124,9 +124,9 @@ enforces.
 ## Read first
 
 1. `docs/testing/README.md`
-2. `apps/control-ui/e2e/bench/core/pairedScenario.ts`
-3. `apps/control-ui/e2e/bench/core/fixtures.ts`
-4. `apps/control-ui/e2e/bench/core/lightBench.ts`
+2. `tests/bench/core/pairedScenario.ts`
+3. `tests/bench/core/fixtures.ts`
+4. `tests/bench/core/lightBench.ts`
 5. `tests/support/operator/programmer.ts`
 6. `tests/support/catalog.ts`
 7. `playwright.config.ts`

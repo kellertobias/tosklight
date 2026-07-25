@@ -2,7 +2,7 @@
 
 Standalone, clickable frontend dummy based on `docs/plans/Later/02-dynamics.md`.
 
-This is deliberately isolated from `apps/control-ui`: it has no imports, packages,
+This is deliberately isolated from `apps/light-desktop`: it has no imports, packages,
 API calls, persistence, or backend behavior. The small CSS subset and controls used
 by the dummy are copied into this folder, so changes to the production UI do not
 affect the experiment.

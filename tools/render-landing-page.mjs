@@ -39,7 +39,7 @@ const PLATFORMS = [
         kind: "Hardware Controls application",
         file: (v) => `tosklight-hardware-controls-${v}-macos-arm64.zip`,
       },
-      { kind: "Standalone server", file: (v) => `light-server-${v}-macos-arm64.zip` },
+      { kind: "Standalone server", file: (v) => `light-headless-${v}-macos-arm64.zip` },
     ],
   },
   {
@@ -47,7 +47,7 @@ const PLATFORMS = [
     note: "64-bit. The installer is unsigned — SmartScreen will ask you to confirm.",
     assets: [
       { kind: "Desktop installer", file: (v) => `tosklight-${v}-windows-amd64-setup.exe` },
-      { kind: "Standalone server", file: (v) => `light-server-${v}-windows-amd64.zip` },
+      { kind: "Standalone server", file: (v) => `light-headless-${v}-windows-amd64.zip` },
     ],
   },
   {
@@ -56,7 +56,7 @@ const PLATFORMS = [
     assets: [
       { kind: "Desktop application (AppImage)", file: (v) => `tosklight-${v}-linux-amd64.AppImage` },
       { kind: "Desktop package (.deb)", file: (v) => `tosklight-${v}-linux-amd64.deb` },
-      { kind: "Standalone server", file: (v) => `light-server-${v}-linux-amd64.zip` },
+      { kind: "Standalone server", file: (v) => `light-headless-${v}-linux-amd64.zip` },
     ],
   },
   {
@@ -65,7 +65,7 @@ const PLATFORMS = [
       "Pi 4 and Pi 5 on 64-bit Raspberry Pi OS. Statically linked, so it runs on any " +
       "release. Server only — run the desk from a browser on another machine.",
     assets: [
-      { kind: "Standalone server (ARM64)", file: (v) => `light-server-${v}-linux-arm64.zip` },
+      { kind: "Standalone server (ARM64)", file: (v) => `light-headless-${v}-linux-arm64.zip` },
     ],
   },
 ];

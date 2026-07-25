@@ -7,7 +7,7 @@ A Show is **portable** — carry it to another desk, machine, or venue and it mu
 Stored as a lossless `.show` document: objects and fields this version does not understand are
 preserved verbatim through load, edit, revision, Save As, and export.
 
-Lives in `crates/show/src/portable/`. Contrast with the [Desk](glossary:desk).
+Lives in `crates/shared/show/src/portable/`. Contrast with the [Desk](glossary:desk).
 
 ## Desk
 

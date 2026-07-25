@@ -1,10 +1,10 @@
-import type { ApiDriver, Session } from "../apps/control-ui/e2e/bench/core/api";
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
-import type { OscHardware } from "../apps/control-ui/e2e/bench/core/protocols";
-import { setProgrammerGroupValue } from "../apps/control-ui/e2e/bench/programmer/programmerValues";
-import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/command-selection/programmingSelection";
-import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
+import type { ApiDriver, Session } from "./bench/core/api";
+import { expect, test } from "./bench/core/fixtures";
+import { pairedScenario } from "./bench/core/pairedScenario";
+import type { OscHardware } from "./bench/core/protocols";
+import { setProgrammerGroupValue } from "./bench/programmer/programmerValues";
+import { replaceProgrammingSelection } from "./bench/command-selection/programmingSelection";
+import type { Locator, Page } from "@playwright/test";
 import {
   executeProgrammerCommand,
   withOscProgrammer,

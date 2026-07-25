@@ -1,15 +1,15 @@
-import type { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
-import type { PlaybackRuntimeSnapshot } from "../../apps/control-ui/src/api/generated/light-wire";
-import { HttpPlaybackTopologyTransport } from "../../apps/control-ui/src/api/PlaybackTopologyTransport";
-import { encodePlaybackTopologyRequest } from "../../apps/control-ui/src/api/playbackTopologyWire";
+import type { ApiDriver } from "../bench/core/api";
+import type { PlaybackRuntimeSnapshot } from "../../apps/light-desktop/src/api/generated/light-wire";
+import { HttpPlaybackTopologyTransport } from "../../apps/light-desktop/src/api/PlaybackTopologyTransport";
+import { encodePlaybackTopologyRequest } from "../../apps/light-desktop/src/api/playbackTopologyWire";
 import type {
 	PlaybackDefinition,
 	PlaybackPage,
-} from "../../apps/control-ui/src/api/types";
+} from "../../apps/light-desktop/src/api/types";
 import type {
 	PlaybackTopologyAction,
 	PlaybackTopologyOutcome,
-} from "../../apps/control-ui/src/features/playbackTopology/contracts";
+} from "../../apps/light-desktop/src/features/playbackTopology/contracts";
 import { activeShowId, objects, type VersionedObject } from "./catalog";
 
 export interface PlaybackSlotAuthority {

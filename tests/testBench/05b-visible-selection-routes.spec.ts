@@ -1,12 +1,12 @@
-import { BrowserScenarioWorld } from "../../apps/control-ui/e2e/bench/core/browserScenario";
-import { DeskDriver } from "../../apps/control-ui/e2e/bench/core/desk";
-import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { PaneType } from "../../apps/control-ui/e2e/bench/window-system/paneTypes";
-import { scenario } from "../../apps/control-ui/e2e/bench/core/scenario";
+import { BrowserScenarioWorld } from "../bench/core/browserScenario";
+import { DeskDriver } from "../bench/core/desk";
+import { expect, test } from "../bench/core/fixtures";
+import { PaneType } from "../bench/window-system/paneTypes";
+import { scenario } from "../bench/core/scenario";
 import {
 	fixture,
 	fixtureRange,
-} from "../../apps/control-ui/e2e/bench/command-selection/selectionContract";
+} from "../bench/command-selection/selectionContract";
 
 scenario(
 	"BENCH-SELECTION-ROUTES-002",
@@ -39,7 +39,7 @@ scenario(
 	},
 );
 
-test("BENCH-SELECTION-ROUTES-003 @bench @touch › touch route uses a real touch-enabled browser context", async ({
+test("BENCH-SELECTION-ROUTES-003 @bench @ui @touch › touch route uses a real touch-enabled browser context", async ({
 	api,
 	bench,
 	browser,

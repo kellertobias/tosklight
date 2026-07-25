@@ -79,7 +79,7 @@ The root suite currently contains 35 specifications and 17,372 lines. It is a sy
 ### Rust
 
 - The Rust workspace had no crate-level `tests/` integration-test directories at baseline. Its coverage was concentrated in 355 inline test functions across 28 `#[cfg(test)]` modules; new pure reducer tests may remain inline as Stage 1 proceeds.
-- `crates/server/src/main.rs` alone owns 82 test functions. Its server tests build routers and then frequently reach through the same module into shared implementation state: the baseline audit found 28 router constructions/usages, 46 direct lock accesses, 34 direct `AppState` accesses, and 7 direct OSC-internal accesses in the test section.
+- `crates/light/adapters/headless/src/main.rs` alone owns 82 test functions. Its server tests build routers and then frequently reach through the same module into shared implementation state: the baseline audit found 28 router constructions/usages, 46 direct lock accesses, 34 direct `AppState` accesses, and 7 direct OSC-internal accesses in the test section.
 - Inline unit tests should remain adjacent to pure reducers and codecs. Router, authentication, application-service, persistence, OSC-adapter and lifecycle behavior should move to crate-level integration tests as those public boundaries appear.
 - Tests must stop treating direct mutex access as proof of behavior. Application services should return immutable query projections and typed outcomes; adapter tests should assert only public wire contracts and domain events.
 
@@ -91,8 +91,8 @@ These results were recorded before the Stage 1 transport migration:
 | --- | --- |
 | `cargo fmt --all -- --check` | passed |
 | `cargo clippy --workspace --all-targets -- -D warnings` | passed |
-| `npm run build` in `apps/hardware-controls` | passed |
-| `npm test` in `apps/control-ui` | passed: 83 files, 512 tests after repairing one stale Groups-window accessibility expectation |
+| `npm run build` in `apps/light-hardware-controls` | passed |
+| `npm test` in `apps/light-desktop` | passed: 83 files, 512 tests after repairing one stale Groups-window accessibility expectation |
 | `./test unit` | Rust suites passed; the first control-UI run exposed the stale Groups-window expectation recorded above |
 | `./test e2e-api` | 75 passed, 7 failed |
 

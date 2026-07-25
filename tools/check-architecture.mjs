@@ -65,13 +65,24 @@ function rustDependencyDirections() {
     if (packageMetadata.name === "light-wire") {
       for (const dependency of workspaceDependencies) forbidden.add(dependency);
     } else if (packageMetadata.name === "light-application") {
-      for (const dependency of ["light-wire", "light-server", "light-control-ui", "light-hardware-controls"])
+      for (const dependency of [
+        "light-wire",
+        "light-headless-runtime",
+        "light-headless",
+        "light-desktop",
+        "light-hardware-controls",
+      ])
         if (workspaceDependencies.has(dependency)) forbidden.add(dependency);
     } else if (
-      manifest.startsWith("crates/") &&
-      packageMetadata.name !== "light-server"
+      (manifest.startsWith("crates/light/domain/") || manifest.startsWith("crates/shared/")) &&
+      packageMetadata.name !== "light-headless-runtime"
     ) {
-      for (const dependency of ["light-application", "light-wire", "light-server"])
+      for (const dependency of [
+        "light-application",
+        "light-wire",
+        "light-headless-runtime",
+        "light-headless",
+      ])
         if (workspaceDependencies.has(dependency)) forbidden.add(dependency);
     }
 
@@ -80,29 +91,38 @@ function rustDependencyDirections() {
     }
   }
 
-  const server = workspacePackages.find((candidate) => candidate.name === "light-server");
-  if (!server) {
-    fail("light-server is missing from the Rust workspace");
+  const runtime = workspacePackages.find((candidate) => candidate.name === "light-headless-runtime");
+  if (!runtime) {
+    fail("light-headless-runtime is missing from the Rust workspace");
   } else {
-    const dependencies = new Set(server.dependencies.map((dependency) => dependency.name));
+    const dependencies = new Set(runtime.dependencies.map((dependency) => dependency.name));
     for (const required of ["light-application", "light-wire"])
-      if (!dependencies.has(required)) fail(`light-server must compose ${required}`);
+      if (!dependencies.has(required)) fail(`light-headless-runtime must compose ${required}`);
+  }
+
+  const headless = workspacePackages.find((candidate) => candidate.name === "light-headless");
+  if (!headless) {
+    fail("light-headless is missing from the Rust workspace");
+  } else {
+    const dependencies = new Set(headless.dependencies.map((dependency) => dependency.name));
+    if (!dependencies.has("light-headless-runtime"))
+      fail("light-headless must bootstrap light-headless-runtime");
   }
 }
 
 function serverEntrypointIsThin() {
-  const entrypoint = path.join(repositoryRoot, "crates/server/src/main.rs");
+  const entrypoint = path.join(repositoryRoot, "apps/light-headless/src/main.rs");
   const source = fs.readFileSync(entrypoint, "utf8");
   const nonEmptyLines = source.split(/\r?\n/u).filter((line) => line.trim()).length;
-  if (nonEmptyLines > 10) fail("crates/server/src/main.rs must remain a thin lifecycle entry point");
+  if (nonEmptyLines > 10) fail("apps/light-headless/src/main.rs must remain a thin lifecycle entry point");
   for (const forbidden of ["Router", "AppState", "TcpListener", "tokio::spawn"])
     if (source.includes(forbidden)) fail(`server entry point must not own ${forbidden}`);
-  if (!source.includes("light_server::run().await"))
-    fail("server entry point must delegate lifecycle ownership to the server library");
+  if (!source.includes("light_headless_runtime::run().await"))
+    fail("headless entry point must delegate lifecycle ownership to the runtime adapter");
 }
 
 function activeShowMutationDirections() {
-  const updateAdapter = path.join(repositoryRoot, "crates/server/src/runtime/update_plans.rs");
+  const updateAdapter = path.join(repositoryRoot, "crates/light/adapters/headless/src/runtime/update_plans.rs");
   const source = fs.readFileSync(updateAdapter, "utf8");
   for (const forbidden of [".put_object(", "refresh_command_show", "load_engine_snapshot"])
     if (source.includes(forbidden))
@@ -110,7 +130,7 @@ function activeShowMutationDirections() {
 }
 
 function playbackOwnershipBoundaries() {
-  const engineSources = walk(path.join(repositoryRoot, "crates/engine/src"))
+  const engineSources = walk(path.join(repositoryRoot, "crates/light/domain/engine/src"))
     .filter((candidate) => candidate.endsWith(".rs"));
   for (const file of engineSources) {
     const source = fs.readFileSync(file, "utf8");
@@ -118,7 +138,7 @@ function playbackOwnershipBoundaries() {
       fail(`${relative(file)} exposes a public Playback lock instead of typed commands and projections`);
   }
 
-  const applicationPlayback = walk(path.join(repositoryRoot, "crates/application/src/playback"))
+  const applicationPlayback = walk(path.join(repositoryRoot, "crates/light/src/playback"))
     .filter((candidate) => candidate.endsWith(".rs"));
   for (const file of applicationPlayback) {
     const source = fs.readFileSync(file, "utf8");
@@ -127,8 +147,8 @@ function playbackOwnershipBoundaries() {
   }
 
   const externalRoots = [
-    path.join(repositoryRoot, "crates/application/src"),
-    path.join(repositoryRoot, "crates/server/src"),
+    path.join(repositoryRoot, "crates/light/src"),
+    path.join(repositoryRoot, "crates/light/adapters/headless/src"),
   ];
   for (const file of externalRoots.flatMap(walk).filter((candidate) => candidate.endsWith(".rs"))) {
     const name = relative(file);
@@ -157,7 +177,7 @@ function localImports(source) {
 }
 
 function typeScriptDependencyDirections() {
-  const sourceRoot = path.join(repositoryRoot, "apps/control-ui/src");
+  const sourceRoot = path.join(repositoryRoot, "apps/light-desktop/src");
   const apiRoot = path.join(sourceRoot, "api");
   const generatedFile = path.join(apiRoot, "generated/light-wire.ts");
   if (!fs.existsSync(generatedFile)) {
@@ -188,7 +208,7 @@ function typeScriptDependencyDirections() {
         (resolved.startsWith(path.join(sourceRoot, "components")) ||
           resolved.startsWith(path.join(sourceRoot, "windows")));
       const legacySoftwareKeypad =
-        relative(file) === "apps/control-ui/src/api/ServerContext.tsx" &&
+        relative(file) === "apps/light-desktop/src/api/ServerContext.tsx" &&
         specifier === "../components/control/softwareKeypad";
       if (importsUiFromApi && !legacySoftwareKeypad)
         fail(`${relative(file)} imports presentation code through ${specifier}`);
@@ -217,7 +237,7 @@ function isProductionTypeScript(file) {
 }
 
 function legacyPlaybackSnapshotBoundaries() {
-  const sourceRoot = path.join(repositoryRoot, "apps/control-ui/src");
+  const sourceRoot = path.join(repositoryRoot, "apps/light-desktop/src");
   for (const file of walk(sourceRoot).filter(isProductionTypeScript)) {
     const source = fs.readFileSync(file, "utf8");
     for (const [description, pattern] of legacyPlaybackPatterns)

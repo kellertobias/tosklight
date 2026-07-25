@@ -1,7 +1,7 @@
-import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../../apps/control-ui/e2e/bench/core/pairedScenario";
-import { setProgrammerFixtureValue } from "../../apps/control-ui/e2e/bench/programmer/programmerValues";
-import { replaceProgrammingSelection } from "../../apps/control-ui/e2e/bench/command-selection/programmingSelection";
+import { expect } from "../bench/core/fixtures";
+import { pairedScenario } from "../bench/core/pairedScenario";
+import { setProgrammerFixtureValue } from "../bench/programmer/programmerValues";
+import { replaceProgrammingSelection } from "../bench/command-selection/programmingSelection";
 import {
 	loadCanonicalCopy,
 	object,

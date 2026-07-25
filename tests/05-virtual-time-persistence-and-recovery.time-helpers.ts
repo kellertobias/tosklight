@@ -1,9 +1,9 @@
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
-import type { DeskDriver } from "../apps/control-ui/e2e/bench/core/desk";
-import { expect } from "../apps/control-ui/e2e/bench/core/fixtures";
-import type { LightBench } from "../apps/control-ui/e2e/bench/core/lightBench";
-import type { OscHardware } from "../apps/control-ui/e2e/bench/core/protocols";
-import type { Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
+import type { ApiDriver } from "./bench/core/api";
+import type { DeskDriver } from "./bench/core/desk";
+import { expect } from "./bench/core/fixtures";
+import type { LightBench } from "./bench/core/lightBench";
+import type { OscHardware } from "./bench/core/protocols";
+import type { Page } from "@playwright/test";
 import { normalized, programmer } from "./support/catalog";
 
 export const FIXED_NOW = "2020-01-01T00:00:00Z";

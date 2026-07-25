@@ -27,7 +27,7 @@ flowchart LR
     INPUTS["MIDI / Matter / schedulers"]
   end
 
-  subgraph SERVER["light-server: composition and adapters"]
+  subgraph SERVER["light-headless: composition and adapters"]
     AUTH["Authentication and addressing"]
     V2["Typed v2 HTTP and event adapters"]
     COMPAT["OSC / integrator / desktop adapters"]
@@ -83,7 +83,7 @@ The common mutation path is:
 6. Reconcile only subscribed frontend projections; command responses and events meet by request
    identity and revision.
 
-For active-show writes, `crates/application/src/active_show/service.rs` is the shared ordered
+For active-show writes, `crates/light/src/active_show/service.rs` is the shared ordered
 lifecycle. Capability services prepare typed changes, while `light-show` retains unknown JSON and
 commits a revisioned `PortableShowTransaction` atomically. Runtime preparation happens before the
 commit; runtime installation and event publication remain ordered after it.
@@ -91,21 +91,21 @@ commit; runtime installation and event publication remain ordered after it.
 ## Query and event model
 
 Commands and queries return immutable projections rather than locks, registries, or transport
-objects. `crates/application/src/event/` owns the bounded event bus. A subscription may filter by
+objects. `crates/light/src/event/` owns the bounded event bus. A subscription may filter by
 desk, capability, class, and stable object identity. Lossless transitions cause an explicit gap on
 overflow; replaceable projections may coalesce or be rate-limited.
 
-The v2 WebSocket adapter is `crates/server/src/runtime/event_transport.rs`. A frontend session
+The v2 WebSocket adapter is `crates/light/adapters/headless/src/runtime/event_transport.rs`. A frontend session
 hydrates an authoritative snapshot, subscribes from its cursor, applies relevant events, and, on a
 gap, installs a coverage-complete snapshot before requesting repair. It is valid to have no
 subscription when a view is not mounted.
 
 The reference frontend implementations are:
 
-- `apps/control-ui/src/features/showObjects/` for kind-wide and exact-object show projections;
-- `apps/control-ui/src/features/playbackRuntime/` for Playback and selected-Cuelist runtime;
-- `apps/control-ui/src/features/patch/` for revisioned optimistic Patch mutations; and
-- `apps/control-ui/src/api/` for generated DTO consumption, decoding, and HTTP/WebSocket adapters.
+- `apps/light-desktop/src/features/showObjects/` for kind-wide and exact-object show projections;
+- `apps/light-desktop/src/features/playbackRuntime/` for Playback and selected-Cuelist runtime;
+- `apps/light-desktop/src/features/patch/` for revisioned optimistic Patch mutations; and
+- `apps/light-desktop/src/api/` for generated DTO consumption, decoding, and HTTP/WebSocket adapters.
 
 Feature stores keep the authoritative base separate from pending optimistic overlays. A failed
 command rolls back its overlay; a successful response or matching event reconciles it. Components
@@ -118,33 +118,33 @@ do not rerender the application.
 installs a coherent runtime generation and resolves Programmer, Playback, Preload, Group, control,
 and optional sampled contribution batches at a render instant. Stateful producers remain outside
 the deterministic render core and provide finite semantic fixture-and-attribute samples through
-`crates/engine/src/contribution_batch.rs`.
+`crates/light/domain/engine/src/contribution_batch.rs`.
 
 `Engine::render_with_contribution_batches` produces semantic projections and complete DMX frames
 without persistence, JSON, fixture-library reads, frontend work, or client backpressure. The output
-scheduler in `crates/server/src/runtime/output_scheduler.rs` encodes and delivers routes through
+scheduler in `crates/light/adapters/headless/src/runtime/output_scheduler.rs` encodes and delivers routes through
 `light-output`. Automatic Playback transitions are returned from the render boundary and published
 after domain locks are released.
 
 ## Persistence and process ownership
 
 The configured data directory contains `desk.sqlite`, portable `.show` SQLite files, revisions,
-fixture-library state, media/cache data, and the server log. `crates/show/src/desk/` owns desk
-installation data; `crates/show/src/portable/` owns portable show data. They must never be copied as
+fixture-library state, media/cache data, and the server log. `crates/shared/show/src/desk/` owns desk
+installation data; `crates/shared/show/src/portable/` owns portable show data. They must never be copied as
 one undifferentiated database. See [State ownership](state-ownership.md) before adding a field.
 
-`crates/server/src/main.rs` only calls `light_server::run()`. Startup, router composition,
+`apps/light-headless/src/main.rs` only calls `light_headless_runtime::run()`. Startup, router composition,
 background input tasks, the output scheduler, cancellation, and graceful shutdown live under
-`crates/server/src/runtime/`. The main Tauri host is `apps/control-ui/src-tauri/`; the sibling
-Hardware Controls host is `apps/hardware-controls/src-tauri/`. Browser tests use the typed desktop
-adapter under `apps/control-ui/src/platform/desktop/` rather than importing Tauri globally.
+`crates/light/adapters/headless/src/runtime/`. The main Tauri host is `apps/light-desktop/src-tauri/`; the sibling
+Hardware Controls host is `apps/light-hardware-controls/src-tauri/`. Browser tests use the typed desktop
+adapter under `apps/light-desktop/src/platform/desktop/` rather than importing Tauri globally.
 
 ## Deliberately retained compatibility seams
 
 No served application route remains under `/api/v1`, and production code has no `useServer()`
-consumer. `apps/control-ui/src/api/ServerContext.ts` is a contract-only export for legacy
+consumer. `apps/light-desktop/src/api/ServerContext.ts` is a contract-only export for legacy
 virtual-module test mocks; it is not a runtime provider or extension point.
-`apps/control-ui/src/features/server/` now contains focused capability composition and shared
+`apps/light-desktop/src/features/server/` now contains focused capability composition and shared
 connection infrastructure. New work belongs in an owning feature store, typed v2 adapter, and
 semantic event path rather than a broad context, generic show-object mutation, string event route,
 or catch-all refresh.

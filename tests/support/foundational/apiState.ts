@@ -1,14 +1,14 @@
 import {
 	type ApiDriver,
 	commandLineOwnership,
-} from "../../../apps/control-ui/e2e/bench/core/api";
-import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
-import { clearProgrammerValues } from "../../../apps/control-ui/e2e/bench/programmer/programmerValues";
+} from "../../bench/core/api";
+import { expect } from "../../bench/core/fixtures";
+import { clearProgrammerValues } from "../../bench/programmer/programmerValues";
 import {
 	gestureActiveProgrammingSelection,
 	replaceActiveProgrammingSelection,
 	replaceProgrammingSelection,
-} from "../../../apps/control-ui/e2e/bench/command-selection/programmingSelection";
+} from "../../bench/command-selection/programmingSelection";
 import { loadCanonicalCopy } from "../catalog";
 import type { ProgrammerState, ShowEntry, VersionedObject } from "./contracts";
 

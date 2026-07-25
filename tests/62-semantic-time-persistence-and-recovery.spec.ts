@@ -1,14 +1,14 @@
 // @bench-semantic-world
 
-import { expect } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
-import { StoreMode } from "../apps/control-ui/e2e/bench/groups-presets/groupScenario";
-import { fixture, group } from "../apps/control-ui/e2e/bench/command-selection/selectionContract";
+import { expect } from "./bench/core/fixtures";
+import { scenario } from "./bench/core/scenario";
+import { StoreMode } from "./bench/groups-presets/groupScenario";
+import { fixture, group } from "./bench/command-selection/selectionContract";
 import {
 	RestartMode,
 	Show,
-} from "../apps/control-ui/e2e/bench/show/showScenario";
-import { PaneType } from "../apps/control-ui/e2e/bench/window-system/paneTypes";
+} from "./bench/show/showScenario";
+import { PaneType } from "./bench/window-system/paneTypes";
 
 scenario(
 	"TIME-001",

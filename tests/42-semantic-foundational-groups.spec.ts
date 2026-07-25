@@ -2,16 +2,16 @@
 
 import {
 	StoreMode,
-} from "../apps/control-ui/e2e/bench/groups-presets/groupScenario";
-import { PaneType } from "../apps/control-ui/e2e/bench/window-system/paneTypes";
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
+} from "./bench/groups-presets/groupScenario";
+import { PaneType } from "./bench/window-system/paneTypes";
+import { scenario } from "./bench/core/scenario";
 import {
 	fixture,
 	fixtureRange,
 	group,
 	groupRange,
-} from "../apps/control-ui/e2e/bench/command-selection/selectionContract";
-import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
+} from "./bench/command-selection/selectionContract";
+import { Show } from "./bench/show/showScenario";
 
 scenario(
 	"GROUP-003",

@@ -1,21 +1,22 @@
 [workspace]
 resolver = "3"
 members = [
-  "apps/control-ui/src-tauri",
-  "apps/hardware-controls/src-tauri",
-  "crates/core",
-  "crates/fixture",
-  "crates/show",
-  "crates/programmer",
-  "crates/playback",
-  "crates/output",
-  "crates/control",
-  "crates/engine",
-  "crates/media",
-  "crates/mvr",
-  "crates/application",
-  "crates/wire",
-  "crates/server",
+  "apps/light-desktop/src-tauri",
+  "apps/light-hardware-controls/src-tauri",
+  "apps/light-headless",
+  "crates/light",
+  "crates/light/adapters/headless",
+  "crates/light/adapters/media",
+  "crates/light/contracts/wire",
+  "crates/light/domain/control",
+  "crates/light/domain/engine",
+  "crates/light/domain/output",
+  "crates/light/domain/playback",
+  "crates/light/domain/programmer",
+  "crates/shared/core",
+  "crates/shared/fixture",
+  "crates/shared/mvr",
+  "crates/shared/show",
 ]
 
 [workspace.package]
@@ -53,8 +54,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.16", features = ["v4", "serde"] }
 quick-xml = "0.38"
 zip = { version = "4.6", default-features = false, features = ["deflate"] }
-light-application = { path = "crates/application" }
-light-wire = { path = "crates/wire" }
+light-application = { path = "crates/light" }
+light-wire = { path = "crates/light/contracts/wire" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

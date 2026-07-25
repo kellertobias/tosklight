@@ -45,14 +45,14 @@ Honor the narrowest requested scope. If the request says to edit planning or tes
 
 ## Repository map
 
-- `crates/engine`: resolved values, render state, output and transition behavior
-- `crates/programmer`: programmer state and merge semantics
-- `crates/playback`: cue/playback behavior
-- `crates/server`: REST, WebSocket, OSC, sessions, persistence and server orchestration
-- `apps/control-ui`: main Tauri/web operator interface
-- `apps/hardware-controls`: sibling hardware-control application
+- `crates/light/domain/engine`: resolved values, render state, output and transition behavior
+- `crates/light/domain/programmer`: programmer state and merge semantics
+- `crates/light/domain/playback`: cue/playback behavior
+- `crates/light/adapters/headless`: REST, WebSocket, OSC, sessions, persistence and server orchestration
+- `apps/light-desktop`: main Tauri/web operator interface
+- `apps/light-hardware-controls`: sibling hardware-control application
 - `tests`: root Playwright acceptance coverage
-- `apps/control-ui/e2e/bench`: shared E2E bench helpers
+- `tests/bench`: shared E2E bench helpers
 - `docs/help`: operator help and manual source
 - `docs/testing`: human-readable acceptance scenarios
 - `.artifacts/runtime/light-data`: local development data and current server log
@@ -78,7 +78,7 @@ When real operator behavior changed, `npm run open` is the authoritative desktop
 curl -fsS http://127.0.0.1:5000/api/v2/readiness
 ```
 
-Inspect `.artifacts/runtime/light-data/light-server.log` first for app-owned server startup/runtime problems. If readiness is healthy but the app appears stuck, time `/api/v2/readiness` and `/api/v2/bootstrap` separately.
+Inspect `.artifacts/runtime/light-data/light-headless.log` first for app-owned server startup/runtime problems. If readiness is healthy but the app appears stuck, time `/api/v2/readiness` and `/api/v2/bootstrap` separately.
 
 If the app looks stale, verify the bundle opened by the current `build` script before reworking UI code.
 

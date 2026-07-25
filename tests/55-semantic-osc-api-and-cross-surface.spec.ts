@@ -1,13 +1,13 @@
 // @bench-semantic-world
 
-import { fixtureRange } from "../apps/control-ui/e2e/bench/command-selection/selectionContract";
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
-import { StoreMode } from "../apps/control-ui/e2e/bench/groups-presets/groupScenario";
+import { fixtureRange } from "./bench/command-selection/selectionContract";
+import { scenario } from "./bench/core/scenario";
+import { StoreMode } from "./bench/groups-presets/groupScenario";
 import {
 	currentPagePlayback,
 	PlaybackButton,
-} from "../apps/control-ui/e2e/bench/playbacks/playbackScenario";
-import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
+} from "./bench/playbacks/playbackScenario";
+import { Show } from "./bench/show/showScenario";
 
 scenario(
 	"OSC-001",

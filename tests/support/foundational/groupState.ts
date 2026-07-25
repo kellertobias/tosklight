@@ -1,5 +1,5 @@
-import type { ApiDriver } from "../../../apps/control-ui/e2e/bench/core/api";
-import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
+import type { ApiDriver } from "../../bench/core/api";
+import { expect } from "../../bench/core/fixtures";
 import {
 	fixtureIdsByNumber,
 	fixtureNumberById,

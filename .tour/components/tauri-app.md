@@ -11,17 +11,17 @@ Two desktop applications, siblings rather than host and pane.
 
 | App | Path | Identifier |
 | --- | --- | --- |
-| ToskLight | `apps/control-ui/src-tauri/` | `de.tokenet.light` |
-| ToskLight Hardware Controls | `apps/hardware-controls/src-tauri/` | `de.tokenet.tosklight.hardware-controls` |
+| ToskLight | `apps/light-desktop/src-tauri/` | `de.tokenet.light` |
+| ToskLight Hardware Controls | `apps/light-hardware-controls/src-tauri/` | `de.tokenet.tosklight.hardware-controls` |
 
 `AGENTS.md`: a dedicated Tauri surface requested as a separate app stays a sibling desktop app
 launched from ToskLight, not an embedded pane.
 
 ## ToskLight host
 
-`apps/control-ui/src-tauri/src/main.rs`, around 352 lines:
+`apps/light-desktop/src-tauri/src/main.rs`, around 352 lines:
 
-- Launches and supervises the sibling `light-server` process. The app does not embed the server.
+- Launches and supervises the sibling `light-headless` process. The app does not embed the server.
 - Owns native windows, including one per configured operator screen.
 - Exposes `open_hardware_controls` to launch the sibling app.
 - Exposes only the typed desktop bridge the frontend needs.
@@ -32,12 +32,12 @@ launched from ToskLight, not an embedded pane.
 
 ## Hardware Controls host
 
-`apps/hardware-controls/src-tauri/src/main.rs` is 22 lines. The work is in `src/osc.rs` (231 lines):
+`apps/light-hardware-controls/src-tauri/src/main.rs` is 22 lines. The work is in `src/osc.rs` (231 lines):
 native UDP OSC, which is why this app needs to be native at all. devUrl `http://127.0.0.1:4176`.
 
 ## DesktopBridge
 
-`apps/control-ui/src/platform/desktop/`:
+`apps/light-desktop/src/platform/desktop/`:
 
 | File | Role |
 | --- | --- |
@@ -56,7 +56,7 @@ the port plus both adapters, including a working browser fallback.
 The host opens one native window per configured screen (`ScreenApp` via `?screen=`). Sessions carry
 a primary or secondary role: only the primary owns session creation and destruction, so closing a
 second monitor's window cannot tear down the desk. See
-`apps/control-ui/src/features/session/ownership.ts`.
+`apps/light-desktop/src/features/session/ownership.ts`.
 
 ## Build and run
 
@@ -70,7 +70,7 @@ npm run test:app-icons      # required icon set for both apps
 
 `npm run open` is the required path when operator-visible behaviour changed. It stops old instances,
 builds both apps and the server, copies the server binary into
-`ToskLight.app/Contents/MacOS/light-server`, registers the launchd job
+`ToskLight.app/Contents/MacOS/light-headless`, registers the launchd job
 `de.tokenet.tosklight.dev-server`, waits for readiness, and verifies the launchd PID owns that
 readiness endpoint.
 
@@ -80,7 +80,7 @@ After launch:
 curl -fsS http://127.0.0.1:5000/api/v2/readiness
 ```
 
-Check `.artifacts/runtime/light-data/light-server.log` first for startup problems. If readiness is
+Check `.artifacts/runtime/light-data/light-headless.log` first for startup problems. If readiness is
 healthy but the app looks stuck, time `/api/v2/readiness` and
 `/api/v2/bootstrap` separately.
 
@@ -91,11 +91,11 @@ If the app looks stale, verify which bundle the build script opened before rewor
 
 ## Read first
 
-1. `apps/control-ui/src/platform/desktop/types.ts`
-2. `apps/control-ui/src/platform/desktop/index.ts`
-3. `apps/control-ui/src-tauri/src/main.rs`
-4. `apps/control-ui/src-tauri/tauri.conf.json`
-5. `apps/hardware-controls/src-tauri/src/osc.rs`
+1. `apps/light-desktop/src/platform/desktop/types.ts`
+2. `apps/light-desktop/src/platform/desktop/index.ts`
+3. `apps/light-desktop/src-tauri/src/main.rs`
+4. `apps/light-desktop/src-tauri/tauri.conf.json`
+5. `apps/light-hardware-controls/src-tauri/src/osc.rs`
 6. The repository-root `build` script, `build_debug_and_open()`
 
 ## Hardware Controls frontend

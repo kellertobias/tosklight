@@ -17,17 +17,17 @@ copies the first and never the second.
 
 ## Raw authority and typed edits
 
-`crates/show/src/portable/document.rs` retains raw object bodies, unknown fields, metadata,
+`crates/shared/show/src/portable/document.rs` retains raw object bodies, unknown fields, metadata,
 profile revisions, and portable revisions. Typed capability code computes an owned delta and merges
 it into the raw body; serde is never allowed to erase data it does not understand.
 
-`crates/show/src/portable/transaction.rs` provides atomic CAS writes and undo rows. The server keeps
+`crates/shared/show/src/portable/transaction.rs` provides atomic CAS writes and undo rows. The server keeps
 an in-memory document for the active show, while each accepted mutation retains one ordered SQLite
 WAL commit. Recovery checkpoints are interval-gated.
 
 ## Load and migrate
 
-`crates/application/src/show_compiler/prepare.rs` creates a candidate, runs owned migrations and
+`crates/light/src/show_compiler/prepare.rs` creates a candidate, runs owned migrations and
 validation, resolves immutable fixture-profile snapshots, and builds an `EngineSnapshot`.
 Malformed active data enters recovery without overwriting the original file.
 
@@ -36,7 +36,7 @@ they ride a mutation; opening a show instead replaces the complete authority and
 
 ## Commit and install
 
-`crates/application/src/active_show/service.rs` owns the sequence:
+`crates/light/src/active_show/service.rs` owns the sequence:
 
 1. begin from the current in-memory document and expected revision;
 2. apply typed changes to a lossless candidate;
@@ -53,7 +53,7 @@ fail, so persistence cannot get ahead of the engine.
 
 Save As copies the complete portable file and gives the copy an independent show identity. Named
 revisions remain durable copies. Selective import under
-`crates/application/src/selective_import/` plans dependency closure and identity rewrites, then
+`crates/light/src/selective_import/` plans dependency closure and identity rewrites, then
 applies one active-show revision; it never becomes a feature-specific copy route.
 
 ## Runtime generations
@@ -64,6 +64,6 @@ equivalent to a full compile.
 
 ## Exercise
 
-Read `crates/application/src/active_show/tests_migration_riders.rs`. List the event order for a
+Read `crates/light/src/active_show/tests_migration_riders.rs`. List the event order for a
 requested object change that also migrates a Cue and an output route, then compare it with the
 asserted order.

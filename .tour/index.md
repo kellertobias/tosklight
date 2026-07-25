@@ -38,11 +38,11 @@ flowchart LR
 
 | Layer | Path | Constraint |
 | --- | --- | --- |
-| Adapters | `crates/server/`, UI transports | Parse, authenticate, translate. No business rules. |
-| Application | `crates/application/` | Transport-independent use cases. Owns state, exposes commands and immutable projections. |
+| Adapters | `crates/light/adapters/headless/`, UI transports | Parse, authenticate, translate. No business rules. |
+| Application | `crates/light/` | Transport-independent use cases. Owns state, exposes commands and immutable projections. |
 | Domain | `crates/{core,fixture,playback,programmer,output,control,show,media,mvr}` | No HTTP, WebSocket, SQLite, or Tauri. |
-| Wire | `crates/wire/` | Leaf. Versioned DTOs only. |
-| Frontend | `apps/control-ui/`, `apps/hardware-controls/` | Renders authoritative projections. Never an authority. |
+| Wire | `crates/light/contracts/wire/` | Leaf. Versioned DTOs only. |
+| Frontend | `apps/light-desktop/`, `apps/light-hardware-controls/` | Renders authoritative projections. Never an authority. |
 
 `tools/check-architecture.mjs` enforces the dependency direction in CI.
 
@@ -61,10 +61,10 @@ New work follows one vertical capability slice:
 
 | Layer | Home |
 | --- | --- |
-| use case and authority | `crates/application/src/<capability>/` |
-| serialized contract | `crates/wire/src/v2/` |
-| adapter/composition | `crates/server/src/runtime/` |
-| frontend projection | `apps/control-ui/src/features/<capability>/` |
+| use case and authority | `crates/light/src/<capability>/` |
+| serialized contract | `crates/light/contracts/wire/src/v2/` |
+| adapter/composition | `crates/light/adapters/headless/src/runtime/` |
+| frontend projection | `apps/light-desktop/src/features/<capability>/` |
 | acceptance | root `tests/` plus feature-local unit tests |
 
 `macro_runtime/`, `timeline/`, `managed_assets/`, and `scheduling/` are extension seams tested with

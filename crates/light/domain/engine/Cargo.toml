@@ -1,0 +1,26 @@
+[package]
+name = "light-engine"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[features]
+default = ["native-midi"]
+native-midi = ["light-control/native-midi"]
+
+[dependencies]
+arc-swap.workspace = true
+chrono.workspace = true
+light-core = { path = "../../../shared/core" }
+light-control = { path = "../control", default-features = false }
+light-fixture = { path = "../../../shared/fixture" }
+light-output = { path = "../output" }
+light-playback = { path = "../playback" }
+light-programmer = { path = "../programmer" }
+parking_lot.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

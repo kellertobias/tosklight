@@ -6,8 +6,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/artifact-paths.sh"
 source "$ROOT/tools/artifact-maintenance.sh"
 light_init_artifact_paths "$ROOT"
-UI_DIR="$ROOT/apps/control-ui"
-HARDWARE_DIR="$ROOT/apps/hardware-controls"
+UI_DIR="$ROOT/apps/light-desktop"
+HARDWARE_DIR="$ROOT/apps/light-hardware-controls"
 TARGET_DIR="$CARGO_TARGET_DIR"
 DATA_DIR="$LIGHT_DATA_DIR"
 FIXTURE_LIBRARY_DIR="$ROOT/assets/fixture-library"
@@ -97,7 +97,7 @@ build_pages() {
   node "$ROOT/tools/semantic-test-docs/cli.mjs" --write \
     --output-dir "$LIGHT_PAGES_DIR/semantic-tests"
   # Same application icon the operator manual renders in its hero and sidebar.
-  cp "$ROOT/apps/control-ui/src-tauri/icons/icon.png" "$LIGHT_PAGES_DIR/icon.png"
+  cp "$ROOT/apps/light-desktop/src-tauri/icons/icon.png" "$LIGHT_PAGES_DIR/icon.png"
   # GitHub Pages otherwise runs the output through Jekyll and drops _-prefixed assets.
   touch "$LIGHT_PAGES_DIR/.nojekyll"
 
@@ -180,16 +180,16 @@ require() {
 stop_running() {
   echo "Stopping running Light instances..."
   launchctl remove "$DEV_SERVER_LABEL" 2>/dev/null || true
-  pkill -x light-server 2>/dev/null || true
-  pkill -x light-control-ui 2>/dev/null || true
+  pkill -x light-headless 2>/dev/null || true
+  pkill -x light-desktop 2>/dev/null || true
   pkill -x ToskLight 2>/dev/null || true
   pkill -x light-hardware-controls 2>/dev/null || true
   pkill -x Light 2>/dev/null || true
-  pkill -f "$ROOT/apps/control-ui/node_modules/.bin/vite" 2>/dev/null || true
-  pkill -f "$ROOT/target/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-server" 2>/dev/null || true
-  pkill -f "$ROOT/target/debug/light-server" 2>/dev/null || true
-  pkill -f "$TARGET_DIR/debug/light-control-ui" 2>/dev/null || true
-  pkill -f "$TARGET_DIR/release/light-control-ui" 2>/dev/null || true
+  pkill -f "$ROOT/node_modules/.bin/vite" 2>/dev/null || true
+  pkill -f "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-headless" 2>/dev/null || true
+  pkill -f "$TARGET_DIR/debug/light-headless" 2>/dev/null || true
+  pkill -f "$TARGET_DIR/debug/light-desktop" 2>/dev/null || true
+  pkill -f "$TARGET_DIR/release/light-desktop" 2>/dev/null || true
 }
 
 wait_for_endpoint() {
@@ -199,7 +199,7 @@ wait_for_endpoint() {
     sleep 0.1
     attempts=$((attempts + 1))
   done
-  echo "error: timed out waiting for the Light server; see $DATA_DIR/light-server.log" >&2
+  echo "error: timed out waiting for Light headless; see $DATA_DIR/light-headless.log" >&2
   return 1
 }
 
@@ -212,7 +212,7 @@ wait_for_launchd_server() {
     pid="$(sed -n 's/^[[:space:]]*pid = \([0-9][0-9]*\)$/\1/p' <<<"$details" | head -1)"
     if [[ -n "$pid" ]]; then
       command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
-      if [[ "$command" == "$TARGET_DIR/debug/light-server --data-dir $DATA_DIR"* ]] && \
+      if [[ "$command" == "$TARGET_DIR/debug/light-headless --data-dir $DATA_DIR"* ]] && \
         curl -fsS http://127.0.0.1:5000/api/v2/readiness >/dev/null 2>&1; then
         return 0
       fi
@@ -220,7 +220,7 @@ wait_for_launchd_server() {
     sleep 0.1
     attempts=$((attempts + 1))
   done
-  echo "error: canonical Light server did not own readiness; see $DATA_DIR/light-server.log" >&2
+  echo "error: canonical Light headless process did not own readiness; see $DATA_DIR/light-headless.log" >&2
   launchctl remove "$DEV_SERVER_LABEL" 2>/dev/null || true
   return 1
 }
@@ -233,22 +233,22 @@ wait_for_server() {
       return 0
     fi
     if ! kill -0 "$pid" 2>/dev/null; then
-      echo "error: Light server exited during startup; see $TARGET_DIR/light-server.log" >&2
+      echo "error: Light headless exited during startup; see $TARGET_DIR/light-headless.log" >&2
       return 1
     fi
     sleep 0.1
     attempts=$((attempts + 1))
   done
-  echo "error: timed out waiting for the Light server; see $TARGET_DIR/light-server.log" >&2
+  echo "error: timed out waiting for Light headless; see $TARGET_DIR/light-headless.log" >&2
   return 1
 }
 
 start_server() {
   local binary="$1"
   mkdir -p "$DATA_DIR" "$TARGET_DIR"
-  nohup "$binary" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR" >"$TARGET_DIR/light-server.log" 2>&1 &
+  nohup "$binary" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR" >"$TARGET_DIR/light-headless.log" 2>&1 &
   local pid=$!
-  echo "$pid" >"$TARGET_DIR/light-server.pid"
+  echo "$pid" >"$TARGET_DIR/light-headless.pid"
   wait_for_server "$pid"
 }
 
@@ -262,22 +262,21 @@ build_debug_and_open() {
   light_check_runtime_migration
   stop_running
   write_tauri_configs
-  echo "Installing UI dependencies..."
-  (cd "$HARDWARE_DIR" && npm ci)
-  (cd "$UI_DIR" && npm ci)
-  echo "Building control UI assets for the server bundle..."
+  echo "Installing workspace dependencies..."
+  (cd "$ROOT" && npm ci)
+  echo "Building control UI assets for the Light headless bundle..."
   (cd "$UI_DIR" && npm run build)
-  echo "Building debug server for the app bundle..."
-  cargo build --manifest-path "$ROOT/Cargo.toml" -p light-server --bin light-server
+  echo "Building Light headless for the app bundle..."
+  cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --bin light-headless
   echo "Building debug Tauri app..."
   (cd "$HARDWARE_DIR" && npm run tauri:build -- --debug --bundles app --config "$HARDWARE_TAURI_CONFIG")
   (cd "$UI_DIR" && npm run tauri:build -- --debug --bundles app --config "$CONTROL_TAURI_CONFIG")
-  cp "$TARGET_DIR/debug/light-server" "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-server"
-  echo "Starting development server service..."
-  launchctl submit -l "$DEV_SERVER_LABEL" -o "$DATA_DIR/light-server.log" -e "$DATA_DIR/light-server.log" -- "$TARGET_DIR/debug/light-server" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR"
+  cp "$TARGET_DIR/debug/light-headless" "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-headless"
+  echo "Starting development Light headless service..."
+  launchctl submit -l "$DEV_SERVER_LABEL" -o "$DATA_DIR/light-headless.log" -e "$DATA_DIR/light-headless.log" -- "$TARGET_DIR/debug/light-headless" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR"
   wait_for_launchd_server
   open "$TARGET_DIR/debug/bundle/macos/ToskLight.app"
-  echo "ToskLight is open. Server log: $DATA_DIR/light-server.log"
+  echo "ToskLight is open. Server log: $DATA_DIR/light-headless.log"
 }
 
 archive_release() {
@@ -300,10 +299,9 @@ archive_release() {
   hardware_app_zip="$artifact_dir/tosklight-hardware-controls-$version-macos-$(uname -m).zip"
 
   write_tauri_configs
-  echo "Installing UI dependencies..."
-  (cd "$HARDWARE_DIR" && npm ci)
-  (cd "$UI_DIR" && npm ci)
-  echo "Building release UI for the standalone server..."
+  echo "Installing workspace dependencies..."
+  (cd "$ROOT" && npm ci)
+  echo "Building release UI for standalone Light headless..."
   (cd "$UI_DIR" && npm run build)
   ensure_rust_target aarch64-apple-darwin
   ensure_rust_target x86_64-apple-darwin
@@ -311,22 +309,22 @@ archive_release() {
   ensure_rust_target x86_64-unknown-linux-musl
   ensure_rust_target aarch64-unknown-linux-musl
 
-  echo "Building self-contained macOS universal server..."
-  cargo build --manifest-path "$ROOT/Cargo.toml" --release --target aarch64-apple-darwin -p light-server --bin light-server
-  cargo build --manifest-path "$ROOT/Cargo.toml" --release --target x86_64-apple-darwin -p light-server --bin light-server
-  universal_server="$TARGET_DIR/release/light-server"
+  echo "Building self-contained macOS universal Light headless..."
+  cargo build --manifest-path "$ROOT/Cargo.toml" --release --target aarch64-apple-darwin -p light-headless --bin light-headless
+  cargo build --manifest-path "$ROOT/Cargo.toml" --release --target x86_64-apple-darwin -p light-headless --bin light-headless
+  universal_server="$TARGET_DIR/release/light-headless"
   mkdir -p "$(dirname "$universal_server")"
   lipo -create \
-    "$TARGET_DIR/aarch64-apple-darwin/release/light-server" \
-    "$TARGET_DIR/x86_64-apple-darwin/release/light-server" \
+    "$TARGET_DIR/aarch64-apple-darwin/release/light-headless" \
+    "$TARGET_DIR/x86_64-apple-darwin/release/light-headless" \
     -output "$universal_server"
 
-  echo "Building self-contained Windows server..."
-  cargo zigbuild --manifest-path "$ROOT/Cargo.toml" --release --target x86_64-pc-windows-gnu -p light-server --bin light-server
-  echo "Building self-contained Linux AMD64 server..."
-  cargo zigbuild --manifest-path "$ROOT/Cargo.toml" --release --no-default-features --target x86_64-unknown-linux-musl -p light-server --bin light-server
-  echo "Building self-contained Linux ARM64 server..."
-  cargo zigbuild --manifest-path "$ROOT/Cargo.toml" --release --no-default-features --target aarch64-unknown-linux-musl -p light-server --bin light-server
+  echo "Building self-contained Windows Light headless..."
+  cargo zigbuild --manifest-path "$ROOT/Cargo.toml" --release --target x86_64-pc-windows-gnu -p light-headless --bin light-headless
+  echo "Building self-contained Linux AMD64 Light headless..."
+  cargo zigbuild --manifest-path "$ROOT/Cargo.toml" --release --no-default-features --target x86_64-unknown-linux-musl -p light-headless --bin light-headless
+  echo "Building self-contained Linux ARM64 Light headless..."
+  cargo zigbuild --manifest-path "$ROOT/Cargo.toml" --release --no-default-features --target aarch64-unknown-linux-musl -p light-headless --bin light-headless
 
   echo "Building release Tauri app..."
   (cd "$HARDWARE_DIR" && npm run tauri:build -- --bundles app --config "$HARDWARE_TAURI_CONFIG")
@@ -334,12 +332,12 @@ archive_release() {
 
   app_path="$TARGET_DIR/release/bundle/macos/ToskLight.app"
   hardware_app_path="$TARGET_DIR/release/bundle/macos/ToskLight Hardware Controls.app"
-  cp "$universal_server" "$app_path/Contents/MacOS/light-server"
+  cp "$universal_server" "$app_path/Contents/MacOS/light-headless"
   mkdir -p "$artifact_dir"
-  archive_binary "$universal_server" "light-server" "$artifact_dir/light-server-$version-macos-universal.zip"
-  archive_binary "$TARGET_DIR/x86_64-pc-windows-gnu/release/light-server.exe" "light-server.exe" "$artifact_dir/light-server-$version-windows-amd64.zip"
-  archive_binary "$TARGET_DIR/x86_64-unknown-linux-musl/release/light-server" "light-server" "$artifact_dir/light-server-$version-linux-amd64.zip"
-  archive_binary "$TARGET_DIR/aarch64-unknown-linux-musl/release/light-server" "light-server" "$artifact_dir/light-server-$version-linux-arm64.zip"
+  archive_binary "$universal_server" "light-headless" "$artifact_dir/light-headless-$version-macos-universal.zip"
+  archive_binary "$TARGET_DIR/x86_64-pc-windows-gnu/release/light-headless.exe" "light-headless.exe" "$artifact_dir/light-headless-$version-windows-amd64.zip"
+  archive_binary "$TARGET_DIR/x86_64-unknown-linux-musl/release/light-headless" "light-headless" "$artifact_dir/light-headless-$version-linux-amd64.zip"
+  archive_binary "$TARGET_DIR/aarch64-unknown-linux-musl/release/light-headless" "light-headless" "$artifact_dir/light-headless-$version-linux-arm64.zip"
   rm -f "$app_zip"
   ditto -c -k --sequesterRsrc --keepParent "$app_path" "$app_zip"
   echo "Created $app_zip"

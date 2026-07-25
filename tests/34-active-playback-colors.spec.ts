@@ -1,7 +1,7 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import { expect, test } from "./bench/core/fixtures";
 import { loadCanonicalCopy, putObject } from "./support/catalog";
 
-test("PLAYBACK-COLOR-001 @supplemental-ui › runtime strengthens configured color while selection stays separate", async ({ api, bench, desk, page }) => {
+test("PLAYBACK-COLOR-001 @ui › runtime strengthens configured color while selection stays separate", async ({ api, bench, desk, page }) => {
   await loadCanonicalCopy(api, bench, "playback-color-001", "default-stage");
   const cueListId = crypto.randomUUID();
   await putObject(api, "cue_list", cueListId, { id: cueListId, name: "Color Test", priority: 0, mode: "sequence", looped: false, chaser_step_millis: 1000, speed_group: null, cues: [{ id: crypto.randomUUID(), number: 1, name: "On", changes: [], group_changes: [], fade_millis: 0, delay_millis: 0, trigger: { type: "manual" }, phasers: [] }] });

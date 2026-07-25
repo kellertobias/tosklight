@@ -1,8 +1,8 @@
-import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
+import { expect, test } from "../bench/core/fixtures";
 import {
 	type PairedScenario,
 	pairedScenario,
-} from "../../apps/control-ui/e2e/bench/core/pairedScenario";
+} from "../bench/core/pairedScenario";
 import {
 	activePlayback,
 	createCueList,
@@ -17,7 +17,7 @@ import {
 	poolAction,
 	prepareShow,
 } from "./helpers";
-import type { PreparedShow } from "../../apps/control-ui/e2e/bench/playbacks/playback-configuration/models";
+import type { PreparedShow } from "../bench/playbacks/playback-configuration/models";
 import { runPbk005LifecycleScenario } from "./pbk005Lifecycle";
 
 type Pbk005State = PreparedShow & {

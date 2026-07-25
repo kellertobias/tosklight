@@ -3,9 +3,9 @@ import {
 	type BenchUiContext,
 	expect,
 	test,
-} from "../../apps/control-ui/e2e/bench/core/fixtures";
-import type { Locator } from "../../apps/control-ui/node_modules/@playwright/test/index.js";
-import { fixtureDefinitionFromProfileMode } from "../../apps/control-ui/src/components/setup/fixtureProfileModel";
+} from "../bench/core/fixtures";
+import type { Locator } from "@playwright/test";
+import { fixtureDefinitionFromProfileMode } from "../../apps/light-desktop/src/components/setup/fixtureProfileModel";
 import {
 	loadCanonicalCopy,
 	object,
@@ -23,7 +23,7 @@ type FixtureAssetContext = Pick<
 	"api" | "bench" | "desk" | "page"
 >;
 
-test("FIXTURE-002 @restart › focused assets and physical metadata remain immutable across edit, patch, and restart", async ({
+test("FIXTURE-002 @ui @restart › focused assets and physical metadata remain immutable across edit, patch, and restart", async ({
 	api,
 	bench,
 	desk,

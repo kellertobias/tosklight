@@ -1,5 +1,5 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { replaceProgrammingSelection } from "../apps/control-ui/e2e/bench/command-selection/programmingSelection";
+import { expect, test } from "./bench/core/fixtures";
+import { replaceProgrammingSelection } from "./bench/command-selection/programmingSelection";
 import { fixtureIdsByNumber, loadCanonicalCopy } from "./support/catalog";
 
 test("ENCODER-DISPLAY-001 @supplemental-ui › six stable slots mirror physical encoder targets", async ({ api, bench, desk, page }) => {

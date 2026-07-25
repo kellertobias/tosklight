@@ -26,7 +26,7 @@ export const COMPATIBILITY_FAMILIES = Object.freeze([
 ]);
 
 /** The bench API driver owns the centralized WebSocket sender, so it is not a scenario call site. */
-export const CENTRALIZED_SENDER = "apps/control-ui/e2e/bench/core/api.ts";
+export const CENTRALIZED_SENDER = "tests/bench/core/api.ts";
 
 const LEGACY_HELPER = /\bexecuteLegacyCommandLine\b/gu;
 const DIRECT_ACTION_COMMAND =
@@ -142,7 +142,7 @@ function walk(directory) {
 }
 
 /** Reads every acceptance-test source under the scanned roots. */
-export function readTestSources(repositoryRoot, roots = ["tests", "apps/control-ui/e2e"]) {
+export function readTestSources(repositoryRoot, roots = ["tests", "apps/light-desktop/e2e"]) {
   return roots
     .flatMap((root) => walk(path.join(repositoryRoot, root)))
     .filter((candidate) => /\.[cm]?tsx?$/u.test(candidate))

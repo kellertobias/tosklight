@@ -14,7 +14,7 @@ The separate **ToskLight Hardware Controls** application is used for the attache
 
 ## Standalone server and browser desk
 
-Choose the archive matching macOS universal, Windows AMD64, Linux AMD64, or Linux ARM64. Start `light-server` with a writable data directory, then open the displayed address in a supported browser. Use `--bind 0.0.0.0:5000` only on a trusted lighting network.
+Choose the archive matching macOS universal, Windows AMD64, Linux AMD64, or Linux ARM64. Start `light-headless` with a writable data directory, then open the displayed address in a supported browser. Use `--bind 0.0.0.0:5000` only on a trusted lighting network.
 
 When the server is reachable over a LAN, set `LIGHT_DESK_TOKEN` before starting it. Browser and API clients must then send that shared desk token. Users remain passwordless operator identities inside that protected desk boundary.
 

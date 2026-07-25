@@ -750,7 +750,7 @@ function importedScenarioNames(ast, sourceFile) {
 	for (const statement of sourceFile.statements) {
 		if (!ast.isImportDeclaration(statement)) continue;
 		if (!ast.isStringLiteral(statement.moduleSpecifier)) continue;
-		if (!statement.moduleSpecifier.text.endsWith("/e2e/bench/core/scenario"))
+		if (!statement.moduleSpecifier.text.endsWith("/bench/core/scenario"))
 			continue;
 		const bindings = statement.importClause?.namedBindings;
 		if (!bindings || !ast.isNamedImports(bindings)) continue;

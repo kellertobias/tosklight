@@ -96,12 +96,12 @@ Never persist a calculated MIB transition into Cue data. It is runtime state der
 
 ## Existing implementation seams
 
-- `crates/fixture/src/lib.rs` owns `PatchedFixture` and needs backward-compatible MIB fields and validation.
-- `apps/control-ui/src/api/types.ts` mirrors the patched-fixture schema.
-- `apps/control-ui/src/components/setup/FixturePatchSetup.tsx` owns the Patch table and revision-checked fixture edits; add the per-row controls there.
-- `crates/playback/src/lib.rs` owns tracked Cue reconstruction, active Cuelists, position arbitration, and transition timing. MIB look-ahead and runtime state belong there or in a focused playback module, not in React.
-- `crates/engine/src/lib.rs` owns resolved output and transitions. It must provide the exact resolved-dark boundary and render the hidden Position transition without DMX discontinuities.
-- `crates/server/src/main.rs` must propagate patch-setting and Cue edits into the active engine and expose MIB runtime evidence needed by the test harness.
+- `crates/shared/fixture/src/lib.rs` owns `PatchedFixture` and needs backward-compatible MIB fields and validation.
+- `apps/light-desktop/src/api/types.ts` mirrors the patched-fixture schema.
+- `apps/light-desktop/src/components/setup/FixturePatchSetup.tsx` owns the Patch table and revision-checked fixture edits; add the per-row controls there.
+- `crates/light/domain/playback/src/lib.rs` owns tracked Cue reconstruction, active Cuelists, position arbitration, and transition timing. MIB look-ahead and runtime state belong there or in a focused playback module, not in React.
+- `crates/light/domain/engine/src/lib.rs` owns resolved output and transitions. It must provide the exact resolved-dark boundary and render the hidden Position transition without DMX discontinuities.
+- `crates/light/adapters/headless/src/main.rs` must propagate patch-setting and Cue edits into the active engine and expose MIB runtime evidence needed by the test harness.
 
 ## Required runtime evidence
 

@@ -1,5 +1,5 @@
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
+import type { ApiDriver } from "./bench/core/api";
+import { expect, test } from "./bench/core/fixtures";
 import { fixtureIdsByNumber, loadCanonicalCopy, putObject } from "./support/catalog";
 
 // Maintainer requirement (docs/engineering/api-rules.md §1: volatile state is pushed,
@@ -7,7 +7,7 @@ import { fixtureIdsByNumber, loadCanonicalCopy, putObject } from "./support/cata
 // runtime values are sampled server-side on a render-frame divider nearest ~10 Hz (44 Hz
 // output → every 4th frame ≈ 11 Hz) and pushed as delta ticks on the v2 events lane; the
 // client renders them from a retained store without polling.
-test("TELEMETRY-001 @supplemental-ui › playback fades stream ~10 Hz delta samples without polling", async ({ api, bench, desk, page }) => {
+test("TELEMETRY-001 @ui › playback fades stream ~10 Hz delta samples without polling", async ({ api, bench, desk, page }) => {
   await loadCanonicalCopy(api, bench, "playback-telemetry", "compact-rig");
   const fixtures = await fixtureIdsByNumber(api);
   await installFadingCuelist(api, 1, "Telemetry A", fixtures[1], 4_000);

@@ -35,10 +35,10 @@ The completion gate is all of the following from a clean invocation:
 ./test e2e tests/11-update-highlight-fixture-profiles-and-matter.spec.ts --workers=1
 ./test e2e tests/21-completion-coverage.spec.ts --workers=1
 ./test desktop-smoke
-cargo test -p light-server --no-default-features --bin light-server matter::transport::tests::commissionable_network_transport_smoke -- --ignored --test-threads=1
+cargo test -p light-headless --no-default-features --bin light-headless matter::transport::tests::commissionable_network_transport_smoke -- --ignored --test-threads=1
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
-(cd apps/hardware-controls && npm run build)
+(cd apps/light-hardware-controls && npm run build)
 ./build manual
 ./build open
 curl -fsS http://127.0.0.1:5000/api/v2/readiness

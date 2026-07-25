@@ -1,11 +1,11 @@
-import type { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
-import { expect } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../../apps/control-ui/e2e/bench/core/pairedScenario";
-import { setProgrammerFixtureValue } from "../../apps/control-ui/e2e/bench/programmer/programmerValues";
+import type { ApiDriver } from "../bench/core/api";
+import { expect } from "../bench/core/fixtures";
+import { pairedScenario } from "../bench/core/pairedScenario";
+import { setProgrammerFixtureValue } from "../bench/programmer/programmerValues";
 import {
 	replaceProgrammingSelection,
 	selectProgrammingGroup,
-} from "../../apps/control-ui/e2e/bench/command-selection/programmingSelection";
+} from "../bench/command-selection/programmingSelection";
 import {
 	loadCanonicalCopy,
 	object,

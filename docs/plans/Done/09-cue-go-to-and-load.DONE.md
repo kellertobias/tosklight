@@ -99,11 +99,11 @@ Cue edits, deletion, renumbering, show reload, playback reassignment, and applic
 
 ## Existing implementation seams
 
-- `apps/control-ui/src/components/control/softwareKeypad.ts` owns consecutive `[CUE]` command construction and must preserve the distinction between the initial operation tokens and the address separator.
-- `apps/control-ui/src/components/control/CommandLineBar.tsx` owns software-key routing, command completion, and visible command errors.
-- `crates/server/src/main.rs` owns `execute_programmer_command`, explicit playback-address parsing, validation, and authoritative command dispatch.
-- `crates/playback/src/lib.rs` owns playback activation, jumping, tracked-state reconstruction, sequence progression, and the transient loaded-next-Cue override.
-- The server playback state and `crates/control` feedback paths must expose current, normal-next, effective-next, loaded state, playback activation, and fader changes consistently to the main desk and hardware controller.
+- `apps/light-desktop/src/components/control/softwareKeypad.ts` owns consecutive `[CUE]` command construction and must preserve the distinction between the initial operation tokens and the address separator.
+- `apps/light-desktop/src/components/control/CommandLineBar.tsx` owns software-key routing, command completion, and visible command errors.
+- `crates/light/adapters/headless/src/main.rs` owns `execute_programmer_command`, explicit playback-address parsing, validation, and authoritative command dispatch.
+- `crates/light/domain/playback/src/lib.rs` owns playback activation, jumping, tracked-state reconstruction, sequence progression, and the transient loaded-next-Cue override.
+- The server playback state and `crates/light/domain/control` feedback paths must expose current, normal-next, effective-next, loaded state, playback activation, and fader changes consistently to the main desk and hardware controller.
 
 ## Required tests
 

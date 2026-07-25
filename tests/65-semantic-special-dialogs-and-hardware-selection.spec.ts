@@ -1,7 +1,7 @@
 // @bench-semantic-world
 
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
-import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
+import { scenario } from "./bench/core/scenario";
+import { Show } from "./bench/show/showScenario";
 
 scenario(
 	"POSITION-HOME-001",

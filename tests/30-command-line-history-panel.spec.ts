@@ -1,7 +1,7 @@
-import type { Locator, Page } from "../apps/control-ui/node_modules/@playwright/test/index.js";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { pairedScenario } from "../apps/control-ui/e2e/bench/core/pairedScenario";
+import type { Locator, Page } from "@playwright/test";
+import type { ApiDriver } from "./bench/core/api";
+import { expect, test } from "./bench/core/fixtures";
+import { pairedScenario } from "./bench/core/pairedScenario";
 import { loadCanonicalCopy } from "./support/catalog";
 
 type HistoryEntry = {

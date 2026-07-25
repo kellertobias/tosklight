@@ -7,7 +7,7 @@ order: 40
 
 # State Ownership to Pixels: Snapshots, Events, and Repair
 
-`apps/control-ui/src/features/showObjects/` is the reference slice. The frontend rules look strict
+`apps/light-desktop/src/features/showObjects/` is the reference slice. The frontend rules look strict
 until you know what each one prevents, so this page names the failure behind each.
 
 Operator truth is in the pane and workflow chapters under `docs/help/`; the paired UI/API
@@ -96,7 +96,7 @@ completed.
 
 ## Composition and authority replacement
 
-`apps/control-ui/src/api/ServerRuntime.tsx` and `features/server/` compose the stable connection and
+`apps/light-desktop/src/api/ServerRuntime.tsx` and `features/server/` compose the stable connection and
 focused capabilities. There is no production `useServer()` consumer. The small
 `api/ServerContext.ts` export exists only for legacy test mocks.
 

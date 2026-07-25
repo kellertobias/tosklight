@@ -1,5 +1,5 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
-import { clearProgrammerValues } from "../apps/control-ui/e2e/bench/programmer/programmerValues";
+import { expect, test } from "./bench/core/fixtures";
+import { clearProgrammerValues } from "./bench/programmer/programmerValues";
 import {
 	assertCueReplayBoundaries,
 	connectHardware,

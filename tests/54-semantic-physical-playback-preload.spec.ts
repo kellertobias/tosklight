@@ -1,8 +1,8 @@
 // @bench-semantic-world
 
-import { scenario } from "../apps/control-ui/e2e/bench/core/scenario";
-import { PlaybackButton } from "../apps/control-ui/e2e/bench/playbacks/playbackScenario";
-import { Show } from "../apps/control-ui/e2e/bench/show/showScenario";
+import { scenario } from "./bench/core/scenario";
+import { PlaybackButton } from "./bench/playbacks/playbackScenario";
+import { Show } from "./bench/show/showScenario";
 
 scenario(
 	"PRELOAD-002",

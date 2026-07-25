@@ -1,11 +1,11 @@
-import { ApiDriver } from "../../apps/control-ui/e2e/bench/core/api";
-import { expect, test } from "../../apps/control-ui/e2e/bench/core/fixtures";
-import { setProgrammerPriority } from "../../apps/control-ui/e2e/bench/programmer/programmerPriority";
+import { ApiDriver } from "../bench/core/api";
+import { expect, test } from "../bench/core/fixtures";
+import { setProgrammerPriority } from "../bench/programmer/programmerPriority";
 import {
 	clearProgrammerValues,
 	releaseProgrammerFixtureValue,
 	setProgrammerFixtureValue,
-} from "../../apps/control-ui/e2e/bench/programmer/programmerValues";
+} from "../bench/programmer/programmerValues";
 import { fixtureIdsByNumber, loadCanonicalCopy } from "../support/catalog";
 import {
 	CUE_SEMANTIC_CONTRACTS,

@@ -1,15 +1,15 @@
-import type { ApiDriver } from "../../../apps/control-ui/e2e/bench/core/api";
-import { expect } from "../../../apps/control-ui/e2e/bench/core/fixtures";
+import type { ApiDriver } from "../../bench/core/api";
+import { expect } from "../../bench/core/fixtures";
 import type {
 	PatchFixtureInput,
 	PatchFixtureProjection,
 	PatchFixturesOutcome,
 	PatchSnapshot,
-} from "../../../apps/control-ui/src/api/generated/light-wire";
+} from "../../../apps/light-desktop/src/api/generated/light-wire";
 import type {
 	Locator,
 	Page,
-} from "../../../apps/control-ui/node_modules/@playwright/test/index.js";
+} from "@playwright/test";
 import { activeShowId } from "../catalog";
 
 export interface SoftwareFixtureAddressRequest {

@@ -1,5 +1,5 @@
-import { expect, test } from "../apps/control-ui/e2e/bench/core/fixtures";
-import type { ApiDriver } from "../apps/control-ui/e2e/bench/core/api";
+import { expect, test } from "./bench/core/fixtures";
+import type { ApiDriver } from "./bench/core/api";
 
 interface ProgrammerProjection {
 	session_id: string;
@@ -7,7 +7,7 @@ interface ProgrammerProjection {
 }
 
 test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
-	test("LOCK-001 @supplemental @api @osc › PIN lock covers every screen and drops every desk input without changing output", async ({ api, bench, desk, page }) => {
+	test("LOCK-001 @api @failure-mode › PIN lock covers every screen and drops every desk input without changing output", async ({ api, bench, desk, page }) => {
 		await desk.open(bench.baseUrl);
 		const pageDeskSession = await desk.session();
 		const otherDeskSession = await api.request<typeof pageDeskSession>("POST", "/api/v2/sessions", {

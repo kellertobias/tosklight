@@ -20,7 +20,7 @@ metric.
 
 | Before | After |
 | --- | --- |
-| `light-server` combined process startup, routes, orchestration, state, and business rules. | `crates/server/src/main.rs` is a thin entry point; feature adapters compose typed application services. |
+| `light-headless` combined process startup, routes, orchestration, state, and business rules. | `crates/light/adapters/headless/src/main.rs` is a thin entry point; feature adapters compose typed application services. |
 | Rust wire models, handwritten TypeScript, generic JSON, string WebSocket commands, and OSC paths could drift. | `light-wire` owns versioned DTOs and checked-in generated TypeScript/schema contracts; adapters map to domain models. |
 | UI, HTTP, WebSocket, OSC, and automatic sources could repeat orchestration. | One semantic action crosses one application boundary and produces one authoritative outcome/event. |
 | Generic show-object writes mixed migration, persistence, compilation, runtime replacement, and publication. | `ActiveShowService` owns one ordered, revisioned, lossless transaction and install lifecycle. |
@@ -37,13 +37,13 @@ The living rules are in
 
 | Component | Entry point | Contract |
 | --- | --- | --- |
-| Server | `crates/server/src/main.rs` / `light_server::run()` | Authenticates and adapts HTTP, WebSocket, OSC, Matter, media, file, and output work into application services. |
-| Control UI | `apps/control-ui` | Main Tauri/React desk, secondary Screen and Stage windows, validated v2 transports, and feature projections. |
-| Hardware Controls | `apps/hardware-controls` | Sibling Tauri app using the frozen OSC control and feedback contract. |
+| Server | `crates/light/adapters/headless/src/main.rs` / `light_headless_runtime::run()` | Authenticates and adapts HTTP, WebSocket, OSC, Matter, media, file, and output work into application services. |
+| Control UI | `apps/light-desktop` | Main Tauri/React desk, secondary Screen and Stage windows, validated v2 transports, and feature projections. |
+| Hardware Controls | `apps/light-hardware-controls` | Sibling Tauri app using the frozen OSC control and feedback contract. |
 | Domain/application workspace | `crates/*` | Pure domain rules, use cases, lossless persistence, compilation, render, output codecs, and typed wire contracts. |
-| UI primitives | `apps/control-ui/src/components` | App-local presentation primitives; the missing shared package/Storybook contract is explicitly deferred below. |
+| UI primitives | `apps/light-desktop/src/components` | App-local presentation primitives; the missing shared package/Storybook contract is explicitly deferred below. |
 | Help/manual generator | `docs/help` plus `tools/manual` | Markdown source rendered into in-app help, offline HTML, and PDF. |
-| Acceptance bench | `apps/control-ui/e2e/bench` plus root `tests` | Isolated server/browser, virtual clock, OSC and output receivers, restart/fault controls, and paired API/UI scenarios. |
+| Acceptance bench | `tests/bench` plus root `tests` | Isolated server/browser, virtual clock, OSC and output receivers, restart/fault controls, and paired API/UI scenarios. |
 
 Supported commands and artifact paths are documented in
 [`docs/engineering/build-and-test-commands.md`](docs/engineering/build-and-test-commands.md).
@@ -168,8 +168,8 @@ they are not shipped product features.
 
 ## Verification snapshot
 
-The final audit records exact reruns in
-[`docs/plans/refactoring/done/27-wrap-refactor.md`](docs/plans/refactoring/done/27-wrap-refactor.md).
+The final audit and later verification snapshot are consolidated in
+[`docs/plans/major-refactoring.md`](docs/plans/major-refactoring.md#consolidated-execution-record).
 Evidence already established on the final pre-capstone tree includes:
 
 - focused Programmer reconciliation tests: 35 passed;
@@ -193,16 +193,16 @@ contracts, and two desktop cases that run separately under `npm run test:desktop
   `features/server/` are retained deliberately; neither is a broad runtime provider.
 - Fixture-library, output, desktop, and network tests that bind sockets must run in an unrestricted
   CI/local environment; sandbox denial is reported separately.
-- Historical refactoring documents retain old counts and migration terminology as execution
-  evidence. Living rules are under `docs/engineering/`.
-- Root Storybook/UI-package scripts still name an absent `@tosklight/ui` workspace. Pending chunk
-  `27a-restore-ui-package-gates.md` owns the explicit restore-or-retire decision; generated local
-  package artifacts are not treated as source.
+- The deleted incremental refactoring documents remain available in git history. Their durable
+  outcome and verification evidence are consolidated into `docs/plans/major-refactoring.md`;
+  living rules are under `docs/engineering/`.
+- Shared UI-package and Storybook work remains separately tracked; generated local package
+  artifacts are not treated as source.
 
 ## Handoff map
 
 - Living architecture: [`docs/engineering/`](docs/engineering/)
 - Guided CodeSafari: [`.tour/`](.tour/)
-- Refactor intent: [`docs/plans/major-refactoring.md`](docs/plans/major-refactoring.md)
-- Ordered execution history: [`docs/plans/refactoring/done/`](docs/plans/refactoring/done/)
-- Next acceptance-bench work: [`docs/plans/refactoring/pending/28-test-bench/README.md`](docs/plans/refactoring/pending/28-test-bench/README.md)
+- Refactor intent and consolidated execution record:
+  [`docs/plans/major-refactoring.md`](docs/plans/major-refactoring.md)
+- Acceptance and test guidance: [`docs/engineering/test-map.md`](docs/engineering/test-map.md)
