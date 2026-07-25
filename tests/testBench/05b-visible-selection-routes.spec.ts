@@ -6,44 +6,7 @@ import { scenario } from "../../apps/control-ui/e2e/bench/scenario";
 import {
 	fixture,
 	fixtureRange,
-	groupRange,
 } from "../../apps/control-ui/e2e/bench/selectionContract";
-
-scenario(
-	"BENCH-SELECTION-ROUTES-001",
-	"visible panes, keypad, API, and OSC converge on the ordered selection oracle",
-	async (t) => {
-		await t.app.open();
-		await t.app.expect.ready();
-		await openSelectionDesktop(t);
-
-		await t.selection.clear();
-		await t.selection.fixtures.via.fixtureSheet.items(1, 3, 2);
-		await t.expect.selection(fixture(1), fixture(3), fixture(2));
-
-		await t.selection.clear();
-		await t.selection.fixtures.via.stage.range(1, 4);
-		await t.expect.selection(fixtureRange(1, 4));
-
-		await t.selection.clear();
-		await t.selection.groups.via.pool.range(1, 4);
-		await t.expect.selection(groupRange(1, 4));
-
-		await t.selection.fixtures.via.keypad.range(2, 5);
-		await t.expect.selection(fixtureRange(2, 5));
-
-		await t.selection.fixtures.via.api.items(5, 2, 4);
-		await t.expect.selection(fixture(5), fixture(2), fixture(4));
-
-		await t.hardware.connect();
-		try {
-			await t.selection.fixtures.via.osc.item(6);
-			await t.expect.selection(fixture(6));
-		} finally {
-			await t.hardware.disconnect();
-		}
-	},
-);
 
 scenario(
 	"BENCH-SELECTION-ROUTES-002",

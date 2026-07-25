@@ -37,6 +37,7 @@ import { BrowserPlaybacks } from "./playbackScenario";
 import type { DmxProtocol } from "./protocols";
 import { BrowserTiming } from "./programmerFadeScenario";
 import { BrowserPresets } from "./presetScenario";
+import { BrowserProductDemo } from "./productDemoScenario";
 import { BrowserProgrammerSpecials } from "./programmerSpecialScenario";
 import { BrowserRoutedSelection } from "./routedSelectionScenario";
 import type { SelectionTarget } from "./selectionContract";
@@ -90,6 +91,7 @@ export class BrowserScenarioWorld {
 	readonly highlight: BrowserHighlight;
 	readonly group: BrowserGroups;
 	readonly preset: BrowserPresets;
+	readonly demo: BrowserProductDemo;
 	readonly record: BrowserRecording;
 	readonly cue: BrowserCues;
 	readonly playback: BrowserPlaybacks;
@@ -201,6 +203,7 @@ export class BrowserScenarioWorld {
 			() => this.show.contractIdentity().workingId,
 			`${this.routeSeed}:preset`,
 		);
+		this.demo = new BrowserProductDemo(page, desk, bench, api, testInfo);
 		this.record = new BrowserRecording(
 			api,
 			page,

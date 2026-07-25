@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **305 root cases across 39 files**.
+Default catalog: **308 root cases across 40 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -319,7 +319,10 @@ Default catalog: **305 root cases across 39 files**.
 | 38-semantic-command-programmer-group-preset.spec.ts | BENCH-ENCODER-001 @bench @ui › normalized Dimmer absolute and relative API intents retain distinct semantics | repository contract | @bench @ui | semantic-command-programmer-group-preset | standard failure evidence | parallel | migrated-semantic-world |
 | 38-semantic-command-programmer-group-preset.spec.ts | BENCH-GROUP-002 @bench @ui › live Group references refresh while dereferenced captures retain concrete fixtures | repository contract | @bench @ui | semantic-command-programmer-group-preset | standard failure evidence | parallel | migrated-semantic-world |
 | 38-semantic-command-programmer-group-preset.spec.ts | BENCH-PRESET-001 @bench @ui › Preset families record and recall through pool, keypad, API, and OSC | repository contract | @bench @ui | semantic-command-programmer-group-preset | standard failure evidence | parallel | migrated-semantic-world |
-| product-demo.spec.ts | @ui narrates the complete Full HD product demo surface in one regression run | repository contract | @ui | product-demo | generated show/video | serial | pending-semantic-migration |
+| 39-semantic-playback-and-osc.spec.ts | BENCH-CUE-PLAYBACK-001 @bench @ui › visible recording and typed runtime actions preserve Cue timing and concrete Playback identity | repository contract | @bench @ui | semantic-playback-and-osc | standard failure evidence | parallel | migrated-semantic-world |
+| 39-semantic-playback-and-osc.spec.ts | BENCH-PAGE-PLAYBACK-001 @bench @ui › current and explicit Page targets retain distinct Playback authority | repository contract | @bench @ui | semantic-playback-and-osc | standard failure evidence | parallel | migrated-semantic-world |
+| 39-semantic-playback-and-osc.spec.ts | BENCH-SELECTION-ROUTES-001 @bench @ui › visible panes, keypad, API, and OSC converge on the ordered selection oracle | repository contract | @bench @ui | semantic-playback-and-osc | standard failure evidence | parallel | migrated-semantic-world |
+| product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints
 
