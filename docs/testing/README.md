@@ -134,8 +134,16 @@ When simulated hardware is connected, normalized encoders also expose relative
 family, resolves the logical attribute from the live attached-hardware display instead of assuming
 a physical slot, sends one detent at a time, and waits for each authoritative Programmer revision.
 The OSC port is relative-only at the type level. Profile-derived discrete and special-dialog
-controls, Programmer Fade, and undecided encoder press/page semantics remain queued in refactoring
-chunks 06c–06e.
+controls plus undecided encoder press/page semantics remain queued in refactoring chunks 06d–06e.
+
+Programmer Fade is available through `timing.programmerFade`. `set("4s")` records a seeded choice
+between eligible routes; `.via.api`, `.via.valueEntry`, `.via.fader`, and connected `.via.osc`
+constrain it explicitly. The value-entry adapter presses the production **Set value** action and
+uses its visible number pad. The fader adapter switches to the Playback controls and performs a
+real pointer slide, calibrating against authoritative 0.1-second feedback without filling the
+underlying range input. Every route waits for the shared configuration value before returning.
+`double()`, `half()`, and `off()` apply the corresponding time-master semantics, while
+`currentMillis()` exposes the normalized assertion value.
 
 The runner exposes separate commands so CI classifies failures clearly:
 

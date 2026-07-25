@@ -19,6 +19,7 @@ export default defineConfig({
 			"e2e/bench/playbackRuntimeAction.test.ts",
 			"e2e/bench/protocols.test.ts",
 			"e2e/bench/programmerPreloadLifecycle.test.ts",
+			"e2e/bench/programmerFadeScenario.test.ts",
 			"e2e/bench/programmerPriority.test.ts",
 			"e2e/bench/programmingSelection.test.ts",
 			"e2e/bench/programmerValues.test.ts",
