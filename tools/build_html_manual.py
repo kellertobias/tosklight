@@ -199,7 +199,7 @@ def build(site: Path, archive: Path) -> None:
     if site.exists():
         shutil.rmtree(site)
     site.mkdir(parents=True)
-    logo = ROOT / "apps" / "control-ui" / "src-tauri" / "icons" / "icon.png"
+    logo = ROOT / "apps" / "light-desktop" / "src-tauri" / "icons" / "icon.png"
     logo_destination = site / "assets" / "brand" / "icon.png"
     logo_destination.parent.mkdir(parents=True)
     shutil.copy2(logo, logo_destination)

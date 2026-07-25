@@ -50,7 +50,7 @@ def create_document(output: Path) -> ManualDocTemplate:
 
 def cover_story() -> list[Flowable]:
     story: list[Flowable] = []
-    logo = ROOT / "apps" / "control-ui" / "src-tauri" / "icons" / "icon.png"
+    logo = ROOT / "apps" / "light-desktop" / "src-tauri" / "icons" / "icon.png"
     if logo.is_file():
         mark = Image(str(logo), width=38 * mm, height=38 * mm)
         mark.hAlign = "LEFT"

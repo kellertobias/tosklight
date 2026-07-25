@@ -49,7 +49,7 @@ test("Playwright exposes only UI and API-exception suites", () => {
 	assert.match(workflow, /npm run test:demo/u);
 	assert.match(
 		testScript,
-		/e2e_ui\(\)\{ e2e --grep '@ui' --grep-invert '@demo'/u,
+		/e2e_ui\(\)\{ e2e --grep '@ui' --grep-invert '@\(demo\|docs\)\\b'/u,
 	);
 	assert.doesNotMatch(pairedScenario, /\btest\s*\(/u);
 });

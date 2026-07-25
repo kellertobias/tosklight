@@ -33,4 +33,10 @@ const controlIcon = path.join(applications[0], "icons/icon.png");
 const hardwareIcon = path.join(applications[1], "icons/icon.png");
 assert.notEqual(digest(controlIcon), digest(hardwareIcon), "ToskLight and Hardware Controls must use distinct icons");
 
+for (const renderer of ["tools/build_html_manual.py", "tools/manual/build_pdf.py"]) {
+  const source = fs.readFileSync(path.join(repositoryRoot, renderer), "utf8");
+  assert.ok(source.includes('ROOT / "apps" / "light-desktop"'), `${renderer} must use the current ToskLight application icon`);
+  assert.ok(!source.includes('ROOT / "apps" / "control-ui"'), `${renderer} must not use the retired control-ui path`);
+}
+
 console.log("ToskLight desktop icon configuration is complete and application-specific.");

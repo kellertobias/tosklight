@@ -26,7 +26,7 @@ architecture(){
 unit(){ architecture; (cd "$ROOT" && npm run test:bench-types); (cd "$ROOT" && npm run test:bench-unit); (cd "$UI" && npm run build); (cd "$HARDWARE_UI" && npm run build); cargo test --manifest-path "$ROOT/Cargo.toml" --workspace --exclude light-desktop --exclude light-hardware-controls --no-default-features; (cd "$UI" && npm test); (cd "$HARDWARE_UI" && npm test); }
 e2e(){ build_e2e; (cd "$UI" && npm run test:e2e -- "$@"); }
 e2e_api(){ e2e --grep '@api' "$@"; }
-e2e_ui(){ e2e --grep '@ui' --grep-invert '@demo' "$@"; }
+e2e_ui(){ e2e --grep '@ui' --grep-invert '@(demo|docs)\b' "$@"; }
 record(){
   build_e2e
   local status=0

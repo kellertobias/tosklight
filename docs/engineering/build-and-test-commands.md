@@ -83,8 +83,8 @@ code.**
 | `npm run test:bench-unit` | Root Vitest coverage for the reusable helpers under `tests/bench`. |
 | `npm run test:e2e -- [args]` | Builds the UI and server, then Playwright with the root config. |
 | `npm run test:e2e-api` | Playwright `--grep '@api'`. API-only contracts and constructed failure, persistence, concurrency, and wire conditions that cannot be driven truthfully through UI. |
-| `npm run test:e2e-ui` | Playwright `--grep '@ui' --grep-invert '@demo'`. Real Chrome operator workflows, including OSC and attached-hardware surfaces. The long-form product demo runs once in the visual-assets job. |
-| `npm run test:help-screenshots` | **Wipes and regenerates** `docs/help/assets/screenshots/`. Only run when intentionally refreshing images, and review the diffs visually. |
+| `npm run test:e2e-ui` | Playwright `--grep '@ui' --grep-invert '@(demo\|docs)\b'`. Real Chrome operator workflows, including OSC and attached-hardware surfaces. Generated visual documentation runs separately. |
+| `npm run test:help-screenshots` | Runs the dedicated `@ui @docs` scenario and **wipes and regenerates** `docs/help/assets/screenshots/`. Only run when intentionally refreshing images, and review the diffs visually. |
 | `npm run test:record` | Serial narrated video of the whole catalog, assembled with ffmpeg into `.artifacts/test/visual-inspection/`. |
 | `npm run test:demo` | The product walkthrough; refreshes `assets/demo.show`. |
 | `npm run test:app-icons` | Asserts the required Tauri icon set for both apps. |

@@ -19,7 +19,7 @@ interface ShowEntry { id: string; name: string }
 interface VersionedObject<T = Record<string, unknown>> { id: string; revision: number; body: T }
 interface PatchedFixtureBody { fixture_id: string; fixture_number?: number; logical_heads?: Array<{ fixture_id: string }> }
 
-test("captures help and README screenshots from the default show desk", async ({ page, desk, api }) => {
+test("captures help and README screenshots from the default show desk @ui @docs", async ({ page, desk, api }) => {
   page.setDefaultTimeout(12_000);
   await fs.mkdir(SCREENSHOT_DIR, { recursive: true });
   await fs.mkdir(PANE_SCREENSHOT_DIR, { recursive: true });
