@@ -22,3 +22,13 @@ navigation UI cases.
   and MIB boundaries retain their exact operator contracts.
 - Focused API/UI/OSC/wire cases, architecture, inventory, and parallel stress
   pass.
+
+## Result
+
+- Re-verified all 32 pending inventory rows across the seven named root specs.
+- The scope spans 2,120 lines of root entrypoints and a further 2,561 lines in
+  the Cue semantic-contract support modules, with independent recording,
+  timing, tracking, Cuelist, Preload, MIB, and Playback Configuration contracts.
+- Split execution into `10c2a` through `10c2g` so each operator-contract family
+  can retain its API/UI/OSC/wire oracle and pass focused parallel verification
+  before landing.
