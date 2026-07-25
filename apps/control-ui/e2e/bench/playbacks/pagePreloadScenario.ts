@@ -24,6 +24,11 @@ export interface PreloadCaptureConfiguration {
 	cueFade: number;
 }
 
+export type PreloadCaptureMask = Pick<
+	PreloadCaptureConfiguration,
+	"programmer" | "physicalPlaybacks" | "virtualPlaybacks"
+>;
+
 class PageSurface {
 	constructor(
 		private readonly owner: BrowserPages,
@@ -238,6 +243,86 @@ class PreloadSurface {
 	}
 }
 
+export class PreloadSettings {
+	readonly expect = {
+		mask: async (mask: PreloadCaptureMask) => {
+			const expected = [
+				mask.programmer,
+				mask.physicalPlaybacks,
+				mask.virtualPlaybacks,
+			];
+			await expect
+				.poll(async () => {
+					const configuration = await this.configuration();
+					return [
+						configuration.preload_programmer_changes,
+						configuration.preload_physical_playback_actions,
+						configuration.preload_virtual_playback_actions,
+					];
+				})
+				.toEqual(expected);
+			for (const [index, label] of PRELOAD_MASK_LABELS.entries())
+				await expect(
+					this.page.getByRole("switch", { name: label }),
+				).toBeChecked({
+					checked: expected[index],
+				});
+		},
+	};
+
+	constructor(
+		private readonly api: ApiDriver,
+		private readonly page: Page,
+		private readonly desk: DeskDriver,
+	) {}
+
+	async configure(mask: PreloadCaptureMask): Promise<void> {
+		const desired = [
+			mask.programmer,
+			mask.physicalPlaybacks,
+			mask.virtualPlaybacks,
+		];
+		for (const [index, label] of PRELOAD_MASK_LABELS.entries()) {
+			const control = this.page.getByRole("switch", { name: label });
+			if ((await control.isChecked()) !== desired[index])
+				await this.desk.click(
+					control.locator("..").locator(".ui-switch-track"),
+				);
+		}
+		await this.desk.click(
+			this.page.getByRole("button", { name: "Save changes", exact: true }),
+		);
+		await expect
+			.poll(async () => {
+				const configuration = await this.configuration();
+				return [
+					configuration.preload_programmer_changes,
+					configuration.preload_physical_playback_actions,
+					configuration.preload_virtual_playback_actions,
+				];
+			})
+			.toEqual(desired);
+		await this.desk.click(
+			this.page.getByRole("button", { name: "Outputs", exact: true }),
+		);
+		await this.desk.click(
+			this.page.getByRole("button", { name: "Programmer", exact: true }),
+		);
+	}
+
+	private configuration() {
+		return this.api
+			.request<{
+				configuration: {
+					preload_programmer_changes: boolean;
+					preload_physical_playback_actions: boolean;
+					preload_virtual_playback_actions: boolean;
+				};
+			}>("GET", "/api/v2/configuration")
+			.then((response) => response.configuration);
+	}
+}
+
 export class BrowserPreload {
 	readonly via = {
 		ui: new PreloadSurface(this, "ui"),
@@ -281,6 +366,24 @@ export class BrowserPreload {
 			preload_physical_playback_actions: configuration.physicalPlaybacks,
 			preload_virtual_playback_actions: configuration.virtualPlaybacks,
 		});
+	}
+
+	async openSettings(): Promise<PreloadSettings> {
+		await this.desk.click(
+			this.page.getByRole("button", { name: /Open show menu/ }),
+		);
+		await this.desk.click(
+			this.page.getByRole("button", { name: "Enter Setup", exact: true }),
+		);
+		await this.desk.click(
+			this.page.getByRole("button", { name: "Programmer", exact: true }),
+		);
+		await expect(
+			this.page.getByRole("switch", {
+				name: PRELOAD_MASK_LABELS[0],
+			}),
+		).toBeVisible();
+		return new PreloadSettings(this.api, this.page, this.desk);
 	}
 
 	async startVia(route: PreloadRoute) {
@@ -402,6 +505,12 @@ export class BrowserPreload {
 		return this.api.session;
 	}
 }
+
+const PRELOAD_MASK_LABELS = [
+	"Preload programmer changes",
+	"Preload physical playback actions",
+	"Preload virtual playback actions",
+] as const;
 
 function valid(value: number, label: string) {
 	if (!Number.isSafeInteger(value) || value < 1)

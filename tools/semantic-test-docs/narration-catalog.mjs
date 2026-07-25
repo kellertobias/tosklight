@@ -59,6 +59,7 @@ const returnedFamilies = {
 	cueEditor: ["Browser UI", "Cues"],
 	cueListSettings: ["Browser UI", "Cuelist Settings"],
 	desktopBuilder: ["Browser UI", "Desktop layout"],
+	preloadSettings: ["Browser UI", "Preload Settings"],
 	screenHandle: ["Secondary screen"],
 };
 
@@ -181,8 +182,11 @@ const supportedCallPaths = new Set([
 	"preload.expect.active",
 	"preload.expect.inactive",
 	"preload.expect.pendingPlaybackActions",
+	"preload.openSettings",
 	"preload.via.api.commit",
 	"preload.via.ui.release",
+	"preloadSettings.configure",
+	"preloadSettings.expect.mask",
 	"preset.expect.absent",
 	"preset.expect.button",
 	"preset.expect.metadata",
@@ -490,6 +494,7 @@ function resultTypeFor(callPath) {
 		return "cueEditor";
 	if (callPath === "cueEditor.openSettings") return "cueListSettings";
 	if (callPath === "desktop.configure") return "desktopBuilder";
+	if (callPath === "preload.openSettings") return "preloadSettings";
 	if (callPath === "screen.create") return "screenHandle";
 	return undefined;
 }

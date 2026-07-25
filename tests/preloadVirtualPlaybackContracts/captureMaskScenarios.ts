@@ -30,6 +30,7 @@ import {
 const preload005Scenario: PairedScenario<PreloadMaskPairState> = {
 	id: "PRELOAD-005",
 	title: "all eight capture-domain switch masks persist independently",
+	surfaces: ["api"],
 	arrange: async ({ api, bench }, surface) => {
 		await loadCanonicalCopy(api, bench, `preload-005-paired-${surface}`);
 		return { savedMasks: [] };
