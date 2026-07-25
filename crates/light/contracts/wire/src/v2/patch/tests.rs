@@ -46,6 +46,31 @@ fn request_rejects_mass_assigned_definition_data() {
 }
 
 #[test]
+fn request_preserves_explicit_unpatched_and_partial_pairs_for_application_validation() {
+    let mut fixture = fixture_input();
+    fixture.split_patches[0].universe = None;
+    fixture.split_patches[0].address = None;
+    let value = serde_json::to_value(PatchFixturesRequest {
+        request_id: "patch-empty".into(),
+        fixtures: vec![fixture],
+        remove_fixture_ids: Vec::new(),
+        placements: Vec::new(),
+    })
+    .expect("serialize unpatched request");
+    let decoded = serde_json::from_value::<PatchFixturesRequest>(value.clone())
+        .expect("explicit null address pair is valid");
+    assert_eq!(decoded.fixtures[0].split_patches[0].universe, None);
+    assert_eq!(decoded.fixtures[0].split_patches[0].address, None);
+
+    let mut partial = value;
+    partial["fixtures"][0]["split_patches"][0]["universe"] = serde_json::json!(1);
+    let decoded = serde_json::from_value::<PatchFixturesRequest>(partial)
+        .expect("shape decoding leaves semantic pair validation to the application");
+    assert_eq!(decoded.fixtures[0].split_patches[0].universe, Some(1));
+    assert_eq!(decoded.fixtures[0].split_patches[0].address, None);
+}
+
+#[test]
 fn request_schema_bounds_idempotency_identity_and_batch_collections() {
     let schema = serde_json::to_value(schemars::schema_for!(PatchFixturesRequest))
         .expect("serialize request schema");

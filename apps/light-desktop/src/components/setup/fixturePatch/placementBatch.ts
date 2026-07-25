@@ -24,11 +24,58 @@ export async function addPlacementBatch(controller: PatchController) {
 		await addVirtualBatch(controller);
 		return;
 	}
+	if (controller.ui.placementEmpty) {
+		await addUnpatchedBatch(controller);
+		return;
+	}
 	if (definitionSplits(definition).length > 1) {
 		await addSplitBatch(controller);
 		return;
 	}
 	await addSingleSplitBatch(controller);
+}
+
+async function addUnpatchedBatch(controller: PatchController) {
+	const { definition, all } = controller.data;
+	const { ui } = controller;
+	if (!definition) return;
+	const fixtureNumber = parseFixtureNumber(ui.draft.fixtureNumber);
+	if (fixtureNumber == null) {
+		ui.setStatus("Enter a positive whole-number start fixture ID.");
+		return;
+	}
+	const requested = placementBatchCount(ui.draft.count);
+	const candidates: PatchFixtureCandidate[] = [];
+	let fixtureNumberCursor = fixtureNumber;
+	const usedFixtureNumbers = physicalFixtureNumbers(all);
+	while (candidates.length < requested) {
+		const nextFixtureNumber = nextAvailableFixtureNumber(
+			fixtureNumberCursor,
+			usedFixtureNumbers,
+		);
+		if (nextFixtureNumber == null) break;
+		candidates.push(
+			newPatchFixtureCandidate({
+				name: incrementFixtureName(ui.draft.name, candidates.length),
+				fixture_number: nextFixtureNumber,
+				definition,
+				universe: null,
+				address: null,
+				split_patches: definitionSplits(definition).map((split) => ({
+					split: split.number,
+					universe: null,
+					address: null,
+				})),
+				layer_id: ui.activeLayer === "all" ? "default" : ui.activeLayer,
+			}),
+		);
+		usedFixtureNumbers.add(nextFixtureNumber);
+		fixtureNumberCursor = nextFixtureNumber + 1;
+	}
+	const results = await commitPlacementBatch(controller, candidates);
+	if (!results) return;
+	selectLastAdded(controller, results.at(-1));
+	closeCompletedBatch(controller);
 }
 
 async function addVirtualBatch(controller: PatchController) {

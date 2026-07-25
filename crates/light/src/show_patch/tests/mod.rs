@@ -67,6 +67,63 @@ fn placement_intent_resolves_consecutive_addresses_with_sparse_operator_override
 }
 
 #[test]
+fn empty_bulk_placement_keeps_every_fixture_unpatched_without_progression() {
+    let (profile, reference) = profile_with_modes(4);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let mut command = patch_batch(rig.ports.show_id(), reference, 3);
+    let fixture_ids = command
+        .fixtures
+        .iter()
+        .map(|fixture| fixture.patch.fixture_id)
+        .collect::<Vec<_>>();
+    command.placements = vec![PatchPlacementIntent {
+        fixture_ids,
+        splits: vec![PatchSplitPlacementIntent {
+            split: 1,
+            universe: None,
+            address: None,
+            mode: PatchSplitPlacementMode::Consecutive,
+        }],
+    }];
+
+    let result = rig
+        .service
+        .handle(envelope(command, "empty-bulk-placement", 0), &rig.ports)
+        .unwrap();
+
+    assert_eq!(result.change.fixtures.len(), 3);
+    assert!(result.change.fixtures.iter().all(|fixture| {
+        fixture
+            .patch
+            .split_patches
+            .iter()
+            .all(|split| split.universe.is_none() && split.address.is_none())
+    }));
+    rig.assert_portable_patch(3, 1);
+}
+
+#[test]
+fn partial_fixture_address_is_rejected_before_patch_side_effects() {
+    let (profile, reference) = profile_with_modes(1);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let mut command = patch_batch(rig.ports.show_id(), reference, 1);
+    command.fixtures[0].patch.split_patches[0].address = None;
+
+    let error = rig
+        .service
+        .handle(envelope(command, "partial-address", 0), &rig.ports)
+        .unwrap_err();
+
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(
+        error
+            .message
+            .contains("universe and address must both be set or both be absent")
+    );
+    rig.assert_empty_show();
+}
+
+#[test]
 fn placement_conflict_and_universe_overflow_stop_before_commit() {
     let (profile, reference) = profile_with_modes(1);
     let conflict_rig = TestRig::new(profile.clone(), FailurePoint::None);

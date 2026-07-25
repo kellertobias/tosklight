@@ -61,6 +61,7 @@ export function beginPlacement(controller: PatchController) {
 		),
 	);
 	ui.setPlacementOverrides({});
+	ui.setPlacementEmpty(false);
 	openPlacement(controller, nextDraft, nextSplitDrafts);
 }
 
@@ -86,6 +87,7 @@ function beginVirtualPlacement(controller: PatchController) {
 	ui.setSplitDrafts({});
 	ui.setBatchPatches([]);
 	ui.setPlacementOverrides({});
+	ui.setPlacementEmpty(false);
 	openPlacement(controller, nextDraft, {});
 }
 
@@ -100,6 +102,7 @@ function openPlacement(
 		draft,
 		splitDrafts,
 		definitionKey: fixtureDefinitionKey(definition),
+		empty: false,
 	});
 	controller.ui.setPlacementCloseConfirm(false);
 	controller.ui.setStatus("");
@@ -114,6 +117,11 @@ export function updatePlacementCount(
 	const { definition } = controller.data;
 	ui.setDraft((current) => ({ ...current, count }));
 	if (!definition || !isDmxPatchable(definition)) return;
+	if (ui.placementEmpty) {
+		ui.setBatchPatches([]);
+		ui.setPlacementOverrides({});
+		return;
+	}
 	const footprint =
 		definitionSplits(definition)[0]?.footprint ?? definition.footprint;
 	const base = parsePatchAddress(ui.draft.patch);
@@ -143,6 +151,7 @@ export function updatePlacementPatch(
 	const { ui } = controller;
 	const { definition } = controller.data;
 	ui.setDraft((current) => ({ ...current, patch }));
+	ui.setPlacementEmpty(false);
 	if (!definition) return;
 	const parsed = parsePatchAddress(patch);
 	if (parsed) {
@@ -216,6 +225,67 @@ export function changePlacementUniverse(
 		...current,
 		[definitionSplits(definition)[0]?.number ?? 1]: patches[0],
 	}));
+	ui.setPlacementEmpty(false);
+}
+
+export function setPlacementEmpty(
+	controller: PatchController,
+	empty: boolean,
+) {
+	const { definition, all } = controller.data;
+	const { ui } = controller;
+	if (!definition || !isDmxPatchable(definition)) return;
+	ui.setPlacementEmpty(empty);
+	ui.setPlacementOverrides({});
+	if (empty) {
+		ui.setBatchPatches([]);
+		return;
+	}
+	const splits = definitionSplits(definition);
+	const retainedPrimary = parsePatchAddress(
+		splits.length > 1
+			? (ui.splitDrafts[splits[0].number] ?? "")
+			: ui.draft.patch,
+	);
+	const universe = retainedPrimary?.universe ?? 1;
+	const address =
+		retainedPrimary?.address ??
+		firstFreeAddress(
+			all,
+			universe,
+			splits[0]?.footprint ?? definition.footprint,
+		) ??
+		1;
+	const patch = `${universe}.${address}`;
+	ui.setDraft((current) => ({ ...current, patch }));
+	ui.setSplitDrafts(
+		Object.fromEntries(
+			splits.map((split, index) => {
+				const retained = parsePatchAddress(ui.splitDrafts[split.number] ?? "");
+				const splitAddress =
+					retained?.address ??
+					firstFreeAddress(
+						all,
+						universe,
+						split.footprint,
+						index === 0 ? address : undefined,
+					) ??
+					1;
+				return [
+					split.number,
+					`${retained?.universe ?? universe}.${splitAddress}`,
+				];
+			}),
+		),
+	);
+	ui.setBatchPatches(
+		contiguousBatchPatches(
+			universe,
+			address,
+			placementBatchCount(ui.draft.count),
+			splits[0]?.footprint ?? definition.footprint,
+		),
+	);
 }
 
 function batchPreviewPatches(
@@ -231,7 +301,13 @@ function batchPreviewPatches(
 }
 
 export function placementIsDirty(controller: PatchController) {
-	const { placementBaseline, draft, splitDrafts, placementOverrides } =
+	const {
+		placementBaseline,
+		draft,
+		splitDrafts,
+		placementOverrides,
+		placementEmpty,
+	} =
 		controller.ui;
 	const { definition } = controller.data;
 	return Boolean(
@@ -241,6 +317,7 @@ export function placementIsDirty(controller: PatchController) {
 				JSON.stringify(placementBaseline.draft) !== JSON.stringify(draft) ||
 				JSON.stringify(placementBaseline.splitDrafts) !==
 					JSON.stringify(splitDrafts) ||
+				placementBaseline.empty !== placementEmpty ||
 				Object.keys(placementOverrides).length > 0),
 	);
 }

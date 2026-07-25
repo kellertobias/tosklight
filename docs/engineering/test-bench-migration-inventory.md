@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **140 root cases across 52 files**.
+Default catalog: **141 root cases across 52 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -46,6 +46,7 @@ Default catalog: **140 root cases across 52 files**.
 | 34-active-playback-colors.spec.ts | PLAYBACK-COLOR-001 @ui › runtime strengthens configured color while selection stays separate | repository contract | @ui | active-playback-colors | standard failure evidence | parallel | pending-semantic-migration |
 | 35-fixture-address-screen.spec.ts | FIXTURE-ADDRESS-001 @ui › integrated address screen keeps the complete map and number block reachable | repository contract | @ui | fixture-address-screen | standard failure evidence | parallel | pending-semantic-migration |
 | 35-fixture-address-screen.spec.ts | PATCH-PLACEMENT-001 @ui › the server commits the independently arranged placement preview | repository contract | @ui | fixture-address-screen | standard failure evidence | parallel | pending-semantic-migration |
+| 35-fixture-address-screen.spec.ts | PATCH-PLACEMENT-002 @ui › Add Fixture keeps bulk Empty placement unpatched across restart | repository contract | @ui | fixture-address-screen | standard failure evidence | parallel | pending-semantic-migration |
 | 36-cuelist-and-cue-settings-layout.spec.ts | CUELIST-LAYOUT-001 @ui › compact Cue settings stay inline while Cuelist Settings opens as a structured modal | repository contract | @ui | cuelist-and-cue-settings-layout | standard failure evidence | parallel | pending-semantic-migration |
 | 37-semantic-desktop-show-clock.spec.ts | BENCH-UI-003 @bench @ui › captures semantic surfaces and emits typed secondary-screen intent | repository contract | @bench @ui | semantic-desktop-show-clock | standard failure evidence | parallel | migrated-semantic-world |
 | 37-semantic-desktop-show-clock.spec.ts | BENCH-SHOW-004 @bench @ui › runs named create, autosave, Save As, revision, and reopen through visible operator controls | repository contract | @bench @ui | semantic-desktop-show-clock | standard failure evidence | parallel | migrated-semantic-world |

@@ -2,7 +2,21 @@
 
 ## Status
 
-**Specification only.** This plan records a Show Patch setup improvement. It does not implement runtime behavior, persistence changes, UI changes, or executable tests.
+**Implemented.** Add Fixture now offers an explicit **Empty** placement, creates one or many
+ordinary fixtures with nullable split assignments, and preserves that state across restart and
+later repatching.
+
+## Implemented decisions
+
+- **Empty** is a fixture-level placement choice beside **Address**. For multi-split modes it clears
+  every split for the newly added fixture; the existing per-split empty controls remain available
+  for partial patching.
+- Switching to **Empty** removes every placement proposal without discarding the operator's hidden
+  concrete draft. Switching back restores that draft and normal footprint validation.
+- Empty bulk placement allocates fixture numbers and stable identities normally but sends no
+  placement intent, so no address auto-advance or fallback assignment can occur.
+- The typed Patch boundary continues to represent an unpatched split as matching nullable
+  `universe` and `address` fields. Application validation rejects partial pairs before persistence.
 
 ## Goal
 

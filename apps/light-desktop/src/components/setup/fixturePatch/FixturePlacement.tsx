@@ -19,6 +19,7 @@ import { addPlacementBatch } from "./placementBatch";
 import {
 	changePlacementUniverse,
 	requestPlacementClose,
+	setPlacementEmpty,
 	updateBatchPatch,
 	updatePlacementCount,
 	updatePlacementPatch,
@@ -35,7 +36,7 @@ export function FixturePlacement() {
 				<PlacementHeader controller={controller} />
 				<div className="placement-grid">
 					<PlacementFields controller={controller} />
-					{isDmxPatchable(definition) && (
+					{isDmxPatchable(definition) && !controller.ui.placementEmpty && (
 						<PlacementUniverseMap controller={controller} />
 					)}
 				</div>
@@ -143,41 +144,81 @@ function PlacementPatchFields({ controller }: { controller: PatchController }) {
 	if (!definition) return null;
 	if (!isDmxPatchable(definition))
 		return <p>This Venue element is visual only and has no DMX patch.</p>;
+	const addressChoice = (
+		<div
+			className="placement-address-choice"
+			role="group"
+			aria-label="Fixture placement address"
+		>
+			<Button
+				active={!ui.placementEmpty}
+				onClick={() => setPlacementEmpty(controller, false)}
+			>
+				Address
+			</Button>
+			<Button
+				active={ui.placementEmpty}
+				onClick={() => setPlacementEmpty(controller, true)}
+			>
+				Empty
+			</Button>
+		</div>
+	);
+	if (ui.placementEmpty)
+		return (
+			<>
+				{addressChoice}
+				<p className="placement-empty-summary">
+					<strong>Placement: Empty</strong>
+					<br />
+					<small>
+						Fixtures remain selectable and programmable but send no DMX until
+						patched.
+					</small>
+				</p>
+			</>
+		);
 	if (definitionSplits(definition).length === 1)
 		return (
-			// biome-ignore lint/a11y/noLabelWithoutControl: ConsoleTextField renders its native control inside this label.
-			<label>
-				Address (universe.address)
-				<ConsoleTextField
-					label="Address (universe.address)"
-					value={ui.draft.patch}
-					onChange={(patch) => updatePlacementPatch(controller, patch)}
-				/>
-			</label>
+			<>
+				{addressChoice}
+				{/* biome-ignore lint/a11y/noLabelWithoutControl: ConsoleTextField renders its native control inside this label. */}
+				<label>
+					Address (universe.address)
+					<ConsoleTextField
+						label="Address (universe.address)"
+						value={ui.draft.patch}
+						onChange={(patch) => updatePlacementPatch(controller, patch)}
+					/>
+				</label>
+			</>
 		);
 	return (
-		<fieldset className="split-patch-fields">
-			<legend>Independent split patches</legend>
-			{definitionSplits(definition).map((split) => (
-				<Fragment key={split.number}>
-					{/* biome-ignore lint/a11y/noLabelWithoutControl: ConsoleTextField renders its native control inside this label. */}
-					<label>
-						Split {split.number} · {split.footprint} slots
-						<ConsoleTextField
-							label={`Split ${split.number} address`}
-							value={ui.splitDrafts[split.number] ?? ""}
-							onChange={(value) =>
-								ui.setSplitDrafts((current) => ({
-									...current,
-									[split.number]: value,
-								}))
-							}
-						/>
-						<small>Clear to leave this split unpatched.</small>
-					</label>
-				</Fragment>
-			))}
-		</fieldset>
+		<>
+			{addressChoice}
+			<fieldset className="split-patch-fields">
+				<legend>Independent split patches</legend>
+				{definitionSplits(definition).map((split) => (
+					<Fragment key={split.number}>
+						{/* biome-ignore lint/a11y/noLabelWithoutControl: ConsoleTextField renders its native control inside this label. */}
+						<label>
+							Split {split.number} · {split.footprint} slots
+							<ConsoleTextField
+								label={`Split ${split.number} address`}
+								value={ui.splitDrafts[split.number] ?? ""}
+								onChange={(value) =>
+									ui.setSplitDrafts((current) => ({
+										...current,
+										[split.number]: value,
+									}))
+								}
+							/>
+							<small>Clear to leave this split unpatched.</small>
+						</label>
+					</Fragment>
+				))}
+			</fieldset>
+		</>
 	);
 }
 
@@ -229,6 +270,7 @@ function placementIsDisabled(controller: PatchController) {
 	if (!definition || ui.busy) return true;
 	if (isDmxPatchable(definition)) {
 		if (parseFixtureNumber(ui.draft.fixtureNumber) == null) return true;
+		if (ui.placementEmpty) return false;
 		if (definitionSplits(definition).length === 1)
 			return (
 				batchPatchError(

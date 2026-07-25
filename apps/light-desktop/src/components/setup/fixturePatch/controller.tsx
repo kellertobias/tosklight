@@ -50,6 +50,7 @@ export type PlacementBaseline = {
 	draft: { name: string; fixtureNumber: string; count: string; patch: string };
 	splitDrafts: Record<number, string>;
 	definitionKey: string;
+	empty: boolean;
 };
 
 export type FixturePatchSetupProps = {
@@ -84,6 +85,7 @@ function usePatchUiState() {
 	const [placementOverrides, setPlacementOverrides] = useState<
 		Record<number, string>
 	>({});
+	const [placementEmpty, setPlacementEmpty] = useState(false);
 	const [status, setStatus] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [placementBaseline, setPlacementBaseline] =
@@ -143,6 +145,8 @@ function usePatchUiState() {
 		setBatchPatches,
 		placementOverrides,
 		setPlacementOverrides,
+		placementEmpty,
+		setPlacementEmpty,
 		status,
 		setStatus,
 		busy,

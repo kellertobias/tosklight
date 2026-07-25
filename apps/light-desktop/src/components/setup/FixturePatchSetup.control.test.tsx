@@ -552,6 +552,123 @@ describe("fixture batch IDs and title actions", () => {
 });
 
 describe("fixture batch DMX placement", () => {
+	it("releases concrete preview reservations for Empty and reacquires them for Address", () => {
+		const placement = openDimmerPlacement();
+		const choice = within(placement).getByRole("group", {
+			name: "Fixture placement address",
+		});
+		expect(within(choice).getByRole("button", { name: "Address" })).toHaveClass(
+			"is-active",
+		);
+		expect(
+			within(placement).getByRole("grid", { name: "DMX universe 1" }),
+		).toBeInTheDocument();
+		fireEvent.change(
+			within(placement).getByRole("textbox", {
+				name: "Address (universe.address)",
+			}),
+			{ target: { value: "2.100" } },
+		);
+
+		fireEvent.click(within(choice).getByRole("button", { name: "Empty" }));
+
+		expect(
+			within(placement).getByText("Placement: Empty"),
+		).toBeInTheDocument();
+		expect(within(placement).queryByRole("grid")).not.toBeInTheDocument();
+		expect(
+			within(placement).queryByRole("textbox", {
+				name: "Address (universe.address)",
+			}),
+		).not.toBeInTheDocument();
+
+		fireEvent.click(within(choice).getByRole("button", { name: "Address" }));
+
+		expect(
+			within(placement).getByRole("textbox", {
+				name: "Address (universe.address)",
+			}),
+		).toHaveValue("2.100");
+		expect(
+			within(placement)
+				.getByRole("grid", { name: "DMX universe 2" })
+				.querySelector('[data-dmx-address="100"]'),
+		).toHaveClass("proposed");
+	});
+
+	it("adds every requested fixture unpatched without address progression", async () => {
+		const placement = openDimmerPlacement();
+		fireEvent.change(within(placement).getByRole("textbox", { name: "Count" }), {
+			target: { value: "3" },
+		});
+		fireEvent.click(
+			within(placement).getByRole("button", { name: "Empty" }),
+		);
+		fireEvent.click(
+			within(placement).getByRole("button", { name: "Add 3 fixtures" }),
+		);
+
+		await waitFor(() =>
+			expect(patchFeature.patchFixtures).toHaveBeenCalledOnce(),
+		);
+		const [candidates, placements] = patchFeature.patchFixtures.mock.calls[0];
+		expect(placements).toEqual([]);
+		expect(
+			candidates.map(
+				(candidate: { fixture: PatchedFixture }) =>
+					candidate.fixture.fixture_number,
+			),
+		).toEqual([1, 2, 3]);
+		expect(
+			candidates.map((candidate: { fixture: PatchedFixture }) => ({
+				universe: candidate.fixture.universe,
+				address: candidate.fixture.address,
+				split_patches: candidate.fixture.split_patches,
+			})),
+		).toEqual([
+			{
+				universe: null,
+				address: null,
+				split_patches: [{ split: 1, universe: null, address: null }],
+			},
+			{
+				universe: null,
+				address: null,
+				split_patches: [{ split: 1, universe: null, address: null }],
+			},
+			{
+				universe: null,
+				address: null,
+				split_patches: [{ split: 1, universe: null, address: null }],
+			},
+		]);
+	});
+
+	it("adds one deliberately Empty fixture with its normal identity and profile", async () => {
+		const placement = openDimmerPlacement();
+		fireEvent.click(
+			within(placement).getByRole("button", { name: "Empty" }),
+		);
+		fireEvent.click(
+			within(placement).getByRole("button", { name: "Add 1 fixtures" }),
+		);
+
+		await waitFor(() =>
+			expect(patchFeature.patchFixtures).toHaveBeenCalledOnce(),
+		);
+		const candidate = patchFeature.patchFixtures.mock.calls[0][0][0].fixture;
+		expect(candidate).toMatchObject({
+			fixture_number: 1,
+			name: "Fixture 1",
+			universe: null,
+			address: null,
+			split_patches: [{ split: 1, universe: null, address: null }],
+			layer_id: "default",
+		});
+		expect(candidate.fixture_id).toEqual(expect.any(String));
+		expect(candidate.definition.name).toBe("Dimmer");
+	});
+
 	it("renders 512 hittable DMX squares and marks used, proposed, and conflicting ranges", () => {
 		const placement = openDimmerPlacement();
 		const grid = within(placement).getByRole("grid", {

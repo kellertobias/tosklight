@@ -1,6 +1,10 @@
 import { expect, test } from "./bench/core/fixtures";
 import { loadCanonicalCopy } from "./support/catalog";
-import { readPatchSnapshot } from "./support/operator/patch";
+import { patchFixtureRow } from "./support/foundational/ui";
+import {
+  readPatchSnapshot,
+  setFixtureAddressThroughApi,
+} from "./support/operator/patch";
 
 test("FIXTURE-ADDRESS-001 @ui › integrated address screen keeps the complete map and number block reachable", async ({ api, bench, desk, page }) => {
   await loadCanonicalCopy(api, bench, "fixture-address-001", "default-stage");
@@ -108,4 +112,95 @@ test("PATCH-PLACEMENT-001 @ui › the server commits the independently arranged 
     .sort((left, right) => left.fixture_number! - right.fixture_number!)
     .map((fixture) => fixture.split_patches[0]?.address);
   expect(authoritative).toEqual(preview);
+});
+
+test("PATCH-PLACEMENT-002 @ui › Add Fixture keeps bulk Empty placement unpatched across restart", async ({
+  api,
+  bench,
+  desk,
+  page,
+}) => {
+  const show = await loadCanonicalCopy(api, bench, "patch-placement-002", "default-stage");
+  await desk.open(api.baseUrl);
+  await page.getByRole("button", { name: /Open show menu/ }).click();
+  await page.getByRole("button", { name: "Show Patch", exact: true }).click();
+
+  await desk.click(page.getByRole("button", { name: "+ Add fixture", exact: true }));
+  const browser = page.locator(".fixture-browser-modal");
+  await browser.getByRole("textbox", { name: "Search", exact: true }).fill("Dimmer");
+  await desk.click(
+    browser
+      .locator(".fixture-picker-columns > section")
+      .nth(1)
+      .getByRole("button")
+      .filter({ has: page.getByText("Dimmer", { exact: true }) })
+      .first(),
+  );
+  await desk.click(
+    browser.locator(".fixture-mode-detail").getByRole("button", {
+      name: "Add fixture",
+      exact: true,
+    }),
+  );
+
+  const placement = page.locator(".fixture-placement-modal");
+  await placement.getByRole("textbox", { name: /^Fixture name\b/ }).fill("Unpatched");
+  await placement.getByRole("textbox", { name: "Start fixture ID", exact: true }).fill("9100");
+  await placement.getByRole("textbox", { name: "Count", exact: true }).fill("3");
+  await desk.click(placement.getByRole("button", { name: "Empty", exact: true }));
+  await expect(placement.getByText("Placement: Empty", { exact: true })).toBeVisible();
+  await expect(placement.getByRole("grid")).toHaveCount(0);
+  await desk.click(
+    placement.getByRole("button", { name: "Add 3 fixtures", exact: true }),
+  );
+  await expect(placement).toBeHidden();
+
+  const beforeRestart = (await readPatchSnapshot(api, show.id)).fixtures
+    .filter((fixture) => (fixture.fixture_number ?? 0) >= 9100)
+    .sort((left, right) => left.fixture_number! - right.fixture_number!);
+  expect(beforeRestart.map((fixture) => fixture.fixture_number)).toEqual([
+    9100, 9101, 9102,
+  ]);
+  expect(
+    beforeRestart.map((fixture) =>
+      fixture.split_patches.map(({ universe, address }) => ({ universe, address })),
+    ),
+  ).toEqual([
+    [{ universe: null, address: null }],
+    [{ universe: null, address: null }],
+    [{ universe: null, address: null }],
+  ]);
+  for (const number of [9100, 9101, 9102]) {
+    const row = patchFixtureRow(page, number);
+    await row.scrollIntoViewIfNeeded();
+    await expect(row.locator(".patch-address")).toHaveText("Unpatched");
+  }
+
+  const identities = beforeRestart.map((fixture) => fixture.fixture_id);
+  await bench.restart();
+  await api.login();
+  await api.openShow(show.id, { transition: "hold_current" });
+  const afterRestart = (await readPatchSnapshot(api, show.id)).fixtures
+    .filter((fixture) => (fixture.fixture_number ?? 0) >= 9100)
+    .sort((left, right) => left.fixture_number! - right.fixture_number!);
+  expect(afterRestart.map((fixture) => fixture.fixture_id)).toEqual(identities);
+  expect(
+    afterRestart.flatMap((fixture) =>
+      fixture.split_patches.map(({ universe, address }) => ({ universe, address })),
+    ),
+  ).toEqual([
+    { universe: null, address: null },
+    { universe: null, address: null },
+    { universe: null, address: null },
+  ]);
+
+  await setFixtureAddressThroughApi(api, identities[0], "1.400");
+  const repatched = (await readPatchSnapshot(api, show.id)).fixtures.find(
+    (fixture) => fixture.fixture_id === identities[0],
+  );
+  expect(repatched?.fixture_number).toBe(9100);
+  expect(repatched?.split_patches[0]).toMatchObject({
+    universe: 1,
+    address: 400,
+  });
 });
