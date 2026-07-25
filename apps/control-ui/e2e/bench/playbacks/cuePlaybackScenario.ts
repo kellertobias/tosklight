@@ -275,6 +275,12 @@ class CueExpectation {
 		expect(await this.owner.cue(this.playback, this.cue)).toBeUndefined();
 	}
 
+	async trigger(expected: Cue["trigger"]) {
+		expect((await this.owner.cue(this.playback, this.cue))?.trigger).toEqual(
+			expected,
+		);
+	}
+
 	async metadata(
 		expected: Partial<Pick<Cue, "name" | "fade_millis" | "delay_millis">>,
 	) {
@@ -288,6 +294,21 @@ class CueExpectation {
 		attribute: string,
 		expected: { fade: ClockDuration; delay?: ClockDuration | null },
 	) {
+		const change = await this.groupChange(group, attribute);
+		expect(change?.fade_millis).toBe(parseClockDuration(expected.fade));
+		expect(change?.delay_millis).toBe(
+			expected.delay == null
+				? expected.delay
+				: parseClockDuration(expected.delay),
+		);
+	}
+
+	async groupValue(group: number, attribute: string, expected: number) {
+		const change = await this.groupChange(group, attribute);
+		expect(change?.value).toEqual({ kind: "normalized", value: expected });
+	}
+
+	private async groupChange(group: number, attribute: string) {
 		const cue = await this.owner.cue(this.playback, this.cue);
 		expect(cue).toBeDefined();
 		const change = (cue?.group_changes ?? []).find(
@@ -296,12 +317,7 @@ class CueExpectation {
 				candidate.attribute === attribute,
 		);
 		expect(change).toBeDefined();
-		expect(change?.fade_millis).toBe(parseClockDuration(expected.fade));
-		expect(change?.delay_millis).toBe(
-			expected.delay == null
-				? expected.delay
-				: parseClockDuration(expected.delay),
-		);
+		return change;
 	}
 }
 

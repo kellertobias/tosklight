@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **308 root cases across 47 files**.
+Default catalog: **308 root cases across 48 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -57,11 +57,8 @@ Default catalog: **308 root cases across 47 files**.
 | 02-cue-semantic-contracts.spec.ts | CUE-003 @api › GO, pause, resume, back, and release use exact application-time boundaries | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 02-cue-semantic-contracts.spec.ts | CUE-004 @api › per-value timing overrides Cue fallback and Force Cue Timing is reversible | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 02-cue-semantic-contracts.spec.ts | CUE-005 @api › GO, FOLLOW, and TIME measure from the preceding Cue's latest value endpoint | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 02-cue-semantic-contracts.spec.ts | CUE-005 @ui › GO, FOLLOW, and TIME measure from the preceding Cue's latest value endpoint | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cue-semantic-contracts | standard failure evidence | parallel | pending-semantic-migration |
 | 02-cue-semantic-contracts.spec.ts | CUE-006 @api › explicit playback selection supplies the implicit Cuelist without following execution order | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 02-cue-semantic-contracts.spec.ts | CUE-006 @ui › explicit playback selection supplies the implicit Cuelist without following execution order | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cue-semantic-contracts | standard failure evidence | parallel | pending-semantic-migration |
 | 02-cue-semantic-contracts.spec.ts | CUE-007 @api › explicit zeroes block a later inserted on Cue from tracking past Cue 4 | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
-| 02-cue-semantic-contracts.spec.ts | CUE-007 @ui › explicit zeroes block a later inserted on Cue from tracking past Cue 4 | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cue-semantic-contracts | standard failure evidence | parallel | pending-semantic-migration |
 | 02-cue-semantic-contracts.spec.ts | CUE-010 @api › tracking and LTP ownership stay per attribute and reveal the underlying programmer | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 02-cue-semantic-contracts.spec.ts | CUE-010 @ui › tracking and LTP ownership stay per attribute and reveal the underlying programmer | docs/testing/02-cues-tracking-and-arbitration.md | @ui | cue-semantic-contracts | standard failure evidence | parallel | pending-semantic-migration |
 | 02-cue-semantic-contracts.spec.ts | MERGE-002 @api › independent Sequences coexist and retrigger only their stored addresses | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
@@ -322,6 +319,9 @@ Default catalog: **308 root cases across 47 files**.
 | 44-semantic-cue-recording-and-reconstruction.spec.ts | CUE-002 @bench @ui › Cue-only restoration reconstructs identically for sequential GO and direct jumps | repository contract | @bench @ui | semantic-cue-recording-and-reconstruction | standard failure evidence | parallel | migrated-semantic-world |
 | 45-semantic-cue-runtime-timing.spec.ts | CUE-003 @bench @ui › GO, pause, resume, back, and release use exact application-time boundaries | repository contract | @bench @ui | semantic-cue-runtime-timing | standard failure evidence | parallel | migrated-semantic-world |
 | 46-semantic-cue-value-timing.spec.ts | CUE-004 @bench @ui › per-value timing overrides Cue fallback and Force Cue Timing is reversible | repository contract | @bench @ui | semantic-cue-value-timing | standard failure evidence | parallel | migrated-semantic-world |
+| 47-semantic-cue-trigger-and-selection.spec.ts | CUE-005 @bench @ui › GO, FOLLOW, and TIME measure from the preceding Cue's latest value endpoint | repository contract | @bench @ui | semantic-cue-trigger-and-selection | standard failure evidence | parallel | migrated-semantic-world |
+| 47-semantic-cue-trigger-and-selection.spec.ts | CUE-006 @bench @ui › explicit playback selection supplies the implicit Cuelist without following execution order | repository contract | @bench @ui | semantic-cue-trigger-and-selection | standard failure evidence | parallel | migrated-semantic-world |
+| 47-semantic-cue-trigger-and-selection.spec.ts | CUE-007 @bench @ui › explicit zeroes block a later inserted on Cue from tracking past Cue 4 | repository contract | @bench @ui | semantic-cue-trigger-and-selection | standard failure evidence | parallel | migrated-semantic-world |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui | product-demo | generated show/video | serial | migrated-semantic-world |
 
 ## Serial generated entrypoints

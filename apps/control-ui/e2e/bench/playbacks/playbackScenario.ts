@@ -5,9 +5,9 @@ import type {
 	PlaybackSnapshot,
 } from "../../../src/api/types/playback";
 import type { ApiDriver } from "../core/api";
-import { playbackLocation, validInteger } from "./cuePlaybackScenario";
 import type { DeskDriver } from "../core/desk";
 import type { SimulatedHardware } from "../hardware/hardwareScenario";
+import { playbackLocation, validInteger } from "./cuePlaybackScenario";
 
 export enum PlaybackButton {
 	Go = "go",
@@ -289,12 +289,20 @@ export class BrowserPlaybacks {
 
 	async selectVia(route: RuntimeRoute, number: number) {
 		if (route === "api") await this.api.playbackNumberAction(number, "select");
-		else
+		else {
+			await this.desk.recordStep(
+				"PLAYBACK SELECT",
+				`Select Playback ${number} with the documented Shift+Z shortcut and visible representation.`,
+			);
+			await this.open();
+			await this.page.keyboard.press("Shift+KeyZ");
+			await expect(this.page.getByLabel("Command line")).toHaveValue("SELECT");
 			await this.desk.click(
 				(await this.visibleCard(number)).getByRole("button", {
 					name: /Playback representation/,
 				}),
 			);
+		}
 		await this.expect(number).selected();
 	}
 
