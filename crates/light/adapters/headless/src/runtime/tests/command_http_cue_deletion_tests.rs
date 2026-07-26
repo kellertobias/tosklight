@@ -2,7 +2,7 @@ fn cue_deletion_authority(scenario: &CommandHttpScenario, cue_number: f64) -> (u
     let show_path = scenario
         .state
         .active_show
-        .read()
+        .current()
         .as_ref()
         .unwrap()
         .path
@@ -69,7 +69,7 @@ async fn delete_cue_action(
 fn cue_deletion_show_events(scenario: &CommandHttpScenario, baseline: u64) -> usize {
     let light_application::EventReplay::Events(events) = scenario
         .state
-        .application_events
+        .events
         .replay(baseline, &light_application::EventFilter::default())
     else {
         return usize::MAX;
@@ -90,8 +90,7 @@ fn cue_deletion_show_events(scenario: &CommandHttpScenario, baseline: u64) -> us
 fn cue_delete_compatibility_events(scenario: &CommandHttpScenario) -> Vec<Event> {
     scenario
         .state
-        .audit_events
-        .lock()
+        .events.audit_events()
         .iter()
         .filter(|event| event.kind == "show_object_changed")
         .cloned()
@@ -107,7 +106,7 @@ async fn atomic_command_deletes_once_preserves_runtime_hold_and_replays_without_
     assert_eq!(active.status(), StatusCode::OK);
     assert_eq!(current_cue(&scenario, 1), Some(2.0));
     assert!(active_playback(&scenario, 2).is_none());
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let compatibility = cue_delete_compatibility_events(&scenario).len();
     let history = history_len(&scenario);
 
@@ -164,7 +163,7 @@ async fn direct_current_page_action_returns_authority_and_replays_before_page_an
         cue_id,
         2,
     );
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let compatibility = cue_delete_compatibility_events(&scenario).len();
     let response = delete_cue_action(
         &scenario,
@@ -193,9 +192,7 @@ async fn direct_current_page_action_returns_authority_and_replays_before_page_an
 
     scenario
         .state
-        .desk
-        .lock()
-        .set_desk_page(
+        .installation.set_desk_page(
             scenario.session.desk.id,
             light_core::ShowId(Uuid::parse_str(&show_id).unwrap()),
             2,
@@ -248,7 +245,7 @@ async fn direct_action_rejects_stale_authority_and_foreign_desk_atomically() {
         cue_id,
         1,
     );
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let stale = delete_cue_action(
         &scenario,
         scenario.session.desk.id,
@@ -283,7 +280,7 @@ async fn direct_action_rejects_stale_authority_and_foreign_desk_atomically() {
 #[tokio::test]
 async fn multiplexed_websocket_uses_typed_delete_and_emits_one_exact_facade_notification() {
     let (scenario, _) = cue_navigation_scenario().await;
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let compatibility = cue_delete_compatibility_events(&scenario).len();
     let (_, object_revision, _) = cue_deletion_authority(&scenario, 2.0);
     let response = dispatch_live_action(
@@ -306,7 +303,7 @@ async fn multiplexed_websocket_uses_typed_delete_and_emits_one_exact_facade_noti
     assert_eq!(
         events[compatibility].payload,
         serde_json::json!({
-            "show_id":scenario.state.active_show.read().as_ref().unwrap().id,
+            "show_id":scenario.state.active_show.current().as_ref().unwrap().id,
             "kind":"cue_list",
             "id":CUE_LIST_ID,
             "revision":object_revision + 1,

@@ -9,8 +9,8 @@ struct CommandContractScenario {
 impl CommandContractScenario {
     fn new() -> Self {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
-    let control_desk = state.desk.lock().add_desk("Commands", "commands").unwrap();
+    let user = state.installation.users().unwrap().remove(0);
+    let control_desk = state.installation.add_desk("Commands", "commands").unwrap();
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -18,7 +18,7 @@ impl CommandContractScenario {
         connected: true,
         desk: control_desk,
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     let show_path = data_dir.join("shows/commands.show");
     let show_id = initialise_show(&show_path, "Commands").unwrap();
     let entry = ShowEntry {
@@ -29,7 +29,7 @@ impl CommandContractScenario {
         updated_at: String::new(),
         revision_copy: None,
     };
-    let store = ShowStore::open(&show_path).unwrap();
+    let store = ActiveShowRepository::open(&show_path).unwrap();
     let group = light_programmer::GroupDefinition {
         id: "1".into(),
         name: "Group 1".into(),
@@ -38,10 +38,9 @@ impl CommandContractScenario {
     store
         .put_object("group", "1", &serde_json::to_value(group).unwrap(), 0)
         .unwrap();
-    *state.active_show.write() = Some(entry.clone());
+    state.active_show.replace_current(Some(entry.clone()));
     state
-        .engine
-        .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+        .output.replace_snapshot(load_engine_snapshot(&entry).unwrap())
         .unwrap();
         Self {
             state,
@@ -56,13 +55,13 @@ impl CommandContractScenario {
     execute_programmer_command(&self.state, &self.session, "GROUP 1 DIV 2 + 1").unwrap();
     execute_programmer_command(&self.state, &self.session, "GROUP 1 AT 50 DELAY 1 TIME 2")
         .unwrap();
-    let programmer = self.state.programmers.get(self.session.id).unwrap();
+    let programmer = self.state.programming.get(self.session.id).unwrap();
     let timed_group = &programmer.group_values["1"][&light_core::AttributeKey::intensity()];
     assert_eq!(timed_group.fade_millis, Some(2_000));
     assert_eq!(timed_group.delay_millis, Some(1_000));
 
     let preset_fixture = light_core::FixtureId::new();
-    self.state.programmers.set(
+    self.state.programming.set(
         self.session.id,
         preset_fixture,
         light_core::AttributeKey("pan".into()),
@@ -71,7 +70,7 @@ impl CommandContractScenario {
     execute_programmer_command(&self.state, &self.session, "RECORD 0.1").unwrap();
     execute_programmer_command(&self.state, &self.session, "RECORD 1.1").unwrap();
     let intensity_preset: light_programmer::Preset = serde_json::from_value(
-        ShowStore::open(&self.show_path)
+        ActiveShowRepository::open(&self.show_path)
             .unwrap()
             .objects("preset")
             .unwrap()
@@ -94,7 +93,7 @@ impl CommandContractScenario {
     execute_programmer_command(&self.state, &self.session, "COPY 0.1 AT 2").unwrap();
     execute_programmer_command(&self.state, &self.session, "MOVE 0.2 AT 3").unwrap();
     execute_programmer_command(&self.state, &self.session, "DELETE 0.1").unwrap();
-    let preset_ids = ShowStore::open(&self.show_path)
+    let preset_ids = ActiveShowRepository::open(&self.show_path)
         .unwrap()
         .objects("preset")
         .unwrap()
@@ -108,9 +107,9 @@ impl CommandContractScenario {
     execute_programmer_command(&self.state, &self.session, "RECORD SET 25 TIME 3 DELAY 1.5")
         .unwrap();
     execute_programmer_command(&self.state, &self.session, "RECORD SET 25 CUE 2.5").unwrap();
-    let snapshot = self.state.engine.snapshot();
+    let snapshot = self.state.output.snapshot();
     let (_, _, cue_list) =
-        cue_list_for_playback(&ShowStore::open(&self.show_path).unwrap(), &snapshot, 25).unwrap();
+        cue_list_for_playback(&ActiveShowRepository::open(&self.show_path).unwrap(), &snapshot, 25).unwrap();
     assert_eq!(
         cue_list
             .cues
@@ -136,8 +135,8 @@ impl CommandContractScenario {
     )
     .unwrap();
     let (_, _, cue_list) = cue_list_for_playback(
-        &ShowStore::open(&self.show_path).unwrap(),
-        &self.state.engine.snapshot(),
+        &ActiveShowRepository::open(&self.show_path).unwrap(),
+        &self.state.output.snapshot(),
         25,
     )
     .unwrap();
@@ -152,14 +151,12 @@ impl CommandContractScenario {
     ));
 
     self.state
-        .desk
-        .lock()
-        .set_selected_playback(self.session.desk.id, self.show_id, Some(25))
+        .installation.set_selected_playback(self.session.desk.id, self.show_id, Some(25))
         .unwrap();
     execute_programmer_command(&self.state, &self.session, "RECORD CUE 7").unwrap();
     let (_, _, selected_list) = cue_list_for_playback(
-        &ShowStore::open(&self.show_path).unwrap(),
-        &self.state.engine.snapshot(),
+        &ActiveShowRepository::open(&self.show_path).unwrap(),
+        &self.state.output.snapshot(),
         25,
     )
     .unwrap();
@@ -169,11 +166,11 @@ impl CommandContractScenario {
     fn verify_record_modes(&self) {
     let color = light_core::AttributeKey("color.emitter.red".into());
     let set_only_color = || {
-        let mut programmer = self.state.programmers.get(self.session.id).unwrap();
+        let mut programmer = self.state.programming.get(self.session.id).unwrap();
         programmer.values.clear();
         programmer.group_values.clear();
-        self.state.programmers.restore(programmer);
-        assert!(self.state.programmers.set_group(
+        self.state.programming.restore(programmer);
+        assert!(self.state.programming.set_group(
             self.session.id,
             "1".into(),
             color.clone(),
@@ -183,8 +180,8 @@ impl CommandContractScenario {
     set_only_color();
     execute_programmer_command(&self.state, &self.session, "RECORD + SET 25 CUE 2.5").unwrap();
     let (_, _, cue_list) = cue_list_for_playback(
-        &ShowStore::open(&self.show_path).unwrap(),
-        &self.state.engine.snapshot(),
+        &ActiveShowRepository::open(&self.show_path).unwrap(),
+        &self.state.output.snapshot(),
         25,
     )
     .unwrap();
@@ -193,8 +190,8 @@ impl CommandContractScenario {
 
     execute_programmer_command(&self.state, &self.session, "RECORD - SET 25 CUE 2.5").unwrap();
     let (_, _, cue_list) = cue_list_for_playback(
-        &ShowStore::open(&self.show_path).unwrap(),
-        &self.state.engine.snapshot(),
+        &ActiveShowRepository::open(&self.show_path).unwrap(),
+        &self.state.output.snapshot(),
         25,
     )
     .unwrap();
@@ -208,8 +205,8 @@ impl CommandContractScenario {
     set_only_color();
     execute_programmer_command(&self.state, &self.session, "RECORD SET 25 CUE 2.5").unwrap();
     let (_, _, cue_list) = cue_list_for_playback(
-        &ShowStore::open(&self.show_path).unwrap(),
-        &self.state.engine.snapshot(),
+        &ActiveShowRepository::open(&self.show_path).unwrap(),
+        &self.state.output.snapshot(),
         25,
     )
     .unwrap();
@@ -217,14 +214,14 @@ impl CommandContractScenario {
     assert_eq!(overwritten.group_changes.len(), 1);
     assert_eq!(overwritten.group_changes[0].attribute, color);
 
-    let mut programmer = self.state.programmers.get(self.session.id).unwrap();
+    let mut programmer = self.state.programming.get(self.session.id).unwrap();
     programmer.values.clear();
     programmer.group_values.clear();
-    self.state.programmers.restore(programmer);
+    self.state.programming.restore(programmer);
     execute_programmer_command(&self.state, &self.session, "RECORD - SET 25 CUE 2.5").unwrap();
     let (_, _, cue_list) = cue_list_for_playback(
-        &ShowStore::open(&self.show_path).unwrap(),
-        &self.state.engine.snapshot(),
+        &ActiveShowRepository::open(&self.show_path).unwrap(),
+        &self.state.output.snapshot(),
         25,
     )
     .unwrap();
@@ -253,25 +250,23 @@ fn command_line_at_timing_setting_preserves_default_and_explicit_time_semantics(
     let scenario = CommandContractScenario::new();
     assert!(scenario
         .state
-        .configuration
-        .read()
+        .installation.configuration()
         .command_line_at_uses_programmer_fade);
 
-    {
-        let mut configuration = scenario.state.configuration.write();
+    scenario.state.installation.update_configuration(|configuration| {
         configuration.programmer_fade_millis = 5_000;
         configuration.command_line_at_uses_programmer_fade = false;
-    }
+    });
     execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50 DELAY 1")
         .unwrap();
-    let programmer = scenario.state.programmers.get(scenario.session.id).unwrap();
+    let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
     let immediate = &programmer.group_values["1"][&light_core::AttributeKey::intensity()];
     assert!(!immediate.fade);
     assert_eq!(immediate.fade_millis, None);
     assert_eq!(immediate.delay_millis, Some(1_000));
 
     execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 75 TIME 2").unwrap();
-    let programmer = scenario.state.programmers.get(scenario.session.id).unwrap();
+    let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
     let explicit = &programmer.group_values["1"][&light_core::AttributeKey::intensity()];
     assert!(explicit.fade);
     assert_eq!(explicit.fade_millis, Some(2_000));
@@ -282,12 +277,12 @@ fn command_line_at_timing_setting_preserves_default_and_explicit_time_semantics(
 fn new_cuelist_and_playback_record_is_one_active_show_batch() {
     let scenario = CommandContractScenario::new();
     execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();
-    let before = ShowStore::open(&scenario.show_path)
+    let before = ActiveShowRepository::open(&scenario.show_path)
         .unwrap()
         .portable_document()
         .unwrap();
-    let before_runtime = scenario.state.engine.snapshot();
-    let before_events = scenario.state.application_events.latest_sequence();
+    let before_runtime = scenario.state.output.snapshot();
+    let before_events = scenario.state.events.latest_sequence();
     let before_backups = command_show_object_backup_count(&scenario.data_dir);
 
     execute_programmer_command(
@@ -297,7 +292,7 @@ fn new_cuelist_and_playback_record_is_one_active_show_batch() {
     )
     .unwrap();
 
-    let after = ShowStore::open(&scenario.show_path)
+    let after = ActiveShowRepository::open(&scenario.show_path)
         .unwrap()
         .portable_document()
         .unwrap();
@@ -310,13 +305,13 @@ fn new_cuelist_and_playback_record_is_one_active_show_batch() {
         before_backups.max(1)
     );
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         before_events + 1
     );
-    let runtime = scenario.state.engine.snapshot();
+    let runtime = scenario.state.output.snapshot();
     assert_eq!(runtime.revision, after.revision().value());
     assert!(!Arc::ptr_eq(&runtime, &before_runtime));
-    let light_application::EventReplay::Events(events) = scenario.state.application_events.replay(
+    let light_application::EventReplay::Events(events) = scenario.state.events.replay(
         before_events,
         &light_application::EventFilter::default(),
     ) else {
@@ -343,7 +338,7 @@ fn set_cuelist_page_assignment_is_one_lossless_active_show_batch() {
         "RECORD SET 25 CUE 1",
     )
     .unwrap();
-    let store = ShowStore::open(&scenario.show_path).unwrap();
+    let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
     store
         .put_object(
             "playback_page",
@@ -358,8 +353,8 @@ fn set_cuelist_page_assignment_is_one_lossless_active_show_batch() {
         )
         .unwrap();
     let before = store.portable_document().unwrap();
-    let before_runtime = scenario.state.engine.snapshot();
-    let before_events = scenario.state.application_events.latest_sequence();
+    let before_runtime = scenario.state.output.snapshot();
+    let before_events = scenario.state.events.latest_sequence();
     let before_backups = command_show_object_backup_count(&scenario.data_dir);
 
     assert_eq!(
@@ -367,7 +362,7 @@ fn set_cuelist_page_assignment_is_one_lossless_active_show_batch() {
         1
     );
 
-    let after = ShowStore::open(&scenario.show_path)
+    let after = ActiveShowRepository::open(&scenario.show_path)
         .unwrap()
         .portable_document()
         .unwrap();
@@ -381,11 +376,11 @@ fn set_cuelist_page_assignment_is_one_lossless_active_show_batch() {
         before_backups.max(1)
     );
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         before_events + 1
     );
     assert!(!Arc::ptr_eq(
-        &scenario.state.engine.snapshot(),
+        &scenario.state.output.snapshot(),
         &before_runtime
     ));
     let _ = std::fs::remove_dir_all(scenario.data_dir);
@@ -414,7 +409,7 @@ fn new_cuelist_and_playback_record_conflict_cannot_leave_a_partial_cuelist() {
         presentation_icon: None,
         presentation_image: None,
     };
-    let store = ShowStore::open(&scenario.show_path).unwrap();
+    let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
     store
         .put_object(
             "playback",
@@ -424,8 +419,8 @@ fn new_cuelist_and_playback_record_conflict_cannot_leave_a_partial_cuelist() {
         )
         .unwrap();
     let before = store.portable_document().unwrap();
-    let runtime = scenario.state.engine.snapshot();
-    let event_sequence = scenario.state.application_events.latest_sequence();
+    let runtime = scenario.state.output.snapshot();
+    let event_sequence = scenario.state.events.latest_sequence();
     let backups = command_show_object_backup_count(&scenario.data_dir);
 
     let error = execute_programmer_command(
@@ -436,16 +431,16 @@ fn new_cuelist_and_playback_record_conflict_cannot_leave_a_partial_cuelist() {
     .unwrap_err();
     assert!(error.contains("stale playback 25 revision"));
 
-    let after = ShowStore::open(&scenario.show_path)
+    let after = ActiveShowRepository::open(&scenario.show_path)
         .unwrap()
         .portable_document()
         .unwrap();
     assert_eq!(after.revision(), before.revision());
     assert_eq!(after.objects_of_kind("cue_list").count(), 0);
     assert_eq!(after.object("playback", "25").unwrap().revision(), 1);
-    assert!(Arc::ptr_eq(&scenario.state.engine.snapshot(), &runtime));
+    assert!(Arc::ptr_eq(&scenario.state.output.snapshot(), &runtime));
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         event_sequence
     );
     assert_eq!(
@@ -467,7 +462,7 @@ fn command_show_object_backup_count(data_dir: &std::path::Path) -> usize {
 #[test]
 fn spd_grp_commands_preserve_precision_mapping_relative_changes_and_phase_links() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user,
@@ -482,61 +477,61 @@ fn spd_grp_commands_preserve_precision_mapping_relative_changes_and_phase_links(
     execute_programmer_command(&state, &session, "SPD GRP 4 AT 140").unwrap();
     execute_programmer_command(&state, &session, "SPD GRP 5 AT 150").unwrap();
     assert_eq!(
-        state.configuration.read().speed_groups_bpm,
+        state.installation.configuration().speed_groups_bpm,
         [120.0, 127.5, 130.0, 140.0, 150.0]
     );
 
     execute_programmer_command(&state, &session, "SPD GRP 1 AT + 5").unwrap();
-    assert_eq!(state.configuration.read().speed_groups_bpm[0], 125.0);
+    assert_eq!(state.installation.configuration().speed_groups_bpm[0], 125.0);
     execute_programmer_command(&state, &session, "SPD GRP 1 AT - 5").unwrap();
-    assert_eq!(state.configuration.read().speed_groups_bpm[0], 120.0);
-    assert_eq!(state.configuration.read().speed_groups_bpm[1], 127.5);
+    assert_eq!(state.installation.configuration().speed_groups_bpm[0], 120.0);
+    assert_eq!(state.installation.configuration().speed_groups_bpm[1], 127.5);
 
     execute_programmer_command(&state, &session, "SPD GRP 1 AT SPD GRP 3").unwrap();
     {
-        let controllers = state.speed_groups.lock();
-        assert_eq!(controllers[0].manual_bpm(), 120.0);
-        assert_eq!(controllers[2].manual_bpm(), 120.0);
-        assert_eq!(controllers[0].synchronized_with(), Some(3));
-        assert_eq!(controllers[2].synchronized_with(), Some(1));
+        let source_controller = state.output.speed_group_controller(0);
+        let target_controller = state.output.speed_group_controller(2);
+        assert_eq!(source_controller.manual_bpm(), 120.0);
+        assert_eq!(target_controller.manual_bpm(), 120.0);
+        assert_eq!(source_controller.synchronized_with(), Some(3));
+        assert_eq!(target_controller.synchronized_with(), Some(1));
         let now = application_millis(&state).saturating_add(18_750);
-        let source = controllers[0].snapshot(now);
-        let target = controllers[2].snapshot(now);
+        let source = source_controller.snapshot(now);
+        let target = target_controller.snapshot(now);
         assert_eq!(source.phase_origin_millis, target.phase_origin_millis);
         assert!((source.beat_phase - target.beat_phase).abs() < f64::EPSILON);
     }
 
     execute_programmer_command(&state, &session, "SPD GRP 3 AT 90").unwrap();
     {
-        let controllers = state.speed_groups.lock();
-        assert_eq!(controllers[0].manual_bpm(), 120.0);
-        assert_eq!(controllers[2].manual_bpm(), 90.0);
-        assert_eq!(controllers[0].synchronized_with(), None);
-        assert_eq!(controllers[2].synchronized_with(), None);
+        let source = state.output.speed_group_controller(0);
+        let target = state.output.speed_group_controller(2);
+        assert_eq!(source.manual_bpm(), 120.0);
+        assert_eq!(target.manual_bpm(), 90.0);
+        assert_eq!(source.synchronized_with(), None);
+        assert_eq!(target.synchronized_with(), None);
     }
 
     execute_programmer_command(&state, &session, "SPD GRP 1 AT SPD GRP 3").unwrap();
     let tap_start = application_millis(&state).saturating_add(1_000);
     {
-        let mut controllers = state.speed_groups.lock();
-        let retained_peer_bpm = controllers[2].manual_bpm();
-        unlink_speed_group(&mut controllers, 0, tap_start);
+        let retained_peer_bpm = state.output.speed_group_manual_bpm(2);
         assert!(matches!(
-            controllers[0].tap_learn(tap_start),
+            state.output.tap_speed_group(0, tap_start),
             light_control::speed::LearnResult::Armed
         ));
         assert!(matches!(
-            controllers[0].tap_learn(tap_start + 400),
+            state.output.tap_speed_group(0, tap_start + 400),
             light_control::speed::LearnResult::Learned { .. }
         ));
-        assert_eq!(controllers[0].manual_bpm(), 150.0);
-        assert_eq!(controllers[2].manual_bpm(), retained_peer_bpm);
-        assert_eq!(controllers[0].synchronized_with(), None);
-        assert_eq!(controllers[2].synchronized_with(), None);
-        copy_speed_group_runtime_to_configuration(&state, &controllers, &[0]);
+        assert_eq!(state.output.speed_group_manual_bpm(0), 150.0);
+        assert_eq!(state.output.speed_group_manual_bpm(2), retained_peer_bpm);
+        assert_eq!(state.output.speed_group_controller(0).synchronized_with(), None);
+        assert_eq!(state.output.speed_group_controller(2).synchronized_with(), None);
+        copy_speed_group_runtime_to_configuration(&state, &[0]);
     }
-    assert_eq!(state.configuration.read().speed_groups_bpm[0], 150.0);
-    assert_eq!(state.configuration.read().speed_groups_bpm[2], 120.0);
+    assert_eq!(state.installation.configuration().speed_groups_bpm[0], 150.0);
+    assert_eq!(state.installation.configuration().speed_groups_bpm[2], 120.0);
     assert!(execute_programmer_command(&state, &session, "SPD GRP 0 AT 120").is_err());
     assert!(execute_programmer_command(&state, &session, "SPD GRP 6 AT 120").is_err());
     let _ = std::fs::remove_dir_all(data_dir);
@@ -545,7 +540,7 @@ fn spd_grp_commands_preserve_precision_mapping_relative_changes_and_phase_links(
 #[test]
 fn typed_speed_execution_resets_the_authoritative_command_line() {
     let scenario = CommandContractScenario::new();
-    assert!(scenario.state.programmers.set_command_line(
+    assert!(scenario.state.programming.set_command_line(
         scenario.session.id,
         "SPD GRP 1 AT 120".into()
     ));
@@ -567,11 +562,11 @@ fn typed_speed_execution_resets_the_authoritative_command_line() {
     assert!(response.ok, "{:?}", response.error);
     let command = scenario
         .state
-        .programmers
+        .programming
         .command_line_state(scenario.session.id)
         .unwrap();
     assert_eq!(command.visible_text(), "FIXTURE");
     assert!(command.pristine);
-    assert_eq!(scenario.state.configuration.read().speed_groups_bpm[0], 120.0);
+    assert_eq!(scenario.state.installation.configuration().speed_groups_bpm[0], 120.0);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

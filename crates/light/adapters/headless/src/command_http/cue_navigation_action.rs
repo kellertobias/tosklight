@@ -56,7 +56,7 @@ fn resolve_address(
     session: &Session,
     target: CueNavigationTarget,
 ) -> Result<PlaybackAddress, String> {
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let (address, playback) = match target {
         CueNavigationTarget::SelectedPlayback => {
             let selected = selected_playback(state, session)?;
@@ -82,10 +82,13 @@ fn resolve_address(
 
 /// Selection is desk-local, so another desk keeps its own selected Playback.
 fn selected_playback(state: &AppState, session: &Session) -> Result<u16, String> {
-    let show = state.active_show.read().clone().ok_or("no show is open")?;
+    let show = state
+        .active_show
+        .current()
+        .clone()
+        .ok_or("no show is open")?;
     state
-        .desk
-        .lock()
+        .installation
         .selected_playback(session.desk.id, show.id)
         .map_err(|error| error.to_string())?
         .ok_or_else(|| {

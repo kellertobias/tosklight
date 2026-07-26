@@ -6,7 +6,7 @@ pub(super) fn ws_programmer_capture_mode(
     request: light_wire::v2::live_action::ProgrammerCaptureModeLiveActionRequest,
 ) -> Result<light_wire::v2::live_action::ProgrammerCaptureModeOutcome, String> {
     let request_id = request.request_id;
-    state.programmers.set_modes(
+    state.programming.set_modes(
         session.id,
         request.blind,
         request.preview,
@@ -15,7 +15,7 @@ pub(super) fn ws_programmer_capture_mode(
     );
     persist_programmer(state, session).map_err(|error| error.message)?;
     let programmer = state
-        .programmers
+        .programming
         .get(session.id)
         .ok_or_else(|| "programmer not found".to_owned())?;
     Ok(light_wire::v2::live_action::ProgrammerCaptureModeOutcome {
@@ -208,7 +208,7 @@ pub(super) fn ws_programmer_control_action(
     }
     let input: Input =
         serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let (assignments, pulse_duration, kind) = control_action_programmer_values(
         &snapshot,
         input.fixture_id,
@@ -218,49 +218,58 @@ pub(super) fn ws_programmer_control_action(
     let transient_source = format!("fixture-control:{}:{}", input.fixture_id.0, input.action_id);
     let transient_generation = match (kind, input.active) {
         (light_fixture::ControlActionKind::Latched, _) => {
-            state.programmers.set_many(session.id, assignments);
+            state.programming.set_many(session.id, assignments);
             persist_programmer(state, session).map_err(|e| e.message)?;
             None
         }
-        (_, true) => state.programmers.set_transient_action(
+        (_, true) => state.programming.set_transient_action(
             session.id,
             transient_source.clone(),
             assignments,
         ),
         (_, false) => {
             state
-                .programmers
+                .programming
                 .release_transient_action(session.id, &transient_source, None);
             None
         }
     };
     if let (Some(duration_millis), Some(generation)) = (pulse_duration, transient_generation) {
-        let state = state.clone();
-        let session = session.clone();
-        tokio::spawn(async move {
+        let task_state = state.clone();
+        let task_session = session.clone();
+        let task_source = transient_source.clone();
+        let lifecycle = task_state.lifecycle.clone();
+        if let Err(error) = lifecycle.schedule(async move {
             tokio::time::sleep(Duration::from_millis(duration_millis)).await;
-            if !state.programmers.release_transient_action(
+            if task_state.programming.release_transient_action(
+                task_session.id,
+                &task_source,
+                Some(generation),
+            ) {
+                emit(
+                    &task_state,
+                    "programmer_changed",
+                    serde_json::json!({
+                        "session_id":task_session.id,
+                        "user_id":task_session.user.id,
+                        "desk_id":task_session.desk.id,
+                        "command":"programmer.control_action",
+                        "changes":["transient_control"],
+                        "action_id":input.action_id,
+                        "active":false,
+                        "timed_pulse_complete":true,
+                    }),
+                );
+            }
+            Ok(())
+        }) {
+            state.programming.release_transient_action(
                 session.id,
                 &transient_source,
                 Some(generation),
-            ) {
-                return;
-            }
-            emit(
-                &state,
-                "programmer_changed",
-                serde_json::json!({
-                    "session_id":session.id,
-                    "user_id":session.user.id,
-                    "desk_id":session.desk.id,
-                    "command":"programmer.control_action",
-                    "changes":["transient_control"],
-                    "action_id":input.action_id,
-                    "active":false,
-                    "timed_pulse_complete":true,
-                }),
             );
-        });
+            return Err(error.to_string());
+        }
     }
     Ok(WsControlActionResult {
         payload: serde_json::json!({
@@ -268,7 +277,7 @@ pub(super) fn ws_programmer_control_action(
             "active":input.active,
             "kind":kind,
             "pulse_duration_millis":pulse_duration,
-            "programmer":state.programmers.get(session.id),
+            "programmer":state.programming.get(session.id),
         }),
     })
 }

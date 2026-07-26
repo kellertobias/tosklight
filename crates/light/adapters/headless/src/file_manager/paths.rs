@@ -30,8 +30,12 @@ pub(super) struct DirectoryQuery {
 
 pub(super) fn configured_roots(state: &AppState) -> Vec<(ConfiguredRoot, bool)> {
     configured_roots_from(
-        state.configuration.read().file_manager_roots.clone(),
-        state.data_dir.join("shows"),
+        state
+            .installation
+            .configuration()
+            .file_manager_roots
+            .clone(),
+        state.installation.data_dir().join("shows"),
         support::discover_removable_paths(),
     )
 }

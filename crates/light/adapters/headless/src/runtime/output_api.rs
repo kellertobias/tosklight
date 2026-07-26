@@ -5,18 +5,9 @@ pub(super) async fn dmx_snapshot(
     show: ShowContext,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     show.verify(&state)?;
-    let control = state.output_control.lock();
-    let mut universes = control
-        .last_frames
-        .iter()
-        .map(|(&universe, frame)| serde_json::json!({"universe":universe,"slots":frame.to_vec()}))
-        .collect::<Vec<_>>();
-    universes.sort_by_key(|universe| universe["universe"].as_u64().unwrap_or_default());
-    Ok(Json(serde_json::json!({
-        "revision":state.engine.snapshot().revision,
-        "universes":universes,
-        "overrides":control.raw_overrides.iter().map(|(&(universe,address),&value)| serde_json::json!({"universe":universe,"address":address,"value":value})).collect::<Vec<_>>()
-    })))
+    Ok(Json(
+        state.output.dmx_snapshot(state.output.snapshot().revision),
+    ))
 }
 pub(super) async fn update_dmx_override(
     State(state): State<AppState>,
@@ -40,20 +31,9 @@ pub(super) fn apply_dmx_override(
             "universe and DMX address must be non-zero and address must be within 1-512",
         ));
     }
-    let mut control = state.output_control.lock();
-    match input.value {
-        Some(value) => {
-            control
-                .raw_overrides
-                .insert((input.universe, input.address), value);
-        }
-        None => {
-            control
-                .raw_overrides
-                .remove(&(input.universe, input.address));
-        }
-    }
-    drop(control);
+    state
+        .output
+        .set_dmx_override(input.universe, input.address, input.value);
     emit(
         state,
         "dmx_override_changed",
@@ -71,13 +51,13 @@ pub(super) async fn shutdown_server(
         "server_shutdown_requested",
         serde_json::json!({"session_id":session.id}),
     );
-    state.shutdown.cancel();
+    state.lifecycle.request_shutdown();
     Ok(Json(serde_json::json!({"shutting_down":true})))
 }
 pub(super) async fn configuration(State(state): State<AppState>) -> Json<serde_json::Value> {
     let matter = refresh_matter_bridge(&state);
     Json(
-        serde_json::json!({"configuration":state.configuration.read().clone(),"output_health":state.output_health.lock().expect("output health mutex poisoned").clone(),"matter":matter}),
+        serde_json::json!({"configuration":state.installation.configuration(),"output_health":state.output.health_snapshot(),"matter":matter}),
     )
 }
 
@@ -90,64 +70,70 @@ pub(super) async fn matter_bridge_status(
 }
 
 pub(super) fn refresh_matter_bridge(state: &AppState) -> matter::MatterBridgeStatus {
-    let enabled = state.configuration.read().matter_enabled;
+    let enabled = state.installation.configuration().matter_enabled;
     let adapter = if !enabled {
         state
-            .matter_bridge
+            .integrations
+            .matter_bridge()
             .reconcile(false, &[], &[], &HashMap::new());
-        state.matter_bridge.status()
+        state.integrations.matter_bridge().status()
     } else {
-        let snapshot = state.engine.snapshot();
+        let snapshot = state.output.snapshot();
         let values = matter_playback_values(state, &snapshot);
-        state
-            .matter_bridge
-            .reconcile(true, &snapshot.playback_pages, &snapshot.playbacks, &values)
+        state.integrations.matter_bridge().reconcile(
+            true,
+            &snapshot.playback_pages,
+            &snapshot.playbacks,
+            &values,
+        )
     };
-    let Some(transport) = &state.matter_transport else {
+    let Some(transport) = state.integrations.matter_transport() else {
         return adapter;
     };
     let transport = transport.reconcile(enabled, &adapter.lights);
-    state.matter_bridge.apply_transport_snapshot(&transport)
+    state
+        .integrations
+        .matter_bridge()
+        .apply_transport_snapshot(&transport)
 }
 
-pub(super) fn spawn_matter_bridge_sync(
+pub(super) async fn matter_bridge_sync(
     state: AppState,
     cancellation: CancellationToken,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_millis(100));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            tokio::select! {
-                _ = cancellation.cancelled() => break,
-                _ = interval.tick() => {
-                    refresh_matter_bridge(&state);
-                    if let Some(transport) = &state.matter_transport {
-                        let writes = transport.drain_remote_writes();
-                        for remote in &writes {
-                            if let Err(error) = apply_matter_playback_write(
+) -> anyhow::Result<()> {
+    let mut interval = tokio::time::interval(Duration::from_millis(100));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        tokio::select! {
+            _ = cancellation.cancelled() => break,
+            _ = interval.tick() => {
+                refresh_matter_bridge(&state);
+                if let Some(transport) = state.integrations.matter_transport() {
+                    let writes = transport.drain_remote_writes();
+                    for remote in &writes {
+                        if let Err(error) = apply_matter_playback_write(
+                            &state,
+                            remote.endpoint_id,
+                            remote.write,
+                        ) {
+                            emit(
                                 &state,
-                                remote.endpoint_id,
-                                remote.write,
-                            ) {
-                                emit(
-                                    &state,
-                                    "matter_write_rejected",
-                                    serde_json::json!({"endpoint_id":remote.endpoint_id,"error":error.message}),
-                                );
-                            }
+                                "matter_write_rejected",
+                                serde_json::json!({"endpoint_id":remote.endpoint_id,"error":error.message}),
+                            );
                         }
-                        if !writes.is_empty() {
-                            refresh_matter_bridge(&state);
-                        }
+                    }
+                    if !writes.is_empty() {
+                        refresh_matter_bridge(&state);
                     }
                 }
             }
         }
-        if let Some(transport) = &state.matter_transport {
-            transport.stop();
-        }
-    })
+    }
+    if let Some(transport) = state.integrations.matter_transport() {
+        transport.stop();
+    }
+    Ok(())
 }
 
 pub(super) fn matter_playback_values(
@@ -155,7 +141,7 @@ pub(super) fn matter_playback_values(
     snapshot: &EngineSnapshot,
 ) -> HashMap<u16, matter::PlaybackValue> {
     let runtime = state
-        .engine
+        .output
         .playback_runtime_status()
         .into_iter()
         .filter_map(|status| {
@@ -166,12 +152,9 @@ pub(super) fn matter_playback_values(
         })
         .collect::<HashMap<_, _>>();
     let now = application_millis(state);
-    let speeds = {
-        let controllers = state.speed_groups.lock();
-        std::array::from_fn::<_, 5, _>(|index| controllers[index].snapshot(now))
-    };
-    let configuration = state.configuration.read().clone();
-    let grand_master = state.output_control.lock().options.grand_master;
+    let speeds = state.output.speed_group_snapshots(now);
+    let configuration = state.installation.configuration();
+    let grand_master = state.output.control_projection().grand_master;
     snapshot
         .playbacks
         .iter()
@@ -261,13 +244,13 @@ pub(super) fn apply_matter_playback_write(
     write: matter::MatterPlaybackWrite,
 ) -> Result<matter::MatterBridgeStatus, ApiError> {
     let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
+        .active_show
+        .try_acquire()
         .map_err(|_| ApiError::conflict("active show transition is in progress"))?;
     refresh_matter_bridge(state);
     let resolved = state
-        .matter_bridge
+        .integrations
+        .matter_bridge()
         .resolve_write(endpoint_id, write)
         .map_err(|error| ApiError::bad_request(error.to_string()))?;
     let result = playback_service::execute(

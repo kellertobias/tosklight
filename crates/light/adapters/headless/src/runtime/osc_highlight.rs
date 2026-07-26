@@ -35,32 +35,18 @@ pub(super) fn handle_highlight_osc(
     let Some(source) = source.and_then(|value| value.parse::<SocketAddr>().ok()) else {
         return;
     };
-    let session_id = {
-        let mut subscribers = state.osc_subscribers.lock();
-        let Some(subscriber) = subscribers.values_mut().find(|subscriber| {
-            subscriber.command_source == source && subscriber.desk_alias == parts[1]
-        }) else {
-            return;
-        };
-        let now = Instant::now();
-        if is_duplicate_osc_action(
-            subscriber
-                .last_highlight_action
-                .as_ref()
-                .map(|(previous, received_at)| (previous.as_str(), *received_at)),
-            action,
-            now,
-        ) {
-            return;
-        }
-        subscriber.last_highlight_action = Some((action.osc_dedupe_key().to_owned(), now));
-        subscriber.session_id
+    let Some(session_id) =
+        state
+            .integrations
+            .accept_highlight_action(source, parts[1], action, Instant::now())
+    else {
+        return;
     };
-    let Some(session) = state.sessions.read().get(&session_id).cloned() else {
+    let Some(session) = state.sessions.session(session_id) else {
         return;
     };
     attach_session_command_context(state, &session);
-    let Ok(_activation) = state.activation_lock.clone().try_lock_owned() else {
+    let Ok(_activation) = state.active_show.try_acquire() else {
         emit_highlight_osc_rejection(
             state,
             &session,
@@ -112,7 +98,7 @@ fn emit_highlight_osc_rejection(
 }
 
 #[derive(Clone, Copy)]
-enum OscRecordGesture {
+pub(super) enum OscRecordGesture {
     None,
     Arm,
     Targets,
@@ -123,13 +109,9 @@ fn programmer_osc_session(
     state: &AppState,
     source: Option<SocketAddr>,
 ) -> Option<(OscSubscriber, Session)> {
-    let subscriber = state
-        .osc_subscribers
-        .lock()
-        .values()
-        .find(|subscriber| Some(subscriber.command_source) == source)
-        .cloned()?;
-    let session = state.sessions.read().get(&subscriber.session_id).cloned()?;
+    let subscriber =
+        source.and_then(|source| state.integrations.osc_subscriber_for_source(source))?;
+    let session = state.sessions.session(subscriber.session_id)?;
     Some((subscriber, session))
 }
 
@@ -140,36 +122,22 @@ fn handle_shift_osc(
     source: Option<SocketAddr>,
     pressed: bool,
 ) {
-    let command_operation = state.programming.desk_lock(session.desk.id);
-    let _command_operation_guard = command_operation.lock();
-    if read_desk_lock(state, session.desk.id).locked {
-        return;
-    }
-    if let Some(source) = source
-        && let Some(target) = state
-            .osc_subscribers
-            .lock()
-            .values_mut()
-            .find(|candidate| candidate.command_source == source)
-    {
-        if pressed {
-            target.shifted = !target.shifted;
-            target.shift_held = true;
-        } else {
-            target.shift_held = false;
-            if target.update_first_release.is_some() {
-                target.shifted = false;
-            }
+    state.programming.run_desk_operation(session.desk.id, || {
+        if read_desk_lock(state, session.desk.id).locked {
+            return;
         }
-    }
-    emit(
-        state,
-        "desk_action",
-        serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"action":if pressed { "shift-down" } else { "shift-up" },"source":"osc"}),
-    );
+        if let Some(source) = source {
+            state.integrations.set_shift(source, pressed);
+        }
+        emit(
+            state,
+            "desk_action",
+            serde_json::json!({"desk_alias":desk_alias,"desk_id":session.desk.id,"session_id":session.id,"action":if pressed { "shift-down" } else { "shift-up" },"source":"osc"}),
+        );
+    });
 }
 
-fn record_gesture(target: &mut OscSubscriber, pressed: bool) -> OscRecordGesture {
+pub(super) fn record_gesture(target: &mut OscSubscriber, pressed: bool) -> OscRecordGesture {
     if !target.shifted && !target.shift_held {
         return OscRecordGesture::None;
     }
@@ -207,7 +175,7 @@ fn apply_record_gesture(state: &AppState, session: &Session, gesture: OscRecordG
     match gesture {
         OscRecordGesture::Arm => {
             state
-                .programmers
+                .programming
                 .set_command_line(session.id, "UPDATE".into());
             let _ = persist_programmer(state, session);
             emit(
@@ -230,7 +198,7 @@ fn apply_record_gesture(state: &AppState, session: &Session, gesture: OscRecordG
         }
         OscRecordGesture::Settings => {
             state
-                .programmers
+                .programming
                 .set_command_line(session.id, String::new());
             let _ = persist_programmer(state, session);
             emit(
@@ -255,23 +223,16 @@ fn handle_record_osc(
     source: Option<SocketAddr>,
     pressed: bool,
 ) -> bool {
-    let command_operation = state.programming.desk_lock(session.desk.id);
-    let _command_operation_guard = command_operation.lock();
-    if read_desk_lock(state, session.desk.id).locked {
-        return true;
-    }
-    let gesture = source
-        .and_then(|source| {
-            state
-                .osc_subscribers
-                .lock()
-                .values_mut()
-                .find(|candidate| candidate.command_source == source)
-                .map(|target| record_gesture(target, pressed))
-        })
-        .unwrap_or(OscRecordGesture::None);
-    apply_record_gesture(state, session, gesture);
-    !matches!(gesture, OscRecordGesture::None) || subscriber.shifted || subscriber.shift_held
+    state.programming.run_desk_operation(session.desk.id, || {
+        if read_desk_lock(state, session.desk.id).locked {
+            return true;
+        }
+        let gesture = source
+            .map(|source| state.integrations.record_gesture(source, pressed))
+            .unwrap_or(OscRecordGesture::None);
+        apply_record_gesture(state, session, gesture);
+        !matches!(gesture, OscRecordGesture::None) || subscriber.shifted || subscriber.shift_held
+    })
 }
 
 fn handle_shifted_shortcut(
@@ -281,14 +242,8 @@ fn handle_shifted_shortcut(
     action: &str,
     source: Option<SocketAddr>,
 ) {
-    if let Some(source) = source
-        && let Some(target) = state
-            .osc_subscribers
-            .lock()
-            .values_mut()
-            .find(|candidate| candidate.command_source == source)
-    {
-        target.shifted = false;
+    if let Some(source) = source {
+        state.integrations.clear_shift(source);
     }
     emit(
         state,
@@ -304,7 +259,7 @@ fn route_programmer_osc_action(
     action: &str,
 ) {
     if action == "set"
-        && state.programmers.get(session.id).is_some_and(|programmer| {
+        && state.programming.get(session.id).is_some_and(|programmer| {
             matches!(programmer.command_line.trim(), "" | "FIXTURE" | "GROUP")
         })
     {
@@ -359,13 +314,12 @@ pub(super) fn handle_programmer_osc(
         handle_shifted_shortcut(state, &session, parts[1], action, source);
         return;
     }
-    let command_operation = state.programming.desk_lock(session.desk.id);
-    let _command_operation_guard = command_operation.lock();
-    if read_desk_lock(state, session.desk.id).locked
-        || file_manager::route_osc_input(state, &session, action)
-    {
+    let handled = state.programming.run_desk_operation(session.desk.id, || {
+        read_desk_lock(state, session.desk.id).locked
+            || file_manager::route_osc_input(state, &session, action)
+    });
+    if handled {
         return;
     }
-    drop(_command_operation_guard);
     route_programmer_osc_action(state, &session, parts[1], action);
 }

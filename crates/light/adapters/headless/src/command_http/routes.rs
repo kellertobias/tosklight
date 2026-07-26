@@ -113,7 +113,7 @@ async fn apply_command_key(
 ) -> Result<Response, ApiError> {
     validate_request_id(&input.request_id)?;
     let session = authenticate_desk_mutation(&state, &headers, &desk)?;
-    let _activation = state.activation_lock.clone().lock_owned().await;
+    let _activation = state.active_show.acquire().await;
     show.verify(&state)?;
     let context = http_context(&session, Some(&input.request_id));
     let result = run_service(
@@ -151,7 +151,7 @@ async fn execute_command_line(
         validate_command(command)?;
     }
     let session = authenticate_desk_mutation(&state, &headers, &desk)?;
-    let _activation = state.activation_lock.clone().lock_owned().await;
+    let _activation = state.active_show.acquire().await;
     show.verify(&state)?;
     let context = http_context(&session, Some(&input.request_id));
     let result = run_service(
@@ -211,7 +211,7 @@ fn ensure_desk_unlocked(state: &AppState, desk_id: uuid::Uuid) -> Result<(), Api
 
 fn command_state(state: &AppState, session: &Session) -> Result<CommandLineState, ApiError> {
     state
-        .programmers
+        .programming
         .command_line_state(session.id)
         .ok_or_else(|| ApiError::not_found("programmer command line"))
 }

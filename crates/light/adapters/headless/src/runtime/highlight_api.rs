@@ -73,7 +73,7 @@ async fn run_highlight_http_interaction<T: Send + 'static>(
     lock_policy: ProgrammingLockPolicy,
     operation: impl FnOnce(&AppState, &Session) -> Result<T, ApiError> + Send + 'static,
 ) -> Result<T, ApiError> {
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     let worker_state = state.clone();
     let worker_session = session.clone();
     let (completed, _activation) = tokio::task::spawn_blocking(move || {
@@ -125,7 +125,7 @@ pub(super) fn execute_highlight(
         highlight_service_adapter::HeadlessHighlightPorts::new(state, session)
     };
     state
-        .highlight_service
+        .highlight
         .handle(ActionEnvelope { context, command }, &ports)
         .map(|result| result.state)
         .map_err(highlight_service_adapter::api_error)
@@ -191,20 +191,20 @@ pub(super) fn apply_highlight_selection_write(
     match write.expression.clone() {
         Some(expression) => {
             state
-                .programmers
+                .programming
                 .select_expression(session.id, write.selected.clone(), expression);
         }
         None => {
-            state.programmers.select(session.id, write.selected.clone());
+            state.programming.select(session.id, write.selected.clone());
         }
     }
     let selection = state
-        .programmers
+        .programming
         .selection(session.id)
         .ok_or_else(|| ApiError::not_found("programmer selection"))?;
     state
         .highlight
-        .acknowledge_internal_selection(session.desk.id, session.user.id, &selection);
+        .acknowledge_selection(session.desk.id, session.user.id, &selection);
     persist_programmer(state, session)?;
     Ok(true)
 }
@@ -214,12 +214,12 @@ pub(super) fn current_highlight_transition(
     state: &AppState,
     session: &Session,
 ) -> Option<light_programmer::HighlightTransition> {
-    let programmer = state.programmers.get(session.id)?;
-    let selection = state.programmers.selection(session.id)?;
-    let snapshot = state.engine.snapshot();
+    let programmer = state.programming.get(session.id)?;
+    let selection = state.programming.selection(session.id)?;
+    let snapshot = state.output.snapshot();
     let fixtures = highlight_fixture_summaries(&snapshot.fixtures);
     let groups = highlight_groups(&snapshot);
-    Some(state.highlight.status(
+    Some(state.highlight.transition(
         session.desk.id,
         session.user.id,
         Some(&session.user.name),
@@ -260,15 +260,9 @@ pub(super) fn reconcile_highlight_selection(
 }
 
 pub(super) fn sync_highlight_output(state: &AppState) {
-    let mut fixtures = state
-        .highlight
-        .output_fixtures()
-        .into_iter()
-        .collect::<HashSet<_>>();
-    for preview in state.patch_preview_highlights.lock().values() {
-        fixtures.extend(preview.iter().copied());
-    }
-    state.engine.set_highlighted_fixtures(fixtures);
+    state
+        .output
+        .set_highlighted_fixtures(state.highlight.output_fixtures());
 }
 
 pub(super) async fn patch_preview_highlight(
@@ -289,11 +283,14 @@ pub(super) fn apply_patch_preview_highlight(
     session: &Session,
     input: light_wire::v2::output_control::PatchPreviewHighlightRequest,
 ) -> serde_json::Value {
-    let allowed = state.configuration.read().patch_preview_highlight_dmx;
+    let allowed = state
+        .installation
+        .configuration()
+        .patch_preview_highlight_dmx;
     let mut active = false;
     if allowed && input.active && !input.fixture_ids.is_empty() {
         let known = state
-            .engine
+            .output
             .snapshot()
             .fixtures
             .iter()
@@ -305,17 +302,9 @@ pub(super) fn apply_patch_preview_highlight(
             .map(light_core::FixtureId)
             .filter(|fixture| known.contains(fixture))
             .collect::<HashSet<_>>();
-        active = !fixtures.is_empty();
-        if active {
-            state
-                .patch_preview_highlights
-                .lock()
-                .insert(session.id, fixtures);
-        } else {
-            state.patch_preview_highlights.lock().remove(&session.id);
-        }
+        active = state.highlight.set_patch_preview(session.id, fixtures);
     } else {
-        state.patch_preview_highlights.lock().remove(&session.id);
+        state.highlight.remove_patch_preview(session.id);
     }
     sync_highlight_output(state);
     emit(

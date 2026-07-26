@@ -33,8 +33,7 @@ async fn create_seeded_show(
     let show = create_show(app, token, name).await;
     let show_id = show["id"].as_str().unwrap().to_owned();
     let entry = state
-        .desk
-        .lock()
+        .installation
         .show(light_core::ShowId(Uuid::parse_str(&show_id).unwrap()))
         .unwrap()
         .unwrap();
@@ -58,8 +57,8 @@ async fn layout_and_patch_intents_preserve_unknown_fields_and_replay_once() {
     let (token, _) = login(&app, "Operator").await;
     let user_id = state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .next()
         .unwrap()
         .user
@@ -106,7 +105,7 @@ async fn layout_and_patch_intents_preserve_unknown_fields_and_replay_once() {
             }
         }
     });
-    let before_application_events = state.application_events.latest_sequence();
+    let before_application_events = state.events.latest_sequence();
     let (status, saved_layout) = post_show_object_intent(
         &app,
         &token,
@@ -125,15 +124,14 @@ async fn layout_and_patch_intents_preserve_unknown_fields_and_replay_once() {
     assert_eq!(saved_layout["object"]["body"]["activeDeskId"], "main");
     let show_filter = light_application::EventFilter::default()
         .with_capability(light_application::EventCapability::Show);
-    let light_application::EventReplay::Events(layout_events) = state
-        .application_events
-        .replay(before_application_events, &show_filter)
+    let light_application::EventReplay::Events(layout_events) =
+        state.events.replay(before_application_events, &show_filter)
     else {
         panic!("the focused user-layout Show event must remain replayable")
     };
     assert_eq!(layout_events.len(), 1);
     assert_eq!(saved_layout["event_sequence"], layout_events[0].sequence);
-    let after_layout_application_event = state.application_events.latest_sequence();
+    let after_layout_application_event = state.events.latest_sequence();
 
     let (status, replayed) = post_show_object_intent(
         &app,
@@ -146,9 +144,8 @@ async fn layout_and_patch_intents_preserve_unknown_fields_and_replay_once() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(replayed["replayed"], true);
     assert_eq!(replayed["object"], saved_layout["object"]);
-    let light_application::EventReplay::Events(replayed_layout_events) = state
-        .application_events
-        .replay(before_application_events, &show_filter)
+    let light_application::EventReplay::Events(replayed_layout_events) =
+        state.events.replay(before_application_events, &show_filter)
     else {
         panic!("the focused user-layout Show event must remain replayable")
     };
@@ -175,7 +172,7 @@ async fn layout_and_patch_intents_preserve_unknown_fields_and_replay_once() {
     assert_eq!(saved_layer["object"]["body"]["name"], "Front truss");
     assert_eq!(saved_layer["object"]["body"]["future_patch_field"], "kept");
     let light_application::EventReplay::Events(layer_events) = state
-        .application_events
+        .events
         .replay(after_layout_application_event, &show_filter)
     else {
         panic!("the focused Patch-layer Show event must remain replayable")
@@ -283,7 +280,7 @@ async fn preload_record_intent_stores_the_pending_scene_and_replays_once() {
     let (token, session_id) = login(&app, "Operator").await;
     let show_id = create_seeded_show(&state, &app, &token, "Typed preload", &[]).await;
     let session_id = light_core::SessionId(Uuid::parse_str(&session_id).unwrap());
-    assert!(state.programmers.set_preload_group(
+    assert!(state.programming.set_preload_group(
         session_id,
         "front".into(),
         light_core::AttributeKey::intensity(),

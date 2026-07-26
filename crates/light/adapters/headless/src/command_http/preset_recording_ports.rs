@@ -46,6 +46,6 @@ pub(super) fn commit(
         },
     );
     state
-        .active_show_service
+        .active_show
         .commit_programming_preset(context, commit, &ports)
 }

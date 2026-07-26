@@ -19,7 +19,7 @@ async fn show_level_route_returns_all_desks_and_publishes_one_replay_safe_event(
         serde_json::json!({"show_id":show_id,"desks":{}})
     );
 
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let saved = put_zones(&app, &token, show_id, SURFACE_ID, "save-zones").await;
     assert_eq!(saved.status(), StatusCode::OK);
     assert_eq!(
@@ -40,8 +40,8 @@ async fn show_level_route_returns_all_desks_and_publishes_one_replay_safe_event(
     let replay = json(replay).await;
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["changed"], true);
-    assert_eq!(state.application_events.latest_sequence(), cursor + 1);
-    let light_application::EventReplay::Events(events) = state.application_events.replay(
+    assert_eq!(state.events.latest_sequence(), cursor + 1);
+    let light_application::EventReplay::Events(events) = state.events.replay(
         cursor,
         &light_application::EventFilter::default()
             .with_capability(light_application::EventCapability::Show),
@@ -63,11 +63,10 @@ async fn show_level_route_returns_all_desks_and_publishes_one_replay_safe_event(
         json(put_zones(&app, &token, show_id, SURFACE_ID, "same-zones-new-request").await).await;
     assert_eq!(no_change["replayed"], false);
     assert_eq!(no_change["changed"], false);
-    assert_eq!(state.application_events.latest_sequence(), cursor + 1);
+    assert_eq!(state.events.latest_sequence(), cursor + 1);
 
     let second_desk = state
-        .desk
-        .lock()
+        .installation
         .add_desk("Zone wing", "zone-wing")
         .unwrap();
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
@@ -121,19 +120,14 @@ async fn captured_show_scope_is_rejected_after_active_show_replacement() {
         json(stale).await["error"],
         "X-Tosk-Show does not match the active show"
     );
-    {
-        let desk = state.desk.lock();
-        let first_store = read_virtual_playback_exclusion_store(
-            &desk,
-            light_core::ShowId(Uuid::parse_str(&first_id).unwrap()),
-        );
-        let second_store = read_virtual_playback_exclusion_store(
-            &desk,
-            light_core::ShowId(Uuid::parse_str(&second_id).unwrap()),
-        );
-        assert!(first_store.is_empty());
-        assert!(second_store.is_empty());
-    }
+    let first_store = state
+        .installation
+        .virtual_playback_exclusions(light_core::ShowId(Uuid::parse_str(&first_id).unwrap()));
+    let second_store = state
+        .installation
+        .virtual_playback_exclusions(light_core::ShowId(Uuid::parse_str(&second_id).unwrap()));
+    assert!(first_store.is_empty());
+    assert!(second_store.is_empty());
 
     let current = put_zones(&app, &token, &second_id, SURFACE_ID, "current-show").await;
     assert_eq!(current.status(), StatusCode::OK);
@@ -144,8 +138,8 @@ async fn captured_show_scope_is_rejected_after_active_show_replacement() {
 fn authenticated_desk_id(state: &AppState, token: &str) -> Uuid {
     state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .find(|session| session.token == token)
         .unwrap()
         .desk

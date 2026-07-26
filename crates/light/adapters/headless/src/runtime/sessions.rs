@@ -10,49 +10,28 @@ pub(super) async fn update_configuration(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let _session = authenticate(&state, &headers)?;
     configuration.validate()?;
-    let previous = state.configuration.read().clone();
+    let previous = state.installation.configuration();
     let now = application_millis(&state);
-    {
-        let mut controllers = state.speed_groups.lock();
-        for index in 0..controllers.len() {
-            if configuration.speed_groups_bpm[index] != previous.speed_groups_bpm[index] {
-                // A direct value entered through Configuration is the same manual action as the
-                // Speed Group UI or OSC surface and therefore takes ownership from Sound.
-                unlink_speed_group(&mut controllers, index, now);
-                controllers[index]
-                    .set_manual_bpm(configuration.speed_groups_bpm[index])
-                    .map_err(|error| ApiError::bad_request(error.to_string()))?;
-                controllers[index]
-                    .set_speed_master_scale(1.0)
-                    .map_err(|error| ApiError::bad_request(error.to_string()))?;
-                controllers[index].set_paused_at(false, now);
-                configuration.speed_group_sound_to_light[index].enabled = false;
-                state.sound_capture_owners.lock()[index] = None;
-            } else {
-                controllers[index]
-                    .set_manual_fallback_bpm(configuration.speed_groups_bpm[index])
-                    .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            }
-            controllers[index]
-                .set_sound_config(configuration.speed_group_sound_to_light[index].clone())
-                .map_err(|error| ApiError::bad_request(error.to_string()))?;
-        }
-    }
+    configuration.speed_group_sound_to_light = state.output.configure_speed_groups(
+        previous.speed_groups_bpm,
+        configuration.speed_groups_bpm,
+        configuration.speed_group_sound_to_light,
+        now,
+    )?;
+    state.output.set_frame_rate_hz(configuration.frame_rate_hz);
     state
-        .output_rate
-        .store(configuration.frame_rate_hz, Ordering::Relaxed);
-    state
-        .timecode_router
-        .lock()
-        .configure(configuration.timecode_sources.clone());
+        .output
+        .configure_timecode(configuration.timecode_sources.clone());
     let requires_restart = configuration.output_bind_ip != previous.output_bind_ip
         || configuration.osc_bind != previous.osc_bind
         || configuration.art_timecode_bind != previous.art_timecode_bind
         || configuration.midi_inputs != previous.midi_inputs
         || configuration.rtp_midi_bind != previous.rtp_midi_bind;
-    *state.configuration.write() = configuration.clone();
+    state
+        .installation
+        .replace_configuration(configuration.clone());
     if !configuration.patch_preview_highlight_dmx {
-        state.patch_preview_highlights.lock().clear();
+        state.highlight.clear_patch_previews();
         sync_highlight_output(&state);
     }
     persist_server_configuration(&state)?;
@@ -77,8 +56,7 @@ pub(super) async fn create_session(
         .or_else(|| {
             input.desk_id.and_then(|desk_id| {
                 state
-                    .desk
-                    .lock()
+                    .installation
                     .client_desks()
                     .ok()?
                     .into_iter()
@@ -88,15 +66,13 @@ pub(super) async fn create_session(
         })
         .unwrap_or_else(Uuid::new_v4);
     let user = state
-        .desk
-        .lock()
+        .installation
         .find_user(&input.username)
         .map_err(ApiError::store)?
         .filter(|u| u.enabled)
         .ok_or_else(|| ApiError::not_found("enabled user"))?;
     let desk = state
-        .desk
-        .lock()
+        .installation
         .resolve_client_desk(client_id, input.desk_id)
         .map_err(ApiError::store)?;
     let session = Session {
@@ -106,15 +82,15 @@ pub(super) async fn create_session(
         connected: true,
         desk: desk.clone(),
     };
-    let _activation = state.activation_lock.clone().lock_owned().await;
-    state.session_clients.write().insert(session.id, client_id);
+    let _activation = state.active_show.acquire().await;
+    state.sessions.bind_client(session.id, client_id);
     let context = programming_context(&session, light_application::ActionSource::Http, None);
     state
         .programming
         .run_lifecycle_transition(&context, user.id, || -> Result<(), ApiError> {
-            state.programmers.start(session.id, user.id);
+            state.programming.start(session.id, user.id);
             attach_session_command_context(&state, &session);
-            state.sessions.write().insert(session.id, session.clone());
+            state.sessions.insert_session(session.clone());
             persist_programmer(&state, &session)
         })?;
     emit(
@@ -137,14 +113,12 @@ pub(super) async fn create_user(
 ) -> Result<(StatusCode, Json<DeskUser>), ApiError> {
     let _session = authenticate(&state, &headers)?;
     let mut user = state
-        .desk
-        .lock()
+        .installation
         .add_user(&input.name)
         .map_err(ApiError::store)?;
     if !input.enabled {
         user = state
-            .desk
-            .lock()
+            .installation
             .update_user(user.id, &user.name, false)
             .map_err(ApiError::store)?;
     }
@@ -165,28 +139,25 @@ pub(super) async fn close_session(
     if caller.id != id {
         return Err(ApiError::conflict("a session may only disconnect itself"));
     }
-    let _activation = state.activation_lock.clone().lock_owned().await;
-    let Some(session) = state.sessions.write().remove(&id) else {
+    let _activation = state.active_show.acquire().await;
+    let Some(session) = state.sessions.remove_session(id) else {
         return Err(ApiError::not_found("session"));
     };
-    state.osc_cue_record_suppression.lock().remove_session(id);
-    if let Some(client_id) = state.session_clients.write().remove(&id) {
+    state.integrations.remove_session_suppression(id);
+    if let Some(client_id) = state.sessions.unbind_client(id) {
         state
-            .desk
-            .lock()
+            .installation
             .touch_client(client_id)
             .map_err(ApiError::store)?;
     }
-    let same_context_connected = state.sessions.read().values().any(|candidate| {
-        candidate.user.id == session.user.id && candidate.desk.id == session.desk.id
-    });
+    let same_context_connected = state.sessions.same_context_connected(&session);
     if !same_context_connected {
         state
             .highlight
             .clear_context(session.desk.id, session.user.id);
         sync_highlight_output(&state);
     }
-    state.patch_preview_highlights.lock().remove(&id);
+    state.highlight.remove_patch_preview(id);
     sync_highlight_output(&state);
     file_manager::release_session_input(&state, &session, "session_closed");
     persist_programmer(&state, &session)?;
@@ -194,7 +165,7 @@ pub(super) async fn close_session(
     state
         .programming
         .run_lifecycle_transition(&context, session.user.id, || {
-            state.programmers.disconnect(id);
+            state.programming.disconnect(id);
         });
     emit(
         &state,

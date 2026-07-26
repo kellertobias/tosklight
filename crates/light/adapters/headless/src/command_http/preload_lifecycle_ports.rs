@@ -12,7 +12,10 @@ impl ProgrammingPreloadLifecyclePorts for ServerProgrammingPorts<'_> {
     }
 
     fn capture_programmer_on_preload(&self, _context: &ActionContext) -> bool {
-        self.state().configuration.read().preload_programmer_changes
+        self.state()
+            .installation
+            .configuration()
+            .preload_programmer_changes
     }
 
     fn commit_preload(

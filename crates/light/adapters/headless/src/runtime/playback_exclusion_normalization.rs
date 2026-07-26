@@ -17,7 +17,7 @@ pub(super) fn normalize_restored_virtual_playback_exclusions(
 ) -> Result<RestoredExclusionOutcome, ApiError> {
     let context = ActionContext::system(Uuid::nil(), ActionSource::System);
     state
-        .playback_service
+        .playback
         .run_unit_of_work(RestoredExclusionNormalization { state, context })
         .output
 }
@@ -60,7 +60,7 @@ impl RestoredExclusionNormalization<'_> {
 }
 
 fn migrate_activation_provenance(state: &AppState) -> Result<bool, ApiError> {
-    let mut runtime = state.engine.playback_runtime();
+    let mut runtime = state.output.playback_runtime();
     if !activation_migration_required(&runtime) {
         return Ok(false);
     }
@@ -78,7 +78,7 @@ fn migrate_activation_provenance(state: &AppState) -> Result<bool, ApiError> {
         playback.activation = None;
     }
     state
-        .engine
+        .output
         .execute_playback(EnginePlaybackCommand::RestoreActive(runtime))
         .map_err(ApiError::internal)?;
     Ok(true)
@@ -135,7 +135,7 @@ fn restored_exclusion_losers(state: &AppState) -> Result<Vec<u16>, ApiError> {
     let legacy_zones: Arc<[Vec<u16>]> = all_restored_zones(state).into();
     let mut desk_zones = HashMap::<Uuid, Arc<[Vec<u16>]>>::new();
     let mut active = state
-        .engine
+        .output
         .playback_runtime()
         .into_iter()
         .filter(|playback| playback.enabled && playback.playback_number.is_some())
@@ -174,8 +174,7 @@ fn activation_zones(
                 return Ok(Arc::clone(zones));
             }
             let exists = state
-                .desk
-                .lock()
+                .installation
                 .control_desk(desk_id)
                 .map_err(ApiError::store)?
                 .is_some();
@@ -191,10 +190,12 @@ fn activation_zones(
 }
 
 fn all_restored_zones(state: &AppState) -> Vec<Vec<u16>> {
-    let Some(show) = state.active_show.read().clone() else {
+    let Some(show) = state.active_show.current().clone() else {
         return Vec::new();
     };
-    let desks = read_virtual_playback_exclusion_store(&state.desk.lock(), show.id)
+    let desks = state
+        .installation
+        .virtual_playback_exclusions(show.id)
         .keys()
         .filter_map(|id| Uuid::parse_str(id).ok())
         .collect::<Vec<_>>();
@@ -229,7 +230,7 @@ fn losing_playbacks(
 
 fn release_candidates(state: &AppState, candidates: Vec<u16>) -> Result<Vec<u16>, ApiError> {
     match state
-        .engine
+        .output
         .execute_playback(EnginePlaybackCommand::ReleasePoolBatch(candidates))
         .map_err(ApiError::bad_request)?
     {

@@ -31,7 +31,7 @@ pub(super) fn commit(
         },
     );
     let result = state
-        .active_show_service
+        .active_show
         .commit_programming_cue(context, commit, &ports)?;
     publish_legacy_cue_list_change(state, &result);
     Ok(result)

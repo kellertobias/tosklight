@@ -131,8 +131,7 @@ async fn patch_preview_highlight_is_default_off_scoped_and_released() {
     let fixtures = highlight_test_fixtures();
     let fixture_id = fixtures[0].fixture_id;
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: fixtures.into(),
             ..EngineSnapshot::default()
         })
@@ -156,16 +155,16 @@ async fn patch_preview_highlight_is_default_off_scoped_and_released() {
 
     let disabled = json(app.clone().oneshot(request(true)).await.unwrap()).await;
     assert_eq!(disabled["allowed"], false);
-    assert!(state.engine.highlighted_fixtures().is_empty());
+    assert!(state.output.highlighted_fixtures().is_empty());
 
-    state.configuration.write().patch_preview_highlight_dmx = true;
+    state.installation.update_configuration(|configuration| configuration.patch_preview_highlight_dmx = true);
     let enabled = json(app.clone().oneshot(request(true)).await.unwrap()).await;
     assert_eq!(enabled["active"], true);
-    assert_eq!(state.engine.highlighted_fixtures(), vec![fixture_id]);
+    assert_eq!(state.output.highlighted_fixtures(), vec![fixture_id]);
 
     let released = json(app.oneshot(request(false)).await.unwrap()).await;
     assert_eq!(released["active"], false);
-    assert!(state.engine.highlighted_fixtures().is_empty());
+    assert!(state.output.highlighted_fixtures().is_empty());
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -269,18 +268,18 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
 }
 
 fn enable_highlight_test_feedback(state: &AppState) {
-    *state.active_show.write() = Some(ShowEntry {
+    state.active_show.replace_current(Some(ShowEntry {
         id: light_core::ShowId::new(),
         name: "Highlight feedback test".into(),
         path: state
-            .data_dir
+            .installation.data_dir()
             .join("shows/highlight-feedback-test.show")
             .display()
             .to_string(),
         revision: 0,
         updated_at: chrono::Utc::now().to_rfc3339(),
         revision_copy: None,
-    });
+    }));
 }
 
 #[test]

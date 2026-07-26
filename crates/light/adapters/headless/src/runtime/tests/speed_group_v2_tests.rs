@@ -10,18 +10,18 @@ async fn direct_manual_entry_resets_pause_scale_sound_and_capture_ownership() {
         enabled: true,
         ..Default::default()
     };
-    {
-        let mut controllers = state.speed_groups.lock();
-        controllers[0].set_sound_config(sound).unwrap();
-        controllers[0].set_speed_master_scale(0.5).unwrap();
-        controllers[0].set_paused_at(true, 10);
-    }
-    state.sound_capture_owners.lock()[0] = Some(SoundCaptureOwner {
-        desk_id: session.desk.id,
-        last_seen_millis: 10,
-    });
+    state
+        .output
+        .configure_speed_group_test_state(0, sound, 0.5, true, 10);
+    state.output.set_sound_capture_owner(
+        0,
+        Some(SoundCaptureOwner {
+            desk_id: session.desk.id,
+            last_seen_millis: 10,
+        }),
+    );
     let initial = speed_group_snapshot(&app, &token, session.desk.id).await;
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let attempts = persistence_attempts(&state);
 
     let response = post_speed_groups(
@@ -40,10 +40,16 @@ async fn direct_manual_entry_resets_pause_scale_sound_and_capture_ownership() {
     assert_eq!(response["status"], "changed");
     assert_eq!(response["groups"][0]["paused"], false);
     assert_eq!(response["groups"][0]["speed_master_scale"], 1.0);
-    let controller = state.speed_groups.lock()[0].clone();
+    let controller = state.output.speed_group_controller(0);
     assert!(!controller.sound_config().enabled);
-    assert!(state.sound_capture_owners.lock()[0].is_none());
-    assert!(!state.configuration.read().speed_group_sound_to_light[0].enabled);
+    assert!(state.output.sound_capture_owner(0).is_none());
+    assert!(
+        !state
+            .installation
+            .configuration()
+            .speed_group_sound_to_light[0]
+            .enabled
+    );
     assert_eq!(persistence_attempts(&state), attempts + 1);
     assert_eq!(speed_group_events(&state, cursor).len(), 1);
     let _ = std::fs::remove_dir_all(data_dir);
@@ -63,7 +69,7 @@ async fn v2_speed_groups_are_revisioned_shared_strict_and_replay_before_desk_loc
     assert_eq!(initial["projection"]["groups"].as_array().unwrap().len(), 5);
     assert_eq!(initial["projection"]["groups"][0]["group"], "A");
     let authority = initial["projection"]["authority_id"].clone();
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let attempts = persistence_attempts(&state);
     let request = speed_request(
         "speed-absolute",
@@ -82,7 +88,10 @@ async fn v2_speed_groups_are_revisioned_shared_strict_and_replay_before_desk_loc
     assert_eq!(changed["durability"], "durable");
     assert_eq!(persistence_attempts(&state), attempts + 1);
     assert_eq!(speed_group_events(&state, cursor).len(), 1);
-    assert_eq!(state.configuration.read().speed_groups_bpm[0], 128.5);
+    assert_eq!(
+        state.installation.configuration().speed_groups_bpm[0],
+        128.5
+    );
 
     write_desk_lock(
         &state,
@@ -135,7 +144,7 @@ async fn v2_speed_groups_are_revisioned_shared_strict_and_replay_before_desk_loc
     assert!(no_change.get("event_sequence").is_none());
     assert_eq!(persistence_attempts(&state), attempts + 1);
 
-    let wing = state.desk.lock().add_desk("Wing", "wing").unwrap();
+    let wing = state.installation.add_desk("Wing", "wing").unwrap();
     let wing_token = login_for_speed_desk(&app, "Operator", wing.id).await;
     let wing_snapshot = speed_group_snapshot(&app, &wing_token, wing.id).await;
     assert_eq!(wing_snapshot["projection"]["revision"], 1);
@@ -199,7 +208,7 @@ async fn synchronization_conflicts_persistence_warning_and_authority_replacement
         StatusCode::OK
     );
     let current = speed_group_snapshot(&app, &token, session.desk.id).await;
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let attempts = persistence_attempts(&state);
     let sync = post_speed_groups(
         &app,
@@ -264,9 +273,7 @@ async fn synchronization_conflicts_persistence_warning_and_authority_replacement
     .await;
     assert_eq!(strict.status(), StatusCode::OK);
 
-    state
-        .speed_group_persistence_failure
-        .store(true, Ordering::Relaxed);
+    state.output.force_speed_group_persistence_failure(true);
     let current = speed_group_snapshot(&app, &token, session.desk.id).await;
     let attempts = persistence_attempts(&state);
     let pending_request = speed_request(
@@ -286,8 +293,9 @@ async fn synchronization_conflicts_persistence_warning_and_authority_replacement
 
     let old_authority = current["projection"]["authority_id"].clone();
     let mut replaced_state = state.clone();
-    replaced_state.speed_group_service =
-        SpeedGroupService::new(replaced_state.application_events.clone());
+    replaced_state
+        .output
+        .rebind_speed_group_events(&replaced_state.events);
     let replaced_app = router(replaced_state.clone());
     let replacement = speed_group_snapshot(&replaced_app, &token, session.desk.id).await;
     assert_eq!(replacement["projection"]["revision"], 0);
@@ -330,10 +338,10 @@ async fn typed_speed_group_ws_action_replays_before_lock_and_emits_once() {
             ),
         )
     };
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let attempts = persistence_attempts(&state);
 
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     let unstable = dispatch_live_action(&state, &session, command());
     assert!(!unstable.ok);
     assert!(
@@ -463,13 +471,11 @@ async fn login_for_speed_desk(app: &Router, username: &str, desk_id: Uuid) -> St
 }
 
 fn persistence_attempts(state: &AppState) -> u64 {
-    state
-        .speed_group_persistence_attempts
-        .load(Ordering::Relaxed)
+    state.output.speed_group_persistence_attempts()
 }
 
 fn speed_group_events(state: &AppState, cursor: u64) -> Vec<Arc<light_application::EventEnvelope>> {
-    let light_application::EventReplay::Events(events) = state.application_events.replay(
+    let light_application::EventReplay::Events(events) = state.events.replay(
         cursor,
         &light_application::EventFilter::default()
             .with_capability(light_application::EventCapability::Playback)

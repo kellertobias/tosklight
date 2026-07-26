@@ -28,8 +28,7 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
     assert!(
         scenario
             .state
-            .engine
-            .playback_runtime()
+            .output.playback_runtime()
             .iter()
             .all(|runtime| runtime.playback_number != Some(31)),
         "command grammar uses Hold activation policy"
@@ -54,7 +53,7 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
 
     let source: SocketAddr = "127.0.0.1:9026".parse().unwrap();
     let osc_alias = scenario.session.desk.osc_alias.clone();
-    scenario.state.osc_subscribers.lock().insert(
+    scenario.state.integrations.register_osc_subscriber(
         "cue-record-keys".into(),
         OscSubscriber {
             desk_alias: osc_alias.clone(),
@@ -107,13 +106,13 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
             .iter()
             .any(|cue| cue.number == 1.0)
     );
-    let sequence = scenario.state.application_events.latest_sequence();
+    let sequence = scenario.state.events.latest_sequence();
     let history = scenario.history_len();
     let compatibility_before_replay = scenario.cue_list_compatibility_payloads().len();
     let replay = dispatch_live_action(&scenario.state, &scenario.session, ws_command());
     assert!(replay.ok, "{:?}", replay.error);
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         sequence
     );
     assert_eq!(scenario.history_len(), history);
@@ -132,7 +131,7 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
     let _show_id = scenario.create_and_open_show("OSC Cue record").await;
     set_cue_record_value(&scenario);
     let source: SocketAddr = "127.0.0.1:9027".parse().unwrap();
-    scenario.state.osc_subscribers.lock().insert(
+    scenario.state.integrations.register_osc_subscriber(
         "cue-record-touch".into(),
         OscSubscriber {
             desk_alias: scenario.session.desk.osc_alias.clone(),
@@ -165,7 +164,7 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
         assert_osc_surface_records(&scenario, slot, control, press, release);
     }
     let fader_address = "/light/playback/4/9/fader";
-    let after_record = scenario.state.application_events.latest_sequence();
+    let after_record = scenario.state.events.latest_sequence();
     handle_playback_osc(
         &scenario.state,
         fader_address,
@@ -173,7 +172,7 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
         Some("127.0.0.1:9027"),
     );
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         after_record
     );
     assert_eq!(runtime_for_page_slot(&scenario, 9).master, 1.0);
@@ -206,10 +205,10 @@ fn assert_osc_surface_records(
 ) {
     scenario
         .state
-        .programmers
+        .programming
         .set_command_line(scenario.session.id, "RECORD".into());
     let address = format!("/light/playback/4/{slot}/{control}");
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     handle_playback_osc(&scenario.state, &address, &[press], Some("127.0.0.1:9027"));
     let action_filter = light_application::EventFilter::default()
         .with_capability(light_application::EventCapability::Desk)
@@ -217,7 +216,7 @@ fn assert_osc_surface_records(
         .with_capability(light_application::EventCapability::Show);
     let light_application::EventReplay::Events(action_events) = scenario
         .state
-        .application_events
+        .events
         .replay(baseline, &action_filter)
     else {
         panic!("the focused OSC recording action events must remain replayable")
@@ -229,14 +228,14 @@ fn assert_osc_surface_records(
     assert_eq!(
         scenario
             .state
-            .programmers
+            .programming
             .get(scenario.session.id)
             .unwrap()
             .command_line,
         ""
     );
     assert_osc_record_event_order(&scenario.state, baseline);
-    let after_press = scenario.state.application_events.latest_sequence();
+    let after_press = scenario.state.events.latest_sequence();
     if let Some(release) = release {
         handle_playback_osc(
             &scenario.state,
@@ -245,7 +244,7 @@ fn assert_osc_surface_records(
             Some("127.0.0.1:9027"),
         );
         assert_eq!(
-            scenario.state.application_events.latest_sequence(),
+            scenario.state.events.latest_sequence(),
             after_press
         );
     }
@@ -257,8 +256,7 @@ fn runtime_for_page_slot(
 ) -> light_playback::ActivePlayback {
     let playback = scenario
         .state
-        .engine
-        .snapshot()
+        .output.snapshot()
         .playback_pages
         .iter()
         .find(|page| page.number == 4)
@@ -266,8 +264,7 @@ fn runtime_for_page_slot(
         .slots[&slot];
     scenario
         .state
-        .engine
-        .playback_runtime_status()
+        .output.playback_runtime_status()
         .into_iter()
         .find(|runtime| runtime.playback.playback_number == Some(playback))
         .unwrap()
@@ -282,10 +279,10 @@ fn stored_cue_list(
     light_show::VersionedObject,
     light_playback::CueList,
 ) {
-    let entry = scenario.state.active_show.read().clone().unwrap();
+    let entry = scenario.state.active_show.current().clone().unwrap();
     cue_list_for_playback(
-        &ShowStore::open(&entry.path).unwrap(),
-        &scenario.state.engine.snapshot(),
+        &ActiveShowRepository::open(&entry.path).unwrap(),
+        &scenario.state.output.snapshot(),
         playback,
     )
     .unwrap()
@@ -297,7 +294,7 @@ fn assert_osc_record_event_order(state: &AppState, baseline: u64) {
         .with_capability(light_application::EventCapability::Playback)
         .with_capability(light_application::EventCapability::Desk);
     let light_application::EventReplay::Events(events) = state
-        .application_events
+        .events
         .replay(baseline, &filter)
     else {
         panic!("OSC Cue record events must remain replayable")

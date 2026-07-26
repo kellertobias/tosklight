@@ -40,7 +40,7 @@ pub(super) async fn thumbnail(
     }
     let size = query.max_size.clamp(32, 1_024);
     let key = thumbnail_cache_key(&root_id, &query.path, &metadata, size);
-    let cache = state.data_dir.join("cache/file-thumbnails");
+    let cache = state.installation.data_dir().join("cache/file-thumbnails");
     fs::create_dir_all(&cache).map_err(ApiError::io)?;
     let cached = cache.join(format!("{key}.png"));
     let bytes = if cached.is_file() {

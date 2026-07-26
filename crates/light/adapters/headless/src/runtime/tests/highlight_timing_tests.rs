@@ -1,7 +1,15 @@
 #[tokio::test(start_paused = true)]
 async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_deadline() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let task_cancellation = CancellationToken::new();
+    let task_receiver = state.lifecycle.take_task_receiver().unwrap();
+    let task_driver = tokio::spawn(
+        super::capabilities::runtime::supervisor::drive_owned_tasks(
+            task_cancellation.clone(),
+            task_receiver,
+        ),
+    );
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -9,9 +17,9 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     attach_session_command_context(&state, &session);
-    state.sessions.write().insert(session.id, session.clone());
+    state.sessions.insert_session(session.clone());
 
     let (mut fixture, action_id, channel_ids) = schema_v2_direct_fixture();
     fixture.definition.profile_snapshot.as_mut().unwrap().modes[0].control_actions[0].kind =
@@ -37,8 +45,7 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
         });
     let fixture_id = fixture.fixture_id;
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             ..EngineSnapshot::default()
         })
@@ -90,7 +97,7 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
         (action_attributes[1].clone(), 255),
     ]);
     let expected_fan_max = HashMap::from([(action_attributes[0].clone(), 180)]);
-    let programmer = state.programmers.get(session.id).unwrap();
+    let programmer = state.programming.get(session.id).unwrap();
     assert_eq!(transient_raw_values(&programmer), expected_active);
     assert_eq!(persistent_raw_values(&programmer), expected_fan_max);
     assert_eq!(
@@ -102,7 +109,7 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
         light_application::EventObject::programming_values(user.id.0),
     );
     let light_application::EventReplay::Events(values_events) =
-        state.application_events.replay(0, &values_filter)
+        state.events.replay(0, &values_filter)
     else {
         panic!("expected replayable typed Programmer values events");
     };
@@ -113,7 +120,7 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
             light_application::ProgrammingEvent::ValuesChanged(_)
         )
     )));
-    assert!(state.audit_events.lock().is_empty());
+    assert!(state.events.audit_events().is_empty());
 
     tokio::task::yield_now().await;
     tokio::time::advance(Duration::from_millis(749)).await;
@@ -125,14 +132,14 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
 
     tokio::time::advance(Duration::from_millis(1)).await;
     tokio::task::yield_now().await;
-    let programmer = state.programmers.get(session.id).unwrap();
+    let programmer = state.programming.get(session.id).unwrap();
     assert!(transient_raw_values(&programmer).is_empty());
     assert_eq!(persistent_raw_values(&programmer), expected_fan_max);
     assert_eq!(
         persistent_raw_values(&persisted_programmer(&state, session.id)),
         expected_fan_max
     );
-    let events = state.audit_events.lock();
+    let events = state.events.audit_events();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].kind, "programmer_changed");
     assert_eq!(events[0].payload["action_id"], action_id.to_string());
@@ -145,6 +152,8 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
     assert_eq!(events[0].payload["user_id"], serde_json::json!(user.id));
     drop(events);
 
+    task_cancellation.cancel();
+    task_driver.await.unwrap().unwrap();
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -172,10 +181,9 @@ fn explicit_profile_preset_generation_writes_portable_show_objects() {
             0,
         )
         .unwrap();
-    *state.active_show.write() = Some(entry.clone());
+    state.active_show.replace_current(Some(entry.clone()));
     state
-        .engine
-        .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+        .output.replace_snapshot(load_engine_snapshot(&entry).unwrap())
         .unwrap();
     assert!(store.objects("preset").unwrap().is_empty());
     store
@@ -238,7 +246,7 @@ fn explicit_profile_preset_generation_writes_portable_show_objects() {
 #[test]
 fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -246,25 +254,24 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     attach_session_command_context(&state, &session);
-    state.sessions.write().insert(session.id, session.clone());
+    state.sessions.insert_session(session.clone());
     let fixture = schema_v2_direct_fixture().0;
     let fixture_id = fixture.fixture_id;
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
-    state.programmers.select(session.id, [fixture_id]);
-    let fixtures = highlight_fixture_summaries(&state.engine.snapshot().fixtures);
+    state.programming.select(session.id, [fixture_id]);
+    let fixtures = highlight_fixture_summaries(&state.output.snapshot().fixtures);
     let groups = HashMap::new();
-    let selection = state.programmers.selection(session.id).unwrap();
+    let selection = state.programming.selection(session.id).unwrap();
     state
         .highlight
-        .action(
+        .apply_action(
             session.desk.id,
             user.id,
             Some(&user.name),
@@ -276,7 +283,7 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
         )
         .unwrap();
     sync_highlight_output(&state);
-    assert_eq!(state.engine.highlighted_fixtures(), vec![fixture_id]);
+    assert_eq!(state.output.highlighted_fixtures(), vec![fixture_id]);
 
     let blind = dispatch_live_action(
         &state,
@@ -295,14 +302,14 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
         ),
     );
     assert!(blind.ok, "{:?}", blind.error);
-    assert!(state.engine.highlighted_fixtures().is_empty());
+    assert!(state.output.highlighted_fixtures().is_empty());
 
     state
-        .programmers
+        .programming
         .set_modes(session.id, Some(false), None, None, None);
     state
         .highlight
-        .action(
+        .apply_action(
             session.desk.id,
             user.id,
             Some(&user.name),
@@ -314,7 +321,7 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
         )
         .unwrap();
     sync_highlight_output(&state);
-    assert_eq!(state.engine.highlighted_fixtures(), vec![fixture_id]);
+    assert_eq!(state.output.highlighted_fixtures(), vec![fixture_id]);
 
     let preview = dispatch_live_action(
         &state,
@@ -333,7 +340,7 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
         ),
     );
     assert!(preview.ok, "{:?}", preview.error);
-    assert!(state.engine.highlighted_fixtures().is_empty());
+    assert!(state.output.highlighted_fixtures().is_empty());
     let preview_state = current_highlight_transition(&state, &session).unwrap();
     assert!(preview_state.state.active);
     assert!(preview_state.state.capture_only);
@@ -356,7 +363,7 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
         ),
     );
     assert!(leave_preview.ok, "{:?}", leave_preview.error);
-    assert_eq!(state.engine.highlighted_fixtures(), vec![fixture_id]);
+    assert_eq!(state.output.highlighted_fixtures(), vec![fixture_id]);
 
     let preload = dispatch_live_action(
         &state,
@@ -368,14 +375,14 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
                 light_wire::v2::preload_lifecycle::ProgrammingPreloadLifecycleRequest {
                     request_id: "preload".into(),
                     expected_capture_mode_revision: state
-                        .programmers
+                        .programming
                         .capture_mode_revision(user.id),
-                    expected_values_revision: state.programmers.preload_values_revision(user.id),
+                    expected_values_revision: state.programming.preload_values_revision(user.id),
                     expected_queue_revision: state
-                        .programmers
+                        .programming
                         .preload_playback_queue_revision(user.id),
                     expected_selection_revision: state
-                        .programmers
+                        .programming
                         .selection(session.id)
                         .unwrap()
                         .revision,
@@ -385,8 +392,8 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
         ),
     );
     assert!(preload.ok, "{:?}", preload.error);
-    assert!(state.engine.highlighted_fixtures().is_empty());
-    let state_after_preload = state.highlight.status(
+    assert!(state.output.highlighted_fixtures().is_empty());
+    let state_after_preload = state.highlight.transition(
         session.desk.id,
         user.id,
         Some(&user.name),

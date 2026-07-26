@@ -1,6 +1,6 @@
-use super::{AppState, ShowEntry};
+use super::{ActiveShowRepository, AppState, ShowEntry};
 use light_application::{ActionError, ActionErrorKind, BackupIdentity};
-use light_show::{ShowStore, StoreError};
+use light_show::StoreError;
 use std::path::PathBuf;
 
 /// Retained same-store backup for a show mutation that has already been prepared.
@@ -13,28 +13,28 @@ pub(in crate::runtime) struct ShowMutationBackupPlan {
 impl ShowMutationBackupPlan {
     pub(in crate::runtime) fn patch(state: &AppState, entry: &ShowEntry) -> Self {
         Self::new(
-            state.data_dir.join("backups"),
+            state.installation.data_dir().join("backups"),
             entry,
             "patch",
-            state.configuration.read().backup_retention,
+            state.installation.configuration().backup_retention,
         )
     }
 
     pub(in crate::runtime) fn output_route(state: &AppState, entry: &ShowEntry) -> Self {
         Self::new(
-            state.data_dir.join("backups"),
+            state.installation.data_dir().join("backups"),
             entry,
             "output-route",
-            state.configuration.read().backup_retention,
+            state.installation.configuration().backup_retention,
         )
     }
 
     pub(in crate::runtime) fn show_objects(state: &AppState, entry: &ShowEntry) -> Self {
         Self::new(
-            state.data_dir.join("backups"),
+            state.installation.data_dir().join("backups"),
             entry,
             "show-object",
-            state.configuration.read().backup_retention,
+            state.installation.configuration().backup_retention,
         )
     }
 
@@ -61,7 +61,7 @@ impl ShowMutationBackupPlan {
 
     pub(in crate::runtime) fn create_mutation(
         &self,
-        store: &ShowStore,
+        store: &ActiveShowRepository,
         identity: &BackupIdentity,
         current_revision: Option<u64>,
     ) -> Result<(), ActionError> {
@@ -75,7 +75,7 @@ impl ShowMutationBackupPlan {
 
     pub(in crate::runtime) fn create_migration(
         &self,
-        store: &ShowStore,
+        store: &ActiveShowRepository,
         source_revision: u64,
     ) -> Result<(), ActionError> {
         self.create(
@@ -87,7 +87,7 @@ impl ShowMutationBackupPlan {
 
     fn create(
         &self,
-        store: &ShowStore,
+        store: &ActiveShowRepository,
         identity: &str,
         current_revision: Option<u64>,
     ) -> Result<(), ActionError> {

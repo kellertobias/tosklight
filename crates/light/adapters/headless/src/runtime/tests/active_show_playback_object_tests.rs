@@ -140,8 +140,7 @@ impl PlaybackObjectScenario {
         let show = create_show(&app, &token, name).await;
         let show_id = show["id"].as_str().unwrap().to_owned();
         let entry = state
-            .desk
-            .lock()
+            .installation
             .show(light_core::ShowId(Uuid::parse_str(&show_id).unwrap()))
             .unwrap()
             .unwrap();
@@ -236,8 +235,8 @@ impl PlaybackObjectScenario {
             .unwrap();
         PlaybackBoundary {
             show_revision: document.revision().value(),
-            runtime: self.state.engine.snapshot(),
-            event_sequence: self.state.application_events.latest_sequence(),
+            runtime: self.state.output.snapshot(),
+            event_sequence: self.state.events.latest_sequence(),
             backup_count: backup_count(&self.data_dir),
         }
     }
@@ -246,13 +245,13 @@ impl PlaybackObjectScenario {
         // One interval-gated recovery checkpoint per scenario (see api-rules §8).
         assert_eq!(backup_count(&self.data_dir), before.backup_count.max(1));
         assert_eq!(
-            self.state.application_events.latest_sequence(),
+            self.state.events.latest_sequence(),
             before.event_sequence + 1
         );
-        let runtime = self.state.engine.snapshot();
+        let runtime = self.state.output.snapshot();
         assert_eq!(runtime.revision, before.show_revision + 1);
         assert!(!Arc::ptr_eq(&runtime, &before.runtime));
-        let light_application::EventReplay::Events(events) = self.state.application_events.replay(
+        let light_application::EventReplay::Events(events) = self.state.events.replay(
             before.event_sequence,
             &light_application::EventFilter::default(),
         ) else {

@@ -58,15 +58,15 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
         }
         let programmer = self
             .state
-            .programmers
+            .programming
             .get(self.session.id)
             .ok_or_else(|| not_found("programmer"))?;
         let selection = self
             .state
-            .programmers
+            .programming
             .selection(self.session.id)
             .ok_or_else(|| not_found("programmer selection"))?;
-        let snapshot = self.state.engine.snapshot();
+        let snapshot = self.state.output.snapshot();
         Ok(HighlightEnvironment {
             user_name: Some(self.session.user.name.clone()),
             selection,
@@ -91,7 +91,7 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
             return Err(action_error(error));
         }
         self.state
-            .programmers
+            .programming
             .selection(self.session.id)
             .ok_or_else(|| not_found("programmer selection"))
     }
@@ -101,11 +101,11 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
         _context: &ActionContext,
         fixtures: &[light_core::FixtureId],
     ) -> Result<(), ActionError> {
-        let mut fixtures = fixtures.iter().copied().collect::<HashSet<_>>();
-        for preview in self.state.patch_preview_highlights.lock().values() {
-            fixtures.extend(preview.iter().copied());
-        }
-        self.state.engine.set_highlighted_fixtures(fixtures);
+        self.state.output.set_highlighted_fixtures(
+            self.state
+                .highlight
+                .include_patch_previews(fixtures.iter().copied()),
+        );
         Ok(())
     }
 
@@ -194,7 +194,7 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
         };
         let revision = emit(self.state, "highlight_changed", payload);
         self.state
-            .application_events
+            .events
             .publish(light_application::EventDraft::highlight_changed(
                 context,
                 HighlightChange {

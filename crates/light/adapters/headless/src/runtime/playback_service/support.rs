@@ -9,7 +9,7 @@ pub(super) fn playback_definition(
     number: u16,
 ) -> Result<light_playback::PlaybackDefinition, ActionError> {
     state
-        .engine
+        .output
         .snapshot()
         .playbacks
         .iter()
@@ -62,7 +62,7 @@ pub(super) fn operator_context(
 }
 
 pub(super) fn capture_enabled(state: &AppState, surface: PlaybackSurface) -> bool {
-    let configuration = state.configuration.read();
+    let configuration = state.installation.configuration();
     if surface == PlaybackSurface::Virtual {
         configuration.preload_virtual_playback_actions
     } else {

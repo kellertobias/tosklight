@@ -7,10 +7,13 @@ fn cue_update_request(
     snapshot: &EngineSnapshot,
     settings: update::UpdateSettings,
 ) -> Result<UpdateApiRequest, String> {
-    let show = state.active_show.read().clone().ok_or("no show is open")?;
+    let show = state
+        .active_show
+        .current()
+        .clone()
+        .ok_or("no show is open")?;
     let current_page = state
-        .desk
-        .lock()
+        .installation
         .desk_page(session.desk.id, show.id)
         .unwrap_or(1);
     let address = parse_update_playback_address(body, current_page, snapshot)?;

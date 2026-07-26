@@ -53,9 +53,7 @@ impl ServerProgrammingCueTransferPorts {
         let live = self
             .state
             .sessions
-            .read()
-            .get(&SessionId(session_id))
-            .is_some_and(|session| session.token == self.session.token);
+            .session_token_matches(SessionId(session_id), &self.session.token);
         if !live {
             return Err(unauthorized("Cue transfer session is no longer active"));
         }
@@ -81,7 +79,13 @@ impl ServerProgrammingCueTransferPorts {
         if !self.within_interaction {
             return;
         }
-        let Some(show_id) = self.state.active_show.read().as_ref().map(|show| show.id) else {
+        let Some(show_id) = self
+            .state
+            .active_show
+            .current()
+            .as_ref()
+            .map(|show| show.id)
+        else {
             return;
         };
         for change in changes {
@@ -117,7 +121,7 @@ impl ActiveShowPorts for ServerProgrammingCueTransferPorts {
         if self.within_interaction {
             return operation();
         }
-        let _activation = self.state.activation_lock.clone().blocking_lock_owned();
+        let _activation = self.state.active_show.acquire_blocking();
         operation()
     }
 

@@ -11,8 +11,8 @@ async fn active_show_document_cache_reuses_and_detects_out_of_band_writes() {
         .await
         .unwrap();
     assert_eq!(opened.status(), StatusCode::OK);
-    assert!(state.active_show_document.lock().is_none());
-    let path = state.active_show.read().as_ref().unwrap().path.clone();
+    assert!(state.active_show.document_cache().snapshot().is_none());
+    let path = state.active_show.current().as_ref().unwrap().path.clone();
 
     // The first mutation loads the document and leaves it cached at the committed revision.
     assert_eq!(
@@ -29,8 +29,9 @@ async fn active_show_document_cache_reuses_and_detects_out_of_band_writes() {
         StatusCode::OK
     );
     let cached_revision = state
-        .active_show_document
-        .lock()
+        .active_show
+        .document_cache()
+        .snapshot()
         .as_ref()
         .map(light_show::PortableShowDocument::revision);
     let store_revision = ShowStore::open(&path).unwrap().portable_revision().unwrap();
@@ -76,7 +77,7 @@ async fn active_show_document_cache_reuses_and_detects_out_of_band_writes() {
         .status(),
         StatusCode::OK
     );
-    let document = state.active_show_document.lock().clone().unwrap();
+    let document = state.active_show.document_cache().snapshot().unwrap();
     assert_eq!(
         document,
         ShowStore::open(&path).unwrap().portable_document().unwrap()

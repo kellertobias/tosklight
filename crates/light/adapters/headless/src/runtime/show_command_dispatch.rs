@@ -27,7 +27,7 @@ pub(super) fn execute_show_command(
     context: &light_application::ActionContext,
 ) -> Result<usize, String> {
     let parsed = parse_show_operation(tokens);
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     match parsed.operation {
         "UPDATE" => execute_update_show_command(state, session, parsed.body, &snapshot, context),
         "RECORD" => {

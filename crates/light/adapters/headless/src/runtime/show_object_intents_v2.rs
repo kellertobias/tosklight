@@ -31,8 +31,11 @@ async fn user_layout_action(
     let show_id = context.resolve(&state)?;
     let replay_action = ReplayAction::UserLayout(request.action.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
-    let mut replay = state.show_object_intent_replay.lock().await;
-    if let Some(outcome) = replay.get(&key, &replay_action)? {
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object_intent(&key, &replay_action)
+        .await?
+    {
         return Ok(Json(outcome));
     }
     validate_printable_id("user layout id", &object_id)?;
@@ -41,7 +44,7 @@ async fn user_layout_action(
             "a user layout can only be updated by its owning user",
         ));
     }
-    let _activation = state.activation_lock.clone().lock_owned().await;
+    let _activation = state.active_show.acquire().await;
     let wire::UserLayoutAction::Update {
         expected_revision,
         patch,
@@ -94,7 +97,10 @@ async fn user_layout_action(
         request.request_id,
         Some(result.event_sequence),
     )?;
-    replay.insert(key, replay_action, outcome.clone());
+    state
+        .replay
+        .insert_show_object_intent(key, replay_action, outcome.clone())
+        .await;
     Ok(Json(outcome))
 }
 
@@ -110,11 +116,14 @@ async fn patch_layer_action(
     let show_id = context.resolve(&state)?;
     let replay_action = ReplayAction::PatchLayer(request.action.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
-    let mut replay = state.show_object_intent_replay.lock().await;
-    if let Some(outcome) = replay.get(&key, &replay_action)? {
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object_intent(&key, &replay_action)
+        .await?
+    {
         return Ok(Json(outcome));
     }
-    let _activation = state.activation_lock.clone().lock_owned().await;
+    let _activation = state.active_show.acquire().await;
     let wire::PatchLayerAction::Save {
         expected_revision,
         layer,
@@ -165,7 +174,10 @@ async fn patch_layer_action(
         request.request_id,
         Some(result.event_sequence),
     )?;
-    replay.insert(key, replay_action, outcome.clone());
+    state
+        .replay
+        .insert_show_object_intent(key, replay_action, outcome.clone())
+        .await;
     Ok(Json(outcome))
 }
 
@@ -181,11 +193,14 @@ async fn dynamic_record_action(
     let show_id = context.resolve(&state)?;
     let replay_action = ReplayAction::Dynamic(request.action.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
-    let mut replay = state.show_object_intent_replay.lock().await;
-    if let Some(outcome) = replay.get(&key, &replay_action)? {
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object_intent(&key, &replay_action)
+        .await?
+    {
         return Ok(Json(outcome));
     }
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     let wire::DynamicRecordAction::Append {
         expected_revision,
         speed,
@@ -241,7 +256,10 @@ async fn dynamic_record_action(
         request.request_id,
         Some(result.event_sequence),
     )?;
-    replay.insert(key, replay_action, outcome.clone());
+    state
+        .replay
+        .insert_show_object_intent(key, replay_action, outcome.clone())
+        .await;
     Ok(Json(outcome))
 }
 
@@ -256,8 +274,11 @@ async fn preload_record_action(
     let show_id = context.resolve(&state)?;
     let replay_action = ReplayAction::Preload(request.action.clone());
     let key = ReplayKey::new(&session, show_id, &request.request_id);
-    let mut replay = state.show_object_intent_replay.lock().await;
-    if let Some(outcome) = replay.get(&key, &replay_action)? {
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object_intent(&key, &replay_action)
+        .await?
+    {
         return Ok(Json(outcome));
     }
     let (input, expected_revision) = preload_input(request.action);
@@ -283,7 +304,10 @@ async fn preload_record_action(
         request.request_id,
         stored.event_sequence,
     )?;
-    replay.insert(key, replay_action, outcome.clone());
+    state
+        .replay
+        .insert_show_object_intent(key, replay_action, outcome.clone())
+        .await;
     Ok(Json(outcome))
 }
 
@@ -394,7 +418,7 @@ fn committed_outcome(
     event_sequence: Option<u64>,
 ) -> Result<wire::ShowObjectActionOutcome, ApiError> {
     let entry = active_entry(state, show_id)?;
-    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
+    let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let (show_revision, object) = store
         .object_with_portable_revision(kind, object_id)
         .map_err(ApiError::store)?;
@@ -417,7 +441,7 @@ fn load_body(
     object_id: &str,
 ) -> Result<serde_json::Value, ApiError> {
     let entry = active_entry(state, show_id)?;
-    Ok(ShowStore::open(&entry.path)
+    Ok(ActiveShowRepository::open(&entry.path)
         .map_err(ApiError::store)?
         .object_with_portable_revision(kind, object_id)
         .map_err(ApiError::store)?
@@ -432,7 +456,7 @@ fn load_existing_body(
     object_id: &str,
 ) -> Result<serde_json::Value, ApiError> {
     let entry = active_entry(state, show_id)?;
-    ShowStore::open(&entry.path)
+    ActiveShowRepository::open(&entry.path)
         .map_err(ApiError::store)?
         .object_with_portable_revision(kind, object_id)
         .map_err(ApiError::store)?
@@ -451,7 +475,7 @@ fn validate_printable_id(label: &str, value: &str) -> Result<(), ApiError> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum ReplayAction {
+pub(super) enum ReplayAction {
     UserLayout(wire::UserLayoutAction),
     PatchLayer(wire::PatchLayerAction),
     Dynamic(wire::DynamicRecordAction),
@@ -459,7 +483,7 @@ enum ReplayAction {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct ReplayKey {
+pub(super) struct ReplayKey {
     session_id: Uuid,
     show_id: light_core::ShowId,
     request_id: String,
@@ -487,7 +511,7 @@ pub(super) struct ShowObjectIntentReplayCache {
 }
 
 impl ShowObjectIntentReplayCache {
-    fn get(
+    pub(super) fn get(
         &self,
         key: &ReplayKey,
         action: &ReplayAction,
@@ -505,7 +529,7 @@ impl ShowObjectIntentReplayCache {
         Ok(Some(outcome))
     }
 
-    fn insert(
+    pub(super) fn insert(
         &mut self,
         key: ReplayKey,
         action: ReplayAction,

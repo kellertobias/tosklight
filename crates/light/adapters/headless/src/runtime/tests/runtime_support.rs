@@ -26,99 +26,68 @@ fn test_state_with_programmers(
 ) -> (AppState, PathBuf) {
     let data_dir = std::env::temp_dir().join(format!("light-headless-test-{}", Uuid::new_v4()));
     std::fs::create_dir_all(data_dir.join("shows")).unwrap();
-    let desk = DeskStore::open(data_dir.join("desk.sqlite")).unwrap();
-    let fixture_library =
-        light_fixture::FixtureLibrary::open(data_dir.join("fixtures.sqlite")).unwrap();
     let engine = Arc::new(Engine::new(programmers.clone()));
     let application_events = EventBus::default();
     let active_show_service = ActiveShowService::new(application_events.clone());
     let highlight = Arc::new(HighlightRegistry::default());
-    let highlight_service = light_application::HighlightService::new(Arc::clone(&highlight));
     let programming = ProgrammingService::new(
         programmers.clone(),
         application_events.clone(),
         Arc::clone(&highlight),
     );
     let output_rate = Arc::new(AtomicU16::new(44));
+    let active_show_service_for_patch = active_show_service.clone();
     (
         AppState {
-            desk: Arc::new(Mutex::new(desk)),
-            fixture_library: Arc::new(Mutex::new(fixture_library)),
-            data_dir: data_dir.clone(),
-            sessions: Arc::default(),
-            session_clients: Arc::default(),
-            programmers: programmers.clone(),
-            programming,
-            playback_service: PlaybackService::new(application_events.clone()),
-            output_runtime_service: OutputRuntimeService::new(application_events.clone()),
-            speed_group_service: SpeedGroupService::new(application_events.clone()),
-            engine,
-            highlight,
-            highlight_service,
-            patch_preview_highlights: Arc::default(),
-            output_health: Arc::new(std::sync::Mutex::new(OutputHealth::default())),
-            output_rate: Arc::clone(&output_rate),
-            playback_telemetry: Arc::new(super::playback_telemetry::PlaybackTelemetrySampler::new(
+            installation: InstallationResource::open_test_installation(data_dir.clone()).unwrap(),
+            sessions: SessionResource::new(),
+            programming: ProgrammingResource::new(programmers, programming),
+            playback: PlaybackResource::new(
+                PlaybackService::new(application_events.clone()),
+                PlaybackTopologyService::new(active_show_service.clone()),
+                Arc::new(
+                    super::playback_telemetry::PlaybackTelemetrySampler::new(
+                        Arc::clone(&output_rate),
+                    ),
+                ),
+            ),
+            highlight: HighlightResource::new(highlight),
+            output: OutputResource::new(
+                OutputRuntimeService::new(application_events.clone()),
+                SpeedGroupService::new(application_events.clone()),
+                engine,
+                Arc::new(std::sync::Mutex::new(OutputHealth::default())),
                 output_rate,
-            )),
-            configuration: Arc::new(RwLock::new(DeskConfiguration::default())),
-            matter_bridge: Arc::new(matter::MatterBridgeAdapter::default()),
-            matter_transport: None,
-            output_control: Arc::new(Mutex::new(OutputControl::default())),
-            output_runtime_persistence_attempts: Arc::new(AtomicU64::new(0)),
-            output_runtime_persistence_failure: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            speed_group_persistence_attempts: Arc::new(AtomicU64::new(0)),
-            speed_group_persistence_failure: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            activation_lock: Arc::new(tokio::sync::Mutex::new(())),
-            timecode_router: Arc::new(Mutex::new(TimecodeRouter::default())),
-            active_show: Arc::default(),
-            active_show_document: Arc::default(),
-            active_show_backup_checkpoint: Arc::default(),
-            active_show_error: Arc::default(),
-            application_events: application_events.clone(),
-            active_show_service: active_show_service.clone(),
-            playback_topology: PlaybackTopologyService::new(active_show_service.clone()),
-            show_patch: ShowPatchService::new(active_show_service.clone()),
-            show_library_replay: Arc::default(),
-            fixture_library_replay: Arc::default(),
-            show_object_replay: Arc::default(),
-            show_object_intent_replay: Arc::default(),
-            preset_generation_replay: Arc::default(),
-            screen_configuration_replay: Arc::default(),
-            control_desk_configuration_replay: Arc::default(),
-            desk_management_replay: Arc::default(),
-            stage_layout_replay: Arc::default(),
-            virtual_playback_zones_replay: Arc::default(),
-            selective_show_import: SelectiveShowImportService::new(active_show_service),
-            patch_profile_resolution: Arc::default(),
-            active_show_http_lifecycle: Arc::default(),
-            preload_store_release_lifecycle: Arc::default(),
-            patch_lifecycle: Arc::default(),
-            audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
-            command_history: Arc::new(Mutex::new(HashMap::new())),
-            event_revision: Arc::new(AtomicU64::new(0)),
-            desk_token: None,
-            shutdown: CancellationToken::new(),
-            media_cache: Arc::new(Mutex::new(MediaCache::default())),
-            media_status: Arc::new(RwLock::new(HashMap::new())),
-            file_input_contexts: Arc::new(Mutex::new(HashMap::new())),
-            osc_subscribers: Arc::new(Mutex::new(HashMap::new())),
-            osc_cue_record_suppression: Arc::default(),
-            osc_feedback: None,
-            osc_feedback_capture: Arc::new(Mutex::new(Vec::new())),
-            mvr_imports: Arc::new(Mutex::new(HashMap::new())),
-            network_output: None,
-            output_sequences: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
-            manual_clock,
-            test_clock_lock: Arc::new(tokio::sync::Mutex::new(())),
-            speed_groups: Arc::new(Mutex::new(std::array::from_fn(|index| {
-                SpeedGroupController::new(
-                    default_speed_groups()[index],
-                    SoundToLightConfig::default(),
-                )
-                .unwrap()
-            }))),
-            sound_capture_owners: Arc::new(Mutex::new([None; 5])),
+                OutputControlCapability::new(Arc::new(Mutex::new(OutputControl::default()))),
+                Arc::new(Mutex::new(TimecodeRouter::default())),
+                None,
+                Arc::default(),
+                manual_clock,
+                Arc::new(Mutex::new(std::array::from_fn(|index| {
+                    SpeedGroupController::new(
+                        default_speed_groups()[index],
+                        SoundToLightConfig::default(),
+                    )
+                    .unwrap()
+                }))),
+            ),
+            active_show: ActiveShowResource::new(
+                ActiveShowCoordinator::new(),
+                Arc::default(),
+                None,
+                active_show_service.clone(),
+                ShowPatchService::new(active_show_service_for_patch),
+                SelectiveShowImportService::new(active_show_service),
+            ),
+            events: EventResource::new(application_events),
+            integrations: IntegrationResource::new(
+                Arc::new(matter::MatterBridgeAdapter::default()),
+                None,
+                None,
+            ),
+            media: MediaResource::default(),
+            replay: ReplayResource::default(),
+            lifecycle: LifecycleResource::new(CancellationToken::new()),
         },
         data_dir,
     )
@@ -135,7 +104,7 @@ fn assert_programming_selection_event(
         light_application::EventObject::programming_selection(session.desk.id),
     );
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(after_sequence, &filter)
+        state.events.replay(after_sequence, &filter)
     else {
         panic!("expected a replayable Programming selection event");
     };

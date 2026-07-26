@@ -3,7 +3,7 @@ use super::super::*;
 pub(super) fn active_show_is(state: &AppState, show_id: light_core::ShowId) -> bool {
     state
         .active_show
-        .read()
+        .current()
         .as_ref()
         .is_some_and(|show| show.id == show_id)
 }
@@ -39,10 +39,10 @@ pub(super) async fn apply_active_mvr_import(
         },
     };
     let worker_state = state.clone();
-    let service = light_application::MvrImportService::new(state.active_show_service.clone());
+    let active_show = state.active_show.clone();
     let result = tokio::task::spawn_blocking(move || {
         let ports = ServerShowPatchPorts::new(worker_state);
-        service.apply(action, &ports)
+        active_show.apply_mvr_import(action, &ports)
     })
     .await
     .map_err(|error| ApiError::internal(format!("MVR import task failed: {error}")))?
@@ -101,19 +101,9 @@ pub(super) fn publish_mvr_definitions(
             "{} {} mode {}",
             definition.manufacturer, definition.model, definition.mode
         );
-        let json = match serde_json::to_string(&definition) {
-            Ok(json) => json,
-            Err(error) => {
-                warnings.push(format!(
-                    "Imported {label}, but could not publish its fixture profile: {error}"
-                ));
-                continue;
-            }
-        };
         if let Err(error) = state
-            .fixture_library
-            .lock()
-            .import_json_with_source(&json, Some(&source))
+            .installation
+            .import_fixture_definition_with_source(&definition, &source)
         {
             warnings.push(format!(
                 "Imported {label}, but could not publish its fixture profile: {error}"

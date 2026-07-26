@@ -1,7 +1,7 @@
 #[tokio::test]
 async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let mut front = test_control_desk();
     front.id = Uuid::new_v4();
     let mut wing = test_control_desk();
@@ -29,9 +29,9 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
         desk: wing.clone(),
     };
     for session in [&writer, &reader, &other_desk] {
-        state.programmers.start(session.id, session.user.id);
+        state.programming.start(session.id, session.user.id);
         attach_session_command_context(&state, session);
-        state.sessions.write().insert(session.id, session.clone());
+        state.sessions.insert_session(session.clone());
     }
     let app = router(state.clone());
     let expected = update::UpdateSettings {
@@ -81,9 +81,7 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     );
 
     let persisted = state
-        .desk
-        .lock()
-        .setting("server_configuration")
+        .installation.setting("server_configuration")
         .unwrap()
         .unwrap();
     let reloaded_configuration: DeskConfiguration = serde_json::from_str(&persisted).unwrap();
@@ -102,7 +100,9 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
     // Rebuild the HTTP surface around configuration decoded from the persisted desk setting,
     // matching the configuration boundary used by a process restart.
     let mut reloaded_state = state.clone();
-    reloaded_state.configuration = Arc::new(RwLock::new(reloaded_configuration));
+    reloaded_state
+        .installation
+        .replace_configuration(reloaded_configuration);
     let reloaded_app = router(reloaded_state);
     let same_desk = reloaded_app
         .clone()
@@ -158,7 +158,7 @@ async fn update_settings_endpoint_persists_and_reloads_per_desk() {
 #[test]
 fn locked_desk_can_preview_update_but_cannot_apply_it() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -166,22 +166,22 @@ fn locked_desk_can_preview_update_but_cannot_apply_it() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     attach_session_command_context(&state, &session);
-    state.sessions.write().insert(session.id, session.clone());
+    state.sessions.insert_session(session.clone());
     let fixture = light_core::FixtureId::new();
-    state.programmers.select(session.id, [fixture]);
+    state.programming.select(session.id, [fixture]);
 
     let show_path = data_dir.join("shows/locked-update-preview.show");
     let show_id = initialise_show(&show_path, "Locked Update preview").unwrap();
-    *state.active_show.write() = Some(ShowEntry {
+    state.active_show.replace_current(Some(ShowEntry {
         id: show_id,
         name: "Locked Update preview".into(),
         path: show_path.display().to_string(),
         revision: 0,
         updated_at: String::new(),
         revision_copy: None,
-    });
+    }));
     ShowStore::open(&show_path)
         .unwrap()
         .put_object(
@@ -240,7 +240,7 @@ fn locked_desk_can_preview_update_but_cannot_apply_it() {
 #[test]
 fn armed_hardware_playback_touch_requests_update_without_operating_playback() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -248,18 +248,18 @@ fn armed_hardware_playback_touch_requests_update_without_operating_playback() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     attach_session_command_context(&state, &session);
-    state.sessions.write().insert(session.id, session.clone());
+    state.sessions.insert_session(session.clone());
     state
-        .programmers
+        .programming
         .set_command_line(session.id, "UPDATE ".into());
     let mut snapshot = matter_test_snapshot();
     std::sync::Arc::make_mut(&mut snapshot.playbacks)[0].buttons[0] =
         light_playback::PlaybackButtonAction::Go;
-    state.engine.replace_snapshot(snapshot).unwrap();
+    state.output.replace_snapshot(snapshot).unwrap();
     let source: SocketAddr = "127.0.0.1:19021".parse().unwrap();
-    state.osc_subscribers.lock().insert(
+    state.integrations.register_osc_subscriber(
         "hardware-update".into(),
         OscSubscriber {
             desk_alias: session.desk.osc_alias.clone(),
@@ -284,13 +284,13 @@ fn armed_hardware_playback_touch_requests_update_without_operating_playback() {
 
     assert!(
         state
-            .programmers
+            .programming
             .get(session.id)
             .unwrap()
             .command_line
             .is_empty()
     );
-    let events = state.audit_events.lock();
+    let events = state.events.audit_events();
     let requested = events
         .iter()
         .find(|event| event.kind == "update_target_requested")

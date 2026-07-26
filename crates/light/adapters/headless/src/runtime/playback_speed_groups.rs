@@ -9,75 +9,61 @@ pub(super) fn apply_speed_group_playback_action(
 ) -> Result<bool, ApiError> {
     let index = speed_group_index(group)?;
     let now = application_millis(state);
-    let takes_manual_control = action != "pause";
-    let configured_source = state.configuration.read().speed_group_sources[index];
-    let linked_fallback = if takes_manual_control
-        && matches!(configured_source, SpeedGroupSource::SpeedGroup { .. })
-    {
-        Some(refresh_speed_group_engine(state)[index].effective_bpm)
-    } else {
-        None
-    };
-    let mut controllers = state.speed_groups.lock();
-    let manual_ownership_changed = takes_manual_control
-        && (configured_source != SpeedGroupSource::Manual
-            || controllers[index].sound_config().enabled
-            || state.sound_capture_owners.lock()[index].is_some());
-    if let Some(effective_bpm) = linked_fallback {
-        controllers[index]
-            .set_manual_fallback_bpm(effective_bpm)
-            .map_err(speed_error)?;
-    }
-    if takes_manual_control {
-        let mut sound_configuration = controllers[index].sound_config().clone();
-        sound_configuration.enabled = false;
-        controllers[index]
-            .set_sound_config(sound_configuration)
-            .map_err(speed_error)?;
-    }
-    let before = controller_snapshots(&controllers, now);
-    let affected = apply_speed_action(state, &mut controllers, index, now, action, input, fader)?;
-    let changed = action == "learn"
-        || manual_ownership_changed
-        || speed_group_changed(&before, &controllers, &affected, now);
+    let configured_source = state.installation.configuration().speed_group_sources[index];
+    let linked_fallback =
+        if action != "pause" && matches!(configured_source, SpeedGroupSource::SpeedGroup { .. }) {
+            Some(refresh_speed_group_engine(state)[index].effective_bpm)
+        } else {
+            None
+        };
+    let (changed, affected, takes_manual_control) = state.output.apply_speed_group_playback(
+        index,
+        now,
+        action,
+        input,
+        fader,
+        configured_source,
+        linked_fallback,
+    )?;
     if !changed {
         return Ok(false);
     }
-    copy_speed_group_runtime_to_configuration(state, &controllers, &affected);
-    drop(controllers);
+    copy_speed_group_runtime_to_configuration(state, &affected);
     if takes_manual_control {
-        state.configuration.write().speed_group_sources[index] = SpeedGroupSource::Manual;
-        state.sound_capture_owners.lock()[index] = None;
+        state.installation.update_configuration(|configuration| {
+            configuration.speed_group_sources[index] = SpeedGroupSource::Manual;
+        });
     }
     persist_server_configuration(state)?;
     refresh_speed_group_engine(state);
     Ok(true)
 }
 
-fn apply_speed_action(
-    state: &AppState,
+pub(super) fn apply_speed_action(
     controllers: &mut [SpeedGroupController; 5],
     index: usize,
     now: u64,
     action: &str,
     input: &PoolPlaybackInput,
     fader: light_playback::PlaybackFaderMode,
-) -> Result<Vec<usize>, ApiError> {
+    sound_owner_present: bool,
+) -> Result<(Vec<usize>, bool), ApiError> {
     match action {
         "learn" => {
             unlink_speed_group(controllers, index, now);
             controllers[index].tap_learn(now);
-            state.sound_capture_owners.lock()[index] = None;
-            Ok(vec![index])
+            Ok((vec![index], true))
         }
-        "double" => Ok(apply_to_speed_group(controllers, index, |controller| {
-            controller.double()
-        })),
-        "half" => Ok(apply_to_speed_group(controllers, index, |controller| {
-            controller.half()
-        })),
-        "pause" => Ok(set_speed_group_paused(controllers, index, now)),
-        "master" => apply_speed_master(state, controllers, index, now, input, fader),
+        "double" => Ok((
+            apply_to_speed_group(controllers, index, |controller| controller.double()),
+            false,
+        )),
+        "half" => Ok((
+            apply_to_speed_group(controllers, index, |controller| controller.half()),
+            false,
+        )),
+        "pause" => Ok((set_speed_group_paused(controllers, index, now), false)),
+        "master" => apply_speed_master(controllers, index, now, input, fader, sound_owner_present),
         _ => Err(ApiError::bad_request(
             "action is not available for a Speed Group playback",
         )),
@@ -85,13 +71,13 @@ fn apply_speed_action(
 }
 
 fn apply_speed_master(
-    state: &AppState,
     controllers: &mut [SpeedGroupController; 5],
     index: usize,
     now: u64,
     input: &PoolPlaybackInput,
     fader: light_playback::PlaybackFaderMode,
-) -> Result<Vec<usize>, ApiError> {
+    sound_owner_present: bool,
+) -> Result<(Vec<usize>, bool), ApiError> {
     let value = input
         .value
         .ok_or_else(|| ApiError::bad_request("master value is required"))?;
@@ -100,15 +86,16 @@ fn apply_speed_master(
     }
     match fader {
         light_playback::PlaybackFaderMode::DirectBpm => {
-            apply_direct_bpm_master(state, controllers, index, now, value)
+            apply_direct_bpm_master(controllers, index, now, value, sound_owner_present)
         }
         light_playback::PlaybackFaderMode::CenteredRelative => {
             let scale = 4_f64.powf((f64::from(value) - 0.5) * 2.0);
-            set_speed_group_scale(controllers, index, scale)
+            set_speed_group_scale(controllers, index, scale).map(|affected| (affected, false))
         }
         light_playback::PlaybackFaderMode::LearnedPercentage
         | light_playback::PlaybackFaderMode::Speed => {
             set_speed_group_percentage(controllers, index, now, value)
+                .map(|affected| (affected, false))
         }
         _ => Err(ApiError::bad_request(
             "the configured fader mode is not available for a Speed Group",
@@ -117,14 +104,14 @@ fn apply_speed_master(
 }
 
 fn apply_direct_bpm_master(
-    state: &AppState,
     controllers: &mut [SpeedGroupController; 5],
     index: usize,
     now: u64,
     value: f32,
-) -> Result<Vec<usize>, ApiError> {
-    if direct_bpm_is_unchanged(state, &controllers[index], index, now, value) {
-        return Ok(Vec::new());
+    sound_owner_present: bool,
+) -> Result<(Vec<usize>, bool), ApiError> {
+    if direct_bpm_is_unchanged(&controllers[index], now, value, sound_owner_present) {
+        return Ok((Vec::new(), false));
     }
     unlink_speed_group(controllers, index, now);
     if value == 0.0 {
@@ -140,17 +127,15 @@ fn apply_direct_bpm_master(
             .set_speed_master_scale(1.0)
             .map_err(speed_error)?;
         controllers[index].set_paused_at(false, now);
-        state.sound_capture_owners.lock()[index] = None;
     }
-    Ok(vec![index])
+    Ok((vec![index], value != 0.0))
 }
 
 fn direct_bpm_is_unchanged(
-    state: &AppState,
     controller: &SpeedGroupController,
-    index: usize,
     now: u64,
     value: f32,
+    sound_owner_present: bool,
 ) -> bool {
     let snapshot = controller.snapshot(now);
     if controller.synchronized_with().is_some() {
@@ -162,7 +147,7 @@ fn direct_bpm_is_unchanged(
     controller.manual_entry_is_current(f64::from(value) * 300.0)
         && snapshot.speed_master_scale == 1.0
         && !snapshot.paused
-        && state.sound_capture_owners.lock()[index].is_none()
+        && !sound_owner_present
 }
 
 fn set_speed_group_scale(
@@ -215,11 +200,14 @@ fn apply_to_speed_group(
     affected
 }
 
-fn controller_snapshots(controllers: &[SpeedGroupController; 5], now: u64) -> [SpeedSnapshot; 5] {
+pub(super) fn controller_snapshots(
+    controllers: &[SpeedGroupController; 5],
+    now: u64,
+) -> [SpeedSnapshot; 5] {
     std::array::from_fn(|index| controllers[index].snapshot(now))
 }
 
-fn speed_group_changed(
+pub(super) fn speed_group_changed(
     before: &[SpeedSnapshot; 5],
     controllers: &[SpeedGroupController; 5],
     affected: &[usize],

@@ -22,7 +22,7 @@ fn startup_fixture_library_migrates_schema_v1_and_loads_transferable_packages_on
                 .is_some_and(|extension| extension == "toskfixture")
         })
         .count();
-    let library = open_fixture_library_for_startup(&data_dir, Some(&package_dir)).unwrap();
+    let library = InstallationResource::open_fixture_library_for_startup(&data_dir, Some(&package_dir)).unwrap();
     let profiles = library.profiles().unwrap();
     let migrated = profiles
         .iter()
@@ -78,7 +78,7 @@ fn startup_fixture_library_migrates_schema_v1_and_loads_transferable_packages_on
     let initial = serde_json::to_value(&profiles).unwrap();
     drop(library);
 
-    let reopened = open_fixture_library_for_startup(&data_dir, Some(&package_dir)).unwrap();
+    let reopened = InstallationResource::open_fixture_library_for_startup(&data_dir, Some(&package_dir)).unwrap();
     assert_eq!(
         serde_json::to_value(reopened.profiles().unwrap()).unwrap(),
         initial
@@ -105,7 +105,7 @@ fn startup_fixture_library_keeps_malformed_and_conflicting_schema_v1_evidence() 
         ).unwrap();
     drop(connection);
 
-    let library = open_fixture_library_for_startup(&data_dir, None).unwrap();
+    let library = InstallationResource::open_fixture_library_for_startup(&data_dir, None).unwrap();
     let warnings = library.migration_warnings().unwrap();
     assert!(warnings.iter().any(|warning| {
         warning.contains(&malformed_id.0.to_string())
@@ -140,7 +140,7 @@ fn startup_fixture_library_keeps_malformed_and_conflicting_schema_v1_evidence() 
     let profiles = serde_json::to_value(library.profiles().unwrap()).unwrap();
     drop(library);
 
-    let reopened = open_fixture_library_for_startup(&data_dir, None).unwrap();
+    let reopened = InstallationResource::open_fixture_library_for_startup(&data_dir, None).unwrap();
     assert_eq!(reopened.migration_warnings().unwrap(), warnings);
     assert_eq!(
         serde_json::to_value(reopened.profiles().unwrap()).unwrap(),

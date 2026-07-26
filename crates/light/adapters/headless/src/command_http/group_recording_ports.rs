@@ -52,6 +52,6 @@ pub(super) fn commit(
     };
     let ports = ServerActiveShowPorts::show_objects_with_programming_owner(state.clone(), owner);
     state
-        .active_show_service
+        .active_show
         .commit_programming_group(context, commit, &ports)
 }

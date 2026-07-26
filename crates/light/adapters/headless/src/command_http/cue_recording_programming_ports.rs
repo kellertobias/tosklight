@@ -2,14 +2,15 @@ use light_application::{
     ActionContext, ActionEnvelope, ActionError, ProgrammingCueRecordingPorts, ProgrammingExecution,
     ProgrammingPorts,
 };
-use light_programmer::ProgrammerRegistry;
 
-use super::programming_ports::{ServerProgrammingPorts, clear_command_line, recording_context};
+use super::programming_ports::{
+    CommandLineProgrammer, ServerProgrammingPorts, clear_command_line, recording_context,
+};
 
 impl ServerProgrammingPorts<'_> {
     pub(super) fn record_cue_command(
         &self,
-        programmers: &ProgrammerRegistry,
+        programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
         command: &str,
     ) -> Option<ProgrammingExecution> {
@@ -31,7 +32,7 @@ impl ServerProgrammingPorts<'_> {
 
     fn execute_cue_recording(
         &self,
-        programmers: &ProgrammerRegistry,
+        programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
         parsed: super::cue_recording_command::CueRecordCommand,
         raw_command: &str,
@@ -128,7 +129,7 @@ impl ServerProgrammingPorts<'_> {
                 error.message
             })?;
         if !result.replayed {
-            clear_command_line(&self.state().programmers, self.session())?;
+            clear_command_line(&self.state().programming, self.session())?;
             self.accepted_recording_command(context, "RECORD", 1);
         }
         Ok(result)

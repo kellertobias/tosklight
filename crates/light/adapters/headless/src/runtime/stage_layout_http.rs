@@ -35,16 +35,16 @@ async fn stage_layout_action(
         session_id: session.id.0,
         request_id: request.request_id.clone(),
     };
-    let _activation = state.activation_lock.clone().lock_owned().await;
+    let _activation = state.active_show.acquire().await;
     if let Some(replayed) = state
-        .stage_layout_replay
-        .lock()
-        .get(&key, &request.action)?
+        .replay
+        .lookup_stage_layout(&key, &request.action)
+        .await?
     {
         return Ok(json_with_etag(replayed.revision, replayed));
     }
     let entry = active_entry(&state, show_id).map_err(StageLayoutHttpError::api)?;
-    let store = ShowStore::open(&entry.path)
+    let store = ActiveShowRepository::open(&entry.path)
         .map_err(|error| StageLayoutHttpError::api(ApiError::store(error)))?;
     let (_, object) = store
         .object_with_portable_revision("stage_layout", "main")
@@ -119,9 +119,9 @@ async fn stage_layout_action(
         }
     };
     state
-        .stage_layout_replay
-        .lock()
-        .insert(key, request.action, outcome.clone());
+        .replay
+        .insert_stage_layout(key, request.action, outcome.clone())
+        .await;
     Ok(json_with_etag(outcome.revision, outcome))
 }
 
@@ -288,7 +288,7 @@ fn json_number(value: f64) -> Result<serde_json::Value, StageLayoutHttpError> {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct ReplayKey {
+pub(super) struct ReplayKey {
     desk_id: Uuid,
     session_id: Uuid,
     request_id: String,
@@ -308,7 +308,7 @@ pub(super) struct StageLayoutReplayCache {
 }
 
 impl StageLayoutReplayCache {
-    fn get(
+    pub(super) fn get(
         &self,
         key: &ReplayKey,
         action: &StageLayoutAction,
@@ -326,7 +326,7 @@ impl StageLayoutReplayCache {
         Ok(Some(replay))
     }
 
-    fn insert(
+    pub(super) fn insert(
         &mut self,
         key: ReplayKey,
         action: StageLayoutAction,
@@ -352,7 +352,7 @@ fn json_with_etag<T: serde::Serialize>(revision: u64, body: T) -> Response {
     response
 }
 
-struct StageLayoutHttpError {
+pub(super) struct StageLayoutHttpError {
     status: StatusCode,
     body: StageLayoutErrorResponse,
 }

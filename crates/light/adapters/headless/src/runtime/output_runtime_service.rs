@@ -57,8 +57,8 @@ pub(super) fn execute_action(
 ) -> Result<OutputRuntimeResult, ActionError> {
     let ports = ServerOutputRuntimePorts { state, session };
     state
-        .output_runtime_service
-        .handle(ActionEnvelope { context, command }, &ports)
+        .output
+        .handle_runtime_action(ActionEnvelope { context, command }, &ports)
 }
 
 pub(super) fn snapshot(
@@ -72,8 +72,8 @@ pub(super) fn snapshot(
         session: Some(session),
     };
     state
-        .output_runtime_service
-        .snapshot(&context, identity, &ports)
+        .output
+        .runtime_snapshot(&context, identity, &ports)
         .map_err(action_error)
 }
 
@@ -102,18 +102,18 @@ impl OutputRuntimePorts for ServerOutputRuntimePorts<'_> {
             show_id: self
                 .state
                 .active_show
-                .read()
+                .current()
                 .as_ref()
                 .map(|show| show.id.0)
                 .unwrap_or_default(),
         };
-        let control = self.state.output_control.lock();
+        let control = self.state.output.control_projection();
         Ok(OutputRuntimeProjection {
             scope,
             identity,
             revision: control.revision,
-            grand_master: control.options.grand_master,
-            blackout: control.options.blackout,
+            grand_master: control.grand_master,
+            blackout: control.blackout,
         })
     }
 
@@ -122,19 +122,10 @@ impl OutputRuntimePorts for ServerOutputRuntimePorts<'_> {
         context: &ActionContext,
         command: OutputRuntimeCommand,
     ) -> Result<OutputRuntimeApplication, ActionError> {
-        {
-            let mut control = self.state.output_control.lock();
-            let next_revision = control.revision.checked_add(1).ok_or_else(|| {
-                ActionError::new(ActionErrorKind::Unavailable, "output revision is exhausted")
-            })?;
-            if let Some(level) = command.grand_master {
-                control.options.grand_master = level.value();
-            }
-            if let Some(blackout) = command.blackout {
-                control.options.blackout = blackout;
-            }
-            control.revision = next_revision;
-        }
+        self.state.output.apply_runtime_control(
+            command.grand_master.map(OutputLevel::value),
+            command.blackout,
+        )?;
         if let Err(error) = persist_output_runtime(self.state) {
             let warning = format!(
                 "global output runtime persistence is pending: {}",

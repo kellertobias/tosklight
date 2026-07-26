@@ -117,7 +117,7 @@ impl PlaybackUnitOfWork for ChangeExistingPage<'_> {
 
 fn existing_page(state: &AppState, number: u8) -> super::super::PlaybackPageAvailability {
     if state
-        .engine
+        .output
         .snapshot()
         .playback_pages
         .iter()
@@ -157,8 +157,7 @@ fn set_page(
     page: u8,
 ) -> Result<(), ApiError> {
     state
-        .desk
-        .lock()
+        .installation
         .set_desk_page(desk_id, show_id, page)
         .map_err(ApiError::store)
 }

@@ -13,7 +13,7 @@ use axum::{
 };
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource,
-    ApplySelectiveShowImportCommand, SelectiveShowImportService,
+    ApplySelectiveShowImportCommand,
 };
 use light_core::ShowId;
 use light_wire::v2::selective_import::{
@@ -74,10 +74,7 @@ async fn preview_import(
         selective_import_wire::application_request(source_show_id, target_show_id, selection)
             .map_err(SelectiveImportHttpError::bad)?;
     let context = http_context(&session);
-    let preview = run_service(state, move |service, ports| {
-        service.preview(&context, request, ports)
-    })
-    .await?;
+    let preview = run_preview(state, context, request).await?;
     let response = selective_import_wire::preview(preview);
     Ok(json_with_etag(response.target_revision, response))
 }
@@ -116,10 +113,7 @@ async fn apply_import(
     let context = http_context(&session)
         .with_request_id(request.request_id)
         .with_expected_revision(expected_target_revision);
-    let result = run_service(state, move |service, ports| {
-        service.apply(ActionEnvelope { context, command }, ports)
-    })
-    .await?;
+    let result = run_apply(state, ActionEnvelope { context, command }).await?;
     let response = selective_import_wire::outcome(result);
     Ok(json_with_etag(response.show_revision, response))
 }
@@ -139,17 +133,29 @@ where
         .map_err(SelectiveImportHttpError::application)
 }
 
-async fn run_service<T, F>(state: AppState, operation: F) -> Result<T, SelectiveImportHttpError>
-where
-    T: Send + 'static,
-    F: FnOnce(&SelectiveShowImportService, &ServerSelectiveImportPorts) -> Result<T, ActionError>
-        + Send
-        + 'static,
-{
-    let service = state.selective_show_import.clone();
+async fn run_preview(
+    state: AppState,
+    context: ActionContext,
+    request: light_application::SelectiveShowImportRequest,
+) -> Result<light_application::SelectiveShowImportPreview, SelectiveImportHttpError> {
+    let active_show = state.active_show.clone();
     tokio::task::spawn_blocking(move || {
         let ports = ServerSelectiveImportPorts::new(state);
-        operation(&service, &ports)
+        active_show.preview_selective_import(&context, request, &ports)
+    })
+    .await
+    .map_err(SelectiveImportHttpError::blocking)?
+    .map_err(SelectiveImportHttpError::application)
+}
+
+async fn run_apply(
+    state: AppState,
+    action: ActionEnvelope<ApplySelectiveShowImportCommand>,
+) -> Result<light_application::SelectiveShowImportResult, SelectiveImportHttpError> {
+    let active_show = state.active_show.clone();
+    tokio::task::spawn_blocking(move || {
+        let ports = ServerSelectiveImportPorts::new(state);
+        active_show.apply_selective_import(action, &ports)
     })
     .await
     .map_err(SelectiveImportHttpError::blocking)?

@@ -6,9 +6,9 @@ use light_core::{AttributeKey, AttributeValue, FixtureId};
 use super::super::AppState;
 
 pub(super) fn values_environment(state: &AppState) -> ProgrammingValuesEnvironment {
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let mut current_values = default_values(&snapshot.fixtures);
-    current_values.extend(state.engine.resolved_values());
+    current_values.extend(state.output.resolved_values());
     let group_members = resolved_group_members(&snapshot.groups);
     ProgrammingValuesEnvironment {
         fixture_ids: fixture_ids(&snapshot.fixtures),

@@ -16,7 +16,7 @@ impl SpreadRecallRig {
     /// Default show with a persisted Group 1 whose ordered members are fresnels 1..=5.
     fn new(name: &str) -> Self {
         let (state, data_dir) = test_state();
-        let user = state.desk.lock().users().unwrap().remove(0);
+        let user = state.installation.users().unwrap().remove(0);
         let session = Session {
             id: SessionId::new(),
             user: user.clone(),
@@ -24,10 +24,10 @@ impl SpreadRecallRig {
             connected: true,
             desk: test_control_desk(),
         };
-        state.programmers.start(session.id, user.id);
+        state.programming.start(session.id, user.id);
         attach_session_command_context(&state, &session);
         // Resolve command values instantly; the spread rule under test is fade-independent.
-        state.configuration.write().programmer_fade_millis = 0;
+        state.installation.update_configuration(|configuration| configuration.programmer_fade_millis = 0);
         let show_path = data_dir.join(format!("shows/{name}.show"));
         let show_id = default_show::initialise(&show_path).unwrap();
         let entry = ShowEntry {
@@ -49,7 +49,7 @@ impl SpreadRecallRig {
                     .fixture_id
             })
             .collect::<Vec<_>>();
-        *state.active_show.write() = Some(entry.clone());
+        state.active_show.replace_current(Some(entry.clone()));
         let rig = Self {
             state,
             session,
@@ -64,7 +64,7 @@ impl SpreadRecallRig {
     /// Persists the ordered membership of Group 1 and recompiles the engine snapshot, matching
     /// the production edit path so stored spread control points re-resolve against it.
     fn set_membership(&self, members: Vec<light_core::FixtureId>) {
-        let store = ShowStore::open(&self.entry.path).unwrap();
+        let store = ActiveShowRepository::open(&self.entry.path).unwrap();
         let revision = store
             .objects("group")
             .unwrap()
@@ -87,8 +87,7 @@ impl SpreadRecallRig {
             )
             .unwrap();
         self.state
-            .engine
-            .replace_snapshot(load_engine_snapshot(&self.entry).unwrap())
+            .output.replace_snapshot(load_engine_snapshot(&self.entry).unwrap())
             .unwrap();
     }
 
@@ -98,7 +97,7 @@ impl SpreadRecallRig {
 
     /// Normalized resolved intensity per fixture; `None` when the fixture has no contribution.
     fn resolved(&self, fixtures: &[light_core::FixtureId]) -> Vec<Option<f32>> {
-        let resolved = self.state.engine.resolved_values();
+        let resolved = self.state.output.resolved_values();
         fixtures
             .iter()
             .map(|fixture| {
@@ -110,14 +109,14 @@ impl SpreadRecallRig {
     }
 
     fn clear_programmer(&self) {
-        let mut programmer = self.state.programmers.get(self.session.id).unwrap();
+        let mut programmer = self.state.programming.get(self.session.id).unwrap();
         programmer.values.clear();
         programmer.group_values.clear();
-        self.state.programmers.restore(programmer);
+        self.state.programming.restore(programmer);
     }
 
     fn stored_group_spread(&self) -> light_core::AttributeValue {
-        self.state.programmers.get(self.session.id).unwrap().group_values["1"]
+        self.state.programming.get(self.session.id).unwrap().group_values["1"]
             [&light_core::AttributeKey::intensity()]
             .value
             .clone()
@@ -199,7 +198,7 @@ fn preset_recall_of_live_group_spread_re_resolves_after_membership_edit() {
             )]),
         )]),
     };
-    ShowStore::open(&rig.entry.path)
+    ActiveShowRepository::open(&rig.entry.path)
         .unwrap()
         .put_object("preset", "1.1", &serde_json::to_value(&preset).unwrap(), 0)
         .unwrap();
@@ -240,9 +239,9 @@ fn cue_recall_of_live_group_spread_re_resolves_after_membership_edit() {
     assert_eq!(rig.command("GROUP 1 AT 100 THRU 0 THRU 100"), 5);
     rig.command("RECORD SET 25");
     // The recorded cue stores the control points, not frozen per-fixture values.
-    let store = ShowStore::open(&rig.entry.path).unwrap();
+    let store = ActiveShowRepository::open(&rig.entry.path).unwrap();
     let (_, _, cue_list) =
-        cue_list_for_playback(&store, &rig.state.engine.snapshot(), 25).unwrap();
+        cue_list_for_playback(&store, &rig.state.output.snapshot(), 25).unwrap();
     assert_eq!(cue_list.cues.len(), 1);
     assert_eq!(cue_list.cues[0].group_changes.len(), 1);
     assert_eq!(cue_list.cues[0].group_changes[0].group_id, "1");
@@ -254,13 +253,11 @@ fn cue_recall_of_live_group_spread_re_resolves_after_membership_edit() {
 
     rig.clear_programmer();
     rig.state
-        .engine
-        .replace_snapshot(load_engine_snapshot(&rig.entry).unwrap())
+        .output.replace_snapshot(load_engine_snapshot(&rig.entry).unwrap())
         .unwrap();
     assert_eq!(rig.resolved(&rig.fixtures), vec![None; 6]);
     rig.state
-        .engine
-        .execute_playback(EnginePlaybackCommand::Pool {
+        .output.execute_playback(EnginePlaybackCommand::Pool {
             number: 25,
             action: PoolPlaybackAction::Go,
         })
@@ -287,7 +284,7 @@ fn degrp_spread_freezes_per_fixture_values_that_ignore_membership_edits() {
     let rig = SpreadRecallRig::new("degrp-spread-freeze");
     assert_eq!(rig.command("DEGRP 1 AT 100 THRU 0 THRU 100"), 5);
     // DEGRP resolves once into per-fixture values; no live group reference remains.
-    let programmer = rig.state.programmers.get(rig.session.id).unwrap();
+    let programmer = rig.state.programming.get(rig.session.id).unwrap();
     assert!(programmer.group_values.is_empty());
     assert_eq!(programmer.values.len(), 5);
     let frozen = [1.0, 0.5, 0.0, 0.5, 1.0];

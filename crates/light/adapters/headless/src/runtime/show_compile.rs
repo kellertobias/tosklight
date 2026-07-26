@@ -25,14 +25,14 @@ impl std::fmt::Display for ShowLoadError {
 /// One exact portable document, its staged compatibility migration, and the snapshot compiled
 /// from that same candidate. No persistence changes occur until `prepare_runtime` succeeds.
 pub(super) struct PreparedShowLoad {
-    store: ShowStore,
+    store: ActiveShowRepository,
     source_revision: u64,
     transaction: PortableShowTransaction,
     snapshot: EngineSnapshot,
 }
 
 pub(super) struct PreparedRuntimeShowLoad {
-    store: ShowStore,
+    store: ActiveShowRepository,
     source_revision: u64,
     transaction: PortableShowTransaction,
     runtime: PreparedEngineSnapshot,
@@ -41,11 +41,9 @@ pub(super) struct PreparedRuntimeShowLoad {
 impl PreparedShowLoad {
     pub(super) fn prepare_runtime(
         self,
-        engine: &Engine,
+        prepare: impl FnOnce(EngineSnapshot) -> Result<PreparedEngineSnapshot, EngineError>,
     ) -> Result<PreparedRuntimeShowLoad, ShowLoadError> {
-        let runtime = engine
-            .prepare_snapshot(self.snapshot)
-            .map_err(ShowLoadError::Engine)?;
+        let runtime = prepare(self.snapshot).map_err(ShowLoadError::Engine)?;
         Ok(PreparedRuntimeShowLoad {
             store: self.store,
             source_revision: self.source_revision,
@@ -84,7 +82,7 @@ pub(super) fn prepare_show_load(
     entry: &ShowEntry,
     override_value: Option<(&str, &str, &serde_json::Value)>,
 ) -> Result<PreparedShowLoad, ShowLoadError> {
-    let store = ShowStore::open(&entry.path).map_err(ShowLoadError::Store)?;
+    let store = ActiveShowRepository::open(&entry.path).map_err(ShowLoadError::Store)?;
     let document = store.portable_document().map_err(ShowLoadError::Store)?;
     let source_revision = document.revision().value();
     let mut transaction = document.transaction();
@@ -129,18 +127,21 @@ pub(super) fn load_engine_snapshot_with_override(
     prepare_show_load(entry, override_value).map(PreparedShowLoad::into_snapshot)
 }
 
-/// Caller must hold `activation_lock` from before this exact read through runtime installation.
+/// Caller must hold an active-show coordinator permit from this exact read through runtime
+/// installation.
 pub(super) fn prepare_show_for_runtime(
     state: &AppState,
     entry: &ShowEntry,
 ) -> Result<PreparedEngineSnapshot, ApiError> {
     let backup = ShowMutationBackupPlan::migration(
-        &state.data_dir,
+        state.installation.data_dir(),
         entry,
-        state.configuration.read().backup_retention,
+        state.installation.configuration().backup_retention,
     );
     prepare_show_load(entry, None)
-        .and_then(|prepared| prepared.prepare_runtime(&state.engine))
+        .and_then(|prepared| {
+            prepared.prepare_runtime(|snapshot| state.output.prepare_snapshot(snapshot))
+        })
         .and_then(|prepared| prepared.commit_migration(&backup))
         .map_err(show_load_api_error)
 }

@@ -56,7 +56,7 @@ async fn run_action(
     session: Session,
     action: ActionEnvelope<light_application::ProgrammingGroupRecordRequest>,
 ) -> Result<light_application::ProgrammingGroupRecordResult, GroupRecordHttpError> {
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     tokio::task::spawn_blocking(move || {
         let ports = ServerProgrammingPorts::new(&state, &session, "http_group_record", true);
         let result = state.programming.handle_group_recording(action, &ports);

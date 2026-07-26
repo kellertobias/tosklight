@@ -31,7 +31,7 @@ async fn collection_snapshot(
     let _session = authenticate(&state, &headers)?;
     let show_id = context.resolve(&state)?;
     let entry = active_entry(&state, show_id)?;
-    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
+    let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let (show_revision, mut objects) = store
         .objects_with_portable_revision(&kind)
         .map_err(ApiError::store)?;
@@ -53,7 +53,7 @@ async fn exact_snapshot(
     let _session = authenticate(&state, &headers)?;
     let show_id = context.resolve(&state)?;
     let entry = active_entry(&state, show_id)?;
-    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
+    let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let (show_revision, mut object) = exact_object_snapshot(&store, &kind, &object_id)?;
     if kind == "patched_fixture"
         && let Some(object) = object.as_mut()
@@ -86,11 +86,24 @@ async fn output_route_action_v2(
         show_id,
         request_id: request.request_id.clone(),
     };
-    let mut replay = state.show_object_replay.lock().await;
-    if let Some(outcome) = replay.get(&key, &request.action)? {
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object(&key, &request.action)
+        .await?
+    {
         return Ok(Json(outcome));
     }
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
+    // A concurrent request can pass the optimistic replay lookup before the first mutation
+    // commits. Recheck after acquiring the mutation serializer so that it observes the completed
+    // entry instead of applying the same request twice.
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object(&key, &request.action)
+        .await?
+    {
+        return Ok(Json(outcome));
+    }
     let (route_id, expected, mutation) = route_mutation(&state, show_id, &request.action)?;
     let action = output_route_action(&session, show_id, route_id, expected, mutation);
     let (result, _activation) = run_output_route_action(&state, activation, action).await?;
@@ -111,7 +124,10 @@ async fn output_route_action_v2(
         change: wire_route_change(&result.change),
         event_sequence: result.event_sequence,
     };
-    replay.insert(key, request.action, outcome.clone());
+    state
+        .replay
+        .insert_show_object(key, request.action, outcome.clone())
+        .await;
     Ok(Json(outcome))
 }
 
@@ -138,7 +154,7 @@ fn route_mutation(
             patch,
         } => {
             let entry = active_entry(state, show_id)?;
-            let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
+            let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
             let (_show_revision, object) = store
                 .object_with_portable_revision("route", route_id)
                 .map_err(ApiError::store)?;
@@ -198,7 +214,7 @@ pub(super) fn active_entry(
 ) -> Result<ShowEntry, ApiError> {
     state
         .active_show
-        .read()
+        .current()
         .clone()
         .filter(|entry| entry.id == show_id)
         .ok_or_else(|| ApiError::conflict("requested show is not active"))
@@ -270,7 +286,7 @@ pub(super) fn validate_request_id(request_id: &str) -> Result<(), ApiError> {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct ReplayKey {
+pub(super) struct ReplayKey {
     session_id: Uuid,
     show_id: light_core::ShowId,
     request_id: String,
@@ -288,7 +304,7 @@ pub(super) struct ShowObjectReplayCache {
 }
 
 impl ShowObjectReplayCache {
-    fn get(
+    pub(super) fn get(
         &self,
         key: &ReplayKey,
         action: &wire::OutputRouteAction,
@@ -306,7 +322,7 @@ impl ShowObjectReplayCache {
         Ok(Some(outcome))
     }
 
-    fn insert(
+    pub(super) fn insert(
         &mut self,
         key: ReplayKey,
         action: wire::OutputRouteAction,

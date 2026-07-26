@@ -29,11 +29,9 @@ struct CueTransferScenario {
 impl CueTransferScenario {
     fn new() -> Self {
         let (state, data_dir) = test_state();
-        let user = state.desk.lock().users().unwrap().remove(0);
+        let user = state.installation.users().unwrap().remove(0);
         let desk = state
-            .desk
-            .lock()
-            .add_desk("Cue transfer", "cue-transfer")
+            .installation.add_desk("Cue transfer", "cue-transfer")
             .unwrap();
         let session = Session {
             id: SessionId::new(),
@@ -42,8 +40,8 @@ impl CueTransferScenario {
             connected: true,
             desk,
         };
-        state.programmers.start(session.id, user.id);
-        state.sessions.write().insert(session.id, session.clone());
+        state.programming.start(session.id, user.id);
+        state.sessions.insert_session(session.clone());
         let fixtures = [
             light_core::FixtureId::new(),
             light_core::FixtureId::new(),
@@ -52,7 +50,7 @@ impl CueTransferScenario {
         let (source, destination, source_cue_id) = transfer_cue_lists(fixtures);
         let show_path = data_dir.join("shows/cue-transfer.show");
         let show_id = initialise_show(&show_path, "Cue transfer").unwrap();
-        let store = ShowStore::open(&show_path).unwrap();
+        let store = ActiveShowRepository::open(&show_path).unwrap();
         for (index, list) in [&source, &destination].into_iter().enumerate() {
             let mut body = serde_json::to_value(list).unwrap();
             body["future_cuelist_metadata"] = serde_json::json!({"list": index});
@@ -90,10 +88,9 @@ impl CueTransferScenario {
             updated_at: String::new(),
             revision_copy: None,
         };
-        *state.active_show.write() = Some(entry.clone());
+        state.active_show.replace_current(Some(entry.clone()));
         state
-            .engine
-            .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+            .output.replace_snapshot(load_engine_snapshot(&entry).unwrap())
             .unwrap();
         Self {
             state,
@@ -106,19 +103,19 @@ impl CueTransferScenario {
     }
 
     fn baseline(&self) -> CueTransferBaseline {
-        let store = ShowStore::open(&self.show_path).unwrap();
-        let (_, source, _) = cue_list_for_playback(&store, &self.state.engine.snapshot(), 1).unwrap();
+        let store = ActiveShowRepository::open(&self.show_path).unwrap();
+        let (_, source, _) = cue_list_for_playback(&store, &self.state.output.snapshot(), 1).unwrap();
         let (_, destination, _) =
-            cue_list_for_playback(&store, &self.state.engine.snapshot(), 2).unwrap();
+            cue_list_for_playback(&store, &self.state.output.snapshot(), 2).unwrap();
         CueTransferBaseline {
             source_body: source.body,
             source_revision: source.revision,
             destination_body: destination.body,
             destination_revision: destination.revision,
             show_revision: store.portable_revision().unwrap().value(),
-            event_sequence: self.state.application_events.latest_sequence(),
+            event_sequence: self.state.events.latest_sequence(),
             backup_count: cue_transfer_backup_count(&self.data_dir),
-            runtime: self.state.engine.snapshot(),
+            runtime: self.state.output.snapshot(),
         }
     }
 }

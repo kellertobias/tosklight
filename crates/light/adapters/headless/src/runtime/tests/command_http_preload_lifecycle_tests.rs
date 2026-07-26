@@ -9,14 +9,14 @@ async fn install_lifecycle_show(
     snapshot.fixtures = vec![fixture].into();
     std::sync::Arc::make_mut(&mut snapshot.groups)[0].fixtures = vec![fixture_id];
     snapshot.revision = 9_001;
-    scenario.state.engine.replace_snapshot(snapshot).unwrap();
-    let show = scenario.state.active_show.read().clone().unwrap();
+    scenario.state.output.replace_snapshot(snapshot).unwrap();
+    let show = scenario.state.active_show.current().clone().unwrap();
     let revision = ShowStore::open(&show.path)
         .unwrap()
         .portable_revision()
         .unwrap()
         .value();
-    assert_ne!(revision, scenario.state.engine.snapshot().revision);
+    assert_ne!(revision, scenario.state.output.snapshot().revision);
     (show_id, revision, fixture_id)
 }
 
@@ -75,7 +75,7 @@ fn playback_request(request_id: &str, number: u16, action: &str) -> serde_json::
 fn application_event_count(state: &AppState, object: light_application::EventObject) -> usize {
     let filter = light_application::EventFilter::default().with_object(object);
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(0, &filter)
+        state.events.replay(0, &filter)
     else {
         panic!("focused event history should remain replayable")
     };
@@ -114,19 +114,17 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
     // Replay is resolved before the now-stale selection precondition.
     scenario
         .state
-        .programmers
+        .programming
         .select(scenario.session.id, [fixture]);
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
     let replay = json(scenario.preload_lifecycle_action(enter).await).await;
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["selection_revision"], 0);
-    assert_eq!(scenario.state.application_events.latest_sequence(), cursor);
+    assert_eq!(scenario.state.events.latest_sequence(), cursor);
 
     let second_desk = scenario
         .state
-        .desk
-        .lock()
-        .add_desk("Preload lifecycle peer", "preload-lifecycle-peer")
+        .installation.add_desk("Preload lifecycle peer", "preload-lifecycle-peer")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, user_id);
@@ -183,7 +181,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
         .await;
     assert_eq!(captured.status(), StatusCode::OK);
     assert_eq!(json(captured).await["outcome"]["status"], "captured");
-    let expected_cursor = scenario.state.application_events.latest_sequence();
+    let expected_cursor = scenario.state.events.latest_sequence();
 
     // A later unrelated Programmer event must not invalidate the queued Playback target.
     assert_eq!(
@@ -256,11 +254,11 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
         application_event_count(&scenario.state, light_application::EventObject::playback(1),),
         1
     );
-    let event_cursor = scenario.state.application_events.latest_sequence();
+    let event_cursor = scenario.state.events.latest_sequence();
     let replay = json(scenario.preload_lifecycle_action(go).await).await;
     assert_eq!(replay["replayed"], true);
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         event_cursor
     );
 
@@ -410,7 +408,7 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
             .status(),
         StatusCode::OK
     );
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
 
     let stale_show = scenario
         .preload_lifecycle_action(lifecycle_go(
@@ -431,15 +429,11 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
 
     let other_user = scenario
         .state
-        .desk
-        .lock()
-        .add_user("Preload cursor other")
+        .installation.add_user("Preload cursor other")
         .unwrap();
     let other_desk = scenario
         .state
-        .desk
-        .lock()
-        .add_desk("Preload cursor other", "preload-cursor-other")
+        .installation.add_desk("Preload cursor other", "preload-cursor-other")
         .unwrap();
     let (other_token, logged_user) =
         login_on_desk(&scenario, "Preload cursor other", other_desk.id).await;
@@ -455,7 +449,7 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
             .status(),
         StatusCode::OK
     );
-    let current = scenario.state.application_events.latest_sequence();
+    let current = scenario.state.events.latest_sequence();
     let target = scenario
         .preload_lifecycle_action(lifecycle_go(
             "cursor-target-conflict",
@@ -475,7 +469,7 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
     assert!(
         scenario
             .state
-            .programmers
+            .programming
             .capture_mode(scenario.session.id)
             .unwrap()
             .blind
@@ -494,11 +488,11 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
                 changed_at: chrono::Utc::now(),
             },
         };
-        scenario.state.application_events.publish(
+        scenario.state.events.publish(
             light_application::EventDraft::programming_priority_changed(&context, change),
         );
     }
-    let latest = scenario.state.application_events.latest_sequence();
+    let latest = scenario.state.events.latest_sequence();
     let gap = scenario
         .preload_lifecycle_action(lifecycle_go(
             "cursor-gap-conflict",
@@ -538,22 +532,22 @@ async fn failed_typed_preload_go_rolls_back_programmer_queue_runtime_and_events(
             .status(),
         StatusCode::OK
     );
-    scenario.state.programmers.queue_preload_playback_action(
+    scenario.state.programming.queue_preload_playback_action(
         scenario.session.id,
         1,
         None,
         light_programmer::PreloadPlaybackQueueAction::Go,
         light_programmer::PreloadPlaybackQueueSurface::Physical,
     );
-    scenario.state.programmers.queue_preload_playback_action(
+    scenario.state.programming.queue_preload_playback_action(
         scenario.session.id,
         3,
         None,
         light_programmer::PreloadPlaybackQueueAction::On,
         light_programmer::PreloadPlaybackQueueSurface::Virtual,
     );
-    let before = scenario.state.programmers.get(scenario.session.id).unwrap();
-    let cursor = scenario.state.application_events.latest_sequence();
+    let before = scenario.state.programming.get(scenario.session.id).unwrap();
+    let cursor = scenario.state.events.latest_sequence();
     let response = scenario
         .preload_lifecycle_action(lifecycle_go(
             "rollback-go",
@@ -573,13 +567,13 @@ async fn failed_typed_preload_go_rolls_back_programmer_queue_runtime_and_events(
             .unwrap()
             .contains("group playback")
     );
-    let after = scenario.state.programmers.get(scenario.session.id).unwrap();
+    let after = scenario.state.programming.get(scenario.session.id).unwrap();
     assert_eq!(
         after.preload_playback_pending,
         before.preload_playback_pending
     );
     assert_eq!(after.blind, before.blind);
-    assert!(scenario.state.engine.playback_runtime().is_empty());
-    assert_eq!(scenario.state.application_events.latest_sequence(), cursor);
+    assert!(scenario.state.output.playback_runtime().is_empty());
+    assert_eq!(scenario.state.events.latest_sequence(), cursor);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

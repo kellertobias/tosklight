@@ -19,9 +19,9 @@ async fn group_record_route_is_authoritative_replay_safe_and_sparse_on_no_change
     let fixture = scenario.install_direct_fixture();
     scenario
         .state
-        .programmers
+        .programming
         .select(scenario.session.id, [fixture]);
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let request = group_record_request("group-route-record", "Front Wash", "overwrite", 0);
 
     let response = scenario
@@ -81,7 +81,7 @@ async fn group_record_route_is_authoritative_replay_safe_and_sparse_on_no_change
         1
     );
 
-    scenario.state.programmers.select(scenario.session.id, []);
+    scenario.state.programming.select(scenario.session.id, []);
     let changed = scenario
         .group_recording_action(
             &show_id,
@@ -96,8 +96,7 @@ async fn group_record_route_is_authoritative_replay_safe_and_sparse_on_no_change
     assert!(
         scenario
             .state
-            .engine
-            .snapshot()
+            .output.snapshot()
             .groups
             .iter()
             .find(|group| group.id == "Front Wash")
@@ -113,8 +112,7 @@ async fn group_record_route_is_authoritative_replay_safe_and_sparse_on_no_change
     assert_eq!(
         scenario
             .state
-            .engine
-            .snapshot()
+            .output.snapshot()
             .groups
             .iter()
             .find(|group| group.id == "Front Wash")
@@ -123,7 +121,7 @@ async fn group_record_route_is_authoritative_replay_safe_and_sparse_on_no_change
         [fixture]
     );
     assert!(
-        !scenario.state.programmers.redo(scenario.session.id),
+        !scenario.state.programming.redo(scenario.session.id),
         "show recording undo must not expose an unsafe snapshot redo"
     );
     let selection_undone = scenario
@@ -137,8 +135,7 @@ async fn group_record_route_is_authoritative_replay_safe_and_sparse_on_no_change
     assert!(
         scenario
             .state
-            .engine
-            .snapshot()
+            .output.snapshot()
             .groups
             .iter()
             .all(|group| group.id != "Front Wash")
@@ -154,7 +151,7 @@ async fn group_recording_finishes_gestures_before_show_events_even_without_topol
         .await;
     let fixture = scenario.install_direct_fixture();
     open_fixture_gesture(&scenario, fixture);
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
 
     let changed = scenario
         .group_recording_action(
@@ -170,14 +167,14 @@ async fn group_recording_finishes_gestures_before_show_events_even_without_topol
     assert!(
         !scenario
             .state
-            .programmers
+            .programming
             .selection(scenario.session.id)
             .unwrap()
             .gesture_open
     );
 
     open_fixture_gesture(&scenario, fixture);
-    let before_no_change = scenario.state.application_events.latest_sequence();
+    let before_no_change = scenario.state.events.latest_sequence();
     let no_change = scenario
         .group_recording_action(
             &show_id,
@@ -205,14 +202,13 @@ async fn group_recording_finishes_gestures_before_show_events_even_without_topol
 fn open_fixture_gesture(scenario: &CommandHttpScenario, fixture: light_core::FixtureId) {
     let groups = scenario
         .state
-        .engine
-        .snapshot()
+        .output.snapshot()
         .groups
         .iter()
         .cloned()
         .map(|group| (group.id.clone(), group))
         .collect();
-    assert!(scenario.state.programmers.apply_selection_gesture(
+    assert!(scenario.state.programming.apply_selection_gesture(
         scenario.session.id,
         vec![light_programmer::SelectionReference::Fixture {
             fixture_id: fixture,
@@ -244,7 +240,7 @@ fn application_events_after(
         .with_capability(light_application::EventCapability::Desk)
         .with_capability(light_application::EventCapability::Show);
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(baseline, &filter)
+        state.events.replay(baseline, &filter)
     else {
         panic!("Group recording events must remain replayable")
     };
@@ -258,7 +254,7 @@ fn show_events_after(
     let filter = light_application::EventFilter::default()
         .with_capability(light_application::EventCapability::Show);
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(baseline, &filter)
+        state.events.replay(baseline, &filter)
     else {
         panic!("Group recording Show events must remain replayable")
     };
@@ -268,8 +264,7 @@ fn show_events_after(
 fn highlight_reconciliations(scenario: &CommandHttpScenario, source: &str) -> usize {
     scenario
         .state
-        .audit_events
-        .lock()
+        .events.audit_events()
         .iter()
         .filter(|event| {
             event.kind == "highlight_changed"
@@ -290,9 +285,9 @@ async fn group_record_route_merges_subtracts_deletes_and_checks_revisions() {
     let second = light_core::FixtureId::new();
     scenario
         .state
-        .programmers
+        .programming
         .select(scenario.session.id, [first]);
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
 
     let overwrite = scenario
         .group_recording_action(
@@ -304,7 +299,7 @@ async fn group_record_route_merges_subtracts_deletes_and_checks_revisions() {
     assert_eq!(overwrite.status(), StatusCode::OK);
     scenario
         .state
-        .programmers
+        .programming
         .select(scenario.session.id, [second]);
     let merge = scenario
         .group_recording_action(
@@ -370,7 +365,7 @@ async fn group_record_route_merges_subtracts_deletes_and_checks_revisions() {
     assert!(
         scenario
             .state
-            .programmers
+            .programming
             .selection(scenario.session.id)
             .unwrap()
             .gesture_open,
@@ -399,7 +394,7 @@ async fn group_record_route_rejects_missing_auth_forged_state_and_wrong_show() {
     let fixture = scenario.install_direct_fixture();
     scenario
         .state
-        .programmers
+        .programming
         .select(scenario.session.id, [fixture]);
     let request = group_record_request("group-secure", "7", "overwrite", 0);
 
@@ -443,10 +438,10 @@ async fn group_recording_captures_each_desk_selection_and_keeps_other_users_isol
     let (same_user, other_user) = group_recording_peer_sessions(&scenario);
     scenario
         .state
-        .programmers
+        .programming
         .select(scenario.session.id, [first]);
-    scenario.state.programmers.select(same_user.id, [second]);
-    scenario.state.programmers.select(other_user.id, [third]);
+    scenario.state.programming.select(same_user.id, [second]);
+    scenario.state.programming.select(other_user.id, [third]);
 
     let same_user_record = scenario
         .group_recording_action(
@@ -470,7 +465,7 @@ async fn group_recording_captures_each_desk_selection_and_keeps_other_users_isol
     assert_eq!(
         scenario
             .state
-            .programmers
+            .programming
             .selection(scenario.session.id)
             .unwrap()
             .selected,
@@ -479,7 +474,7 @@ async fn group_recording_captures_each_desk_selection_and_keeps_other_users_isol
     assert_eq!(
         scenario
             .state
-            .programmers
+            .programming
             .selection(same_user.id)
             .unwrap()
             .selected,
@@ -528,10 +523,19 @@ async fn group_recording_port_rejects_forged_user_session_and_desk_contexts() {
 
 fn group_recording_peer_sessions(scenario: &CommandHttpScenario) -> (Session, Session) {
     let (same_desk, other_user, other_desk) = {
-        let store = scenario.state.desk.lock();
-        let same_desk = store.add_desk("Same user wing", "same-user-wing").unwrap();
-        let other_user = store.add_user("Other Group operator").unwrap();
-        let other_desk = store
+        let same_desk = scenario
+            .state
+            .installation
+            .add_desk("Same user wing", "same-user-wing")
+            .unwrap();
+        let other_user = scenario
+            .state
+            .installation
+            .add_user("Other Group operator")
+            .unwrap();
+        let other_desk = scenario
+            .state
+            .installation
             .add_desk("Other user wing", "other-user-wing")
             .unwrap();
         (same_desk, other_user, other_desk)
@@ -553,14 +557,13 @@ fn group_recording_peer_sessions(scenario: &CommandHttpScenario) -> (Session, Se
     for session in [&same_user, &other_user] {
         scenario
             .state
-            .programmers
+            .programming
             .start(session.id, session.user.id);
         attach_session_command_context(&scenario.state, session);
         scenario
             .state
             .sessions
-            .write()
-            .insert(session.id, session.clone());
+            .insert_session(session.clone());
     }
     (same_user, other_user)
 }
@@ -585,7 +588,7 @@ async fn command_keyboard_osc_and_websocket_group_recording_converge_on_typed_ca
     let fixture = scenario.install_direct_fixture();
     scenario
         .state
-        .programmers
+        .programming
         .select(scenario.session.id, [fixture]);
 
     let command = scenario
@@ -602,7 +605,7 @@ async fn command_keyboard_osc_and_websocket_group_recording_converge_on_typed_ca
     }
 
     let source: SocketAddr = "127.0.0.1:9018".parse().unwrap();
-    scenario.state.osc_subscribers.lock().insert(
+    scenario.state.integrations.register_osc_subscriber(
         "group-record".into(),
         OscSubscriber {
             desk_alias: "main".into(),
@@ -668,7 +671,7 @@ async fn websocket_group_request_replay_skips_history_persistence_and_events() {
     let fixture = scenario.install_direct_fixture();
     scenario
         .state
-        .programmers
+        .programming
         .select(scenario.session.id, [fixture]);
     let command = || {
         live_action_frame(
@@ -684,12 +687,12 @@ async fn websocket_group_request_replay_skips_history_persistence_and_events() {
 
     let first = dispatch_live_action(&scenario.state, &scenario.session, command());
     assert!(first.ok, "{:?}", first.error);
-    let sequence = scenario.state.application_events.latest_sequence();
+    let sequence = scenario.state.events.latest_sequence();
     let history = scenario.history_len();
     let replay = dispatch_live_action(&scenario.state, &scenario.session, command());
     assert!(replay.ok, "{:?}", replay.error);
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         sequence
     );
     assert_eq!(scenario.history_len(), history);

@@ -7,7 +7,25 @@ use light_application::{
 };
 use light_programmer::ProgrammerRegistry;
 
-use super::super::{AppState, Session};
+use super::super::{AppState, Session, capability_resources::ProgrammingResource};
+
+pub(crate) trait CommandLineProgrammer {
+    fn clear_command_line(&self, session_id: light_core::SessionId) -> bool;
+}
+
+impl CommandLineProgrammer for ProgrammerRegistry {
+    fn clear_command_line(&self, session_id: light_core::SessionId) -> bool {
+        self.update_command_line(session_id, |current| (String::new(), current.target, true))
+            .is_some()
+    }
+}
+
+impl CommandLineProgrammer for ProgrammingResource {
+    fn clear_command_line(&self, session_id: light_core::SessionId) -> bool {
+        self.update_command_line(session_id, |current| (String::new(), current.target, true))
+            .is_some()
+    }
+}
 
 pub(crate) struct ServerProgrammingPorts<'a> {
     state: &'a AppState,
@@ -45,7 +63,7 @@ impl<'a> ServerProgrammingPorts<'a> {
 
     pub(crate) fn record_typed_command(
         &self,
-        programmers: &ProgrammerRegistry,
+        programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
         command: &str,
         policy: ExecutionPolicy,
@@ -61,7 +79,7 @@ impl<'a> ServerProgrammingPorts<'a> {
 
     fn record_group_command(
         &self,
-        programmers: &ProgrammerRegistry,
+        programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
         command: &str,
     ) -> Option<ProgrammingExecution> {
@@ -75,7 +93,7 @@ impl<'a> ServerProgrammingPorts<'a> {
 
     pub(crate) fn record_preset_command(
         &self,
-        programmers: &ProgrammerRegistry,
+        programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
         command: &str,
     ) -> Option<ProgrammingExecution> {
@@ -92,7 +110,7 @@ impl<'a> ServerProgrammingPorts<'a> {
 
     fn execute_group_recording(
         &self,
-        programmers: &ProgrammerRegistry,
+        programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
         group_id: String,
         operation: light_application::ProgrammingGroupRecordOperation,
@@ -129,7 +147,7 @@ impl<'a> ServerProgrammingPorts<'a> {
 
     fn execute_preset_recording(
         &self,
-        programmers: &ProgrammerRegistry,
+        programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
         address: light_programmer::PresetAddress,
         raw_command: &str,
@@ -169,7 +187,7 @@ impl<'a> ServerProgrammingPorts<'a> {
     pub(super) fn active_show_id(&self) -> Result<light_core::ShowId, String> {
         self.state
             .active_show
-            .read()
+            .current()
             .as_ref()
             .map(|entry| entry.id)
             .ok_or_else(|| "no show is open".to_owned())
@@ -252,13 +270,13 @@ pub(super) fn recording_context(context: &ActionContext, prefix: &str) -> Action
 }
 
 pub(super) fn clear_command_line(
-    programmers: &ProgrammerRegistry,
+    programmers: &dyn CommandLineProgrammer,
     session: &Session,
 ) -> Result<(), String> {
     programmers
-        .update_command_line(session.id, |current| (String::new(), current.target, true))
-        .ok_or_else(|| "programmer command line does not exist".to_owned())?;
-    Ok(())
+        .clear_command_line(session.id)
+        .then_some(())
+        .ok_or_else(|| "programmer command line does not exist".to_owned())
 }
 
 impl ProgrammingPorts for ServerProgrammingPorts<'_> {
@@ -385,10 +403,7 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
                     .collect(),
             },
         };
-        let result = self
-            .state
-            .active_show_service
-            .undo_recording(action, &ports)?;
+        let result = self.state.active_show.undo_recording(action, &ports)?;
         super::super::emit_migration_object_changes(
             self.state,
             target.show_id,
@@ -412,7 +427,10 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
     }
 
     fn capture_programmer_on_preload(&self, _context: &ActionContext) -> bool {
-        self.state.configuration.read().preload_programmer_changes
+        self.state
+            .installation
+            .configuration()
+            .preload_programmer_changes
     }
 
     fn reconcile(

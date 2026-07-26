@@ -7,8 +7,7 @@ use axum::{
     routing::{get, post},
 };
 use light_application::{
-    ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource,
-    PatchFixturesCommand, ShowPatchService,
+    ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource, PatchFixturesCommand,
 };
 use light_core::ShowId;
 use light_wire::v2::patch::{PatchErrorResponse, PatchFixturesRequest};
@@ -27,10 +26,7 @@ async fn patch_snapshot(
     let session = authenticate(&state, &headers).map_err(PatchHttpError::api)?;
     let show_id = show.resolve(&state).map_err(PatchHttpError::api)?;
     let context = http_context(&session);
-    let snapshot = run_patch_service(state, move |service, ports| {
-        service.snapshot(&context, show_id, ports)
-    })
-    .await?;
+    let snapshot = run_patch_snapshot(state, context, show_id).await?;
     let response = super::show_patch_wire::wire_snapshot(snapshot);
     Ok(json_with_etag(response.patch_revision, response))
 }
@@ -46,21 +42,34 @@ async fn patch_fixtures(
     let expected_patch_revision = parse_if_match(&headers).map_err(PatchHttpError::api)?;
     let Json(request) = request.map_err(|error| PatchHttpError::bad_request(error.body_text()))?;
     let action = patch_action(show_id, &session, expected_patch_revision, request)?;
-    let result =
-        run_patch_service(state, move |service, ports| service.handle(action, ports)).await?;
+    let result = run_patch_fixtures(state, action).await?;
     let response = super::show_patch_wire::wire_outcome(result);
     Ok(json_with_etag(response.delta.patch_revision, response))
 }
 
-async fn run_patch_service<T, F>(state: AppState, operation: F) -> Result<T, PatchHttpError>
-where
-    T: Send + 'static,
-    F: FnOnce(&ShowPatchService, &ServerShowPatchPorts) -> Result<T, ActionError> + Send + 'static,
-{
-    let service = state.show_patch.clone();
+async fn run_patch_snapshot(
+    state: AppState,
+    context: ActionContext,
+    show_id: ShowId,
+) -> Result<light_application::PatchSnapshot, PatchHttpError> {
+    let active_show = state.active_show.clone();
     tokio::task::spawn_blocking(move || {
         let ports = ServerShowPatchPorts::new(state);
-        operation(&service, &ports)
+        active_show.patch_snapshot(&context, show_id, &ports)
+    })
+    .await
+    .map_err(PatchHttpError::blocking)?
+    .map_err(PatchHttpError::application)
+}
+
+async fn run_patch_fixtures(
+    state: AppState,
+    action: ActionEnvelope<PatchFixturesCommand>,
+) -> Result<light_application::PatchFixturesResult, PatchHttpError> {
+    let active_show = state.active_show.clone();
+    tokio::task::spawn_blocking(move || {
+        let ports = ServerShowPatchPorts::new(state);
+        active_show.patch_fixtures(action, &ports)
     })
     .await
     .map_err(PatchHttpError::blocking)?

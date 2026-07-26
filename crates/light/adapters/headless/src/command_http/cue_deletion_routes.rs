@@ -31,7 +31,7 @@ async fn delete_cue(
     show.verify(&state).map_err(CueDeletionHttpError::api)?;
     let show_id = state
         .active_show
-        .read()
+        .current()
         .as_ref()
         .map(|show| show.id)
         .ok_or_else(|| CueDeletionHttpError::api(ApiError::conflict("no show is active")))?;
@@ -57,7 +57,7 @@ async fn run_action(
         let ports = ServerProgrammingCueDeletionPorts::new(state.clone(), session, false);
         state
             .programming
-            .handle_cue_deletion(action, &state.active_show_service, &ports)
+            .handle_cue_deletion(action, &state.active_show, &ports)
     })
     .await
     .map_err(CueDeletionHttpError::blocking)?

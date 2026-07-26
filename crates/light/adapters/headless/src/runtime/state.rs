@@ -2,103 +2,18 @@ use super::*;
 
 #[derive(Clone)]
 pub(super) struct AppState {
-    pub(super) desk: Arc<Mutex<DeskStore>>,
-    pub(super) fixture_library: Arc<Mutex<light_fixture::FixtureLibrary>>,
-    pub(super) data_dir: PathBuf,
-    pub(super) sessions: Arc<RwLock<HashMap<SessionId, Session>>>,
-    pub(super) session_clients: Arc<RwLock<HashMap<SessionId, Uuid>>>,
-    pub(super) programmers: ProgrammerRegistry,
-    pub(super) programming: ProgrammingService,
-    pub(super) playback_service: PlaybackService,
-    pub(super) output_runtime_service: OutputRuntimeService,
-    pub(super) speed_group_service: SpeedGroupService,
-    pub(super) engine: Arc<Engine>,
-    pub(super) highlight: Arc<HighlightRegistry>,
-    pub(super) highlight_service: light_application::HighlightService,
-    pub(super) patch_preview_highlights:
-        Arc<Mutex<HashMap<SessionId, HashSet<light_core::FixtureId>>>>,
-    pub(super) output_health: Arc<std::sync::Mutex<OutputHealth>>,
-    pub(super) output_rate: Arc<AtomicU16>,
-    pub(super) playback_telemetry: Arc<playback_telemetry::PlaybackTelemetrySampler>,
-    pub(super) configuration: Arc<RwLock<DeskConfiguration>>,
-    pub(super) matter_bridge: Arc<matter::MatterBridgeAdapter>,
-    pub(super) matter_transport: Option<Arc<matter::MatterTransport>>,
-    pub(super) output_control: Arc<Mutex<OutputControl>>,
-    #[cfg(test)]
-    pub(super) output_runtime_persistence_attempts: Arc<AtomicU64>,
-    #[cfg(test)]
-    pub(super) output_runtime_persistence_failure: Arc<std::sync::atomic::AtomicBool>,
-    #[cfg(test)]
-    pub(super) speed_group_persistence_attempts: Arc<AtomicU64>,
-    #[cfg(test)]
-    pub(super) speed_group_persistence_failure: Arc<std::sync::atomic::AtomicBool>,
-    pub(super) activation_lock: Arc<tokio::sync::Mutex<()>>,
-    pub(super) timecode_router: Arc<Mutex<TimecodeRouter>>,
-    pub(super) active_show: Arc<RwLock<Option<ShowEntry>>>,
-    /// In-memory copy of the active show document reused across mutations. Validated against the
-    /// store's O(1) portable revision at every unit-of-work begin, so out-of-band writers that
-    /// commit portable transactions are detected and trigger a reload. Cleared explicitly where
-    /// the active show file is replaced without a portable-revision bump (open, rename,
-    /// overwrite, revision open, rollback).
-    pub(super) active_show_document: Arc<Mutex<Option<light_show::PortableShowDocument>>>,
-    /// Show id and application-millis timestamp of the last automatic recovery checkpoint.
-    /// Mutation backups are gated to at most one per configured autosave interval (api-rules §8).
-    pub(super) active_show_backup_checkpoint: Arc<Mutex<Option<(light_core::ShowId, u64)>>>,
-    pub(super) active_show_error: Arc<RwLock<Option<String>>>,
-    pub(super) application_events: EventBus,
-    pub(super) active_show_service: ActiveShowService,
-    pub(super) playback_topology: PlaybackTopologyService,
-    pub(super) show_patch: ShowPatchService,
-    pub(super) show_library_replay:
-        Arc<tokio::sync::Mutex<show_library_v2::ShowLibraryReplayCache>>,
-    pub(super) fixture_library_replay:
-        Arc<tokio::sync::Mutex<fixture_api_replay::FixtureLibraryReplayCache>>,
-    pub(super) show_object_replay: Arc<tokio::sync::Mutex<show_objects_v2::ShowObjectReplayCache>>,
-    pub(super) show_object_intent_replay:
-        Arc<tokio::sync::Mutex<show_object_intents_v2::ShowObjectIntentReplayCache>>,
-    pub(super) preset_generation_replay:
-        Arc<tokio::sync::Mutex<live_action_http::PresetGenerationReplayCache>>,
-    pub(super) screen_configuration_replay:
-        Arc<tokio::sync::Mutex<screen_configuration_v2::ScreenConfigurationReplayCache>>,
-    pub(super) control_desk_configuration_replay:
-        Arc<tokio::sync::Mutex<control_desk_configuration_v2::ControlDeskConfigurationReplayCache>>,
-    pub(super) desk_management_replay:
-        Arc<tokio::sync::Mutex<desk_management_v2::DeskManagementReplayCache>>,
-    pub(super) stage_layout_replay: Arc<Mutex<stage_layout_http::StageLayoutReplayCache>>,
-    pub(super) virtual_playback_zones_replay:
-        Arc<Mutex<virtual_playback_zones_http::VirtualPlaybackZonesReplayCache>>,
-    pub(super) selective_show_import: SelectiveShowImportService,
-    #[cfg(test)]
-    pub(super) patch_profile_resolution: Arc<PatchProfileResolutionPause>,
-    #[cfg(test)]
-    pub(super) active_show_http_lifecycle: Arc<ActiveShowLifecyclePause>,
-    #[cfg(test)]
-    pub(super) preload_store_release_lifecycle: Arc<ActiveShowLifecyclePause>,
-    #[cfg(test)]
-    pub(super) patch_lifecycle: Arc<ActiveShowLifecyclePause>,
-    pub(super) audit_events: Arc<Mutex<VecDeque<Event>>>,
-    pub(super) command_history: Arc<Mutex<HashMap<Uuid, VecDeque<CommandHistoryEntry>>>>,
-    pub(super) event_revision: Arc<AtomicU64>,
-    pub(super) desk_token: Option<Arc<str>>,
-    pub(super) shutdown: CancellationToken,
-    pub(super) media_cache: Arc<Mutex<MediaCache>>,
-    pub(super) media_status: Arc<RwLock<HashMap<light_core::FixtureId, MediaServerStatus>>>,
-    pub(super) file_input_contexts: Arc<Mutex<HashMap<Uuid, file_manager::FileInputContext>>>,
-    pub(super) osc_subscribers: Arc<Mutex<HashMap<String, OscSubscriber>>>,
-    pub(super) osc_cue_record_suppression:
-        Arc<Mutex<osc_cue_record_suppression::OscCueRecordSuppression>>,
-    pub(super) osc_feedback: Option<Arc<std::net::UdpSocket>>,
-    #[cfg(test)]
-    pub(super) osc_feedback_capture: Arc<Mutex<Vec<CapturedOscMessage>>>,
-    pub(super) mvr_imports: Arc<Mutex<HashMap<Uuid, StagedMvrImport>>>,
-    pub(super) network_output: Option<Arc<NetworkOutput>>,
-    pub(super) output_sequences:
-        Arc<tokio::sync::Mutex<HashMap<(light_output::Protocol, u16), u8>>>,
-    pub(super) manual_clock: Option<Arc<ManualClock>>,
-    /// Serializes deterministic clock steps and bounded free-running scheduler sessions.
-    pub(super) test_clock_lock: Arc<tokio::sync::Mutex<()>>,
-    pub(super) speed_groups: Arc<Mutex<[SpeedGroupController; 5]>>,
-    pub(super) sound_capture_owners: Arc<Mutex<[Option<SoundCaptureOwner>; 5]>>,
+    pub(super) installation: InstallationResource,
+    pub(super) sessions: SessionResource,
+    pub(super) programming: ProgrammingResource,
+    pub(super) playback: PlaybackResource,
+    pub(super) highlight: HighlightResource,
+    pub(super) output: OutputResource,
+    pub(super) active_show: ActiveShowResource,
+    pub(super) events: EventResource,
+    pub(super) integrations: IntegrationResource,
+    pub(super) media: MediaResource,
+    pub(super) replay: ReplayResource,
+    pub(super) lifecycle: LifecycleResource,
 }
 
 #[cfg(test)]

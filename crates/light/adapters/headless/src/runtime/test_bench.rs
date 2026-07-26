@@ -10,26 +10,18 @@ pub(super) fn fixed_test_time() -> chrono::DateTime<chrono::Utc> {
 pub(super) async fn reset_test_clock(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let _clock_session = state.test_clock_lock.lock().await;
-    let clock = state
-        .manual_clock
-        .as_ref()
-        .ok_or_else(|| ApiError::not_found("test clock"))?;
+    let clock = state.output.acquire_test_clock().await?;
     clock.set(fixed_test_time());
-    state.programmers.reset_all();
-    state.engine.clear_programmer_transitions();
-    state.output_sequences.lock().await.clear();
-    state.osc_subscribers.lock().clear();
+    state.programming.reset_all();
+    state.output.clear_programmer_transitions();
+    state.output.clear_sequences().await;
+    state.integrations.clear_osc_subscribers();
     {
-        let configuration = state.configuration.read().clone();
-        *state.speed_groups.lock() = std::array::from_fn(|index| {
-            SpeedGroupController::new(
-                configuration.speed_groups_bpm[index],
-                configuration.speed_group_sound_to_light[index].clone(),
-            )
-            .expect("validated Speed Group configuration")
-        });
-        *state.sound_capture_owners.lock() = [None; 5];
+        let configuration = state.installation.configuration();
+        state.output.reset_speed_groups(
+            configuration.speed_groups_bpm,
+            configuration.speed_group_sound_to_light,
+        );
     }
     refresh_speed_group_engine(&state);
     emit(
@@ -53,62 +45,30 @@ pub(super) async fn advance_test_clock(
     if !(0..=604_800_000).contains(&input.millis) {
         return Err(ApiError::bad_request("millis must be within 0-604800000"));
     }
-    let _clock_session = state.test_clock_lock.lock().await;
-    let clock = state
-        .manual_clock
-        .as_ref()
-        .ok_or_else(|| ApiError::not_found("test clock"))?;
+    let clock = state.output.acquire_test_clock().await?;
     let now = clock.advance_millis(input.millis);
     refresh_speed_group_engine(&state);
     let rendered = {
-        let _activation = state.activation_lock.clone().lock_owned().await;
-        output_scheduler::render_with_playback_events(
-            &state.engine,
-            &state.active_show,
-            &state.playback_service,
-            state.output_control.lock().render_options(),
-            Some(&state.playback_telemetry),
-        )
-        .map_err(|error| ApiError::internal(error.to_string()))?
+        let _activation = state.active_show.acquire().await;
+        let playback = state.playback.render_capability();
+        state
+            .output
+            .render_with_playback_events(
+                &state.active_show.output_projection(),
+                &playback,
+                state.output.render_options(),
+            )
+            .map_err(|error| ApiError::internal(error.to_string()))?
     };
-    let frames = {
-        let mut control = state.output_control.lock();
-        if control.hold {
-            control.last_frames.clone()
-        } else {
-            let mut frames = rendered.universes;
-            for (&(universe, address), &value) in &control.raw_overrides {
-                if let Some(frame) = frames.get_mut(&universe) {
-                    frame[usize::from(address - 1)] = value;
-                }
-            }
-            control.last_frames = frames.clone();
-            frames
-        }
-    };
-    let snapshot = state.engine.snapshot();
-    let output = state
-        .network_output
-        .as_ref()
-        .ok_or_else(|| ApiError::unavailable("network output is unavailable"))?;
-    let packets = output
-        .send_routes(
-            &snapshot.routes,
-            &frames,
-            &rendered.patched_slots,
-            &mut *state.output_sequences.lock().await,
-        )
+    let frames = state.output.render_frames(rendered.universes);
+    let snapshot = state.output.snapshot();
+    let packets = state
+        .output
+        .send_network_routes(&snapshot.routes, &frames, &rendered.patched_slots)
         .await
         .map_err(ApiError::io)?;
-    {
-        let mut health = state
-            .output_health
-            .lock()
-            .expect("output health mutex poisoned");
-        health.frames_sent += 1;
-        health.packets_sent += packets;
-        health.send_errors += output.take_send_errors();
-    }
+    let send_errors = state.output.take_send_errors();
+    state.output.record_output_health(packets, send_errors);
     send_osc_feedback(&state, true);
     Ok(Json(serde_json::json!({
         "now": now,
@@ -133,39 +93,35 @@ pub(super) async fn free_run_test_clock(
     if !(1..=60_000).contains(&input.millis) {
         return Err(ApiError::bad_request("millis must be within 1-60000"));
     }
-    let _clock_session = state.test_clock_lock.lock().await;
-    let clock = state
-        .manual_clock
-        .as_ref()
-        .cloned()
-        .ok_or_else(|| ApiError::not_found("test clock"))?;
+    let clock_session = state.output.acquire_test_clock().await?;
+    let clock = clock_session.driver();
     let started = std::time::Instant::now();
     let cancellation = tokio_util::sync::CancellationToken::new();
     let cancellation_after_tick = cancellation.clone();
     let mut advanced = 0_u64;
-    let rate = Arc::clone(&state.output_rate);
-    let health = Arc::clone(&state.output_health);
-    light_output::run_scheduler_dynamic(rate, cancellation, health, || {
-        let elapsed = u64::try_from(started.elapsed().as_millis())
-            .unwrap_or(u64::MAX)
-            .min(input.millis);
-        let delta = elapsed.saturating_sub(advanced);
-        advanced = elapsed;
-        if delta > 0 {
-            clock.advance_millis(i64::try_from(delta).unwrap_or(i64::MAX));
-        }
-        refresh_speed_group_engine(&state);
-        if elapsed == input.millis {
-            cancellation_after_tick.cancel();
-        }
-        let tick_state = state.clone();
-        async move {
-            let result = output_scheduler::render_test_tick(tick_state.clone()).await;
-            send_osc_feedback(&tick_state, true);
-            result
-        }
-    })
-    .await;
+    state
+        .output
+        .run_output_scheduler(cancellation, || {
+            let elapsed = u64::try_from(started.elapsed().as_millis())
+                .unwrap_or(u64::MAX)
+                .min(input.millis);
+            let delta = elapsed.saturating_sub(advanced);
+            advanced = elapsed;
+            if delta > 0 {
+                clock.advance_millis(i64::try_from(delta).unwrap_or(i64::MAX));
+            }
+            refresh_speed_group_engine(&state);
+            if elapsed == input.millis {
+                cancellation_after_tick.cancel();
+            }
+            let tick_state = state.clone();
+            async move {
+                let result = output_scheduler::render_test_tick(tick_state.clone()).await;
+                send_osc_feedback(&tick_state, true);
+                result
+            }
+        })
+        .await;
     Ok(Json(serde_json::json!({
         "now": clock.now(),
         "wall_millis": started.elapsed().as_millis(),
@@ -183,10 +139,8 @@ pub(super) async fn set_test_output_failure(
     Json(input): Json<TestOutputFailure>,
 ) -> Result<StatusCode, ApiError> {
     state
-        .network_output
-        .as_ref()
-        .ok_or_else(|| ApiError::unavailable("network output is unavailable"))?
-        .inject_failure(input.destination, input.enabled);
+        .output
+        .inject_network_failure(input.destination, input.enabled)?;
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -1,3 +1,4 @@
+use super::super::capability_resources::ActiveShowPermit;
 use super::super::*;
 
 pub(in crate::runtime) fn output_route_action(
@@ -25,21 +26,17 @@ pub(in crate::runtime) fn output_route_action(
 
 pub(in crate::runtime) async fn run_output_route_action(
     state: &AppState,
-    activation: tokio::sync::OwnedMutexGuard<()>,
+    activation: ActiveShowPermit,
     action: light_application::ActionEnvelope<light_application::MutateOutputRouteCommand>,
-) -> Result<
-    (
-        light_application::MutateOutputRouteResult,
-        tokio::sync::OwnedMutexGuard<()>,
-    ),
-    ApiError,
-> {
+) -> Result<(light_application::MutateOutputRouteResult, ActiveShowPermit), ApiError> {
     let worker_state = state.clone();
-    let service = state.active_show_service.clone();
+    let active_show = state.active_show.clone();
     let show_id = action.command.show_id;
     let (result, activation) = tokio::task::spawn_blocking(move || {
+        #[cfg(test)]
+        worker_state.active_show.pause_http_lifecycle_if_armed();
         let ports = ServerActiveShowPorts::new(worker_state.clone());
-        let result = service
+        let result = active_show
             .mutate_output_route(action, &ports)
             .inspect(|result| {
                 emit_migration_object_changes(&worker_state, show_id, &result.migration_changes);
@@ -56,12 +53,10 @@ pub(in crate::runtime) async fn terminate_changed_route(
     state: &AppState,
     route: Option<&light_output::OutputRoute>,
 ) {
-    if let (Some(output), Some(route)) = (&state.network_output, route) {
-        let _ = output
-            .terminate_routes(
-                std::slice::from_ref(route),
-                &mut *state.output_sequences.lock().await,
-            )
+    if let Some(route) = route {
+        state
+            .output
+            .terminate_routes(std::slice::from_ref(route))
             .await;
     }
 }

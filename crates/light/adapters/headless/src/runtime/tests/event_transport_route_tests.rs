@@ -44,9 +44,9 @@ async fn malformed_correlated_action_returns_v2_failure_without_mutating_program
             .unwrap(),
     );
     let session = event_transport::authenticate_protocols(&state, &protocols).unwrap();
-    let before = serde_json::to_value(state.programmers.get(session.id)).unwrap();
+    let before = serde_json::to_value(state.programming.get(session.id)).unwrap();
     let stream = event_transport::EventStream::subscribe(
-        &state.application_events,
+        &state.events,
         &session,
         Ok(light_wire::v2::events::EventClientMessage::Subscribe {
             filter: Default::default(),
@@ -72,7 +72,7 @@ async fn malformed_correlated_action_returns_v2_failure_without_mutating_program
     assert_eq!(response.request_id, "malformed-action");
     assert!(!response.ok);
     assert_eq!(
-        serde_json::to_value(state.programmers.get(session.id)).unwrap(),
+        serde_json::to_value(state.programming.get(session.id)).unwrap(),
         before
     );
     let _ = std::fs::remove_dir_all(data_dir);
@@ -92,11 +92,11 @@ async fn v2_subscription_dispatches_an_action_and_keeps_delivering_events() {
     );
     let session = event_transport::authenticate_protocols(&state, &protocols).unwrap();
     let mut stream = event_transport::EventStream::subscribe(
-        &state.application_events,
+        &state.events,
         &session,
         Ok(light_wire::v2::events::EventClientMessage::Subscribe {
             filter: light_wire::v2::events::EventSubscriptionFilter::default(),
-            after_sequence: Some(state.application_events.latest_sequence()),
+            after_sequence: Some(state.events.latest_sequence()),
             capacity: Some(32),
             rate_limits: Vec::new(),
         }),
@@ -121,7 +121,7 @@ async fn v2_subscription_dispatches_an_action_and_keeps_delivering_events() {
     assert!(response.ok, "{:?}", response.error);
     assert_eq!(response.request_id, "v2-multiplex-command");
 
-    state.application_events.publish(
+    state.events.publish(
         light_application::EventDraft::virtual_playback_exclusion_zones_changed(
             light_application::VirtualPlaybackExclusionZonesChange {
                 show_id: light_core::ShowId(Uuid::from_u128(41)),
@@ -155,14 +155,14 @@ async fn v2_subscription_delivers_typed_fixture_library_events_from_the_emit_bou
     );
     let session = event_transport::authenticate_protocols(&state, &protocols).unwrap();
     let mut stream = event_transport::EventStream::subscribe(
-        &state.application_events,
+        &state.events,
         &session,
         Ok(light_wire::v2::events::EventClientMessage::Subscribe {
             filter: light_wire::v2::events::EventSubscriptionFilter {
                 capabilities: vec![light_wire::v2::events::EventCapability::Show],
                 ..Default::default()
             },
-            after_sequence: Some(state.application_events.latest_sequence()),
+            after_sequence: Some(state.events.latest_sequence()),
             capacity: Some(32),
             rate_limits: Vec::new(),
         }),
@@ -189,7 +189,7 @@ async fn v2_subscription_delivers_typed_fixture_library_events_from_the_emit_bou
     );
     assert_eq!(
         change.revision,
-        state.audit_events.lock().back().unwrap().revision
+        state.events.audit_events().last().unwrap().revision
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }

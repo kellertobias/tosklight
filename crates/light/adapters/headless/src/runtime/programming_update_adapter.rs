@@ -61,9 +61,7 @@ impl ServerProgrammingUpdatePorts {
         let live = self
             .state
             .sessions
-            .read()
-            .get(&SessionId(session_id))
-            .is_some_and(|session| session.token == self.session.token);
+            .session_token_matches(SessionId(session_id), &self.session.token);
         if !live {
             return Err(ActionError::new(
                 ActionErrorKind::Unauthorized,
@@ -106,12 +104,10 @@ impl ActiveShowPorts for ServerProgrammingUpdatePorts {
         if self.within_interaction {
             return operation();
         }
-        let _activation = self
-            .state
-            .activation_lock
-            .clone()
-            .try_lock_owned()
-            .map_err(|_| ActionError::new(ActionErrorKind::Busy, "the active show is changing"))?;
+        let _activation =
+            self.state.active_show.try_acquire().map_err(|_| {
+                ActionError::new(ActionErrorKind::Busy, "the active show is changing")
+            })?;
         operation()
     }
 
@@ -157,7 +153,7 @@ impl ProgrammingUpdatePorts for ServerProgrammingUpdatePorts {
     ) -> Result<Vec<ActiveCueContext>, ActionError> {
         Ok(self
             .state
-            .engine
+            .output
             .active_playbacks()
             .into_iter()
             .filter_map(|playback| {

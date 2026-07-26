@@ -12,7 +12,7 @@ async fn v2_selective_import_previews_conflicts_and_applies_one_atomic_revision(
     put_group(&state, source_id, "front", "Source Front");
     put_group(&state, target_id, "front", "Target Front");
     open_import_target(&app, &token, target_id).await;
-    let baseline_sequence = state.application_events.latest_sequence();
+    let baseline_sequence = state.events.latest_sequence();
 
     let denied = app
         .clone()
@@ -81,10 +81,7 @@ async fn v2_selective_import_previews_conflicts_and_applies_one_atomic_revision(
     assert_eq!(ready["can_apply"], true);
     assert_eq!(ready["source_revision"], 2);
     assert_eq!(ready["target_revision"], 2);
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        baseline_sequence
-    );
+    assert_eq!(state.events.latest_sequence(), baseline_sequence);
 
     let applied = post_import(
         &app,
@@ -117,10 +114,7 @@ async fn v2_selective_import_previews_conflicts_and_applies_one_atomic_revision(
         stored_group_name(&state, target_id, "front"),
         "Source Front"
     );
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        baseline_sequence + 1
-    );
+    assert_eq!(state.events.latest_sequence(), baseline_sequence + 1);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -135,7 +129,7 @@ async fn v2_selective_import_rejects_stale_target_and_source_previews() {
     let target_id = target["id"].as_str().unwrap();
     put_group(&state, source_id, "front", "Source Front");
     open_import_target(&app, &token, target_id).await;
-    let baseline_sequence = state.application_events.latest_sequence();
+    let baseline_sequence = state.events.latest_sequence();
 
     let preview = post_import(
         &app,
@@ -174,10 +168,7 @@ async fn v2_selective_import_rejects_stale_target_and_source_previews() {
     let stale_target = json(stale_target).await;
     assert_eq!(stale_target["error"], "active show changed after preview");
     assert_eq!(stale_target["current_revision"], 2);
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        baseline_sequence
-    );
+    assert_eq!(state.events.latest_sequence(), baseline_sequence);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -280,8 +271,7 @@ fn stored_group_name(state: &AppState, show_id: &str, group_id: &str) -> String 
 
 fn show_entry(state: &AppState, show_id: &str) -> ShowEntry {
     state
-        .desk
-        .lock()
+        .installation
         .show(light_core::ShowId(Uuid::parse_str(show_id).unwrap()))
         .unwrap()
         .unwrap()

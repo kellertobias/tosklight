@@ -70,9 +70,9 @@ async fn property_update_is_authoritative_replay_safe_and_sparse_on_no_change() 
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario.create_and_open_show("Group property update").await;
     let fixture = scenario.install_direct_fixture();
-    scenario.state.programmers.select(scenario.session.id, [fixture]);
+    scenario.state.programming.select(scenario.session.id, [fixture]);
     seed_group(&scenario, &show_id, "house").await;
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let request = group_management_request("manage-rename", "house", rename("Front wash"), 1);
 
     let response = scenario
@@ -94,7 +94,7 @@ async fn property_update_is_authoritative_replay_safe_and_sparse_on_no_change() 
     let event_sequence = management_event_sequence(&changed).unwrap();
     assert_eq!(event_sequence, baseline + 1);
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         baseline + 1,
         "one semantic mutation must publish exactly one Show event"
     );
@@ -106,7 +106,7 @@ async fn property_update_is_authoritative_replay_safe_and_sparse_on_no_change() 
     assert!(management_replayed(&replay));
     assert_eq!(management_event_sequence(&replay), Some(event_sequence));
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         baseline + 1,
         "a replay must not publish another Show event"
     );
@@ -122,7 +122,7 @@ async fn property_update_is_authoritative_replay_safe_and_sparse_on_no_change() 
     assert!(matches!(no_change, GroupManagementOutcome::NoChange { .. }));
     assert_eq!(management_event_sequence(&no_change), None);
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         baseline + 1,
         "a semantic no-op must publish no Show event"
     );
@@ -134,7 +134,7 @@ async fn undo_restores_the_previous_body_and_a_stale_revision_conflicts() {
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario.create_and_open_show("Group undo").await;
     let fixture = scenario.install_direct_fixture();
-    scenario.state.programmers.select(scenario.session.id, [fixture]);
+    scenario.state.programming.select(scenario.session.id, [fixture]);
     seed_group(&scenario, &show_id, "house").await;
     let renamed = scenario
         .group_management_action(
@@ -179,9 +179,9 @@ async fn frozen_refresh_publishes_its_selection_before_the_owning_show_event() {
     let show_id = scenario.create_and_open_show("Frozen refresh ordering").await;
     let first = scenario.install_direct_fixture();
     let second = light_core::FixtureId::new();
-    scenario.state.programmers.select(scenario.session.id, [first]);
+    scenario.state.programming.select(scenario.session.id, [first]);
     seed_group(&scenario, &show_id, "source").await;
-    scenario.state.programmers.select(scenario.session.id, [first]);
+    scenario.state.programming.select(scenario.session.id, [first]);
     seed_group(&scenario, &show_id, "frozen").await;
     // Make "frozen" a frozen snapshot of "source", then widen the source membership.
     let stored = scenario
@@ -207,7 +207,7 @@ async fn frozen_refresh_publishes_its_selection_before_the_owning_show_event() {
     assert_eq!(stored.status(), StatusCode::OK);
     scenario
         .state
-        .programmers
+        .programming
         .select(scenario.session.id, [first, second]);
     scenario
         .group_recording_action(
@@ -221,7 +221,7 @@ async fn frozen_refresh_publishes_its_selection_before_the_owning_show_event() {
             }),
         )
         .await;
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
 
     let refreshed = scenario
         .group_management_action(
@@ -267,7 +267,7 @@ async fn frozen_refresh_publishes_its_selection_before_the_owning_show_event() {
     assert_eq!(
         scenario
             .state
-            .programmers
+            .programming
             .selection(scenario.session.id)
             .unwrap()
             .selected,
@@ -285,7 +285,7 @@ async fn detach_derived_freezes_membership_and_an_invalid_source_mutates_nothing
     let second = light_core::FixtureId::new();
     scenario
         .state
-        .programmers
+        .programming
         .select(scenario.session.id, [first, second]);
     seed_group(&scenario, &show_id, "source").await;
     seed_group(&scenario, &show_id, "derived").await;
@@ -306,7 +306,7 @@ async fn detach_derived_freezes_membership_and_an_invalid_source_mutates_nothing
         )
         .await;
     assert_eq!(stored.status(), StatusCode::OK);
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
 
     let mismatched = scenario
         .group_management_action(
@@ -325,7 +325,7 @@ async fn detach_derived_freezes_membership_and_an_invalid_source_mutates_nothing
         .await;
     assert_eq!(mismatched.status(), StatusCode::CONFLICT);
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         baseline,
         "an invalid source must mutate nothing and publish nothing"
     );
@@ -355,7 +355,7 @@ async fn group_management_rejects_missing_auth_forged_scope_and_a_foreign_show()
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario.create_and_open_show("Group management security").await;
     let fixture = scenario.install_direct_fixture();
-    scenario.state.programmers.select(scenario.session.id, [fixture]);
+    scenario.state.programming.select(scenario.session.id, [fixture]);
     seed_group(&scenario, &show_id, "house").await;
     let request = group_management_request("manage-secure", "house", rename("Secured"), 1);
 

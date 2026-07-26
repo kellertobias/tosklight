@@ -14,7 +14,7 @@ use light_application::{
     ProgrammingPreloadPlaybackQueueItem, ProgrammingPreloadPlaybackQueueProjection,
     ProgrammingPreloadPlaybackSurface, ProgrammingPreloadValuesChange,
     ProgrammingPreloadValuesProjection, ProgrammingPriorityChange, ProgrammingPriorityProjection,
-    ProgrammingValuesChange, ProgrammingValuesProjection, publish_automatic_playback_events,
+    ProgrammingValuesChange, ProgrammingValuesProjection,
 };
 use light_core::{CueListId, ManualClock, ShowId, UserId};
 use light_engine::EnginePlaybackCommand;
@@ -93,7 +93,7 @@ async fn running_chaser_wakes_only_its_narrow_subscriber() {
             action: light_engine::CueListPlaybackAction::GoAt(started),
         })
         .unwrap();
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let object = wire::EventObject {
         capability: wire::EventCapability::Playback,
         id: format!("cuelist:{}", cue_list_id.0),
@@ -116,7 +116,7 @@ async fn running_chaser_wakes_only_its_narrow_subscriber() {
         test_playback_scope(),
         rendered.automatic_playback_transitions,
     );
-    publish_automatic_playback_events(&bus, changes);
+    bus.publish_automatic_playback_events(changes);
 
     let message = tokio::time::timeout(std::time::Duration::from_secs(1), waiting)
         .await
@@ -139,7 +139,7 @@ async fn running_chaser_wakes_only_its_narrow_subscriber() {
 
 #[tokio::test]
 async fn reconnect_gap_repairs_from_an_authoritative_snapshot_cursor() {
-    let bus = EventBus::new(2);
+    let bus = EventResource::new(EventBus::new(2));
     let desk_id = Uuid::from_u128(1);
     let session = event_session(desk_id, Uuid::from_u128(11));
     for sequence in 1..=3_u16 {
@@ -169,7 +169,7 @@ async fn reconnect_gap_repairs_from_an_authoritative_snapshot_cursor() {
 
 #[tokio::test]
 async fn exact_show_object_subscription_keeps_the_aggregate_event_identity() {
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let desk_id = Uuid::from_u128(1);
     let show_id = ShowId(Uuid::from_u128(2));
     let group_route = wire::EventObject {
@@ -265,7 +265,7 @@ fn wire_rate_limits_map_only_replaceable_topics() {
 
 #[test]
 fn programmer_values_objects_are_limited_to_the_authenticated_user() {
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let session = event_session(Uuid::from_u128(1), Uuid::from_u128(11));
     let foreign = wire::EventObject {
         capability: wire::EventCapability::Programmer,
@@ -312,7 +312,7 @@ fn programmer_values_objects_are_limited_to_the_authenticated_user() {
 
 #[test]
 fn programmer_priority_objects_are_limited_to_the_exact_authenticated_user() {
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
     let object = |user_id| wire::EventObject {
@@ -353,7 +353,7 @@ fn programmer_priority_objects_are_limited_to_the_exact_authenticated_user() {
 
 #[tokio::test]
 async fn broad_subscription_delivers_only_authenticated_user_priority() {
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
     let request = Ok(wire::EventClientMessage::Subscribe {
@@ -384,7 +384,7 @@ async fn broad_subscription_delivers_only_authenticated_user_priority() {
 
 #[test]
 fn programmer_lifecycle_is_the_only_aggregate_programmer_object() {
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let session = event_session(Uuid::from_u128(1), Uuid::from_u128(11));
     let lifecycle = wire::EventObject {
         capability: wire::EventCapability::Programmer,
@@ -408,7 +408,7 @@ fn programmer_lifecycle_is_the_only_aggregate_programmer_object() {
 
 #[tokio::test]
 async fn lifecycle_aggregate_delivers_foreign_safe_rows_through_the_wire_adapter() {
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let session = event_session(Uuid::from_u128(1), Uuid::from_u128(11));
     let object = wire::EventObject {
         capability: wire::EventCapability::Programmer,
@@ -462,7 +462,7 @@ async fn lifecycle_aggregate_delivers_foreign_safe_rows_through_the_wire_adapter
 
 #[test]
 fn programmer_capture_mode_objects_are_limited_to_the_authenticated_user() {
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
     let own = wire::EventObject {
@@ -518,7 +518,7 @@ fn programmer_capture_mode_objects_are_limited_to_the_authenticated_user() {
 
 #[test]
 fn programmer_preload_values_objects_are_limited_to_the_authenticated_user() {
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
     for id in [
@@ -557,7 +557,7 @@ fn programmer_preload_values_objects_are_limited_to_the_authenticated_user() {
 
 #[test]
 fn programmer_preload_playback_queue_objects_are_limited_to_the_authenticated_user() {
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
     for id in [
@@ -596,7 +596,7 @@ fn programmer_preload_playback_queue_objects_are_limited_to_the_authenticated_us
 
 #[tokio::test]
 async fn broad_subscription_delivers_only_authenticated_user_programmer_values() {
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
     let request = Ok(wire::EventClientMessage::Subscribe {
@@ -624,7 +624,7 @@ async fn broad_subscription_delivers_only_authenticated_user_programmer_values()
 
 #[tokio::test]
 async fn broad_subscription_delivers_only_authenticated_user_capture_mode() {
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
     let request = Ok(wire::EventClientMessage::Subscribe {
@@ -652,7 +652,7 @@ async fn broad_subscription_delivers_only_authenticated_user_capture_mode() {
 
 #[tokio::test]
 async fn broad_subscription_delivers_only_authenticated_user_preload_values() {
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
     let request = Ok(wire::EventClientMessage::Subscribe {
@@ -680,7 +680,7 @@ async fn broad_subscription_delivers_only_authenticated_user_preload_values() {
 
 #[tokio::test]
 async fn broad_subscription_delivers_only_authenticated_user_preload_playback_queue() {
-    let bus = EventBus::new(8);
+    let bus = EventResource::new(EventBus::new(8));
     let user_id = Uuid::from_u128(11);
     let session = event_session(Uuid::from_u128(1), user_id);
     let request = Ok(wire::EventClientMessage::Subscribe {

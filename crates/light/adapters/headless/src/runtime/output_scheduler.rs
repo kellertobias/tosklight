@@ -1,31 +1,31 @@
 //! Network-output scheduling and safe shutdown for the server runtime.
 
-use super::{
-    AppState, OutputControl, PersistedOutputRuntime, playback_service,
-    playback_telemetry::PlaybackTelemetrySampler,
+use super::capability_resources::{
+    ActiveShowCoordinator, ActiveShowProjection, OutputControlCapability, PlaybackRenderCapability,
 };
+use super::{AppState, OutputControl, PersistedOutputRuntime, playback_service};
 use light_application::{
-    PlaybackOperation, PlaybackService, PlaybackShowScope, PlaybackUnitOfWork,
-    automatic_playback_events,
+    PlaybackOperation, PlaybackShowScope, PlaybackUnitOfWork, automatic_playback_events,
 };
 use light_control::{SmpteTimecode, TimecodeRouter};
 use light_core::Universe;
 use light_engine::{Engine, EngineError, RenderOptions, RenderResult};
 use light_output::{DmxFrame, NetworkOutput, OutputHealth, Protocol, run_scheduler_dynamic};
-use light_show::ShowEntry;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use std::{
     collections::HashMap,
+    future::Future,
     io,
     net::IpAddr,
+    pin::Pin,
     sync::{Arc, atomic::AtomicU16},
 };
-use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 type OutputSequences = HashMap<(Protocol, Universe), u8>;
 type SharedSequences = Arc<tokio::sync::Mutex<OutputSequences>>;
+pub(super) type OutputTask = Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'static>>;
 
 pub(super) struct Config {
     pub bind_ip: IpAddr,
@@ -35,10 +35,9 @@ pub(super) struct Config {
     pub timecode: Arc<Mutex<TimecodeRouter>>,
     pub cancellation: CancellationToken,
     pub persisted_runtime: PersistedOutputRuntime,
-    pub playback_service: PlaybackService,
-    pub active_show: Arc<RwLock<Option<ShowEntry>>>,
-    pub activation_lock: Arc<tokio::sync::Mutex<()>>,
-    pub telemetry: Arc<PlaybackTelemetrySampler>,
+    pub playback: PlaybackRenderCapability,
+    pub active_show: ActiveShowProjection,
+    pub activation: ActiveShowCoordinator,
     pub test_bench: bool,
 }
 
@@ -47,7 +46,7 @@ pub(super) struct OutputScheduler {
     pub(super) sequences: SharedSequences,
     pub(super) control: Arc<Mutex<OutputControl>>,
     start: Option<tokio::sync::oneshot::Sender<()>>,
-    pub(super) task: JoinHandle<()>,
+    task: OutputTask,
 }
 
 struct SharedResources {
@@ -63,10 +62,9 @@ struct Runtime {
     pub(super) sequences: SharedSequences,
     pub(super) control: Arc<Mutex<OutputControl>>,
     pub(super) timecode: Arc<Mutex<TimecodeRouter>>,
-    pub(super) playback_service: PlaybackService,
-    pub(super) active_show: Arc<RwLock<Option<ShowEntry>>>,
-    pub(super) activation_lock: Arc<tokio::sync::Mutex<()>>,
-    pub(super) telemetry: Arc<PlaybackTelemetrySampler>,
+    pub(super) playback: PlaybackRenderCapability,
+    pub(super) active_show: ActiveShowProjection,
+    pub(super) activation: ActiveShowCoordinator,
     pub(super) cancellation: CancellationToken,
 }
 
@@ -74,7 +72,7 @@ pub(super) async fn start(config: Config) -> anyhow::Result<OutputScheduler> {
     let resources = SharedResources::create(&config).await?;
     let runtime = resources.runtime(&config);
     let (start, ready) = tokio::sync::oneshot::channel();
-    let task = spawn(
+    let task = task(
         runtime,
         config.rate,
         config.health,
@@ -101,19 +99,20 @@ fn create_control(runtime: &PersistedOutputRuntime) -> Arc<Mutex<OutputControl>>
     }))
 }
 
-fn spawn(
+fn task(
     runtime: Runtime,
     rate: Arc<AtomicU16>,
     health: Arc<std::sync::Mutex<OutputHealth>>,
     test_bench: bool,
     ready: tokio::sync::oneshot::Receiver<()>,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
+) -> OutputTask {
+    Box::pin(async move {
         if !await_start(ready, &runtime.cancellation).await {
-            return;
+            return Ok(());
         }
         run(&runtime, rate, health, test_bench).await;
         shut_down_safely(&runtime).await;
+        Ok(())
     })
 }
 
@@ -148,13 +147,12 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     update_timecode(&runtime);
     let options = runtime.control.lock().render_options();
     let rendered = {
-        let _activation = runtime.activation_lock.clone().lock_owned().await;
+        let _activation = runtime.activation.acquire().await;
         render_with_playback_events(
             &runtime.engine,
             &runtime.active_show,
-            &runtime.playback_service,
+            &runtime.playback,
             options,
-            Some(&runtime.telemetry),
         )
         .map_err(io::Error::other)?
     };
@@ -173,48 +171,46 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
 /// Runs one test-bench frame through the same render, routing, sequence, health-facing output
 /// boundary as the production scheduler.
 pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
-    let output = state
-        .network_output
-        .as_ref()
-        .cloned()
-        .ok_or_else(|| io::Error::other("network output is unavailable"))?;
-    render_tick(Runtime {
-        engine: Arc::clone(&state.engine),
-        output,
-        sequences: Arc::clone(&state.output_sequences),
-        control: Arc::clone(&state.output_control),
-        timecode: Arc::clone(&state.timecode_router),
-        playback_service: state.playback_service.clone(),
-        active_show: Arc::clone(&state.active_show),
-        activation_lock: Arc::clone(&state.activation_lock),
-        telemetry: Arc::clone(&state.playback_telemetry),
-        cancellation: state.shutdown.clone(),
-    })
-    .await
+    let rendered = {
+        let _activation = state.active_show.acquire().await;
+        let playback = state.playback.render_capability();
+        state
+            .output
+            .render_with_playback_events(
+                &state.active_show.output_projection(),
+                &playback,
+                state.output.render_options(),
+            )
+            .map_err(io::Error::other)?
+    };
+    let frames = state.output.render_frames(rendered.universes);
+    state
+        .output
+        .send_network_routes(&rendered.routes, &frames, &rendered.patched_slots)
+        .await
 }
 
 pub(super) fn render_with_playback_events(
     engine: &Engine,
-    active_show: &RwLock<Option<ShowEntry>>,
-    service: &PlaybackService,
+    active_show: &ActiveShowProjection,
+    playback: &PlaybackRenderCapability,
     options: RenderOptions,
-    telemetry: Option<&PlaybackTelemetrySampler>,
 ) -> Result<RenderResult, EngineError> {
-    service
+    playback
         .run_unit_of_work(AutomaticRender {
             engine,
             active_show,
             options,
-            telemetry,
+            playback,
         })
         .output
 }
 
 struct AutomaticRender<'a> {
     engine: &'a Engine,
-    active_show: &'a RwLock<Option<ShowEntry>>,
+    active_show: &'a ActiveShowProjection,
     options: RenderOptions,
-    telemetry: Option<&'a PlaybackTelemetrySampler>,
+    playback: &'a PlaybackRenderCapability,
 }
 
 impl PlaybackUnitOfWork for AutomaticRender<'_> {
@@ -226,7 +222,7 @@ impl PlaybackUnitOfWork for AutomaticRender<'_> {
             Err(error) => return PlaybackOperation::new(Err(error)),
         };
         let transitions = std::mem::take(&mut rendered.automatic_playback_transitions);
-        let show_id = self.active_show.read().as_ref().map(|show| show.id.0);
+        let show_id = self.active_show.current().as_ref().map(|show| show.id.0);
         let mut events = show_id
             .map(|show_id| {
                 playback_service::automatic_projection_changes(
@@ -240,8 +236,8 @@ impl PlaybackUnitOfWork for AutomaticRender<'_> {
             })
             .map(automatic_playback_events)
             .unwrap_or_default();
-        if let Some((telemetry, show_id)) = self.telemetry.zip(show_id)
-            && let Some(draft) = telemetry.completed_frame(
+        if let Some(show_id) = show_id
+            && let Some(draft) = self.playback.completed_frame(
                 self.engine,
                 show_id,
                 rendered.revision,
@@ -340,13 +336,13 @@ impl OutputScheduler {
         Arc::clone(&self.sequences)
     }
 
-    pub(super) fn control(&self) -> Arc<Mutex<OutputControl>> {
-        Arc::clone(&self.control)
+    pub(super) fn control_capability(&self) -> OutputControlCapability {
+        OutputControlCapability::new(Arc::clone(&self.control))
     }
 
-    pub(super) async fn wait(mut self) {
+    pub(super) fn into_task(mut self) -> OutputTask {
         self.start.take();
-        let _ = self.task.await;
+        self.task
     }
 }
 
@@ -366,10 +362,9 @@ impl SharedResources {
             sequences: Arc::clone(&self.sequences),
             control: Arc::clone(&self.control),
             timecode: Arc::clone(&config.timecode),
-            playback_service: config.playback_service.clone(),
-            active_show: Arc::clone(&config.active_show),
-            activation_lock: Arc::clone(&config.activation_lock),
-            telemetry: Arc::clone(&config.telemetry),
+            playback: config.playback.clone(),
+            active_show: config.active_show.clone(),
+            activation: config.activation.clone(),
             cancellation: config.cancellation.clone(),
         }
     }
@@ -377,7 +372,7 @@ impl SharedResources {
     fn scheduler(
         self,
         start: tokio::sync::oneshot::Sender<()>,
-        task: JoinHandle<()>,
+        task: OutputTask,
     ) -> OutputScheduler {
         OutputScheduler {
             output: self.output,

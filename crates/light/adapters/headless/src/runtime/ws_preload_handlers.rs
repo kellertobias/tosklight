@@ -82,11 +82,11 @@ pub(super) fn ws_programmer_command_line(
     let input: Input =
         serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
     let was_armed = state
-        .programmers
+        .programming
         .get(session.id)
         .is_some_and(|programmer| command_line_arms_update(&programmer.command_line));
     let is_armed = command_line_arms_update(&input.value);
-    state.programmers.set_command_line(session.id, input.value);
+    state.programming.set_command_line(session.id, input.value);
     persist_programmer(state, session).map_err(|e| e.message)?;
     emit_update_armed_transition(state, session, was_armed, is_armed, "software");
     Ok(serde_json::json!({"updated":true}))
@@ -104,7 +104,7 @@ pub(super) fn ws_programmer_command_target(
     let input: Input =
         serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
     if !state
-        .programmers
+        .programming
         .set_command_target(session.id, input.value.to_ascii_uppercase())
     {
         return Err("command target must be FIXTURE or GROUP".into());
@@ -170,7 +170,7 @@ fn finish_ws_execution(
     };
     if !replayed {
         state
-            .programmers
+            .programming
             .complete_command_execution(session.id, final_text, pending_choice);
     }
     match outcome {
@@ -178,7 +178,7 @@ fn finish_ws_execution(
             Ok(serde_json::json!({
                 "applied":0,
                 "pending_choice":command_http::wire_choice(pending_choice),
-                "programmer":state.programmers.get(session.id)
+                "programmer":state.programming.get(session.id)
             }))
         }
         command_http::ExistingCommandOutcome::Accepted {
@@ -188,7 +188,7 @@ fn finish_ws_execution(
         } => Ok(serde_json::json!({
             "applied":applied,
             "persistence_warning":persistence_warning,
-            "programmer":state.programmers.get(session.id)
+            "programmer":state.programming.get(session.id)
         })),
         command_http::ExistingCommandOutcome::Rejected { error } => Err(error),
     }
@@ -202,7 +202,7 @@ fn ws_typed_recording(
 ) -> Option<command_http::ExistingCommandOutcome> {
     let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
     let outcome = ports.record_typed_command(
-        &state.programmers,
+        &state.programming,
         context,
         command,
         light_application::ExecutionPolicy::Compatibility,

@@ -39,7 +39,7 @@ async fn apply_selection_action(
     let session = authenticate_desk_mutation(&state, &headers, &desk)?;
     let context = http_context(&session, Some(&input.request_id));
     let command = selection_command(input.action)?;
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     show.verify(&state)?;
     let worker_state = state.clone();
     let worker_session = session.clone();

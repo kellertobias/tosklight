@@ -6,7 +6,7 @@ mod output_routes;
 pub(super) use output_routes::*;
 
 pub(super) fn exact_object_snapshot(
-    store: &ShowStore,
+    store: &ActiveShowRepository,
     kind: &str,
     object_id: &str,
 ) -> Result<
@@ -128,7 +128,7 @@ pub(super) fn validate_object_candidate(
     let candidate = load_engine_snapshot_with_override(entry, Some((kind, object_id, body)))
         .map_err(show_load_api_error)?;
     if active || matches!(kind, "playback" | "playback_page") {
-        state.engine.validate_snapshot_for_runtime(&candidate)
+        state.output.validate_snapshot_for_runtime(&candidate)
     } else {
         candidate.validate()
     }
@@ -142,15 +142,11 @@ pub(super) async fn activate_object_change(
     body: &serde_json::Value,
 ) -> Result<(), ApiError> {
     let prepared = prepare_show_for_runtime(state, entry)?;
-    state.engine.install_prepared_snapshot(prepared);
+    state.output.install_prepared_snapshot(prepared);
     if kind == "patched_fixture"
         && let Ok(fixture) = serde_json::from_value::<light_fixture::PatchedFixture>(body.clone())
     {
-        state
-            .media_cache
-            .lock()
-            .clear_fixture(&fixture.fixture_id.0.to_string());
-        state.media_status.write().remove(&fixture.fixture_id);
+        state.media.invalidate_fixture(fixture.fixture_id);
     }
     Ok(())
 }
@@ -164,15 +160,14 @@ pub(super) async fn seed_object_for_test_put(
     body: serde_json::Value,
 ) -> Result<Response, ApiError> {
     let entry = state
-        .desk
-        .lock()
+        .installation
         .show(show_id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     let active = state
         .active_show
-        .read()
+        .current()
         .as_ref()
         .is_some_and(|active| active.id == show_id);
     if active && kind == "route" {
@@ -253,7 +248,7 @@ pub(super) async fn seed_object_for_test_put(
     }
     let body = normalize_object_body(&state, &kind, &object_id, body)?;
     validate_object_candidate(&state, &entry, &kind, &object_id, &body, active)?;
-    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
+    let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     backup_show(&state, &entry)?;
     let revision = store
         .put_object(&kind, &object_id, &body, expected)
@@ -290,15 +285,14 @@ pub(super) async fn seed_object_for_test_delete(
         ));
     }
     let entry = state
-        .desk
-        .lock()
+        .installation
         .show(show_id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     let active = state
         .active_show
-        .read()
+        .current()
         .as_ref()
         .is_some_and(|active| active.id == show_id);
     if active {
@@ -325,7 +319,7 @@ pub(super) async fn seed_object_for_test_delete(
         );
         return Ok(StatusCode::NO_CONTENT);
     }
-    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
+    let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let _object = store
         .objects(&kind)
         .map_err(ApiError::store)?

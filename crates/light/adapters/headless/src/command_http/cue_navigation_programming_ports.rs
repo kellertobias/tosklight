@@ -5,14 +5,13 @@
 //! therefore leaves both the command line and the runtime untouched.
 
 use super::cue_navigation_action;
-use super::programming_ports::{ServerProgrammingPorts, clear_command_line};
+use super::programming_ports::{CommandLineProgrammer, ServerProgrammingPorts, clear_command_line};
 use light_application::{ActionContext, ExecutionPolicy, ProgrammingExecution};
-use light_programmer::ProgrammerRegistry;
 
 impl ServerProgrammingPorts<'_> {
     pub(super) fn navigate_cue_command(
         &self,
-        programmers: &ProgrammerRegistry,
+        programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
         command: &str,
         policy: ExecutionPolicy,

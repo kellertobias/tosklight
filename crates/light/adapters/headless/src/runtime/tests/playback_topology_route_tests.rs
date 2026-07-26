@@ -4,7 +4,7 @@ use super::{playback_topology_route_support::*, *};
 async fn configure_no_change_replay_conflict_and_clear_are_one_event_actions() {
     let scenario = TopologyScenario::new("Playback topology lifecycle").await;
     let initial_revision = scenario.show_revision();
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
     let configure = configure_request("configure-house", 0, 0);
 
     let response = scenario.action(initial_revision, configure.clone()).await;
@@ -31,10 +31,7 @@ async fn configure_no_change_replay_conflict_and_clear_are_one_event_actions() {
     assert_eq!(replay["status"], "changed");
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["event_sequence"], cursor + 1);
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
+    assert_eq!(scenario.state.events.latest_sequence(), cursor + 1);
 
     let no_change = scenario
         .action(
@@ -48,10 +45,7 @@ async fn configure_no_change_replay_conflict_and_clear_are_one_event_actions() {
     assert_eq!(no_change["status"], "no_change");
     assert!(no_change.get("event_sequence").is_none());
     assert_eq!(no_change["objects"].as_array().unwrap().len(), 2);
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
+    assert_eq!(scenario.state.events.latest_sequence(), cursor + 1);
 
     let stale_show = scenario
         .action(
@@ -76,10 +70,7 @@ async fn configure_no_change_replay_conflict_and_clear_are_one_event_actions() {
     let stale_page = json(stale_page).await;
     assert_eq!(stale_page["current_revision"], initial_revision + 1);
     assert_eq!(stale_page["current_related_revision"], page_revision);
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
+    assert_eq!(scenario.state.events.latest_sequence(), cursor + 1);
 
     let clear = scenario
         .action(
@@ -105,7 +96,7 @@ async fn configure_no_change_replay_conflict_and_clear_are_one_event_actions() {
 async fn save_cue_list_preserves_extensions_and_returns_the_committed_projection() {
     let scenario = TopologyScenario::new("Playback topology Cuelist").await;
     let revision = scenario.show_revision();
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
     let request = save_request("save-lossless", 0);
     let cue_list_id = request["action"]["cue_list_id"]
         .as_str()
@@ -145,10 +136,7 @@ async fn save_cue_list_preserves_extensions_and_returns_the_committed_projection
     assert_eq!(conflict["current_revision"], revision + 1);
     assert_eq!(conflict["current_related_revision"], 1);
     assert_eq!(scenario.show_revision(), revision + 1);
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
+    assert_eq!(scenario.state.events.latest_sequence(), cursor + 1);
     let document = scenario.document();
     let stored = document.object("cue_list", &cue_list_id).unwrap();
     assert_ne!(stored.body()["name"], "Must not replace");
@@ -160,7 +148,7 @@ async fn topology_route_rejects_missing_authority_and_forged_scope() {
     let scenario = TopologyScenario::new("Playback topology authorization").await;
     let revision = scenario.show_revision();
     let request = map_existing_request("authorization", 0, None, 0, None);
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
 
     let unauthorized = post_topology(
         &scenario.app,
@@ -232,7 +220,7 @@ async fn topology_route_rejects_missing_authority_and_forged_scope() {
             .unwrap()
             .contains("safe integer")
     );
-    assert_eq!(scenario.state.application_events.latest_sequence(), cursor);
+    assert_eq!(scenario.state.events.latest_sequence(), cursor);
     scenario.cleanup();
 }
 
@@ -277,17 +265,26 @@ async fn same_user_two_desks_and_another_user_share_the_active_show() {
     let primary_user_id = scenario
         .state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .find(|session| session.token == scenario.token)
         .unwrap()
         .user
         .id;
     let (same_user_desk, other_user_desk) = {
-        let store = scenario.state.desk.lock();
-        let same = store.add_desk("Topology wing", "topology-wing").unwrap();
-        store.add_user("Topology guest").unwrap();
-        let other = store
+        let same = scenario
+            .state
+            .installation
+            .add_desk("Topology wing", "topology-wing")
+            .unwrap();
+        scenario
+            .state
+            .installation
+            .add_user("Topology guest")
+            .unwrap();
+        let other = scenario
+            .state
+            .installation
             .add_desk("Topology guest desk", "topology-guest")
             .unwrap();
         (same, other)
@@ -302,7 +299,7 @@ async fn same_user_two_desks_and_another_user_share_the_active_show() {
     .await;
     assert_eq!(same_user["user"]["id"], primary_user_id.0.to_string());
     assert_ne!(other_user["user"]["id"], primary_user_id.0.to_string());
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
 
     for (token, request_id) in [
         (scenario.token.as_str(), "primary-save"),
@@ -333,7 +330,7 @@ async fn same_user_two_desks_and_another_user_share_the_active_show() {
 #[tokio::test]
 async fn configured_desk_boundary_rejects_missing_or_foreign_credentials() {
     let (mut state, data_dir) = test_state();
-    state.desk_token = Some(Arc::from("topology-boundary"));
+    state.installation.set_desk_token("topology-boundary");
     let app = router(state.clone());
     let session = login_on_desk(&app, "Operator", None, Some("topology-boundary")).await;
     let token = session["token"].as_str().unwrap();
@@ -342,7 +339,7 @@ async fn configured_desk_boundary_rejects_missing_or_foreign_credentials() {
     open_topology_show(&app, token, show_id, Some("topology-boundary")).await;
     let revision = state
         .active_show
-        .read()
+        .current()
         .as_ref()
         .map(|entry| {
             ShowStore::open(&entry.path)

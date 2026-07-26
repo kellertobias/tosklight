@@ -54,7 +54,7 @@ async fn run_action(
     session: Session,
     action: ActionEnvelope<light_application::ProgrammingPresetRecallRequest>,
 ) -> Result<light_application::ProgrammingPresetRecallResult, PresetRecallHttpError> {
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     tokio::task::spawn_blocking(move || {
         let ports = ServerProgrammingPorts::new(&state, &session, "http_preset_recall", true);
         let result = state.programming.handle_preset_recall(action, &ports);

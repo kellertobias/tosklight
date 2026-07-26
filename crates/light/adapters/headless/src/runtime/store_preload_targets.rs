@@ -10,7 +10,7 @@ pub(super) struct PreparedPreloadTarget {
 }
 
 pub(super) fn prepare_preload_preset(
-    store: &ShowStore,
+    store: &ActiveShowRepository,
     input: &PreloadStoreInput,
     fixtures: &[light_core::TimedValue],
     groups: &PreloadGroupValues,
@@ -91,7 +91,7 @@ pub(super) fn prepare_preload_preset(
 }
 
 pub(super) fn prepare_preload_cue(
-    store: &ShowStore,
+    store: &ActiveShowRepository,
     input: &PreloadStoreInput,
     fixtures: &[light_core::TimedValue],
     groups: &PreloadGroupValues,

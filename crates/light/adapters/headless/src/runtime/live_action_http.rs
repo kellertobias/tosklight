@@ -48,7 +48,7 @@ async fn command_target(
             light_wire::v2::command_line::CommandTarget::Group => "GROUP",
         };
         if !state
-            .programmers
+            .programming
             .set_command_target(session.id, value.into())
         {
             return Err("command target must be FIXTURE or GROUP".into());
@@ -74,7 +74,7 @@ async fn programmer_undo(
     let outcome_request_id = request_id.clone();
     let outcome =
         run_http_programming_action(state, session, request_id, move |state, session, _| {
-            let changed = state.programmers.undo(session.id);
+            let changed = state.programming.undo(session.id);
             persist_programmer(state, session).map_err(|error| error.message)?;
             Ok(ProgrammerUndoHttpActionOutcome {
                 request_id: outcome_request_id,
@@ -206,8 +206,11 @@ async fn generate_fixture_presets(
         show_id,
         request_id: request.request_id.clone(),
     };
-    let mut replay = state.preset_generation_replay.lock().await;
-    if let Some(outcome) = replay.get(&replay_key, &request)? {
+    if let Some(outcome) = state
+        .replay
+        .lookup_preset_generation(&replay_key, &request)
+        .await?
+    {
         return Ok(Json(outcome));
     }
     let replay_request = request.clone();
@@ -229,7 +232,10 @@ async fn generate_fixture_presets(
     .await
     .map_err(|error| ApiError::internal(format!("Preset generation task failed: {error}")))?
     .map_err(action_api_error)?;
-    replay.insert(replay_key, replay_request, outcome.clone());
+    state
+        .replay
+        .insert_preset_generation(replay_key, replay_request, outcome.clone())
+        .await;
     Ok(Json(outcome))
 }
 
@@ -242,7 +248,7 @@ async fn run_http_programming_action<T>(
 where
     T: Send + 'static,
 {
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     let worker_state = state.clone();
     let worker_session = session.clone();
     let context = programming_context(
@@ -294,7 +300,7 @@ fn action_api_error(message: String) -> ApiError {
 const PRESET_GENERATION_REPLAY_LIMIT: usize = 1_024;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct PresetGenerationReplayKey {
+pub(super) struct PresetGenerationReplayKey {
     session_id: Uuid,
     show_id: light_core::ShowId,
     request_id: String,
@@ -312,7 +318,7 @@ pub(super) struct PresetGenerationReplayCache {
 }
 
 impl PresetGenerationReplayCache {
-    fn get(
+    pub(super) fn get(
         &self,
         key: &PresetGenerationReplayKey,
         request: &GenerateFixturePresetsRequest,
@@ -330,7 +336,7 @@ impl PresetGenerationReplayCache {
         Ok(Some(outcome))
     }
 
-    fn insert(
+    pub(super) fn insert(
         &mut self,
         key: PresetGenerationReplayKey,
         request: GenerateFixturePresetsRequest,

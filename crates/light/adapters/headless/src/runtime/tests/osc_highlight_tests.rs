@@ -32,19 +32,18 @@ fn verify_cross_surface_highlight_dedupe(
     send_highlight_osc(state, session, "on");
     assert_eq!(
         state
-            .engine
-            .highlighted_fixtures()
+            .output.highlighted_fixtures()
             .into_iter()
             .collect::<HashSet<_>>(),
         fixture_ids.iter().copied().collect::<HashSet<_>>()
     );
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let fixtures = highlight_fixture_summaries(&snapshot.fixtures);
     let groups = highlight_groups(&snapshot);
-    let selection = state.programmers.selection(session.id).unwrap();
+    let selection = state.programming.selection(session.id).unwrap();
     let software = state
         .highlight
-        .action_guarded(
+        .apply_action_guarded(
             session.desk.id,
             session.user.id,
             Some(&session.user.name),
@@ -58,8 +57,8 @@ fn verify_cross_surface_highlight_dedupe(
     apply_highlight_selection_write(state, session, software.working_selection.as_ref()).unwrap();
     assert_eq!(software.state.active_index, Some(0));
     send_highlight_osc(state, session, "next");
-    let selection = state.programmers.selection(session.id).unwrap();
-    let after_echo = state.highlight.status(
+    let selection = state.programming.selection(session.id).unwrap();
+    let after_echo = state.highlight.transition(
         session.desk.id,
         session.user.id,
         Some(&session.user.name),
@@ -76,14 +75,14 @@ fn verify_highlight_alias_dedupe(
     session: &Session,
     fixture_ids: &[light_core::FixtureId],
 ) {
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let fixtures = highlight_fixture_summaries(&snapshot.fixtures);
     let groups = highlight_groups(&snapshot);
     for _ in 0..2 {
-        let selection = state.programmers.selection(session.id).unwrap();
+        let selection = state.programming.selection(session.id).unwrap();
         let transition = state
             .highlight
-            .action(
+            .apply_action(
                 session.desk.id,
                 session.user.id,
                 Some(&session.user.name),
@@ -97,11 +96,11 @@ fn verify_highlight_alias_dedupe(
         apply_highlight_selection_write(state, session, transition.working_selection.as_ref())
             .unwrap();
     }
-    let before_aliases = state.application_events.latest_sequence();
+    let before_aliases = state.events.latest_sequence();
     send_highlight_osc(state, session, "previous");
     send_highlight_osc(state, session, "prev");
-    let selection = state.programmers.selection(session.id).unwrap();
-    let after_aliases = state.highlight.status(
+    let selection = state.programming.selection(session.id).unwrap();
+    let after_aliases = state.highlight.transition(
         session.desk.id,
         session.user.id,
         Some(&session.user.name),
@@ -121,8 +120,7 @@ fn verify_highlight_alias_dedupe(
     );
     assert_eq!(
         state
-            .audit_events
-            .lock()
+            .events.audit_events()
             .iter()
             .filter(|event| {
                 event.kind == "highlight_changed"
@@ -136,7 +134,7 @@ fn verify_highlight_alias_dedupe(
 }
 
 fn verify_highlight_osc_feedback(state: &AppState, session: &Session) {
-    let feedback = state.osc_feedback_capture.lock();
+    let feedback = state.integrations.captured_osc_feedback();
     let prefix = format!("/light/{}/feedback/highlight", session.desk.osc_alias);
     for (suffix, arguments) in [
         ("active", vec![OscArgument::Bool(true)]),
@@ -169,17 +167,24 @@ fn verify_highlight_reconnect(
             source: Some(HIGHLIGHT_OSC_SOURCE.into()),
         },
     );
-    assert!(!state.osc_subscribers.lock().contains_key(HIGHLIGHT_OSC_CLIENT));
+    assert!(state
+        .integrations
+        .osc_subscriber(HIGHLIGHT_OSC_CLIENT)
+        .is_none());
     handle_control_event(state, highlight_subscription(session));
     assert_eq!(
-        state.osc_subscribers.lock()[HIGHLIGHT_OSC_CLIENT].session_id,
+        state
+            .integrations
+            .osc_subscriber(HIGHLIGHT_OSC_CLIENT)
+            .unwrap()
+            .session_id,
         session.id
     );
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let fixtures = highlight_fixture_summaries(&snapshot.fixtures);
     let groups = highlight_groups(&snapshot);
-    let selection = state.programmers.selection(session.id).unwrap();
-    let reconnected = state.highlight.status(
+    let selection = state.programming.selection(session.id).unwrap();
+    let reconnected = state.highlight.transition(
         session.desk.id,
         session.user.id,
         Some(&session.user.name),
@@ -194,8 +199,8 @@ fn verify_highlight_reconnect(
 
     send_highlight_osc(state, session, "capture");
     send_highlight_osc(state, session, "reset");
-    let selection = state.programmers.selection(session.id).unwrap();
-    let unchanged = state.highlight.status(
+    let selection = state.programming.selection(session.id).unwrap();
+    let unchanged = state.highlight.transition(
         session.desk.id,
         session.user.id,
         Some(&session.user.name),
@@ -206,9 +211,9 @@ fn verify_highlight_reconnect(
     );
     assert_eq!(unchanged.state.active_index, Some(1));
     send_highlight_osc(state, session, "all");
-    assert_eq!(state.programmers.get(session.id).unwrap().selected, fixture_ids);
-    let selection = state.programmers.selection(session.id).unwrap();
-    let restored = state.highlight.status(
+    assert_eq!(state.programming.get(session.id).unwrap().selected, fixture_ids);
+    let selection = state.programming.selection(session.id).unwrap();
+    let restored = state.highlight.transition(
         session.desk.id,
         session.user.id,
         Some(&session.user.name),
@@ -227,24 +232,27 @@ async fn authenticated_osc_highlight_adapter_feedback_dedupe_and_reconnect_are_a
     let app = router(state.clone());
     let (_, session_id) = login(&app, "Operator").await;
     let session_id = SessionId(Uuid::parse_str(&session_id).unwrap());
-    let session = state.sessions.read()[&session_id].clone();
+    let session = state.sessions.session(session_id).unwrap();
     let fixtures = highlight_test_fixtures();
     let fixture_ids = fixtures
         .iter()
         .map(|fixture| fixture.fixture_id)
         .collect::<Vec<_>>();
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: fixtures.into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
-    state.programmers.select(session.id, fixture_ids.clone());
+    state.programming.select(session.id, fixture_ids.clone());
     enable_highlight_test_feedback(&state);
     handle_control_event(&state, highlight_subscription(&session));
     assert_eq!(
-        state.osc_subscribers.lock()[HIGHLIGHT_OSC_CLIENT].session_id,
+        state
+            .integrations
+            .osc_subscriber(HIGHLIGHT_OSC_CLIENT)
+            .unwrap()
+            .session_id,
         session.id
     );
     verify_cross_surface_highlight_dedupe(&state, &session, &fixture_ids);

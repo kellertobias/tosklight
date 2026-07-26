@@ -24,12 +24,11 @@ async fn show_library_snapshot(
     headers: HeaderMap,
 ) -> Result<Json<wire::ShowLibrarySnapshot>, ApiError> {
     let _session = authenticate(&state, &headers)?;
-    let shows = state.desk.lock().library().map_err(ApiError::store)?;
+    let shows = state.installation.show_library().map_err(ApiError::store)?;
     let mut entries = Vec::with_capacity(shows.len());
     for show in shows {
         let revisions = state
-            .desk
-            .lock()
+            .installation
             .show_revisions(show.id)
             .map_err(ApiError::store)?
             .into_iter()
@@ -55,8 +54,7 @@ async fn show_library_action(
         request_id: request.request_id.clone(),
     };
     let signature = action_signature(&request.action)?;
-    let mut replay = state.show_library_replay.lock().await;
-    if let Some(outcome) = replay.get(&key, &signature)? {
+    if let Some(outcome) = state.replay.lookup_show_library(&key, &signature).await? {
         return Ok(Json(outcome));
     }
     let result = execute_action(&state, &headers, request.action).await?;
@@ -65,7 +63,10 @@ async fn show_library_action(
         replayed: false,
         result,
     };
-    replay.insert(key, signature, outcome.clone());
+    state
+        .replay
+        .insert_show_library(key, signature, outcome.clone())
+        .await;
     Ok(Json(outcome))
 }
 
@@ -413,7 +414,7 @@ fn validate_request_id(request_id: &str) -> Result<(), ApiError> {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct ReplayKey {
+pub(super) struct ReplayKey {
     session_id: Uuid,
     request_id: String,
 }
@@ -430,7 +431,7 @@ pub(super) struct ShowLibraryReplayCache {
 }
 
 impl ShowLibraryReplayCache {
-    fn get(
+    pub(super) fn get(
         &self,
         key: &ReplayKey,
         signature: &[u8; 32],
@@ -448,7 +449,7 @@ impl ShowLibraryReplayCache {
         Ok(Some(outcome))
     }
 
-    fn insert(
+    pub(super) fn insert(
         &mut self,
         key: ReplayKey,
         signature: [u8; 32],

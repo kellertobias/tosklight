@@ -28,8 +28,7 @@ async fn typed_route_update_and_delete_share_the_prepared_application_boundary()
     let show_id = show["id"].as_str().unwrap();
     let show_uuid = Uuid::parse_str(show_id).unwrap();
     let entry = state
-        .desk
-        .lock()
+        .installation
         .show(light_core::ShowId(show_uuid))
         .unwrap()
         .unwrap();
@@ -57,7 +56,7 @@ async fn typed_route_update_and_delete_share_the_prepared_application_boundary()
         .await
         .unwrap();
     assert_eq!(opened.status(), StatusCode::OK);
-    let before_events = state.application_events.latest_sequence();
+    let before_events = state.events.latest_sequence();
     let updated_route = serde_json::json!({
         "protocol": "art_net",
         "logical_universe": 1,
@@ -98,14 +97,11 @@ async fn typed_route_update_and_delete_share_the_prepared_application_boundary()
     );
     assert!(stored.body()["future_client_field"].is_null());
     assert_eq!(
-        state.engine.snapshot().revision,
+        state.output.snapshot().revision,
         document.revision().value()
     );
-    assert_eq!(state.engine.snapshot().routes[0].destination_universe, 2);
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        before_events + 1
-    );
+    assert_eq!(state.output.snapshot().routes[0].destination_universe, 2);
+    assert_eq!(state.events.latest_sequence(), before_events + 1);
     assert_output_route_event(&state, before_events, "main", false);
 
     let stale = post_output_route_action(
@@ -124,10 +120,7 @@ async fn typed_route_update_and_delete_share_the_prepared_application_boundary()
     )
     .await;
     assert_eq!(stale.status(), StatusCode::CONFLICT);
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        before_events + 1
-    );
+    assert_eq!(state.events.latest_sequence(), before_events + 1);
     assert_eq!(
         ShowStore::open(&entry.path)
             .unwrap()
@@ -159,9 +152,9 @@ async fn typed_route_update_and_delete_share_the_prepared_application_boundary()
         .portable_document()
         .unwrap();
     assert!(document.object("route", "main").is_none());
-    assert!(state.engine.snapshot().routes.is_empty());
+    assert!(state.output.snapshot().routes.is_empty());
     assert_eq!(
-        state.engine.snapshot().revision,
+        state.output.snapshot().revision,
         document.revision().value()
     );
     assert_output_route_event(&state, before_events + 1, "main", true);
@@ -184,9 +177,7 @@ async fn typed_route_update_and_delete_share_the_prepared_application_boundary()
 fn assert_output_route_event(state: &AppState, after: u64, route_id: &str, deleted: bool) {
     let filter = light_application::EventFilter::default()
         .with_capability(light_application::EventCapability::Output);
-    let light_application::EventReplay::Events(events) =
-        state.application_events.replay(after, &filter)
-    else {
+    let light_application::EventReplay::Events(events) = state.events.replay(after, &filter) else {
         panic!("expected retained output-route event");
     };
     assert_eq!(events.len(), 1);

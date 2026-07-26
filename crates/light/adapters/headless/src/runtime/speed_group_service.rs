@@ -1,14 +1,13 @@
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, SpeedBpm, SpeedBpmDelta,
     SpeedGroupAction, SpeedGroupApplication, SpeedGroupCommand, SpeedGroupDurability, SpeedGroupId,
-    SpeedGroupPortState, SpeedGroupPorts, SpeedGroupProjection, SpeedGroupResolvedAction,
-    SpeedGroupResult, SpeedGroupSnapshot,
+    SpeedGroupPortState, SpeedGroupPorts, SpeedGroupResolvedAction, SpeedGroupResult,
+    SpeedGroupSnapshot,
 };
 
 use super::{
     ApiError, AppState, Session, application_millis, copy_speed_group_runtime_to_configuration,
     persist_server_configuration, read_desk_lock, refresh_speed_group_engine,
-    synchronize_speed_groups, unlink_speed_group,
 };
 
 pub(super) fn exact_command(
@@ -60,8 +59,8 @@ fn execute_with_lock_policy(
         require_unlocked,
     };
     state
-        .speed_group_service
-        .handle(ActionEnvelope { context, command }, &ports)
+        .output
+        .handle_speed_group_action(ActionEnvelope { context, command }, &ports)
 }
 
 /// Publishes an authority revision for Speed Group runtime changes applied by the v1 surfaces
@@ -85,7 +84,7 @@ pub(super) fn record_external_change(state: &AppState, session: &Session, affect
         session.id.0,
         light_application::ActionSource::Http,
     );
-    if let Err(error) = state.speed_group_service.record_external_change(
+    if let Err(error) = state.output.record_speed_group_external_change(
         &context,
         &ports,
         &changed,
@@ -106,8 +105,8 @@ pub(super) fn snapshot(
         require_unlocked: false,
     };
     state
-        .speed_group_service
-        .snapshot(&context, &ports)
+        .output
+        .speed_group_service_snapshot(&context, &ports)
         .map_err(action_error)
 }
 
@@ -147,26 +146,7 @@ impl SpeedGroupPorts for ServerSpeedGroupPorts<'_> {
                 "desk is locked",
             ));
         }
-        let controllers = self.state.speed_groups.lock();
-        let owners = self.state.sound_capture_owners.lock();
-        let groups = controllers
-            .iter()
-            .enumerate()
-            .map(|(index, controller)| projection(index, controller))
-            .collect();
-        let manual_control_clean = controllers
-            .iter()
-            .enumerate()
-            .filter(|(index, controller)| {
-                controller.manual_entry_is_current(controller.manual_bpm())
-                    && owners[*index].is_none()
-            })
-            .filter_map(|(index, _)| SpeedGroupId::new((index + 1) as u8))
-            .collect();
-        Ok(SpeedGroupPortState {
-            groups,
-            manual_control_clean,
-        })
+        Ok(self.state.output.speed_group_port_state())
     }
 
     fn application_millis(&self, _context: &ActionContext) -> Result<u64, ActionError> {
@@ -199,79 +179,23 @@ impl SpeedGroupPorts for ServerSpeedGroupPorts<'_> {
     }
 }
 
-fn projection(
-    index: usize,
-    controller: &light_control::speed::SpeedGroupController,
-) -> SpeedGroupProjection {
-    let snapshot = controller.snapshot(0);
-    SpeedGroupProjection {
-        group: SpeedGroupId::new((index + 1) as u8).expect("fixed Speed Group index"),
-        manual_bpm: snapshot.manual_bpm,
-        paused: snapshot.paused,
-        speed_master_scale: snapshot.speed_master_scale,
-        synchronized_with: snapshot.synchronized_with.and_then(SpeedGroupId::new),
-        phase_origin_millis: snapshot.phase_origin_millis,
-    }
-}
-
 fn apply_runtime(
     state: &AppState,
     action: SpeedGroupResolvedAction,
 ) -> Result<Vec<usize>, ActionError> {
-    let mut controllers = state.speed_groups.lock();
-    let affected = match action {
-        SpeedGroupResolvedAction::SetManualBpm {
-            group,
-            bpm,
-            applied_at_millis,
-        } => {
-            let index = group.index();
-            unlink_speed_group(&mut controllers, index, applied_at_millis);
-            controllers[index]
-                .set_manual_bpm(bpm)
-                .map_err(speed_error)?;
-            controllers[index]
-                .set_speed_master_scale(1.0)
-                .map_err(speed_error)?;
-            controllers[index].set_paused_at(false, applied_at_millis);
-            vec![index]
-        }
-        SpeedGroupResolvedAction::Synchronize {
-            source,
-            target,
-            applied_at_millis,
-        } => {
-            synchronize_speed_groups(
-                &mut controllers,
-                source.index(),
-                target.index(),
-                applied_at_millis,
-            )
-            .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.message))?;
-            vec![source.index(), target.index()]
-        }
-    };
-    copy_speed_group_runtime_to_configuration(state, &controllers, &affected);
+    let affected = state.output.apply_resolved_speed_group_action(action)?;
+    copy_speed_group_runtime_to_configuration(state, &affected);
     Ok(affected)
 }
 
 fn clear_sound_owners(state: &AppState, affected: &[usize]) {
-    let mut owners = state.sound_capture_owners.lock();
-    for &index in affected {
-        owners[index] = None;
-    }
+    state.output.clear_sound_capture_owners(affected);
 }
 
 fn persist_configuration(state: &AppState) -> Result<(), ApiError> {
     #[cfg(test)]
     {
-        use std::sync::atomic::Ordering;
-        state
-            .speed_group_persistence_attempts
-            .fetch_add(1, Ordering::SeqCst);
-        if state.speed_group_persistence_failure.load(Ordering::SeqCst) {
-            return Err(ApiError::internal("forced Speed Group persistence failure"));
-        }
+        state.output.record_speed_group_persistence_attempt()?;
     }
     persist_server_configuration(state)
 }

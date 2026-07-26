@@ -2,10 +2,7 @@
 
 use super::{
     ApiError, AppState, ShowContext, authenticate, emit,
-    playback_api::{
-        VirtualPlaybackExclusionZone, read_virtual_playback_exclusion_store,
-        validate_virtual_playback_exclusion_zones, write_virtual_playback_exclusion_surface,
-    },
+    playback_api::{VirtualPlaybackExclusionZone, validate_virtual_playback_exclusion_zones},
 };
 use axum::{
     Json, Router,
@@ -38,9 +35,9 @@ async fn snapshot(
     headers: HeaderMap,
 ) -> Result<Json<VirtualPlaybackExclusionSnapshot>, ApiError> {
     authenticate(&state, &headers)?;
-    let _activation = state.activation_lock.clone().lock_owned().await;
+    let _activation = state.active_show.acquire().await;
     let show_id = show.resolve(&state)?;
-    let desks = read_virtual_playback_exclusion_store(&state.desk.lock(), show_id);
+    let desks = state.installation.virtual_playback_exclusions(show_id);
     Ok(Json(VirtualPlaybackExclusionSnapshot {
         show_id: show_id.0,
         desks,
@@ -64,7 +61,7 @@ async fn update_surface(
         request_id: request.request_id.clone(),
     };
 
-    let _activation = state.activation_lock.clone().lock_owned().await;
+    let _activation = state.active_show.acquire().await;
     let show_id = show.resolve(&state)?;
     let action = ReplayAction {
         show_id: show_id.0,
@@ -72,26 +69,16 @@ async fn update_surface(
         zones: zones.clone(),
     };
     if let Some(outcome) = state
-        .virtual_playback_zones_replay
-        .lock()
-        .get(&key, &action)?
+        .replay
+        .lookup_virtual_playback_zones(&key, &action)
+        .await?
     {
         return Ok(Json(outcome));
     }
     let desk_id = session.desk.id;
-    let changed = {
-        let desk = state.desk.lock();
-        let stored = read_virtual_playback_exclusion_store(&desk, show_id);
-        let previous = stored
-            .get(&desk_id.to_string())
-            .and_then(|surfaces| surfaces.get(&surface_id));
-        if previous == Some(&zones) || (previous.is_none() && zones.is_empty()) {
-            false
-        } else {
-            write_virtual_playback_exclusion_surface(&desk, show_id, desk_id, &surface_id, &zones)?;
-            true
-        }
-    };
+    let changed = state
+        .installation
+        .update_virtual_playback_exclusion_surface(show_id, desk_id, &surface_id, &zones)?;
     let outcome = VirtualPlaybackExclusionUpdateOutcome {
         request_id: request.request_id,
         show_id: show_id.0,
@@ -102,13 +89,13 @@ async fn update_surface(
         changed,
     };
     state
-        .virtual_playback_zones_replay
-        .lock()
-        .insert(key, action, outcome.clone());
+        .replay
+        .insert_virtual_playback_zones(key, action, outcome.clone())
+        .await;
 
     if changed {
         state
-            .application_events
+            .events
             .publish(EventDraft::virtual_playback_exclusion_zones_changed(
                 VirtualPlaybackExclusionZonesChange {
                     show_id,
@@ -157,13 +144,13 @@ fn validate_surface_id(surface_id: &str) -> Result<(), ApiError> {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct ReplayKey {
+pub(super) struct ReplayKey {
     session_id: Uuid,
     request_id: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct ReplayAction {
+pub(super) struct ReplayAction {
     show_id: Uuid,
     surface_id: String,
     zones: Vec<VirtualPlaybackExclusionZone>,
@@ -181,7 +168,7 @@ pub(super) struct VirtualPlaybackZonesReplayCache {
 }
 
 impl VirtualPlaybackZonesReplayCache {
-    fn get(
+    pub(super) fn get(
         &self,
         key: &ReplayKey,
         action: &ReplayAction,
@@ -199,7 +186,7 @@ impl VirtualPlaybackZonesReplayCache {
         Ok(Some(replay))
     }
 
-    fn insert(
+    pub(super) fn insert(
         &mut self,
         key: ReplayKey,
         action: ReplayAction,

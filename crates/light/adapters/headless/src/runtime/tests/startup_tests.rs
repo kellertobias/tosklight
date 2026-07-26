@@ -13,7 +13,7 @@ fn startup_rebases_show_paths_after_the_desk_data_directory_moves() {
         .unwrap();
     std::fs::rename(legacy.join("shows"), current.join("shows")).unwrap();
 
-    rebase_desk_show_paths(&desk, &current).unwrap();
+    startup_state::rebase_desk_show_paths(&desk, &current).unwrap();
 
     let relocated = desk.show(entry.id).unwrap().unwrap();
     assert_eq!(
@@ -27,7 +27,10 @@ fn startup_rebases_show_paths_after_the_desk_data_directory_moves() {
 #[tokio::test]
 async fn clean_default_load_creates_a_pristine_copy_without_replacing_manual_changes() {
     let (state, data_dir) = test_state();
-    let working = ensure_default_show_available(&state.desk.lock(), &data_dir).unwrap();
+    let working = state
+        .installation
+        .ensure_default_show_available()
+        .unwrap();
     let working_store = ShowStore::open(&working.path).unwrap();
     let hazer = working_store
         .objects("patched_fixture")
@@ -40,11 +43,10 @@ async fn clean_default_load_creates_a_pristine_copy_without_replacing_manual_cha
             .delete_object("patched_fixture", &hazer.id)
             .unwrap()
     );
-    state.desk.lock().set_active_show(Some(working.id)).unwrap();
-    *state.active_show.write() = Some(working.clone());
+    state.installation.set_active_show(Some(working.id)).unwrap();
+    state.active_show.replace_current(Some(working.clone()));
     state
-        .engine
-        .replace_snapshot(load_engine_snapshot(&working).unwrap())
+        .output.replace_snapshot(load_engine_snapshot(&working).unwrap())
         .unwrap();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -78,7 +80,7 @@ async fn clean_default_load_creates_a_pristine_copy_without_replacing_manual_cha
 #[tokio::test]
 async fn command_history_is_desk_scoped_bounded_newest_first_and_redacted() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -98,8 +100,8 @@ async fn command_history_is_desk_scoped_bounded_newest_first_and_redacted() {
             ..test_control_desk()
         },
     };
-    state.sessions.write().insert(session.id, session.clone());
-    state.sessions.write().insert(other.id, other.clone());
+    state.sessions.insert_session(session.clone());
+    state.sessions.insert_session(other.clone());
     for number in 0..54 {
         record_command_history(
             &state,
@@ -194,12 +196,11 @@ fn advancing_from_an_occupied_last_playback_page_creates_one_empty_page() {
         )
         .unwrap();
     state
-        .engine
-        .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+        .output.replace_snapshot(load_engine_snapshot(&entry).unwrap())
         .unwrap();
-    *state.active_show.write() = Some(entry.clone());
+    state.active_show.replace_current(Some(entry.clone()));
 
-    let _activation = state.activation_lock.clone().try_lock_owned().unwrap();
+    let _activation = state.active_show.try_acquire().unwrap();
     let context = light_application::ActionContext::system(
         Uuid::nil(),
         light_application::ActionSource::Http,
@@ -208,8 +209,8 @@ fn advancing_from_an_occupied_last_playback_page_creates_one_empty_page() {
         .unwrap()
         .portable_document()
         .unwrap();
-    let before_runtime = state.engine.snapshot();
-    let before_events = state.application_events.latest_sequence();
+    let before_runtime = state.output.snapshot();
+    let before_events = state.events.latest_sequence();
     let before_backups = startup_show_object_backup_count(&data_dir);
     let created = ensure_playback_page_for_advance(&state, &entry, 2, &context).unwrap();
     assert!(created.available());
@@ -222,13 +223,13 @@ fn advancing_from_an_occupied_last_playback_page_creates_one_empty_page() {
         after_create.revision().value(),
         before_document.revision().value() + 1
     );
-    assert_eq!(state.application_events.latest_sequence(), before_events + 1);
+    assert_eq!(state.events.latest_sequence(), before_events + 1);
     assert_eq!(
         startup_show_object_backup_count(&data_dir),
         before_backups + 1
     );
-    assert_eq!(state.engine.snapshot().revision, after_create.revision().value());
-    assert!(!Arc::ptr_eq(&state.engine.snapshot(), &before_runtime));
+    assert_eq!(state.output.snapshot().revision, after_create.revision().value());
+    assert!(!Arc::ptr_eq(&state.output.snapshot(), &before_runtime));
     let missing = ensure_playback_page_for_advance(&state, &entry, 3, &context).unwrap();
     assert!(!missing.available());
     assert_eq!(missing.event_sequence(), None);
@@ -239,7 +240,7 @@ fn advancing_from_an_occupied_last_playback_page_creates_one_empty_page() {
             .unwrap(),
         after_create.revision()
     );
-    assert_eq!(state.application_events.latest_sequence(), before_events + 1);
+    assert_eq!(state.events.latest_sequence(), before_events + 1);
     assert_eq!(
         startup_show_object_backup_count(&data_dir),
         before_backups + 1
@@ -262,7 +263,7 @@ fn advancing_from_an_occupied_last_playback_page_creates_one_empty_page() {
 #[test]
 fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
     let (state, data_dir) = test_state();
-    assert!(state.network_output.is_none());
+    assert!(!state.output.has_network_output());
     let show = ShowEntry {
         id: light_core::ShowId::new(),
         name: "Restored exclusions".into(),
@@ -271,24 +272,22 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
         updated_at: String::new(),
         revision_copy: None,
     };
-    *state.active_show.write() = Some(show.clone());
+    state.active_show.replace_current(Some(show.clone()));
     let cue_list_id = light_core::CueListId::new();
     state
-        .engine
-        .replace_snapshot(restored_exclusion_snapshot(cue_list_id))
+        .output.replace_snapshot(restored_exclusion_snapshot(cue_list_id))
         .unwrap();
     let activated_at = "2026-01-01T00:00:00Z";
     state
-        .engine
-        .execute_playback(EnginePlaybackCommand::RestoreActive(vec![
+        .output.execute_playback(EnginePlaybackCommand::RestoreActive(vec![
             restored_exclusion_active(3, cue_list_id, activated_at),
             restored_exclusion_active(1, cue_list_id, activated_at),
             restored_exclusion_active(4, cue_list_id, activated_at),
             restored_exclusion_active(2, cue_list_id, activated_at),
         ]))
         .unwrap();
-    let desk = state.desk.lock().add_desk("Restored", "restored").unwrap();
-    state.desk.lock().set_desk_page(desk.id, show.id, 1).unwrap();
+    let desk = state.installation.add_desk("Restored", "restored").unwrap();
+    state.installation.set_desk_page(desk.id, show.id, 1).unwrap();
     let stored = VirtualPlaybackExclusionStore::from([(
         desk.id.to_string(),
         HashMap::from([(
@@ -308,9 +307,7 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
         )]),
     )]);
     state
-        .desk
-        .lock()
-        .set_setting(
+        .installation.set_setting(
             &virtual_playback_exclusion_setting(show.id),
             &serde_json::to_string(&stored).unwrap(),
         )
@@ -322,7 +319,7 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
     assert!(first.provenance_migrated);
     assert!(!first.persistence_pending);
     let light_application::EventReplay::Events(events) = state
-        .application_events
+        .events
         .replay(0, &light_application::EventFilter::default())
     else {
         panic!("expected retained restored-exclusion events");
@@ -355,19 +352,16 @@ fn restored_exclusion_normalization_emits_each_loser_once_and_is_idempotent() {
     assert!(second.released_playbacks.is_empty());
     assert!(!second.provenance_migrated);
     assert!(!second.persistence_pending);
-    assert_eq!(state.application_events.latest_sequence(), 2);
+    assert_eq!(state.events.latest_sequence(), 2);
     let enabled = state
-        .engine
-        .playback_runtime()
+        .output.playback_runtime()
         .into_iter()
         .filter(|playback| playback.enabled)
         .filter_map(|playback| playback.playback_number)
         .collect::<HashSet<_>>();
     assert_eq!(enabled, HashSet::from([3, 4]));
     let persisted = state
-        .desk
-        .lock()
-        .setting(&active_playbacks_setting(show.id))
+        .installation.setting(&active_playbacks_setting(show.id))
         .unwrap()
         .unwrap();
     let persisted: Vec<light_playback::ActivePlayback> = serde_json::from_str(&persisted).unwrap();
@@ -400,27 +394,20 @@ fn restored_exclusions_replay_each_activation_with_its_own_desk_zones() {
             updated_at: String::new(),
             revision_copy: None,
         };
-        *state.active_show.write() = Some(show.clone());
+        state.active_show.replace_current(Some(show.clone()));
         let cue_list_id = light_core::CueListId::new();
         state
-            .engine
-            .replace_snapshot(restored_exclusion_snapshot(cue_list_id))
+            .output.replace_snapshot(restored_exclusion_snapshot(cue_list_id))
             .unwrap();
         let configured = state
-            .desk
-            .lock()
-            .add_desk("Configured restart desk", "configured-restart")
+            .installation.add_desk("Configured restart desk", "configured-restart")
             .unwrap();
         let unconfigured = state
-            .desk
-            .lock()
-            .add_desk("Unconfigured restart desk", "unconfigured-restart")
+            .installation.add_desk("Unconfigured restart desk", "unconfigured-restart")
             .unwrap();
         for desk in [&configured, &unconfigured] {
             state
-                .desk
-                .lock()
-                .set_desk_page(desk.id, show.id, 1)
+                .installation.set_desk_page(desk.id, show.id, 1)
                 .unwrap();
         }
         store_restart_zone(&state, &show, configured.id);
@@ -430,8 +417,7 @@ fn restored_exclusions_replay_each_activation_with_its_own_desk_zones() {
             ((1, configured.id), (2, unconfigured.id))
         };
         state
-            .engine
-            .execute_playback(EnginePlaybackCommand::RestoreActive(vec![
+            .output.execute_playback(EnginePlaybackCommand::RestoreActive(vec![
                 restored_exclusion_active_with_origin(first.0, cue_list_id, 1, first.1),
                 restored_exclusion_active_with_origin(second.0, cue_list_id, 2, second.1),
             ]))
@@ -440,9 +426,7 @@ fn restored_exclusions_replay_each_activation_with_its_own_desk_zones() {
         if !configured_desk_activates_last {
             assert!(
                 state
-                    .desk
-                    .lock()
-                    .remove_client_desk(unconfigured.id)
+                    .installation.remove_client_desk(unconfigured.id)
                     .unwrap()
             );
         }
@@ -457,8 +441,7 @@ fn restored_exclusions_replay_each_activation_with_its_own_desk_zones() {
         assert_eq!(outcome.released_playbacks, expected_released);
         assert!(!outcome.provenance_migrated);
         let enabled = state
-            .engine
-            .playback_runtime()
+            .output.playback_runtime()
             .into_iter()
             .filter(|playback| playback.enabled)
             .filter_map(|playback| playback.playback_number)
@@ -470,14 +453,12 @@ fn restored_exclusions_replay_each_activation_with_its_own_desk_zones() {
         };
         assert_eq!(enabled, expected_enabled);
         let persisted = state
-            .desk
-            .lock()
-            .setting(&active_playbacks_setting(show.id))
+            .installation.setting(&active_playbacks_setting(show.id))
             .unwrap()
             .unwrap();
         assert!(persisted.contains("\"activation\""));
         assert!(
-            !serde_json::to_string(&state.engine.playback_runtime())
+            !serde_json::to_string(&state.output.playback_runtime())
                 .unwrap()
                 .contains("\"activation\"")
         );
@@ -500,21 +481,16 @@ fn timed_preload_release_restart_keeps_the_original_activation_order() {
         updated_at: String::new(),
         revision_copy: None,
     };
-    *state.active_show.write() = Some(show.clone());
+    state.active_show.replace_current(Some(show.clone()));
     let cue_list_id = light_core::CueListId::new();
     state
-        .engine
-        .replace_snapshot(restored_exclusion_snapshot(cue_list_id))
+        .output.replace_snapshot(restored_exclusion_snapshot(cue_list_id))
         .unwrap();
     let desk = state
-        .desk
-        .lock()
-        .add_desk("Timed Preload desk", "timed-preload")
+        .installation.add_desk("Timed Preload desk", "timed-preload")
         .unwrap();
     state
-        .desk
-        .lock()
-        .set_desk_page(desk.id, show.id, 1)
+        .installation.set_desk_page(desk.id, show.id, 1)
         .unwrap();
     store_restart_zone(&state, &show, desk.id);
 
@@ -530,12 +506,10 @@ fn timed_preload_release_restart_keeps_the_original_activation_order() {
         exclusion_scope: light_playback::PlaybackExclusionScope::None,
     });
     state
-        .engine
-        .execute_playback(EnginePlaybackCommand::RestoreActive(vec![releasing, later]))
+        .output.execute_playback(EnginePlaybackCommand::RestoreActive(vec![releasing, later]))
         .unwrap();
     let prepared = state
-        .engine
-        .prepare_playback_batch(
+        .output.prepare_playback_batch(
             &[light_engine::PlaybackBatchCommand {
                 number: 1,
                 action: light_engine::PlaybackBatchAction::Off,
@@ -547,12 +521,10 @@ fn timed_preload_release_restart_keeps_the_original_activation_order() {
         )
         .unwrap();
     state
-        .engine
-        .install_prepared_playback_batch(prepared)
+        .output.install_prepared_playback_batch(prepared)
         .unwrap();
     let active_release = state
-        .engine
-        .playback_runtime()
+        .output.playback_runtime()
         .into_iter()
         .find(|playback| playback.playback_number == Some(1))
         .unwrap();
@@ -560,23 +532,19 @@ fn timed_preload_release_restart_keeps_the_original_activation_order() {
     assert_eq!(active_release.activation.unwrap().ordinal, 1);
     persist_active_playbacks(&state).unwrap();
     let checkpoint = state
-        .desk
-        .lock()
-        .setting(&active_playbacks_setting(show.id))
+        .installation.setting(&active_playbacks_setting(show.id))
         .unwrap()
         .unwrap();
     let restored = serde_json::from_str(&checkpoint).unwrap();
     state
-        .engine
-        .execute_playback(EnginePlaybackCommand::RestoreActive(restored))
+        .output.execute_playback(EnginePlaybackCommand::RestoreActive(restored))
         .unwrap();
 
     let normalized = normalize_restored_virtual_playback_exclusions(&state).unwrap();
     assert!(!normalized.provenance_migrated);
     assert!(normalized.released_playbacks.is_empty());
     let enabled = state
-        .engine
-        .playback_runtime()
+        .output.playback_runtime()
         .into_iter()
         .filter(|playback| playback.enabled)
         .filter_map(|playback| playback.playback_number)
@@ -598,9 +566,7 @@ fn store_restart_zone(state: &AppState, show: &ShowEntry, desk_id: Uuid) {
         )]),
     )]);
     state
-        .desk
-        .lock()
-        .set_setting(
+        .installation.set_setting(
             &virtual_playback_exclusion_setting(show.id),
             &serde_json::to_string(&stored).unwrap(),
         )
@@ -791,9 +757,7 @@ async fn test_bench_router_seeds_show_objects_through_the_gated_v2_route() {
     assert_eq!(json(response).await["revision"], 1);
 
     let entry = state
-        .desk
-        .lock()
-        .show(light_core::ShowId(Uuid::parse_str(show_id).unwrap()))
+        .installation.show(light_core::ShowId(Uuid::parse_str(show_id).unwrap()))
         .unwrap()
         .unwrap();
     let group = ShowStore::open(entry.path)

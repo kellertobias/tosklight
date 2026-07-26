@@ -24,10 +24,11 @@ pub(super) async fn apply_legacy_mvr_import(
         resolutions,
     } = import;
     let temporary = state
-        .data_dir
+        .installation
+        .data_dir()
         .join("shows")
         .join(format!(".mvr-{}.show", Uuid::new_v4()));
-    let source_store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
+    let source_store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let source_revision = source_store.portable_revision().map_err(ApiError::store)?;
     source_store
         .backup_to(&temporary)
@@ -40,7 +41,7 @@ pub(super) async fn apply_legacy_mvr_import(
             return Err(error);
         }
     };
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     if active_show_is(state, entry.id) {
         let _ = std::fs::remove_file(&temporary);
         drop(activation);
@@ -73,12 +74,11 @@ pub(super) async fn apply_legacy_mvr_import(
         let context = operator_action_context(&session, light_application::ActionSource::Http);
         activate_snapshot(state, compiled, &context, &Transition::HoldCurrent, None).await?;
         state
-            .desk
-            .lock()
+            .installation
             .set_active_show(Some(entry.id))
             .map_err(ApiError::store)?;
         invalidate_active_show_document(state);
-        *state.active_show.write() = Some(entry.clone());
+        state.active_show.replace_current(Some(entry.clone()));
         restore_output_runtime_for_show(state, entry.id, output_runtime);
     }
     emit(
@@ -100,7 +100,7 @@ fn ensure_source_revision(
     entry: &ShowEntry,
     expected: light_show::PortableShowRevision,
 ) -> Result<(), ApiError> {
-    let current = ShowStore::open(&entry.path)
+    let current = ActiveShowRepository::open(&entry.path)
         .map_err(ApiError::store)?
         .portable_revision()
         .map_err(ApiError::store)?;
@@ -120,7 +120,7 @@ fn apply_to_temporary_show(
     definitions: &[light_fixture::FixtureDefinition],
     resolutions: &HashMap<Uuid, MvrResolution>,
 ) -> Result<(usize, usize, Vec<String>), ApiError> {
-    let store = ShowStore::open(temporary).map_err(ApiError::store)?;
+    let store = ActiveShowRepository::open(temporary).map_err(ApiError::store)?;
     let applied = apply_mvr_to_store(&store, document, definitions, resolutions)?;
     validate_show_file(temporary).map_err(ApiError::store)?;
     let probe = ShowEntry {
@@ -137,7 +137,7 @@ fn apply_to_temporary_show(
 fn clean_failed_import(state: &AppState, entry: &ShowEntry, temporary: &FsPath, is_new: bool) {
     let _ = std::fs::remove_file(temporary);
     if is_new {
-        let _ = state.desk.lock().remove_show(entry.id);
+        let _ = state.installation.remove_show(entry.id);
         let _ = std::fs::remove_file(&entry.path);
     }
 }

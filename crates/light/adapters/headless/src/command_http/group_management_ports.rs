@@ -42,7 +42,7 @@ impl GroupManagementPorts for ServerProgrammingPorts<'_> {
         };
         let ports = ServerActiveShowPorts::group_management(state.clone(), owner, session_id);
         state
-            .active_show_service
+            .active_show
             .commit_group_management(context, commit, &ports)
     }
 }

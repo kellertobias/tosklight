@@ -20,7 +20,7 @@ fn cue_record_request(
 
 fn set_cue_record_value(scenario: &CommandHttpScenario) -> light_core::FixtureId {
     let fixture = scenario.install_direct_fixture();
-    scenario.state.programmers.set(
+    scenario.state.programming.set(
         scenario.session.id,
         fixture,
         light_core::AttributeKey::intensity(),
@@ -30,7 +30,7 @@ fn set_cue_record_value(scenario: &CommandHttpScenario) -> light_core::FixtureId
 }
 
 fn active_show_revision(scenario: &CommandHttpScenario) -> u64 {
-    let entry = scenario.state.active_show.read().clone().unwrap();
+    let entry = scenario.state.active_show.current().clone().unwrap();
     ShowStore::open(&entry.path)
         .unwrap()
         .portable_document()
@@ -72,7 +72,7 @@ async fn programmer_undo_reverses_a_new_cue_list_and_playback_atomically() {
         .press_key(&scenario.token, "UND", "undo-new-cue-recording")
         .await;
     assert_eq!(undone.status(), StatusCode::OK);
-    let entry = scenario.state.active_show.read().clone().unwrap();
+    let entry = scenario.state.active_show.current().clone().unwrap();
     let document = ShowStore::open(&entry.path)
         .unwrap()
         .portable_document()
@@ -86,8 +86,7 @@ async fn programmer_undo_reverses_a_new_cue_list_and_playback_atomically() {
     assert!(
         scenario
             .state
-            .engine
-            .snapshot()
+            .output.snapshot()
             .playbacks
             .iter()
             .all(|playback| playback.number != 27)
@@ -100,7 +99,7 @@ async fn cue_record_route_is_atomic_replay_safe_sparse_and_revisioned() {
     let show_id = scenario.create_and_open_show("Cue record route").await;
     let fixture = set_cue_record_value(&scenario);
     let initial_revision = active_show_revision(&scenario);
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let compatibility_baseline = scenario.cue_list_compatibility_payloads().len();
     let request = cue_record_request(
         "cue-route-record",
@@ -174,7 +173,7 @@ async fn cue_record_route_is_atomic_replay_safe_sparse_and_revisioned() {
         replay,
         light_wire::v2::cue_recording::CueRecordOutcome::Changed { replayed: true, .. }
     ));
-    assert_eq!(scenario.state.application_events.latest_sequence(), baseline + 1);
+    assert_eq!(scenario.state.events.latest_sequence(), baseline + 1);
     assert_eq!(
         scenario.cue_list_compatibility_payloads().len(),
         compatibility_baseline + 1
@@ -200,7 +199,7 @@ async fn cue_record_route_is_atomic_replay_safe_sparse_and_revisioned() {
         no_change,
         light_wire::v2::cue_recording::CueRecordOutcome::NoChange { .. }
     ));
-    assert_eq!(scenario.state.application_events.latest_sequence(), baseline + 1);
+    assert_eq!(scenario.state.events.latest_sequence(), baseline + 1);
     assert_eq!(
         scenario.cue_list_compatibility_payloads().len(),
         compatibility_baseline + 1
@@ -351,7 +350,7 @@ async fn page_slot_recording_is_exact_activates_normal_and_holds_preload() {
     let show_id = scenario.create_and_open_show("Cue page recording").await;
     set_cue_record_value(&scenario);
     let initial_revision = active_show_revision(&scenario);
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let response = scenario
         .cue_recording_action(
             &show_id,
@@ -386,13 +385,13 @@ async fn page_slot_recording_is_exact_activates_normal_and_holds_preload() {
     assert_eq!(runtime.event_sequence, baseline + 2);
     assert_one_show_batch(&scenario.state, baseline, 3);
 
-    assert!(scenario.state.programmers.set_preload_group(
+    assert!(scenario.state.programming.set_preload_group(
         scenario.session.id,
         "front".into(),
         light_core::AttributeKey::intensity(),
         light_core::AttributeValue::Normalized(0.7),
     ));
-    let before_preload = scenario.state.application_events.latest_sequence();
+    let before_preload = scenario.state.events.latest_sequence();
     let preload = scenario
         .cue_recording_action(
             &show_id,
@@ -417,7 +416,7 @@ async fn page_slot_recording_is_exact_activates_normal_and_holds_preload() {
             ..
         }
     ));
-    assert_eq!(scenario.state.application_events.latest_sequence(), before_preload + 1);
+    assert_eq!(scenario.state.events.latest_sequence(), before_preload + 1);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -445,14 +444,14 @@ async fn already_current_cue_activation_can_complete_without_a_second_runtime_ev
     let first = json(first).await;
     assert!(!first["runtime"].is_null());
 
-    scenario.state.programmers.set(
+    scenario.state.programming.set(
         scenario.session.id,
         fixture,
         light_core::AttributeKey::intensity(),
         light_core::AttributeValue::Normalized(0.6),
     );
     let revision = active_show_revision(&scenario);
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let request = cue_record_request(
         "current-cue-overwrite",
         serde_json::json!({"kind":"pool","playback_number":63}),
@@ -475,7 +474,7 @@ async fn already_current_cue_activation_can_complete_without_a_second_runtime_ev
     assert_eq!(outcome["show_event_sequence"], baseline + 1);
     assert_one_show_batch(&scenario.state, baseline, 1);
 
-    let after = scenario.state.application_events.latest_sequence();
+    let after = scenario.state.events.latest_sequence();
     let replay = scenario
         .cue_recording_action(
             &show_id,
@@ -488,7 +487,7 @@ async fn already_current_cue_activation_can_complete_without_a_second_runtime_ev
     let replay = json(replay).await;
     assert_eq!(replay["replayed"], true);
     assert!(replay["runtime"].is_null());
-    assert_eq!(scenario.state.application_events.latest_sequence(), after);
+    assert_eq!(scenario.state.events.latest_sequence(), after);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -499,9 +498,7 @@ async fn cue_recording_shares_one_users_values_across_desks_and_isolates_another
     let fixture = set_cue_record_value(&scenario);
     let second_desk = scenario
         .state
-        .desk
-        .lock()
-        .add_desk("Cue peer", "cue-peer")
+        .installation.add_desk("Cue peer", "cue-peer")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);
@@ -524,25 +521,20 @@ async fn cue_recording_shares_one_users_values_across_desks_and_isolates_another
     assert_eq!(shared.status(), StatusCode::OK);
     assert_eq!(recorded_fixture_value(&scenario, 40, fixture), 0.5);
 
-    let other_user = scenario.state.desk.lock().add_user("Other Cue user").unwrap();
+    let other_user = scenario.state.installation.add_user("Other Cue user").unwrap();
     let other_desk = scenario
         .state
-        .desk
-        .lock()
-        .add_desk("Other Cue desk", "other-cue")
+        .installation.add_desk("Other Cue desk", "other-cue")
         .unwrap();
     let (other_token, logged_in_user) =
         login_on_desk(&scenario, "Other Cue user", other_desk.id).await;
     assert_eq!(logged_in_user, other_user.id.0);
     let other_session = scenario
         .state
-        .sessions
-        .read()
-        .values()
+        .sessions.sessions().into_iter()
         .find(|session| session.token == other_token)
-        .cloned()
         .unwrap();
-    scenario.state.programmers.set(
+    scenario.state.programming.set(
         other_session.id,
         fixture,
         light_core::AttributeKey::intensity(),
@@ -592,9 +584,7 @@ async fn selected_playback_and_exact_cue_list_targets_do_not_readdress_the_recor
     assert_eq!(pool.status(), StatusCode::OK);
     scenario
         .state
-        .desk
-        .lock()
-        .set_selected_playback(
+        .installation.set_selected_playback(
             scenario.session.desk.id,
             light_core::ShowId(Uuid::parse_str(&show_id).unwrap()),
             Some(50),
@@ -642,7 +632,7 @@ async fn selected_playback_and_exact_cue_list_targets_do_not_readdress_the_recor
     assert!(projections.playback.is_none());
     assert!(projections.page.is_none());
     assert_eq!(stored_cue_list(&scenario, 50).2.cues.len(), 3);
-    assert_eq!(scenario.state.engine.snapshot().playbacks.len(), 1);
+    assert_eq!(scenario.state.output.snapshot().playbacks.len(), 1);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -694,13 +684,13 @@ async fn explicit_cue_address_ignores_divergent_active_cues_but_implicit_merge_r
         );
     }
 
-    scenario.state.programmers.set(
+    scenario.state.programming.set(
         scenario.session.id,
         fixture,
         light_core::AttributeKey::intensity(),
         light_core::AttributeValue::Normalized(0.6),
     );
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let revision = active_show_revision(&scenario);
     let mut explicit = cue_record_request(
         "divergent-explicit-merge",
@@ -725,7 +715,7 @@ async fn explicit_cue_address_ignores_divergent_active_cues_but_implicit_merge_r
     assert_eq!(outcome["show_event_sequence"], baseline + 1);
     assert!(outcome["projections"]["playback"].is_null());
     assert!(outcome["projections"]["page"].is_null());
-    assert_eq!(scenario.state.application_events.latest_sequence(), baseline + 1);
+    assert_eq!(scenario.state.events.latest_sequence(), baseline + 1);
     assert_one_show_batch(&scenario.state, baseline, 1);
 
     let mut implicit = cue_record_request(
@@ -752,7 +742,7 @@ async fn explicit_cue_address_ignores_divergent_active_cues_but_implicit_merge_r
         "the Cuelist is active on multiple different Cues; supply an explicit Cue number"
     );
     assert_eq!(active_show_revision(&scenario), revision + 1);
-    assert_eq!(scenario.state.application_events.latest_sequence(), baseline + 1);
+    assert_eq!(scenario.state.events.latest_sequence(), baseline + 1);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -761,13 +751,13 @@ async fn active_preload_capture_persists_its_release_on_the_direct_v2_route() {
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario.create_and_open_show("Active Preload persistence").await;
     scenario.install_direct_fixture();
-    assert!(scenario.state.programmers.set_preload_group(
+    assert!(scenario.state.programming.set_preload_group(
         scenario.session.id,
         "1".into(),
         light_core::AttributeKey::intensity(),
         light_core::AttributeValue::Normalized(0.7),
     ));
-    assert!(scenario.state.programmers.activate_preload(scenario.session.id));
+    assert!(scenario.state.programming.activate_preload(scenario.session.id));
     persist_programmer(&scenario.state, &scenario.session).unwrap();
     assert!(!persisted_programmer_state(&scenario).preload_group_active.is_empty());
 
@@ -789,7 +779,7 @@ async fn active_preload_capture_persists_its_release_on_the_direct_v2_route() {
     assert!(!persisted_programmer_state(&scenario).preload_group_active.is_empty());
 
     let revision = active_show_revision(&scenario);
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let response = scenario
         .cue_recording_action(
             &show_id,
@@ -811,7 +801,7 @@ async fn active_preload_capture_persists_its_release_on_the_direct_v2_route() {
     assert_eq!(outcome["show_revision"], revision + 1);
     assert_eq!(outcome["show_event_sequence"], baseline + 1);
     assert_one_show_batch(&scenario.state, baseline, 2);
-    assert_released_preload(&scenario.state.programmers.get(scenario.session.id).unwrap());
+    assert_released_preload(&scenario.state.programming.get(scenario.session.id).unwrap());
     assert_released_preload(&persisted_programmer_state(&scenario));
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
@@ -825,7 +815,7 @@ async fn v2_merge_no_change_and_empty_subtract_use_one_authoritative_action_each
         ("operation-cue-1", 1.0, 0.5),
         ("operation-cue-2", 2.0, 0.7),
     ] {
-        scenario.state.programmers.set(
+        scenario.state.programming.set(
             scenario.session.id,
             fixture,
             light_core::AttributeKey::intensity(),
@@ -848,14 +838,14 @@ async fn v2_merge_no_change_and_empty_subtract_use_one_authoritative_action_each
         assert_eq!(response.status(), StatusCode::OK);
     }
 
-    scenario.state.programmers.set(
+    scenario.state.programming.set(
         scenario.session.id,
         fixture,
         light_core::AttributeKey::intensity(),
         light_core::AttributeValue::Normalized(0.8),
     );
     let revision = active_show_revision(&scenario);
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let mut merge = cue_record_request(
         "operation-merge",
         serde_json::json!({"kind":"pool","playback_number":61}),
@@ -879,7 +869,7 @@ async fn v2_merge_no_change_and_empty_subtract_use_one_authoritative_action_each
     assert_eq!(outcome["show_event_sequence"], baseline + 1);
     assert_one_show_batch(&scenario.state, baseline, 1);
 
-    let after_merge = scenario.state.application_events.latest_sequence();
+    let after_merge = scenario.state.events.latest_sequence();
     let mut no_change = cue_record_request(
         "operation-merge-no-change",
         serde_json::json!({"kind":"pool","playback_number":61}),
@@ -902,10 +892,10 @@ async fn v2_merge_no_change_and_empty_subtract_use_one_authoritative_action_each
     assert_eq!(outcome["replayed"], false);
     assert_eq!(outcome["show_revision"], revision + 1);
     assert!(outcome.get("show_event_sequence").is_none());
-    assert_eq!(scenario.state.application_events.latest_sequence(), after_merge);
+    assert_eq!(scenario.state.events.latest_sequence(), after_merge);
 
-    assert!(scenario.state.programmers.clear_normal_values(scenario.session.id));
-    let baseline = scenario.state.application_events.latest_sequence();
+    assert!(scenario.state.programming.clear_normal_values(scenario.session.id));
+    let baseline = scenario.state.events.latest_sequence();
     let mut subtract = cue_record_request(
         "operation-empty-subtract",
         serde_json::json!({"kind":"pool","playback_number":61}),
@@ -940,9 +930,7 @@ fn persisted_programmer_state(
 ) -> light_programmer::ProgrammerState {
     let row = scenario
         .state
-        .desk
-        .lock()
-        .persisted_sessions()
+        .installation.persisted_sessions()
         .unwrap()
         .into_iter()
         .find(|row| row.id == scenario.session.id)
@@ -978,7 +966,7 @@ fn recorded_fixture_value(
 
 fn assert_one_show_batch(state: &AppState, baseline: u64, expected_changes: usize) {
     let light_application::EventReplay::Events(events) = state
-        .application_events
+        .events
         .replay(baseline, &light_application::EventFilter::default())
     else {
         panic!("Cue recording event must remain replayable")

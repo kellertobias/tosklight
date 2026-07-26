@@ -36,13 +36,19 @@ async fn apply_action(
         desk_id,
         request_id: request.request_id.clone(),
     };
-    let mut replay = state.control_desk_configuration_replay.lock().await;
-    if let Some(outcome) = replay.get(&key, &request.action)? {
+    if let Some(outcome) = state
+        .replay
+        .lookup_control_desk_configuration(&key, &request.action)
+        .await?
+    {
         return Ok(Json(outcome));
     }
     let mut outcome = execute_action(&state, &session, desk_id, request.action.clone()).await?;
     outcome.request_id = request.request_id;
-    replay.insert(key, request.action, outcome.clone());
+    state
+        .replay
+        .insert_control_desk_configuration(key, request.action, outcome.clone())
+        .await;
     Ok(Json(outcome))
 }
 
@@ -72,8 +78,7 @@ fn update_control_desk(
     patch: wire::ControlDeskConfigurationPatch,
 ) -> Result<wire::ControlDeskConfigurationActionOutcome, ApiError> {
     let current = state
-        .desk
-        .lock()
+        .installation
         .control_desk(desk_id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("control desk"))?;
@@ -82,8 +87,7 @@ fn update_control_desk(
         .map(domain_layout)
         .or(current.playback_layout);
     let desk = state
-        .desk
-        .lock()
+        .installation
         .update_desk(
             desk_id,
             patch.name.as_deref().unwrap_or(&current.name),
@@ -94,14 +98,7 @@ fn update_control_desk(
             layout,
         )
         .map_err(ApiError::store)?;
-    for active in state
-        .sessions
-        .write()
-        .values_mut()
-        .filter(|active| active.desk.id == desk.id)
-    {
-        active.desk = desk.clone();
-    }
+    state.sessions.update_desk_sessions(&desk);
     emit(
         state,
         "control_desk_changed",
@@ -116,16 +113,16 @@ async fn set_playback_page(
     page: u8,
     existing_only: bool,
 ) -> Result<wire::ControlDeskConfigurationActionOutcome, ApiError> {
-    let _activation = state.activation_lock.clone().lock_owned().await;
+    let _activation = state.active_show.acquire().await;
     let show = state
         .active_show
-        .read()
+        .current()
         .clone()
         .ok_or_else(|| ApiError::bad_request("no show is open"))?;
     let context = operator_action_context(session, light_application::ActionSource::Http);
     let completed = if existing_only {
         state
-            .playback_service
+            .playback
             .run_unit_of_work(playback_service::ChangePage::existing(
                 state,
                 show.id,
@@ -135,7 +132,7 @@ async fn set_playback_page(
             ))
     } else {
         state
-            .playback_service
+            .playback
             .run_unit_of_work(playback_service::ChangePage {
                 state,
                 show: &show,
@@ -157,8 +154,7 @@ async fn set_playback_page(
     );
     send_osc_feedback(state, false);
     let desk = state
-        .desk
-        .lock()
+        .installation
         .control_desk(session.desk.id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("control desk"))?;
@@ -176,8 +172,7 @@ fn remove_historical_client(
     desk_id: Uuid,
 ) -> Result<wire::ControlDeskConfigurationActionOutcome, ApiError> {
     let target = state
-        .desk
-        .lock()
+        .installation
         .client_desks()
         .map_err(ApiError::store)?
         .into_iter()
@@ -186,18 +181,15 @@ fn remove_historical_client(
     let target_client_id = target.client_id.unwrap_or(target.desk.id);
     ensure_client_is_removable(state, session, desk_id, target_client_id)?;
     if !state
-        .desk
-        .lock()
+        .installation
         .remove_client_desk(desk_id)
         .map_err(ApiError::store)?
     {
         return Err(ApiError::not_found("client"));
     }
-    state
-        .configuration
-        .write()
-        .update_settings_by_desk
-        .remove(&desk_id);
+    state.installation.update_configuration(|configuration| {
+        configuration.update_settings_by_desk.remove(&desk_id);
+    });
     state.highlight.clear_desk(desk_id);
     sync_highlight_output(state);
     emit(
@@ -214,18 +206,16 @@ fn ensure_client_is_removable(
     desk_id: Uuid,
     target_client_id: Uuid,
 ) -> Result<(), ApiError> {
-    let caller_client_id = state.session_clients.read().get(&session.id).copied();
+    let caller_client_id = state.sessions.client_id(session.id);
     if caller_client_id == Some(target_client_id) || session.desk.id == desk_id {
         return Err(ApiError::conflict(
             "the current client cannot remove itself",
         ));
     }
-    let sessions = state.sessions.read();
-    let session_clients = state.session_clients.read();
-    if sessions.values().any(|candidate| {
-        session_clients.get(&candidate.id) == Some(&target_client_id)
-            || candidate.desk.id == desk_id
-    }) {
+    if state
+        .sessions
+        .client_or_desk_in_use(target_client_id, desk_id)
+    {
         return Err(ApiError::conflict(
             "an actively connected client cannot be removed",
         ));
@@ -274,7 +264,7 @@ fn domain_layout(
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct ReplayKey {
+pub(super) struct ReplayKey {
     session_id: Uuid,
     desk_id: Uuid,
     request_id: String,
@@ -293,7 +283,7 @@ pub(super) struct ControlDeskConfigurationReplayCache {
 }
 
 impl ControlDeskConfigurationReplayCache {
-    fn get(
+    pub(super) fn get(
         &self,
         key: &ReplayKey,
         action: &wire::ControlDeskConfigurationAction,
@@ -311,7 +301,7 @@ impl ControlDeskConfigurationReplayCache {
         Ok(Some(outcome))
     }
 
-    fn insert(
+    pub(super) fn insert(
         &mut self,
         key: ReplayKey,
         action: wire::ControlDeskConfigurationAction,

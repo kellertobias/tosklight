@@ -21,7 +21,7 @@ async fn legacy_master_update_publishes_one_typed_change_and_v2_repairs_it() {
         .unwrap();
     assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
 
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let persistence_attempts = output_persistence_attempts(&state);
     let response = put_master(
         &app,
@@ -33,13 +33,13 @@ async fn legacy_master_update_publishes_one_typed_change_and_v2_repairs_it() {
     let body = json(response).await;
     assert_eq!(body["blackout"], true);
     assert!((body["grand_master"].as_f64().unwrap() - 0.4).abs() < 0.000_001);
-    assert_eq!(state.output_control.lock().revision, 1);
+    assert_eq!(state.output.control_projection().revision, 1);
     assert_eq!(
         output_persistence_attempts(&state),
         persistence_attempts + 1
     );
 
-    let light_application::EventReplay::Events(events) = state.application_events.replay(
+    let light_application::EventReplay::Events(events) = state.events.replay(
         cursor,
         &light_application::EventFilter::default()
             .with_object(light_application::EventObject::global_output()),
@@ -68,7 +68,7 @@ async fn legacy_master_update_publishes_one_typed_change_and_v2_repairs_it() {
     )
     .await;
     assert_eq!(no_change.status(), StatusCode::OK);
-    assert_eq!(state.application_events.latest_sequence(), cursor + 1);
+    assert_eq!(state.events.latest_sequence(), cursor + 1);
     assert_eq!(
         output_persistence_attempts(&state),
         persistence_attempts + 1
@@ -121,7 +121,7 @@ async fn websocket_master_retry_is_idempotent_at_the_typed_boundary() {
         )
     };
 
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let first = dispatch_live_action(&state, &session, command());
     let replay = dispatch_live_action(&state, &session, command());
     assert!(first.ok, "{:?}", first.error);
@@ -133,8 +133,8 @@ async fn websocket_master_retry_is_idempotent_at_the_typed_boundary() {
     first_payload["replayed"] = serde_json::Value::Null;
     replay_payload["replayed"] = serde_json::Value::Null;
     assert_eq!(first_payload, replay_payload);
-    assert_eq!(state.output_control.lock().options.grand_master, 0.25);
-    assert_eq!(state.application_events.latest_sequence(), cursor + 1);
+    assert_eq!(state.output.control_projection().grand_master, 0.25);
+    assert_eq!(state.events.latest_sequence(), cursor + 1);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -161,10 +161,7 @@ async fn volatile_output_controls_use_correlated_websocket_frames() {
         ),
     );
     assert!(dmx.ok, "{:?}", dmx.error);
-    assert_eq!(
-        state.output_control.lock().raw_overrides.get(&(1, 7)),
-        Some(&201)
-    );
+    assert_eq!(state.output.dmx_override(1, 7), Some(201));
 
     let mismatched = dispatch_live_action(
         &state,
@@ -183,10 +180,7 @@ async fn volatile_output_controls_use_correlated_websocket_frames() {
         ),
     );
     assert!(!mismatched.ok);
-    assert_eq!(
-        state.output_control.lock().raw_overrides.get(&(1, 7)),
-        Some(&201)
-    );
+    assert_eq!(state.output.dmx_override(1, 7), Some(201));
 
     let patch_preview = dispatch_live_action(
         &state,
@@ -217,7 +211,7 @@ async fn v2_output_action_is_atomic_revisioned_idempotent_and_strict() {
     let show = create_show(&app, &token, "Revisioned output").await;
     open_show_for_output_test(&app, &token, &show).await;
     let initial = output_snapshot(&app, &token, session.desk.id).await;
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let attempts = output_persistence_attempts(&state);
     let request = output_request("output-combined", &initial, Some(0.45), Some(true));
 
@@ -329,10 +323,10 @@ async fn typed_output_runtime_ws_action_is_atomic_replay_safe_and_lock_gated() {
             ),
         )
     };
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let attempts = output_persistence_attempts(&state);
 
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     let unstable = dispatch_live_action(&state, &session, command());
     assert!(!unstable.ok);
     assert!(
@@ -403,7 +397,7 @@ async fn v2_output_is_shared_across_desks_but_enforces_exact_desk_and_lock() {
     let front = authenticate_token(&state, &front_token).unwrap();
     let show = create_show(&app, &front_token, "Shared output").await;
     open_show_for_output_test(&app, &front_token, &show).await;
-    let wing = state.desk.lock().add_desk("Wing", "wing").unwrap();
+    let wing = state.installation.add_desk("Wing", "wing").unwrap();
     let wing_token = login_for_desk(&app, "Operator", wing.id).await;
     let initial = output_snapshot(&app, &wing_token, wing.id).await;
 
@@ -440,7 +434,7 @@ async fn v2_output_is_shared_across_desks_but_enforces_exact_desk_and_lock() {
         },
     )
     .unwrap();
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let attempts = output_persistence_attempts(&state);
     let locked = post_output(
         &app,
@@ -469,10 +463,10 @@ async fn output_revision_ignores_engine_and_show_revisions_and_replaces_with_sho
     open_show_for_output_test(&app, &token, &show_a).await;
     let a_initial = output_snapshot(&app, &token, session.desk.id).await;
 
-    let mut engine = (*state.engine.snapshot()).clone();
+    let mut engine = (*state.output.snapshot()).clone();
     engine.revision = 9_001;
-    state.engine.replace_snapshot(engine).unwrap();
-    state.active_show.write().as_mut().unwrap().revision += 17;
+    state.output.replace_snapshot(engine).unwrap();
+    assert!(state.active_show.update_current(|show| show.revision += 17));
     let a_changed = post_output(
         &app,
         &token,
@@ -524,10 +518,8 @@ async fn output_persistence_failure_is_visible_and_replay_does_not_retry_it() {
     let show = create_show(&app, &token, "Pending output").await;
     open_show_for_output_test(&app, &token, &show).await;
     let initial = output_snapshot(&app, &token, session.desk.id).await;
-    state
-        .output_runtime_persistence_failure
-        .store(true, Ordering::Relaxed);
-    let cursor = state.application_events.latest_sequence();
+    state.output.force_runtime_persistence_failure(true);
+    let cursor = state.events.latest_sequence();
     let attempts = output_persistence_attempts(&state);
     let request = output_request("pending-output", &initial, Some(0.5), Some(true));
 
@@ -566,8 +558,7 @@ async fn legacy_persisted_output_without_revision_activates_at_revision_zero() {
     let show = create_show(&app, &token, "Legacy output").await;
     let show_id = light_core::ShowId(Uuid::parse_str(show["id"].as_str().unwrap()).unwrap());
     state
-        .desk
-        .lock()
+        .installation
         .set_setting(
             &output_runtime_setting(show_id),
             r#"{"grand_master":0.65,"blackout":true,"dynamics_paused_at":null,"group_masters":{}}"#,
@@ -653,7 +644,7 @@ async fn login_for_desk(app: &Router, username: &str, desk_id: Uuid) -> String {
 }
 
 fn output_events(state: &AppState, cursor: u64) -> Vec<Arc<light_application::EventEnvelope>> {
-    let light_application::EventReplay::Events(events) = state.application_events.replay(
+    let light_application::EventReplay::Events(events) = state.events.replay(
         cursor,
         &light_application::EventFilter::default()
             .with_object(light_application::EventObject::global_output()),
@@ -664,9 +655,7 @@ fn output_events(state: &AppState, cursor: u64) -> Vec<Arc<light_application::Ev
 }
 
 fn output_persistence_attempts(state: &AppState) -> u64 {
-    state
-        .output_runtime_persistence_attempts
-        .load(Ordering::Relaxed)
+    state.output.runtime_persistence_attempts()
 }
 
 async fn put_master(app: &Router, token: &str, payload: serde_json::Value) -> Response {

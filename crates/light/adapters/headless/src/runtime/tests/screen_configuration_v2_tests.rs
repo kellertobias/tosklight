@@ -40,20 +40,20 @@ async fn screen_configuration_v2_is_sparse_replay_safe_tolerant_and_retires_v1()
             }
         }
     });
-    let event_before = state.event_revision.load(Ordering::Relaxed);
+    let event_before = state.events.audit_revision();
     let created = post_screen_action(&app, &token, create.clone()).await;
     assert_eq!(created.status(), StatusCode::OK);
     let created = json(created).await;
     assert_eq!(created["replayed"], false);
     assert_eq!(created["screen"]["name"], "Side screen");
     assert_eq!(created["screen"]["layout"]["future_layout"], true);
-    let event_after = state.event_revision.load(Ordering::Relaxed);
+    let event_after = state.events.audit_revision();
     assert_eq!(event_after, event_before + 1);
 
     let replay = post_screen_action(&app, &token, create).await;
     assert_eq!(replay.status(), StatusCode::OK);
     assert_eq!(json(replay).await["replayed"], true);
-    assert_eq!(state.event_revision.load(Ordering::Relaxed), event_after);
+    assert_eq!(state.events.audit_revision(), event_after);
 
     let collision = post_screen_action(
         &app,
@@ -151,8 +151,7 @@ async fn screen_configuration_v2_reads_existing_desk_store_rows_without_migratio
     let (state, data_dir) = test_state();
     let screen_id = Uuid::new_v4();
     state
-        .desk
-        .lock()
+        .installation
         .put_screen(ScreenConfiguration {
             id: screen_id,
             name: "Existing row".into(),

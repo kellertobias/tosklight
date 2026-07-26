@@ -41,13 +41,17 @@ fn playback_level(
             }
         }
         light_playback::PlaybackTarget::ProgrammerFade => {
-            state.configuration.read().programmer_fade_millis as f32 / 20_000.0
+            state.installation.configuration().programmer_fade_millis as f32 / 20_000.0
         }
         light_playback::PlaybackTarget::CueFade => {
-            state.configuration.read().sequence_master_fade_millis as f32 / 60_000.0
+            state
+                .installation
+                .configuration()
+                .sequence_master_fade_millis as f32
+                / 60_000.0
         }
         light_playback::PlaybackTarget::GrandMaster => {
-            state.output_control.lock().options.grand_master
+            state.output.control_projection().grand_master
         }
     };
     level.clamp(0.0, 1.0)

@@ -67,7 +67,7 @@ async fn verify_atomic_put_boundary(scenario: &CommandHttpScenario) {
     assert_eq!(
         scenario
             .state
-            .programmers
+            .programming
             .command_line_state(scenario.session.id)
             .unwrap()
             .revision,

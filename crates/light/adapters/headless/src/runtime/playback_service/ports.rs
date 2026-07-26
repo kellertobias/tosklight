@@ -80,19 +80,18 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
         let show = self
             .state
             .active_show
-            .read()
+            .current()
             .clone()
             .ok_or_else(|| invalid("no show is open"))?;
         self.state
-            .desk
-            .lock()
+            .installation
             .desk_page(context.desk_id, show.id)
             .map_err(|error| invalid(error.to_string()))
     }
 
     fn playback_at(&self, page: u8, slot: u8) -> Result<Option<u16>, ActionError> {
         Ok(cuelist_for_page_playback(
-            &self.state.engine.snapshot(),
+            &self.state.output.snapshot(),
             page,
             slot,
         ))
@@ -103,7 +102,7 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
         _context: &ActionContext,
         group_id: PlaybackGroupId,
     ) -> Result<Option<u16>, ActionError> {
-        resolve_group_playback(&self.state.engine.snapshot(), group_id.as_str())
+        resolve_group_playback(&self.state.output.snapshot(), group_id.as_str())
     }
 
     fn execute(
@@ -175,7 +174,7 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
             ));
         }
         if semantics::may_trigger_auto_off(action, &definition) {
-            related.extend(self.state.engine.enabled_auto_off_playbacks());
+            related.extend(self.state.output.enabled_auto_off_playbacks());
         }
         related.remove(&number);
         Ok(related
@@ -224,7 +223,7 @@ impl ServerPlaybackPorts<'_> {
         };
         let outcome = self
             .state
-            .engine
+            .output
             .execute_playback(EnginePlaybackCommand::CueList {
                 id,
                 action: command,
@@ -283,7 +282,7 @@ impl ServerPlaybackPorts<'_> {
         }
         let (exclusion_zones, exclusion_scope) = self.exclusion_context(address);
         let activation_origin = Some(light_playback::PlaybackActivationOrigin {
-            at: self.state.engine.application_time(),
+            at: self.state.output.application_time(),
             desk_id: self.desk.map(|desk| desk.id),
             surface: activation_surface(surface),
             exclusion_scope,

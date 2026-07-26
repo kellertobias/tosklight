@@ -1,15 +1,16 @@
 use light_application::{ActionContext, ExecutionPolicy, ProgrammingExecution, SpeedGroupOutcome};
-use light_programmer::ProgrammerRegistry;
 
 use super::{
-    programming_ports::{ServerProgrammingPorts, clear_command_line, recording_context},
+    programming_ports::{
+        CommandLineProgrammer, ServerProgrammingPorts, clear_command_line, recording_context,
+    },
     speed_group_action,
 };
 
 impl ServerProgrammingPorts<'_> {
     pub(super) fn speed_group_command(
         &self,
-        programmers: &ProgrammerRegistry,
+        programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
         command: &str,
         policy: ExecutionPolicy,

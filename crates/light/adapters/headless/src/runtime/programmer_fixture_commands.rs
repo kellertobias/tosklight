@@ -14,7 +14,7 @@ fn fixture_selection(
     ),
     String,
 > {
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let (mut fixtures, sources) = if tokens[start..at_index]
         .iter()
         .any(|token| token == "GROUP" || token == "DEGRP")
@@ -34,7 +34,7 @@ fn fixture_selection(
     let mut sources = sources;
     if continuing {
         let current = state
-            .programmers
+            .programming
             .get(session.id)
             .ok_or("programmer does not exist")?;
         let mut combined = match current.selection_expression {
@@ -85,7 +85,7 @@ fn fixture_level_values(
     if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
         return Err("level must be within 0-100".into());
     }
-    let resolved = relative.then(|| state.engine.resolved_values());
+    let resolved = relative.then(|| state.output.resolved_values());
     Ok(fixtures
         .iter()
         .map(|fixture| {
@@ -128,11 +128,11 @@ pub(super) fn execute_fixture_programmer_command(
     let (fixtures, expression) =
         fixture_selection(state, session, tokens, start, at_index, continuing)?;
     state
-        .programmers
+        .programming
         .select_expression(session.id, fixtures.clone(), expression);
     if at_index == tokens.len() {
         state
-            .programmers
+            .programming
             .set_command_line(session.id, command_line.to_owned());
         return Ok(fixtures.len());
     }
@@ -159,7 +159,7 @@ pub(super) fn execute_fixture_programmer_command(
         );
     } else {
         state
-            .programmers
+            .programming
             .set_command_line(session.id, command_line.to_owned());
         let values = fixture_level_values(state, &fixtures, value)?;
         set_command_fixture_intensities(state, session, values, timing);

@@ -21,14 +21,14 @@ pub(super) fn prepare_preload_commit(
     context: light_application::ActionContext,
 ) -> Result<PreparedPreloadCommit, String> {
     let pending = pending_actions(state, session)?;
-    validate_playback_definitions(&pending, &state.engine.snapshot())?;
-    let committed_at = state.programmers.clock().now();
-    let programmer_fade_millis = state.configuration.read().programmer_fade_millis;
+    validate_playback_definitions(&pending, &state.output.snapshot())?;
+    let committed_at = state.programming.clock().now();
+    let programmer_fade_millis = state.installation.configuration().programmer_fade_millis;
     let mut commands = preload_batch_commands(&pending)?;
     attach_shared_exclusions(state, session, committed_at, &pending, &mut commands);
     let prepared_playback =
         state
-            .engine
+            .output
             .prepare_playback_batch(&commands, committed_at, programmer_fade_millis)?;
     let identities = changed_identities(&prepared_playback);
     let before = read_projections(state, &context, &identities)?;
@@ -64,7 +64,7 @@ fn pending_actions(
     session: &Session,
 ) -> Result<Vec<light_programmer::PreloadPlaybackAction>, String> {
     state
-        .programmers
+        .programming
         .preload_playback_actions(session.id)
         .ok_or_else(|| "programmer does not exist".to_owned())
 }
@@ -125,8 +125,7 @@ fn resolve_exclusions(
     resolvers: &mut HashMap<uuid::Uuid, VirtualPlaybackExclusionResolver>,
 ) -> ResolvedExclusions {
     let desk_exists = state
-        .desk
-        .lock()
+        .installation
         .control_desk(desk_id)
         .ok()
         .flatten()

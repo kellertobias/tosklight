@@ -109,20 +109,18 @@ pub(super) fn speed_group_action_indices(
     affected
 }
 
-pub(super) fn copy_speed_group_runtime_to_configuration(
-    state: &AppState,
-    controllers: &[SpeedGroupController; 5],
-    indices: &[usize],
-) {
-    let mut configuration = state.configuration.write();
-    for &index in indices {
-        configuration.speed_groups_bpm[index] = controllers[index].manual_bpm();
-        configuration.speed_group_sound_to_light[index] = controllers[index].sound_config().clone();
-    }
+pub(super) fn copy_speed_group_runtime_to_configuration(state: &AppState, indices: &[usize]) {
+    state.installation.update_configuration(|configuration| {
+        for &index in indices {
+            configuration.speed_groups_bpm[index] = state.output.speed_group_manual_bpm(index);
+            configuration.speed_group_sound_to_light[index] =
+                state.output.speed_group_sound_config(index);
+        }
+    });
 }
 
 pub(super) fn application_millis(state: &AppState) -> u64 {
-    state.engine.application_time().timestamp_millis().max(0) as u64
+    state.output.application_time().timestamp_millis().max(0) as u64
 }
 
 /// Propagates the authoritative Speed Group controllers into both chaser scheduling and runtime
@@ -130,11 +128,8 @@ pub(super) fn application_millis(state: &AppState) -> u64 {
 /// separate phase-advancing flag so resuming does not lose that rate.
 pub(super) fn refresh_speed_group_engine(state: &AppState) -> [SpeedSnapshot; 5] {
     let now = application_millis(state);
-    let mut snapshots = {
-        let controllers = state.speed_groups.lock();
-        std::array::from_fn(|index| controllers[index].snapshot(now))
-    };
-    let timing = state.configuration.read().clone();
+    let mut snapshots = state.output.speed_group_snapshots(now);
+    let timing = state.installation.configuration();
     let base = snapshots;
     for index in 0..snapshots.len() {
         let mut source = index;
@@ -154,24 +149,23 @@ pub(super) fn refresh_speed_group_engine(state: &AppState) -> [SpeedSnapshot; 5]
         }
     }
     let effective_bpm = snapshots.map(|snapshot| snapshot.effective_bpm.clamp(0.1, 999.0));
-    state.engine.set_control_timing(
+    state.output.set_control_timing(
         effective_bpm,
         timing.programmer_fade_millis,
         timing.sequence_master_fade_millis,
     );
     state
-        .engine
+        .output
         .set_speed_groups_paused(snapshots.map(|snapshot| !snapshot.phase_advancing));
     snapshots
 }
 
 pub(super) fn persist_server_configuration(state: &AppState) -> Result<(), ApiError> {
-    let configuration = state.configuration.read().clone();
+    let configuration = state.installation.configuration();
     let encoded = serde_json::to_string(&configuration)
         .map_err(|error| ApiError::internal(error.to_string()))?;
     state
-        .desk
-        .lock()
+        .installation
         .set_setting("server_configuration", &encoded)
         .map_err(ApiError::store)
 }
@@ -181,10 +175,12 @@ pub(super) fn speed_group_response(
     index: usize,
     snapshots: [SpeedSnapshot; 5],
 ) -> SpeedGroupResponse {
-    let configuration = state.speed_groups.lock()[index].sound_config().clone();
+    let configuration = state.output.speed_group_sound_config(index);
     SpeedGroupResponse {
         group: speed_group_name(index),
-        source: wire_speed_group_source(state.configuration.read().speed_group_sources[index]),
+        source: wire_speed_group_source(
+            state.installation.configuration().speed_group_sources[index],
+        ),
         configuration,
         snapshot: snapshots[index],
     }
@@ -227,34 +223,14 @@ pub(super) async fn observe_speed_group(
     State(state): State<AppState>,
     Path(group): Path<String>,
     headers: HeaderMap,
-    Json(mut observation): Json<SoundObservation>,
+    Json(observation): Json<SoundObservation>,
 ) -> Result<Json<SpeedGroupResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
     let index = speed_group_index(&group)?;
     let now = application_millis(&state);
-    if !state.speed_groups.lock()[index].sound_config().enabled {
-        return Err(ApiError::conflict(
-            "enable Sound to Light before submitting observations",
-        ));
-    }
-    {
-        let mut owners = state.sound_capture_owners.lock();
-        if owners[index].is_some_and(|owner| {
-            owner.desk_id != session.desk.id && now.saturating_sub(owner.last_seen_millis) <= 3_000
-        }) {
-            return Err(ApiError::conflict(
-                "this Speed Group is receiving audio from another desk",
-            ));
-        }
-        owners[index] = Some(SoundCaptureOwner {
-            desk_id: session.desk.id,
-            last_seen_millis: now,
-        });
-    }
-    // Browser clocks and capture callback timestamps are not comparable across desks. The server
-    // stamps every accepted sample with the shared application clock used by playback.
-    observation.captured_at_millis = now;
-    state.speed_groups.lock()[index].observe_sound(observation);
+    state
+        .output
+        .observe_speed_group_sound(index, session.desk.id, now, observation)?;
     let snapshots = refresh_speed_group_engine(&state);
     emit(
         &state,
@@ -273,49 +249,11 @@ pub(super) async fn speed_group_action(
     let session = authenticate(&state, &headers)?;
     let index = speed_group_index(&group)?;
     let now = application_millis(&state);
-    let mut controller = state.speed_groups.lock();
-    let affected = match input.action.as_str() {
-        "learn" => {
-            // The optional browser timestamp is deliberately advisory only; all desk surfaces use
-            // the same application clock so an attached OSC surface and the UI behave identically.
-            let _browser_timestamp = input.captured_at_millis;
-            unlink_speed_group(&mut controller, index, now);
-            controller[index].tap_learn(now);
-            vec![index]
-        }
-        "double" => {
-            let affected = speed_group_action_indices(&controller, index);
-            for &affected_index in &affected {
-                controller[affected_index].double();
-            }
-            affected
-        }
-        "half" => {
-            let affected = speed_group_action_indices(&controller, index);
-            for &affected_index in &affected {
-                controller[affected_index].half();
-            }
-            affected
-        }
-        "pause" => {
-            let paused = !controller[index].snapshot(now).paused;
-            let affected = speed_group_action_indices(&controller, index);
-            for &affected_index in &affected {
-                controller[affected_index].set_paused_at(paused, now);
-            }
-            affected
-        }
-        _ => {
-            return Err(ApiError::bad_request(
-                "Speed Group action must be learn, double, half, or pause",
-            ));
-        }
-    };
-    copy_speed_group_runtime_to_configuration(&state, &controller, &affected);
-    drop(controller);
-    if input.action == "learn" {
-        state.sound_capture_owners.lock()[index] = None;
-    }
+    let _browser_timestamp = input.captured_at_millis;
+    let affected = state
+        .output
+        .apply_speed_group_action(index, now, &input.action)?;
+    copy_speed_group_runtime_to_configuration(&state, &affected);
     persist_server_configuration(&state)?;
     let snapshots = refresh_speed_group_engine(&state);
     emit(

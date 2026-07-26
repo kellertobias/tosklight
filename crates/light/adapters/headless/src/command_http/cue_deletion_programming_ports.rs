@@ -1,14 +1,15 @@
-use super::programming_ports::{ServerProgrammingPorts, clear_command_line, recording_context};
+use super::programming_ports::{
+    CommandLineProgrammer, ServerProgrammingPorts, clear_command_line, recording_context,
+};
 use light_application::{
     ActionContext, ExecutionPolicy, ProgrammingCueDeletionExpectation,
     ProgrammingCueDeletionRequest, ProgrammingCueDeletionState, ProgrammingExecution,
 };
-use light_programmer::ProgrammerRegistry;
 
 impl ServerProgrammingPorts<'_> {
     pub(super) fn delete_cue_command(
         &self,
-        programmers: &ProgrammerRegistry,
+        programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
         command: &str,
         policy: ExecutionPolicy,
@@ -22,7 +23,7 @@ impl ServerProgrammingPorts<'_> {
 
     fn execute_cue_deletion(
         &self,
-        programmers: &ProgrammerRegistry,
+        programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
         raw_command: &str,
         policy: ExecutionPolicy,
@@ -47,7 +48,7 @@ impl ServerProgrammingPorts<'_> {
                     cue_number: parsed.cue_number,
                     expectation: ProgrammingCueDeletionExpectation::Current,
                 },
-                &self.state().active_show_service,
+                &self.state().active_show,
                 &ports,
             )
             .map_err(|error| error.message)?;

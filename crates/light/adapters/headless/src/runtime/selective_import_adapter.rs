@@ -1,6 +1,6 @@
 //! Server-owned storage and runtime ports for selective show import.
 
-use super::{AppState, ServerActiveShowPorts, ServerActiveShowUnitOfWork};
+use super::{ActiveShowRepository, AppState, ServerActiveShowPorts, ServerActiveShowUnitOfWork};
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, ActiveShowObjectChange, ActiveShowPorts,
     ActiveShowUnitOfWork, AssetReference, ImportManagedAssetAction, SelectiveShowImportChange,
@@ -8,7 +8,7 @@ use light_application::{
 };
 use light_core::ShowId;
 use light_engine::{EngineSnapshot, PreparedEngineSnapshot};
-use light_show::{PortableShowDocument, PortableShowObjectUndo, ShowStore, StoreError};
+use light_show::{PortableShowDocument, PortableShowObjectUndo, StoreError};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -51,7 +51,7 @@ impl ActiveShowPorts for ServerSelectiveImportPorts {
         _show_id: ShowId,
         operation: impl FnOnce() -> Result<T, ActionError>,
     ) -> Result<T, ActionError> {
-        let _activation = self.state.activation_lock.clone().blocking_lock_owned();
+        let _activation = self.state.active_show.acquire_blocking();
         operation()
     }
 
@@ -107,12 +107,11 @@ impl SelectiveShowImportPorts for ServerSelectiveImportPorts {
     ) -> Result<Self::ImportSourceSnapshot, ActionError> {
         let entry = self
             .state
-            .desk
-            .lock()
+            .installation
             .show(show_id)
             .map_err(store_error)?
             .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "source show not found"))?;
-        let document = ShowStore::open(&entry.path)
+        let document = ActiveShowRepository::open(&entry.path)
             .and_then(|store| store.portable_document())
             .map_err(store_error)?;
         Ok(ImportSourceSnapshot { document })
@@ -186,11 +185,7 @@ impl ServerSelectiveImportPorts {
             if let Ok(fixture) =
                 serde_json::from_value::<light_fixture::PatchedFixture>(object.body.clone())
             {
-                self.state
-                    .media_cache
-                    .lock()
-                    .clear_fixture(&fixture.fixture_id.0.to_string());
-                self.state.media_status.write().remove(&fixture.fixture_id);
+                self.state.media.invalidate_fixture(fixture.fixture_id);
             }
         }
     }
@@ -203,18 +198,13 @@ impl ServerSelectiveImportPorts {
         {
             return;
         }
-        let (Some(output), Ok(runtime)) = (
-            self.state.network_output.clone(),
-            tokio::runtime::Handle::try_current(),
-        ) else {
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
             return;
         };
         let routes = self.previous_routes.lock().clone();
-        let sequences = Arc::clone(&self.state.output_sequences);
+        let output = self.state.output.clone();
         runtime.spawn(async move {
-            let _ = output
-                .terminate_routes(&routes, &mut *sequences.lock().await)
-                .await;
+            output.terminate_routes(&routes).await;
         });
     }
 }

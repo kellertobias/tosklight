@@ -66,7 +66,7 @@ impl TopologyScenario {
 
     pub fn seed(&self, kind: &str, object_id: &str, body: &serde_json::Value) {
         let show_id = light_core::ShowId(Uuid::parse_str(&self.show_id).unwrap());
-        let entry = self.state.desk.lock().show(show_id).unwrap().unwrap();
+        let entry = self.state.installation.show(show_id).unwrap().unwrap();
         ShowStore::open(entry.path)
             .unwrap()
             .put_object(kind, object_id, body, 0)
@@ -304,7 +304,7 @@ pub(super) fn show_events(
     state: &AppState,
     after: u64,
 ) -> Vec<Arc<light_application::EventEnvelope>> {
-    let light_application::EventReplay::Events(events) = state.application_events.replay(
+    let light_application::EventReplay::Events(events) = state.events.replay(
         after,
         &light_application::EventFilter::default()
             .with_capability(light_application::EventCapability::Desk)
@@ -345,7 +345,7 @@ fn show_revision(state: &AppState, show_id: &str) -> u64 {
 
 fn show_document(state: &AppState, show_id: &str) -> light_show::PortableShowDocument {
     let id = light_core::ShowId(Uuid::parse_str(show_id).unwrap());
-    let entry = state.desk.lock().show(id).unwrap().unwrap();
+    let entry = state.installation.show(id).unwrap().unwrap();
     ShowStore::open(entry.path)
         .unwrap()
         .portable_document()

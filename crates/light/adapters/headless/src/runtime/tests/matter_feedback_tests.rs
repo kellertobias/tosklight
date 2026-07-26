@@ -1,7 +1,7 @@
 #[test]
 fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
     let (state, data_dir) = test_state();
-    state.configuration.write().matter_enabled = true;
+    state.installation.update_configuration(|configuration| configuration.matter_enabled = true);
     let mut snapshot = matter_test_snapshot();
     let cue_list_id = snapshot.cue_lists[0].id;
     let definition = |number, fader, has_fader| light_playback::PlaybackDefinition {
@@ -32,11 +32,10 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
         slots: HashMap::from([(1, 27), (2, 28)]),
     }]
     .into();
-    state.engine.replace_snapshot(snapshot).unwrap();
+    state.output.replace_snapshot(snapshot).unwrap();
 
     let faderless_xfade = state
-        .engine
-        .snapshot()
+        .output.snapshot()
         .playbacks
         .iter()
         .find(|definition| definition.number == 28)
@@ -124,8 +123,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
     assert!(on.lights[1].on);
     assert_eq!(
         state
-            .engine
-            .playback_runtime()
+            .output.playback_runtime()
             .iter()
             .find(|playback| playback.playback_number == Some(28))
             .unwrap()
@@ -134,8 +132,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
     );
 
     state
-        .engine
-        .execute_playback(EnginePlaybackCommand::Pool {
+        .output.execute_playback(EnginePlaybackCommand::Pool {
             number: 28,
             action: PoolPlaybackAction::Off,
         })
@@ -150,8 +147,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
 async fn matter_enablement_is_desk_persistent_and_status_is_explicit() {
     let (state, data_dir) = test_state();
     state
-        .engine
-        .replace_snapshot(matter_test_snapshot())
+        .output.replace_snapshot(matter_test_snapshot())
         .unwrap();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -177,9 +173,7 @@ async fn matter_enablement_is_desk_persistent_and_status_is_explicit() {
 
     let persisted: DeskConfiguration = serde_json::from_str(
         &state
-            .desk
-            .lock()
-            .setting("server_configuration")
+            .installation.setting("server_configuration")
             .unwrap()
             .unwrap(),
     )
@@ -204,9 +198,7 @@ async fn matter_enablement_is_desk_persistent_and_status_is_explicit() {
 #[test]
 fn direct_bpm_fader_reports_zero_half_and_full_authoritative_rates() {
     let (state, data_dir) = test_state();
-    state.speed_groups.lock()[0]
-        .set_speed_master_scale(0.25)
-        .unwrap();
+    state.output.set_speed_group_scale_for_test(0, 0.25);
 
     let set_fader = |value| {
         apply_speed_group_playback_action(
@@ -220,7 +212,7 @@ fn direct_bpm_fader_reports_zero_half_and_full_authoritative_rates() {
             light_playback::PlaybackFaderMode::DirectBpm,
         )
         .unwrap();
-        state.speed_groups.lock()[0].snapshot(0)
+        state.output.speed_group_snapshot(0, 0)
     };
 
     let half = set_fader(0.5);

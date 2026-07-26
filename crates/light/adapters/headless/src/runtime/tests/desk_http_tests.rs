@@ -1,10 +1,10 @@
 #[tokio::test]
 async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
     let (state, data_dir) = test_state();
-    let second = state.desk.lock().add_desk("Second", "second").unwrap();
+    let second = state.installation.add_desk("Second", "second").unwrap();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
-    let desk_id = state.sessions.read().values().find(|session| session.token == token).unwrap().desk.id;
+    let desk_id = state.sessions.sessions().into_iter().find(|session| session.token == token).unwrap().desk.id;
     let configure = app.clone().oneshot(Request::post(format!("/api/v2/control-desks/{desk_id}/desk-lock/update")).header(header::AUTHORIZATION, format!("Bearer {token}")).header(header::CONTENT_TYPE,"application/json").body(Body::from(r#"{"request_id":"desk-lock-configure","message":"Call the operator","wallpaper":null,"unlock_mode":"pin","pin":"1234"}"#)).unwrap()).await.unwrap();
     assert_eq!(configure.status(), StatusCode::OK);
     let lock = app
@@ -23,9 +23,7 @@ async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
         read_desk_lock(
             &state,
             state
-                .sessions
-                .read()
-                .values()
+                .sessions.sessions().into_iter()
                 .find(|session| session.token == token)
                 .unwrap()
                 .desk
@@ -106,13 +104,9 @@ async fn desk_lock_is_persisted_scoped_and_enforced_by_the_server() {
         .unwrap();
     assert_eq!(unlock.status(), StatusCode::OK);
     let stored = state
-        .desk
-        .lock()
-        .setting(&desk_lock_key(
+        .installation.setting(&desk_lock_key(
             state
-                .sessions
-                .read()
-                .values()
+                .sessions.sessions().into_iter()
                 .find(|session| session.token == token)
                 .unwrap()
                 .desk
@@ -161,8 +155,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
     let (state, data_dir) = test_state();
     let fixture_id = light_core::FixtureId::new();
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![light_fixture::PatchedFixture {
                 name: "Media Server".into(),
                 layer_id: "default".into(),
@@ -264,8 +257,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
         .unwrap();
     assert_eq!(refreshed.status(), StatusCode::OK);
     let cached = state
-        .media_cache
-        .lock()
+        .media
         .thumbnail(&ThumbnailKey {
             fixture: fixture_id.0.to_string(),
             library_type: 1,

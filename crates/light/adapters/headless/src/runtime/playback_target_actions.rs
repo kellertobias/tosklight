@@ -70,7 +70,7 @@ fn execute_pool_with_exclusions(
     activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     let transition = state
-        .engine
+        .output
         .execute_pool_playback_with_activation(number, action, exclusion_zones, activation_origin)
         .map_err(ApiError::bad_request)?;
     let EnginePlaybackOutcome::Changed(effect) = transition.outcome else {
@@ -210,17 +210,18 @@ pub(super) fn select_playback_target(
     let desk = desk.ok_or_else(|| ApiError::bad_request("playback selection needs a desk"))?;
     let show = state
         .active_show
-        .read()
+        .current()
         .clone()
         .ok_or_else(|| ApiError::bad_request("no show is open"))?;
-    let store = state.desk.lock();
-    let selected = store
+    let selected = state
+        .installation
         .selected_playback(desk.id, show.id)
         .map_err(ApiError::store)?;
     if selected == Some(definition.number) {
         return Ok(false);
     }
-    store
+    state
+        .installation
         .set_selected_playback(desk.id, show.id, Some(definition.number))
         .map_err(ApiError::store)?;
     Ok(true)

@@ -1,3 +1,4 @@
+use super::capability_resources::ActiveShowPermit;
 use super::*;
 
 pub(super) fn active_show_object_action(
@@ -72,8 +73,8 @@ pub(super) fn undo_active_show_object_action(
     }
 }
 
-/// Runs while the caller holds `activation_lock`, keeping the active identity stable through the
-/// infallible runtime installation.
+/// Runs while the caller holds an active-show coordinator permit, keeping the active identity
+/// stable through the infallible runtime installation.
 pub(super) fn run_active_show_object_action(
     state: &AppState,
     action: light_application::ActionEnvelope<light_application::MutateActiveShowObjectsCommand>,
@@ -109,7 +110,7 @@ fn run_active_show_object_action_with_ports(
 ) -> Result<light_application::MutateActiveShowObjectsResult, ApiError> {
     let show_id = action.command.show_id;
     let result = state
-        .active_show_service
+        .active_show
         .mutate_objects(action, ports)
         .map_err(active_show_object_api_error)?;
     emit_migration_object_changes(state, show_id, &result.migration_changes);
@@ -162,19 +163,19 @@ pub(super) fn emit_migrated_route_changes(
 
 pub(super) async fn run_active_show_object_action_async(
     state: &AppState,
-    activation: tokio::sync::OwnedMutexGuard<()>,
+    activation: ActiveShowPermit,
     action: light_application::ActionEnvelope<light_application::MutateActiveShowObjectsCommand>,
 ) -> Result<
     (
         light_application::MutateActiveShowObjectsResult,
-        tokio::sync::OwnedMutexGuard<()>,
+        ActiveShowPermit,
     ),
     ApiError,
 > {
     let worker_state = state.clone();
     let result = tokio::task::spawn_blocking(move || {
         #[cfg(test)]
-        worker_state.active_show_http_lifecycle.pause_if_armed();
+        worker_state.active_show.pause_http_lifecycle_if_armed();
         (
             run_active_show_object_action(&worker_state, action),
             activation,
@@ -185,17 +186,17 @@ pub(super) async fn run_active_show_object_action_async(
     Ok((result.0?, result.1))
 }
 
-/// Runs while the caller holds `activation_lock`, keeping the active identity stable through the
-/// infallible runtime installation.
+/// Runs while the caller holds an active-show coordinator permit, keeping the active identity
+/// stable through the infallible runtime installation.
 #[cfg(test)]
 pub(super) async fn run_active_show_object_undo_async(
     state: &AppState,
-    activation: tokio::sync::OwnedMutexGuard<()>,
+    activation: ActiveShowPermit,
     action: light_application::ActionEnvelope<light_application::UndoActiveShowObjectCommand>,
 ) -> Result<
     (
         light_application::UndoActiveShowObjectResult,
-        tokio::sync::OwnedMutexGuard<()>,
+        ActiveShowPermit,
     ),
     ApiError,
 > {
@@ -204,7 +205,7 @@ pub(super) async fn run_active_show_object_undo_async(
         let ports = ServerActiveShowPorts::show_objects(worker_state.clone());
         let show_id = action.command.show_id;
         let undone = worker_state
-            .active_show_service
+            .active_show
             .undo_object(action, &ports)
             .map_err(active_show_object_api_error)
             .inspect(|result| {

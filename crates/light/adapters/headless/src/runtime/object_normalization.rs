@@ -36,7 +36,7 @@ fn normalize_cue_list(
     if let Ok(id) = Uuid::parse_str(object_id) {
         cue_list.id = light_core::CueListId(id);
     }
-    cue_list.migrate_legacy_chaser_xfade(&state.configuration.read().speed_groups_bpm);
+    cue_list.migrate_legacy_chaser_xfade(&state.installation.configuration().speed_groups_bpm);
     cue_list.validate().map_err(ApiError::bad_request)?;
     serde_json::to_value(cue_list).map_err(|error| ApiError::internal(error.to_string()))
 }

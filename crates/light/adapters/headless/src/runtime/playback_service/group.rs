@@ -44,12 +44,12 @@ fn set_master(
 
 fn set_flash(ports: &ServerPlaybackPorts<'_>, group_id: PlaybackGroupId, pressed: bool) -> bool {
     let value = if pressed { 1.0 } else { 0.0 };
-    if ports.state.engine.group_master_flash(group_id.as_str()) == value {
+    if ports.state.output.group_master_flash(group_id.as_str()) == value {
         return false;
     }
     ports
         .state
-        .engine
+        .output
         .set_group_master_flash(group_id.as_str().to_owned(), value);
     true
 }

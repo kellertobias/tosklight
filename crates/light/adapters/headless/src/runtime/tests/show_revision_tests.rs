@@ -51,9 +51,7 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
     let show_id = show["id"].as_str().unwrap();
     let show_uuid = Uuid::parse_str(show_id).unwrap();
     let source_entry = state
-        .desk
-        .lock()
-        .show(light_core::ShowId(show_uuid))
+        .installation.show(light_core::ShowId(show_uuid))
         .unwrap()
         .unwrap();
     let seed_path = data_dir.join("legacy-revision-seed.show");
@@ -90,9 +88,7 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
     assert_eq!(saved["name"], "Before experiment");
     assert!(saved.get("path").is_none());
     let saved_revision = state
-        .desk
-        .lock()
-        .show_revision(light_core::ShowId(show_uuid), 1)
+        .installation.show_revision(light_core::ShowId(show_uuid), 1)
         .unwrap()
         .unwrap();
     let saved_source = std::fs::read(&saved_revision.path).unwrap();
@@ -116,9 +112,7 @@ async fn named_revision_load_creates_an_independent_provenanced_copy() {
     assert!(copy["revision_copy"]["copied_at"].as_str().is_some());
     assert_eq!(std::fs::read(&saved_revision.path).unwrap(), saved_source);
     let copy_entry = state
-        .desk
-        .lock()
-        .show(light_core::ShowId(Uuid::parse_str(copy_id).unwrap()))
+        .installation.show(light_core::ShowId(Uuid::parse_str(copy_id).unwrap()))
         .unwrap()
         .unwrap();
     let copy_fixture = ShowStore::open(&copy_entry.path)

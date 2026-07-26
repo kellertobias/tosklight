@@ -43,18 +43,17 @@ fn subscription_target(
 }
 
 fn unsubscribe_osc_client(state: &AppState, client_id: &str) {
-    let removed = state.osc_subscribers.lock().remove(client_id);
+    let removed = state.integrations.unregister_osc_subscriber(client_id);
     if let Some(subscriber) = removed {
         state
-            .osc_cue_record_suppression
-            .lock()
-            .remove_source(subscriber.session_id, subscriber.command_source);
+            .integrations
+            .remove_suppression_source(subscriber.session_id, subscriber.command_source);
         disconnect_orphaned_osc_session(state, subscriber.session_id);
     }
     emit(
         state,
         "hardware_connection_changed",
-        serde_json::json!({"connected":!state.osc_subscribers.lock().is_empty()}),
+        serde_json::json!({"connected":state.integrations.hardware_connected()}),
     );
 }
 
@@ -71,7 +70,7 @@ fn subscribe_osc_client(
         return;
     };
     let desk_alias = desk.osc_alias.clone();
-    let existing = state.osc_subscribers.lock().get(&client_id).cloned();
+    let existing = state.integrations.osc_subscriber(&client_id);
     let attached = attached_osc_session(state, desk.id);
     let reusable = reusable_osc_session(state, &client_id, &desk_alias, existing.as_ref());
     let session_id = resolve_osc_session(
@@ -107,16 +106,11 @@ fn subscribe_osc_client(
 }
 
 fn attached_osc_session(state: &AppState, desk_id: Uuid) -> Option<Session> {
-    let session = state
-        .sessions
-        .read()
-        .values()
-        .find(|session| {
-            session.connected
-                && session.desk.id == desk_id
-                && state.programmers.get(session.id).is_some()
-        })
-        .cloned();
+    let session = state.sessions.sessions().into_iter().find(|session| {
+        session.connected
+            && session.desk.id == desk_id
+            && state.programming.get(session.id).is_some()
+    });
     if let Some(session) = &session {
         attach_session_command_context(state, session);
     }
@@ -131,18 +125,13 @@ fn reusable_osc_session(
 ) -> Option<Session> {
     existing
         .filter(|subscriber| !subscriber.desk_alias.eq_ignore_ascii_case(desk_alias))
+        .filter(|subscriber| !state.sessions.has_bound_client(subscriber.session_id))
         .filter(|subscriber| {
-            !state
-                .session_clients
-                .read()
-                .contains_key(&subscriber.session_id)
+            state
+                .integrations
+                .osc_session_is_exclusive_to_client(client_id, subscriber.session_id)
         })
-        .filter(|subscriber| {
-            state.osc_subscribers.lock().iter().all(|(id, peer)| {
-                id.as_str() == client_id || peer.session_id != subscriber.session_id
-            })
-        })
-        .and_then(|subscriber| state.sessions.read().get(&subscriber.session_id).cloned())
+        .and_then(|subscriber| state.sessions.session(subscriber.session_id))
 }
 
 fn resolve_osc_session(
@@ -168,15 +157,14 @@ fn reuse_osc_session(state: &AppState, desk: &ControlDesk, mut session: Session)
         .programming
         .run_lifecycle_transition(&context, session.user.id, || {
             attach_session_command_context(state, &session);
-            state.sessions.write().insert(session.id, session.clone());
+            state.sessions.insert_session(session.clone());
         });
     session.id
 }
 
 fn create_osc_session(state: &AppState, desk: &ControlDesk) -> SessionId {
     let Some(user) = state
-        .desk
-        .lock()
+        .installation
         .users()
         .ok()
         .and_then(|users| users.into_iter().find(|user| user.enabled))
@@ -195,21 +183,22 @@ fn create_osc_session(state: &AppState, desk: &ControlDesk) -> SessionId {
     state
         .programming
         .run_lifecycle_transition(&context, user.id, || {
-            state.programmers.start(id, user.id);
+            state.programming.start(id, user.id);
             attach_session_command_context(state, &session);
-            state.sessions.write().insert(id, session);
+            state.sessions.insert_session(session);
         });
     id
 }
 
 fn replace_osc_subscriber(state: &AppState, client_id: String, subscriber: OscSubscriber) {
     let session_id = subscriber.session_id;
-    let replaced = state.osc_subscribers.lock().insert(client_id, subscriber);
+    let replaced = state
+        .integrations
+        .register_osc_subscriber(client_id, subscriber);
     if let Some(replaced) = replaced {
         state
-            .osc_cue_record_suppression
-            .lock()
-            .remove_source(replaced.session_id, replaced.command_source);
+            .integrations
+            .remove_suppression_source(replaced.session_id, replaced.command_source);
         if replaced.session_id != session_id {
             disconnect_orphaned_osc_session(state, replaced.session_id);
         }
@@ -217,26 +206,18 @@ fn replace_osc_subscriber(state: &AppState, client_id: String, subscriber: OscSu
 }
 
 pub(in crate::runtime) fn disconnect_orphaned_osc_session(state: &AppState, session_id: SessionId) {
-    if state.session_clients.read().contains_key(&session_id)
-        || state
-            .osc_subscribers
-            .lock()
-            .values()
-            .any(|subscriber| subscriber.session_id == session_id)
+    if state.sessions.has_bound_client(session_id) || state.integrations.has_osc_session(session_id)
     {
         return;
     }
-    state
-        .osc_cue_record_suppression
-        .lock()
-        .remove_session(session_id);
-    let Some(session) = state.sessions.write().remove(&session_id) else {
+    state.integrations.remove_session_suppression(session_id);
+    let Some(session) = state.sessions.remove_session(session_id) else {
         return;
     };
     let context = programming_context(&session, light_application::ActionSource::Osc, None);
     state
         .programming
         .run_lifecycle_transition(&context, session.user.id, || {
-            state.programmers.disconnect(session_id);
+            state.programming.disconnect(session_id);
         });
 }

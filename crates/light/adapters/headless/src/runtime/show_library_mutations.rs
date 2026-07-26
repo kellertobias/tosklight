@@ -12,7 +12,7 @@ pub(super) async fn rename_show(
     let id = light_core::ShowId(id);
     let current = state
         .active_show
-        .read()
+        .current()
         .clone()
         .filter(|show| show.id == id)
         .ok_or_else(|| ApiError::conflict("only the active show can be renamed"))?;
@@ -20,9 +20,8 @@ pub(super) async fn rename_show(
         return Ok(Json(current));
     }
     if state
-        .desk
-        .lock()
-        .library()
+        .installation
+        .show_library()
         .map_err(ApiError::store)?
         .into_iter()
         .any(|show| show.id != id && show.name.eq_ignore_ascii_case(name))
@@ -30,19 +29,24 @@ pub(super) async fn rename_show(
         return Err(ApiError::conflict("a show with that name already exists"));
     }
 
-    let destination = state.data_dir.join("shows").join(format!("{name}.show"));
+    let destination = state
+        .installation
+        .data_dir()
+        .join("shows")
+        .join(format!("{name}.show"));
     if destination.exists() {
         return Err(ApiError::conflict(
             "a show file with that name already exists",
         ));
     }
     let staged = state
-        .data_dir
+        .installation
+        .data_dir()
         .join("shows")
         .join(format!(".rename-{}.tmp", Uuid::new_v4()));
-    let stage_result = ShowStore::open(&current.path)
+    let stage_result = ActiveShowRepository::open(&current.path)
         .and_then(|store| store.backup_to(&staged))
-        .and_then(|_| ShowStore::open(&staged))
+        .and_then(|_| ActiveShowRepository::open(&staged))
         .and_then(|store| store.set_identity(current.id, name, current.revision_copy.as_ref()))
         .and_then(|_| validate_show_file(&staged).map(|_| ()));
     if let Err(error) = stage_result {
@@ -55,8 +59,7 @@ pub(super) async fn rename_show(
     }
     let renamed =
         match state
-            .desk
-            .lock()
+            .installation
             .rename_show(current.id, name, &destination.display().to_string())
         {
             Ok(entry) => entry,
@@ -66,7 +69,7 @@ pub(super) async fn rename_show(
             }
         };
     invalidate_active_show_document(&state);
-    *state.active_show.write() = Some(renamed.clone());
+    state.active_show.replace_current(Some(renamed.clone()));
     if let Err(error) = std::fs::remove_file(&current.path)
         && error.kind() != std::io::ErrorKind::NotFound
     {
@@ -92,7 +95,7 @@ pub(super) async fn overwrite_show(
     }
     if state
         .active_show
-        .read()
+        .current()
         .as_ref()
         .is_none_or(|show| show.id.0 != source_id)
     {
@@ -101,24 +104,26 @@ pub(super) async fn overwrite_show(
         ));
     }
     let (source, destination) = {
-        let desk = state.desk.lock();
-        let source = desk
+        let source = state
+            .installation
             .show(light_core::ShowId(source_id))
             .map_err(ApiError::store)?
             .ok_or_else(|| ApiError::not_found("source show"))?;
-        let destination = desk
+        let destination = state
+            .installation
             .show(light_core::ShowId(destination_id))
             .map_err(ApiError::store)?
             .ok_or_else(|| ApiError::not_found("overwrite destination"))?;
         (source, destination)
     };
     let staged = state
-        .data_dir
+        .installation
+        .data_dir()
         .join("shows")
         .join(format!(".overwrite-{}.tmp", Uuid::new_v4()));
-    let stage_result = ShowStore::open(&source.path)
+    let stage_result = ActiveShowRepository::open(&source.path)
         .and_then(|store| store.backup_to(&staged))
-        .and_then(|_| ShowStore::open(&staged))
+        .and_then(|_| ActiveShowRepository::open(&staged))
         .and_then(|store| {
             store.set_identity(
                 destination.id,
@@ -140,8 +145,7 @@ pub(super) async fn overwrite_show(
         return Err(ApiError::io(error));
     }
     let destination = state
-        .desk
-        .lock()
+        .installation
         .mark_show_updated(destination.id)
         .map_err(ApiError::store)?;
     emit(

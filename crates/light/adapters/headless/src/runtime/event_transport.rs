@@ -2,7 +2,10 @@
 
 mod adapter;
 
-use super::{ApiError, AppState, Session, WsResponse, authenticate_token, dispatch_live_action};
+use super::{
+    ApiError, AppState, EventResource, Session, WsResponse, authenticate_token,
+    dispatch_live_action,
+};
 use axum::{
     Router,
     extract::{State, WebSocketUpgrade, ws::Message, ws::WebSocket},
@@ -64,7 +67,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
         ClientMessage::Action(_) => Err("the first event message must subscribe".into()),
         ClientMessage::Invalid { error, .. } => Err(error),
     };
-    let mut stream = match EventStream::subscribe(&state.application_events, &session, request) {
+    let mut stream = match EventStream::subscribe(&state.events, &session, request) {
         Ok(stream) => stream,
         Err(error) => {
             send_wire(&mut socket, wire::EventServerMessage::Error { error }).await;
@@ -224,7 +227,7 @@ fn command_error(state: &AppState, request_id: String, error: String) -> WsRespo
         protocol_version: 2,
         request_id,
         ok: false,
-        revision: state.engine.snapshot().revision,
+        revision: state.output.snapshot().revision,
         payload: None,
         error: Some(error),
     }
@@ -249,13 +252,13 @@ async fn send_json<T: Serialize>(socket: &mut WebSocket, message: &T) -> bool {
 }
 
 pub(super) struct EventStream {
-    pub(super) bus: application::EventBus,
+    events: EventResource,
     pub(super) subscription: application::EventSubscription,
 }
 
 impl EventStream {
     pub(super) fn subscribe(
-        bus: &application::EventBus,
+        events: &EventResource,
         session: &Session,
         request: Result<wire::EventClientMessage, String>,
     ) -> Result<Self, String> {
@@ -269,12 +272,12 @@ impl EventStream {
         else {
             return Err("the first event message must subscribe".into());
         };
-        validate_cursor(bus, after_sequence)?;
+        validate_cursor(events, after_sequence)?;
         validate_programming_scope(session, &filter, &rate_limits)?;
         let options = subscription_options(capacity, after_sequence, rate_limits)?;
-        let subscription = bus.subscribe(adapter::application_filter(session, filter), options);
+        let subscription = events.subscribe(adapter::application_filter(session, filter), options);
         Ok(Self {
-            bus: bus.clone(),
+            events: events.clone(),
             subscription,
         })
     }
@@ -295,7 +298,7 @@ impl EventStream {
     }
 
     pub(super) fn repair(&self, cursor: wire::EventSnapshotCursor) -> wire::EventServerMessage {
-        if cursor.sequence > self.bus.latest_sequence() {
+        if cursor.sequence > self.events.latest_sequence() {
             return wire::EventServerMessage::Error {
                 error: "snapshot cursor is newer than the event stream".into(),
             };
@@ -310,7 +313,7 @@ impl EventStream {
 
     fn cursor(&self) -> wire::EventSnapshotCursor {
         wire::EventSnapshotCursor {
-            sequence: self.bus.latest_sequence(),
+            sequence: self.events.latest_sequence(),
         }
     }
 }
@@ -362,8 +365,8 @@ fn validate_programming_object(
     Ok(())
 }
 
-fn validate_cursor(bus: &application::EventBus, cursor: Option<u64>) -> Result<(), String> {
-    if cursor.is_some_and(|sequence| sequence > bus.latest_sequence()) {
+fn validate_cursor(events: &EventResource, cursor: Option<u64>) -> Result<(), String> {
+    if cursor.is_some_and(|sequence| sequence > events.latest_sequence()) {
         return Err("event cursor is newer than the event stream".into());
     }
     Ok(())

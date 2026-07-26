@@ -31,13 +31,19 @@ async fn apply_action(
         session_id: session.id.0,
         request_id: request.request_id.clone(),
     };
-    let mut replay = state.screen_configuration_replay.lock().await;
-    if let Some(outcome) = replay.get(&key, &request.action)? {
+    if let Some(outcome) = state
+        .replay
+        .lookup_screen_configuration(&key, &request.action)
+        .await?
+    {
         return Ok(Json(outcome));
     }
     let mut outcome = execute_action(&state, request.action.clone())?;
     outcome.request_id = request.request_id;
-    replay.insert(key, request.action, outcome.clone());
+    state
+        .replay
+        .insert_screen_configuration(key, request.action, outcome.clone())
+        .await;
     Ok(Json(outcome))
 }
 
@@ -47,41 +53,47 @@ fn execute_action(
 ) -> Result<wire::ScreenConfigurationActionOutcome, ApiError> {
     match action {
         wire::ScreenConfigurationAction::Create { configuration } => {
-            let store = state.desk.lock();
-            if store
+            if state
+                .installation
                 .screen(configuration.id)
                 .map_err(ApiError::store)?
                 .is_some()
             {
                 return Err(ApiError::conflict("screen already exists"));
             }
-            let screen = store
+            let screen = state
+                .installation
                 .put_screen(domain_screen(configuration)?)
                 .map_err(ApiError::store)?;
-            drop(store);
             emit_screen_changed(state, &screen);
             outcome(Some(screen), None)
         }
         wire::ScreenConfigurationAction::Update { screen_id, patch } => {
-            let store = state.desk.lock();
-            let existing = store
+            let existing = state
+                .installation
                 .screen(screen_id)
                 .map_err(ApiError::store)?
                 .ok_or_else(|| ApiError::not_found("screen"))?;
-            let screen = store
+            let screen = state
+                .installation
                 .put_screen(apply_patch(existing, patch)?)
                 .map_err(ApiError::store)?;
-            drop(store);
             emit_screen_changed(state, &screen);
             outcome(Some(screen), None)
         }
         wire::ScreenConfigurationAction::Delete { screen_id } => {
-            let store = state.desk.lock();
-            if store.screen(screen_id).map_err(ApiError::store)?.is_none() {
+            if state
+                .installation
+                .screen(screen_id)
+                .map_err(ApiError::store)?
+                .is_none()
+            {
                 return Err(ApiError::not_found("screen"));
             }
-            store.delete_screen(screen_id).map_err(ApiError::store)?;
-            drop(store);
+            state
+                .installation
+                .delete_screen(screen_id)
+                .map_err(ApiError::store)?;
             emit(
                 state,
                 "screen_configuration_changed",
@@ -92,11 +104,11 @@ fn execute_action(
         wire::ScreenConfigurationAction::SetPage { screen_id, page } => {
             let show = state
                 .active_show
-                .read()
+                .current()
                 .clone()
                 .ok_or_else(|| ApiError::bad_request("no show is open"))?;
             if !state
-                .engine
+                .output
                 .snapshot()
                 .playback_pages
                 .iter()
@@ -104,18 +116,18 @@ fn execute_action(
             {
                 return Err(ApiError::bad_request("playback page does not exist"));
             }
-            let store = state.desk.lock();
-            let screen = store
+            let screen = state
+                .installation
                 .screen(screen_id)
                 .map_err(ApiError::store)?
                 .ok_or_else(|| ApiError::not_found("screen"))?;
             if screen.page_mode != "independent" {
                 return Err(ApiError::bad_request("screen follows the main page"));
             }
-            store
+            state
+                .installation
                 .set_screen_page(screen_id, show.id, page)
                 .map_err(ApiError::store)?;
-            drop(store);
             emit(
                 state,
                 "screen_page_changed",
@@ -130,16 +142,15 @@ fn screen_snapshot(
     state: &AppState,
     session: &Session,
 ) -> Result<wire::ScreenConfigurationSnapshot, ApiError> {
-    let show = state.active_show.read().clone();
-    let store = state.desk.lock();
-    let screens = store.screens().map_err(ApiError::store)?;
+    let show = state.active_show.current().clone();
+    let screens = state.installation.screens().map_err(ApiError::store)?;
     let mut active_pages = std::collections::BTreeMap::new();
     if let Some(show) = show {
         for screen in &screens {
             let page = if screen.page_mode == "follow_main" {
-                store.desk_page(session.desk.id, show.id)
+                state.installation.desk_page(session.desk.id, show.id)
             } else {
-                store.screen_page(screen.id, show.id)
+                state.installation.screen_page(screen.id, show.id)
             }
             .map_err(ApiError::store)?;
             active_pages.insert(screen.id, page);
@@ -298,7 +309,7 @@ fn outcome(
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct ReplayKey {
+pub(super) struct ReplayKey {
     session_id: Uuid,
     request_id: String,
 }
@@ -316,7 +327,7 @@ pub(super) struct ScreenConfigurationReplayCache {
 }
 
 impl ScreenConfigurationReplayCache {
-    fn get(
+    pub(super) fn get(
         &self,
         key: &ReplayKey,
         action: &wire::ScreenConfigurationAction,
@@ -334,7 +345,7 @@ impl ScreenConfigurationReplayCache {
         Ok(Some(outcome))
     }
 
-    fn insert(
+    pub(super) fn insert(
         &mut self,
         key: ReplayKey,
         action: wire::ScreenConfigurationAction,

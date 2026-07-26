@@ -180,9 +180,9 @@ pub(super) fn store_cue_at(
     context: &light_application::ActionContext,
 ) -> Result<(), String> {
     let (entry, store) = active_show_store(state)?;
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let programmer = state
-        .programmers
+        .programming
         .get(session.id)
         .ok_or("programmer does not exist")?;
     let programmer_is_empty = programmer.values.is_empty() && programmer.group_values.is_empty();

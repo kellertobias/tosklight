@@ -21,7 +21,7 @@ async fn map_existing_is_a_page_only_action_with_replay_no_change_and_conflict()
         }),
     );
     let revision = scenario.show_revision();
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
     let request = map_existing_request(
         "map-existing",
         1,
@@ -43,10 +43,7 @@ async fn map_existing_is_a_page_only_action_with_replay_no_change_and_conflict()
     let page_revision = projection_revision(&changed, "playback_page");
     assert_no_change(&scenario, revision + 1, page_revision).await;
     assert_conflict(&scenario, revision + 1, page_revision).await;
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
+    assert_eq!(scenario.state.events.latest_sequence(), cursor + 1);
     scenario.cleanup();
 }
 
@@ -79,10 +76,7 @@ async fn assert_replay(
     let replay = json(response).await;
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["event_sequence"], changed["event_sequence"]);
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
+    assert_eq!(scenario.state.events.latest_sequence(), cursor + 1);
 }
 
 async fn assert_no_change(scenario: &TopologyScenario, revision: u64, page_revision: u64) {

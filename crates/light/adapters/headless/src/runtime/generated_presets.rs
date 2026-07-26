@@ -95,12 +95,11 @@ pub(super) fn generate_profile_presets_action(
         return Err("select at least one fixture before generating presets".into());
     }
     let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
+        .active_show
+        .try_acquire()
         .map_err(|_| "the active show is changing; retry Preset generation".to_owned())?;
     let generated =
-        generated_profile_presets(&state.engine.snapshot(), &fixture_ids.into_iter().collect())?;
+        generated_profile_presets(&state.output.snapshot(), &fixture_ids.into_iter().collect())?;
     if generated.is_empty() {
         return Err("the selected fixtures have no fixed or indexed values".into());
     }

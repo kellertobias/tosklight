@@ -1,7 +1,8 @@
+use super::capability_resources::ActiveShowDocumentCache;
 use super::{
-    AppState, HighlightInstallPolicy, PlaybackInstallPolicy, ProgrammingInstallOwner,
-    install_prepared_snapshot_with_selection_refresh, show_mutation_backup::ShowMutationBackupPlan,
-    speed_groups::application_millis,
+    ActiveShowRepository, AppState, HighlightInstallPolicy, PlaybackInstallPolicy,
+    ProgrammingInstallOwner, install_prepared_snapshot_with_selection_refresh,
+    show_mutation_backup::ShowMutationBackupPlan, speed_groups::application_millis,
 };
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, ActiveShowPorts, ActiveShowUnitOfWork,
@@ -11,9 +12,8 @@ use light_core::{SessionId, ShowId};
 use light_engine::{EngineError, EngineSnapshot, PreparedEngineSnapshot};
 use light_show::{
     PortableShowCommit, PortableShowDocument, PortableShowObjectUndo, PortableShowTransaction,
-    ShowStore, StoreError,
+    StoreError,
 };
-use parking_lot::Mutex;
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -78,8 +78,8 @@ impl ActiveShowLifecyclePause {
 
 /// Server adapter for generic application-owned active-show mutations.
 ///
-/// The caller holds `AppState::activation_lock` across the service call and any returned targeted
-/// reconciliation, keeping the exact active-show identity stable through runtime installation.
+/// The caller holds an active-show coordinator permit across the service call and any returned
+/// targeted reconciliation, keeping the exact identity stable through runtime installation.
 #[derive(Clone)]
 pub(super) struct ServerActiveShowPorts {
     state: AppState,
@@ -154,16 +154,16 @@ pub(super) enum ActiveShowBackupKind {
 /// re-identified in place, because such changes do not always bump the portable revision the
 /// cache is validated against.
 pub(crate) fn invalidate_active_show_document(state: &AppState) {
-    *state.active_show_document.lock() = None;
+    state.active_show.clear_document_cache();
 }
 
 pub(crate) struct ServerActiveShowUnitOfWork {
     state: AppState,
-    store: ShowStore,
+    store: ActiveShowRepository,
     /// Present for the whole unit; taken only when the unit is dropped (returned to the shared
     /// cache) or discarded after a commit conflict revealed the disk moved underneath it.
     document: Option<PortableShowDocument>,
-    cache: Arc<Mutex<Option<PortableShowDocument>>>,
+    cache: ActiveShowDocumentCache,
     backup: ShowMutationBackupPlan,
 }
 
@@ -173,7 +173,7 @@ impl ServerActiveShowUnitOfWork {
         show_id: ShowId,
         backup_kind: ActiveShowBackupKind,
     ) -> Result<Self, ActionError> {
-        let entry = state.active_show.read().clone().ok_or_else(|| {
+        let entry = state.active_show.current().clone().ok_or_else(|| {
             ActionError::new(ActionErrorKind::NotFound, "no active show is loaded")
         })?;
         if entry.id != show_id {
@@ -182,7 +182,8 @@ impl ServerActiveShowUnitOfWork {
                 "requested show is not active",
             ));
         }
-        let store = ShowStore::open(&entry.path).map_err(|error| store_error(error, None))?;
+        let store =
+            ActiveShowRepository::open(&entry.path).map_err(|error| store_error(error, None))?;
         let document = Self::current_document(state, &store, show_id)?;
         if document.id() != show_id {
             return Err(ActionError::new(
@@ -204,7 +205,7 @@ impl ServerActiveShowUnitOfWork {
             state: state.clone(),
             store,
             document: Some(document),
-            cache: Arc::clone(&state.active_show_document),
+            cache: state.active_show.document_cache(),
             backup,
         })
     }
@@ -213,10 +214,10 @@ impl ServerActiveShowUnitOfWork {
     /// revision; any out-of-band portable commit invalidates it and forces a full reload.
     fn current_document(
         state: &AppState,
-        store: &ShowStore,
+        store: &ActiveShowRepository,
         show_id: ShowId,
     ) -> Result<PortableShowDocument, ActionError> {
-        let cached = state.active_show_document.lock().take();
+        let cached = state.active_show.document_cache().take();
         if let Some(document) = cached
             && document.id() == show_id
             && store.portable_revision().ok() == Some(document.revision())
@@ -265,24 +266,30 @@ impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
         let now = application_millis(&self.state);
         let interval_millis = self
             .state
-            .configuration
-            .read()
+            .installation
+            .configuration()
             .autosave_interval_seconds
             .saturating_mul(1_000);
-        let mut checkpoint = self.state.active_show_backup_checkpoint.lock();
-        let due = match *checkpoint {
-            Some((last_show, last_at)) if last_show == show_id => {
-                now.saturating_sub(last_at) >= interval_millis
-            }
-            _ => true,
-        };
-        if !due {
-            return Ok(());
-        }
-        self.backup
-            .create_mutation(&self.store, identity, Some(revision))?;
-        *checkpoint = Some((show_id, now));
-        Ok(())
+        let mut result = Ok(());
+        self.state
+            .active_show
+            .update_backup_checkpoint(|checkpoint| {
+                let due = match *checkpoint {
+                    Some((last_show, last_at)) if last_show == show_id => {
+                        now.saturating_sub(last_at) >= interval_millis
+                    }
+                    _ => true,
+                };
+                if due {
+                    result = self
+                        .backup
+                        .create_mutation(&self.store, identity, Some(revision));
+                    if result.is_ok() {
+                        *checkpoint = Some((show_id, now));
+                    }
+                }
+            });
+        result
     }
 
     fn commit(
@@ -315,7 +322,7 @@ impl Drop for ServerActiveShowUnitOfWork {
         // it only via `apply_commit` after a successful store commit), so it is safe to hand back
         // for the next unit of work regardless of whether this unit committed.
         if let Some(document) = self.document.take() {
-            *self.cache.lock() = Some(document);
+            self.cache.replace(Some(document));
         }
     }
 }
@@ -348,13 +355,13 @@ impl ActiveShowPorts for ServerActiveShowPorts {
     ) -> Result<Self::PreparedRuntime, ActionError> {
         let revision = snapshot.revision;
         self.state
-            .engine
+            .output
             .prepare_snapshot(snapshot)
             .map_err(|error| engine_error(error, Some(revision)))
     }
 
     fn normalized_active_snapshot(&self) -> Option<Arc<EngineSnapshot>> {
-        Some(self.state.engine.snapshot())
+        Some(self.state.output.snapshot())
     }
 
     fn install_runtime(&self, context: &ActionContext, prepared: Self::PreparedRuntime) {

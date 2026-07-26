@@ -68,13 +68,11 @@ async fn active_empty_show_rename_preserves_identity_content_and_revisions() {
         "before naming"
     );
     let revisions = state
-        .desk
-        .lock()
-        .show_revisions(light_core::ShowId(Uuid::parse_str(show_id).unwrap()))
+        .installation.show_revisions(light_core::ShowId(Uuid::parse_str(show_id).unwrap()))
         .unwrap();
     assert_eq!(revisions.len(), 1);
     assert_eq!(revisions[0].name, "Before naming");
-    let active = state.desk.lock().active_show().unwrap().unwrap();
+    let active = state.installation.active_show().unwrap().unwrap();
     assert_eq!(active.id.0.to_string(), show_id);
     assert_eq!(active.name, "Opening Night");
 
@@ -85,7 +83,7 @@ async fn active_empty_show_rename_preserves_identity_content_and_revisions() {
         .await
         .unwrap();
     assert_eq!(collision.status(), StatusCode::CONFLICT);
-    let still_active = state.desk.lock().active_show().unwrap().unwrap();
+    let still_active = state.installation.active_show().unwrap().unwrap();
     assert_eq!(still_active.id.0.to_string(), show_id);
     assert_eq!(still_active.name, "Opening Night");
     assert!(FsPath::new(&still_active.path).exists());

@@ -5,9 +5,6 @@ pub(super) async fn desk_boundary(
     request: Request,
     next: Next,
 ) -> Response {
-    let Some(required) = &state.desk_token else {
-        return next.run(request).await;
-    };
     let ticketed_file_stream = request.method() == Method::GET
         && request.uri().path().starts_with("/api/v2/files/")
         && request.uri().path().ends_with("/content")
@@ -42,8 +39,10 @@ pub(super) async fn desk_boundary(
         })
         .and_then(|encoded| URL_SAFE_NO_PAD.decode(encoded).ok())
         .and_then(|bytes| String::from_utf8(bytes).ok());
-    if supplied_header == Some(required.as_ref())
-        || supplied_ws.as_deref() == Some(required.as_ref())
+    if state.installation.desk_token_matches(supplied_header)
+        || state
+            .installation
+            .desk_token_matches(supplied_ws.as_deref())
     {
         next.run(request).await
     } else {
@@ -57,8 +56,7 @@ pub(super) fn desk_lock_key(id: Uuid) -> String {
 
 pub(super) fn read_desk_lock(state: &AppState, id: Uuid) -> DeskLockConfiguration {
     state
-        .desk
-        .lock()
+        .installation
         .setting(&desk_lock_key(id))
         .ok()
         .flatten()
@@ -74,8 +72,7 @@ pub(super) fn write_desk_lock(
     let value = serde_json::to_string(configuration)
         .map_err(|error| ApiError::internal(error.to_string()))?;
     state
-        .desk
-        .lock()
+        .installation
         .set_setting(&desk_lock_key(id), &value)
         .map_err(ApiError::store)
 }
@@ -203,52 +200,52 @@ pub(super) async fn update_desk_lock(
     Json(input): Json<DeskLockUpdate>,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let operation_lock = state.programming.desk_lock(session.desk.id);
-    let _operation = operation_lock.lock();
-    let mut configuration = read_desk_lock(&state, session.desk.id);
-    if configuration.locked {
-        return Err(ApiError::conflict(
-            "unlock the desk before changing its lock configuration",
-        ));
-    }
-    if !matches!(input.unlock_mode.as_str(), "button" | "pin") {
-        return Err(ApiError::bad_request("unlock mode must be button or pin"));
-    }
-    if input.message.len() > 500 {
-        return Err(ApiError::bad_request(
-            "lock message must not exceed 500 characters",
-        ));
-    }
-    configuration.message = input.message;
-    configuration.wallpaper = input.wallpaper.filter(|value| !value.trim().is_empty());
-    configuration.unlock_mode = input.unlock_mode;
-    if configuration.unlock_mode == "pin" {
-        if let Some(pin) = input.pin {
-            if !(4..=12).contains(&pin.len())
-                || !pin.chars().all(|character| character.is_ascii_digit())
-            {
-                return Err(ApiError::bad_request("PIN must contain 4-12 digits"));
-            }
-            let salt = Uuid::new_v4().to_string();
-            configuration.pin_hash = Some(pin_hash(&salt, &pin));
-            configuration.pin_salt = Some(salt);
-        }
-        if configuration.pin_hash.is_none() {
-            return Err(ApiError::bad_request(
-                "PIN required mode needs a configured PIN",
+    state.programming.run_desk_operation(session.desk.id, || {
+        let mut configuration = read_desk_lock(&state, session.desk.id);
+        if configuration.locked {
+            return Err(ApiError::conflict(
+                "unlock the desk before changing its lock configuration",
             ));
         }
-    } else {
-        configuration.pin_hash = None;
-        configuration.pin_salt = None;
-    }
-    write_desk_lock(&state, session.desk.id, &configuration)?;
-    emit(
-        &state,
-        "desk_lock_changed",
-        serde_json::json!({"desk_id":session.desk.id,"locked":false}),
-    );
-    Ok(Json(desk_lock_response(configuration)))
+        if !matches!(input.unlock_mode.as_str(), "button" | "pin") {
+            return Err(ApiError::bad_request("unlock mode must be button or pin"));
+        }
+        if input.message.len() > 500 {
+            return Err(ApiError::bad_request(
+                "lock message must not exceed 500 characters",
+            ));
+        }
+        configuration.message = input.message;
+        configuration.wallpaper = input.wallpaper.filter(|value| !value.trim().is_empty());
+        configuration.unlock_mode = input.unlock_mode;
+        if configuration.unlock_mode == "pin" {
+            if let Some(pin) = input.pin {
+                if !(4..=12).contains(&pin.len())
+                    || !pin.chars().all(|character| character.is_ascii_digit())
+                {
+                    return Err(ApiError::bad_request("PIN must contain 4-12 digits"));
+                }
+                let salt = Uuid::new_v4().to_string();
+                configuration.pin_hash = Some(pin_hash(&salt, &pin));
+                configuration.pin_salt = Some(salt);
+            }
+            if configuration.pin_hash.is_none() {
+                return Err(ApiError::bad_request(
+                    "PIN required mode needs a configured PIN",
+                ));
+            }
+        } else {
+            configuration.pin_hash = None;
+            configuration.pin_salt = None;
+        }
+        write_desk_lock(&state, session.desk.id, &configuration)?;
+        emit(
+            &state,
+            "desk_lock_changed",
+            serde_json::json!({"desk_id":session.desk.id,"locked":false}),
+        );
+        Ok(Json(desk_lock_response(configuration)))
+    })
 }
 
 pub(super) async fn lock_desk(
@@ -256,17 +253,17 @@ pub(super) async fn lock_desk(
     headers: HeaderMap,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let operation_lock = state.programming.desk_lock(session.desk.id);
-    let _operation = operation_lock.lock();
-    let mut configuration = read_desk_lock(&state, session.desk.id);
-    configuration.locked = true;
-    write_desk_lock(&state, session.desk.id, &configuration)?;
-    emit(
-        &state,
-        "desk_lock_changed",
-        serde_json::json!({"desk_id":session.desk.id,"locked":true}),
-    );
-    Ok(Json(desk_lock_response(configuration)))
+    state.programming.run_desk_operation(session.desk.id, || {
+        let mut configuration = read_desk_lock(&state, session.desk.id);
+        configuration.locked = true;
+        write_desk_lock(&state, session.desk.id, &configuration)?;
+        emit(
+            &state,
+            "desk_lock_changed",
+            serde_json::json!({"desk_id":session.desk.id,"locked":true}),
+        );
+        Ok(Json(desk_lock_response(configuration)))
+    })
 }
 
 pub(super) async fn unlock_desk(
@@ -275,28 +272,28 @@ pub(super) async fn unlock_desk(
     Json(input): Json<DeskUnlockInput>,
 ) -> Result<Json<DeskLockResponse>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let operation_lock = state.programming.desk_lock(session.desk.id);
-    let _operation = operation_lock.lock();
-    let mut configuration = read_desk_lock(&state, session.desk.id);
-    if configuration.unlock_mode == "pin" {
-        let Some(pin) = input.pin else {
-            return Err(ApiError::unauthorized("PIN is required"));
-        };
-        let valid = configuration
-            .pin_salt
-            .as_deref()
-            .zip(configuration.pin_hash.as_deref())
-            .is_some_and(|(salt, expected)| pin_hash(salt, &pin) == expected);
-        if !valid {
-            return Err(ApiError::unauthorized("incorrect PIN"));
+    state.programming.run_desk_operation(session.desk.id, || {
+        let mut configuration = read_desk_lock(&state, session.desk.id);
+        if configuration.unlock_mode == "pin" {
+            let Some(pin) = input.pin else {
+                return Err(ApiError::unauthorized("PIN is required"));
+            };
+            let valid = configuration
+                .pin_salt
+                .as_deref()
+                .zip(configuration.pin_hash.as_deref())
+                .is_some_and(|(salt, expected)| pin_hash(salt, &pin) == expected);
+            if !valid {
+                return Err(ApiError::unauthorized("incorrect PIN"));
+            }
         }
-    }
-    configuration.locked = false;
-    write_desk_lock(&state, session.desk.id, &configuration)?;
-    emit(
-        &state,
-        "desk_lock_changed",
-        serde_json::json!({"desk_id":session.desk.id,"locked":false}),
-    );
-    Ok(Json(desk_lock_response(configuration)))
+        configuration.locked = false;
+        write_desk_lock(&state, session.desk.id, &configuration)?;
+        emit(
+            &state,
+            "desk_lock_changed",
+            serde_json::json!({"desk_id":session.desk.id,"locked":false}),
+        );
+        Ok(Json(desk_lock_response(configuration)))
+    })
 }

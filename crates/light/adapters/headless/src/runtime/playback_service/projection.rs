@@ -59,9 +59,9 @@ pub(super) fn projection(
     _context: &ActionContext,
     identity: PlaybackRuntimeIdentity,
 ) -> Result<PlaybackRuntimeProjection, ActionError> {
-    let snapshot = ports.state.engine.snapshot();
+    let snapshot = ports.state.output.snapshot();
     let scope = show_scope(ports, &snapshot);
-    let runtime = ports.state.engine.playback_runtime_status();
+    let runtime = ports.state.output.playback_runtime_status();
     match identity {
         PlaybackRuntimeIdentity::Playback(number) => {
             project_playback(ports, &snapshot, &runtime, scope, identity, number)
@@ -85,9 +85,9 @@ pub(super) fn projections(
     _context: &ActionContext,
     identities: &[PlaybackRuntimeIdentity],
 ) -> Result<Vec<PlaybackRuntimeProjection>, ActionError> {
-    let snapshot = ports.state.engine.snapshot();
+    let snapshot = ports.state.output.snapshot();
     let scope = show_scope(ports, &snapshot);
-    let runtime = ports.state.engine.playback_runtime_status();
+    let runtime = ports.state.output.playback_runtime_status();
     let mut result = Vec::with_capacity(identities.len());
     for identity in identities {
         project_identity(
@@ -109,8 +109,8 @@ pub(super) fn desk_projection(
     if context.desk_id.is_nil() {
         return Ok(None);
     }
-    let snapshot = ports.state.engine.snapshot();
-    let Some(show) = ports.state.active_show.read().clone() else {
+    let snapshot = ports.state.output.snapshot();
+    let Some(show) = ports.state.active_show.current().clone() else {
         // Test-bench and startup compatibility paths may operate a prepared in-memory runtime
         // before its show index entry is installed. Nil makes that transient scope explicit.
         return Ok(Some(PlaybackDeskProjection {
@@ -123,11 +123,14 @@ pub(super) fn desk_projection(
             selected_playback: None,
         }));
     };
-    let store = ports.state.desk.lock();
-    let active_page = store
+    let active_page = ports
+        .state
+        .installation
         .desk_page(context.desk_id, show.id)
         .map_err(|error| invalid(error.to_string()))?;
-    let selected_playback = store
+    let selected_playback = ports
+        .state
+        .installation
         .selected_playback(context.desk_id, show.id)
         .map_err(|error| invalid(error.to_string()))?;
     Ok(Some(PlaybackDeskProjection {
@@ -268,10 +271,18 @@ fn project_playback(
         PlaybackTarget::SpeedGroup { group } => speed_projection(ports, group)?,
         PlaybackTarget::GrandMaster => grand_master_projection(ports),
         PlaybackTarget::ProgrammerFade => PlaybackTargetProjection::ProgrammerFade {
-            millis: ports.state.configuration.read().programmer_fade_millis,
+            millis: ports
+                .state
+                .installation
+                .configuration()
+                .programmer_fade_millis,
         },
         PlaybackTarget::CueFade => PlaybackTargetProjection::CueFade {
-            millis: ports.state.configuration.read().sequence_master_fade_millis,
+            millis: ports
+                .state
+                .installation
+                .configuration()
+                .sequence_master_fade_millis,
         },
     };
     Ok(PlaybackRuntimeProjection {
@@ -286,7 +297,7 @@ fn show_scope(ports: &ServerPlaybackPorts<'_>, snapshot: &EngineSnapshot) -> Pla
     let show_id = ports
         .state
         .active_show
-        .read()
+        .current()
         .as_ref()
         .map(|show| show.id.0)
         .unwrap_or_else(uuid::Uuid::nil);

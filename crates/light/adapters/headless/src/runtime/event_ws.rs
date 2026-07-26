@@ -6,15 +6,7 @@ pub(super) async fn audit_events(
     headers: HeaderMap,
 ) -> Result<Json<Vec<Event>>, ApiError> {
     let _session = authenticate(&state, &headers)?;
-    Ok(Json(
-        state
-            .audit_events
-            .lock()
-            .iter()
-            .filter(|event| event.revision > query.after)
-            .cloned()
-            .collect(),
-    ))
+    Ok(Json(state.events.audit_after(query.after)))
 }
 
 pub(super) const COMMAND_HISTORY_LIMIT: usize = 50;
@@ -24,12 +16,7 @@ pub(super) async fn command_history(
     headers: HeaderMap,
 ) -> Result<Json<Vec<CommandHistoryEntry>>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let entries = state
-        .command_history
-        .lock()
-        .get(&session.desk.id)
-        .map(|history| history.iter().cloned().collect())
-        .unwrap_or_default();
+    let entries = state.programming.command_history(session.desk.id);
     Ok(Json(entries))
 }
 pub(super) async fn clear_programmer(
@@ -38,18 +25,17 @@ pub(super) async fn clear_programmer(
     headers: HeaderMap,
 ) -> Result<StatusCode, ApiError> {
     let actor = authenticate(&state, &headers)?;
-    let _activation = state.activation_lock.clone().lock_owned().await;
+    let _activation = state.active_show.acquire().await;
     let session_id = SessionId(id);
-    let Some(programmer) = state.programmers.get(session_id) else {
+    let Some(programmer) = state.programming.get(session_id) else {
         return Ok(StatusCode::NOT_FOUND);
     };
     let user_id = programmer.user_id;
     let connected = state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .filter(|candidate| candidate.user.id == user_id)
-        .cloned()
         .collect::<Vec<_>>();
     let target = light_application::ProgrammingLifecycleTarget::new(
         user_id,
@@ -80,15 +66,15 @@ fn replace_programmer_authority(
 ) -> light_application::ProgrammingLifecycleCompletion<Result<StatusCode, ApiError>> {
     let mut replacement_session_id = None;
     let output = (|| {
-        if !state.programmers.clear(session_id) {
+        if !state.programming.clear(session_id) {
             return Ok(StatusCode::NOT_FOUND);
         }
-        if let Err(error) = state.desk.lock().delete_session(session_id) {
+        if let Err(error) = state.installation.delete_session(session_id) {
             tracing::error!(%error, "failed to remove persisted programmer");
             return Ok(StatusCode::INTERNAL_SERVER_ERROR);
         }
         for session in connected {
-            state.programmers.start(session.id, user_id);
+            state.programming.start(session.id, user_id);
             replacement_session_id.get_or_insert(session.id);
             attach_session_command_context(state, session);
             persist_programmer(state, session)?;
@@ -104,7 +90,7 @@ pub(super) async fn update_master(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
     let command = output_runtime_service::command(input.grand_master, input.blackout)?;
-    let _activation = state.activation_lock.clone().lock_owned().await;
+    let _activation = state.active_show.acquire().await;
     let context = light_application::ActionContext::operator(
         session.desk.id,
         session.user.id.0,

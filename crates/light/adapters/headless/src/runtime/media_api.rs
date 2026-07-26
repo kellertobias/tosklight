@@ -12,15 +12,13 @@ pub(super) async fn media_servers(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let _session = authenticate(&state, &headers)?;
     show.verify(&state)?;
-    let statuses = state.media_status.read();
     let fixtures = state
-        .engine
-        .snapshot()
+        .output.snapshot()
         .fixtures
         .iter()
         .filter_map(|fixture| {
             fixture.direct_control.as_ref().map(|endpoint| {
-                let status = statuses.get(&fixture.fixture_id).cloned().unwrap_or_default();
+                let status = state.media.status(fixture.fixture_id);
                 serde_json::json!({
                     "fixture_id": fixture.fixture_id,
                     "name": format!("{} {}", fixture.definition.manufacturer, fixture.definition.model),
@@ -64,10 +62,10 @@ pub(super) async fn refresh_media_thumbnails(
     match result {
         Ok(images) => {
             let count = images.len();
-            let mut cache = state.media_cache.lock();
-            for (element, image) in images {
-                cache
-                    .put_thumbnail(
+            state
+                .media
+                .put_thumbnails(images.into_iter().map(|(element, image)| {
+                    (
                         ThumbnailKey {
                             fixture: fixture_id.0.to_string(),
                             library_type: input.library_type,
@@ -76,9 +74,9 @@ pub(super) async fn refresh_media_thumbnails(
                         },
                         image,
                     )
-                    .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            }
-            update_media_status(&state, fixture_id, None);
+                }))
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            state.media.record_status(fixture_id, None);
             emit(
                 &state,
                 "media_thumbnails_refreshed",
@@ -89,7 +87,9 @@ pub(super) async fn refresh_media_thumbnails(
             ))
         }
         Err(error) => {
-            update_media_status(&state, fixture_id, Some(error.to_string()));
+            state
+                .media
+                .record_status(fixture_id, Some(error.to_string()));
             emit(
                 &state,
                 "media_server_offline",
@@ -123,8 +123,7 @@ pub(super) async fn refresh_media_preview(
             let width = image.width;
             let height = image.height;
             state
-                .media_cache
-                .lock()
+                .media
                 .put_preview(
                     PreviewKey {
                         fixture: fixture_id.0.to_string(),
@@ -133,7 +132,7 @@ pub(super) async fn refresh_media_preview(
                     image,
                 )
                 .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            update_media_status(&state, fixture_id, None);
+            state.media.record_status(fixture_id, None);
             emit(
                 &state,
                 "media_preview_refreshed",
@@ -144,7 +143,9 @@ pub(super) async fn refresh_media_preview(
             ))
         }
         Err(error) => {
-            update_media_status(&state, fixture_id, Some(error.to_string()));
+            state
+                .media
+                .record_status(fixture_id, Some(error.to_string()));
             emit(
                 &state,
                 "media_server_offline",
@@ -164,7 +165,7 @@ pub(super) async fn media_preview(
     let _session = authenticate(&state, &headers)?;
     show.verify(&state)?;
     cached_image_response(
-        state.media_cache.lock().preview(&PreviewKey {
+        state.media.preview(&PreviewKey {
             fixture: fixture_id.0.to_string(),
             source,
         }),
@@ -176,7 +177,7 @@ pub(super) fn media_endpoint(
     state: &AppState,
     fixture_id: light_core::FixtureId,
 ) -> Result<SocketAddr, ApiError> {
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let fixture = snapshot
         .fixtures
         .iter()
@@ -194,21 +195,6 @@ pub(super) fn library_id(
     LibraryId {
         level: input.library_level,
         ids: [input.library_1, input.library_2, input.library_3],
-    }
-}
-pub(super) fn update_media_status(
-    state: &AppState,
-    fixture_id: light_core::FixtureId,
-    error: Option<String>,
-) {
-    let mut statuses = state.media_status.write();
-    let status = statuses.entry(fixture_id).or_default();
-    status.online = error.is_none();
-    if let Some(error) = error {
-        status.last_error = Some(error);
-    } else {
-        status.last_success = Some(chrono::Utc::now().to_rfc3339());
-        status.last_error = None;
     }
 }
 pub(super) fn cached_image_response(

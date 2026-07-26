@@ -1,3 +1,4 @@
+use super::capability_resources::ActiveShowPermit;
 use super::*;
 
 pub(super) async fn store_preload_intent(
@@ -7,15 +8,14 @@ pub(super) async fn store_preload_intent(
     input: PreloadStoreInput,
     expected_revision: u64,
 ) -> Result<StoredPreloadIntent, ApiError> {
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     let entry = state
-        .desk
-        .lock()
+        .installation
         .show(show_id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
     let programmer = state
-        .programmers
+        .programming
         .get(session.id)
         .ok_or_else(|| ApiError::not_found("programmer"))?;
     let use_active_preload = programmer.preload_pending.is_empty()
@@ -36,7 +36,7 @@ pub(super) async fn store_preload_intent(
             "the pending and active preload scenes are empty",
         ));
     }
-    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
+    let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let prepared = match input.target.as_str() {
         "preset" => prepare_preload_preset(&store, &input, fixture_values, group_values)?,
         "cue" => prepare_preload_cue(&store, &input, fixture_values, group_values)?,
@@ -58,7 +58,7 @@ pub(super) async fn store_preload_intent(
         let _activation = activation;
         #[cfg(test)]
         {
-            let pause = Arc::clone(&state.preload_store_release_lifecycle);
+            let pause = state.active_show.preload_store_release_lifecycle_probe();
             tokio::task::spawn_blocking(move || pause.pause_if_armed())
                 .await
                 .expect("Preload Store release pause task failed");
@@ -71,7 +71,7 @@ pub(super) async fn store_preload_intent(
             "http_preload_store",
             ProgrammingLockPolicy::AllowLockedReconciliation,
             || {
-                state.programmers.release_preload(session.id);
+                state.programming.release_preload(session.id);
                 persist_programmer(state, session)
             },
         )?
@@ -109,13 +109,13 @@ async fn store_prepared_preload_target(
     state: &AppState,
     session: &Session,
     entry: &ShowEntry,
-    activation: tokio::sync::OwnedMutexGuard<()>,
+    activation: ActiveShowPermit,
     prepared: PreparedPreloadTarget,
     expected: u64,
-) -> Result<(StoredPreloadTarget, tokio::sync::OwnedMutexGuard<()>), ApiError> {
+) -> Result<(StoredPreloadTarget, ActiveShowPermit), ApiError> {
     let active = state
         .active_show
-        .read()
+        .current()
         .as_ref()
         .is_some_and(|active| active.id == entry.id);
     if active {
@@ -144,7 +144,7 @@ async fn store_prepared_preload_target(
         ))
     } else {
         backup_show(state, entry)?;
-        let revision = ShowStore::open(&entry.path)
+        let revision = ActiveShowRepository::open(&entry.path)
             .map_err(ApiError::store)?
             .put_object(
                 prepared.kind.as_str(),

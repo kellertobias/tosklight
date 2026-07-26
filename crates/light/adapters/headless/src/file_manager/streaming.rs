@@ -85,10 +85,8 @@ fn validate_stream_ticket(
     validate_ticket_claims(&claims, root_id, path)?;
     let session = state
         .sessions
-        .read()
-        .get(&claims.session_id)
+        .session(claims.session_id)
         .filter(|session| session.connected)
-        .cloned()
         .ok_or_else(|| ApiError::unauthorized("file stream session is no longer active"))?;
     let expected = stream_ticket_signature(
         &session.token,

@@ -25,7 +25,7 @@ pub(super) fn transition_cause(
     };
     let definition = ports
         .state
-        .engine
+        .output
         .snapshot()
         .playbacks
         .iter()

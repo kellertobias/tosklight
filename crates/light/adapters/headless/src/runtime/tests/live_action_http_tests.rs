@@ -72,7 +72,7 @@ async fn capture_mode_http_and_websocket_publish_one_typed_change_each() {
     let count_changes = |after| {
         let light_application::EventReplay::Events(events) = scenario
             .state
-            .application_events
+            .events
             .replay(after, &light_application::EventFilter::default())
         else {
             panic!("capture-mode events should remain replayable");
@@ -89,7 +89,7 @@ async fn capture_mode_http_and_websocket_publish_one_typed_change_each() {
             })
             .count()
     };
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let websocket_request = light_wire::v2::live_action::ProgrammerCaptureModeLiveActionRequest {
         request_id: "capture-mode-ws".into(),
         blind: Some(true),
@@ -109,7 +109,7 @@ async fn capture_mode_http_and_websocket_publish_one_typed_change_each() {
     assert!(websocket.ok, "{:?}", websocket.error);
     assert_eq!(count_changes(baseline), 1);
 
-    let before_http = scenario.state.application_events.latest_sequence();
+    let before_http = scenario.state.events.latest_sequence();
     let http = post_live_action(
         &scenario,
         &show_id,
@@ -256,7 +256,7 @@ async fn preset_generation_intent_replay_does_not_repeat_show_mutation_or_events
             .status(),
         StatusCode::OK
     );
-    let show = scenario.state.active_show.read().clone().unwrap();
+    let show = scenario.state.active_show.current().clone().unwrap();
     let show_revision = ShowStore::open(&show.path)
         .unwrap()
         .portable_revision()
@@ -278,7 +278,7 @@ async fn preset_generation_intent_replay_does_not_repeat_show_mutation_or_events
     let first = json(first).await;
     assert_eq!(first["replayed"], false);
     assert!(!first["created"].as_array().unwrap().is_empty());
-    let event_sequence = scenario.state.application_events.latest_sequence();
+    let event_sequence = scenario.state.events.latest_sequence();
     let preset_count = ShowStore::open(&show.path)
         .unwrap()
         .objects("preset")
@@ -297,7 +297,7 @@ async fn preset_generation_intent_replay_does_not_repeat_show_mutation_or_events
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["show_revision"], first["show_revision"]);
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         event_sequence
     );
     assert_eq!(

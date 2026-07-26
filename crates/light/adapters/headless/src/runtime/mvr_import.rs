@@ -13,12 +13,11 @@ pub(super) async fn preview_mvr_import(
     let mut existing = Vec::new();
     if let Some(id) = query.show_id
         && let Some(show) = state
-            .desk
-            .lock()
+            .installation
             .show(light_core::ShowId(id))
             .map_err(ApiError::store)?
     {
-        existing = ShowStore::open(show.path)
+        existing = ActiveShowRepository::open(show.path)
             .map_err(ApiError::store)?
             .objects("patched_fixture")
             .map_err(ApiError::store)?
@@ -58,9 +57,7 @@ pub(super) async fn preview_mvr_import(
     }
     let token = Uuid::new_v4();
     let now = Instant::now();
-    let mut imports = state.mvr_imports.lock();
-    imports.retain(|_, item| now.duration_since(item.created) < Duration::from_secs(30 * 60));
-    imports.insert(
+    state.active_show.stage_mvr_import(
         token,
         StagedMvrImport {
             document: document.clone(),
@@ -106,9 +103,8 @@ pub(super) fn mvr_definitions(
     document: &light_mvr::MvrDocument,
 ) -> Result<MvrDefinitions, ApiError> {
     let mut definitions = state
-        .fixture_library
-        .lock()
-        .definitions()
+        .installation
+        .fixture_definitions()
         .map_err(ApiError::fixture)?;
     let mut imported = Vec::new();
     for fixture in &document.fixtures {

@@ -26,9 +26,7 @@ async fn priority_snapshot_and_action_are_exact_user_shared_sparse_and_replay_sa
 
     let second_desk = scenario
         .state
-        .desk
-        .lock()
-        .add_desk("Priority peer", "priority-peer")
+        .installation.add_desk("Priority peer", "priority-peer")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, user_id);
@@ -38,7 +36,7 @@ async fn priority_snapshot_and_action_are_exact_user_shared_sparse_and_replay_sa
         "priority":75,
     });
     let compatibility_before = compatibility_event_count(&scenario.state);
-    let activation = scenario.state.activation_lock.clone().lock_owned().await;
+    let activation = scenario.state.active_show.acquire().await;
     let response = tokio::time::timeout(
         std::time::Duration::from_secs(1),
         scenario.priority_action_for(user_id, &scenario.token, request.clone()),
@@ -184,24 +182,23 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
             .status(),
         StatusCode::OK
     );
-    let show = scenario.state.active_show.read().clone().unwrap();
+    let show = scenario.state.active_show.current().clone().unwrap();
     let show_revision = ShowStore::open(&show.path)
         .unwrap()
         .portable_revision()
         .unwrap()
         .value();
-    let selection_revision = scenario.state.programmers.select(scenario.session.id, []);
+    let selection_revision = scenario.state.programming.select(scenario.session.id, []);
 
     // Deliberately contradict the portable Group graph. Recall must derive Group membership from
     // the exact same portable document and revision as the Preset, not this runtime projection.
-    let engine_revision = scenario.state.engine.snapshot().revision;
+    let engine_revision = scenario.state.output.snapshot().revision;
     let mut unpatched = operational_fixture(selected[0]);
     unpatched.universe = None;
     unpatched.address = None;
     scenario
         .state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![operational_fixture(selected[1]), unpatched].into(),
             groups: vec![light_programmer::GroupDefinition {
                 id: "5".into(),
@@ -235,7 +232,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
         StatusCode::CONFLICT
     );
     request["values"] = serde_json::json!({"forged":true});
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let compatibility_before = compatibility_event_count(&scenario.state);
     let response = scenario
         .preset_recall_action(&show_id, Some(&scenario.token), request.clone())
@@ -270,7 +267,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
     assert_eq!(
         scenario
             .state
-            .programmers
+            .programming
             .selection(scenario.session.id)
             .unwrap()
             .selected,
@@ -373,7 +370,7 @@ async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_poli
             ),
         )
     };
-    let activation = scenario.state.activation_lock.clone().lock_owned().await;
+    let activation = scenario.state.active_show.acquire().await;
     let first = dispatch_live_action(&scenario.state, &scenario.session, priority());
     assert!(first.ok, "{:?}", first.error);
     assert_eq!(first.payload.unwrap()["projection"]["revision"], 1);
@@ -386,7 +383,7 @@ async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_poli
     let fixture = light_core::FixtureId::new();
     let selection_revision = scenario
         .state
-        .programmers
+        .programming
         .select(scenario.session.id, [fixture]);
     let preset = light_programmer::Preset {
         name: "Typed WS look".into(),
@@ -414,7 +411,7 @@ async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_poli
             .status(),
         StatusCode::OK
     );
-    let show = scenario.state.active_show.read().clone().unwrap();
+    let show = scenario.state.active_show.current().clone().unwrap();
     let show_revision = ShowStore::open(&show.path)
         .unwrap()
         .portable_revision()
@@ -482,7 +479,7 @@ fn priority_event_count(state: &AppState, user_id: Uuid) -> usize {
         light_application::EventObject::programming_priority(user_id),
     );
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(0, &filter)
+        state.events.replay(0, &filter)
     else {
         panic!("priority events should remain replayable")
     };
@@ -493,7 +490,7 @@ fn values_event_count(state: &AppState, user_id: Uuid) -> usize {
     let filter = light_application::EventFilter::default()
         .with_object(light_application::EventObject::programming_values(user_id));
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(0, &filter)
+        state.events.replay(0, &filter)
     else {
         panic!("values events should remain replayable")
     };
@@ -502,8 +499,7 @@ fn values_event_count(state: &AppState, user_id: Uuid) -> usize {
 
 fn compatibility_event_count(state: &AppState) -> usize {
     state
-        .audit_events
-        .lock()
+        .events.audit_events()
         .iter()
         .filter(|event| {
             matches!(

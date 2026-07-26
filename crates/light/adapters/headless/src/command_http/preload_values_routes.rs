@@ -72,7 +72,7 @@ async fn run_action(
     session: Session,
     action: ActionEnvelope<light_application::ProgrammingPreloadValuesRequest>,
 ) -> Result<light_application::ProgrammingPreloadValuesResult, PreloadValuesHttpError> {
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     tokio::task::spawn_blocking(move || {
         let ports = ServerProgrammingPorts::new(&state, &session, "http_preload_values", true);
         let result = state.programming.handle_preload_values(action, &ports);

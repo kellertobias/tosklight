@@ -7,14 +7,14 @@ pub(super) async fn list_programmers(
     let actor = authenticate(&state, &headers)?;
     // Filter session ownership before cloning any complete compatibility row. New clients use
     // narrow scoped projections; this endpoint remains only for authenticated migration callers.
-    let programmers = state.programmers.active_for_user_sessions(actor.user.id);
+    let programmers = state.programming.active_for_user_sessions(actor.user.id);
     Ok(Json(programmers))
 }
 
 pub(super) fn update_settings_for(state: &AppState, desk_id: Uuid) -> update::UpdateSettings {
     state
-        .configuration
-        .read()
+        .installation
+        .configuration()
         .update_settings_by_desk
         .get(&desk_id)
         .cloned()
@@ -52,7 +52,7 @@ pub(super) fn emit_update_armed_transition(
 
 pub(super) fn active_update_cue_contexts(state: &AppState) -> Vec<update::ActiveCueContext> {
     state
-        .engine
+        .output
         .active_playbacks()
         .into_iter()
         .filter_map(|playback| {
@@ -148,7 +148,7 @@ pub(super) fn update_api_error(error: update::UpdateError) -> ApiError {
 
 #[cfg(test)]
 pub(super) fn stored_update_object(
-    store: &ShowStore,
+    store: &ActiveShowRepository,
     kind: &str,
     id: &str,
 ) -> Result<light_show::VersionedObject, ApiError> {

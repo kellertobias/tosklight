@@ -108,22 +108,28 @@ async fn storing_active_preload_publishes_the_capture_mode_release() {
 async fn active_preload_store_holds_one_activation_guard_through_release() {
     let scenario = CuePreloadScenario::new("Atomic Preload Store release", true).await;
     scenario.activate_preload();
-    scenario.state.preload_store_release_lifecycle.arm();
+    scenario
+        .state
+        .active_show
+        .preload_store_release_lifecycle_probe()
+        .arm();
     let request = scenario.store_preload(1);
-    let pause = Arc::clone(&scenario.state.preload_store_release_lifecycle);
+    let pause = scenario
+        .state
+        .active_show
+        .preload_store_release_lifecycle_probe();
     let wait = tokio::task::spawn_blocking(move || pause.wait_until_started());
     let verify_guard = async {
         wait.await.unwrap();
         assert!(
-            scenario
-                .state
-                .activation_lock
-                .clone()
-                .try_lock_owned()
-                .is_err(),
+            scenario.state.active_show.try_acquire().is_err(),
             "the persisted target and active Preload release must share one activation guard"
         );
-        scenario.state.preload_store_release_lifecycle.release();
+        scenario
+            .state
+            .active_show
+            .preload_store_release_lifecycle_probe()
+            .release();
     };
     let ((), response) = tokio::join!(verify_guard, request);
     assert_eq!(response.status(), StatusCode::OK);
@@ -147,7 +153,7 @@ impl CuePreloadScenario {
         let (token, session_id) = login(&app, "Operator").await;
         let show = create_show(&app, &token, name).await;
         let show_id = light_core::ShowId(Uuid::parse_str(show["id"].as_str().unwrap()).unwrap());
-        let entry = state.desk.lock().show(show_id).unwrap().unwrap();
+        let entry = state.installation.show(show_id).unwrap().unwrap();
         let cue_list_id = light_core::CueListId::new();
         seed_cue_preload_show(&entry, cue_list_id);
         if active {
@@ -165,13 +171,13 @@ impl CuePreloadScenario {
     }
 
     fn activate_preload(&self) {
-        assert!(self.state.programmers.set_preload_group(
+        assert!(self.state.programming.set_preload_group(
             self.session_id,
             "1".into(),
             light_core::AttributeKey::intensity(),
             light_core::AttributeValue::Normalized(0.6),
         ));
-        assert!(self.state.programmers.activate_preload(self.session_id));
+        assert!(self.state.programming.activate_preload(self.session_id));
         assert!(self.has_active_preload());
     }
 
@@ -203,7 +209,7 @@ impl CuePreloadScenario {
     }
 
     async fn enter_preload(&self) -> Response {
-        let session = self.state.sessions.read()[&self.session_id].clone();
+        let session = self.state.sessions.session(self.session_id).unwrap();
         self.app
             .clone()
             .oneshot(
@@ -237,7 +243,7 @@ impl CuePreloadScenario {
     }
 
     fn has_active_preload(&self) -> bool {
-        let programmer = self.state.programmers.get(self.session_id).unwrap();
+        let programmer = self.state.programming.get(self.session_id).unwrap();
         !programmer.preload_active.is_empty() || !programmer.preload_group_active.is_empty()
     }
 
@@ -245,8 +251,8 @@ impl CuePreloadScenario {
         CuePreloadBoundary {
             show_revision: self.document().revision().value(),
             backup_count: self.backup_names().len(),
-            runtime: self.state.engine.snapshot(),
-            event_sequence: self.state.application_events.latest_sequence(),
+            runtime: self.state.output.snapshot(),
+            event_sequence: self.state.events.latest_sequence(),
         }
     }
 
@@ -254,24 +260,21 @@ impl CuePreloadScenario {
         assert_eq!(self.document().revision().value(), before.show_revision);
         assert_eq!(self.backup_names().len(), before.backup_count);
         assert!(std::sync::Arc::ptr_eq(
-            &self.state.engine.snapshot(),
+            &self.state.output.snapshot(),
             &before.runtime
         ));
-        assert_eq!(
-            self.state.application_events.latest_sequence(),
-            before.event_sequence
-        );
+        assert_eq!(self.state.events.latest_sequence(), before.event_sequence);
     }
 
     fn assert_one_active_commit(&self, before: &CuePreloadBoundary) {
         let document = self.document();
         assert_eq!(document.revision().value(), before.show_revision + 1);
         assert_eq!(self.backup_names().len(), before.backup_count + 1);
-        let runtime = self.state.engine.snapshot();
+        let runtime = self.state.output.snapshot();
         assert_eq!(runtime.revision, document.revision().value());
         assert!(!std::sync::Arc::ptr_eq(&runtime, &before.runtime));
         assert_eq!(
-            self.state.application_events.latest_sequence(),
+            self.state.events.latest_sequence(),
             before.event_sequence + 1
         );
     }
@@ -288,7 +291,7 @@ impl CuePreloadScenario {
     fn events_after(&self, sequence: u64) -> Vec<std::sync::Arc<light_application::EventEnvelope>> {
         let light_application::EventReplay::Events(events) = self
             .state
-            .application_events
+            .events
             .replay(sequence, &light_application::EventFilter::default())
         else {
             panic!("expected retained CueList event");

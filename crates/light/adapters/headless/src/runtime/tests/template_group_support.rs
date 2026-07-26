@@ -238,7 +238,7 @@ impl TemplateGroupScenario {
         let show_id = light_core::ShowId(
             Uuid::parse_str(created["id"].as_str().unwrap()).unwrap(),
         );
-        let entry = state.desk.lock().show(show_id).unwrap().unwrap();
+        let entry = state.installation.show(show_id).unwrap().unwrap();
         let store = ShowStore::open(&entry.path).unwrap();
         let dimmers = ["Front Left", "Front Mid Left", "Front Mid Right", "Front Right"]
             .into_iter()

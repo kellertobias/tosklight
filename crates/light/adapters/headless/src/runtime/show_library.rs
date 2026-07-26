@@ -9,8 +9,7 @@ pub(super) async fn save_show_revision(
     let _session = authenticate(&state, &headers)?;
     let id = light_core::ShowId(id);
     let entry = state
-        .desk
-        .lock()
+        .installation
         .show(id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
@@ -20,16 +19,17 @@ pub(super) async fn save_show_revision(
         ));
     }
     let directory = state
-        .data_dir
+        .installation
+        .data_dir()
         .join("revisions")
         .join(entry.id.0.to_string());
     std::fs::create_dir_all(&directory).map_err(ApiError::io)?;
     let destination = directory.join(format!("{}.show", Uuid::new_v4()));
-    ShowStore::open(&entry.path)
+    ActiveShowRepository::open(&entry.path)
         .map_err(ApiError::store)?
         .backup_to(&destination)
         .map_err(ApiError::store)?;
-    let revision = match state.desk.lock().add_show_revision(
+    let revision = match state.installation.add_show_revision(
         entry.id,
         input.name.trim(),
         &destination.display().to_string(),
@@ -56,14 +56,12 @@ pub(super) async fn open_show_revision(
     let session = authenticate(&state, &headers)?;
     let id = light_core::ShowId(id);
     let entry = state
-        .desk
-        .lock()
+        .installation
         .show(id)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
     let saved_revision = state
-        .desk
-        .lock()
+        .installation
         .show_revision(id, revision)
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show revision"))?;
@@ -81,11 +79,12 @@ pub(super) async fn open_show_revision(
     };
     let copy_name = revision_copy_name(&state, &entry.name, revision, copied_at.date_naive())?;
     let copy_path = state
-        .data_dir
+        .installation
+        .data_dir()
         .join("shows")
         .join(format!("{copy_name}.show"));
     std::fs::copy(&saved_revision.path, &copy_path).map_err(ApiError::io)?;
-    let copy = match state.desk.lock().upsert_show_with_revision_copy(
+    let copy = match state.installation.upsert_show_with_revision_copy(
         &copy_name,
         &copy_path.display().to_string(),
         false,
@@ -97,24 +96,24 @@ pub(super) async fn open_show_revision(
             return Err(ApiError::store(error));
         }
     };
-    if let Err(error) = ShowStore::open(&copy.path)
+    if let Err(error) = ActiveShowRepository::open(&copy.path)
         .and_then(|store| store.set_identity(copy.id, &copy.name, copy.revision_copy.as_ref()))
     {
-        let _ = state.desk.lock().remove_show(copy.id);
+        let _ = state.installation.remove_show(copy.id);
         let _ = std::fs::remove_file(&copy_path);
         return Err(ApiError::store(error));
     }
-    let _activation = state.activation_lock.lock().await;
+    let _activation = state.active_show.acquire().await;
     let output_runtime = load_output_runtime_for_show(&state, copy.id)?;
     let prepared = match prepare_show_for_runtime(&state, &copy) {
         Ok(prepared) => prepared,
         Err(error) => {
-            let _ = state.desk.lock().remove_show(copy.id);
+            let _ = state.installation.remove_show(copy.id);
             let _ = std::fs::remove_file(&copy_path);
             return Err(error);
         }
     };
-    let previous = state.active_show.read().clone();
+    let previous = state.active_show.current().clone();
     let transition = input.transition.unwrap_or(Transition::SafeBlackout);
     let context = operator_action_context(&session, light_application::ActionSource::Http);
     activate_prepared_snapshot(
@@ -126,22 +125,20 @@ pub(super) async fn open_show_revision(
     )
     .await?;
     state
-        .desk
-        .lock()
+        .installation
         .set_active_show(Some(copy.id))
         .map_err(ApiError::store)?;
     if let Some(previous) = &previous
         && previous.id != copy.id
     {
         state
-            .desk
-            .lock()
+            .installation
             .set_setting("previous_active_show_id", &previous.id.0.to_string())
             .map_err(ApiError::store)?;
     }
     invalidate_active_show_document(&state);
-    *state.active_show.write() = Some(copy.clone());
-    *state.active_show_error.write() = None;
+    state.active_show.replace_current(Some(copy.clone()));
+    state.active_show.set_error(None);
     restore_output_runtime_for_show(&state, copy.id, output_runtime);
     emit(
         &state,
@@ -158,7 +155,8 @@ pub(super) async fn upload_show(
     let _session = authenticate(&state, &headers)?;
     validate_show_name(&input.name)?;
     let path = state
-        .data_dir
+        .installation
+        .data_dir()
         .join("shows")
         .join(format!("{}.show", input.name));
     let mut uploaded_revision_copy = None;
@@ -172,7 +170,8 @@ pub(super) async fn upload_show(
             ));
         }
         let staged = state
-            .data_dir
+            .installation
+            .data_dir()
             .join("shows")
             .join(format!(".upload-{}.tmp", Uuid::new_v4()));
         std::fs::write(&staged, bytes).map_err(ApiError::io)?;
@@ -180,7 +179,7 @@ pub(super) async fn upload_show(
             let _ = std::fs::remove_file(&staged);
             return Err(ApiError::store(error));
         }
-        uploaded_revision_copy = ShowStore::open(&staged)
+        uploaded_revision_copy = ActiveShowRepository::open(&staged)
             .map_err(ApiError::store)?
             .revision_copy_source()
             .map_err(ApiError::store)?;
@@ -190,9 +189,8 @@ pub(super) async fn upload_show(
         }
         if path.exists()
             && let Some(existing) = state
-                .desk
-                .lock()
-                .library()
+                .installation
+                .show_library()
                 .map_err(ApiError::store)?
                 .into_iter()
                 .find(|entry| entry.name.eq_ignore_ascii_case(&input.name))
@@ -208,8 +206,7 @@ pub(super) async fn upload_show(
         }
     }
     let entry = state
-        .desk
-        .lock()
+        .installation
         .upsert_show_with_revision_copy(
             &input.name,
             &path.display().to_string(),
@@ -217,7 +214,7 @@ pub(super) async fn upload_show(
             uploaded_revision_copy.as_ref(),
         )
         .map_err(ApiError::store)?;
-    ShowStore::open(&entry.path)
+    ActiveShowRepository::open(&entry.path)
         .map_err(ApiError::store)?
         .set_identity(entry.id, &entry.name, entry.revision_copy.as_ref())
         .map_err(ApiError::store)?;

@@ -25,10 +25,10 @@ fn execute_mixed_group_value(
     value: &[String],
     timing: CommandTiming,
 ) -> Result<usize, String> {
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let parsed = parse_group_mixed_selection(&snapshot, address, true)?;
     let percent = percent_level(value)?;
-    state.programmers.select_expression(
+    state.programming.select_expression(
         session.id,
         parsed.fixtures.clone(),
         light_programmer::SelectionExpression::Sources {
@@ -124,7 +124,7 @@ fn apply_group_value(
     }
     let percent = percent_level(&value[usize::from(relative)..])?;
     if frozen {
-        let resolved = state.engine.resolved_values();
+        let resolved = state.output.resolved_values();
         let values = fixtures.iter().map(|fixture| {
             let target = if relative {
                 let current = resolved
@@ -194,8 +194,8 @@ pub(super) fn execute_group_programmer_command(
     }
     if at_index == tokens.len() && mixed && !address.iter().any(|token| token == "DIV") {
         let parsed =
-            parse_group_mixed_selection(&state.engine.snapshot(), &tokens[..at_index], true)?;
-        state.programmers.select_expression(
+            parse_group_mixed_selection(&state.output.snapshot(), &tokens[..at_index], true)?;
+        state.programming.select_expression(
             session.id,
             parsed.fixtures.clone(),
             light_programmer::SelectionExpression::Sources {
@@ -203,7 +203,7 @@ pub(super) fn execute_group_programmer_command(
             },
         );
         state
-            .programmers
+            .programming
             .set_command_line(session.id, command_line.to_owned());
         return Ok(parsed.fixtures.len());
     }
@@ -211,7 +211,7 @@ pub(super) fn execute_group_programmer_command(
         .get(id_index)
         .ok_or("GROUP requires a group number")?
         .clone();
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let groups = snapshot
         .groups
         .iter()
@@ -238,7 +238,7 @@ pub(super) fn execute_group_programmer_command(
         }
     };
     state
-        .programmers
+        .programming
         .select_expression(session.id, fixtures.clone(), expression);
     if at_index < tokens.len() {
         apply_group_value(

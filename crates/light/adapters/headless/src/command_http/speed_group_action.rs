@@ -24,12 +24,14 @@ pub(super) fn emit_compatibility_change(
     result: &SpeedGroupResult,
 ) -> Result<(), String> {
     let addressed = super::speed_group_command::addressed(parsed);
-    let controllers = state.speed_groups.lock();
     let snapshots = addressed
         .iter()
-        .map(|group| controllers[group.index()].snapshot(result.applied_at_millis))
+        .map(|group| {
+            state
+                .output
+                .speed_group_snapshot(group.index(), result.applied_at_millis)
+        })
         .collect::<Vec<_>>();
-    drop(controllers);
     super::super::emit(
         state,
         "speed_group_command",

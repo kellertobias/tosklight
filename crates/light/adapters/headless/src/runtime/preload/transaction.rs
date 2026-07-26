@@ -98,14 +98,14 @@ fn install_preload_commit(
     prepared_playback: light_engine::PreparedPlaybackBatch,
 ) -> Result<(), String> {
     state
-        .programmers
+        .programming
         .activate_preload_at(session.id, committed_at);
-    let drained = state.programmers.take_preload_playback_actions(session.id);
+    let drained = state.programming.take_preload_playback_actions(session.id);
     if drained != pending {
         return Err("the Preload queue changed while GO was being prepared".into());
     }
     state
-        .engine
+        .output
         .install_prepared_playback_batch(prepared_playback)
 }
 

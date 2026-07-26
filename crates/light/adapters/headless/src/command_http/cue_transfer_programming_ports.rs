@@ -1,13 +1,13 @@
-use super::programming_ports::{ServerProgrammingPorts, clear_command_line};
+use super::programming_ports::{CommandLineProgrammer, ServerProgrammingPorts, clear_command_line};
 use light_application::{
     ActionContext, ProgrammingCueTransferMode, ProgrammingCueTransferRequest, ProgrammingExecution,
 };
-use light_programmer::{ProgrammerRegistry, ProgrammingChoiceOptionId};
+use light_programmer::ProgrammingChoiceOptionId;
 
 impl ServerProgrammingPorts<'_> {
     pub(super) fn transfer_cue_command(
         &self,
-        programmers: &ProgrammerRegistry,
+        programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
         command: &str,
     ) -> Option<ProgrammingExecution> {
@@ -48,7 +48,7 @@ impl ServerProgrammingPorts<'_> {
             .prepare_cue_transfer_choice_within_interaction(
                 context,
                 request,
-                &self.state().active_show_service,
+                &self.state().active_show,
                 &ports,
             ) {
             Ok(pending_choice) => ProgrammingExecution::ChoiceRequired { pending_choice },
@@ -60,7 +60,7 @@ impl ServerProgrammingPorts<'_> {
 
     fn execute_transfer(
         &self,
-        programmers: &ProgrammerRegistry,
+        programmers: &dyn CommandLineProgrammer,
         context: &ActionContext,
         raw_command: &str,
         request: light_application::ProgrammingCueTransferChoiceRequest,
@@ -95,7 +95,7 @@ impl ServerProgrammingPorts<'_> {
                 .cue_transfer_within_interaction(
                     &exact_context,
                     &typed,
-                    &self.state().active_show_service,
+                    &self.state().active_show,
                     &ports,
                 )
                 .map_err(|error| error.message)?;
@@ -106,7 +106,7 @@ impl ServerProgrammingPorts<'_> {
                     context,
                     request,
                     mode,
-                    &self.state().active_show_service,
+                    &self.state().active_show,
                     &ports,
                 )
                 .map_err(|error| error.message)?;
@@ -122,7 +122,7 @@ impl ServerProgrammingPorts<'_> {
     ) -> Result<Option<(ProgrammingCueTransferRequest, ActionContext)>, String> {
         let command = self
             .state()
-            .programmers
+            .programming
             .command_line_state(self.session().id)
             .ok_or("programmer command line does not exist")?;
         let Some(choice) = command.pending_choice else {

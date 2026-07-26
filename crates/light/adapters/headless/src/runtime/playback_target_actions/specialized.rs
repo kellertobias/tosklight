@@ -78,11 +78,11 @@ fn apply_group_action(
 
 fn set_group_flash(state: &AppState, group_id: &str, pressed: bool) -> bool {
     let value = if pressed { 1.0 } else { 0.0 };
-    if state.engine.group_master_flash(group_id) == value {
+    if state.output.group_master_flash(group_id) == value {
         return false;
     }
     state
-        .engine
+        .output
         .set_group_master_flash(group_id.to_owned(), value);
     true
 }
@@ -118,12 +118,11 @@ fn apply_grand_master_action(
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     match action {
         Action::Blackout => {
-            let blackout = !state.output_control.lock().options.blackout;
+            let blackout = !state.output.control_projection().blackout;
             apply_global_output(state, context, session, None, Some(blackout))
         }
         Action::Flash => {
-            let changed =
-                set_if_changed(&mut state.output_control.lock().grand_master_flash, pressed);
+            let changed = state.output.set_grand_master_flash(pressed);
             Ok(PlaybackTargetOutcome::changed(changed))
         }
         Action::PauseDynamics => {
@@ -151,7 +150,7 @@ fn apply_global_output(
 
 fn toggle_dynamics(state: &AppState) -> Result<(), ApiError> {
     state
-        .engine
+        .output
         .execute_playback(EnginePlaybackCommand::ToggleDynamicsPaused)
         .map_err(ApiError::bad_request)?;
     Ok(())
@@ -176,14 +175,13 @@ fn apply_time_master_action(
     action: Action,
 ) -> Result<bool, ApiError> {
     let maximum = time_master_maximum(definition);
-    let changed = {
-        let mut configuration = state.configuration.write();
-        let current = time_master_slot(&mut configuration, definition);
+    let changed = state.installation.update_configuration(|configuration| {
+        let current = time_master_slot(configuration, definition);
         match time_master_action_value(*current, maximum, action)? {
-            Some(value) => set_if_changed(current, value),
-            None => false,
+            Some(value) => Ok(set_if_changed(current, value)),
+            None => Ok(false),
         }
-    };
+    })?;
     persist_time_master_change(state, changed)
 }
 
@@ -230,11 +228,10 @@ fn set_time_master(
     definition: &light_playback::PlaybackDefinition,
     value: u64,
 ) -> Result<bool, ApiError> {
-    let changed = {
-        let mut configuration = state.configuration.write();
-        let current = time_master_slot(&mut configuration, definition);
+    let changed = state.installation.update_configuration(|configuration| {
+        let current = time_master_slot(configuration, definition);
         set_if_changed(current, value)
-    };
+    });
     persist_time_master_change(state, changed)
 }
 

@@ -7,13 +7,12 @@ async fn programmer_values_ws_frame_uses_typed_service_and_relative_intent_once(
     let (token, _) = login(&app, "Operator").await;
     let session = state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .find(|session| session.token == token)
-        .cloned()
         .unwrap();
     open_values_test_show(&app, &token).await;
-    let fixture_id = state.engine.snapshot().fixtures[0].fixture_id;
+    let fixture_id = state.output.snapshot().fixtures[0].fixture_id;
     let absolute_id = "ws-programmer-values-absolute";
 
     let absolute = dispatch_live_action(
@@ -85,7 +84,7 @@ async fn programmer_values_ws_frame_uses_typed_service_and_relative_intent_once(
         payload["projection"]["fixture_values"][0]["value"]["value"],
         0.5
     );
-    assert_eq!(state.programmers.get(session.id).unwrap().undo.len(), 2);
+    assert_eq!(state.programming.get(session.id).unwrap().undo.len(), 2);
 
     let replay = dispatch_live_action(
         &state,
@@ -113,7 +112,7 @@ async fn programmer_values_ws_frame_uses_typed_service_and_relative_intent_once(
     );
     assert!(replay.ok, "{:?}", replay.error);
     assert_eq!(replay.payload.unwrap()["replayed"], true);
-    assert_eq!(state.programmers.get(session.id).unwrap().undo.len(), 2);
+    assert_eq!(state.programming.get(session.id).unwrap().undo.len(), 2);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -124,10 +123,9 @@ async fn programmer_values_ws_frame_rejects_mismatched_identity_without_mutation
     let (token, _) = login(&app, "Operator").await;
     let session = state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .find(|session| session.token == token)
-        .cloned()
         .unwrap();
     open_values_test_show(&app, &token).await;
 
@@ -156,7 +154,7 @@ async fn programmer_values_ws_frame_rejects_mismatched_identity_without_mutation
             .unwrap()
             .contains("action payload request_id must match the frame request_id")
     );
-    assert_eq!(state.programmers.normal_values_revision(session.user.id), 0);
+    assert_eq!(state.programming.normal_values_revision(session.user.id), 0);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -167,10 +165,9 @@ async fn preload_lifecycle_and_values_ws_frames_use_exact_typed_authority() {
     let (token, _) = login(&app, "Operator").await;
     let session = state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .find(|session| session.token == token)
-        .cloned()
         .unwrap();
     open_values_test_show(&app, &token).await;
     let enter_id = "ws-preload-enter";
@@ -200,7 +197,7 @@ async fn preload_lifecycle_and_values_ws_frames_use_exact_typed_authority() {
     assert_eq!(enter_payload["status"], "changed");
     assert_eq!(enter_payload["capture_mode"]["revision"], 1);
 
-    let fixture_id = state.engine.snapshot().fixtures[0].fixture_id;
+    let fixture_id = state.output.snapshot().fixtures[0].fixture_id;
     let values_id = "ws-preload-values";
     let values = dispatch_live_action(
         &state,

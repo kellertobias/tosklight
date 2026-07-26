@@ -8,7 +8,7 @@ async fn command_line_replace_ws_is_exact_correlated_and_replay_safe() {
     let session = session_for_token(&state, &token);
     open_default_show(&app, &token).await;
     let revision = state
-        .programmers
+        .programming
         .command_line_state(session.id)
         .unwrap()
         .revision;
@@ -54,7 +54,7 @@ async fn command_line_replace_ws_is_exact_correlated_and_replay_safe() {
     assert_eq!(replay.payload.unwrap()["revision"], revision + 1);
     assert_eq!(
         state
-            .programmers
+            .programming
             .command_line_state(session.id)
             .unwrap()
             .revision,
@@ -82,7 +82,7 @@ async fn command_line_replace_ws_is_exact_correlated_and_replay_safe() {
     assert!(stale.error.unwrap().contains("revision conflict"));
     assert_eq!(
         state
-            .programmers
+            .programming
             .command_line_state(session.id)
             .unwrap()
             .visible_text(),
@@ -99,14 +99,14 @@ async fn selection_action_ws_uses_typed_service_and_request_identity() {
     let session = session_for_token(&state, &token);
     open_default_show(&app, &token).await;
     let fixture_id = state
-        .engine
+        .output
         .snapshot()
         .fixtures
         .iter()
         .find(|fixture| fixture.logical_heads.is_empty())
         .expect("Default Stage must contain a leaf fixture")
         .fixture_id;
-    let revision = state.programmers.selection(session.id).unwrap().revision;
+    let revision = state.programming.selection(session.id).unwrap().revision;
 
     let selection_payload = serde_json::json!({
         "request_id": "selection-1",
@@ -154,7 +154,7 @@ async fn selection_action_ws_uses_typed_service_and_request_identity() {
     assert!(replay.ok, "{:?}", replay.error);
     assert_eq!(replay.payload.unwrap()["replayed"], true);
     assert_eq!(
-        state.programmers.selection(session.id).unwrap().revision,
+        state.programming.selection(session.id).unwrap().revision,
         revision + 1
     );
 
@@ -192,8 +192,8 @@ async fn selection_action_ws_accepts_the_complete_action_union() {
     let (token, _) = login(&app, "Operator").await;
     let session = session_for_token(&state, &token);
     open_default_show(&app, &token).await;
-    let fixture_id = state.engine.snapshot().fixtures[0].fixture_id;
-    let show_id = state.active_show.read().as_ref().unwrap().id.0;
+    let fixture_id = state.output.snapshot().fixtures[0].fixture_id;
+    let show_id = state.active_show.current().as_ref().unwrap().id.0;
     let group = seed_show_object(
         &state,
         &token,
@@ -215,7 +215,7 @@ async fn selection_action_ws_accepts_the_complete_action_union() {
             String::from_utf8_lossy(&body)
         );
     }
-    let revision = state.programmers.selection(session.id).unwrap().revision;
+    let revision = state.programming.selection(session.id).unwrap().revision;
 
     for (request_id, payload, accepted_action) in [
         (
@@ -283,10 +283,9 @@ async fn selection_action_ws_accepts_the_complete_action_union() {
 fn session_for_token(state: &AppState, token: &str) -> Session {
     state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .find(|session| session.token == token)
-        .cloned()
         .unwrap()
 }
 

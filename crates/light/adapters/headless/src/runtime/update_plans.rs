@@ -8,7 +8,7 @@ pub(super) fn preview_update_application(
 ) -> Result<UpdatePreviewResponse, ApiError> {
     let show_id = state
         .active_show
-        .read()
+        .current()
         .as_ref()
         .map(|show| show.id)
         .ok_or_else(|| ApiError::bad_request("no show is open"))?;
@@ -24,7 +24,7 @@ pub(super) fn preview_update_application(
         .programming
         .preview_update(
             light_application::ActionEnvelope { context, command },
-            &state.active_show_service,
+            &state.active_show,
             &ports,
         )
         .map_err(programming_action_error)?;
@@ -84,7 +84,7 @@ fn perform_update_with_boundary(
     validate_confirmed_legacy_cue(request)?;
     let show_id = state
         .active_show
-        .read()
+        .current()
         .as_ref()
         .map(|show| show.id)
         .ok_or_else(|| ApiError::bad_request("no show is open"))?;
@@ -114,12 +114,12 @@ fn perform_update_with_boundary(
         UpdateProgrammingBoundary::Unowned => {
             state
                 .programming
-                .handle_update(action, &state.active_show_service, &ports)
+                .handle_update(action, &state.active_show, &ports)
         }
         UpdateProgrammingBoundary::HeldByCaller => {
             state
                 .programming
-                .update_within_interaction(action, &state.active_show_service, &ports)
+                .update_within_interaction(action, &state.active_show, &ports)
         }
     }
     .map_err(programming_action_error)?;

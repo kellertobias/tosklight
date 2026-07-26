@@ -116,7 +116,7 @@ async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order
         }),
     )
     .await;
-    let application_cursor = state.application_events.latest_sequence();
+    let application_cursor = state.events.latest_sequence();
 
     let response = post_stage_layout_action(
         &app,
@@ -135,7 +135,7 @@ async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order
     let revision = outcome["revision"].as_u64().unwrap();
     assert!(revision > seeded);
     assert_eq!(
-        state.application_events.latest_sequence(),
+        state.events.latest_sequence(),
         application_cursor + 1,
         "one stage-layout commit publishes one semantic application event"
     );
@@ -158,7 +158,7 @@ async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order
     assert_eq!(layout["body"]["future_layout_field"], true);
     assert_eq!(layout["body"]["camera3d"]["position"][2], 2.0);
 
-    let light_application::EventReplay::Events(events) = state.application_events.replay(
+    let light_application::EventReplay::Events(events) = state.events.replay(
         application_cursor,
         &light_application::EventFilter::default()
             .with_capability(light_application::EventCapability::Show),
@@ -209,14 +209,14 @@ async fn move_selection_replays_on_request_id_and_rejects_reuse_for_a_different_
     let request = move_request("replay-1", &[fixture], "y", 2.0);
     let first = json(post_stage_layout_action(&app, &token, &request).await).await;
     assert_eq!(first["changed"], true);
-    let committed_cursor = state.application_events.latest_sequence();
+    let committed_cursor = state.events.latest_sequence();
     let replayed = post_stage_layout_action(&app, &token, &request).await;
     assert_eq!(replayed.status(), StatusCode::OK);
     let replayed = json(replayed).await;
     assert_eq!(replayed["replayed"], true);
     assert_eq!(replayed["revision"], first["revision"]);
     assert_eq!(
-        state.application_events.latest_sequence(),
+        state.events.latest_sequence(),
         committed_cursor,
         "a replay must not publish another semantic event"
     );
@@ -314,7 +314,7 @@ async fn move_selection_validates_requests_and_tolerates_unknown_fields() {
     let accepted = post_stage_layout_action(&app, &token, &tolerant).await;
     assert_eq!(accepted.status(), StatusCode::OK);
     assert_eq!(json(accepted).await["changed"], true);
-    let committed_cursor = state.application_events.latest_sequence();
+    let committed_cursor = state.events.latest_sequence();
 
     // A zero delta and a selection without any stored position both change nothing.
     let zero = json(
@@ -334,7 +334,7 @@ async fn move_selection_validates_requests_and_tolerates_unknown_fields() {
     .await;
     assert_eq!(unknown_only["changed"], false);
     assert_eq!(
-        state.application_events.latest_sequence(),
+        state.events.latest_sequence(),
         committed_cursor,
         "no-change stage actions must not publish semantic events"
     );

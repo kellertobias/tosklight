@@ -26,24 +26,23 @@ pub(super) fn ws_speed_group_action(
         action,
     );
     let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
+        .active_show
+        .try_acquire()
         .map_err(|_| "the active show is changing; retry the Speed Group action")?;
-    let desk_operation = state.programming.desk_lock(session.desk.id);
-    let _desk_operation = desk_operation.lock();
-    let context = light_application::ActionContext::operator(
-        session.desk.id,
-        session.user.id.0,
-        session.id.0,
-        light_application::ActionSource::UserInterface,
-    )
-    .with_request_id(&request.request_id);
-    let result = speed_group_service::execute_http_action(state, session, context, exact)
-        .map_err(|error| error.message)?;
-    let payload = serde_json::to_value(speed_group_v2::wire_outcome(result))
-        .map_err(|error| error.to_string())?;
-    Ok(WsTypedRuntimeAction { payload })
+    state.programming.run_desk_operation(session.desk.id, || {
+        let context = light_application::ActionContext::operator(
+            session.desk.id,
+            session.user.id.0,
+            session.id.0,
+            light_application::ActionSource::UserInterface,
+        )
+        .with_request_id(&request.request_id);
+        let result = speed_group_service::execute_http_action(state, session, context, exact)
+            .map_err(|error| error.message)?;
+        let payload = serde_json::to_value(speed_group_v2::wire_outcome(result))
+            .map_err(|error| error.to_string())?;
+        Ok(WsTypedRuntimeAction { payload })
+    })
 }
 
 pub(super) fn ws_output_runtime_action(
@@ -68,27 +67,26 @@ pub(super) fn ws_output_runtime_action(
     )
     .map_err(|error| error.message)?;
     let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
+        .active_show
+        .try_acquire()
         .map_err(|_| "the active show is changing; retry the output action")?;
-    let desk_operation = state.programming.desk_lock(session.desk.id);
-    let _desk_operation = desk_operation.lock();
-    if read_desk_lock(state, session.desk.id).locked {
-        return Err("desk is locked".into());
-    }
-    let context = light_application::ActionContext::operator(
-        session.desk.id,
-        session.user.id.0,
-        session.id.0,
-        light_application::ActionSource::UserInterface,
-    )
-    .with_request_id(&request.request_id);
-    let result = output_runtime_service::execute_action(state, Some(session), context, exact)
-        .map_err(|error| error.message)?;
-    let payload = serde_json::to_value(output_runtime_v2::wire_outcome(result))
-        .map_err(|error| error.to_string())?;
-    Ok(WsTypedRuntimeAction { payload })
+    state.programming.run_desk_operation(session.desk.id, || {
+        if read_desk_lock(state, session.desk.id).locked {
+            return Err("desk is locked".into());
+        }
+        let context = light_application::ActionContext::operator(
+            session.desk.id,
+            session.user.id.0,
+            session.id.0,
+            light_application::ActionSource::UserInterface,
+        )
+        .with_request_id(&request.request_id);
+        let result = output_runtime_service::execute_action(state, Some(session), context, exact)
+            .map_err(|error| error.message)?;
+        let payload = serde_json::to_value(output_runtime_v2::wire_outcome(result))
+            .map_err(|error| error.to_string())?;
+        Ok(WsTypedRuntimeAction { payload })
+    })
 }
 
 pub(super) fn ws_dmx_override(
@@ -154,9 +152,8 @@ pub(super) fn ws_patch_preview_highlight(
     }
     output_runtime_v2::validate_request_id(&input.request_id)?;
     let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
+        .active_show
+        .try_acquire()
         .map_err(|_| "the active show is changing; retry Patch Preview Highlight")?;
     Ok(apply_patch_preview_highlight(state, session, input))
 }

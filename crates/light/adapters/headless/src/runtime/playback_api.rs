@@ -2,11 +2,8 @@ use super::*;
 
 pub(super) fn authoritative_playback_controls(state: &AppState) -> serde_json::Value {
     let now = application_millis(state);
-    let speed_groups = {
-        let controllers = state.speed_groups.lock();
-        std::array::from_fn::<_, 5, _>(|index| controllers[index].snapshot(now))
-    };
-    let snapshot = state.engine.snapshot();
+    let speed_groups = state.output.speed_group_snapshots(now);
+    let snapshot = state.output.snapshot();
     let groups = snapshot
         .groups
         .iter()
@@ -14,21 +11,21 @@ pub(super) fn authoritative_playback_controls(state: &AppState) -> serde_json::V
             serde_json::json!({
                 "id":group.id,
                 "master":group.master,
-                "flash_level":state.engine.group_master_flash(&group.id)
+                "flash_level":state.output.group_master_flash(&group.id)
             })
         })
         .collect::<Vec<_>>();
-    let control = state.output_control.lock();
-    let timing = state.configuration.read();
+    let control = state.output.control_projection();
+    let timing = state.installation.configuration();
     serde_json::json!({
         "speed_groups":speed_groups,
         "groups":groups,
         "grand_master":{
-            "level":control.options.grand_master,
-            "effective_level":if control.grand_master_flash {1.0} else {control.options.grand_master},
-            "blackout":control.options.blackout,
+            "level":control.grand_master,
+            "effective_level":if control.grand_master_flash {1.0} else {control.grand_master},
+            "blackout":control.blackout,
             "flash_active":control.grand_master_flash,
-            "dynamics_paused":state.engine.playback_dynamics().paused
+            "dynamics_paused":state.output.playback_dynamics().paused
         },
         "programmer_fade_millis":timing.programmer_fade_millis,
         "cue_fade_millis":timing.sequence_master_fade_millis
@@ -44,17 +41,6 @@ pub(super) type VirtualPlaybackExclusionStore = HashMap<String, VirtualPlaybackE
 
 pub(super) fn virtual_playback_exclusion_setting(show_id: light_core::ShowId) -> String {
     format!("virtual_playback_exclusion_zones:{}", show_id.0)
-}
-
-pub(super) fn read_virtual_playback_exclusion_store(
-    desk: &DeskStore,
-    show_id: light_core::ShowId,
-) -> VirtualPlaybackExclusionStore {
-    desk.setting(&virtual_playback_exclusion_setting(show_id))
-        .ok()
-        .flatten()
-        .and_then(|value| serde_json::from_str(&value).ok())
-        .unwrap_or_default()
 }
 
 pub(super) fn validate_virtual_playback_exclusion_zones(
@@ -104,30 +90,6 @@ fn validate_virtual_playback_exclusion_zone(
     Ok(())
 }
 
-pub(super) fn write_virtual_playback_exclusion_surface(
-    desk: &DeskStore,
-    show_id: light_core::ShowId,
-    desk_id: Uuid,
-    surface_id: &str,
-    zones: &[VirtualPlaybackExclusionZone],
-) -> Result<(), ApiError> {
-    let mut stored = read_virtual_playback_exclusion_store(desk, show_id);
-    let surfaces = stored.entry(desk_id.to_string()).or_default();
-    if zones.is_empty() {
-        surfaces.remove(surface_id);
-    } else {
-        surfaces.insert(surface_id.to_owned(), zones.to_vec());
-    }
-    if surfaces.is_empty() {
-        stored.remove(&desk_id.to_string());
-    }
-    desk.set_setting(
-        &virtual_playback_exclusion_setting(show_id),
-        &serde_json::to_string(&stored).map_err(|error| ApiError::internal(error.to_string()))?,
-    )
-    .map_err(ApiError::store)
-}
-
 pub(super) struct VirtualPlaybackExclusionResolver {
     current_page: u8,
     surfaces: VirtualPlaybackExclusionSurfaces,
@@ -137,22 +99,23 @@ pub(super) struct VirtualPlaybackExclusionResolver {
 impl VirtualPlaybackExclusionResolver {
     pub(super) fn read(state: &AppState, desk_id: Uuid) -> Self {
         let pages = state
-            .engine
+            .output
             .snapshot()
             .playback_pages
             .iter()
             .map(|page| (page.number, page.slots.clone()))
             .collect();
-        let Some(show) = state.active_show.read().clone() else {
+        let Some(show) = state.active_show.current().clone() else {
             return Self {
                 current_page: 1,
                 surfaces: HashMap::new(),
                 pages,
             };
         };
-        let desk = state.desk.lock();
-        let current_page = desk.desk_page(desk_id, show.id).unwrap_or(1);
-        let surfaces = read_virtual_playback_exclusion_store(&desk, show.id)
+        let current_page = state.installation.desk_page(desk_id, show.id).unwrap_or(1);
+        let surfaces = state
+            .installation
+            .virtual_playback_exclusions(show.id)
             .remove(&desk_id.to_string())
             .unwrap_or_default();
         Self {

@@ -52,9 +52,7 @@ impl ServerProgrammingCueDeletionPorts {
         let live = self
             .state
             .sessions
-            .read()
-            .get(&SessionId(session_id))
-            .is_some_and(|session| session.token == self.session.token);
+            .session_token_matches(SessionId(session_id), &self.session.token);
         if !live {
             return Err(unauthorized("Cue deletion session is no longer active"));
         }
@@ -95,7 +93,7 @@ impl ActiveShowPorts for ServerProgrammingCueDeletionPorts {
         if self.within_interaction {
             return operation();
         }
-        let _activation = self.state.activation_lock.clone().blocking_lock_owned();
+        let _activation = self.state.active_show.acquire_blocking();
         operation()
     }
 
@@ -141,8 +139,7 @@ impl ProgrammingCueDeletionPorts for ServerProgrammingCueDeletionPorts {
         show_id: ShowId,
     ) -> Result<u8, ActionError> {
         self.state
-            .desk
-            .lock()
+            .installation
             .desk_page(context.desk_id, show_id)
             .map_err(|error| ActionError::new(ActionErrorKind::Unavailable, error.to_string()))
     }

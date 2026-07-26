@@ -9,7 +9,7 @@ pub(super) fn dispatch_live_action(
     session: &Session,
     frame: LiveActionFrame,
 ) -> WsResponse {
-    let revision = state.engine.snapshot().revision;
+    let revision = state.output.snapshot().revision;
     if let Err(error) = validate_frame(state, session, &frame) {
         return failed_response(frame.request_id, revision, error);
     }
@@ -22,7 +22,7 @@ pub(super) fn dispatch_live_action(
             protocol_version: 2,
             request_id,
             ok: true,
-            revision: state.engine.snapshot().revision,
+            revision: state.output.snapshot().revision,
             payload: Some(payload),
             error: None,
         },
@@ -182,7 +182,7 @@ fn dispatch_action(
             ))
         }),
         LiveAction::ProgrammerUndo => run_interaction(state, session, context, || {
-            let changed = state.programmers.undo(session.id);
+            let changed = state.programming.undo(session.id);
             let response = persist_programmer(state, session)
                 .map(|()| serde_json::json!({"changed":changed}))
                 .map_err(|error| error.message);
@@ -336,7 +336,7 @@ impl WsTrackedState {
 
 fn tracked_state(state: &AppState, session: &Session) -> WsTrackedState {
     WsTrackedState {
-        interaction: state.programmers.interaction_version(session.id),
+        interaction: state.programming.interaction_version(session.id),
     }
 }
 

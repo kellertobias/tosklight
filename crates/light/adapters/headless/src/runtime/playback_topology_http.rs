@@ -57,11 +57,11 @@ async fn run_action(
     session: Session,
     action: ActionEnvelope<PlaybackTopologyCommand>,
 ) -> Result<light_application::PlaybackTopologyResult, PlaybackTopologyHttpError> {
-    let service = state.playback_topology.clone();
+    let playback = state.playback.clone();
     let show_id = action.command.show_id;
     tokio::task::spawn_blocking(move || {
         let ports = ServerPlaybackTopologyPorts::new(state, session, show_id);
-        service.handle(action, &ports)
+        playback.handle_topology(action, &ports)
     })
     .await
     .map_err(PlaybackTopologyHttpError::blocking)?

@@ -1,23 +1,37 @@
 use super::*;
+use anyhow::Context;
+use std::{future::Future, pin::Pin};
 
 mod mappings;
 mod subscriptions;
 use mappings::{apply_control_mappings, mapped_control_origin};
 pub(super) use subscriptions::{disconnect_orphaned_osc_session, handle_subscription_osc};
 
-pub(super) fn spawn_control_inputs(
+pub(super) type ControlInputTask =
+    Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'static>>;
+
+pub(super) fn control_input_tasks(
     state: &AppState,
     cancel: CancellationToken,
-) -> Vec<tokio::task::JoinHandle<()>> {
-    let configuration = state.configuration.read().clone();
-    let mut tasks = Vec::new();
-    if state.manual_clock.is_none() {
+) -> Vec<ControlInputTask> {
+    let configuration = state.installation.configuration();
+    let mut tasks: Vec<ControlInputTask> = Vec::new();
+    if !state.output.has_test_clock() {
         let feedback_state = state.clone();
         let feedback_cancel = cancel.clone();
-        tasks.push(tokio::spawn(async move{let mut interval=tokio::time::interval(Duration::from_millis(500));loop{tokio::select!{_=feedback_cancel.cancelled()=>break,_=interval.tick()=>send_osc_feedback(&feedback_state,false)}}}));
+        tasks.push(Box::pin(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(500));
+            loop {
+                tokio::select! {
+                    _ = feedback_cancel.cancelled() => break,
+                    _ = interval.tick() => send_osc_feedback(&feedback_state, false),
+                }
+            }
+            Ok(())
+        }));
         let refresh_state = state.clone();
         let refresh_cancel = cancel.clone();
-        tasks.push(tokio::spawn(async move {
+        tasks.push(Box::pin(async move {
             let mut interval = tokio::time::interval(Duration::from_millis(50));
             loop {
                 tokio::select! {
@@ -25,6 +39,7 @@ pub(super) fn spawn_control_inputs(
                     _ = interval.tick() => { refresh_speed_group_engine(&refresh_state); }
                 }
             }
+            Ok(())
         }));
     }
     for (address, protocol) in [
@@ -39,31 +54,33 @@ pub(super) fn spawn_control_inputs(
         };
         let state = state.clone();
         let cancel = cancel.clone();
-        tasks.push(tokio::spawn(async move {
-            match UdpControlInput::bind(address, protocol).await {
-                Ok(input) => drive_control_input(state, cancel, input).await,
-                Err(error) => tracing::error!(%address,%error,"control input could not bind"),
-            }
+        tasks.push(Box::pin(async move {
+            let input = UdpControlInput::bind(address, protocol)
+                .await
+                .with_context(|| format!("control input could not bind {address}"))?;
+            drive_control_input(state, cancel, input).await;
+            Ok(())
         }));
     }
     for port in configuration.midi_inputs {
         let state = state.clone();
         let cancel = cancel.clone();
-        tasks.push(tokio::spawn(async move {
-            match MidiControlInput::open(&port) {
-                Ok(input) => drive_control_input(state, cancel, input).await,
-                Err(error) => tracing::error!(%port,%error,"MIDI input could not open"),
-            }
+        tasks.push(Box::pin(async move {
+            let input = MidiControlInput::open(&port)
+                .map_err(|error| anyhow::anyhow!("MIDI input could not open {port}: {error}"))?;
+            drive_control_input(state, cancel, input).await;
+            Ok(())
         }));
     }
     if let Some(address) = configuration.rtp_midi_bind {
         let state = state.clone();
         let cancel = cancel.clone();
-        tasks.push(tokio::spawn(async move {
-            match RtpMidiInput::bind(address, "Light").await {
-                Ok(input) => drive_control_input(state, cancel, input).await,
-                Err(error) => tracing::error!(%address,%error,"RTP-MIDI input could not bind"),
-            }
+        tasks.push(Box::pin(async move {
+            let input = RtpMidiInput::bind(address, "Light")
+                .await
+                .with_context(|| format!("RTP-MIDI input could not bind {address}"))?;
+            drive_control_input(state, cancel, input).await;
+            Ok(())
         }));
     }
     tasks
@@ -95,7 +112,7 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
     if let ControlEvent::Osc {
         address, arguments, ..
     } = &event
-        && let Some(configuration) = &state.configuration.read().osc_timecode
+        && let Some(configuration) = &state.installation.configuration().osc_timecode
         && &configuration.address == address
         && let [
             OscArgument::Int(hours),
@@ -140,10 +157,10 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
     if input_locked {
         return;
     }
-    let mappings = state.engine.snapshot().control_mappings.clone();
+    let mappings = state.output.snapshot().control_mappings.clone();
     let origin = mapped_control_origin(state, &event);
     if mappings.iter().any(|mapping| mapping.matches(&event)) {
-        match state.activation_lock.clone().try_lock_owned() {
+        match state.active_show.try_acquire() {
             Ok(_activation) => {
                 apply_control_mappings(
                     state,

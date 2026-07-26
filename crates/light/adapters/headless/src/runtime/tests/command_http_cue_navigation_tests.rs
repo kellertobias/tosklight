@@ -102,12 +102,10 @@ async fn install_cue_navigation_show(
 }
 
 fn select_playback(scenario: &CommandHttpScenario, desk_id: Uuid, playback: Option<u16>) {
-    let show_id = scenario.state.active_show.read().as_ref().unwrap().id;
+    let show_id = scenario.state.active_show.current().as_ref().unwrap().id;
     scenario
         .state
-        .desk
-        .lock()
-        .set_selected_playback(desk_id, show_id, playback)
+        .installation.set_selected_playback(desk_id, show_id, playback)
         .unwrap();
 }
 
@@ -117,8 +115,7 @@ fn active_playback(
 ) -> Option<light_playback::ActivePlayback> {
     scenario
         .state
-        .engine
-        .playback_runtime()
+        .output.playback_runtime()
         .into_iter()
         .find(|runtime| runtime.playback_number == Some(playback))
 }
@@ -135,7 +132,7 @@ fn loaded_cue(scenario: &CommandHttpScenario, playback: u16) -> Option<f64> {
 fn playback_events(scenario: &CommandHttpScenario, baseline: u64) -> usize {
     let light_application::EventReplay::Events(events) = scenario
         .state
-        .application_events
+        .events
         .replay(baseline, &light_application::EventFilter::default())
     else {
         return usize::MAX;
@@ -157,8 +154,7 @@ fn playback_events(scenario: &CommandHttpScenario, baseline: u64) -> usize {
 fn compatibility_notifications(scenario: &CommandHttpScenario) -> usize {
     scenario
         .state
-        .audit_events
-        .lock()
+        .events.audit_events()
         .iter()
         .filter(|event| event.kind == "playback_changed")
         .count()
@@ -185,10 +181,9 @@ async fn command_line_text(scenario: &CommandHttpScenario) -> String {
 fn history_len(scenario: &CommandHttpScenario) -> usize {
     scenario
         .state
-        .command_history
-        .lock()
-        .get(&scenario.session.desk.id)
-        .map_or(0, std::collections::VecDeque::len)
+        .programming
+        .command_history(scenario.session.desk.id)
+        .len()
 }
 
 #[tokio::test]
@@ -197,7 +192,7 @@ async fn selected_and_explicit_go_to_and_load_use_the_typed_playback_action() {
     select_playback(&scenario, scenario.session.desk.id, Some(2));
 
     // Go To on the desk-selected Playback.
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let response = scenario.execute("go-to-selected", Some("CUE 3")).await;
     assert_eq!(response.status(), StatusCode::OK);
     let body = json(response).await;
@@ -211,7 +206,7 @@ async fn selected_and_explicit_go_to_and_load_use_the_typed_playback_action() {
     assert_eq!(compatibility_notifications(&scenario), 0);
 
     // Load on the desk-selected Playback leaves the current Cue and output untouched.
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let response = scenario.execute("load-selected", Some("CUE CUE 2")).await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
@@ -226,13 +221,11 @@ async fn selected_and_explicit_go_to_and_load_use_the_typed_playback_action() {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
     assert_eq!(current_cue(&scenario, 1), Some(3.0));
-    let show_id = scenario.state.active_show.read().as_ref().unwrap().id;
+    let show_id = scenario.state.active_show.current().as_ref().unwrap().id;
     assert_eq!(
         scenario
             .state
-            .desk
-            .lock()
-            .selected_playback(scenario.session.desk.id, show_id)
+            .installation.selected_playback(scenario.session.desk.id, show_id)
             .unwrap(),
         Some(2)
     );
@@ -260,7 +253,7 @@ async fn rejected_navigation_retains_the_command_line_and_mutates_no_runtime() {
         scenario.put("CUE 2", revision).await.status(),
         StatusCode::OK
     );
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let response = scenario.execute("missing-selection", None).await;
     assert_eq!(response.status(), StatusCode::OK);
     let body = json(response).await;
@@ -292,7 +285,7 @@ async fn rejected_navigation_retains_the_command_line_and_mutates_no_runtime() {
             "page 9 slot 9 is not assigned",
         ),
     ] {
-        let baseline = scenario.state.application_events.latest_sequence();
+        let baseline = scenario.state.events.latest_sequence();
         let response = scenario.execute(request_id, Some(command)).await;
         assert_eq!(response.status(), StatusCode::OK);
         let body = json(response).await;
@@ -317,13 +310,13 @@ async fn replay_and_semantic_no_change_publish_no_second_transition() {
     let (scenario, _show_id) = frozen_cue_navigation_scenario().await;
     select_playback(&scenario, scenario.session.desk.id, Some(2));
 
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let history = history_len(&scenario);
     let response = scenario.execute("go-to-once", Some("CUE 3")).await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
     assert_eq!(playback_events(&scenario, baseline), 1);
-    let after_first = scenario.state.application_events.latest_sequence();
+    let after_first = scenario.state.events.latest_sequence();
     let history_after_first = history_len(&scenario);
     assert_eq!(history_after_first, history + 1);
 
@@ -337,7 +330,7 @@ async fn replay_and_semantic_no_change_publish_no_second_transition() {
 
     // A distinct request that resolves to the same runtime instant is a semantic no-change: the
     // frozen clock keeps `activated_at` identical, so nothing about the runtime actually moves.
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let response = scenario.execute("go-to-again", Some("CUE 3")).await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
@@ -350,7 +343,7 @@ async fn replay_and_semantic_no_change_publish_no_second_transition() {
 #[tokio::test]
 async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
     let (scenario, _show_id) = cue_navigation_scenario().await;
-    let second_desk = scenario.state.desk.lock().add_desk("Wing", "wing").unwrap();
+    let second_desk = scenario.state.installation.add_desk("Wing", "wing").unwrap();
     select_playback(&scenario, scenario.session.desk.id, Some(2));
     select_playback(&scenario, second_desk.id, Some(1));
 
@@ -433,7 +426,7 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     // A locked desk rejects the mutating action without moving the runtime.
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     write_desk_lock(
         &scenario.state,
         scenario.session.desk.id,
@@ -467,7 +460,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
             ),
         )
     };
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let ws = dispatch_live_action(&scenario.state, &scenario.session, ws_command());
     assert!(ws.ok, "{:?}", ws.error);
     assert_eq!(current_cue(&scenario, 2), Some(3.0));
@@ -477,7 +470,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     // A delayed replay must not erase a newer command the operator has already started.
     scenario
         .state
-        .programmers
+        .programming
         .update_command_line(scenario.session.id, |current| {
             ("GROUP 7 +".into(), current.target, false)
         })
@@ -485,7 +478,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     let history = history_len(&scenario);
 
     // Replaying the compatibility request repeats neither interaction nor runtime side effects.
-    let after = scenario.state.application_events.latest_sequence();
+    let after = scenario.state.events.latest_sequence();
     let replay = dispatch_live_action(&scenario.state, &scenario.session, ws_command());
     assert!(replay.ok, "{:?}", replay.error);
     assert_eq!(playback_events(&scenario, after), 0);
@@ -494,14 +487,14 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     assert_eq!(command_line_text(&scenario).await, "GROUP 7 +");
     scenario
         .state
-        .programmers
+        .programming
         .complete_command_execution(scenario.session.id, Some(""), None)
         .unwrap();
 
     // Real OSC keys build the same command and reach the same typed action.
     let source: SocketAddr = "127.0.0.1:9031".parse().unwrap();
     let osc_alias = scenario.session.desk.osc_alias.clone();
-    scenario.state.osc_subscribers.lock().insert(
+    scenario.state.integrations.register_osc_subscriber(
         "cue-navigation-keys".into(),
         OscSubscriber {
             desk_alias: osc_alias.clone(),
@@ -516,7 +509,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
             last_highlight_action: None,
         },
     );
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     for action in ["cue", "cue", "digit-2", "enter"] {
         handle_programmer_osc(
             &scenario.state,

@@ -4,7 +4,7 @@ use super::*;
 async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocking() {
     let scenario = ActiveGroupScenario::new("Multi-desk Group refresh").await;
 
-    scenario.state.programmers.select_expression(
+    scenario.state.programming.select_expression(
         scenario.actor.id,
         Vec::new(),
         light_programmer::SelectionExpression::LiveGroup {
@@ -12,7 +12,7 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
             rule: light_programmer::SelectionRule::Even,
         },
     );
-    scenario.state.programmers.select_expression(
+    scenario.state.programming.select_expression(
         scenario.peer.id,
         vec![scenario.first],
         light_programmer::SelectionExpression::LiveGroup {
@@ -21,7 +21,7 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
         },
     );
 
-    let before_put = scenario.state.application_events.latest_sequence();
+    let before_put = scenario.state.events.latest_sequence();
     let changed = tokio::time::timeout(
         Duration::from_secs(2),
         put_active_object(
@@ -65,7 +65,7 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
     assert_selection_events_precede_show_event(&scenario.state, before_put);
     assert_group_membership(&scenario.state, &[scenario.first, scenario.second]);
 
-    let before_undo = scenario.state.application_events.latest_sequence();
+    let before_undo = scenario.state.events.latest_sequence();
     let undone = tokio::time::timeout(
         Duration::from_secs(2),
         undo_active_object(
@@ -117,7 +117,7 @@ async fn active_show_install_clears_each_desk_pending_choice_once() {
     let scenario = ActiveGroupScenario::new("Pending choice invalidation").await;
     let command = "COPY SET 1 CUE 1 AT SET 2 CUE 2";
     for session in [&scenario.actor, &scenario.peer] {
-        scenario.state.programmers.complete_command_execution(
+        scenario.state.programming.complete_command_execution(
             session.id,
             Some(command),
             Some(light_application::CueMoveCopyChoice {
@@ -131,7 +131,7 @@ async fn active_show_install_clears_each_desk_pending_choice_once() {
             }),
         );
     }
-    let before = scenario.state.application_events.latest_sequence();
+    let before = scenario.state.events.latest_sequence();
 
     let response = put_active_object(
         &scenario.state,
@@ -149,7 +149,7 @@ async fn active_show_install_clears_each_desk_pending_choice_once() {
         assert!(
             scenario
                 .state
-                .programmers
+                .programming
                 .command_line_state(session.id)
                 .unwrap()
                 .pending_choice
@@ -159,7 +159,7 @@ async fn active_show_install_clears_each_desk_pending_choice_once() {
             light_application::EventObject::programming_command_line(session.desk.id),
         );
         let light_application::EventReplay::Events(events) =
-            scenario.state.application_events.replay(before, &filter)
+            scenario.state.events.replay(before, &filter)
         else {
             panic!("choice invalidation should remain replayable")
         };
@@ -178,7 +178,7 @@ async fn active_show_install_clears_each_desk_pending_choice_once() {
 #[tokio::test]
 async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the_actor() {
     let scenario = ActiveGroupScenario::new("Nested Record Group refresh").await;
-    scenario.state.programmers.select_expression(
+    scenario.state.programming.select_expression(
         scenario.actor.id,
         vec![scenario.first, scenario.second],
         light_programmer::SelectionExpression::LiveGroup {
@@ -186,7 +186,7 @@ async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the
             rule: light_programmer::SelectionRule::Even,
         },
     );
-    scenario.state.programmers.select_expression(
+    scenario.state.programming.select_expression(
         scenario.peer.id,
         vec![scenario.first],
         light_programmer::SelectionExpression::LiveGroup {
@@ -195,8 +195,8 @@ async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the
         },
     );
 
-    let before_record = scenario.state.application_events.latest_sequence();
-    let before_audit = scenario.state.audit_events.lock().len();
+    let before_record = scenario.state.events.latest_sequence();
+    let before_audit = scenario.state.events.audit_events().len();
     let worker_state = scenario.state.clone();
     let worker_actor = scenario.actor.clone();
     let response = tokio::time::timeout(
@@ -248,8 +248,8 @@ async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the
     assert_eq!(
         scenario
             .state
-            .audit_events
-            .lock()
+            .events
+            .audit_events()
             .iter()
             .skip(before_audit)
             .filter(|event| {
@@ -265,8 +265,8 @@ async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the
     assert!(
         scenario
             .state
-            .audit_events
-            .lock()
+            .events
+            .audit_events()
             .iter()
             .skip(before_audit)
             .all(|event| {
@@ -348,11 +348,10 @@ impl ActiveGroupScenario {
 
 fn two_desk_sessions(state: &AppState) -> (Session, Session) {
     let (actor_user, peer_user, actor_desk, peer_desk) = {
-        let store = state.desk.lock();
-        let actor_user = store.users().unwrap().remove(0);
-        let peer_user = store.add_user("Peer operator").unwrap();
-        let actor_desk = store.add_desk("Front", "front").unwrap();
-        let peer_desk = store.add_desk("Wing", "wing").unwrap();
+        let actor_user = state.installation.users().unwrap().remove(0);
+        let peer_user = state.installation.add_user("Peer operator").unwrap();
+        let actor_desk = state.installation.add_desk("Front", "front").unwrap();
+        let peer_desk = state.installation.add_desk("Wing", "wing").unwrap();
         (actor_user, peer_user, actor_desk, peer_desk)
     };
     let actor = Session {
@@ -370,9 +369,9 @@ fn two_desk_sessions(state: &AppState) -> (Session, Session) {
         desk: peer_desk,
     };
     for session in [&actor, &peer] {
-        state.programmers.start(session.id, session.user.id);
+        state.programming.start(session.id, session.user.id);
         attach_session_command_context(state, session);
-        state.sessions.write().insert(session.id, session.clone());
+        state.sessions.insert_session(session.clone());
     }
     (actor, peer)
 }
@@ -428,7 +427,7 @@ async fn undo_active_object(
         object_id,
         expected_revision,
     );
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     match run_active_show_object_undo_async(state, activation, action).await {
         Ok((result, _activation)) => Json(serde_json::json!({
             "revision": result.change.object_revision,
@@ -450,7 +449,7 @@ fn group_body(fixtures: impl IntoIterator<Item = light_core::FixtureId>) -> serd
 fn assert_group_membership(state: &AppState, expected: &[light_core::FixtureId]) {
     assert_eq!(
         state
-            .engine
+            .output
             .snapshot()
             .groups
             .iter()
@@ -491,7 +490,7 @@ fn selection_refresh_events(
         .with_capability(light_application::EventCapability::Programmer)
         .with_capability(light_application::EventCapability::Show);
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(after_sequence, &filter)
+        state.events.replay(after_sequence, &filter)
     else {
         panic!("the scoped selection refresh events should remain replayable")
     };
@@ -510,7 +509,7 @@ fn assert_selection_refresh(
         light_application::EventObject::programming_selection(session.desk.id),
     );
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(after_sequence, &filter)
+        state.events.replay(after_sequence, &filter)
     else {
         panic!("the selection event should remain replayable")
     };
@@ -539,7 +538,7 @@ fn assert_selection_refresh(
     assert!(change.command_line().is_none());
     assert_eq!(change.selection().unwrap().selected, expected);
     assert_eq!(
-        state.programmers.selection(session.id).unwrap().selected,
+        state.programming.selection(session.id).unwrap().selected,
         expected
     );
     correlation

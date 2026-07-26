@@ -60,7 +60,7 @@ pub(super) fn intercept_update_playback_target(
 ) -> bool {
     if !touched
         || !state
-            .programmers
+            .programming
             .get(session.id)
             .is_some_and(|programmer| command_line_arms_update(&programmer.command_line))
     {
@@ -84,7 +84,7 @@ pub(super) fn intercept_update_playback_target(
         }
     };
     state
-        .programmers
+        .programming
         .set_command_line(session.id, String::new());
     let _ = persist_programmer(state, session);
     emit(
@@ -136,12 +136,12 @@ fn handle_osc_page(state: &AppState, parts: &[&str], arguments: &[OscArgument]) 
     let Some(page) = page else {
         return true;
     };
-    let Ok(_activation) = state.activation_lock.clone().try_lock_owned() else {
+    let Ok(_activation) = state.active_show.try_acquire() else {
         return true;
     };
     let Some((show, desk)) = state
         .active_show
-        .read()
+        .current()
         .clone()
         .and_then(|show| osc_control_desk(state, parts[1]).map(|desk| (show, desk)))
     else {
@@ -150,7 +150,7 @@ fn handle_osc_page(state: &AppState, parts: &[&str], arguments: &[OscArgument]) 
     let context =
         light_application::ActionContext::system(desk.id, light_application::ActionSource::Osc);
     let completed = state
-        .playback_service
+        .playback
         .run_unit_of_work(playback_service::ChangePage {
             state,
             show: &show,
@@ -208,12 +208,7 @@ pub(super) fn osc_playback_session(
     action_desk: Option<&ControlDesk>,
 ) -> Result<Option<Session>, ()> {
     let source = source.and_then(|source| source.parse::<SocketAddr>().ok());
-    let subscribed = state
-        .osc_subscribers
-        .lock()
-        .values()
-        .find(|subscriber| Some(subscriber.command_source) == source)
-        .cloned();
+    let subscribed = source.and_then(|source| state.integrations.osc_subscriber_for_source(source));
     if let Some(subscriber) = subscribed {
         let desk = action_desk.ok_or(())?;
         if !subscriber.desk_alias.eq_ignore_ascii_case(action_alias) {
@@ -221,10 +216,8 @@ pub(super) fn osc_playback_session(
         }
         let session = state
             .sessions
-            .read()
-            .get(&subscriber.session_id)
+            .session(subscriber.session_id)
             .filter(|session| session.connected && session.desk.id == desk.id)
-            .cloned()
             .ok_or(())?;
         if !subscriber
             .desk_alias
@@ -237,10 +230,9 @@ pub(super) fn osc_playback_session(
     Ok(action_desk.and_then(|desk| {
         state
             .sessions
-            .read()
-            .values()
+            .sessions()
+            .into_iter()
             .find(|session| session.connected && session.desk.id == desk.id)
-            .cloned()
     }))
 }
 
@@ -270,7 +262,7 @@ pub(super) fn handle_playback_osc(
     let Some((playback_address, action_index)) = osc_playback_address(&parts) else {
         return;
     };
-    let Ok(_activation) = state.activation_lock.clone().try_lock_owned() else {
+    let Ok(_activation) = state.active_show.try_acquire() else {
         return;
     };
     let button = (parts[action_index] == "button")
@@ -290,14 +282,8 @@ pub(super) fn handle_playback_osc(
     } else {
         None
     };
-    let subscribed = source_socket.and_then(|source| {
-        state
-            .osc_subscribers
-            .lock()
-            .values()
-            .find(|subscriber| subscriber.command_source == source)
-            .cloned()
-    });
+    let subscribed =
+        source_socket.and_then(|source| state.integrations.osc_subscriber_for_source(source));
     let action_alias = path_alias
         .map(str::to_owned)
         .or_else(|| {
@@ -311,8 +297,7 @@ pub(super) fn handle_playback_osc(
         .and_then(|subscriber| {
             state
                 .sessions
-                .read()
-                .get(&subscriber.session_id)
+                .session(subscriber.session_id)
                 .map(|session| session.desk.clone())
         })
         .or_else(|| osc_control_desk(state, &action_alias));
@@ -337,9 +322,8 @@ pub(super) fn handle_playback_osc(
             });
     if suppression_input.is_some_and(|input| {
         state
-            .osc_cue_record_suppression
-            .lock()
-            .suppresses_input(input, Instant::now())
+            .integrations
+            .suppresses_osc_input(input, Instant::now())
     }) {
         return;
     }
@@ -353,9 +337,8 @@ pub(super) fn handle_playback_osc(
     {
         if let Some(input) = suppression_input {
             state
-                .osc_cue_record_suppression
-                .lock()
-                .remember_intercept(input, Instant::now());
+                .integrations
+                .remember_osc_intercept(input, Instant::now());
         }
         return;
     }
@@ -383,14 +366,14 @@ pub(super) fn handle_playback_osc(
 }
 
 pub(super) fn ingest_timecode(state: &AppState, timecode: SmpteTimecode) {
-    let current = state.timecode_router.lock().ingest(timecode).cloned();
+    let current = state.output.ingest_timecode(timecode);
     if let Some(timecode) = current {
         let fps = u64::from(timecode.rate.nominal_frames());
         let seconds = u64::from(timecode.hours) * 3600
             + u64::from(timecode.minutes) * 60
             + u64::from(timecode.seconds);
         state
-            .engine
+            .output
             .set_timecode_frame(Some(seconds * fps + u64::from(timecode.frames)));
     }
 }

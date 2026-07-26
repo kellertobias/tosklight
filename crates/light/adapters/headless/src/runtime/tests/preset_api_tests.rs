@@ -74,9 +74,7 @@ async fn preset_object_api_uses_family_scoped_numbers() {
         assert_eq!(response.status(), StatusCode::OK);
     }
     let entry = state
-        .desk
-        .lock()
-        .show(light_core::ShowId(Uuid::parse_str(show_id).unwrap()))
+        .installation.show(light_core::ShowId(Uuid::parse_str(show_id).unwrap()))
         .unwrap()
         .unwrap();
     ShowStore::open(&entry.path)
@@ -169,7 +167,7 @@ async fn typed_recording_persists_default_family_preset_under_its_bare_address()
         .await
         .unwrap();
     assert_eq!(opened.status(), StatusCode::OK);
-    state.programmers.set(
+    state.programming.set(
         light_core::SessionId(Uuid::parse_str(&session_id).unwrap()),
         fixture,
         light_core::AttributeKey("pan".into()),

@@ -58,7 +58,7 @@ fn mvr_fixture_ids(objects: &[light_show::VersionedObject]) -> HashMap<Uuid, Str
 }
 
 fn store_unresolved_mvr_fixture(
-    store: &ShowStore,
+    store: &ActiveShowRepository,
     source: &light_mvr::MvrFixture,
 ) -> Result<(), ApiError> {
     let id = source.uuid.to_string();
@@ -82,7 +82,7 @@ fn store_unresolved_mvr_fixture(
 }
 
 fn resolved_mvr_address(
-    store: &ShowStore,
+    store: &ActiveShowRepository,
     source: &light_mvr::MvrFixture,
     fixture_id: light_core::FixtureId,
     definition: &light_fixture::FixtureDefinition,
@@ -180,7 +180,7 @@ fn patched_mvr_fixture(
 }
 
 fn store_resolved_mvr_fixture(
-    store: &ShowStore,
+    store: &ActiveShowRepository,
     source: &light_mvr::MvrFixture,
     patched: &light_fixture::PatchedFixture,
     existing: &[light_show::VersionedObject],
@@ -211,7 +211,7 @@ fn store_resolved_mvr_fixture(
 }
 
 pub(super) fn apply_mvr_to_store(
-    store: &ShowStore,
+    store: &ActiveShowRepository,
     document: &light_mvr::MvrDocument,
     definitions: &[light_fixture::FixtureDefinition],
     resolutions: &HashMap<Uuid, MvrResolution>,

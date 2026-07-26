@@ -20,11 +20,8 @@ impl CommandHttpScenario {
         let app = router(state.clone());
         let (token, _) = login(&app, "Operator").await;
         let session = state
-            .sessions
-            .read()
-            .values()
+            .sessions.sessions().into_iter()
             .find(|session| session.token == token)
-            .cloned()
             .unwrap();
         Self {
             path: "/api/v2/command-line".into(),
@@ -40,8 +37,7 @@ impl CommandHttpScenario {
         let fixture = schema_v2_direct_fixture().0;
         let fixture_id = fixture.fixture_id;
         self.state
-            .engine
-            .replace_snapshot(EngineSnapshot {
+            .output.replace_snapshot(EngineSnapshot {
                 fixtures: vec![fixture].into(),
                 groups: vec![light_programmer::GroupDefinition {
                     id: "1".into(),
@@ -596,17 +592,14 @@ impl CommandHttpScenario {
 
     fn history_len(&self) -> usize {
         self.state
-            .command_history
-            .lock()
-            .get(&self.session.desk.id)
-            .unwrap()
+            .programming
+            .command_history(self.session.desk.id)
             .len()
     }
 
     fn cue_list_compatibility_payloads(&self) -> Vec<serde_json::Value> {
         self.state
-            .audit_events
-            .lock()
+            .events.audit_events()
             .iter()
             .filter(|event| {
                 event.kind == "show_object_changed"

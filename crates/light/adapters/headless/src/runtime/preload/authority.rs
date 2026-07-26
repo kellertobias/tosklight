@@ -4,7 +4,6 @@ use light_application::{
     ProgrammingPreloadLifecycleAction, ProgrammingPreloadLifecycleRequest,
     ProgrammingPreloadRevisionExpectation,
 };
-use light_show::ShowStore;
 
 pub(super) struct PreloadCommitAuthority {
     pub(super) show_id: light_core::ShowId,
@@ -27,13 +26,13 @@ pub(super) fn validate(
     };
     let active = state
         .active_show
-        .read()
+        .current()
         .clone()
         .ok_or_else(|| conflict("Preload GO requires an active Show"))?;
     if active.id != show_id {
         return Err(conflict("the requested Show is not active"));
     }
-    let store = ShowStore::open(&active.path)
+    let store = ActiveShowRepository::open(&active.path)
         .map_err(|error| internal(format!("failed to open the active Show: {error}")))?;
     let stored_id = store
         .id()
@@ -48,7 +47,7 @@ pub(super) fn validate(
         .map_err(|error| internal(format!("failed to read the active Show revision: {error}")))?
         .value();
     assert_expected(expected_show_revision, show_revision, "active Show")?;
-    let playback_event_sequence = state.application_events.latest_sequence();
+    let playback_event_sequence = state.events.latest_sequence();
     validate_runtime_cursor(
         state,
         session,
@@ -81,7 +80,7 @@ fn validate_runtime_cursor(
         ));
     }
     let pending = state
-        .programmers
+        .programming
         .preload_playback_actions(session.id)
         .ok_or_else(|| conflict("Preload playback queue is unavailable"))?;
     if pending.is_empty() {
@@ -95,7 +94,7 @@ fn validate_runtime_cursor(
                 .with_object(EventObject::playback(action.playback_number))
                 .with_object(EventObject::playback_view(desk_id))
         });
-    match state.application_events.replay(cursor, &filter) {
+    match state.events.replay(cursor, &filter) {
         EventReplay::Events(events) if events.is_empty() => Ok(()),
         EventReplay::Events(_) => Err(revision_conflict(
             "a queued Playback or origin desk changed after the expected cursor",

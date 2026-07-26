@@ -1,10 +1,11 @@
 //! Process bootstrap and ownership of server background tasks.
 
+use super::capabilities::runtime::supervisor::CapabilitySupervisors;
+use super::capability_resources::*;
 use super::{
     AppState, HighlightRegistry, matter, normalize_restored_virtual_playback_exclusions,
     output_scheduler, playback_telemetry, refresh_matter_bridge, refresh_speed_group_engine,
-    router, spawn_control_inputs, spawn_matter_bridge_sync, startup_options,
-    startup_state::StartupState,
+    router, startup_options, startup_state::StartupState,
 };
 use axum::Router;
 use light_application::{
@@ -17,15 +18,10 @@ use light_output::OutputHealth;
 use light_show::ShowEntry;
 use parking_lot::{Mutex, RwLock};
 use std::{
-    collections::{HashMap, VecDeque},
     env,
     net::{SocketAddr, UdpSocket},
-    sync::{
-        Arc,
-        atomic::{AtomicU16, AtomicU64},
-    },
+    sync::{Arc, atomic::AtomicU16},
 };
-use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 pub(super) async fn run() -> anyhow::Result<()> {
@@ -62,11 +58,12 @@ struct RuntimeResources {
     pub(super) timecode_router: Arc<Mutex<TimecodeRouter>>,
     pub(super) matter_bridge: Arc<matter::MatterBridgeAdapter>,
     pub(super) cancellation: CancellationToken,
+    pub(super) output_cancellation: CancellationToken,
     pub(super) scheduler: output_scheduler::OutputScheduler,
     pub(super) events: EventBus,
     pub(super) playback_service: PlaybackService,
     pub(super) active_show: Arc<RwLock<Option<ShowEntry>>>,
-    pub(super) activation_lock: Arc<tokio::sync::Mutex<()>>,
+    pub(super) activation: ActiveShowCoordinator,
 }
 
 impl RuntimeResources {
@@ -84,22 +81,25 @@ impl RuntimeResources {
         ));
         let matter_bridge = Arc::new(matter::MatterBridgeAdapter::default());
         let cancellation = CancellationToken::new();
+        let output_cancellation = cancellation.child_token();
         let events = EventBus::default();
         let playback_service = PlaybackService::new(events.clone());
         let active_show = Arc::new(RwLock::new(startup.persistent.active_show.clone()));
-        let activation_lock = Arc::new(tokio::sync::Mutex::new(()));
+        let activation = ActiveShowCoordinator::new();
         let scheduler = output_scheduler::start(output_scheduler::Config {
             bind_ip: configuration.output_bind_ip,
             engine: Arc::clone(&startup.engine),
             health: Arc::clone(&output_health),
             rate: Arc::clone(&output_rate),
             timecode: Arc::clone(&timecode_router),
-            cancellation: cancellation.clone(),
+            cancellation: output_cancellation.clone(),
             persisted_runtime,
-            playback_service: playback_service.clone(),
-            active_show: Arc::clone(&active_show),
-            activation_lock: Arc::clone(&activation_lock),
-            telemetry: Arc::clone(&playback_telemetry),
+            playback: PlaybackRenderCapability::new(
+                playback_service.clone(),
+                Arc::clone(&playback_telemetry),
+            ),
+            active_show: ActiveShowProjection::new(Arc::clone(&active_show)),
+            activation: activation.clone(),
             test_bench: startup.persistent.test_bench,
         })
         .await?;
@@ -110,11 +110,12 @@ impl RuntimeResources {
             timecode_router,
             matter_bridge,
             cancellation,
+            output_cancellation,
             scheduler,
             events,
             playback_service,
             active_show,
-            activation_lock,
+            activation,
         })
     }
 }
@@ -122,10 +123,7 @@ impl RuntimeResources {
 struct RunningServer {
     pub(super) bind: SocketAddr,
     pub(super) app: Router,
-    pub(super) cancellation: CancellationToken,
-    pub(super) scheduler: output_scheduler::OutputScheduler,
-    pub(super) input_tasks: Vec<JoinHandle<()>>,
-    pub(super) matter_sync: JoinHandle<()>,
+    pub(super) supervisors: CapabilitySupervisors,
 }
 
 impl RunningServer {
@@ -138,29 +136,39 @@ impl RunningServer {
         refresh_matter_bridge(&state);
         refresh_speed_group_engine(&state);
         resources.scheduler.start_rendering()?;
-        let matter_sync = spawn_matter_bridge_sync(state.clone(), resources.cancellation.clone());
-        let input_tasks = spawn_control_inputs(&state, resources.cancellation.clone());
+        let supervisors = CapabilitySupervisors::start(
+            resources.cancellation,
+            resources.output_cancellation,
+            resources.scheduler,
+            &state,
+        );
         let app = router(state);
         Ok(Self {
             bind,
             app,
-            cancellation: resources.cancellation,
-            scheduler: resources.scheduler,
-            input_tasks,
-            matter_sync,
+            supervisors,
         })
     }
 
     async fn serve(self) -> anyhow::Result<()> {
-        tracing::info!(bind=%self.bind, "starting light control server");
-        let listener = tokio::net::TcpListener::bind(self.bind).await?;
-        axum::serve(listener, self.app)
-            .with_graceful_shutdown(wait_for_shutdown(self.cancellation.clone()))
-            .await?;
-        self.scheduler.wait().await;
-        join_tasks(self.input_tasks).await;
-        let _ = self.matter_sync.await;
-        Ok(())
+        let Self {
+            bind,
+            app,
+            supervisors,
+        } = self;
+        tracing::info!(%bind, "starting light control server");
+        let cancellation = supervisors.cancellation();
+        let server = async move {
+            let listener = tokio::net::TcpListener::bind(bind).await?;
+            axum::serve(listener, app)
+                .with_graceful_shutdown(wait_for_shutdown(cancellation))
+                .await
+                .map_err(anyhow::Error::from)
+        }
+        .await;
+        let shutdown = supervisors.shutdown().await;
+        server?;
+        shutdown
     }
 }
 
@@ -172,109 +180,71 @@ async fn wait_for_shutdown(cancellation: CancellationToken) {
     cancellation.cancel();
 }
 
-async fn join_tasks(tasks: Vec<JoinHandle<()>>) {
-    for task in tasks {
-        let _ = task.await;
-    }
-}
-
 fn build_app_state(
     startup: StartupState,
     resources: &RuntimeResources,
 ) -> anyhow::Result<AppState> {
     let output = resources.scheduler.network_output();
     let output_sequences = resources.scheduler.sequences();
-    let output_control = resources.scheduler.control();
+    let output_control = resources.scheduler.control_capability();
     let matter_transport = Arc::new(matter::MatterTransport::new(&startup.persistent.data_dir));
     let osc_feedback = Arc::new(UdpSocket::bind("0.0.0.0:0")?);
     let application_events = resources.events.clone();
     let active_show_service = ActiveShowService::new(application_events.clone());
     let highlight = Arc::new(HighlightRegistry::default());
-    let highlight_service = light_application::HighlightService::new(Arc::clone(&highlight));
     let programming = ProgrammingService::new(
         startup.programmers.clone(),
         application_events.clone(),
         Arc::clone(&highlight),
     );
+    let playback_topology = PlaybackTopologyService::new(active_show_service.clone());
+    let selective_import = SelectiveShowImportService::new(active_show_service.clone());
     Ok(AppState {
-        desk: Arc::new(Mutex::new(startup.persistent.desk)),
-        fixture_library: Arc::new(Mutex::new(startup.persistent.fixture_library)),
-        data_dir: startup.persistent.data_dir,
-        sessions: Arc::default(),
-        session_clients: Arc::default(),
-        programmers: startup.programmers.clone(),
-        programming,
-        playback_service: resources.playback_service.clone(),
-        output_runtime_service: OutputRuntimeService::new(application_events.clone()),
-        speed_group_service: SpeedGroupService::new(application_events.clone()),
-        engine: startup.engine,
-        highlight,
-        highlight_service,
-        patch_preview_highlights: Arc::default(),
-        output_health: Arc::clone(&resources.output_health),
-        output_rate: Arc::clone(&resources.output_rate),
-        playback_telemetry: Arc::clone(&resources.playback_telemetry),
-        configuration: Arc::new(RwLock::new(startup.persistent.configuration)),
-        matter_bridge: Arc::clone(&resources.matter_bridge),
-        matter_transport: Some(matter_transport),
-        output_control,
-        #[cfg(test)]
-        output_runtime_persistence_attempts: Arc::new(AtomicU64::new(0)),
-        #[cfg(test)]
-        output_runtime_persistence_failure: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        #[cfg(test)]
-        speed_group_persistence_attempts: Arc::new(AtomicU64::new(0)),
-        #[cfg(test)]
-        speed_group_persistence_failure: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        activation_lock: Arc::clone(&resources.activation_lock),
-        timecode_router: Arc::clone(&resources.timecode_router),
-        active_show: Arc::clone(&resources.active_show),
-        active_show_document: Arc::default(),
-        active_show_backup_checkpoint: Arc::default(),
-        active_show_error: Arc::new(RwLock::new(startup.active_show_error)),
-        application_events: application_events.clone(),
-        active_show_service: active_show_service.clone(),
-        playback_topology: PlaybackTopologyService::new(active_show_service.clone()),
-        show_patch: ShowPatchService::new(active_show_service.clone()),
-        show_library_replay: Arc::default(),
-        fixture_library_replay: Arc::default(),
-        show_object_replay: Arc::default(),
-        show_object_intent_replay: Arc::default(),
-        preset_generation_replay: Arc::default(),
-        screen_configuration_replay: Arc::default(),
-        control_desk_configuration_replay: Arc::default(),
-        desk_management_replay: Arc::default(),
-        stage_layout_replay: Arc::default(),
-        virtual_playback_zones_replay: Arc::default(),
-        selective_show_import: SelectiveShowImportService::new(active_show_service),
-        #[cfg(test)]
-        patch_profile_resolution: Arc::default(),
-        #[cfg(test)]
-        active_show_http_lifecycle: Arc::default(),
-        #[cfg(test)]
-        preload_store_release_lifecycle: Arc::default(),
-        #[cfg(test)]
-        patch_lifecycle: Arc::default(),
-        audit_events: Arc::new(Mutex::new(VecDeque::with_capacity(2048))),
-        command_history: Arc::new(Mutex::new(HashMap::new())),
-        event_revision: Arc::new(AtomicU64::new(0)),
-        desk_token: desk_token(),
-        shutdown: resources.cancellation.clone(),
-        media_cache: Arc::new(Mutex::new(MediaCache::default())),
-        media_status: Arc::new(RwLock::new(HashMap::new())),
-        file_input_contexts: Arc::new(Mutex::new(HashMap::new())),
-        osc_subscribers: Arc::new(Mutex::new(HashMap::new())),
-        osc_cue_record_suppression: Arc::default(),
-        osc_feedback: Some(osc_feedback),
-        #[cfg(test)]
-        osc_feedback_capture: Arc::new(Mutex::new(Vec::new())),
-        mvr_imports: Arc::new(Mutex::new(HashMap::new())),
-        network_output: Some(output),
-        output_sequences,
-        manual_clock: startup.manual_clock,
-        test_clock_lock: Arc::new(tokio::sync::Mutex::new(())),
-        speed_groups: startup.speed_groups,
-        sound_capture_owners: Arc::new(Mutex::new([None; 5])),
+        installation: InstallationResource::new(
+            startup.persistent.desk,
+            startup.persistent.fixture_library,
+            startup.persistent.data_dir,
+            startup.persistent.configuration,
+            desk_token(),
+        ),
+        sessions: SessionResource::new(),
+        programming: ProgrammingResource::new(startup.programmers, programming),
+        playback: PlaybackResource::new(
+            resources.playback_service.clone(),
+            playback_topology,
+            Arc::clone(&resources.playback_telemetry),
+        ),
+        highlight: HighlightResource::new(highlight),
+        output: OutputResource::new(
+            OutputRuntimeService::new(application_events.clone()),
+            SpeedGroupService::new(application_events.clone()),
+            startup.engine,
+            Arc::clone(&resources.output_health),
+            Arc::clone(&resources.output_rate),
+            output_control,
+            Arc::clone(&resources.timecode_router),
+            Some(output),
+            output_sequences,
+            startup.manual_clock,
+            startup.speed_groups,
+        ),
+        active_show: ActiveShowResource::new(
+            resources.activation.clone(),
+            Arc::clone(&resources.active_show),
+            startup.active_show_error,
+            active_show_service.clone(),
+            ShowPatchService::new(active_show_service),
+            selective_import,
+        ),
+        events: EventResource::new(application_events),
+        integrations: IntegrationResource::new(
+            Arc::clone(&resources.matter_bridge),
+            Some(matter_transport),
+            Some(osc_feedback),
+        ),
+        media: MediaResource::new(MediaCache::default()),
+        replay: ReplayResource::default(),
+        lifecycle: LifecycleResource::new(resources.cancellation.clone()),
     })
 }
 

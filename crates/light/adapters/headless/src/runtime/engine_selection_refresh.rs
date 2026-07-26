@@ -53,13 +53,13 @@ pub(super) fn install_prepared_snapshot_with_selection_refresh(
     playback: PlaybackInstallPolicy,
     highlight: HighlightInstallPolicy,
 ) -> ProgrammingSelectionRefreshResult<()> {
-    let groups_changed = selection_topology(&state.engine.snapshot().groups)
+    let groups_changed = selection_topology(&state.output.snapshot().groups)
         != selection_topology(&prepared.snapshot().groups);
     let finish_owner = owner
         .is_some_and(|owner| matches!(owner.gesture, ProgrammingOwnerGesturePolicy::Finish(_)));
     let owner_context = owner.and_then(|owner| selection_target(state, owner.desk_id));
     let pending_choice = state
-        .programmers
+        .programming
         .has_pending_command_choices_except_context(
             owner_context.map(|target| target.interaction_id),
         );
@@ -82,7 +82,7 @@ pub(super) fn install_prepared_snapshot_with_selection_refresh(
     let install = || {
         install(state, prepared, playback);
         state
-            .programmers
+            .programming
             .clear_pending_command_choices_except_context(
                 owned_target.map(|target| target.interaction_id),
             );
@@ -111,16 +111,16 @@ fn finish_owned_selection_gesture(state: &AppState, owner: Option<ProgrammingIns
     }) = owner
     {
         state
-            .programmers
+            .programming
             .finish_selection_gesture_within_interaction(session_id);
     }
 }
 
 fn install(state: &AppState, prepared: PreparedEngineSnapshot, policy: PlaybackInstallPolicy) {
     match policy {
-        PlaybackInstallPolicy::Preserve => state.engine.install_prepared_snapshot(prepared),
+        PlaybackInstallPolicy::Preserve => state.output.install_prepared_snapshot(prepared),
         PlaybackInstallPolicy::Release => state
-            .engine
+            .output
             .install_prepared_snapshot_releasing_playback(prepared),
     }
 }
@@ -131,10 +131,9 @@ fn selection_targets(
 ) -> Vec<ProgrammingSelectionTarget> {
     let mut sessions = state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .filter(|session| Some(session.desk.id) != owned_desk)
-        .cloned()
         .collect::<Vec<_>>();
     sessions.sort_unstable_by_key(|session| (session.desk.id, session.id.0));
     sessions.dedup_by_key(|session| session.desk.id);
@@ -147,7 +146,7 @@ fn selection_targets(
 fn selection_target(state: &AppState, desk_id: Uuid) -> Option<ProgrammingSelectionTarget> {
     let interaction_id = SessionId(desk_id);
     state
-        .programmers
+        .programming
         .selection(interaction_id)
         .map(|_| ProgrammingSelectionTarget {
             desk_id,
@@ -158,10 +157,9 @@ fn selection_target(state: &AppState, desk_id: Uuid) -> Option<ProgrammingSelect
 fn highlight_sessions(state: &AppState, owner: Option<ProgrammingInstallOwner>) -> Vec<Session> {
     let mut sessions = state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .filter(|session| should_reconcile_highlight(session, owner))
-        .cloned()
         .collect::<Vec<_>>();
     sessions.sort_unstable_by_key(|session| (session.desk.id, session.user.id.0, session.id.0));
     let mut seen = HashSet::new();

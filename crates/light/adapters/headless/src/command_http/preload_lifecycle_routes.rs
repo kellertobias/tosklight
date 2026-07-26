@@ -12,7 +12,7 @@ use light_wire::v2::preload_lifecycle::{
 };
 use uuid::Uuid;
 
-use super::super::{ApiError, AppState, Session};
+use super::super::{ApiError, AppState, Session, capability_resources::ActiveShowPermit};
 use super::{programming_ports::ServerProgrammingPorts, routes::http_context};
 use crate::tolerant_json::TolerantJson;
 
@@ -41,7 +41,7 @@ async fn apply_action(
     let context = http_context(&session, Some(&request.request_id));
     let command = super::preload_lifecycle_wire::command(&request);
     let activation = if needs_show_lock {
-        Some(state.activation_lock.clone().lock_owned().await)
+        Some(state.active_show.acquire().await)
     } else {
         None
     };
@@ -59,7 +59,7 @@ async fn run_action(
     state: AppState,
     session: Session,
     action: ActionEnvelope<light_application::ProgrammingPreloadLifecycleRequest>,
-    activation: Option<tokio::sync::OwnedMutexGuard<()>>,
+    activation: Option<ActiveShowPermit>,
 ) -> Result<light_application::ProgrammingPreloadLifecycleResult, PreloadLifecycleHttpError> {
     tokio::task::spawn_blocking(move || {
         let ports = ServerProgrammingPorts::new(&state, &session, "http_preload_lifecycle", true);

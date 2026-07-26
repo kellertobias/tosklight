@@ -65,7 +65,7 @@ fn update_undo_snapshot(
 #[test]
 fn command_line_update_enter_applies_the_configured_group_default_directly() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -73,9 +73,9 @@ fn command_line_update_enter_applies_the_configured_group_default_directly() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     attach_session_command_context(&state, &session);
-    state.sessions.write().insert(session.id, session.clone());
+    state.sessions.insert_session(session.clone());
 
     let first = light_core::FixtureId::new();
     let added = light_core::FixtureId::new();
@@ -86,21 +86,22 @@ fn command_line_update_enter_applies_the_configured_group_default_directly() {
         ..Default::default()
     };
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             groups: vec![group.clone()].into(),
             ..Default::default()
         })
         .unwrap();
-    state.programmers.select(session.id, [first, added]);
-    state.configuration.write().update_settings_by_desk.insert(
-        session.desk.id,
-        update::UpdateSettings {
-            group_mode: update::ExistingContentMode::AddNew,
-            show_update_modal_on_touch: true,
-            ..Default::default()
-        },
-    );
+    state.programming.select(session.id, [first, added]);
+    state.installation.update_configuration(|configuration| {
+        configuration.update_settings_by_desk.insert(
+            session.desk.id,
+            update::UpdateSettings {
+                group_mode: update::ExistingContentMode::AddNew,
+                show_update_modal_on_touch: true,
+                ..Default::default()
+            },
+        );
+    });
 
     let show_path = data_dir.join("shows/update-enter-default.show");
     let show_id = initialise_show(&show_path, "Update Enter default").unwrap();
@@ -112,8 +113,8 @@ fn command_line_update_enter_applies_the_configured_group_default_directly() {
         updated_at: String::new(),
         revision_copy: None,
     };
-    *state.active_show.write() = Some(entry);
-    let store = ShowStore::open(&show_path).unwrap();
+    state.active_show.replace_current(Some(entry));
+    let store = ActiveShowRepository::open(&show_path).unwrap();
     store
         .put_object("group", "981", &serde_json::to_value(&group).unwrap(), 0)
         .unwrap();
@@ -128,7 +129,7 @@ fn command_line_update_enter_applies_the_configured_group_default_directly() {
     .unwrap();
     assert_eq!(updated.fixtures, vec![first, added]);
     assert_eq!(
-        state.programmers.get(session.id).unwrap().selected,
+        state.programming.get(session.id).unwrap().selected,
         vec![first, added]
     );
     let _ = std::fs::remove_dir_all(data_dir);
@@ -172,7 +173,7 @@ fn touched_update_target_rejects_a_changed_playback_context_but_explicit_cue_rem
 #[test]
 fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -180,21 +181,19 @@ fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     attach_session_command_context(&state, &session);
-    state.sessions.write().insert(session.id, session.clone());
+    state.sessions.insert_session(session.clone());
 
     let fixture = light_core::FixtureId::new();
     let (cue_list, snapshot) = update_undo_snapshot(fixture);
     let cue_list_id = cue_list.id;
     state
-        .engine
-        .replace_snapshot(snapshot)
+        .output.replace_snapshot(snapshot)
         .unwrap();
     for _ in 0..3 {
         state
-            .engine
-            .execute_playback(EnginePlaybackCommand::Pool {
+            .output.execute_playback(EnginePlaybackCommand::Pool {
                 number: 7,
                 action: PoolPlaybackAction::Go,
             })
@@ -211,8 +210,8 @@ fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
         updated_at: String::new(),
         revision_copy: None,
     };
-    *state.active_show.write() = Some(entry.clone());
-    let store = ShowStore::open(&show_path).unwrap();
+    state.active_show.replace_current(Some(entry.clone()));
+    let store = ActiveShowRepository::open(&show_path).unwrap();
     let cue_list_object_id = cue_list_id.0.to_string();
     let stored_revision = store
         .put_object(
@@ -226,13 +225,13 @@ fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
         .unwrap()
         .body;
 
-    state.programmers.set(
+    state.programming.set(
         session.id,
         fixture,
         light_core::AttributeKey::intensity(),
         light_core::AttributeValue::Normalized(0.8),
     );
-    state.programmers.set(
+    state.programming.set(
         session.id,
         fixture,
         light_core::AttributeKey("color.red".into()),
@@ -257,7 +256,7 @@ fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
     assert_eq!(preview.revision, stored_revision);
     assert_eq!(preview.preview.changed_count(), 2);
 
-    state.programmers.set(
+    state.programming.set(
         session.id,
         fixture,
         light_core::AttributeKey::intensity(),

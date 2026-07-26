@@ -97,7 +97,9 @@ async fn runtime_v2_session_rejects_a_malformed_known_field() {
 #[tokio::test]
 async fn runtime_v2_preserves_diagnostics_auth_and_recovery_reporting() {
     let (state, data_dir) = test_state();
-    *state.active_show_error.write() = Some("malformed active show".into());
+    state
+        .active_show
+        .set_error(Some("malformed active show".into()));
     let app = router(state);
 
     let unauthorized = app

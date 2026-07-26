@@ -8,8 +8,7 @@ async fn control_desk_v2_is_sparse_replay_safe_authorized_and_retires_v1() {
     let desk_id = scenario_desk_id(&scenario);
     let original = scenario
         .state
-        .desk
-        .lock()
+        .installation
         .control_desk(desk_id)
         .unwrap()
         .unwrap();
@@ -22,7 +21,7 @@ async fn control_desk_v2_is_sparse_replay_safe_authorized_and_retires_v1() {
             "patch":{"name":"Front desk renamed","future_patch_field":42}
         }
     });
-    let event_before = scenario.state.event_revision.load(Ordering::Relaxed);
+    let event_before = scenario.state.events.audit_revision();
     let changed = post_desk_action(&scenario, desk_id, update.clone()).await;
     assert_eq!(changed.status(), StatusCode::OK);
     let changed = json(changed).await;
@@ -34,24 +33,21 @@ async fn control_desk_v2_is_sparse_replay_safe_authorized_and_retires_v1() {
         scenario
             .state
             .sessions
-            .read()
-            .values()
+            .sessions()
+            .into_iter()
             .next()
             .unwrap()
             .desk
             .name,
         "Front desk renamed"
     );
-    let event_after = scenario.state.event_revision.load(Ordering::Relaxed);
+    let event_after = scenario.state.events.audit_revision();
     assert_eq!(event_after, event_before + 1);
 
     let replay = post_desk_action(&scenario, desk_id, update).await;
     assert_eq!(replay.status(), StatusCode::OK);
     assert_eq!(json(replay).await["replayed"], true);
-    assert_eq!(
-        scenario.state.event_revision.load(Ordering::Relaxed),
-        event_after
-    );
+    assert_eq!(scenario.state.events.audit_revision(), event_after);
     let collision = post_desk_action(
         &scenario,
         desk_id,
@@ -93,14 +89,11 @@ async fn control_desk_v2_is_sparse_replay_safe_authorized_and_retires_v1() {
         desk_page(&scenario, desk_id, scenario_show_id(&scenario)),
         2
     );
-    let page_event = scenario.state.event_revision.load(Ordering::Relaxed);
+    let page_event = scenario.state.events.audit_revision();
     let replayed_page =
         post_desk_action(&scenario, desk_id, page_action("create-page", 2, false)).await;
     assert_eq!(json(replayed_page).await["replayed"], true);
-    assert_eq!(
-        scenario.state.event_revision.load(Ordering::Relaxed),
-        page_event
-    );
+    assert_eq!(scenario.state.events.audit_revision(), page_event);
 
     scenario.cleanup();
 }

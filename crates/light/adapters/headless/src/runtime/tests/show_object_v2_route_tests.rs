@@ -93,7 +93,7 @@ async fn output_route_v2_actions_are_partial_tolerant_and_replay_safe() {
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let show_id = open_show(&app, &token, "Output route intents").await;
-    let before_events = state.application_events.latest_sequence();
+    let before_events = state.events.latest_sequence();
     let create = serde_json::json!({
         "request_id": "create-main-route",
         "action": {
@@ -120,19 +120,13 @@ async fn output_route_v2_actions_are_partial_tolerant_and_replay_safe() {
     assert_eq!(created["change"]["route_id"], "main");
     assert_eq!(created["change"]["object_revision"], 1);
     assert_eq!(created["change"]["deleted"], false);
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        before_events + 1
-    );
+    assert_eq!(state.events.latest_sequence(), before_events + 1);
 
     let (status, replay) = post_route_action(&app, &token, &show_id, create).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["change"], created["change"]);
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        before_events + 1
-    );
+    assert_eq!(state.events.latest_sequence(), before_events + 1);
 
     let update = serde_json::json!({
         "request_id": "disable-main-route",
@@ -203,10 +197,92 @@ async fn output_route_v2_actions_are_partial_tolerant_and_replay_safe() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(replayed_delete["replayed"], true);
     assert_eq!(replayed_delete["change"], deleted["change"]);
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        before_events + 3
+    assert_eq!(state.events.latest_sequence(), before_events + 3);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn overlapping_output_route_replay_releases_cache_while_work_is_paused() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show_id = open_show(&app, &token, "Overlapping output route replay").await;
+    let before_events = state.events.latest_sequence();
+    let create = serde_json::json!({
+        "request_id": "overlapping-create-main",
+        "action": {
+            "type": "create",
+            "route_id": "main",
+            "route": {
+                "protocol": "art_net",
+                "logical_universe": 1,
+                "destination_universe": 2,
+                "delivery_mode": "broadcast",
+                "destination": null,
+                "enabled": true,
+                "minimum_slots": 128
+            }
+        }
+    });
+
+    state.active_show.http_lifecycle_probe().arm();
+    let first_app = app.clone();
+    let first_token = token.clone();
+    let first_show_id = show_id.clone();
+    let first_create = create.clone();
+    let first = tokio::spawn(async move {
+        post_route_action(&first_app, &first_token, &first_show_id, first_create).await
+    });
+    let pause = state.active_show.http_lifecycle_probe();
+    tokio::task::spawn_blocking(move || pause.wait_until_started())
+        .await
+        .unwrap();
+
+    assert!(
+        state.replay.show_object_cache_is_available(),
+        "the replay cache must not remain locked while route mutation work is suspended"
     );
+
+    let replay_app = app.clone();
+    let replay_token = token.clone();
+    let replay_show_id = show_id.clone();
+    let replay_create = create.clone();
+    let overlapping_replay = tokio::spawn(async move {
+        post_route_action(&replay_app, &replay_token, &replay_show_id, replay_create).await
+    });
+    tokio::task::yield_now().await;
+    state.active_show.http_lifecycle_probe().release();
+
+    let (first_status, first_body) = first.await.unwrap();
+    let (replay_status, replay_body) = overlapping_replay.await.unwrap();
+    assert_eq!(first_status, StatusCode::OK);
+    assert_eq!(replay_status, StatusCode::OK);
+    assert_eq!(first_body["replayed"], false);
+    assert_eq!(replay_body["replayed"], true);
+    assert_eq!(replay_body["change"], first_body["change"]);
+    assert_eq!(
+        state.events.latest_sequence(),
+        before_events + 1,
+        "overlapping replay must not publish a second mutation"
+    );
+
+    let (conflict_status, conflict) = post_route_action(
+        &app,
+        &token,
+        &show_id,
+        serde_json::json!({
+            "request_id": "overlapping-create-main",
+            "action": {
+                "type": "delete",
+                "route_id": "main",
+                "expected_revision": 1
+            }
+        }),
+    )
+    .await;
+    assert_eq!(conflict_status, StatusCode::CONFLICT);
+    assert!(conflict["error"].as_str().unwrap().contains("request_id"));
 
     let _ = std::fs::remove_dir_all(data_dir);
 }

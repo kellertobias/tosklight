@@ -9,8 +9,7 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
     let show_id = show["id"].as_str().unwrap();
     let show_uuid = Uuid::parse_str(show_id).unwrap();
     let entry = state
-        .desk
-        .lock()
+        .installation
         .show(light_core::ShowId(show_uuid))
         .unwrap()
         .unwrap();
@@ -113,7 +112,7 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
     let stored_preset = document.object("preset", "2.3").unwrap();
     assert_eq!(stored_preset.revision(), 1);
     assert_eq!(stored_preset.body()["future_preset_field"], 42);
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     assert_eq!(snapshot.revision, document.revision().value());
     assert_eq!(
         snapshot
@@ -160,7 +159,7 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
         .unwrap();
     assert_eq!(after_failures.revision(), revision_before_failures);
     assert_eq!(
-        state.engine.snapshot().revision,
+        state.output.snapshot().revision,
         revision_before_failures.value()
     );
     assert!(after_failures.object("preset", "2.4").is_none());
@@ -178,7 +177,7 @@ async fn active_group_and_preset_puts_install_the_exact_committed_candidate() {
     // Recovery checkpoints are interval-gated: the first mutation on the show creates one
     // backup and later mutations within the autosave interval reuse it.
     assert_eq!(object_backups, 1);
-    let audit = state.audit_events.lock();
+    let audit = state.events.audit_events();
     let changed = audit
         .iter()
         .filter(|event| event.kind == "show_object_changed")
@@ -197,8 +196,7 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
     let show_id = show["id"].as_str().unwrap();
     let show_uuid = Uuid::parse_str(show_id).unwrap();
     let entry = state
-        .desk
-        .lock()
+        .installation
         .show(light_core::ShowId(show_uuid))
         .unwrap()
         .unwrap();
@@ -251,7 +249,7 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
         )
         .unwrap();
 
-    let before_put_sequence = state.application_events.latest_sequence();
+    let before_put_sequence = state.events.latest_sequence();
     let changed = put_active_object(
         &state,
         &token,
@@ -272,9 +270,8 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
             "7",
         ),
     );
-    let light_application::EventReplay::Events(put_events) = state
-        .application_events
-        .replay(before_put_sequence, &put_filter)
+    let light_application::EventReplay::Events(put_events) =
+        state.events.replay(before_put_sequence, &put_filter)
     else {
         panic!("expected authoritative object PUT event");
     };
@@ -321,9 +318,8 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
             "7",
         ),
     );
-    let light_application::EventReplay::Events(undo_events) = state
-        .application_events
-        .replay(before.event_sequence, &undo_filter)
+    let light_application::EventReplay::Events(undo_events) =
+        state.events.replay(before.event_sequence, &undo_filter)
     else {
         panic!("expected authoritative object Undo event");
     };
@@ -338,7 +334,7 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
     assert_eq!(document.object("group", "7").unwrap().body(), &original);
     // The undo commit stays within the autosave interval of the earlier checkpoint.
     assert_eq!(show_object_backup_count(&data_dir), before.backup_count);
-    let runtime = state.engine.snapshot();
+    let runtime = state.output.snapshot();
     assert_eq!(runtime.revision, document.revision().value());
     assert!(!std::sync::Arc::ptr_eq(&runtime, &before.runtime));
     assert_eq!(
@@ -395,13 +391,12 @@ async fn inactive_object_put_keeps_legacy_runtime_and_returns_null_cursor() {
     let show_id = show["id"].as_str().unwrap();
     let show_uuid = Uuid::parse_str(show_id).unwrap();
     let entry = state
-        .desk
-        .lock()
+        .installation
         .show(light_core::ShowId(show_uuid))
         .unwrap()
         .unwrap();
-    let before_runtime = state.engine.snapshot();
-    let before_sequence = state.application_events.latest_sequence();
+    let before_runtime = state.output.snapshot();
+    let before_sequence = state.events.latest_sequence();
     let before_revision = ShowStore::open(&entry.path)
         .unwrap()
         .portable_document()
@@ -432,10 +427,10 @@ async fn inactive_object_put_keeps_legacy_runtime_and_returns_null_cursor() {
         "Inactive Put"
     );
     assert!(std::sync::Arc::ptr_eq(
-        &state.engine.snapshot(),
+        &state.output.snapshot(),
         &before_runtime
     ));
-    assert_eq!(state.application_events.latest_sequence(), before_sequence);
+    assert_eq!(state.events.latest_sequence(), before_sequence);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -457,11 +452,11 @@ impl ActiveUndoBoundary {
                 .revision()
                 .value(),
             backup_count: show_object_backup_count(data_dir),
-            runtime: state.engine.snapshot(),
-            event_sequence: state.application_events.latest_sequence(),
+            runtime: state.output.snapshot(),
+            event_sequence: state.events.latest_sequence(),
             compatibility_event_count: state
-                .audit_events
-                .lock()
+                .events
+                .audit_events()
                 .iter()
                 .filter(|event| event.kind == "show_object_undone")
                 .count(),
@@ -480,17 +475,14 @@ impl ActiveUndoBoundary {
         );
         assert_eq!(show_object_backup_count(data_dir), self.backup_count);
         assert!(std::sync::Arc::ptr_eq(
-            &state.engine.snapshot(),
+            &state.output.snapshot(),
             &self.runtime
         ));
-        assert_eq!(
-            state.application_events.latest_sequence(),
-            self.event_sequence
-        );
+        assert_eq!(state.events.latest_sequence(), self.event_sequence);
         assert_eq!(
             state
-                .audit_events
-                .lock()
+                .events
+                .audit_events()
                 .iter()
                 .filter(|event| event.kind == "show_object_undone")
                 .count(),
@@ -541,7 +533,7 @@ async fn undo_show_object(
         object_id,
         revision,
     );
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     match run_active_show_object_undo_async(state, activation, action).await {
         Ok((result, _activation)) => Json(serde_json::json!({
             "revision": result.change.object_revision,
@@ -562,7 +554,7 @@ struct ActiveObjectScenario {
 impl ActiveObjectScenario {
     fn new(name: &str, seed: impl FnOnce(&ShowStore)) -> Self {
         let (state, data_dir) = test_state();
-        let user = state.desk.lock().users().unwrap().remove(0);
+        let user = state.installation.users().unwrap().remove(0);
         let session = Session {
             id: SessionId::new(),
             user: user.clone(),
@@ -570,9 +562,9 @@ impl ActiveObjectScenario {
             connected: true,
             desk: test_control_desk(),
         };
-        state.programmers.start(session.id, user.id);
+        state.programming.start(session.id, user.id);
         attach_session_command_context(&state, &session);
-        state.sessions.write().insert(session.id, session.clone());
+        state.sessions.insert_session(session.clone());
 
         let show_path = data_dir.join("shows").join(format!(
             "{}-{}.show",
@@ -590,9 +582,9 @@ impl ActiveObjectScenario {
             updated_at: String::new(),
             revision_copy: None,
         };
-        *state.active_show.write() = Some(entry.clone());
+        state.active_show.replace_current(Some(entry.clone()));
         state
-            .engine
+            .output
             .replace_snapshot(load_engine_snapshot(&entry).unwrap())
             .unwrap();
 
@@ -612,7 +604,7 @@ impl ActiveObjectScenario {
         MutationBoundary {
             show_revision: self.store().portable_document().unwrap().revision().value(),
             backup_count: show_object_backup_count(&self.data_dir),
-            runtime: self.state.engine.snapshot(),
+            runtime: self.state.output.snapshot(),
         }
     }
 
@@ -625,7 +617,7 @@ impl ActiveObjectScenario {
             show_object_backup_count(&self.data_dir),
             before.backup_count.max(1)
         );
-        let runtime = self.state.engine.snapshot();
+        let runtime = self.state.output.snapshot();
         assert_eq!(runtime.revision, document.revision().value());
         assert!(!std::sync::Arc::ptr_eq(&runtime, &before.runtime));
     }
@@ -640,7 +632,7 @@ impl ActiveObjectScenario {
             before.backup_count
         );
         assert!(std::sync::Arc::ptr_eq(
-            &self.state.engine.snapshot(),
+            &self.state.output.snapshot(),
             &before.runtime
         ));
     }
@@ -700,7 +692,7 @@ fn record_and_delete_commands_each_cross_one_active_show_boundary() {
     let fixtures = [light_core::FixtureId::new(), light_core::FixtureId::new()];
     scenario
         .state
-        .programmers
+        .programming
         .select(scenario.session.id, fixtures);
 
     let before_group_record = scenario.boundary();
@@ -727,7 +719,7 @@ fn record_and_delete_commands_each_cross_one_active_show_boundary() {
     assert!(
         scenario
             .state
-            .engine
+            .output
             .snapshot()
             .groups
             .iter()
@@ -735,7 +727,7 @@ fn record_and_delete_commands_each_cross_one_active_show_boundary() {
     );
     let light_application::EventReplay::Events(events) = scenario
         .state
-        .application_events
+        .events
         .replay(0, &light_application::EventFilter::default())
     else {
         panic!("expected a retained Group event");
@@ -770,14 +762,14 @@ fn record_and_delete_commands_each_cross_one_active_show_boundary() {
     assert!(
         scenario
             .state
-            .engine
+            .output
             .snapshot()
             .groups
             .iter()
             .all(|group| group.id != "71")
     );
 
-    scenario.state.programmers.set(
+    scenario.state.programming.set(
         scenario.session.id,
         fixtures[0],
         light_core::AttributeKey("pan".into()),
@@ -851,13 +843,8 @@ fn preset_move_commits_destination_and_source_delete_atomically() {
     );
 
     let before_stale_batch = scenario.boundary();
-    let show_id = scenario.state.active_show.read().as_ref().unwrap().id;
-    let _activation = scenario
-        .state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
-        .unwrap();
+    let show_id = scenario.state.active_show.current().as_ref().unwrap().id;
+    let _activation = scenario.state.active_show.try_acquire().unwrap();
     let stale_move = active_show_object_action(
         operator_action_context(&scenario.session, light_application::ActionSource::Http),
         show_id,
@@ -912,7 +899,7 @@ fn generated_presets_share_one_show_commit_backup_and_runtime_install() {
     });
 
     let before = scenario.boundary();
-    let show_id = scenario.state.active_show.read().as_ref().unwrap().id;
+    let show_id = scenario.state.active_show.current().as_ref().unwrap().id;
     let response = generate_profile_presets_action(
         &scenario.state,
         vec![fixture_id],
@@ -952,8 +939,7 @@ async fn active_preload_preset_uses_one_typed_show_boundary_and_returns_its_even
     let show_id = show["id"].as_str().unwrap();
     let show_uuid = Uuid::parse_str(show_id).unwrap();
     let entry = state
-        .desk
-        .lock()
+        .installation
         .show(light_core::ShowId(show_uuid))
         .unwrap()
         .unwrap();
@@ -983,16 +969,16 @@ async fn active_preload_preset_uses_one_typed_show_boundary_and_returns_its_even
         .unwrap();
     open_show_for_test(&app, &token, show_id).await;
     let session = authenticate_token(&state, &token).unwrap();
-    assert!(state.programmers.set_preload_group(
+    assert!(state.programming.set_preload_group(
         session.id,
         "1".into(),
         light_core::AttributeKey::intensity(),
         light_core::AttributeValue::Normalized(0.6),
     ));
-    let before = state.engine.snapshot();
+    let before = state.output.snapshot();
     let before_revision = store.portable_document().unwrap().revision().value();
     let before_backups = show_object_backup_count(&data_dir);
-    let before_sequence = state.application_events.latest_sequence();
+    let before_sequence = state.events.latest_sequence();
 
     let response = app
         .clone()
@@ -1031,12 +1017,12 @@ async fn active_preload_preset_uses_one_typed_show_boundary_and_returns_its_even
     assert_eq!(preset.revision(), 2);
     assert_eq!(preset.body()["future_extension"]["retained"], true);
     assert_eq!(preset.body()["name"], "From Preload");
-    let runtime = state.engine.snapshot();
+    let runtime = state.output.snapshot();
     assert_eq!(runtime.revision, document.revision().value());
     assert!(!std::sync::Arc::ptr_eq(&before, &runtime));
 
     let light_application::EventReplay::Events(events) = state
-        .application_events
+        .events
         .replay(before_sequence, &light_application::EventFilter::default())
     else {
         panic!("expected the authoritative Preload Preset event");
@@ -1080,20 +1066,20 @@ fn group_and_preset_updates_each_install_the_exact_committed_revision() {
     });
     scenario
         .state
-        .configuration
-        .write()
-        .update_settings_by_desk
-        .insert(
-            scenario.session.desk.id,
-            update::UpdateSettings {
-                group_mode: update::ExistingContentMode::AddNew,
-                preset_mode: update::ExistingContentMode::AddNew,
-                ..Default::default()
-            },
-        );
+        .installation
+        .update_configuration(|configuration| {
+            configuration.update_settings_by_desk.insert(
+                scenario.session.desk.id,
+                update::UpdateSettings {
+                    group_mode: update::ExistingContentMode::AddNew,
+                    preset_mode: update::ExistingContentMode::AddNew,
+                    ..Default::default()
+                },
+            );
+        });
     scenario
         .state
-        .programmers
+        .programming
         .select(scenario.session.id, [first, added]);
 
     let before_group = scenario.boundary();
@@ -1106,7 +1092,7 @@ fn group_and_preset_updates_each_install_the_exact_committed_revision() {
     assert_eq!(group.body["fixtures"], serde_json::json!([first, added]));
     assert_eq!(group.body["future_group_field"], "retained");
 
-    scenario.state.programmers.set(
+    scenario.state.programming.set(
         scenario.session.id,
         first,
         light_core::AttributeKey("color.blue".into()),

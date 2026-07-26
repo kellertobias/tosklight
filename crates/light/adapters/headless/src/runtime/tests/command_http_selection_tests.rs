@@ -4,7 +4,7 @@ async fn programming_selection_actions_are_scoped_revisioned_and_replay_safe() {
     let fixture = scenario.install_direct_fixture();
     let initial_revision = scenario
         .state
-        .programmers
+        .programming
         .selection(scenario.session.id)
         .unwrap()
         .revision;
@@ -56,7 +56,7 @@ async fn programming_selection_actions_are_scoped_revisioned_and_replay_safe() {
     assert_eq!(
         scenario
             .state
-            .programmers
+            .programming
             .selection(scenario.session.id)
             .unwrap()
             .selected,
@@ -93,7 +93,7 @@ async fn programming_selection_gestures_return_the_complete_authoritative_contex
     assert_eq!(snapshot["projection"]["selection"], gesture["selection"]);
     assert_eq!(
         snapshot["cursor"]["sequence"],
-        scenario.state.application_events.latest_sequence()
+        scenario.state.events.latest_sequence()
     );
     let selection_events = selection_events(&scenario);
     assert_eq!(selection_events.len(), 1);
@@ -109,7 +109,7 @@ fn selection_events(
         light_application::EventObject::programming_selection(scenario.session.desk.id),
     );
     let light_application::EventReplay::Events(events) =
-        scenario.state.application_events.replay(0, &filter)
+        scenario.state.events.replay(0, &filter)
     else {
         panic!("the focused Programming selection history should remain replayable")
     };
@@ -121,7 +121,7 @@ async fn programming_selection_contract_rejects_ambiguous_or_unsafe_requests() {
     let scenario = CommandHttpScenario::new().await;
     let revision = scenario
         .state
-        .programmers
+        .programming
         .selection(scenario.session.id)
         .unwrap()
         .revision;
@@ -238,14 +238,13 @@ async fn accepted_selection_persistence_warning_is_replayed_without_duplicate_ev
     let isolated_desk = isolated
         .add_desk("Isolated", "isolated")
         .expect("isolated control desk");
-    *scenario.state.desk.lock() = isolated;
-    scenario
-        .state
-        .sessions
-        .write()
-        .get_mut(&scenario.session.id)
-        .expect("live session")
-        .desk = isolated_desk.clone();
+    scenario.state.installation.replace_desk_store(isolated);
+    assert!(
+        scenario
+            .state
+            .sessions
+            .update_session_desk(scenario.session.id, isolated_desk.clone())
+    );
     let request = serde_json::json!({
         "request_id": "selection-persistence-warning",
         "action": "replace",
@@ -268,7 +267,7 @@ async fn accepted_selection_persistence_warning_is_replayed_without_duplicate_ev
     assert_eq!(replay["warning"], first["warning"]);
     assert_eq!(replay["event_sequence"], sequence);
     assert_eq!(replay["replayed"], true);
-    assert_eq!(scenario.state.application_events.latest_sequence(), sequence);
+    assert_eq!(scenario.state.events.latest_sequence(), sequence);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -308,7 +307,7 @@ async fn selection_waits_for_active_group_install_before_resolving_its_environme
         .await;
     assert_eq!(group.status(), StatusCode::OK);
 
-    scenario.state.active_show_http_lifecycle.arm();
+    scenario.state.active_show.http_lifecycle_probe().arm();
     let group_state = scenario.state.clone();
     let group_token = scenario.token.clone();
     let group_show_id = show_id.clone();
@@ -328,7 +327,7 @@ async fn selection_waits_for_active_group_install_before_resolving_its_environme
         )
         .await
     });
-    let pause = Arc::clone(&scenario.state.active_show_http_lifecycle);
+    let pause = scenario.state.active_show.http_lifecycle_probe();
     tokio::task::spawn_blocking(move || pause.wait_until_started())
         .await
         .unwrap();
@@ -367,7 +366,7 @@ async fn selection_waits_for_active_group_install_before_resolving_its_environme
         "selection bypassed the active-show ordering gate"
     );
 
-    scenario.state.active_show_http_lifecycle.release();
+    scenario.state.active_show.http_lifecycle_probe().release();
     let group_update = tokio::time::timeout(Duration::from_secs(2), group_update)
         .await
         .expect("Group update deadlocked")

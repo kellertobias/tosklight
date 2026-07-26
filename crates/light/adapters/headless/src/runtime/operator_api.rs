@@ -33,17 +33,17 @@ pub(super) fn embedded_asset(path: &str) -> Response {
 pub(super) async fn readiness(
     State(state): State<AppState>,
 ) -> Result<Json<wire::RuntimeReadinessSnapshot>, ApiError> {
-    let active_show_error = state.active_show_error.read().clone();
+    let active_show_error = state.active_show.error();
     let recovery_mode = active_show_error.is_some();
-    if !recovery_mode && let Some(show) = state.active_show.read().as_ref() {
+    if !recovery_mode && let Some(show) = state.active_show.current().as_ref() {
         validate_show_file(&show.path).map_err(|error| ApiError::unavailable(error.to_string()))?;
     }
     Ok(Json(wire::RuntimeReadinessSnapshot {
         status: "ready".into(),
-        active_show: state.active_show.read().as_ref().map(|show| show.id.0),
+        active_show: state.active_show.current().as_ref().map(|show| show.id.0),
         active_show_error,
         recovery_mode,
-        snapshot_revision: state.engine.snapshot().revision,
+        snapshot_revision: state.output.snapshot().revision,
     }))
 }
 pub(super) async fn diagnostics(
@@ -54,41 +54,27 @@ pub(super) async fn diagnostics(
     // Refresh derived runtime state at the same application timestamp before exposing it. This is
     // especially important under the manually advanced Playwright clock, where no output frame is
     // guaranteed to have rendered between two exact MIB checkpoints.
-    let _ = state.engine.resolved_values();
-    let route_send_errors = state
-        .network_output
-        .as_ref()
-        .map(|output| output.route_send_errors())
-        .unwrap_or_default();
-    let output_routes = NetworkOutput::route_diagnostics(&state.engine.snapshot().routes);
-    let output_bind_ip = state.configuration.read().output_bind_ip;
+    let _ = state.output.resolved_values();
+    let route_send_errors = state.output.route_send_errors();
+    let output_routes = NetworkOutput::route_diagnostics(&state.output.snapshot().routes);
+    let output_bind_ip = state.installation.configuration().output_bind_ip;
     Ok(Json(wire::RuntimeDiagnosticsSnapshot {
-        output: runtime_wire::output_health(
-            state
-                .output_health
-                .lock()
-                .expect("output health mutex poisoned")
-                .clone(),
-        ),
+        output: runtime_wire::output_health(state.output.health_snapshot()),
         output_bind_ip: output_bind_ip.to_string(),
         output_routes: serde_json::to_value(output_routes)
             .map_err(|error| ApiError::internal(error.to_string()))?,
         route_send_errors: serde_json::to_value(route_send_errors)
             .map_err(|error| ApiError::internal(error.to_string()))?,
-        active_programmers: serde_json::to_value(state.programmers.active())
+        active_programmers: serde_json::to_value(state.programming.active())
             .map_err(|error| ApiError::internal(error.to_string()))?,
-        active_playbacks: serde_json::to_value(state.engine.active_playbacks())
+        active_playbacks: serde_json::to_value(state.output.active_playbacks())
             .map_err(|error| ApiError::internal(error.to_string()))?,
-        move_in_black: serde_json::to_value(state.engine.move_in_black_runtime())
+        move_in_black: serde_json::to_value(state.output.move_in_black_runtime())
             .map_err(|error| ApiError::internal(error.to_string()))?,
-        timecode_source: state
-            .timecode_router
-            .lock()
-            .active_source()
-            .map(str::to_owned),
-        media_servers: serde_json::to_value(state.media_status.read().clone())
+        timecode_source: state.output.timecode_status().0,
+        media_servers: serde_json::to_value(state.media.statuses())
             .map_err(|error| ApiError::internal(error.to_string()))?,
-        snapshot_revision: state.engine.snapshot().revision,
+        snapshot_revision: state.output.snapshot().revision,
     }))
 }
 pub(super) async fn bootstrap_v2(
@@ -98,26 +84,13 @@ pub(super) async fn bootstrap_v2(
 }
 
 fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
-    let (users, desks, client_desks) = {
-        let desk = state.desk.lock();
-        (
-            desk.users().unwrap_or_default(),
-            desk.desks().unwrap_or_default(),
-            desk.client_desks().unwrap_or_default(),
-        )
-    };
-    let sessions = state.sessions.read();
-    let session_clients = state.session_clients.read();
+    let (users, desks, client_desks) = state.installation.bootstrap_desk_data();
     let mut clients = client_desks
         .into_iter()
         .map(|entry| {
             let client_id = entry.client_id.unwrap_or(entry.desk.id);
-            let connected = sessions
-                .values()
-                .any(|session| session_clients.get(&session.id) == Some(&client_id));
-            let desk_in_use = sessions
-                .values()
-                .any(|session| session.desk.id == entry.desk.id);
+            let connected = state.sessions.client_connected(client_id);
+            let desk_in_use = state.sessions.desk_in_use(entry.desk.id);
             wire::RuntimeClientSummary {
                 client_id,
                 name: entry.desk.name.clone(),
@@ -128,8 +101,6 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
             }
         })
         .collect::<Vec<_>>();
-    drop(sessions);
-    drop(session_clients);
     clients.sort_by(|left, right| {
         right
             .connected
@@ -139,10 +110,10 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
             .then_with(|| left.client_id.cmp(&right.client_id))
     });
     let (active_timecode_source, active_timecode) = {
-        let router = state.timecode_router.lock();
+        let (source, current) = state.output.timecode_status();
         (
-            router.active_source().map(str::to_owned),
-            router.current().map(|timecode| {
+            source,
+            current.map(|timecode| {
                 format!(
                     "{:02}:{:02}:{:02}:{:02}",
                     timecode.hours, timecode.minutes, timecode.seconds, timecode.frames
@@ -150,21 +121,21 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
             }),
         )
     };
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let highlight_fixtures = highlight_fixture_summaries(&snapshot.fixtures);
     let highlight_groups = highlight_groups(&snapshot);
     let highlight_states = state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .filter_map(|session| {
-            let programmer = state.programmers.get(session.id)?;
-            let selection = state.programmers.selection(session.id)?;
+            let programmer = state.programming.get(session.id)?;
+            let selection = state.programming.selection(session.id)?;
             let context =
-                programming_context(session, light_application::ActionSource::System, None);
+                programming_context(&session, light_application::ActionSource::System, None);
             let ports = highlight_service_adapter::HeadlessHighlightPorts::with_environment(
                 state,
-                session,
+                &session,
                 light_application::HighlightEnvironment {
                     user_name: Some(session.user.name.clone()),
                     selection,
@@ -173,7 +144,7 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
                     output_suppressed: programmer.blind || programmer.preview,
                 },
             );
-            let highlight = state.highlight_service.snapshot(&context, &ports).ok()?;
+            let highlight = state.highlight.snapshot(&context, &ports).ok()?;
             Some(wire::RuntimeBootstrapHighlightState {
                 session_id: session.id.0,
                 desk_id: session.desk.id,
@@ -191,23 +162,17 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
         users: users.into_iter().map(runtime_wire::user).collect(),
         desks: desks.into_iter().map(runtime_wire::desk).collect(),
         clients,
-        active_show: state.active_show.read().clone().map(runtime_wire::show),
+        active_show: state.active_show.current().clone().map(runtime_wire::show),
         // Bootstrap is intentionally available before login so clients can discover enabled
         // users. Programmer state is authenticated separately through `/api/v2/programmers`.
         active_programmers: Vec::new(),
         highlight_states,
-        frame_rate_hz: state.output_rate.load(Ordering::Relaxed),
-        output_health: runtime_wire::output_health(
-            state
-                .output_health
-                .lock()
-                .expect("output health mutex poisoned")
-                .clone(),
-        ),
+        frame_rate_hz: state.output.frame_rate_hz(),
+        output_health: runtime_wire::output_health(state.output.health_snapshot()),
         active_timecode_source,
         active_timecode,
-        active_show_error: state.active_show_error.read().clone(),
-        hardware_connected: !state.osc_subscribers.lock().is_empty(),
+        active_show_error: state.active_show.error(),
+        hardware_connected: state.integrations.hardware_connected(),
     }
 }
 pub(super) async fn visualization_snapshot(
@@ -218,11 +183,11 @@ pub(super) async fn visualization_snapshot(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
     show.verify(&state)?;
-    let snapshot = state.engine.snapshot();
-    let options = state.output_control.lock().render_options();
-    let mut resolved = state.engine.resolved_values();
+    let snapshot = state.output.snapshot();
+    let options = state.output.render_options();
+    let mut resolved = state.output.resolved_values();
     if query.preload
-        && let Some(programmer) = state.programmers.get(session.id)
+        && let Some(programmer) = state.programming.get(session.id)
     {
         for value in programmer
             .preload_active
@@ -254,7 +219,7 @@ pub(super) async fn visualization_snapshot(
         }
     }
     let profile_output_values = state
-        .engine
+        .output
         .profile_visualization_values(&resolved, options)
         .map_err(|error| ApiError::internal(error.to_string()))?
         .into_iter()

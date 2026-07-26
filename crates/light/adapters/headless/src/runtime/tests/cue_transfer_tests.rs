@@ -41,20 +41,20 @@ fn typed_choice_selection_resets_the_authoritative_command_once() {
     assert_eq!(pending["type"], "cue_move_copy");
     let authoritative = scenario
         .state
-        .programmers
+        .programming
         .command_line_state(scenario.session.id)
         .unwrap();
     assert_eq!(
         authoritative.pending_choice.as_ref().unwrap().choice_id,
         serde_json::from_value::<Uuid>(pending["choice_id"].clone()).unwrap()
     );
-    let before = scenario.state.application_events.latest_sequence();
+    let before = scenario.state.events.latest_sequence();
 
     assert!(dispatch("plain-copy", "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2").ok);
 
     let command = scenario
         .state
-        .programmers
+        .programming
         .command_line_state(scenario.session.id)
         .unwrap();
     assert_eq!(command.visible_text(), "FIXTURE");
@@ -62,9 +62,7 @@ fn typed_choice_selection_resets_the_authoritative_command_once() {
     assert!(command.pending_choice.is_none());
     let persisted = scenario
         .state
-        .desk
-        .lock()
-        .persisted_sessions()
+        .installation.persisted_sessions()
         .unwrap()
         .into_iter()
         .find(|session| session.id == scenario.session.id)
@@ -76,7 +74,7 @@ fn typed_choice_selection_resets_the_authoritative_command_once() {
         light_application::EventObject::programming_command_line(scenario.session.desk.id),
     );
     let light_application::EventReplay::Events(events) =
-        scenario.state.application_events.replay(before, &filter)
+        scenario.state.events.replay(before, &filter)
     else {
         panic!("accepted choice should publish one retained command event")
     };
@@ -87,9 +85,9 @@ fn typed_choice_selection_resets_the_authoritative_command_once() {
 #[test]
 fn cue_copy_preserves_extensions_on_duplicate_id_destination_cues() {
     let scenario = CueTransferScenario::new();
-    let store = ShowStore::open(&scenario.show_path).unwrap();
+    let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
     let (_, destination_object, _) =
-        cue_list_for_playback(&store, &scenario.state.engine.snapshot(), 2).unwrap();
+        cue_list_for_playback(&store, &scenario.state.output.snapshot(), 2).unwrap();
     let mut body = destination_object.body;
     let cues = body["cues"].as_array_mut().unwrap();
     cues[0]["future_cue_metadata"] = serde_json::json!({"position": "first"});
@@ -105,11 +103,10 @@ fn cue_copy_preserves_extensions_on_duplicate_id_destination_cues() {
             destination_object.revision,
         )
         .unwrap();
-    let entry = scenario.state.active_show.read().clone().unwrap();
+    let entry = scenario.state.active_show.current().clone().unwrap();
     scenario
         .state
-        .engine
-        .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+        .output.replace_snapshot(load_engine_snapshot(&entry).unwrap())
         .unwrap();
 
     let response = dispatch_cue_transfer(
@@ -120,8 +117,8 @@ fn cue_copy_preserves_extensions_on_duplicate_id_destination_cues() {
     assert!(response.ok, "Cue copy failed: {:?}", response.error);
 
     let (_, destination_object, destination) = cue_list_for_playback(
-        &ShowStore::open(&scenario.show_path).unwrap(),
-        &scenario.state.engine.snapshot(),
+        &ActiveShowRepository::open(&scenario.show_path).unwrap(),
+        &scenario.state.output.snapshot(),
         2,
     )
     .unwrap();
@@ -164,7 +161,7 @@ fn verify_pending_cue_transfer_choice(
     assert_eq!(pending["cancel_label"], "Cancel");
     let authoritative = scenario
         .state
-        .programmers
+        .programming
         .command_line_state(scenario.session.id)
         .unwrap();
     assert_eq!(
@@ -189,7 +186,7 @@ fn execute_and_verify_cue_transfer(
 ) {
     let had_pending_choice = scenario
         .state
-        .programmers
+        .programming
         .command_line_state(scenario.session.id)
         .is_some_and(|command| command.pending_choice.is_some());
     let command = format!(
@@ -198,11 +195,11 @@ fn execute_and_verify_cue_transfer(
     );
     let response = dispatch_cue_transfer(scenario, "explicit-transfer", &command);
     assert!(response.ok, "Cue transfer failed: {:?}", response.error);
-    let store = ShowStore::open(&scenario.show_path).unwrap();
+    let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
     let (_, source_object, source) =
-        cue_list_for_playback(&store, &scenario.state.engine.snapshot(), 1).unwrap();
+        cue_list_for_playback(&store, &scenario.state.output.snapshot(), 1).unwrap();
     let (_, destination_object, destination) =
-        cue_list_for_playback(&store, &scenario.state.engine.snapshot(), 2).unwrap();
+        cue_list_for_playback(&store, &scenario.state.output.snapshot(), 2).unwrap();
     assert_eq!(
         store.portable_revision().unwrap().value(),
         before.show_revision + 1
@@ -211,7 +208,7 @@ fn execute_and_verify_cue_transfer(
         .with_capability(light_application::EventCapability::Show);
     let light_application::EventReplay::Events(show_events) = scenario
         .state
-        .application_events
+        .events
         .replay(before.event_sequence, &show_filter)
     else {
         panic!("the focused Cue transfer Show event must remain replayable")
@@ -226,7 +223,7 @@ fn execute_and_verify_cue_transfer(
             );
         let light_application::EventReplay::Events(command_events) = scenario
             .state
-            .application_events
+            .events
             .replay(before.event_sequence, &command_filter)
         else {
             panic!("the focused pending-choice command-line event must remain replayable")
@@ -237,7 +234,7 @@ fn execute_and_verify_cue_transfer(
         cue_transfer_backup_count(&scenario.data_dir),
         before.backup_count + 1
     );
-    let runtime = scenario.state.engine.snapshot();
+    let runtime = scenario.state.output.snapshot();
     assert_eq!(runtime.revision, before.show_revision + 1);
     assert!(!Arc::ptr_eq(&runtime, &before.runtime));
     assert_eq!(source_object.body["future_cuelist_metadata"]["list"], 0);

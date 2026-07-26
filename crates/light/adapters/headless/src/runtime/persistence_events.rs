@@ -2,12 +2,11 @@ use super::*;
 
 pub(super) fn persist_programmer(state: &AppState, session: &Session) -> Result<(), ApiError> {
     let programmer = state
-        .programmers
+        .programming
         .get(session.id)
         .ok_or_else(|| ApiError::not_found("programmer"))?;
     state
-        .desk
-        .lock()
+        .installation
         .save_session(&PersistedSession {
             id: session.id,
             user_id: session.user.id,
@@ -33,8 +32,7 @@ pub(super) fn load_output_runtime_for_show(
     show_id: light_core::ShowId,
 ) -> Result<PersistedOutputRuntime, ApiError> {
     let Some(serialized) = state
-        .desk
-        .lock()
+        .installation
         .setting(&output_runtime_setting(show_id))
         .map_err(ApiError::store)?
     else {
@@ -59,36 +57,31 @@ pub(super) fn restore_output_runtime_for_show(
     runtime: PersistedOutputRuntime,
 ) {
     debug_assert_eq!(
-        state.active_show.read().as_ref().map(|show| show.id),
+        state.active_show.current().as_ref().map(|show| show.id),
         Some(show_id)
     );
     restore_output_group_masters(state, &runtime);
     state
-        .engine
+        .output
         .execute_playback(EnginePlaybackCommand::RestoreDynamicsPausedSince(
             runtime.dynamics_paused_at,
         ))
         .expect("restoring dynamics pause state is infallible");
-    {
-        let mut control = state.output_control.lock();
-        control.options.grand_master = runtime.grand_master;
-        control.options.blackout = runtime.blackout;
-        control.revision = runtime.revision;
-    }
-    state.output_runtime_service.clear_replay();
+    state.output.restore_runtime_control(&runtime);
+    state.output.clear_runtime_replay();
 }
 
 fn restore_output_group_masters(state: &AppState, runtime: &PersistedOutputRuntime) {
     if runtime.group_masters.is_empty() {
         return;
     }
-    let mut snapshot = (*state.engine.snapshot()).clone();
+    let mut snapshot = (*state.output.snapshot()).clone();
     for group in Arc::make_mut(&mut snapshot.groups) {
         if let Some(master) = runtime.group_masters.get(&group.id) {
             group.master = *master;
         }
     }
-    if let Err(error) = state.engine.replace_snapshot(snapshot) {
+    if let Err(error) = state.output.replace_snapshot(snapshot) {
         tracing::warn!(%error, "ignoring persisted group output masters");
     }
 }
@@ -96,36 +89,19 @@ fn restore_output_group_masters(state: &AppState, runtime: &PersistedOutputRunti
 pub(super) fn persist_output_runtime(state: &AppState) -> Result<(), ApiError> {
     #[cfg(test)]
     {
-        state
-            .output_runtime_persistence_attempts
-            .fetch_add(1, Ordering::Relaxed);
-        if state
-            .output_runtime_persistence_failure
-            .load(Ordering::Relaxed)
-        {
-            return Err(ApiError::unavailable(
-                "injected output runtime persistence failure",
-            ));
-        }
+        state.output.record_runtime_persistence_attempt()?;
     }
-    let Some(show) = state.active_show.read().clone() else {
+    let Some(show) = state.active_show.current().clone() else {
         return Ok(());
     };
-    let (revision, grand_master, blackout) = {
-        let control = state.output_control.lock();
-        (
-            control.revision,
-            control.options.grand_master,
-            control.options.blackout,
-        )
-    };
+    let control = state.output.control_projection();
     let runtime = PersistedOutputRuntime {
-        revision,
-        grand_master,
-        blackout,
-        dynamics_paused_at: state.engine.playback_dynamics().paused_since,
+        revision: control.revision,
+        grand_master: control.grand_master,
+        blackout: control.blackout,
+        dynamics_paused_at: state.output.playback_dynamics().paused_since,
         group_masters: state
-            .engine
+            .output
             .snapshot()
             .groups
             .iter()
@@ -135,17 +111,16 @@ pub(super) fn persist_output_runtime(state: &AppState) -> Result<(), ApiError> {
     let serialized =
         serde_json::to_string(&runtime).map_err(|error| ApiError::internal(error.to_string()))?;
     state
-        .desk
-        .lock()
+        .installation
         .set_setting(&output_runtime_setting(show.id), &serialized)
         .map_err(ApiError::store)
 }
 
 pub(super) fn persist_active_playbacks(state: &AppState) -> Result<(), ApiError> {
-    let Some(show) = state.active_show.read().clone() else {
+    let Some(show) = state.active_show.current().clone() else {
         return Ok(());
     };
-    let runtime = state.engine.playback_runtime();
+    let runtime = state.output.playback_runtime();
     let persisted = runtime
         .iter()
         .map(PersistedActivePlayback::from)
@@ -153,8 +128,7 @@ pub(super) fn persist_active_playbacks(state: &AppState) -> Result<(), ApiError>
     let serialized =
         serde_json::to_string(&persisted).map_err(|error| ApiError::internal(error.to_string()))?;
     state
-        .desk
-        .lock()
+        .installation
         .set_setting(&active_playbacks_setting(show.id), &serialized)
         .map_err(ApiError::store)
 }
@@ -176,21 +150,9 @@ impl<'a> From<&'a light_playback::ActivePlayback> for PersistedActivePlayback<'a
     }
 }
 pub(super) fn emit(state: &AppState, kind: &str, payload: serde_json::Value) -> u64 {
-    let revision = state.event_revision.fetch_add(1, Ordering::Relaxed) + 1;
-    let event = Event {
-        revision,
-        kind: kind.into(),
-        payload: payload.clone(),
-    };
-    {
-        let mut audit = state.audit_events.lock();
-        if audit.len() == 2048 {
-            audit.pop_front();
-        }
-        audit.push_back(event.clone());
-    }
+    let revision = state.events.record_audit(kind, payload.clone());
     if let Some(event) = typed_capability_event(revision, kind, &payload) {
-        state.application_events.publish(event);
+        state.events.publish(event);
     }
     revision
 }
@@ -484,12 +446,9 @@ pub(super) fn record_command_history(
         request_id: request_id.map(str::to_owned),
         at: chrono::Utc::now().to_rfc3339(),
     };
-    {
-        let mut histories = state.command_history.lock();
-        let history = histories.entry(session.desk.id).or_default();
-        history.push_front(entry.clone());
-        history.truncate(COMMAND_HISTORY_LIMIT);
-    }
+    state
+        .programming
+        .record_command_history(entry.clone(), COMMAND_HISTORY_LIMIT);
     emit(
         state,
         "command_history",
@@ -528,9 +487,8 @@ pub(super) fn validate_show_name(name: &str) -> Result<(), ApiError> {
 
 pub(super) fn available_show_name(state: &AppState, stem: &str) -> Result<String, ApiError> {
     let existing = state
-        .desk
-        .lock()
-        .library()
+        .installation
+        .show_library()
         .map_err(ApiError::store)?
         .into_iter()
         .map(|show| show.name.to_lowercase())
@@ -542,7 +500,8 @@ pub(super) fn available_show_name(state: &AppState, stem: &str) -> Result<String
             format!("{stem} {number}")
         };
         let path = state
-            .data_dir
+            .installation
+            .data_dir()
             .join("shows")
             .join(format!("{candidate}.show"));
         if !existing.contains(&candidate.to_lowercase()) && !path.exists() {
@@ -559,9 +518,8 @@ pub(super) fn revision_copy_name(
     copied_on: chrono::NaiveDate,
 ) -> Result<String, ApiError> {
     let existing = state
-        .desk
-        .lock()
-        .library()
+        .installation
+        .show_library()
         .map_err(ApiError::store)?
         .into_iter()
         .map(|show| show.name.to_lowercase())
@@ -585,7 +543,8 @@ pub(super) fn revision_copy_name(
             disambiguator
         );
         let path = state
-            .data_dir
+            .installation
+            .data_dir()
             .join("shows")
             .join(format!("{candidate}.show"));
         if !existing.contains(&candidate.to_lowercase()) && !path.exists() {

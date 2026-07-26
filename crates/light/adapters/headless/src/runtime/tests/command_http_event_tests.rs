@@ -4,8 +4,7 @@ async fn supplied_command_executes_without_publishing_intermediate_command_text(
     let fixture_id = scenario.install_direct_fixture();
     let events_before = scenario
         .state
-        .audit_events
-        .lock()
+        .events.audit_events()
         .iter()
         .filter(|event| event.kind == "command_line_changed")
         .count();
@@ -22,8 +21,7 @@ async fn supplied_command_executes_without_publishing_intermediate_command_text(
     assert_eq!(
         scenario
             .state
-            .audit_events
-            .lock()
+            .events.audit_events()
             .iter()
             .filter(|event| event.kind == "command_line_changed")
             .count(),
@@ -32,8 +30,7 @@ async fn supplied_command_executes_without_publishing_intermediate_command_text(
     assert_eq!(
         scenario
             .state
-            .audit_events
-            .lock()
+            .events.audit_events()
             .iter()
             .filter(|event| {
                 matches!(
@@ -46,7 +43,7 @@ async fn supplied_command_executes_without_publishing_intermediate_command_text(
     );
     let programmer = scenario
         .state
-        .programmers
+        .programming
         .get(scenario.session.id)
         .unwrap();
     assert_eq!(programmer.selected, vec![fixture_id]);
@@ -60,7 +57,7 @@ async fn supplied_command_executes_without_publishing_intermediate_command_text(
 #[tokio::test]
 async fn sensitive_command_text_is_returned_to_its_writer_but_redacted_from_global_events() {
     let scenario = CommandHttpScenario::new().await;
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
     let response = scenario
         .put("FIXTURE 1 TOKEN super-secret-value", 0)
         .await;
@@ -72,8 +69,7 @@ async fn sensitive_command_text_is_returned_to_its_writer_but_redacted_from_glob
 
     let audit_event = scenario
         .state
-        .audit_events
-        .lock()
+        .events.audit_events()
         .iter()
         .rev()
         .find(|event| event.kind == "command_line_changed")
@@ -90,7 +86,7 @@ async fn sensitive_command_text_is_returned_to_its_writer_but_redacted_from_glob
             .to_string()
             .contains("super-secret-value")
     );
-    let light_application::EventReplay::Events(events) = scenario.state.application_events.replay(
+    let light_application::EventReplay::Events(events) = scenario.state.events.replay(
         cursor,
         &light_application::EventFilter::default()
             .with_capability(light_application::EventCapability::System),

@@ -20,9 +20,7 @@ async fn verify_revisioned_command_line(scenario: &CommandHttpScenario) {
     assert_eq!(json(replaced).await["text"], "FIXTURE 1");
     let persisted = scenario
         .state
-        .desk
-        .lock()
-        .persisted_sessions()
+        .installation.persisted_sessions()
         .unwrap()
         .into_iter()
         .find(|session| session.id == scenario.session.id)
@@ -36,7 +34,7 @@ async fn verify_revisioned_command_line(scenario: &CommandHttpScenario) {
     assert_eq!(
         scenario
             .state
-            .programmers
+            .programming
             .command_line_state(scenario.session.id)
             .unwrap()
             .visible_text(),
@@ -59,7 +57,7 @@ async fn verify_idempotent_execution(
     assert_eq!(
         scenario
             .state
-            .programmers
+            .programming
             .get(scenario.session.id)
             .unwrap()
             .selected,
@@ -85,10 +83,10 @@ async fn verify_rejection_replay(scenario: &CommandHttpScenario) {
 async fn verify_rejected_command_is_atomic(scenario: &CommandHttpScenario) {
     let selection_before = scenario
         .state
-        .programmers
+        .programming
         .selection(scenario.session.id)
         .unwrap();
-    let programmer_before = scenario.state.programmers.get(scenario.session.id).unwrap();
+    let programmer_before = scenario.state.programming.get(scenario.session.id).unwrap();
     let rejected = scenario
         .execute("missing-fixture", Some("GROUP 1 AT BOGUS"))
         .await;
@@ -99,12 +97,12 @@ async fn verify_rejected_command_is_atomic(scenario: &CommandHttpScenario) {
     assert_eq!(
         scenario
             .state
-            .programmers
+            .programming
             .selection(scenario.session.id)
             .unwrap(),
         selection_before
     );
-    let programmer_after = scenario.state.programmers.get(scenario.session.id).unwrap();
+    let programmer_after = scenario.state.programming.get(scenario.session.id).unwrap();
     assert_eq!(
         serde_json::to_value(programmer_after.values).unwrap(),
         serde_json::to_value(programmer_before.values).unwrap()

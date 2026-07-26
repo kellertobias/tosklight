@@ -59,8 +59,11 @@ pub(super) async fn save_note(
     );
     let fingerprint =
         serde_json::to_value(&input).map_err(|error| ApiError::internal(error.to_string()))?;
-    let mut replay = state.desk_management_replay.lock().await;
-    if let Some(value) = replay.get(&key, &fingerprint)? {
+    if let Some(value) = state
+        .replay
+        .lookup_desk_management(&key, &fingerprint)
+        .await?
+    {
         return Ok(Json(value));
     }
     if input.note.len() > 64 * 1024 {
@@ -84,6 +87,9 @@ pub(super) async fn save_note(
         &input.request_id,
         false,
     )?;
-    replay.insert(key, fingerprint, value.clone());
+    state
+        .replay
+        .insert_desk_management(key, fingerprint, value.clone())
+        .await;
     Ok(Json(value))
 }

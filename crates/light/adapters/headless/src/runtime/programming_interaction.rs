@@ -1,4 +1,7 @@
-use super::{ApiError, AppState, Session, command_http::ServerProgrammingPorts};
+use super::{
+    ApiError, AppState, Session, capability_resources::ActiveShowPermit,
+    command_http::ServerProgrammingPorts,
+};
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, ActionSource, ProgrammingInteractionResult,
     ProgrammingLifecycleCompletion, ProgrammingLifecycleResult, ProgrammingLifecycleTarget,
@@ -38,13 +41,10 @@ pub(super) fn run_programming_interaction<T>(
         .map_err(programming_action_error)
 }
 
-pub(super) fn try_programming_activation(
-    state: &AppState,
-) -> Result<tokio::sync::OwnedMutexGuard<()>, String> {
+pub(super) fn try_programming_activation(state: &AppState) -> Result<ActiveShowPermit, String> {
     state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
+        .active_show
+        .try_acquire()
         .map_err(|_| "the active show is changing; retry the Programmer action".to_owned())
 }
 

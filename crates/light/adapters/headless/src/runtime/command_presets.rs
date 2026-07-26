@@ -9,13 +9,15 @@ pub(super) fn normalized_programmer_command_family(
     tokenize_programmer_command(command_line).map(|(tokens, _)| tokens.into_iter().next())
 }
 
-pub(super) fn active_show_store(state: &AppState) -> Result<(ShowEntry, ShowStore), String> {
+pub(super) fn active_show_store(
+    state: &AppState,
+) -> Result<(ShowEntry, ActiveShowRepository), String> {
     let entry = state
         .active_show
-        .read()
+        .current()
         .clone()
         .ok_or("no active show is loaded")?;
-    let store = ShowStore::open(&entry.path).map_err(|error| error.to_string())?;
+    let store = ActiveShowRepository::open(&entry.path).map_err(|error| error.to_string())?;
     Ok((entry, store))
 }
 
@@ -70,17 +72,17 @@ pub(super) fn apply_command_preset(
         .ok_or_else(|| format!("preset {id} does not exist"))?;
     let (_, preset) = decode_preset_object(&object)?;
     let groups = state
-        .engine
+        .output
         .snapshot()
         .groups
         .iter()
         .map(|group| (group.id.clone(), group.clone()))
         .collect::<HashMap<_, _>>();
     let current_expression = state
-        .programmers
+        .programming
         .get(session.id)
         .and_then(|programmer| programmer.selection_expression);
-    let programmer_fade_millis = state.configuration.read().programmer_fade_millis;
+    let programmer_fade_millis = state.installation.configuration().programmer_fade_millis;
     let live_group_targets = match current_expression {
         Some(light_programmer::SelectionExpression::LiveGroup {
             group_id,
@@ -104,7 +106,7 @@ pub(super) fn apply_command_preset(
     for fixture in selected {
         if let Some(attributes) = preset.values.get(fixture) {
             for (attribute, value) in attributes {
-                state.programmers.set_faded_with_timing(
+                state.programming.set_faded_with_timing(
                     session.id,
                     *fixture,
                     attribute.clone(),
@@ -123,7 +125,7 @@ pub(super) fn apply_command_preset(
                 .is_ok_and(|members| members.contains(fixture))
             {
                 for (attribute, value) in attributes {
-                    state.programmers.set_faded_with_timing(
+                    state.programming.set_faded_with_timing(
                         session.id,
                         *fixture,
                         attribute.clone(),
@@ -140,7 +142,7 @@ pub(super) fn apply_command_preset(
             continue;
         };
         for (attribute, value) in attributes {
-            state.programmers.set_group_faded_with_timing(
+            state.programming.set_group_faded_with_timing(
                 session.id,
                 group_id.clone(),
                 attribute.clone(),
@@ -150,7 +152,7 @@ pub(super) fn apply_command_preset(
             );
         }
     }
-    state.programmers.set_modes(
+    state.programming.set_modes(
         session.id,
         None,
         None,

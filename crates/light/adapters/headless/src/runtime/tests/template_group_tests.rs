@@ -48,14 +48,12 @@ impl TemplateGroupScenario {
     }
 
     fn activate_and_verify_empty_groups(&self) {
-        *self.state.active_show.write() = Some(self.entry.clone());
+        self.state.active_show.replace_current(Some(self.entry.clone()));
         self.state
-            .engine
-            .replace_snapshot(load_engine_snapshot(&self.entry).unwrap())
+            .output.replace_snapshot(load_engine_snapshot(&self.entry).unwrap())
             .unwrap();
         self.state
-            .engine
-            .execute_playback(EnginePlaybackCommand::CueList {
+            .output.execute_playback(EnginePlaybackCommand::CueList {
                 id: self.cue_list_id,
                 action: light_engine::CueListPlaybackAction::Go,
             })
@@ -105,7 +103,7 @@ impl TemplateGroupScenario {
     fn exercise_first_preload(&self, white_frame: &light_output::DmxFrame) {
         self.set_preload(0.25, 0.75);
         assert_eq!(&self.render(), white_frame);
-        self.state.programmers.activate_preload(self.session_id);
+        self.state.programming.activate_preload(self.session_id);
         let frame = self.render();
         let address = self.profiles[0].address.unwrap();
         assert_eq!(template_word(&frame, address), 16_384);
@@ -154,7 +152,7 @@ impl TemplateGroupScenario {
                     .and_then(light_core::AttributeValue::normalized)
                     == Some(0.25)
         }));
-        let programmer = self.state.programmers.get(self.session_id).unwrap();
+        let programmer = self.state.programming.get(self.session_id).unwrap();
         assert!(programmer.preload_active.is_empty());
         assert!(programmer.preload_group_active.is_empty());
     }
@@ -162,8 +160,7 @@ impl TemplateGroupScenario {
     fn exercise_second_preload_and_recall(&self) {
         self.set_preload(0.8, 0.2);
         self.state
-            .engine
-            .execute_playback(EnginePlaybackCommand::CueList {
+            .output.execute_playback(EnginePlaybackCommand::CueList {
                 id: self.cue_list_id,
                 action: light_engine::CueListPlaybackAction::Jump(2.0),
             })
@@ -172,7 +169,7 @@ impl TemplateGroupScenario {
         let recalled = self.render();
         assert_eq!(template_word(&recalled, address), 16_384);
         assert_eq!(template_word(&recalled, address + 2), 49_151);
-        self.state.programmers.activate_preload(self.session_id);
+        self.state.programming.activate_preload(self.session_id);
         let second_go = self.render();
         assert_eq!(template_word(&second_go, address), 52_428);
         assert_eq!(template_word(&second_go, address + 2), 13_107);
@@ -221,11 +218,10 @@ impl TemplateGroupScenario {
                 2,
             )
             .unwrap();
-        self.state.programmers.release_preload(self.session_id);
+        self.state.programming.release_preload(self.session_id);
         self.reload_snapshot();
         self.state
-            .engine
-            .execute_playback(EnginePlaybackCommand::CueList {
+            .output.execute_playback(EnginePlaybackCommand::CueList {
                 id: self.cue_list_id,
                 action: light_engine::CueListPlaybackAction::Jump(2.0),
             })
@@ -258,10 +254,10 @@ impl TemplateGroupScenario {
 
     fn set_preload(&self, pan: f32, tilt: f32) {
         self.state
-            .programmers
+            .programming
             .set_modes(self.session_id, Some(true), None, None, None);
         for (attribute, value) in [("pan", pan), ("tilt", tilt)] {
-            self.state.programmers.set_preload_group(
+            self.state.programming.set_preload_group(
                 self.session_id,
                 "profile".into(),
                 light_core::AttributeKey(attribute.into()),
@@ -272,15 +268,13 @@ impl TemplateGroupScenario {
 
     fn reload_snapshot(&self) {
         self.state
-            .engine
-            .replace_snapshot(load_engine_snapshot(&self.entry).unwrap())
+            .output.replace_snapshot(load_engine_snapshot(&self.entry).unwrap())
             .unwrap();
     }
 
     fn render(&self) -> light_output::DmxFrame {
         self.state
-            .engine
-            .render(RenderOptions::default())
+            .output.render(RenderOptions::default())
             .unwrap()
             .universes[&1]
     }

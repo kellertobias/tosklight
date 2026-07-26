@@ -21,7 +21,7 @@ fn invalid_active_show_enters_recovery_instead_of_aborting_startup() {
 #[test]
 fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -29,7 +29,7 @@ fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     let first = light_core::FixtureId::new();
     let second = light_core::FixtureId::new();
     let third = light_core::FixtureId::new();
@@ -43,19 +43,17 @@ fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
         ..Default::default()
     };
     state
-        .engine
-        .replace_snapshot(snapshot(vec![first, second]))
+        .output.replace_snapshot(snapshot(vec![first, second]))
         .unwrap();
     assert_eq!(
         execute_programmer_command(&state, &session, "DEGRP 1").unwrap(),
         2
     );
     state
-        .engine
-        .replace_snapshot(snapshot(vec![first, second, third]))
+        .output.replace_snapshot(snapshot(vec![first, second, third]))
         .unwrap();
     assert_eq!(
-        state.programmers.get(session.id).unwrap().selected,
+        state.programming.get(session.id).unwrap().selected,
         vec![first, second]
     );
     assert!(execute_programmer_command(&state, &session, "DEGRP 2").is_err());
@@ -68,11 +66,10 @@ fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
     );
     execute_programmer_command(&state, &session, "GROUP 1").unwrap();
     state
-        .engine
-        .replace_snapshot(snapshot(vec![third]))
+        .output.replace_snapshot(snapshot(vec![third]))
         .unwrap();
     assert_eq!(
-        state.programmers.get(session.id).unwrap().selected,
+        state.programming.get(session.id).unwrap().selected,
         vec![third]
     );
     let _ = std::fs::remove_dir_all(data_dir);
@@ -81,7 +78,7 @@ fn repeated_group_command_freezes_membership_while_live_reference_refreshes() {
 #[test]
 fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_to_right() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -89,7 +86,7 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     attach_session_command_context(&state, &session);
 
     let show_path = data_dir.join("shows/mixed-selection.show");
@@ -130,13 +127,13 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
         },
     ]
     .into();
-    state.engine.replace_snapshot(snapshot.clone()).unwrap();
+    state.output.replace_snapshot(snapshot.clone()).unwrap();
 
     assert_eq!(
         execute_programmer_command(&state, &session, "DEGRP 3 + G5").unwrap(),
         8
     );
-    let mixed = state.programmers.get(session.id).unwrap();
+    let mixed = state.programming.get(session.id).unwrap();
     assert_eq!(mixed.selected, fixtures[..8]);
     let Some(light_programmer::SelectionExpression::Sources { items }) = mixed.selection_expression
     else {
@@ -157,9 +154,9 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
 
     std::sync::Arc::make_mut(&mut snapshot.groups)[1].fixtures =
         vec![fixtures[8], fixtures[4]];
-    state.engine.replace_snapshot(snapshot).unwrap();
+    state.output.replace_snapshot(snapshot).unwrap();
     assert_eq!(
-        state.programmers.get(session.id).unwrap().selected,
+        state.programming.get(session.id).unwrap().selected,
         vec![
             fixtures[0],
             fixtures[1],
@@ -172,7 +169,7 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
 
     execute_programmer_command(&state, &session, "G3 - F2 + F2").unwrap();
     assert_eq!(
-        state.programmers.get(session.id).unwrap().selected,
+        state.programming.get(session.id).unwrap().selected,
         vec![fixtures[0], fixtures[2], fixtures[3], fixtures[1]]
     );
     let _ = std::fs::remove_dir_all(data_dir);
@@ -181,7 +178,7 @@ fn mixed_selection_sources_dereference_only_the_addressed_term_and_replay_left_t
 #[test]
 fn set_group_requests_properties_only_for_the_originating_desk() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -189,10 +186,9 @@ fn set_group_requests_properties_only_for_the_originating_desk() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             groups: vec![light_programmer::GroupDefinition {
                 id: "4".into(),
                 name: "Center Spot".into(),
@@ -206,7 +202,7 @@ fn set_group_requests_properties_only_for_the_originating_desk() {
         execute_programmer_command(&state, &session, "SET GROUP 4").unwrap(),
         0
     );
-    let event = state.audit_events.lock().back().cloned().unwrap();
+    let event = state.events.audit_events().last().cloned().unwrap();
     assert_eq!(event.kind, "group_configuration_requested");
     assert_eq!(event.payload["group_id"], "4");
     assert_eq!(event.payload["desk_id"], session.desk.id.to_string());
@@ -218,7 +214,7 @@ fn set_group_requests_properties_only_for_the_originating_desk() {
 #[test]
 fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -226,7 +222,7 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     let show_path = data_dir.join("shows/record-group.show");
     let show_id = initialise_show(&show_path, "Record Group").unwrap();
     let entry = ShowEntry {
@@ -256,13 +252,12 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
             0,
         )
         .unwrap();
-    *state.active_show.write() = Some(entry.clone());
+    state.active_show.replace_current(Some(entry.clone()));
     state
-        .engine
-        .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+        .output.replace_snapshot(load_engine_snapshot(&entry).unwrap())
         .unwrap();
 
-    state.programmers.select_expression(
+    state.programming.select_expression(
         session.id,
         fixtures[..3].to_vec(),
         light_programmer::SelectionExpression::LiveGroup {
@@ -314,10 +309,9 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
         )
         .unwrap();
     state
-        .engine
-        .replace_snapshot(load_engine_snapshot(&entry).unwrap())
+        .output.replace_snapshot(load_engine_snapshot(&entry).unwrap())
         .unwrap();
-    state.programmers.select_expression(
+    state.programming.select_expression(
         session.id,
         fixtures[..3].to_vec(),
         light_programmer::SelectionExpression::LiveGroup {
@@ -339,23 +333,23 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
             > group_3_revision
     );
 
-    state.programmers.select(session.id, []);
+    state.programming.select(session.id, []);
     assert!(execute_programmer_command(&state, &session, "RECORD - GROUP 3").is_err());
     execute_programmer_command(&state, &session, "DELETE GROUP 4").unwrap();
 
     state
-        .programmers
+        .programming
         .select(session.id, [fixtures[2], fixtures[3]]);
     execute_programmer_command(&state, &session, "RECORD + GROUP 3").unwrap();
     assert_eq!(read_group().fixtures, fixtures);
 
     state
-        .programmers
+        .programming
         .select(session.id, [fixtures[1], fixtures[3]]);
     execute_programmer_command(&state, &session, "RECORD - GROUP 3").unwrap();
     assert_eq!(read_group().fixtures, vec![fixtures[0], fixtures[2]]);
 
-    state.programmers.select(session.id, []);
+    state.programming.select(session.id, []);
     execute_programmer_command(&state, &session, "RECORD - GROUP 3").unwrap();
     assert!(
         ShowStore::open(&show_path)
@@ -370,7 +364,7 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
 #[test]
 fn multi_point_spread_with_more_points_than_selection_is_rejected_without_mutation() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -378,12 +372,11 @@ fn multi_point_spread_with_more_points_than_selection_is_rejected_without_mutati
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     let first = light_core::FixtureId::new();
     let second = light_core::FixtureId::new();
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             groups: vec![light_programmer::GroupDefinition {
                 id: "1".into(),
                 name: "Group 1".into(),
@@ -397,7 +390,7 @@ fn multi_point_spread_with_more_points_than_selection_is_rejected_without_mutati
         execute_programmer_command(&state, &session, "GROUP 1 AT 0 THRU 50 THRU 100").unwrap_err();
     assert!(error.contains("control points"), "{error}");
     // No partial mutation: neither per-fixture values nor a group value landed.
-    let programmer = state.programmers.get(session.id).unwrap();
+    let programmer = state.programming.get(session.id).unwrap();
     assert!(programmer.values.is_empty());
     assert!(programmer.group_values.is_empty());
     let _ = std::fs::remove_dir_all(data_dir);

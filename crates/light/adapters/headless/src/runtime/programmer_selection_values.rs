@@ -7,7 +7,7 @@ pub(super) fn apply_current_selection_value(
     timing: CommandTiming,
 ) -> Result<usize, String> {
     let current = state
-        .programmers
+        .programming
         .get(session.id)
         .ok_or("programmer does not exist")?;
     if current.selected.is_empty() {
@@ -28,7 +28,7 @@ pub(super) fn apply_current_selection_value(
         if let Some(light_programmer::SelectionExpression::LiveGroup { group_id, .. }) =
             current.selection_expression.clone()
         {
-            state.programmers.set_group_faded_with_timing(
+            state.programming.set_group_faded_with_timing(
                 session.id,
                 group_id,
                 light_core::AttributeKey::intensity(),
@@ -76,7 +76,7 @@ pub(super) fn apply_current_selection_value(
                 "relative group values require DEGRP so each fixture keeps its own offset".into(),
             );
         }
-        state.programmers.set_group_faded_with_timing(
+        state.programming.set_group_faded_with_timing(
             session.id,
             group_id,
             light_core::AttributeKey::intensity(),
@@ -86,7 +86,7 @@ pub(super) fn apply_current_selection_value(
         );
         return Ok(current.selected.len());
     }
-    let resolved = relative.then(|| state.engine.resolved_values());
+    let resolved = relative.then(|| state.output.resolved_values());
     let values = current.selected.iter().map(|fixture_id| {
         let target = if let Some(resolved) = &resolved {
             let current = resolved

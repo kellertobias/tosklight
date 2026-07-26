@@ -9,7 +9,7 @@ pub(super) fn selection_environment(
     state: &AppState,
     query: &ProgrammingSelectionQuery,
 ) -> ProgrammingSelectionEnvironment {
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     match query {
         ProgrammingSelectionQuery::Fixtures(requested) => ProgrammingSelectionEnvironment {
             show_revision: snapshot.revision,

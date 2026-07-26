@@ -13,9 +13,8 @@ pub(super) async fn apply_mvr_import(
 ) -> Result<Json<ApplyMvrResult>, ApiError> {
     let session = authenticate(&state, &headers)?;
     let staged = state
-        .mvr_imports
-        .lock()
-        .remove(&token)
+        .active_show
+        .take_mvr_import(token)
         .ok_or_else(|| ApiError::not_found("MVR import preview"))?;
     if staged.created.elapsed() > Duration::from_secs(30 * 60) {
         return Err(ApiError::bad_request("MVR import preview expired"));
@@ -62,7 +61,8 @@ fn import_destination(
     if let Some(new) = new_show {
         validate_show_name(&new.name)?;
         let path = state
-            .data_dir
+            .installation
+            .data_dir()
             .join("shows")
             .join(format!("{}.show", new.name));
         if path.exists() {
@@ -71,8 +71,7 @@ fn import_destination(
         initialise_show(&path, &new.name).map_err(ApiError::store)?;
         Ok((
             state
-                .desk
-                .lock()
+                .installation
                 .upsert_show(&new.name, &path.display().to_string(), false)
                 .map_err(ApiError::store)?,
             true,
@@ -82,8 +81,7 @@ fn import_destination(
         let id = light_core::ShowId(existing_show_id.expect("destination was validated"));
         Ok((
             state
-                .desk
-                .lock()
+                .installation
                 .show(id)
                 .map_err(ApiError::store)?
                 .ok_or_else(|| ApiError::not_found("show"))?,
@@ -98,12 +96,11 @@ pub(super) fn build_mvr_export(
     id: Uuid,
 ) -> Result<(ShowEntry, light_mvr::MvrDocument, MvrExportPreview), ApiError> {
     let entry = state
-        .desk
-        .lock()
+        .installation
         .show(light_core::ShowId(id))
         .map_err(ApiError::store)?
         .ok_or_else(|| ApiError::not_found("show"))?;
-    let store = ShowStore::open(&entry.path).map_err(ApiError::store)?;
+    let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let metas: HashMap<String, serde_json::Value> = store
         .objects("mvr_fixture")
         .map_err(ApiError::store)?
@@ -136,9 +133,8 @@ pub(super) fn build_mvr_export(
                 format!("{}@{}.gdtf", f.definition.manufacturer, f.definition.model)
             });
         if let Some(source) = state
-            .fixture_library
-            .lock()
-            .source_gdtf(f.definition.id, f.definition.revision)
+            .installation
+            .fixture_source_gdtf(f.definition.id, f.definition.revision)
             .map_err(ApiError::fixture)?
         {
             doc.files.entry(gdtf.to_ascii_lowercase()).or_insert(source);

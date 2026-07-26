@@ -11,7 +11,7 @@ pub(super) fn environment(
     context: &ActionContext,
     request: &ProgrammingCueRecordRequest,
 ) -> Result<ProgrammingCueRecordingEnvironment, ActionError> {
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let resolved = resolve_target(state, context, request.target, &snapshot)?;
     Ok(ProgrammingCueRecordingEnvironment {
         target: resolved,
@@ -56,12 +56,11 @@ fn selected_playback(
 ) -> Result<ProgrammingCueResolvedTarget, ActionError> {
     let show = state
         .active_show
-        .read()
+        .current()
         .clone()
         .ok_or_else(|| not_found("no show is open"))?;
     let playback_number = state
-        .desk
-        .lock()
+        .installation
         .selected_playback(context.desk_id, show.id)
         .map_err(|error| invalid(error.to_string()))?
         .ok_or_else(|| not_found("no playback is selected"))?;
@@ -104,7 +103,7 @@ fn active_cue(
     state: &AppState,
     target: ProgrammingCueResolvedTarget,
 ) -> Result<Option<PlaybackCueReference>, ActionError> {
-    let runtime = state.engine.playback_runtime_status();
+    let runtime = state.output.playback_runtime_status();
     let mut candidates = runtime.iter().filter(|status| match target {
         ProgrammingCueResolvedTarget::Playback {
             playback_number, ..

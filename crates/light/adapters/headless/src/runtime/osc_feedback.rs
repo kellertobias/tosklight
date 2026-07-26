@@ -13,13 +13,14 @@ pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[Os
         && matches!(parts[3], "prog-fade" | "cue-fade")
         && let Some(value) = numeric
     {
-        let mut config = state.configuration.write();
-        if parts[3] == "prog-fade" {
-            config.programmer_fade_millis = (value.clamp(0.0, 1.0) * 20_000.0) as u64;
-        } else {
-            config.sequence_master_fade_millis = (value.clamp(0.0, 1.0) * 60_000.0) as u64;
-        }
-        drop(config);
+        state.installation.update_configuration(|configuration| {
+            if parts[3] == "prog-fade" {
+                configuration.programmer_fade_millis = (value.clamp(0.0, 1.0) * 20_000.0) as u64;
+            } else {
+                configuration.sequence_master_fade_millis =
+                    (value.clamp(0.0, 1.0) * 60_000.0) as u64;
+            }
+        });
         let _ = persist_server_configuration(state);
         refresh_speed_group_engine(state);
     }
@@ -33,13 +34,9 @@ pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[Os
         && osc_pressed(arguments)
     {
         let index = group - 1;
-        let mut controllers = state.speed_groups.lock();
         let now = application_millis(state);
-        unlink_speed_group(&mut controllers, index, now);
-        controllers[index].tap_learn(now);
-        copy_speed_group_runtime_to_configuration(state, &controllers, &[index]);
-        drop(controllers);
-        state.sound_capture_owners.lock()[index] = None;
+        let _ = state.output.tap_speed_group(index, now);
+        copy_speed_group_runtime_to_configuration(state, &[index]);
         let _ = persist_server_configuration(state);
         let snapshots = refresh_speed_group_engine(state);
         emit(
@@ -60,14 +57,12 @@ pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[Os
         let index = group - 1;
         let bpm = f64::from(value).clamp(0.1, 999.0);
         let now = application_millis(state);
-        let mut controllers = state.speed_groups.lock();
-        unlink_speed_group(&mut controllers, index, now);
-        if controllers[index].set_manual_bpm(bpm).is_ok() {
-            let _ = controllers[index].set_speed_master_scale(1.0);
-            controllers[index].set_paused_at(false, now);
-            copy_speed_group_runtime_to_configuration(state, &controllers, &[index]);
-            drop(controllers);
-            state.sound_capture_owners.lock()[index] = None;
+        if state
+            .output
+            .set_manual_speed_group(index, bpm, now, false)
+            .is_ok()
+        {
+            copy_speed_group_runtime_to_configuration(state, &[index]);
             let _ = persist_server_configuration(state);
             refresh_speed_group_engine(state);
             emit(
@@ -75,8 +70,6 @@ pub(super) fn handle_timing_osc(state: &AppState, address: &str, arguments: &[Os
                 "speed_group_changed",
                 serde_json::json!({"group":speed_group_name(index),"desk_alias":parts[1],"source":"osc","manual_bpm":bpm}),
             );
-        } else {
-            drop(controllers);
         }
     }
 }
@@ -117,17 +110,7 @@ pub(super) fn send_osc(
     address: String,
     arguments: Vec<OscArgument>,
 ) {
-    #[cfg(test)]
-    state
-        .osc_feedback_capture
-        .lock()
-        .push((target, address.clone(), arguments.clone()));
-    if let (Some(socket), Ok(packet)) = (
-        &state.osc_feedback,
-        encode_osc_message(&address, &arguments),
-    ) {
-        let _ = socket.send_to(&packet, target);
-    }
+    state.integrations.send_osc(target, address, arguments);
 }
 
 pub(super) fn speed_group_osc_feedback(snapshot: SpeedSnapshot) -> Vec<OscArgument> {
@@ -160,10 +143,13 @@ pub(super) fn playback_color_rgb(color: &str, active: bool) -> (f32, f32, f32) {
 }
 
 pub(super) fn osc_control_desk(state: &AppState, alias: &str) -> Option<ControlDesk> {
-    let store = state.desk.lock();
     if alias.eq_ignore_ascii_case("main") || alias.is_empty() {
-        store.desks().ok()?.into_iter().next()
+        state.installation.desks().ok()?.into_iter().next()
     } else {
-        store.control_desk_by_alias(alias).ok().flatten()
+        state
+            .installation
+            .control_desk_by_alias(alias)
+            .ok()
+            .flatten()
     }
 }

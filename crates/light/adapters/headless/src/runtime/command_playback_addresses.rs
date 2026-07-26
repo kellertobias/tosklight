@@ -212,7 +212,7 @@ pub(super) fn programmer_cue(
 }
 
 pub(super) fn cue_list_for_playback(
-    store: &ShowStore,
+    store: &ActiveShowRepository,
     snapshot: &EngineSnapshot,
     playback: u16,
 ) -> Result<

@@ -39,7 +39,7 @@ impl OperationalScenario {
             .await
             .unwrap();
         assert_eq!(opened.status(), StatusCode::OK);
-        assert_eq!(self.state.engine.snapshot().fixtures.len(), 1);
+        assert_eq!(self.state.output.snapshot().fixtures.len(), 1);
         let patch = self
             .app
             .clone()
@@ -77,8 +77,8 @@ impl OperationalScenario {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(
-            self.state.output_control.lock().raw_overrides.get(&(1, 1)),
-            Some(&200)
+            self.state.output.dmx_override(1, 1),
+            Some(200)
         );
         let dmx = self
             .app
@@ -103,15 +103,14 @@ impl OperationalScenario {
         );
         assert_eq!(self.rendered_intensity(), 64);
         assert_eq!(
-            self.state.programmers.get(session.id).unwrap().selected,
+            self.state.programming.get(session.id).unwrap().selected,
             vec![self.fixture_id]
         );
     }
 
     fn rendered_intensity(&self) -> u8 {
         self.state
-            .engine
-            .render(RenderOptions::default())
+            .output.render(RenderOptions::default())
             .unwrap()
             .universes[&1][0]
     }
@@ -145,11 +144,11 @@ impl OperationalScenario {
             StatusCode::OK
         );
         apply_command_preset(&self.state, &session, "1.1", &[self.fixture_id]).unwrap();
-        let programmer = self.state.programmers.get(session.id).unwrap();
+        let programmer = self.state.programming.get(session.id).unwrap();
         assert_eq!(programmer.values[0].fade_millis, Some(3_000));
         assert_eq!(programmer.values[0].value.normalized(), Some(0.75));
         assert_eq!(
-            self.state.programmers.get(session.id).unwrap().values[0].fade_millis,
+            self.state.programming.get(session.id).unwrap().values[0].fade_millis,
             Some(3_000)
         );
         let go = self
@@ -257,7 +256,7 @@ impl OperationalScenario {
             .unwrap();
         assert_eq!(rollback.status(), StatusCode::OK);
         assert_eq!(
-            self.state.active_show.read().as_ref().unwrap().id.0.to_string(),
+            self.state.active_show.current().as_ref().unwrap().id.0.to_string(),
             self.first_id
         );
         self.disconnect_and_clear_programmer().await;
@@ -280,7 +279,7 @@ impl OperationalScenario {
             .unwrap();
         assert_eq!(disconnected.status(), StatusCode::NO_CONTENT);
         let session_id = SessionId(Uuid::parse_str(&self.session_id).unwrap());
-        assert!(!self.state.programmers.get(session_id).unwrap().connected);
+        assert!(!self.state.programming.get(session_id).unwrap().connected);
         let (second_token, _) = login(&self.app, "Operator").await;
         let cleared = self
             .app

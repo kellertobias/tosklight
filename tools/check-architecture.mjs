@@ -23,6 +23,10 @@ import {
 import {
   controlStateLabelWarnings,
 } from "./check-control-state-labels.mjs";
+import {
+  capabilityStateBoundaryFailures,
+  readCapabilityStateBoundarySources,
+} from "./capability-state-boundaries.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
@@ -164,6 +168,9 @@ function activeShowMutationDirections() {
   const adapterRoot = path.join(repositoryRoot, "crates/light/adapters/headless/src");
   const directMutation = /\.(?:put_object|delete_object|mutate_objects_atomically|apply_portable_transaction|put_user_layout)\s*\(/u;
   const deliberateBoundaries = new Set([
+    // Capability-owned SQLite adapter. It exposes persistence operations but no raw ShowStore;
+    // the calling ActiveShowResource/service still owns loaded-show mutation ordering.
+    "crates/light/adapters/headless/src/runtime/capabilities/active_show/repository.rs",
     // The ActiveShowService unit of work is the one production active-show commit owner.
     "crates/light/adapters/headless/src/runtime/active_show_adapter.rs",
     // Default-show creation writes a new library file, never the loaded active show.
@@ -561,11 +568,18 @@ function semanticWorldBoundaries() {
   }
 }
 
+function capabilityStateOwnershipBoundaries() {
+  for (const failure of capabilityStateBoundaryFailures(
+    readCapabilityStateBoundarySources(repositoryRoot),
+  )) fail(failure);
+}
+
 rustDependencyDirections();
 serverEntrypointIsThin();
 desktopHostIsCompositionRoot();
 activeShowMutationDirections();
 playbackOwnershipBoundaries();
+capabilityStateOwnershipBoundaries();
 typeScriptDependencyDirections();
 sharedUiDependencyDirections();
 applicationSourceDirections();

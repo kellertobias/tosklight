@@ -8,7 +8,7 @@ pub(super) fn compile_active_show_for_startup(
 ) -> Option<String> {
     let backup = ShowMutationBackupPlan::migration(data_dir, entry, backup_retention);
     let result = prepare_show_load(entry, None)
-        .and_then(|prepared| prepared.prepare_runtime(engine))
+        .and_then(|prepared| prepared.prepare_runtime(|snapshot| engine.prepare_snapshot(snapshot)))
         .and_then(|prepared| prepared.commit_migration(&backup));
     match result {
         Ok(prepared) => {

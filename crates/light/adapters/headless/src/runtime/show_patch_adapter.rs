@@ -19,9 +19,9 @@ use std::{collections::HashSet, sync::Arc};
 
 /// Runtime adapter for the application-owned active-show patch workflow.
 ///
-/// Each application-ordered lifecycle owns `AppState::activation_lock`. Snapshot lifecycles release
-/// it before immutable fixture-library planning begins; transaction lifecycles retain it through
-/// commit, runtime installation, reconciliation, and event publication.
+/// Each application-ordered lifecycle owns an active-show coordinator permit. Snapshot lifecycles
+/// release it before immutable fixture-library planning begins; transaction lifecycles retain it
+/// through commit, runtime installation, reconciliation, and event publication.
 #[derive(Clone)]
 pub(super) struct ServerShowPatchPorts {
     state: AppState,
@@ -140,8 +140,8 @@ impl ActiveShowPorts for ServerShowPatchPorts {
         operation: impl FnOnce() -> Result<T, ActionError>,
     ) -> Result<T, ActionError> {
         #[cfg(test)]
-        self.state.patch_lifecycle.pause_if_armed();
-        let _activation = self.state.activation_lock.clone().blocking_lock_owned();
+        self.state.active_show.pause_patch_lifecycle_if_armed();
+        let _activation = self.state.active_show.acquire_blocking();
         operation()
     }
 
@@ -177,7 +177,7 @@ impl ActiveShowPorts for ServerShowPatchPorts {
         snapshot: EngineSnapshot,
     ) -> Result<Self::PreparedRuntime, ActionError> {
         self.state
-            .engine
+            .output
             .prepare_snapshot(snapshot)
             .map_err(|error| engine_error(error, self.current_patch_revision()))
     }
@@ -201,7 +201,10 @@ impl ShowPatchPorts for ServerShowPatchPorts {
         revision: Revision,
     ) -> Result<FixtureProfileRevision, ActionError> {
         #[cfg(test)]
-        self.state.patch_profile_resolution.pause_if_armed();
+        self.state
+            .active_show
+            .patch_profile_resolution_probe()
+            .pause_if_armed();
         let library_revision = u32::try_from(revision).map_err(|_| {
             at_current_patch_revision(
                 ActionError::new(
@@ -213,9 +216,8 @@ impl ShowPatchPorts for ServerShowPatchPorts {
         })?;
         let profile = self
             .state
-            .fixture_library
-            .lock()
-            .profile_revision_document(profile_id, library_revision)
+            .installation
+            .fixture_profile_revision_document(profile_id, library_revision)
             .map_err(|error| fixture_error(error, self.current_patch_revision()))?
             .ok_or_else(|| {
                 at_current_patch_revision(
@@ -232,16 +234,7 @@ impl ShowPatchPorts for ServerShowPatchPorts {
 
     fn reconcile_patch_change(&self, change: &PatchChange) {
         let fixture_ids = affected_fixture_ids(change);
-        {
-            let mut cache = self.state.media_cache.lock();
-            for fixture_id in &fixture_ids {
-                cache.clear_fixture(&fixture_id.0.to_string());
-            }
-        }
-        let mut statuses = self.state.media_status.write();
-        for fixture_id in fixture_ids {
-            statuses.remove(&fixture_id);
-        }
+        self.state.media.invalidate_fixtures(fixture_ids);
     }
 }
 

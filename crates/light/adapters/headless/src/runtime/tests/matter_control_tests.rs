@@ -23,10 +23,9 @@ fn legacy_four_speed_group_configuration_gains_group_e() {
 #[test]
 fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
     let (state, data_dir) = test_state();
-    state.configuration.write().matter_enabled = true;
+    state.installation.update_configuration(|configuration| configuration.matter_enabled = true);
     state
-        .engine
-        .replace_snapshot(matter_test_snapshot())
+        .output.replace_snapshot(matter_test_snapshot())
         .unwrap();
 
     let initial = refresh_matter_bridge(&state);
@@ -49,7 +48,7 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
         },
     )
     .unwrap();
-    let runtime = state.engine.playback_runtime();
+    let runtime = state.output.playback_runtime();
     let addressed = runtime
         .iter()
         .find(|playback| playback.playback_number == Some(25))
@@ -72,8 +71,7 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
 
     // Automatic tracking/off behavior is mirrored back to the Matter attribute snapshot.
     state
-        .engine
-        .execute_playback(EnginePlaybackCommand::Pool {
+        .output.execute_playback(EnginePlaybackCommand::Pool {
             number: 25,
             action: PoolPlaybackAction::Off,
         })
@@ -87,7 +85,7 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
     assert!(!light.on);
     assert_eq!(light.level, 0);
     assert_eq!(
-        state.audit_events.lock().back().unwrap().payload["source"],
+        state.events.audit_events().last().unwrap().payload["source"],
         "matter"
     );
     let _ = std::fs::remove_dir_all(data_dir);
@@ -104,32 +102,26 @@ fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
         updated_at: String::new(),
         revision_copy: None,
     };
-    *state.active_show.write() = Some(show.clone());
+    state.active_show.replace_current(Some(show.clone()));
     let cue_list_id = light_core::CueListId::new();
     state
-        .engine
-        .replace_snapshot(restored_exclusion_snapshot(cue_list_id))
+        .output.replace_snapshot(restored_exclusion_snapshot(cue_list_id))
         .unwrap();
-    state.configuration.write().matter_enabled = true;
+    state.installation.update_configuration(|configuration| configuration.matter_enabled = true);
     let desk = state
-        .desk
-        .lock()
-        .add_desk("Matter restart desk", "matter-restart")
+        .installation.add_desk("Matter restart desk", "matter-restart")
         .unwrap();
     state
-        .desk
-        .lock()
-        .set_desk_page(desk.id, show.id, 1)
+        .installation.set_desk_page(desk.id, show.id, 1)
         .unwrap();
     store_restart_zone(&state, &show, desk.id);
     state
-        .engine
-        .execute_pool_playback_with_activation(
+        .output.execute_pool_playback_with_activation(
             1,
             PoolPlaybackAction::On,
             &[vec![1, 2]],
             Some(light_playback::PlaybackActivationOrigin {
-                at: state.engine.application_time(),
+                at: state.output.application_time(),
                 desk_id: Some(desk.id),
                 surface: light_playback::PlaybackActivationSurface::Virtual,
                 exclusion_scope: light_playback::PlaybackExclusionScope::OriginatingDesk,
@@ -148,8 +140,7 @@ fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
     .unwrap();
 
     let activation = state
-        .engine
-        .playback_runtime()
+        .output.playback_runtime()
         .into_iter()
         .find(|playback| playback.playback_number == Some(2))
         .unwrap()
@@ -166,23 +157,19 @@ fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
     );
     persist_active_playbacks(&state).unwrap();
     let checkpoint = state
-        .desk
-        .lock()
-        .setting(&active_playbacks_setting(show.id))
+        .installation.setting(&active_playbacks_setting(show.id))
         .unwrap()
         .unwrap();
     let restored = serde_json::from_str(&checkpoint).unwrap();
     state
-        .engine
-        .execute_playback(EnginePlaybackCommand::RestoreActive(restored))
+        .output.execute_playback(EnginePlaybackCommand::RestoreActive(restored))
         .unwrap();
 
     let normalized = normalize_restored_virtual_playback_exclusions(&state).unwrap();
     assert!(!normalized.provenance_migrated);
     assert!(normalized.released_playbacks.is_empty());
     let enabled = state
-        .engine
-        .playback_runtime()
+        .output.playback_runtime()
         .into_iter()
         .filter(|playback| playback.enabled)
         .filter_map(|playback| playback.playback_number)
@@ -194,15 +181,13 @@ fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
 #[test]
 fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
     let (state, data_dir) = test_state();
-    state.configuration.write().matter_enabled = true;
+    state.installation.update_configuration(|configuration| configuration.matter_enabled = true);
     state
-        .engine
-        .replace_snapshot(matter_test_snapshot())
+        .output.replace_snapshot(matter_test_snapshot())
         .unwrap();
     let endpoint = matter::endpoint_id(1, 7).unwrap();
     let definition = state
-        .engine
-        .snapshot()
+        .output.snapshot()
         .playbacks
         .iter()
         .find(|definition| definition.number == 26)
@@ -241,7 +226,7 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
         },
     )
     .unwrap();
-    let runtime = state.engine.playback_runtime();
+    let runtime = state.output.playback_runtime();
     let active = runtime
         .iter()
         .find(|playback| playback.playback_number == Some(26))
@@ -292,8 +277,7 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
     assert_eq!(light.level, matter::MAX_MATTER_LEVEL);
     assert_eq!(
         state
-            .engine
-            .playback_runtime()
+            .output.playback_runtime()
             .iter()
             .find(|playback| playback.playback_number == Some(26))
             .unwrap()
@@ -302,8 +286,7 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
     );
 
     state
-        .engine
-        .execute_playback(EnginePlaybackCommand::Pool {
+        .output.execute_playback(EnginePlaybackCommand::Pool {
             number: 26,
             action: PoolPlaybackAction::Off,
         })
@@ -322,7 +305,7 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
 #[test]
 fn matter_writes_reach_every_assignable_faderless_target_family() {
     let (state, data_dir) = test_state();
-    state.configuration.write().matter_enabled = true;
+    state.installation.update_configuration(|configuration| configuration.matter_enabled = true);
     let definition = |number, target, fader| light_playback::PlaybackDefinition {
         number,
         name: format!("Matter playback {number}"),
@@ -341,8 +324,7 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
         presentation_image: None,
     };
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             groups: vec![light_programmer::GroupDefinition {
                 id: "front".into(),
                 name: "Front".into(),
@@ -387,7 +369,7 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
         })
         .unwrap();
 
-    let activation = state.activation_lock.clone().try_lock_owned().unwrap();
+    let activation = state.active_show.try_acquire().unwrap();
     let rejected = apply_matter_playback_write(
         &state,
         matter::endpoint_id(1, 1).unwrap(),
@@ -398,10 +380,10 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
     )
     .unwrap_err();
     assert_eq!(rejected.status, StatusCode::CONFLICT);
-    assert_eq!(state.engine.snapshot().groups[0].master, 1.0);
+    assert_eq!(state.output.snapshot().groups[0].master, 1.0);
     drop(activation);
 
-    let output_cursor = state.application_events.latest_sequence();
+    let output_cursor = state.events.latest_sequence();
     for playback in 1..=5 {
         apply_matter_playback_write(
             &state,
@@ -415,17 +397,19 @@ fn matter_writes_reach_every_assignable_faderless_target_family() {
     }
 
     assert!(
-        (state.engine.snapshot().groups[0].master - 0.5).abs() < 0.001,
+        (state.output.snapshot().groups[0].master - 0.5).abs() < 0.001,
         "Group Master uses the Matter level"
     );
-    let speed = state.speed_groups.lock()[0].snapshot(application_millis(&state));
+    let speed = state
+        .output
+        .speed_group_snapshot(0, application_millis(&state));
     assert!((speed.manual_bpm - 150.0).abs() < 0.001);
     assert!((speed.speed_master_scale - 1.0).abs() < 0.001);
-    let configuration = state.configuration.read();
+    let configuration = state.installation.configuration();
     assert_eq!(configuration.programmer_fade_millis, 10_000);
     assert_eq!(configuration.sequence_master_fade_millis, 30_000);
-    assert!((state.output_control.lock().options.grand_master - 0.5).abs() < 0.001);
-    let light_application::EventReplay::Events(output_events) = state.application_events.replay(
+    assert!((state.output.control_projection().grand_master - 0.5).abs() < 0.001);
+    let light_application::EventReplay::Events(output_events) = state.events.replay(
         output_cursor,
         &light_application::EventFilter::default()
             .with_object(light_application::EventObject::global_output()),

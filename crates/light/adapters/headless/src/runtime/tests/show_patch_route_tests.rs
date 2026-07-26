@@ -93,7 +93,7 @@ async fn v2_patch_snapshot_authenticates_and_returns_the_patch_revision_etag() {
     let show = create_show(&app, &token, "V2 Patch snapshot").await;
     let show_id = show["id"].as_str().unwrap();
     open_show_for_patch_test(&app, &token, show_id).await;
-    let baseline_sequence = state.application_events.latest_sequence();
+    let baseline_sequence = state.events.latest_sequence();
 
     let response = app
         .oneshot(
@@ -157,7 +157,7 @@ async fn v2_patch_requires_if_match_and_rejects_invalid_batches_without_side_eff
     let show = create_show(&app, &token, "V2 Patch validation").await;
     let show_id = show["id"].as_str().unwrap();
     open_show_for_patch_test(&app, &token, show_id).await;
-    let baseline_sequence = state.application_events.latest_sequence();
+    let baseline_sequence = state.events.latest_sequence();
 
     let missing_precondition = post_patch(
         &app,
@@ -190,10 +190,7 @@ async fn v2_patch_requires_if_match_and_rejects_invalid_batches_without_side_eff
     assert_eq!(unchanged["show_revision"], 1);
     assert_eq!(unchanged["patch_revision"], 0);
     assert_eq!(unchanged["cursor"]["sequence"], baseline_sequence);
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        baseline_sequence
-    );
+    assert_eq!(state.events.latest_sequence(), baseline_sequence);
 
     let successful_request = valid_patch_request_for(profile_id, mode_id, "successful-route-test");
     let success = post_patch(&app, &token, show_id, Some(0), successful_request.clone()).await;
@@ -205,10 +202,7 @@ async fn v2_patch_requires_if_match_and_rejects_invalid_batches_without_side_eff
     assert_eq!(success["patch_revision"], 1);
     assert_eq!(success["event_sequence"], baseline_sequence + 1);
     assert_eq!(success["fixtures"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        baseline_sequence + 1
-    );
+    assert_eq!(state.events.latest_sequence(), baseline_sequence + 1);
 
     let replay = post_patch(&app, &token, show_id, Some(0), successful_request).await;
     assert_eq!(replay.status(), StatusCode::OK);
@@ -216,10 +210,7 @@ async fn v2_patch_requires_if_match_and_rejects_invalid_batches_without_side_eff
     let replay = json(replay).await;
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["event_sequence"], baseline_sequence + 1);
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        baseline_sequence + 1
-    );
+    assert_eq!(state.events.latest_sequence(), baseline_sequence + 1);
     assert_eq!(patch_backup_count(&data_dir), 1);
 
     let committed_response = get_patch(&app, &token, show_id).await;
@@ -231,7 +222,7 @@ async fn v2_patch_requires_if_match_and_rejects_invalid_batches_without_side_eff
     assert_eq!(committed["fixtures"].as_array().unwrap().len(), 1);
 
     open_show_for_patch_test(&app, &token, show_id).await;
-    assert_eq!(state.engine.snapshot().fixtures.len(), 1);
+    assert_eq!(state.output.snapshot().fixtures.len(), 1);
     let reopened = json(get_patch(&app, &token, show_id).await).await;
     assert_eq!(reopened["show_revision"], 2);
     assert_eq!(reopened["patch_revision"], 1);
@@ -251,8 +242,7 @@ async fn v2_patch_revision_ignores_unrelated_group_mutations() {
 
     let show_uuid = Uuid::parse_str(show_id).unwrap();
     let entry = state
-        .desk
-        .lock()
+        .installation
         .show(light_core::ShowId(show_uuid))
         .unwrap()
         .unwrap();
@@ -309,7 +299,7 @@ async fn ordinary_http_and_patch_share_one_outer_lock_order_without_deadlock() {
     let show_id = show["id"].as_str().unwrap().to_owned();
     open_show_for_patch_test(&app, &token, &show_id).await;
 
-    state.active_show_http_lifecycle.arm();
+    state.active_show.http_lifecycle_probe().arm();
     let group_state = state.clone();
     let group_token = token.clone();
     let group_show_id = show_id.clone();
@@ -328,12 +318,12 @@ async fn ordinary_http_and_patch_share_one_outer_lock_order_without_deadlock() {
         )
         .await
     });
-    let ordinary_pause = Arc::clone(&state.active_show_http_lifecycle);
+    let ordinary_pause = state.active_show.http_lifecycle_probe();
     tokio::task::spawn_blocking(move || ordinary_pause.wait_until_started())
         .await
         .unwrap();
 
-    state.patch_lifecycle.arm();
+    state.active_show.patch_lifecycle_probe().arm();
     let patch_app = app.clone();
     let patch_token = token.clone();
     let patch_show_id = show_id.clone();
@@ -347,7 +337,7 @@ async fn ordinary_http_and_patch_share_one_outer_lock_order_without_deadlock() {
         )
         .await
     });
-    let patch_pause = Arc::clone(&state.patch_lifecycle);
+    let patch_pause = state.active_show.patch_lifecycle_probe();
     tokio::task::spawn_blocking(move || patch_pause.wait_until_started())
         .await
         .unwrap();
@@ -355,9 +345,9 @@ async fn ordinary_http_and_patch_share_one_outer_lock_order_without_deadlock() {
     // Patch is paused immediately before taking activation. Because that outer lifecycle precedes
     // the application operation gate, the ordinary request must still be able to commit while
     // Patch remains paused. The former operation-then-activation order deadlocked at this point.
-    state.active_show_http_lifecycle.release();
+    state.active_show.http_lifecycle_probe().release();
     let group = tokio::time::timeout(Duration::from_secs(2), group).await;
-    state.patch_lifecycle.release();
+    state.active_show.patch_lifecycle_probe().release();
     let group = group
         .expect("ordinary active-show HTTP mutation deadlocked with Patch")
         .unwrap();
@@ -370,8 +360,7 @@ async fn ordinary_http_and_patch_share_one_outer_lock_order_without_deadlock() {
 
     let document = ShowStore::open(
         &state
-            .desk
-            .lock()
+            .installation
             .show(light_core::ShowId(Uuid::parse_str(&show_id).unwrap()))
             .unwrap()
             .unwrap()
@@ -395,7 +384,7 @@ async fn paused_profile_resolution_releases_activation_for_an_http_show_mutation
     let show = create_show(&app, &token, "V2 Patch planning concurrency").await;
     let show_id = show["id"].as_str().unwrap().to_owned();
     open_show_for_patch_test(&app, &token, &show_id).await;
-    state.patch_profile_resolution.arm();
+    state.active_show.patch_profile_resolution_probe().arm();
 
     let patch_app = app.clone();
     let patch_token = token.clone();
@@ -410,10 +399,10 @@ async fn paused_profile_resolution_releases_activation_for_an_http_show_mutation
         )
         .await
     });
-    let pause = Arc::clone(&state.patch_profile_resolution);
+    let pause = state.active_show.patch_profile_resolution_probe();
     let started = tokio::task::spawn_blocking(move || pause.wait_until_started()).await;
     if started.is_err() {
-        state.patch_profile_resolution.release();
+        state.active_show.patch_profile_resolution_probe().release();
     }
     started.unwrap();
 
@@ -433,7 +422,7 @@ async fn paused_profile_resolution_releases_activation_for_an_http_show_mutation
         ),
     )
     .await;
-    state.patch_profile_resolution.release();
+    state.active_show.patch_profile_resolution_probe().release();
     let patch = patch.await.unwrap();
     let group =
         group.expect("ordinary active-show HTTP mutation was blocked by Patch profile resolution");
@@ -444,15 +433,15 @@ async fn paused_profile_resolution_releases_activation_for_an_http_show_mutation
     assert_eq!(patch["show_revision"], 3);
     assert_eq!(patch["patch_revision"], 1);
     let show_id = light_core::ShowId(Uuid::parse_str(&show_id).unwrap());
-    let entry = state.desk.lock().show(show_id).unwrap().unwrap();
+    let entry = state.installation.show(show_id).unwrap().unwrap();
     let document = ShowStore::open(&entry.path)
         .unwrap()
         .portable_document()
         .unwrap();
     assert!(document.object("group", "during-resolution").is_some());
     assert_eq!(document.objects_of_kind("patched_fixture").count(), 1);
-    assert_eq!(state.engine.snapshot().revision, 3);
-    assert_eq!(state.engine.snapshot().fixtures.len(), 1);
+    assert_eq!(state.output.snapshot().revision, 3);
+    assert_eq!(state.output.snapshot().fixtures.len(), 1);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -507,11 +496,7 @@ fn install_patch_route_profile(state: &AppState) -> (Uuid, Uuid) {
     profile.manufacturer = "Route Test".into();
     profile.name = "Patch Fixture".into();
     profile.short_name = "Patch".into();
-    let profile = state
-        .fixture_library
-        .lock()
-        .save_profile(profile, 0)
-        .unwrap();
+    let profile = state.installation.save_fixture_profile(profile, 0).unwrap();
     (profile.id.0, profile.modes[0].id)
 }
 

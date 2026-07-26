@@ -32,7 +32,7 @@ pub(crate) fn intercept_armed_playback(
 }
 
 fn record_is_armed(state: &AppState, session: &Session) -> bool {
-    state.programmers.get(session.id).is_some_and(|programmer| {
+    state.programming.get(session.id).is_some_and(|programmer| {
         matches!(
             programmer.command_line.trim().to_ascii_uppercase().as_str(),
             "RECORD" | "REC"
@@ -71,12 +71,11 @@ fn target(
 fn current_page(state: &AppState, session: &Session) -> Result<u8, ActionError> {
     let show = state
         .active_show
-        .read()
+        .current()
         .clone()
         .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "no show is open"))?;
     state
-        .desk
-        .lock()
+        .installation
         .desk_page(session.desk.id, show.id)
         .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.to_string()))
 }

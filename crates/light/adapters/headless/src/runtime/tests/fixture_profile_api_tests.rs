@@ -55,9 +55,8 @@ async fn fixture_profile_api_rejects_invalid_discrete_wheel_before_storing_revis
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     assert!(
         state
-            .fixture_library
-            .lock()
-            .profile(profile_id, 1)
+            .installation
+            .fixture_profile(profile_id, 1)
             .unwrap()
             .is_none()
     );
@@ -71,8 +70,8 @@ async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
     let (token, _) = login(&app, "Operator").await;
     let show = create_show(&app, &token, "Inactive patch preflight").await;
     let show_id = light_core::ShowId(Uuid::parse_str(show["id"].as_str().unwrap()).unwrap());
-    let entry = state.desk.lock().show(show_id).unwrap().unwrap();
-    assert!(state.active_show.read().is_none());
+    let entry = state.installation.show(show_id).unwrap().unwrap();
+    assert!(state.active_show.current().is_none());
 
     let (fixture, _, _) = schema_v2_direct_fixture();
     let object_id = fixture.fixture_id.0.to_string();
@@ -239,9 +238,8 @@ async fn fixture_library_v2_is_replay_safe_and_preserves_package_and_gdtf_bytes(
     assert_eq!(created["result"]["revision"], 1);
     let created_profile = serde_json::to_value(
         state
-            .fixture_library
-            .lock()
-            .profile(profile_id, 1)
+            .installation
+            .fixture_profile(profile_id, 1)
             .unwrap()
             .unwrap(),
     )
@@ -366,9 +364,8 @@ async fn fixture_library_v2_is_replay_safe_and_preserves_package_and_gdtf_bytes(
     assert_eq!(retained.status(), StatusCode::OK);
     assert_eq!(
         state
-            .fixture_library
-            .lock()
-            .profile_source_gdtf(profile_id, 1)
+            .installation
+            .fixture_profile_source_gdtf(profile_id, 1)
             .unwrap()
             .as_deref(),
         Some(source.as_slice())

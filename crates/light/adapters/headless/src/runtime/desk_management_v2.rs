@@ -70,15 +70,21 @@ async fn update_configuration(
     let key = ReplayKey::new(session.id, "configuration", &request.request_id);
     let fingerprint =
         serde_json::to_value(&request).map_err(|error| ApiError::internal(error.to_string()))?;
-    let mut replay = state.desk_management_replay.lock().await;
-    if let Some(value) = replay.get(&key, &fingerprint)? {
+    if let Some(value) = state
+        .replay
+        .lookup_desk_management(&key, &fingerprint)
+        .await?
+    {
         return Ok(Json(value));
     }
-    let configuration = patched_configuration(state.configuration.read().clone(), request.patch)?;
+    let configuration = patched_configuration(state.installation.configuration(), request.patch)?;
     let Json(mut value) =
         sessions::update_configuration(State(state.clone()), headers, Json(configuration)).await?;
     attach_intent_metadata(&mut value, &request.request_id, false);
-    replay.insert(key, fingerprint, value.clone());
+    state
+        .replay
+        .insert_desk_management(key, fingerprint, value.clone())
+        .await;
     Ok(Json(value))
 }
 
@@ -115,28 +121,32 @@ async fn update_speed_group_settings(
     );
     let fingerprint =
         serde_json::to_value(&request).map_err(|error| ApiError::internal(error.to_string()))?;
-    let mut replay = state.desk_management_replay.lock().await;
-    if let Some(value) = replay.get(&key, &fingerprint)? {
+    if let Some(value) = state
+        .replay
+        .lookup_desk_management(&key, &fingerprint)
+        .await?
+    {
         return Ok(Json(value));
     }
     let source = application_source(request.source);
-    let mut sources = state.configuration.read().speed_group_sources;
+    let mut sources = state.installation.configuration().speed_group_sources;
     sources[index] = source;
     configuration::validate_speed_group_source_graph(&sources)?;
     let configuration = application_sound_configuration(request.configuration, source);
     configuration
         .validate()
         .map_err(|error| ApiError::bad_request(error.to_string()))?;
-    state.speed_groups.lock()[index]
-        .set_sound_config(configuration.clone())
-        .map_err(|error| ApiError::bad_request(error.to_string()))?;
-    {
-        let mut desk_configuration = state.configuration.write();
-        desk_configuration.speed_group_sound_to_light[index] = configuration.clone();
-        desk_configuration.speed_group_sources = sources;
-    }
+    state
+        .output
+        .set_speed_group_sound_config(index, configuration.clone())?;
+    state
+        .installation
+        .update_configuration(|desk_configuration| {
+            desk_configuration.speed_group_sound_to_light[index] = configuration.clone();
+            desk_configuration.speed_group_sources = sources;
+        });
     if source != SpeedGroupSource::SoundToLight {
-        state.sound_capture_owners.lock()[index] = None;
+        state.output.clear_sound_capture_owner(index);
     }
     speed_groups::persist_server_configuration(&state)?;
     let snapshots = speed_groups::refresh_speed_group_engine(&state);
@@ -154,7 +164,10 @@ async fn update_speed_group_settings(
     let mut value =
         serde_json::to_value(response).map_err(|error| ApiError::internal(error.to_string()))?;
     attach_intent_metadata(&mut value, &request.request_id, false);
-    replay.insert(key, fingerprint, value.clone());
+    state
+        .replay
+        .insert_desk_management(key, fingerprint, value.clone())
+        .await;
     Ok(Json(value))
 }
 
@@ -169,26 +182,18 @@ async fn speed_group_action(
         request.map_err(|error| ApiError::bad_request(error.body_text()))?;
     let action = request.action;
     let index = speed_groups::speed_group_index(&group)?;
-    let source = state.configuration.read().speed_group_sources[index];
+    let source = state.installation.configuration().speed_group_sources[index];
     if matches!(action, wire::SpeedGroupLiveAction::SetBpm) {
         let bpm = request
             .bpm
             .ok_or_else(|| ApiError::bad_request("set_bpm requires bpm"))?;
         let now = speed_groups::application_millis(&state);
-        let mut controllers = state.speed_groups.lock();
-        speed_groups::unlink_speed_group(&mut controllers, index, now);
-        controllers[index]
-            .set_manual_bpm(bpm)
-            .map_err(|error| ApiError::bad_request(error.to_string()))?;
-        let mut sound_configuration = controllers[index].sound_config().clone();
-        sound_configuration.enabled = false;
-        controllers[index]
-            .set_sound_config(sound_configuration)
-            .map_err(|error| ApiError::bad_request(error.to_string()))?;
-        speed_groups::copy_speed_group_runtime_to_configuration(&state, &controllers, &[index]);
-        drop(controllers);
-        state.configuration.write().speed_group_sources[index] = SpeedGroupSource::Manual;
-        state.sound_capture_owners.lock()[index] = None;
+        state.output.set_manual_speed_group(index, bpm, now, true)?;
+        speed_groups::copy_speed_group_runtime_to_configuration(&state, &[index]);
+        state.installation.update_configuration(|configuration| {
+            configuration.speed_group_sources[index] = SpeedGroupSource::Manual;
+        });
+        state.output.clear_sound_capture_owner(index);
         speed_groups::persist_server_configuration(&state)?;
         let snapshots = speed_groups::refresh_speed_group_engine(&state);
         return Ok(Json(speed_groups::speed_group_response(
@@ -201,22 +206,20 @@ async fn speed_group_action(
         if matches!(source, SpeedGroupSource::SpeedGroup { .. }) {
             let effective_bpm =
                 speed_groups::refresh_speed_group_engine(&state)[index].effective_bpm;
-            state.speed_groups.lock()[index]
-                .set_manual_fallback_bpm(effective_bpm)
-                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+            state
+                .output
+                .set_speed_group_manual_fallback(index, effective_bpm)?;
         }
-        let mut controllers = state.speed_groups.lock();
-        let mut sound_configuration = controllers[index].sound_config().clone();
+        let mut sound_configuration = state.output.speed_group_sound_config(index);
         sound_configuration.enabled = false;
-        controllers[index]
-            .set_sound_config(sound_configuration.clone())
-            .map_err(|error| ApiError::bad_request(error.to_string()))?;
-        drop(controllers);
-        let mut configuration = state.configuration.write();
-        configuration.speed_group_sources[index] = SpeedGroupSource::Manual;
-        configuration.speed_group_sound_to_light[index] = sound_configuration;
-        drop(configuration);
-        state.sound_capture_owners.lock()[index] = None;
+        state
+            .output
+            .set_speed_group_sound_config(index, sound_configuration.clone())?;
+        state.installation.update_configuration(|configuration| {
+            configuration.speed_group_sources[index] = SpeedGroupSource::Manual;
+            configuration.speed_group_sound_to_light[index] = sound_configuration;
+        });
+        state.output.clear_sound_capture_owner(index);
     }
     let input = SpeedGroupActionInput {
         action: match action {
@@ -308,8 +311,11 @@ async fn update_desk_lock(
     let key = ReplayKey::new(session.id, "desk-lock-configuration", &request.request_id);
     let fingerprint =
         serde_json::to_value(&request).map_err(|error| ApiError::internal(error.to_string()))?;
-    let mut replay = state.desk_management_replay.lock().await;
-    if let Some(value) = replay.get(&key, &fingerprint)? {
+    if let Some(value) = state
+        .replay
+        .lookup_desk_management(&key, &fingerprint)
+        .await?
+    {
         return Ok(Json(value));
     }
     let Json(response) = boundaries::update_desk_lock(
@@ -330,7 +336,10 @@ async fn update_desk_lock(
     let mut value =
         serde_json::to_value(response).map_err(|error| ApiError::internal(error.to_string()))?;
     attach_intent_metadata(&mut value, &request.request_id, false);
-    replay.insert(key, fingerprint, value.clone());
+    state
+        .replay
+        .insert_desk_management(key, fingerprint, value.clone())
+        .await;
     Ok(Json(value))
 }
 
@@ -372,8 +381,11 @@ async fn create_user(
     let key = ReplayKey::new(session.id, "user-create", &request.request_id);
     let fingerprint =
         serde_json::to_value(&request).map_err(|error| ApiError::internal(error.to_string()))?;
-    let mut replay = state.desk_management_replay.lock().await;
-    if let Some(value) = replay.get(&key, &fingerprint)? {
+    if let Some(value) = state
+        .replay
+        .lookup_desk_management(&key, &fingerprint)
+        .await?
+    {
         return Ok((StatusCode::OK, Json(value)));
     }
     let (_, Json(user)) = sessions::create_user(
@@ -387,7 +399,10 @@ async fn create_user(
     .await?;
     let mut value = serde_json::json!({"user":user});
     attach_intent_metadata(&mut value, &request.request_id, false);
-    replay.insert(key, fingerprint, value.clone());
+    state
+        .replay
+        .insert_desk_management(key, fingerprint, value.clone())
+        .await;
     Ok((StatusCode::CREATED, Json(value)))
 }
 

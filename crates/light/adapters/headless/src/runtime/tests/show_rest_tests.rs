@@ -76,7 +76,7 @@ async fn rest_session_show_and_revision_flow() {
     );
     let configuration=app.clone().oneshot(Request::post("/api/v2/configuration/update").header(header::CONTENT_TYPE,"application/json").header(header::AUTHORIZATION,format!("Bearer {token}")).body(Body::from(r#"{"request_id":"configuration-test","patch":{"frame_rate_hz":40,"output_bind_ip":"0.0.0.0","osc_bind":null,"art_timecode_bind":null,"backup_retention":5,"programmer_fade_millis":1250,"command_line_at_uses_programmer_fade":false,"sequence_master_fade_millis":2500}}"#)).unwrap()).await.unwrap();
     assert_eq!(configuration.status(), StatusCode::OK);
-    assert_eq!(state.output_rate.load(Ordering::Relaxed), 40);
+    assert_eq!(state.output.frame_rate_hz(), 40);
     for (index, bpm) in [101, 102, 103, 104].into_iter().enumerate() {
         let group = char::from(b'A' + index as u8);
         let response = app.clone().oneshot(
@@ -88,14 +88,13 @@ async fn rest_session_show_and_revision_flow() {
         ).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
-    assert_eq!(state.configuration.read().speed_groups_bpm, [101.0, 102.0, 103.0, 104.0, 15.0]);
-    assert_eq!(state.configuration.read().programmer_fade_millis, 1_250);
+    assert_eq!(state.installation.configuration().speed_groups_bpm, [101.0, 102.0, 103.0, 104.0, 15.0]);
+    assert_eq!(state.installation.configuration().programmer_fade_millis, 1_250);
     assert!(!state
-        .configuration
-        .read()
+        .installation.configuration()
         .command_line_at_uses_programmer_fade);
     assert_eq!(
-        state.configuration.read().sequence_master_fade_millis,
+        state.installation.configuration().sequence_master_fade_millis,
         2_500
     );
     let user = app
@@ -122,9 +121,7 @@ async fn exact_non_group_read_does_not_deserialize_its_collection() {
     let show = create_show(&app, &token, "Exact object").await;
     let show_id = show["id"].as_str().unwrap();
     let entry = state
-        .desk
-        .lock()
-        .show(light_core::ShowId(Uuid::parse_str(show_id).unwrap()))
+        .installation.show(light_core::ShowId(Uuid::parse_str(show_id).unwrap()))
         .unwrap()
         .unwrap();
     let store = ShowStore::open(&entry.path).unwrap();
@@ -190,9 +187,7 @@ async fn exact_group_read_keeps_derived_membership_materialization() {
     let show = create_show(&app, &token, "Derived group").await;
     let show_id = show["id"].as_str().unwrap();
     let entry = state
-        .desk
-        .lock()
-        .show(light_core::ShowId(Uuid::parse_str(show_id).unwrap()))
+        .installation.show(light_core::ShowId(Uuid::parse_str(show_id).unwrap()))
         .unwrap()
         .unwrap();
     let fixtures = [light_core::FixtureId::new(), light_core::FixtureId::new()];

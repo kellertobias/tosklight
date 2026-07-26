@@ -63,8 +63,8 @@ async fn v2_context_headers_default_to_the_single_or_main_control_desk() {
     );
 
     let (main_state, main_data_dir) = test_state();
-    let wing = main_state.desk.lock().add_desk("A wing", "wing").unwrap();
-    let main = main_state.desk.lock().add_desk("Z main", "main").unwrap();
+    let wing = main_state.installation.add_desk("A wing", "wing").unwrap();
+    let main = main_state.installation.add_desk("Z main", "main").unwrap();
     let main_app = router(main_state.clone());
     let main_token = login_playback_user_on_desk(&main_app, "Operator", main.id).await;
     open_playback_test_show(&main_app, &main_token).await;
@@ -111,7 +111,7 @@ async fn v2_scoped_playback_action_rejects_stale_show_before_execution() {
     )
     .await;
     assert_eq!(accepted.status(), StatusCode::OK);
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     let rejected = post_scoped_action(
         &app,
@@ -130,7 +130,7 @@ async fn v2_scoped_playback_action_rejects_stale_show_before_execution() {
         json(rejected).await["error"],
         "X-Tosk-Show does not match the active show"
     );
-    assert_eq!(state.application_events.latest_sequence(), cursor);
+    assert_eq!(state.events.latest_sequence(), cursor);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -171,7 +171,7 @@ async fn v2_playback_action_is_desk_scoped_typed_and_idempotent() {
         1,
         serde_json::json!({"type":"go","pressed":true}),
     );
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let first = post_action(&app, Some(&token), desk_id, request.clone()).await;
     assert_eq!(first.status(), StatusCode::OK);
     let first = json(first).await;
@@ -193,10 +193,10 @@ async fn v2_playback_action_is_desk_scoped_typed_and_idempotent() {
     let replay = json(replay).await;
     assert_eq!(replay["event_sequence"], cursor + 1);
     assert_eq!(replay["replayed"], true);
-    assert_eq!(state.application_events.latest_sequence(), cursor + 1);
+    assert_eq!(state.events.latest_sequence(), cursor + 1);
 
     let light_application::EventReplay::Events(events) = state
-        .application_events
+        .events
         .replay(cursor, &light_application::EventFilter::for_desk(desk_id))
     else {
         panic!("playback event should be retained");
@@ -234,7 +234,7 @@ async fn v2_virtual_activation_returns_and_emits_one_transition_per_changed_play
     )
     .await;
     assert_eq!(first.status(), StatusCode::OK);
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let request = action_request(
         "activate-zone-winner",
         3,
@@ -255,12 +255,12 @@ async fn v2_virtual_activation_returns_and_emits_one_transition_per_changed_play
         false
     );
     assert_eq!(playback_event_objects(&state, cursor), vec![1, 3]);
-    let after_mutation = state.application_events.latest_sequence();
+    let after_mutation = state.events.latest_sequence();
 
     let replay = json(post_action(&app, Some(&token), desk_id, request).await).await;
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["related"], outcome["related"]);
-    assert_eq!(state.application_events.latest_sequence(), after_mutation);
+    assert_eq!(state.events.latest_sequence(), after_mutation);
 
     let toggle_off = json(
         post_action(
@@ -293,7 +293,7 @@ async fn v2_virtual_exclusion_publishes_changed_peer_before_target_and_replays_n
     set_pool_enabled(&state, 2, true);
     set_pool_enabled(&state, 4, true);
     put_virtual_exclusion_zone(&state, &app, &token, &[1, 2, 3]).await;
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let request = action_request(
         "activate-zoned-playback",
         1,
@@ -327,12 +327,12 @@ async fn v2_virtual_exclusion_publishes_changed_peer_before_target_and_replays_n
     assert_eq!(response["event_sequence"], events[1].sequence);
     assert_eq!(
         response["event_sequence"].as_u64(),
-        Some(state.application_events.latest_sequence())
+        Some(state.events.latest_sequence())
     );
     assert!(!pool_is_enabled(&state, 3));
     assert!(pool_is_enabled(&state, 4));
 
-    let after_first = state.application_events.latest_sequence();
+    let after_first = state.events.latest_sequence();
     let replay = json(post_action(&app, Some(&token), desk_id, request).await).await;
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["related"], response["related"]);
@@ -351,7 +351,7 @@ async fn v2_auto_off_publishes_related_release_before_primary_high_water() {
     install_auto_off_test_state(&state);
     set_pool_enabled(&state, 1, true);
     std::thread::sleep(std::time::Duration::from_millis(2));
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     let response = post_action(
         &app,
@@ -384,7 +384,7 @@ async fn v2_auto_off_publishes_related_release_before_primary_high_water() {
     assert_eq!(response["event_sequence"], events[1].sequence);
     assert_eq!(
         response["event_sequence"].as_u64(),
-        Some(state.application_events.latest_sequence())
+        Some(state.events.latest_sequence())
     );
     assert_eq!(enabled_playback_numbers(&state), vec![2]);
     let _ = std::fs::remove_dir_all(data_dir);
@@ -403,7 +403,7 @@ async fn v2_peer_only_auto_off_change_does_not_emit_an_equal_primary_event() {
     std::thread::sleep(std::time::Duration::from_millis(2));
     set_pool_enabled(&state, 2, true);
     update_virtual_definition(&state, 1, |definition| definition.auto_off = true);
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let request = action_request(
         "repeat-covering-playback",
         2,
@@ -418,7 +418,7 @@ async fn v2_peer_only_auto_off_change_does_not_emit_an_equal_primary_event() {
     assert_eq!(response["related"][0]["event_sequence"], cursor + 1);
     assert_eq!(response["event_sequence"], cursor + 1);
     assert_eq!(enabled_playback_numbers(&state), vec![2]);
-    let replay_cursor = state.application_events.latest_sequence();
+    let replay_cursor = state.events.latest_sequence();
     let replay = json(post_action(&app, Some(&token), desk_id, request).await).await;
     assert_eq!(replay["replayed"], true);
     assert!(playback_runtime_events(&state, replay_cursor).is_empty());
@@ -448,7 +448,7 @@ async fn v2_timed_crossfade_retrigger_emits_one_equal_projection_event() {
         .await,
     )
     .await;
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let request = action_request(
         "retrigger-timed-crossfade",
         1,
@@ -462,7 +462,7 @@ async fn v2_timed_crossfade_retrigger_emits_one_equal_projection_event() {
     assert_eq!(response["related"], serde_json::json!([]));
     assert_eq!(response["event_sequence"], cursor + 1);
     assert_eq!(playback_event_objects(&state, cursor), vec![1]);
-    let replay_cursor = state.application_events.latest_sequence();
+    let replay_cursor = state.events.latest_sequence();
     let replay = json(post_action(&app, Some(&token), desk_id, request).await).await;
     assert_eq!(replay["replayed"], true);
     assert!(playback_runtime_events(&state, replay_cursor).is_empty());
@@ -479,7 +479,7 @@ async fn v2_crossfade_activation_uses_the_same_atomic_exclusion_transition_set()
     install_virtual_exclusion_test_state(&state);
     set_pool_enabled(&state, 2, true);
     put_virtual_exclusion_zone(&state, &app, &token, &[1, 2]).await;
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     let response = post_action(
         &app,
@@ -534,7 +534,7 @@ async fn v2_flash_release_promotion_publishes_its_exclusion_peer() {
     .await;
     assert_eq!(press["related"], serde_json::json!([]));
     assert!(pool_is_enabled(&state, 1));
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     let release = json(
         post_action(
@@ -570,7 +570,7 @@ async fn v2_zero_manual_xfade_activation_publishes_its_exclusion_peer() {
     });
     set_pool_enabled(&state, 1, true);
     put_virtual_exclusion_zone(&state, &app, &token, &[1, 2]).await;
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     let response = json(
         post_action(
@@ -604,7 +604,7 @@ async fn v2_explicit_non_current_page_does_not_borrow_virtual_exclusions() {
     add_explicit_virtual_page(&state);
     set_pool_enabled(&state, 2, true);
     put_virtual_exclusion_zone(&state, &app, &token, &[1, 2]).await;
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     let request = serde_json::json!({
         "request_id":"explicit-non-current-zone-member",
@@ -624,7 +624,7 @@ async fn v2_explicit_non_current_page_does_not_borrow_virtual_exclusions() {
     assert_eq!(response["event_sequence"], events[0].sequence);
     assert_eq!(
         state
-            .engine
+            .output
             .playback_runtime()
             .into_iter()
             .find(|playback| playback.playback_number == Some(1))
@@ -648,7 +648,7 @@ async fn v2_current_page_and_explicit_page_addresses_resolve_independently() {
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_playback_test_state(&state);
-    let mut snapshot = (*state.engine.snapshot()).clone();
+    let mut snapshot = (*state.output.snapshot()).clone();
     snapshot.playback_pages = vec![
         light_playback::PlaybackPage {
             number: 1,
@@ -662,7 +662,7 @@ async fn v2_current_page_and_explicit_page_addresses_resolve_independently() {
         },
     ]
     .into();
-    state.engine.replace_snapshot(snapshot).unwrap();
+    state.output.replace_snapshot(snapshot).unwrap();
 
     let current = post_action(
         &app,
@@ -713,8 +713,7 @@ async fn v2_virtual_exclusion_configuration_is_desk_scoped() {
     let app = router(state.clone());
     let (first_token, _) = login(&app, "Operator").await;
     let second_desk = state
-        .desk
-        .lock()
+        .installation
         .add_desk("Playback v2 wing", "playback-v2-wing")
         .unwrap();
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
@@ -722,7 +721,7 @@ async fn v2_virtual_exclusion_configuration_is_desk_scoped() {
     install_virtual_exclusion_test_state(&state);
     set_pool_enabled(&state, 2, true);
     put_virtual_exclusion_zone(&state, &app, &first_token, &[1, 2]).await;
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     let response = post_action(
         &app,
@@ -744,7 +743,7 @@ async fn v2_virtual_exclusion_configuration_is_desk_scoped() {
     assert_eq!(events.len(), 1);
     assert_eq!(playback_event_state(&events[0]), (1, true));
     let activation = state
-        .engine
+        .output
         .playback_runtime()
         .into_iter()
         .find(|playback| playback.playback_number == Some(1))
@@ -768,7 +767,7 @@ async fn v2_group_selection_publishes_one_live_or_static_programming_event() {
     open_playback_test_show(&app, &token).await;
     let fixture = install_playback_test_state(&state);
 
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let request = action_request(
         "select-live-group",
         2,
@@ -791,13 +790,13 @@ async fn v2_group_selection_publishes_one_live_or_static_programming_event() {
             if group_id == "front"
     ));
 
-    let after_live = state.application_events.latest_sequence();
+    let after_live = state.events.latest_sequence();
     let replay = post_action(&app, Some(&token), desk_id, request).await;
     assert_eq!(replay.status(), StatusCode::OK);
     assert!(json(replay).await["replayed"].as_bool().unwrap());
     assert!(playback_selection_events(&state, desk_id, after_live).is_empty());
 
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let response = post_action(
         &app,
         Some(&token),
@@ -829,7 +828,7 @@ async fn v2_http_group_playback_selection_uses_the_same_typed_event_boundary() {
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     let fixture = install_playback_test_state(&state);
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     let response = post_action(
         &app,
@@ -867,16 +866,15 @@ async fn osc_group_playback_selection_uses_the_same_typed_event_boundary() {
     let (token, _) = login(&app, "Operator").await;
     let session = state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .find(|session| session.token == token)
-        .cloned()
         .unwrap();
     let desk_id = session.desk.id;
     open_playback_test_show(&app, &token).await;
     let fixture = install_playback_test_state(&state);
     let source: SocketAddr = "127.0.0.1:9020".parse().unwrap();
-    state.osc_subscribers.lock().insert(
+    state.integrations.register_osc_subscriber(
         "playback-selection-test".into(),
         OscSubscriber {
             desk_alias: session.desk.osc_alias.clone(),
@@ -891,7 +889,7 @@ async fn osc_group_playback_selection_uses_the_same_typed_event_boundary() {
             last_highlight_action: None,
         },
     );
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     handle_playback_osc(
         &state,
@@ -914,7 +912,7 @@ async fn osc_group_playback_selection_uses_the_same_typed_event_boundary() {
             if group_id == "front"
     ));
 
-    let after_press = state.application_events.latest_sequence();
+    let after_press = state.events.latest_sequence();
     handle_playback_osc(
         &state,
         "/light/playback/2/select",
@@ -933,7 +931,7 @@ async fn v2_snapshot_returns_only_requested_runtime_and_a_pre_read_cursor() {
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_playback_test_state(&state);
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     let response = app
         .oneshot(
@@ -984,7 +982,7 @@ async fn v2_group_runtime_actions_resolve_assigned_and_direct_authority() {
     open_playback_test_show(&app, &token).await;
     install_group_runtime_test_state(&state);
 
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let assigned_request = group_action_request(
         "assigned-group-master",
         "front",
@@ -1017,11 +1015,11 @@ async fn v2_group_runtime_actions_resolve_assigned_and_direct_authority() {
     assert_eq!(by_group[0].sequence, by_playback[0].sequence);
     assert_eq!(assigned["event_sequence"], by_group[0].sequence);
 
-    let replay_cursor = state.application_events.latest_sequence();
+    let replay_cursor = state.events.latest_sequence();
     let replay = json(post_action(&app, Some(&token), desk_id, assigned_request).await).await;
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["event_sequence"], assigned["event_sequence"]);
-    assert_eq!(state.application_events.latest_sequence(), replay_cursor);
+    assert_eq!(state.events.latest_sequence(), replay_cursor);
 
     let no_change = json(
         post_action(
@@ -1039,16 +1037,15 @@ async fn v2_group_runtime_actions_resolve_assigned_and_direct_authority() {
     .await;
     assert_eq!(no_change["outcome"]["status"], "no_change");
     assert!(no_change["event_sequence"].is_null());
-    assert_eq!(state.application_events.latest_sequence(), replay_cursor);
+    assert_eq!(state.events.latest_sequence(), replay_cursor);
 
     assert_group_flash_phase(&app, &state, &token, desk_id, "front", true, 1.0).await;
     assert_group_flash_phase(&app, &state, &token, desk_id, "front", false, 0.0).await;
 
-    let show_id = state.active_show.read().as_ref().unwrap().id;
+    let show_id = state.active_show.current().as_ref().unwrap().id;
     let output_key = output_runtime_setting(show_id);
     state
-        .desk
-        .lock()
+        .installation
         .set_setting(&output_key, "output-sentinel")
         .unwrap();
     let direct = json(
@@ -1076,8 +1073,7 @@ async fn v2_group_runtime_actions_resolve_assigned_and_direct_authority() {
     assert_eq!(direct["projection"]["master"], 0.4);
     assert_ne!(setting_value(&state, &output_key), "output-sentinel");
     state
-        .desk
-        .lock()
+        .installation
         .set_setting(&output_key, "flash-sentinel")
         .unwrap();
     assert_group_flash_phase(&app, &state, &token, desk_id, "side", true, 1.0).await;
@@ -1146,7 +1142,7 @@ async fn v2_group_actions_reject_unsupported_missing_and_wrong_assignments() {
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_group_runtime_test_state(&state);
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     for request in [
         group_action_request(
@@ -1198,7 +1194,7 @@ async fn v2_group_actions_reject_unsupported_missing_and_wrong_assignments() {
     )
     .await;
     assert_eq!(wrong_assignment.status(), StatusCode::CONFLICT);
-    assert_eq!(state.application_events.latest_sequence(), cursor);
+    assert_eq!(state.events.latest_sequence(), cursor);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -1210,7 +1206,7 @@ async fn playback_originated_group_change_uses_the_same_group_event_route() {
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_playback_test_state(&state);
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     let response = post_action(
         &app,
@@ -1243,14 +1239,13 @@ async fn v2_group_runtime_preserves_peer_desk_scope_and_rejects_stale_show() {
     let (first_token, _) = login(&app, "Operator").await;
     let first_desk = session_desk_id(&state, &first_token);
     let second_desk = state
-        .desk
-        .lock()
+        .installation
         .add_desk("Group runtime wing", "group-runtime-wing")
         .unwrap();
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
     open_playback_test_show(&app, &first_token).await;
     install_group_runtime_test_state(&state);
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     let foreign_desk = post_action(
         &app,
@@ -1278,7 +1273,7 @@ async fn v2_group_runtime_preserves_peer_desk_scope_and_rejects_stale_show() {
     )
     .await;
     assert_eq!(stale_show.status(), StatusCode::CONFLICT);
-    assert_eq!(state.application_events.latest_sequence(), cursor);
+    assert_eq!(state.events.latest_sequence(), cursor);
 
     let accepted = post_action(
         &app,
@@ -1300,12 +1295,12 @@ async fn v2_group_runtime_preserves_peer_desk_scope_and_rejects_stale_show() {
     let second_filter = light_application::EventFilter::for_desk(second_desk.id)
         .with_object(light_application::EventObject::group("side"));
     let light_application::EventReplay::Events(first_events) =
-        state.application_events.replay(cursor, &first_filter)
+        state.events.replay(cursor, &first_filter)
     else {
         panic!("Playback events should remain replayable")
     };
     let light_application::EventReplay::Events(second_events) =
-        state.application_events.replay(cursor, &second_filter)
+        state.events.replay(cursor, &second_filter)
     else {
         panic!("Playback events should remain replayable")
     };
@@ -1362,7 +1357,7 @@ async fn v2_playback_rejects_forged_sources_control_ids_and_no_change_emits_noth
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_playback_test_state(&state);
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     for invalid in [
         serde_json::json!({
@@ -1397,7 +1392,7 @@ async fn v2_playback_rejects_forged_sources_control_ids_and_no_change_emits_noth
     let no_change = json(no_change).await;
     assert_eq!(no_change["outcome"]["status"], "no_change");
     assert!(no_change["event_sequence"].is_null());
-    assert_eq!(state.application_events.latest_sequence(), cursor);
+    assert_eq!(state.events.latest_sequence(), cursor);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -1446,7 +1441,7 @@ async fn v2_playback_actions_persist_only_their_owned_runtime_domain() {
     let desk_id = session_desk_id(&state, &token);
     open_playback_test_show(&app, &token).await;
     install_playback_test_state(&state);
-    let show_id = state.active_show.read().as_ref().unwrap().id;
+    let show_id = state.active_show.current().as_ref().unwrap().id;
     let active_key = active_playbacks_setting(show_id);
     let output_key = output_runtime_setting(show_id);
 
@@ -1493,8 +1488,7 @@ async fn v2_playback_actions_persist_only_their_owned_runtime_domain() {
     assert_ne!(setting_value(&state, &output_key), "output-sentinel");
 
     state
-        .desk
-        .lock()
+        .installation
         .set_setting(&output_key, "output-sentinel")
         .unwrap();
     let on = post_action(
@@ -1542,9 +1536,14 @@ async fn v2_playback_actions_persist_only_their_owned_runtime_domain() {
 }
 
 fn set_runtime_sentinels(state: &AppState, active_key: &str, output_key: &str) {
-    let store = state.desk.lock();
-    store.set_setting(active_key, "active-sentinel").unwrap();
-    store.set_setting(output_key, "output-sentinel").unwrap();
+    state
+        .installation
+        .set_setting(active_key, "active-sentinel")
+        .unwrap();
+    state
+        .installation
+        .set_setting(output_key, "output-sentinel")
+        .unwrap();
 }
 
 fn assert_runtime_sentinels(state: &AppState, active_key: &str, output_key: &str) {
@@ -1553,7 +1552,7 @@ fn assert_runtime_sentinels(state: &AppState, active_key: &str, output_key: &str
 }
 
 fn setting_value(state: &AppState, key: &str) -> String {
-    state.desk.lock().setting(key).unwrap().unwrap()
+    state.installation.setting(key).unwrap().unwrap()
 }
 
 async fn assert_repeat_is_no_change(
@@ -1573,7 +1572,7 @@ async fn assert_repeat_is_no_change(
     .await;
     assert_eq!(first.status(), StatusCode::OK);
     assert_eq!(json(first).await["outcome"]["status"], "applied");
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     let repeated = post_action(
         app,
@@ -1586,7 +1585,7 @@ async fn assert_repeat_is_no_change(
     let repeated = json(repeated).await;
     assert_eq!(repeated["outcome"]["status"], "no_change", "{name}");
     assert!(repeated["event_sequence"].is_null(), "{name}");
-    assert_eq!(state.application_events.latest_sequence(), cursor, "{name}");
+    assert_eq!(state.events.latest_sequence(), cursor, "{name}");
 }
 
 async fn assert_action_is_no_change(
@@ -1598,7 +1597,7 @@ async fn assert_action_is_no_change(
     playback_number: u16,
     action: serde_json::Value,
 ) {
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let response = post_action(
         app,
         Some(token),
@@ -1610,7 +1609,7 @@ async fn assert_action_is_no_change(
     let response = json(response).await;
     assert_eq!(response["outcome"]["status"], "no_change", "{name}");
     assert!(response["event_sequence"].is_null(), "{name}");
-    assert_eq!(state.application_events.latest_sequence(), cursor, "{name}");
+    assert_eq!(state.events.latest_sequence(), cursor, "{name}");
 }
 
 #[tokio::test]
@@ -1661,8 +1660,8 @@ async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_b
     };
     assert_eq!(change.projection.revision, 1);
     let legacy = state
-        .audit_events
-        .lock()
+        .events
+        .audit_events()
         .iter()
         .find(|event| {
             event.kind == "programmer_changed"
@@ -1689,7 +1688,7 @@ async fn captured_preload_queue_is_replay_safe_snapshot_owned_and_drained_once_b
             "surface": "physical",
         }])
     );
-    let show_id = state.active_show.read().as_ref().unwrap().id;
+    let show_id = state.active_show.current().as_ref().unwrap().id;
     let active_key = active_playbacks_setting(show_id);
     let output_key = output_runtime_setting(show_id);
     set_runtime_sentinels(&state, &active_key, &output_key);
@@ -1738,11 +1737,11 @@ async fn all_no_op_preload_batch_drains_without_runtime_event_or_persistence() {
     assert_eq!(captured.status(), StatusCode::OK);
     assert_eq!(json(captured).await["outcome"]["status"], "captured");
 
-    let show_id = state.active_show.read().as_ref().unwrap().id;
+    let show_id = state.active_show.current().as_ref().unwrap().id;
     let active_key = active_playbacks_setting(show_id);
     let output_key = output_runtime_setting(show_id);
     set_runtime_sentinels(&state, &active_key, &output_key);
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     assert_preload_key(
         &app,
         &token,
@@ -1788,14 +1787,14 @@ async fn transient_preload_cancellation_drains_without_runtime_event_or_persiste
         assert_eq!(json(captured).await["outcome"]["status"], "captured");
     }
 
-    let show_id = state.active_show.read().as_ref().unwrap().id;
+    let show_id = state.active_show.current().as_ref().unwrap().id;
     let active_key = active_playbacks_setting(show_id);
     let output_key = output_runtime_setting(show_id);
     set_runtime_sentinels(&state, &active_key, &output_key);
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let exclusion_count = state
-        .audit_events
-        .lock()
+        .events
+        .audit_events()
         .iter()
         .filter(|event| event.kind == "playback_exclusion_applied")
         .count();
@@ -1809,8 +1808,8 @@ async fn transient_preload_cancellation_drains_without_runtime_event_or_persiste
     .await;
 
     let committed_actions = state
-        .audit_events
-        .lock()
+        .events
+        .audit_events()
         .iter()
         .rev()
         .find(|event| event.kind == "preload_committed")
@@ -1822,11 +1821,11 @@ async fn transient_preload_cancellation_drains_without_runtime_event_or_persiste
     assert_eq!(committed_actions, 2);
     assert!(playback_event_objects(&state, cursor).is_empty());
     assert_runtime_sentinels(&state, &active_key, &output_key);
-    assert!(state.engine.playback_runtime().is_empty());
+    assert!(state.output.playback_runtime().is_empty());
     assert_eq!(
         state
-            .audit_events
-            .lock()
+            .events
+            .audit_events()
             .iter()
             .filter(|event| event.kind == "playback_exclusion_applied")
             .count(),
@@ -1844,8 +1843,7 @@ async fn same_user_preload_commit_keeps_each_captured_actions_originating_desk()
     let (first_token, _) = login(&app, "Operator").await;
     let first_session = session_for_token(&state, &first_token);
     let second_desk = state
-        .desk
-        .lock()
+        .installation
         .add_desk("Preload origin wing", "preload-origin-wing")
         .unwrap();
     let second_token = login_playback_user_on_desk(&app, "Operator", second_desk.id).await;
@@ -1882,7 +1880,7 @@ async fn same_user_preload_commit_keeps_each_captured_actions_originating_desk()
 
     assert_eq!(enabled_playback_numbers(&state), vec![1, 2]);
     let activation = state
-        .engine
+        .output
         .playback_runtime()
         .into_iter()
         .find(|playback| playback.playback_number == Some(1))
@@ -1898,10 +1896,9 @@ async fn same_user_preload_commit_keeps_each_captured_actions_originating_desk()
         activation.exclusion_scope,
         light_playback::PlaybackExclusionScope::OriginatingDesk
     );
-    let show_id = state.active_show.read().as_ref().unwrap().id;
+    let show_id = state.active_show.current().as_ref().unwrap().id;
     let persisted = state
-        .desk
-        .lock()
+        .installation
         .setting(&active_playbacks_setting(show_id))
         .unwrap()
         .unwrap();
@@ -1948,7 +1945,7 @@ async fn preload_hidden_addressed_change_emits_one_equal_projection_event() {
     let captured = post_action(&app, Some(&token), session.desk.id, request).await;
     assert_eq!(captured.status(), StatusCode::OK);
     assert_eq!(json(captured).await["outcome"]["status"], "captured");
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     assert_preload_key(
         &app,
@@ -1991,7 +1988,7 @@ async fn failed_preload_go_rolls_back_queue_generation_and_emits_no_projection()
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(preload_queue_events(&state, session.user.id.0).len(), 1);
     state
-        .engine
+        .output
         .replace_snapshot(EngineSnapshot::default())
         .unwrap();
 
@@ -2143,9 +2140,7 @@ fn preload_queue_events(
 ) -> Vec<std::sync::Arc<light_application::EventEnvelope>> {
     let filter = light_application::EventFilter::default()
         .with_object(light_application::EventObject::programming_preload_playback_queue(user_id));
-    let light_application::EventReplay::Events(events) =
-        state.application_events.replay(0, &filter)
-    else {
+    let light_application::EventReplay::Events(events) = state.events.replay(0, &filter) else {
         panic!("queue events should remain replayable")
     };
     events
@@ -2154,8 +2149,8 @@ fn preload_queue_events(
 fn session_desk_id(state: &AppState, token: &str) -> Uuid {
     state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .find(|session| session.token == token)
         .unwrap()
         .desk
@@ -2165,21 +2160,20 @@ fn session_desk_id(state: &AppState, token: &str) -> Uuid {
 fn session_for_token(state: &AppState, token: &str) -> Session {
     state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .find(|session| session.token == token)
-        .cloned()
         .unwrap()
 }
 
 fn active_show_id(state: &AppState) -> Uuid {
-    state.active_show.read().as_ref().unwrap().id.0
+    state.active_show.current().as_ref().unwrap().id.0
 }
 
 fn install_virtual_playback_test_state(state: &AppState, desk_id: Uuid) {
     install_playback_test_state(state);
-    let cue_list_id = state.engine.snapshot().cue_lists[0].id;
-    let mut snapshot = (*state.engine.snapshot()).clone();
+    let cue_list_id = state.output.snapshot().cue_lists[0].id;
+    let mut snapshot = (*state.output.snapshot()).clone();
     std::sync::Arc::make_mut(&mut snapshot.playbacks).push(playback_test_definition(
         3,
         light_playback::PlaybackTarget::CueList { cue_list_id },
@@ -2190,7 +2184,7 @@ fn install_virtual_playback_test_state(state: &AppState, desk_id: Uuid) {
         slots: HashMap::from([(1, 1), (2, 3)]),
     }]
     .into();
-    state.engine.replace_snapshot(snapshot).unwrap();
+    state.output.replace_snapshot(snapshot).unwrap();
     let store = VirtualPlaybackExclusionStore::from([(
         desk_id.to_string(),
         VirtualPlaybackExclusionSurfaces::from([(
@@ -2202,10 +2196,9 @@ fn install_virtual_playback_test_state(state: &AppState, desk_id: Uuid) {
             }],
         )]),
     )]);
-    let show_id = state.active_show.read().as_ref().unwrap().id;
+    let show_id = state.active_show.current().as_ref().unwrap().id;
     state
-        .desk
-        .lock()
+        .installation
         .set_setting(
             &virtual_playback_exclusion_setting(show_id),
             &serde_json::to_string(&store).unwrap(),
@@ -2215,7 +2208,7 @@ fn install_virtual_playback_test_state(state: &AppState, desk_id: Uuid) {
 
 fn playback_event_objects(state: &AppState, after: u64) -> Vec<u16> {
     let light_application::EventReplay::Events(events) = state
-        .application_events
+        .events
         .replay(after, &light_application::EventFilter::default())
     else {
         panic!("Playback events should remain replayable")
@@ -2233,7 +2226,7 @@ fn playback_event_objects(state: &AppState, after: u64) -> Vec<u16> {
 
 fn enabled_playback_numbers(state: &AppState) -> Vec<u16> {
     state
-        .engine
+        .output
         .playback_runtime()
         .into_iter()
         .filter(|playback| playback.enabled)
@@ -2256,7 +2249,7 @@ fn install_playback_test_state(state: &AppState) -> light_core::FixtureId {
     let cue_list_id = cue_list.id;
     let fixture = light_core::FixtureId::new();
     state
-        .engine
+        .output
         .replace_snapshot(EngineSnapshot {
             cue_lists: vec![cue_list].into(),
             playbacks: vec![
@@ -2288,7 +2281,7 @@ fn install_playback_test_state(state: &AppState) -> light_core::FixtureId {
 
 fn install_group_runtime_test_state(state: &AppState) {
     install_playback_test_state(state);
-    let mut snapshot = (*state.engine.snapshot()).clone();
+    let mut snapshot = (*state.output.snapshot()).clone();
     let groups = std::sync::Arc::make_mut(&mut snapshot.groups);
     groups
         .iter_mut()
@@ -2301,17 +2294,17 @@ fn install_group_runtime_test_state(state: &AppState) {
         master: 0.6,
         ..light_programmer::GroupDefinition::default()
     });
-    state.engine.replace_snapshot(snapshot).unwrap();
+    state.output.replace_snapshot(snapshot).unwrap();
 }
 
 fn set_group_playback_assignment(state: &AppState, group_id: &str, playback: Option<u8>) {
-    let mut snapshot = (*state.engine.snapshot()).clone();
+    let mut snapshot = (*state.output.snapshot()).clone();
     std::sync::Arc::make_mut(&mut snapshot.groups)
         .iter_mut()
         .find(|group| group.id == group_id)
         .unwrap()
         .playback_fader = playback;
-    state.engine.replace_snapshot(snapshot).unwrap();
+    state.output.replace_snapshot(snapshot).unwrap();
 }
 
 fn install_virtual_exclusion_test_state(state: &AppState) {
@@ -2328,7 +2321,7 @@ fn install_virtual_exclusion_test_state(state: &AppState) {
         })
         .collect::<Vec<_>>();
     state
-        .engine
+        .output
         .replace_snapshot(EngineSnapshot {
             cue_lists: vec![cue_list].into(),
             playbacks: playbacks.into(),
@@ -2375,7 +2368,7 @@ fn install_auto_off_test_state(state: &AppState) {
     );
     second_definition.auto_off = false;
     state
-        .engine
+        .output
         .replace_snapshot(EngineSnapshot {
             cue_lists: vec![first, second].into(),
             playbacks: vec![first_definition, second_definition].into(),
@@ -2389,28 +2382,28 @@ fn update_virtual_definition(
     number: u16,
     update: impl FnOnce(&mut light_playback::PlaybackDefinition),
 ) {
-    let mut snapshot = (*state.engine.snapshot()).clone();
+    let mut snapshot = (*state.output.snapshot()).clone();
     let definition = std::sync::Arc::make_mut(&mut snapshot.playbacks)
         .iter_mut()
         .find(|definition| definition.number == number)
         .unwrap();
     update(definition);
-    state.engine.replace_snapshot(snapshot).unwrap();
+    state.output.replace_snapshot(snapshot).unwrap();
 }
 
 fn add_explicit_virtual_page(state: &AppState) {
-    let mut snapshot = (*state.engine.snapshot()).clone();
+    let mut snapshot = (*state.output.snapshot()).clone();
     std::sync::Arc::make_mut(&mut snapshot.playback_pages).push(light_playback::PlaybackPage {
         number: 2,
         name: "Explicit".into(),
         slots: std::collections::HashMap::from([(1, 1)]),
     });
-    state.engine.replace_snapshot(snapshot).unwrap();
+    state.output.replace_snapshot(snapshot).unwrap();
 }
 
 fn set_pool_enabled(state: &AppState, number: u16, enabled: bool) {
     state
-        .engine
+        .output
         .execute_playback(light_engine::EnginePlaybackCommand::Pool {
             number,
             action: if enabled {
@@ -2424,14 +2417,14 @@ fn set_pool_enabled(state: &AppState, number: u16, enabled: bool) {
 
 fn pool_is_enabled(state: &AppState, number: u16) -> bool {
     state
-        .engine
+        .output
         .playback_runtime()
         .iter()
         .any(|playback| playback.playback_number == Some(number) && playback.enabled)
 }
 
 async fn put_virtual_exclusion_zone(state: &AppState, app: &Router, token: &str, slots: &[u8]) {
-    let show_id = state.active_show.read().as_ref().unwrap().id.0;
+    let show_id = state.active_show.current().as_ref().unwrap().id.0;
     let response = app
         .clone()
         .oneshot(
@@ -2476,9 +2469,7 @@ fn playback_runtime_events(
 ) -> Vec<Arc<light_application::EventEnvelope>> {
     let filter = light_application::EventFilter::default()
         .with_capability(light_application::EventCapability::Playback);
-    let light_application::EventReplay::Events(events) =
-        state.application_events.replay(after, &filter)
-    else {
+    let light_application::EventReplay::Events(events) = state.events.replay(after, &filter) else {
         panic!("Playback events should remain replayable")
     };
     events
@@ -2490,9 +2481,7 @@ fn playback_events_for_object(
     object: light_application::EventObject,
 ) -> Vec<Arc<light_application::EventEnvelope>> {
     let filter = light_application::EventFilter::default().with_object(object);
-    let light_application::EventReplay::Events(events) =
-        state.application_events.replay(after, &filter)
-    else {
+    let light_application::EventReplay::Events(events) = state.events.replay(after, &filter) else {
         panic!("Playback events should remain replayable")
     };
     events
@@ -2507,7 +2496,7 @@ async fn assert_group_flash_phase(
     pressed: bool,
     expected_level: f64,
 ) {
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let response = post_action(
         app,
         Some(token),
@@ -2553,9 +2542,7 @@ fn playback_selection_events(
     let filter = light_application::EventFilter::for_desk(desk_id).with_object(
         light_application::EventObject::programming_selection(desk_id),
     );
-    let light_application::EventReplay::Events(events) =
-        state.application_events.replay(after, &filter)
-    else {
+    let light_application::EventReplay::Events(events) = state.events.replay(after, &filter) else {
         panic!("selection events should remain replayable")
     };
     events

@@ -51,7 +51,7 @@ async fn run_action(
         let ports = ServerProgrammingCueTransferPorts::new(state.clone(), session, false);
         state
             .programming
-            .handle_cue_transfer(action, &state.active_show_service, &ports)
+            .handle_cue_transfer(action, &state.active_show, &ports)
     })
     .await
     .map_err(CueTransferHttpError::blocking)?

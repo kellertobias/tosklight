@@ -4,10 +4,11 @@ use light_application::{
     ProgrammingPresetRecallRequest,
 };
 use light_programmer::{Preset, PresetAddress};
-use light_show::{PortableShowDocument, PortableShowObject, ShowStore};
+use light_show::{PortableShowDocument, PortableShowObject};
 use std::{collections::HashMap, sync::Arc};
 
 use super::programming_ports::ServerProgrammingPorts;
+use crate::runtime::ActiveShowRepository;
 
 impl ProgrammingPresetRecallPorts for ServerProgrammingPorts<'_> {
     fn authorize_preset_recall(&self, context: &ActionContext) -> Result<(), ActionError> {
@@ -38,13 +39,13 @@ fn environment(
     let active = ports
         .state()
         .active_show
-        .read()
+        .current()
         .clone()
         .ok_or_else(|| not_found("no active Show is loaded"))?;
     if active.id != request.show_id {
         return Err(conflict("the requested Show is not active"));
     }
-    let document = ShowStore::open(&active.path)
+    let document = ActiveShowRepository::open(&active.path)
         .and_then(|store| store.portable_document())
         .map_err(|error| internal(format!("failed to load the active Show: {error}")))?;
     if document.id() != request.show_id {
@@ -69,7 +70,11 @@ fn environment(
         groups: Arc::new(groups),
         selectable_targets: Arc::new(selectable_targets),
         target_expansions: Arc::new(target_expansions),
-        programmer_fade_millis: ports.state().configuration.read().programmer_fade_millis,
+        programmer_fade_millis: ports
+            .state()
+            .installation
+            .configuration()
+            .programmer_fade_millis,
     })
 }
 
@@ -81,7 +86,7 @@ fn selectable_targets(
 ) {
     let mut targets = Vec::new();
     let mut expansions = HashMap::new();
-    for fixture in ports.state().engine.snapshot().fixtures.iter() {
+    for fixture in ports.state().output.snapshot().fixtures.iter() {
         let selectable = super::super::selectable_fixture_ids(fixture);
         targets.extend(selectable.iter().copied());
         expansions.insert(fixture.fixture_id, selectable);

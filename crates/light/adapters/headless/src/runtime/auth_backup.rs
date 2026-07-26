@@ -11,10 +11,7 @@ pub(super) fn authenticate(state: &AppState, headers: &HeaderMap) -> Result<Sess
 pub(super) fn authenticate_token(state: &AppState, token: &str) -> Result<Session, ApiError> {
     let session = state
         .sessions
-        .read()
-        .values()
-        .find(|session| session.token == token)
-        .cloned()
+        .session_for_token(token)
         .ok_or_else(|| ApiError::unauthorized("invalid session token"))?;
     attach_session_command_context(state, &session);
     Ok(session)
@@ -22,7 +19,7 @@ pub(super) fn authenticate_token(state: &AppState, token: &str) -> Result<Sessio
 
 pub(super) fn attach_session_command_context(state: &AppState, session: &Session) {
     state
-        .programmers
+        .programming
         .attach_command_context(session.id, SessionId(session.desk.id));
 }
 pub(super) fn parse_if_match(headers: &HeaderMap) -> Result<u64, ApiError> {
@@ -36,14 +33,14 @@ pub(super) fn parse_if_match(headers: &HeaderMap) -> Result<u64, ApiError> {
         .map_err(|_| ApiError::bad_request("If-Match must contain a numeric revision"))
 }
 pub(super) fn backup_show(state: &AppState, entry: &ShowEntry) -> Result<PathBuf, ApiError> {
-    let directory = state.data_dir.join("backups");
+    let directory = state.installation.data_dir().join("backups");
     std::fs::create_dir_all(&directory).map_err(ApiError::io)?;
     let destination = directory.join(format!(
         "{}-{}.show",
         entry.name,
         chrono::Utc::now().timestamp_millis()
     ));
-    ShowStore::open(&entry.path)
+    ActiveShowRepository::open(&entry.path)
         .map_err(ApiError::store)?
         .backup_to(&destination)
         .map_err(ApiError::store)?;
@@ -59,7 +56,7 @@ pub(super) fn backup_show(state: &AppState, entry: &ShowEntry) -> Result<PathBuf
         })
         .collect::<Vec<_>>();
     backups.sort();
-    let retention = state.configuration.read().backup_retention;
+    let retention = state.installation.configuration().backup_retention;
     let remove_count = backups.len().saturating_sub(retention);
     for path in backups.into_iter().take(remove_count) {
         std::fs::remove_file(path).map_err(ApiError::io)?;
@@ -74,7 +71,7 @@ pub(super) async fn activate_snapshot(
     duration: Option<u64>,
 ) -> Result<(), ApiError> {
     let prepared = state
-        .engine
+        .output
         .prepare_snapshot(snapshot)
         .map_err(|error| ApiError::internal(error.to_string()))?;
     activate_prepared_snapshot(state, prepared, context, transition, duration).await
@@ -90,8 +87,7 @@ pub(super) async fn activate_prepared_snapshot(
     // A remembered Highlight selection belongs only to the current live show context. Clear the
     // transient overlay before any transition so it cannot reappear in the newly loaded show.
     state.highlight.clear_all();
-    state.patch_preview_highlights.lock().clear();
-    state.engine.clear_highlighted_fixtures();
+    state.output.clear_highlighted_fixtures();
     let media_fixture_ids = prepared
         .snapshot()
         .fixtures
@@ -99,42 +95,37 @@ pub(super) async fn activate_prepared_snapshot(
         .filter(|fixture| fixture.direct_control.is_some())
         .map(|fixture| fixture.fixture_id)
         .collect::<std::collections::HashSet<_>>();
-    state
-        .media_status
-        .write()
-        .retain(|fixture, _| media_fixture_ids.contains(fixture));
-    state.media_cache.lock().retain_fixtures(
-        &media_fixture_ids
-            .iter()
-            .map(|fixture| fixture.0.to_string())
-            .collect(),
-    );
+    state.media.retain_fixtures(&media_fixture_ids);
     let frame = Duration::from_millis(25);
     match transition {
         Transition::HoldCurrent => {
-            state.output_control.lock().hold = true;
+            state.output.set_transition_hold(true);
             install_activated_snapshot(state, context, prepared).await?;
             tokio::time::sleep(frame).await;
-            state.output_control.lock().hold = false;
+            state.output.set_transition_hold(false);
         }
         Transition::SafeBlackout => {
-            state.output_control.lock().options.blackout = true;
+            state.output.set_transition_blackout(true);
             tokio::time::sleep(frame * 2).await;
             install_activated_snapshot(state, context, prepared).await?;
             tokio::time::sleep(frame).await;
-            state.output_control.lock().options.blackout = false;
+            state.output.set_transition_blackout(false);
         }
         Transition::TimedFade => {
             let duration = duration.unwrap_or(1_000).clamp(100, 30_000);
             let steps = 20_u64;
             let sleep = Duration::from_millis((duration / (steps * 2)).max(1));
             for step in 1..=steps {
-                state.output_control.lock().options.grand_master = 1.0 - step as f32 / steps as f32;
+                state
+                    .output
+                    .set_transition_grand_master(1.0 - step as f32 / steps as f32);
                 tokio::time::sleep(sleep).await;
             }
             install_activated_snapshot(state, context, prepared).await?;
             for step in 1..=steps {
-                state.output_control.lock().options.grand_master = step as f32 / steps as f32;
+                state
+                    .output
+                    .set_transition_grand_master(step as f32 / steps as f32);
                 tokio::time::sleep(sleep).await;
             }
         }

@@ -6,7 +6,7 @@ fn mapped_cue_action_uses_playback_service_and_publishes_one_midi_event() {
     let cue_list = mapped_test_cue_list();
     let cue_list_id = cue_list.id;
     state
-        .engine
+        .output
         .replace_snapshot(EngineSnapshot {
             cue_lists: vec![cue_list].into(),
             control_mappings: vec![midi_mapping(ControlAction::CueGo { cue_list_id })].into(),
@@ -22,10 +22,10 @@ fn mapped_cue_action_uses_playback_service_and_publishes_one_midi_event() {
         },
     );
 
-    let active = state.engine.active_playbacks();
+    let active = state.output.active_playbacks();
     assert_eq!(active.len(), 1);
     assert_eq!(active[0].current_cue_number, Some(1.0));
-    let light_application::EventReplay::Events(events) = state.application_events.replay(
+    let light_application::EventReplay::Events(events) = state.events.replay(
         0,
         &light_application::EventFilter::default()
             .with_object(light_application::EventObject::cue_list(cue_list_id.0)),
@@ -48,9 +48,9 @@ fn mapped_cue_action_uses_playback_service_and_publishes_one_midi_event() {
 #[test]
 fn mapped_global_output_respects_the_osc_desk_alias_lock() {
     let (state, data_dir) = test_state();
-    let wing = state.desk.lock().add_desk("Wing", "wing").unwrap();
+    let wing = state.installation.add_desk("Wing", "wing").unwrap();
     state
-        .engine
+        .output
         .replace_snapshot(EngineSnapshot {
             control_mappings: vec![
                 light_control::ControlMapping {
@@ -90,15 +90,15 @@ fn mapped_global_output_respects_the_osc_desk_alias_lock() {
         source: Some("127.0.0.1:19000".into()),
     };
     handle_control_event(&state, event());
-    assert!(!state.output_control.lock().options.blackout);
-    assert_eq!(state.application_events.latest_sequence(), 0);
+    assert!(!state.output.control_projection().blackout);
+    assert_eq!(state.events.latest_sequence(), 0);
 
     write_desk_lock(&state, wing.id, &DeskLockConfiguration::default()).unwrap();
     handle_control_event(&state, event());
-    assert!(state.output_control.lock().options.blackout);
-    assert_eq!(state.output_control.lock().options.grand_master, 0.35);
-    assert_eq!(state.application_events.latest_sequence(), 1);
-    let light_application::EventReplay::Events(events) = state.application_events.replay(
+    assert!(state.output.control_projection().blackout);
+    assert_eq!(state.output.control_projection().grand_master, 0.35);
+    assert_eq!(state.events.latest_sequence(), 1);
+    let light_application::EventReplay::Events(events) = state.events.replay(
         0,
         &light_application::EventFilter::default()
             .with_object(light_application::EventObject::global_output()),
@@ -118,7 +118,7 @@ fn mapped_global_output_respects_the_osc_desk_alias_lock() {
 fn configured_grand_master_playback_keeps_playback_and_output_events() {
     let (state, data_dir) = test_state();
     state
-        .engine
+        .output
         .replace_snapshot(EngineSnapshot {
             playbacks: vec![mapped_test_playback(
                 7,
@@ -147,7 +147,7 @@ fn configured_grand_master_playback_keeps_playback_and_output_events() {
     )
     .unwrap();
 
-    let light_application::EventReplay::Events(events) = state.application_events.replay(
+    let light_application::EventReplay::Events(events) = state.events.replay(
         0,
         &light_application::EventFilter::default()
             .with_object(light_application::EventObject::playback(7)),
@@ -159,7 +159,7 @@ fn configured_grand_master_playback_keeps_playback_and_output_events() {
         &events[0].payload,
         light_application::ApplicationEvent::Playback(_)
     ));
-    let light_application::EventReplay::Events(output_events) = state.application_events.replay(
+    let light_application::EventReplay::Events(output_events) = state.events.replay(
         0,
         &light_application::EventFilter::default()
             .with_object(light_application::EventObject::global_output()),
@@ -192,7 +192,7 @@ fn configured_grand_master_playback_keeps_playback_and_output_events() {
         },
     )
     .unwrap();
-    let light_application::EventReplay::Events(output_events) = state.application_events.replay(
+    let light_application::EventReplay::Events(output_events) = state.events.replay(
         0,
         &light_application::EventFilter::default()
             .with_object(light_application::EventObject::global_output()),

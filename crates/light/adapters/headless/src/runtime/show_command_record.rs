@@ -123,10 +123,10 @@ fn record_group(
     }
     let id = &body[1];
     let programmer = state
-        .programmers
+        .programming
         .get(session.id)
         .ok_or("programmer does not exist")?;
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let (entry, store) = active_show_store(state)?;
     let existing = store
         .objects("group")
@@ -177,7 +177,7 @@ fn record_group(
     );
     run_active_show_object_action_in_programming_interaction(state, action)
         .map_err(|error| error.message)?;
-    state.programmers.finish_selection_gesture(session.id);
+    state.programming.finish_selection_gesture(session.id);
     Ok(programmer.selected.len())
 }
 
@@ -191,10 +191,13 @@ fn record_cue(
     context: &light_application::ActionContext,
 ) -> Result<usize, String> {
     if body.first().is_some_and(|token| token == "CUE") {
-        let show = state.active_show.read().clone().ok_or("no show is open")?;
+        let show = state
+            .active_show
+            .current()
+            .clone()
+            .ok_or("no show is open")?;
         let playback = state
-            .desk
-            .lock()
+            .installation
             .selected_playback(session.desk.id, show.id)
             .map_err(|error| error.to_string())?
             .ok_or("no playback is selected; use RECORD SET <playback> CUE <cue>")?;
@@ -234,7 +237,7 @@ fn record_preset(
     let address = command_preset_address(body)?;
     let id = address.storage_key();
     let programmer = state
-        .programmers
+        .programming
         .get(session.id)
         .ok_or("programmer does not exist")?;
     let preset = programmer_preset(&programmer, format!("Preset {id}"), address);

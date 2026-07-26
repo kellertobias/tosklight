@@ -1,7 +1,7 @@
 #[test]
 fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -9,10 +9,10 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
-    state.sessions.write().insert(session.id, session.clone());
+    state.programming.start(session.id, user.id);
+    state.sessions.insert_session(session.clone());
     let source: SocketAddr = "127.0.0.1:9010".parse().unwrap();
-    state.osc_subscribers.lock().insert(
+    state.integrations.register_osc_subscriber(
         "test".into(),
         OscSubscriber {
             desk_alias: "main".into(),
@@ -34,14 +34,14 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         &pressed,
         Some("127.0.0.1:9010"),
     );
-    assert_eq!(state.programmers.get(session.id).unwrap().command_line, "");
-    assert!(state.audit_events.lock().iter().any(|event| {
+    assert_eq!(state.programming.get(session.id).unwrap().command_line, "");
+    assert!(state.events.audit_events().iter().any(|event| {
         event.kind == "desk_action"
             && event.payload["action"] == "set"
             && event.payload["session_id"] == serde_json::json!(session.id)
     }));
     state
-        .programmers
+        .programming
         .set_command_line(session.id, "COPY".into());
     handle_programmer_osc(
         &state,
@@ -50,11 +50,11 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         Some("127.0.0.1:9010"),
     );
     assert_eq!(
-        state.programmers.get(session.id).unwrap().command_line,
+        state.programming.get(session.id).unwrap().command_line,
         "COPY SET"
     );
     state
-        .programmers
+        .programming
         .set_command_line(session.id, String::new());
     handle_programmer_osc(
         &state,
@@ -63,8 +63,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         Some("127.0.0.1:9010"),
     );
     let interaction_event = state
-        .audit_events
-        .lock()
+        .events.audit_events()
         .iter()
         .rev()
         .find(|event| event.kind == "programmer_changed")
@@ -73,7 +72,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
     assert_eq!(interaction_event.payload["command"], "programmer.command_line");
     assert_eq!(interaction_event.payload["changes"], serde_json::json!(["interaction"]));
     state
-        .programmers
+        .programming
         .set_command_line(session.id, String::new());
     handle_programmer_osc(
         &state,
@@ -82,16 +81,16 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         Some("127.0.0.1:9010"),
     );
     assert_eq!(
-        state.programmers.get(session.id).unwrap().command_line,
+        state.programming.get(session.id).unwrap().command_line,
         "RECORD "
     );
-    assert!(!state.audit_events.lock().iter().any(|event| {
+    assert!(!state.events.audit_events().iter().any(|event| {
         event.kind == "desk_action"
             && event.payload["action"] == "record"
             && event.payload["session_id"] == serde_json::json!(session.id)
     }));
     state
-        .programmers
+        .programming
         .set_command_line(session.id, "TIME".into());
     handle_programmer_osc(
         &state,
@@ -100,7 +99,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         Some("127.0.0.1:9010"),
     );
     assert_eq!(
-        state.programmers.get(session.id).unwrap().command_line,
+        state.programming.get(session.id).unwrap().command_line,
         "TIME -"
     );
     handle_programmer_osc(
@@ -109,16 +108,16 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         &pressed,
         Some("127.0.0.1:9010"),
     );
-    assert!(state.osc_subscribers.lock()["test"].shifted);
+    assert!(state.integrations.osc_subscriber("test").unwrap().shifted);
     handle_programmer_osc(
         &state,
         "/light/main/programmer/digit-1",
         &pressed,
         Some("127.0.0.1:9010"),
     );
-    assert!(!state.osc_subscribers.lock()["test"].shifted);
+    assert!(!state.integrations.osc_subscriber("test").unwrap().shifted);
     assert_eq!(
-        state.programmers.get(session.id).unwrap().command_line,
+        state.programming.get(session.id).unwrap().command_line,
         "TIME -"
     );
     handle_programmer_osc(
@@ -133,13 +132,13 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
         &pressed,
         Some("127.0.0.1:9010"),
     );
-    assert!(!state.osc_subscribers.lock()["test"].shifted);
+    assert!(!state.integrations.osc_subscriber("test").unwrap().shifted);
     assert_eq!(
-        state.programmers.get(session.id).unwrap().command_line,
+        state.programming.get(session.id).unwrap().command_line,
         "TIME -"
     );
-    let events = state.audit_events.lock();
-    let shifted_clear = events.back().unwrap();
+    let events = state.events.audit_events();
+    let shifted_clear = events.last().unwrap();
     assert_eq!(shifted_clear.kind, "desk_action");
     assert_eq!(shifted_clear.payload["action"], "shift-clear");
     let _ = std::fs::remove_dir_all(data_dir);
@@ -148,7 +147,7 @@ fn osc_exposes_time_minus_and_latched_shift_shortcuts() {
 #[test]
 fn osc_playback_source_cannot_cross_its_subscribed_desk_alias() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user,
@@ -156,9 +155,9 @@ fn osc_playback_source_cannot_cross_its_subscribed_desk_alias() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.sessions.write().insert(session.id, session.clone());
+    state.sessions.insert_session(session.clone());
     let source: SocketAddr = "127.0.0.1:9011".parse().unwrap();
-    state.osc_subscribers.lock().insert(
+    state.integrations.register_osc_subscriber(
         "cross-desk".into(),
         OscSubscriber {
             desk_alias: "other-desk".into(),
@@ -189,7 +188,7 @@ fn osc_playback_source_cannot_cross_its_subscribed_desk_alias() {
 #[test]
 fn held_shift_record_short_double_and_long_gestures_are_mutually_distinct() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -197,10 +196,10 @@ fn held_shift_record_short_double_and_long_gestures_are_mutually_distinct() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
-    state.sessions.write().insert(session.id, session.clone());
+    state.programming.start(session.id, user.id);
+    state.sessions.insert_session(session.clone());
     let source: SocketAddr = "127.0.0.1:9011".parse().unwrap();
-    state.osc_subscribers.lock().insert(
+    state.integrations.register_osc_subscriber(
         "update-test".into(),
         OscSubscriber {
             desk_alias: "main".into(),
@@ -230,7 +229,7 @@ fn held_shift_record_short_double_and_long_gestures_are_mutually_distinct() {
     send("record", &pressed);
     send("record", &released);
     assert_eq!(
-        state.programmers.get(session.id).unwrap().command_line,
+        state.programming.get(session.id).unwrap().command_line,
         "UPDATE"
     );
 
@@ -238,18 +237,15 @@ fn held_shift_record_short_double_and_long_gestures_are_mutually_distinct() {
     send("record", &released);
 
     send("record", &pressed);
-    state
-        .osc_subscribers
-        .lock()
-        .get_mut("update-test")
-        .unwrap()
-        .update_record_started = Some(Instant::now() - Duration::from_millis(700));
+    state.integrations.set_osc_record_started(
+        "update-test",
+        Instant::now() - Duration::from_millis(700),
+    );
     send("record", &released);
-    assert_eq!(state.programmers.get(session.id).unwrap().command_line, "");
+    assert_eq!(state.programming.get(session.id).unwrap().command_line, "");
 
     let kinds = state
-        .audit_events
-        .lock()
+        .events.audit_events()
         .iter()
         .map(|event| event.kind.clone())
         .filter(|kind| kind.starts_with("update_"))
@@ -268,7 +264,7 @@ fn held_shift_record_short_double_and_long_gestures_are_mutually_distinct() {
 #[test]
 fn software_update_armed_state_is_shared_only_with_the_same_desk() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let front = test_control_desk();
     let mut wing = test_control_desk();
     wing.id = Uuid::new_v4();
@@ -295,9 +291,9 @@ fn software_update_armed_state_is_shared_only_with_the_same_desk() {
         desk: wing,
     };
     for session in [&first, &second, &other] {
-        state.programmers.start(session.id, session.user.id);
+        state.programming.start(session.id, session.user.id);
         attach_session_command_context(&state, session);
-        state.sessions.write().insert(session.id, session.clone());
+        state.sessions.insert_session(session.clone());
     }
 
     let armed = dispatch_live_action(
@@ -315,20 +311,19 @@ fn software_update_armed_state_is_shared_only_with_the_same_desk() {
     );
     assert!(armed.ok);
     assert_eq!(
-        state.programmers.get(second.id).unwrap().command_line,
+        state.programming.get(second.id).unwrap().command_line,
         "UPDATE "
     );
     assert!(
         state
-            .programmers
+            .programming
             .get(other.id)
             .unwrap()
             .command_line
             .is_empty()
     );
     let event = state
-        .audit_events
-        .lock()
+        .events.audit_events()
         .iter()
         .rev()
         .find(|event| event.kind == "update_armed")
@@ -353,15 +348,14 @@ fn software_update_armed_state_is_shared_only_with_the_same_desk() {
     assert!(disarmed.ok);
     assert!(
         state
-            .programmers
+            .programming
             .get(first.id)
             .unwrap()
             .command_line
             .is_empty()
     );
     let events = state
-        .audit_events
-        .lock()
+        .events.audit_events()
         .iter()
         .filter(|event| event.kind == "update_armed")
         .map(|event| event.payload["armed"].as_bool())

@@ -91,10 +91,8 @@ impl ProgrammingService {
         })
     }
 
-    /// Compatibility-only raw gate access for server adapters not yet expressed through the
-    /// Programming service. New code must use `handle` or `run_external_interaction` so
-    /// publication remains ordered.
-    pub fn desk_lock(&self, desk_id: Uuid) -> Arc<Mutex<()>> {
-        self.desk_gates.gate(desk_id)
+    /// Runs one adapter-owned desk operation without exposing the synchronization primitive.
+    pub fn run_desk_operation<T>(&self, desk_id: Uuid, operation: impl FnOnce() -> T) -> T {
+        self.desk_gates.with_gates(&[desk_id], operation)
     }
 }

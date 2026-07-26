@@ -20,7 +20,7 @@ impl CueTransferRouteScenario {
         let show_id = fixture
             .state
             .active_show
-            .read()
+            .current()
             .as_ref()
             .unwrap()
             .id
@@ -29,8 +29,7 @@ impl CueTransferRouteScenario {
         fixture
             .state
             .sessions
-            .write()
-            .insert(fixture.session.id, fixture.session.clone());
+            .insert_session(fixture.session.clone());
         Self {
             app: router(fixture.state.clone()),
             state: fixture.state,
@@ -125,8 +124,7 @@ impl CueTransferRouteScenario {
 
     fn compatibility_count(&self) -> usize {
         self.state
-            .audit_events
-            .lock()
+            .events.audit_events()
             .iter()
             .filter(|event| event.kind == "show_object_changed")
             .count()
@@ -152,7 +150,7 @@ fn non_set_copy_and_move_remain_owned_by_legacy_preset_mutation() {
     let show_path = scenario
         .state
         .active_show
-        .read()
+        .current()
         .as_ref()
         .unwrap()
         .path
@@ -215,7 +213,7 @@ async fn command_line_choice_replay_uses_current_authority_without_resurrecting_
     assert_eq!(cancelled.status(), StatusCode::OK);
     let cancelled = json(cancelled).await;
     assert!(cancelled["pending_choice"].is_null());
-    let sequence = scenario.state.application_events.latest_sequence();
+    let sequence = scenario.state.events.latest_sequence();
 
     let replay = scenario.execute("replayable-choice", command).await;
     assert_eq!(replay.status(), StatusCode::OK);
@@ -227,14 +225,14 @@ async fn command_line_choice_replay_uses_current_authority_without_resurrecting_
     assert!(
         scenario
             .state
-            .programmers
+            .programming
             .command_line_state(scenario.session.id)
             .unwrap()
             .pending_choice
             .is_none()
     );
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         sequence
     );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
@@ -244,7 +242,7 @@ async fn command_line_choice_replay_uses_current_authority_without_resurrecting_
 async fn cue_transfer_route_returns_one_authoritative_batch_and_replays_without_side_effects() {
     let scenario = CueTransferRouteScenario::new();
     let pending = scenario.open_copy_choice().await;
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let compatibility = scenario.compatibility_count();
     let request = scenario.request("typed-transfer", pending);
 
@@ -304,7 +302,7 @@ async fn cue_transfer_route_returns_one_authoritative_batch_and_replays_without_
     assert!(command_line.pending_choice.is_none());
     assert!(persistence_warning.is_none());
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         baseline + 2
     );
     assert_eq!(scenario.compatibility_count(), compatibility);
@@ -325,7 +323,7 @@ async fn cue_transfer_route_returns_one_authoritative_batch_and_replays_without_
         light_wire::v2::cue_transfer::CueTransferOutcome::Changed { replayed: true, .. }
     ));
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         baseline + 2
     );
     assert_eq!(scenario.compatibility_count(), compatibility);
@@ -445,7 +443,7 @@ async fn cue_transfer_route_rejects_forged_scope_and_reports_both_revision_autho
 
 fn assert_one_cue_transfer_show_event(state: &AppState, baseline: u64) {
     let light_application::EventReplay::Events(events) = state
-        .application_events
+        .events
         .replay(baseline, &light_application::EventFilter::default())
     else {
         panic!("expected retained Cue transfer events")

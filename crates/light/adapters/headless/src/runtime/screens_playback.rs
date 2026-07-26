@@ -25,7 +25,7 @@ pub(super) fn ensure_playback_page_for_advance(
     requested: u8,
     context: &light_application::ActionContext,
 ) -> Result<PlaybackPageAvailability, ApiError> {
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     if snapshot
         .playback_pages
         .iter()

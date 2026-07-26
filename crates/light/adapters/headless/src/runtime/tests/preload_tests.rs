@@ -261,7 +261,7 @@ fn preload_capture_resolves_real_buttons_canonicalizes_temp_and_excludes_live_co
 #[test]
 fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -269,33 +269,32 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     state
-        .engine
-        .replace_snapshot(preload_atomicity_test_snapshot())
+        .output.replace_snapshot(preload_atomicity_test_snapshot())
         .unwrap();
-    assert!(state.programmers.arm_preload(session.id, true));
-    assert!(state.programmers.queue_preload_playback_action(
+    assert!(state.programming.arm_preload(session.id, true));
+    assert!(state.programming.queue_preload_playback_action(
         session.id,
         1,
         None,
         light_programmer::PreloadPlaybackQueueAction::Go,
         light_programmer::PreloadPlaybackQueueSurface::Physical,
     ));
-    assert!(state.programmers.queue_preload_playback_action(
+    assert!(state.programming.queue_preload_playback_action(
         session.id,
         3,
         None,
         light_programmer::PreloadPlaybackQueueAction::On,
         light_programmer::PreloadPlaybackQueueSurface::Virtual,
     ));
-    let programmer_before = state.programmers.get(session.id).unwrap();
+    let programmer_before = state.programming.get(session.id).unwrap();
 
     let error = commit_preload(&state, &session).unwrap_err();
 
     assert!(error.contains("group playback"), "{error}");
-    assert!(state.engine.playback_runtime().is_empty());
-    let programmer_after = state.programmers.get(session.id).unwrap();
+    assert!(state.output.playback_runtime().is_empty());
+    let programmer_after = state.programming.get(session.id).unwrap();
     assert_eq!(
         programmer_after.preload_playback_pending,
         programmer_before.preload_playback_pending
@@ -303,8 +302,7 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
     assert_eq!(programmer_after.blind, programmer_before.blind);
     assert!(
         state
-            .audit_events
-            .lock()
+            .events.audit_events()
             .iter()
             .all(|event| event.kind != "preload_committed")
     );
@@ -314,11 +312,9 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
 #[test]
 fn committed_preload_publishes_the_exact_typed_playback_change() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let desk = state
-        .desk
-        .lock()
-        .add_desk("Preload exclusions", "preload-exclusions")
+        .installation.add_desk("Preload exclusions", "preload-exclusions")
         .unwrap();
     let session = Session {
         id: SessionId::new(),
@@ -327,25 +323,20 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
         connected: true,
         desk,
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     state
-        .engine
-        .replace_snapshot(preload_atomicity_test_snapshot())
+        .output.replace_snapshot(preload_atomicity_test_snapshot())
         .unwrap();
     let show = state
-        .desk
-        .lock()
-        .upsert_show(
+        .installation.upsert_show(
             "Preload exclusions",
             &data_dir.join("shows/preload-exclusions.show").display().to_string(),
             false,
         )
         .unwrap();
-    *state.active_show.write() = Some(show.clone());
+    state.active_show.replace_current(Some(show.clone()));
     state
-        .desk
-        .lock()
-        .set_desk_page(session.desk.id, show.id, 1)
+        .installation.set_desk_page(session.desk.id, show.id, 1)
         .unwrap();
     let zones = VirtualPlaybackExclusionStore::from([(
         session.desk.id.to_string(),
@@ -359,29 +350,26 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
         )]),
     )]);
     state
-        .desk
-        .lock()
-        .set_setting(
+        .installation.set_setting(
             &virtual_playback_exclusion_setting(show.id),
             &serde_json::to_string(&zones).unwrap(),
         )
         .unwrap();
     state
-        .engine
-        .execute_playback(EnginePlaybackCommand::Pool {
+        .output.execute_playback(EnginePlaybackCommand::Pool {
             number: 2,
             action: PoolPlaybackAction::On,
         })
         .unwrap();
-    assert!(state.programmers.arm_preload(session.id, true));
-    assert!(state.programmers.queue_preload_playback_action(
+    assert!(state.programming.arm_preload(session.id, true));
+    assert!(state.programming.queue_preload_playback_action(
         session.id,
         1,
         None,
         light_programmer::PreloadPlaybackQueueAction::On,
         light_programmer::PreloadPlaybackQueueSurface::Physical,
     ));
-    assert!(state.programmers.queue_preload_playback_action(
+    assert!(state.programming.queue_preload_playback_action(
         session.id,
         1,
         None,
@@ -404,7 +392,7 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
         response["playback_event_sequences"],
         serde_json::json!([1, 2])
     );
-    let light_application::EventReplay::Events(events) = state.application_events.replay(
+    let light_application::EventReplay::Events(events) = state.events.replay(
         0,
         &light_application::EventFilter::default(),
     ) else {
@@ -442,12 +430,10 @@ fn committed_preload_publishes_the_exact_typed_playback_change() {
 fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
     let (state, data_dir) = test_state();
     state
-        .engine
-        .replace_snapshot(preload_atomicity_test_snapshot())
+        .output.replace_snapshot(preload_atomicity_test_snapshot())
         .unwrap();
     state
-        .engine
-        .execute_playback(EnginePlaybackCommand::Pool {
+        .output.execute_playback(EnginePlaybackCommand::Pool {
             number: 2,
             action: PoolPlaybackAction::On,
         })
@@ -459,13 +445,12 @@ fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
         action: light_programmer::PreloadPlaybackQueueAction::On,
         surface: light_programmer::PreloadPlaybackQueueSurface::Virtual,
     };
-    let source = state.engine.playback_runtime();
+    let source = state.output.playback_runtime();
     let pending = vec![pending];
     let mut commands = preload_batch_commands(&pending).unwrap();
     commands[0].exclusion_zones = vec![vec![1, 2]].into();
     let prepared = state
-        .engine
-        .prepare_playback_batch(&commands, chrono::Utc::now(), 0)
+        .output.prepare_playback_batch(&commands, chrono::Utc::now(), 0)
         .unwrap();
     let actions = staged_preload_actions(&pending, &prepared);
 
@@ -479,7 +464,7 @@ fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
             .iter()
             .all(|runtime| runtime.playback_number != Some(1))
     );
-    let unchanged = state.engine.playback_runtime();
+    let unchanged = state.output.playback_runtime();
     assert!(unchanged.iter().any(|runtime| {
         runtime.playback_number == Some(2) && runtime.enabled
     }));
@@ -489,10 +474,9 @@ fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
             .all(|runtime| runtime.playback_number != Some(1))
     );
     state
-        .engine
-        .install_prepared_playback_batch(prepared)
+        .output.install_prepared_playback_batch(prepared)
         .unwrap();
-    let result = state.engine.playback_runtime();
+    let result = state.output.playback_runtime();
     assert!(
         result
             .iter()
@@ -510,7 +494,7 @@ fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
 #[test]
 fn committed_preload_publishes_auto_off_before_the_activating_playback() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -518,15 +502,12 @@ fn committed_preload_publishes_auto_off_before_the_activating_playback() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     state
-        .engine
-        .replace_snapshot(preload_auto_off_test_snapshot())
+        .output.replace_snapshot(preload_auto_off_test_snapshot())
         .unwrap();
     let show = state
-        .desk
-        .lock()
-        .upsert_show(
+        .installation.upsert_show(
             "Preload auto-off",
             &data_dir
                 .join("shows/preload-auto-off.show")
@@ -535,16 +516,15 @@ fn committed_preload_publishes_auto_off_before_the_activating_playback() {
             false,
         )
         .unwrap();
-    *state.active_show.write() = Some(show);
+    state.active_show.replace_current(Some(show));
     state
-        .engine
-        .execute_playback(EnginePlaybackCommand::Pool {
+        .output.execute_playback(EnginePlaybackCommand::Pool {
             number: 1,
             action: PoolPlaybackAction::On,
         })
         .unwrap();
-    assert!(state.programmers.arm_preload(session.id, true));
-    assert!(state.programmers.queue_preload_playback_action(
+    assert!(state.programming.arm_preload(session.id, true));
+    assert!(state.programming.queue_preload_playback_action(
         session.id,
         2,
         None,
@@ -555,7 +535,7 @@ fn committed_preload_publishes_auto_off_before_the_activating_playback() {
     let response = commit_preload(&state, &session).unwrap();
 
     assert_eq!(response["playback_event_sequences"], serde_json::json!([1, 2]));
-    let light_application::EventReplay::Events(events) = state.application_events.replay(
+    let light_application::EventReplay::Events(events) = state.events.replay(
         0,
         &light_application::EventFilter::default(),
     ) else {
@@ -584,11 +564,9 @@ fn committed_preload_publishes_auto_off_before_the_activating_playback() {
 #[test]
 fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let desk = state
-        .desk
-        .lock()
-        .add_desk("Explicit Preload page", "explicit-preload-page")
+        .installation.add_desk("Explicit Preload page", "explicit-preload-page")
         .unwrap();
     let session = Session {
         id: SessionId::new(),
@@ -597,18 +575,16 @@ fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
         connected: true,
         desk,
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     let mut snapshot = preload_atomicity_test_snapshot();
     std::sync::Arc::make_mut(&mut snapshot.playback_pages).push(light_playback::PlaybackPage {
         number: 2,
         name: "Explicit".into(),
         slots: HashMap::from([(1, 1)]),
     });
-    state.engine.replace_snapshot(snapshot).unwrap();
+    state.output.replace_snapshot(snapshot).unwrap();
     let show = state
-        .desk
-        .lock()
-        .upsert_show(
+        .installation.upsert_show(
             "Explicit Preload page",
             &data_dir
                 .join("shows/explicit-preload-page.show")
@@ -617,11 +593,9 @@ fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
             false,
         )
         .unwrap();
-    *state.active_show.write() = Some(show.clone());
+    state.active_show.replace_current(Some(show.clone()));
     state
-        .desk
-        .lock()
-        .set_desk_page(session.desk.id, show.id, 1)
+        .installation.set_desk_page(session.desk.id, show.id, 1)
         .unwrap();
     let zones = VirtualPlaybackExclusionStore::from([(
         session.desk.id.to_string(),
@@ -635,22 +609,19 @@ fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
         )]),
     )]);
     state
-        .desk
-        .lock()
-        .set_setting(
+        .installation.set_setting(
             &virtual_playback_exclusion_setting(show.id),
             &serde_json::to_string(&zones).unwrap(),
         )
         .unwrap();
     state
-        .engine
-        .execute_playback(EnginePlaybackCommand::Pool {
+        .output.execute_playback(EnginePlaybackCommand::Pool {
             number: 2,
             action: PoolPlaybackAction::On,
         })
         .unwrap();
-    assert!(state.programmers.arm_preload(session.id, true));
-    assert!(state.programmers.queue_preload_playback_action(
+    assert!(state.programming.arm_preload(session.id, true));
+    assert!(state.programming.queue_preload_playback_action(
         session.id,
         1,
         Some(2),
@@ -663,8 +634,7 @@ fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
     assert_eq!(response["playback_actions"][0]["page"], 2);
     assert_eq!(response["playback_event_sequences"], serde_json::json!([1]));
     let enabled = state
-        .engine
-        .playback_runtime()
+        .output.playback_runtime()
         .into_iter()
         .filter(|runtime| runtime.enabled)
         .filter_map(|runtime| runtime.playback_number)

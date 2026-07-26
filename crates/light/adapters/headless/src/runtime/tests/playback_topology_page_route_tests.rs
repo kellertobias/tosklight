@@ -4,7 +4,7 @@ use super::{playback_topology_route_support::*, *};
 async fn create_page_returns_one_authority_and_is_replayable_and_idempotent() {
     let scenario = TopologyScenario::new("Create Playback Page").await;
     let revision = scenario.show_revision();
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
     let request = create_page_request("create-page-four", 4, 0, None);
 
     let response = scenario.action(revision, request.clone()).await;
@@ -31,10 +31,7 @@ async fn create_page_returns_one_authority_and_is_replayable_and_idempotent() {
     let replay = json(replay).await;
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["event_sequence"], changed["event_sequence"]);
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
+    assert_eq!(scenario.state.events.latest_sequence(), cursor + 1);
 
     let changed_page = scenario
         .action(
@@ -50,10 +47,7 @@ async fn create_page_returns_one_authority_and_is_replayable_and_idempotent() {
             .contains("request_id was already used")
     );
     assert!(scenario.document().object("playback_page", "5").is_none());
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
+    assert_eq!(scenario.state.events.latest_sequence(), cursor + 1);
 
     let page_revision = projection_revision(&changed, "playback_page");
     let no_change = scenario
@@ -67,10 +61,7 @@ async fn create_page_returns_one_authority_and_is_replayable_and_idempotent() {
     assert_eq!(no_change["status"], "no_change");
     assert!(no_change.get("event_sequence").is_none());
     assert_eq!(no_change["objects"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
+    assert_eq!(scenario.state.events.latest_sequence(), cursor + 1);
     scenario.cleanup();
 }
 
@@ -87,7 +78,7 @@ async fn rename_page_is_lossless_no_change_replayable_and_revision_checked() {
         }),
     );
     let revision = scenario.show_revision();
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
     let request = rename_page_request(
         "rename-page-three",
         3,
@@ -194,10 +185,7 @@ async fn rename_page_is_lossless_no_change_replayable_and_revision_checked() {
     let stale = json(stale).await;
     assert_eq!(stale["current_revision"], revision + 1);
     assert_eq!(stale["current_related_revision"], page_revision);
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
+    assert_eq!(scenario.state.events.latest_sequence(), cursor + 1);
     scenario.cleanup();
 }
 
@@ -220,7 +208,7 @@ async fn strict_desk_page_selects_one_existing_page_without_creating_another() {
     assert_eq!(created.status(), StatusCode::OK);
     let desk_id = scenario_desk_id(&scenario);
     let show_id = scenario_show_id(&scenario);
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
 
     let response = put_desk_page(&scenario, desk_id, 2, Some(true)).await;
 
@@ -230,10 +218,8 @@ async fn strict_desk_page_selects_one_existing_page_without_creating_another() {
     assert_eq!(body["page"], 2);
     let view_filter = light_application::EventFilter::for_desk(desk_id)
         .with_object(light_application::EventObject::playback_view(desk_id));
-    let light_application::EventReplay::Events(retained) = scenario
-        .state
-        .application_events
-        .replay(cursor, &view_filter)
+    let light_application::EventReplay::Events(retained) =
+        scenario.state.events.replay(cursor, &view_filter)
     else {
         panic!("the focused Playback view event must remain replayable")
     };
@@ -265,7 +251,7 @@ async fn strict_missing_page_is_side_effect_free_while_legacy_advance_still_crea
     let desk_id = scenario_desk_id(&scenario);
     let show_id = scenario_show_id(&scenario);
     let revision = scenario.show_revision();
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
 
     let strict = put_desk_page(&scenario, desk_id, 2, Some(true)).await;
 
@@ -275,7 +261,7 @@ async fn strict_missing_page_is_side_effect_free_while_legacy_advance_still_crea
     assert!(
         !scenario
             .state
-            .engine
+            .output
             .snapshot()
             .playback_pages
             .iter()
@@ -284,10 +270,8 @@ async fn strict_missing_page_is_side_effect_free_while_legacy_advance_still_crea
     assert_eq!(desk_page(&scenario, desk_id, show_id), 1);
     let view_filter = light_application::EventFilter::for_desk(desk_id)
         .with_object(light_application::EventObject::playback_view(desk_id));
-    let light_application::EventReplay::Events(strict_view_events) = scenario
-        .state
-        .application_events
-        .replay(cursor, &view_filter)
+    let light_application::EventReplay::Events(strict_view_events) =
+        scenario.state.events.replay(cursor, &view_filter)
     else {
         panic!("the focused Playback view history must remain replayable")
     };
@@ -300,10 +284,8 @@ async fn strict_missing_page_is_side_effect_free_while_legacy_advance_still_crea
     let legacy_filter = view_filter.with_object(
         light_application::EventObject::show_storage_object(show_id, "playback_page", "2"),
     );
-    let light_application::EventReplay::Events(retained) = scenario
-        .state
-        .application_events
-        .replay(cursor, &legacy_filter)
+    let light_application::EventReplay::Events(retained) =
+        scenario.state.events.replay(cursor, &legacy_filter)
     else {
         panic!("the focused Page creation and Playback view events must remain replayable")
     };
@@ -324,7 +306,7 @@ async fn page_route_rejects_unauthenticated_unsafe_and_canonical_collision_reque
         &serde_json::json!({"number":9,"name":"Occupied","slots":{}}),
     );
     let revision = scenario.show_revision();
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
     let request = create_page_request("create-page-six", 6, 0, None);
 
     let unauthorized = post_topology(
@@ -356,7 +338,7 @@ async fn page_route_rejects_unauthenticated_unsafe_and_canonical_collision_reque
             .unwrap()
             .contains("safe integer")
     );
-    assert_eq!(scenario.state.application_events.latest_sequence(), cursor);
+    assert_eq!(scenario.state.events.latest_sequence(), cursor);
     scenario.cleanup();
 }
 
@@ -388,8 +370,8 @@ pub(super) fn scenario_desk_id(scenario: &TopologyScenario) -> Uuid {
     scenario
         .state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .next()
         .unwrap()
         .desk
@@ -407,8 +389,7 @@ pub(super) fn desk_page(
 ) -> u8 {
     scenario
         .state
-        .desk
-        .lock()
+        .installation
         .desk_page(desk_id, show_id)
         .unwrap()
 }

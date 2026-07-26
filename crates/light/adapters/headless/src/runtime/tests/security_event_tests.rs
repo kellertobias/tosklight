@@ -56,7 +56,7 @@ async fn unauthenticated_bootstrap_keeps_login_discovery_but_omits_programmers()
 
     let (_, session_id) = login(&app, "Operator").await;
     let session_id = SessionId(Uuid::parse_str(&session_id).unwrap());
-    state.programmers.set(
+    state.programming.set(
         session_id,
         light_core::FixtureId::new(),
         light_core::AttributeKey::intensity(),
@@ -104,9 +104,7 @@ async fn programmer_list_returns_only_same_user_session_rows() {
     let (operator_token, first_operator) = login(&app, "Operator").await;
     let (_, second_operator) = login(&app, "Operator").await;
     state
-        .desk
-        .lock()
-        .add_user("Foreign operator")
+        .installation.add_user("Foreign operator")
         .unwrap();
     let (foreign_token, foreign_session) = login(&app, "Foreign operator").await;
     let first_operator = SessionId(Uuid::parse_str(&first_operator).unwrap());
@@ -114,13 +112,13 @@ async fn programmer_list_returns_only_same_user_session_rows() {
     let foreign_session = SessionId(Uuid::parse_str(&foreign_session).unwrap());
     let operator_fixture = light_core::FixtureId::new();
     let foreign_fixture = light_core::FixtureId::new();
-    state.programmers.set(
+    state.programming.set(
         first_operator,
         operator_fixture,
         light_core::AttributeKey::intensity(),
         light_core::AttributeValue::Normalized(0.5),
     );
-    state.programmers.set(
+    state.programming.set(
         foreign_session,
         foreign_fixture,
         light_core::AttributeKey::intensity(),
@@ -129,7 +127,7 @@ async fn programmer_list_returns_only_same_user_session_rows() {
 
     let operator_rows = authenticated_programmer_rows(&app, &operator_token).await;
     assert_eq!(operator_rows.len(), 2);
-    let operator_user = state.sessions.read()[&first_operator].user.id;
+    let operator_user = state.sessions.session(first_operator).unwrap().user.id;
     let mut operator_sessions = operator_rows
         .iter()
         .map(|row| row["session_id"].as_str().unwrap())
@@ -182,7 +180,7 @@ async fn authenticated_programmer_rows(
 #[tokio::test]
 async fn optional_desk_token_guards_the_api_boundary() {
     let (mut state, data_dir) = test_state();
-    state.desk_token = Some(Arc::from("shared-secret"));
+    state.installation.set_desk_token("shared-secret");
     let app = router(state);
     let denied = app
         .clone()
@@ -248,22 +246,22 @@ async fn authenticated_shutdown_requests_orderly_server_cancellation() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(state.shutdown.is_cancelled());
+    assert!(state.lifecycle.is_shutdown_requested());
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[test]
 fn emitted_events_have_strictly_sequential_revisions() {
     let (state, data_dir) = test_state();
-    let before_application_events = state.application_events.latest_sequence();
+    let before_application_events = state.events.latest_sequence();
     emit(&state, "first", serde_json::Value::Null);
     emit(&state, "second", serde_json::Value::Null);
-    let audit = state.audit_events.lock();
+    let audit = state.events.audit_events();
     assert_eq!(audit.len(), 2);
     assert_eq!(audit[0].kind, "first");
     assert_eq!(audit[0].revision + 1, audit[1].revision);
     assert_eq!(
-        state.application_events.latest_sequence(),
+        state.events.latest_sequence(),
         before_application_events,
         "audit-only rows must not enter the application event stream"
     );

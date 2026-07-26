@@ -140,9 +140,7 @@ async fn preload_values_share_one_user_across_desks_and_reject_foreign_actions()
     );
     let second_desk = scenario
         .state
-        .desk
-        .lock()
-        .add_desk("Second Preload desk", "second-preload-values")
+        .installation.add_desk("Second Preload desk", "second-preload-values")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);
@@ -163,9 +161,7 @@ async fn preload_values_share_one_user_across_desks_and_reject_foreign_actions()
 
     let other_user = scenario
         .state
-        .desk
-        .lock()
-        .add_user("Other Preload values user")
+        .installation.add_user("Other Preload values user")
         .unwrap();
     let (other_token, logged_in_user) = login_on_desk(
         &scenario,
@@ -349,7 +345,7 @@ fn assert_preload_values_changed(
         ),
     );
     let light_application::EventReplay::Events(events) =
-        scenario.state.application_events.replay(0, &filter)
+        scenario.state.events.replay(0, &filter)
     else {
         panic!("the focused Preload values event history should remain replayable")
     };
@@ -381,7 +377,7 @@ fn assert_preload_values_event_count(
         light_application::EventObject::programming_preload_values(user_id),
     );
     let light_application::EventReplay::Events(events) =
-        scenario.state.application_events.replay(0, &filter)
+        scenario.state.events.replay(0, &filter)
     else {
         panic!("the focused Preload values event history should remain replayable")
     };

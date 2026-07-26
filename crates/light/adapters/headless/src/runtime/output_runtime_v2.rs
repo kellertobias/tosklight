@@ -43,19 +43,20 @@ async fn output_runtime_action(
         request.blackout,
     )
     .map_err(OutputRuntimeHttpError::api)?;
-    let _activation = state.activation_lock.clone().lock_owned().await;
-    let desk_operation = state.programming.desk_lock(session.desk.id);
-    let _desk_operation = desk_operation.lock();
-    if read_desk_lock(&state, session.desk.id).locked {
-        return Err(OutputRuntimeHttpError::conflict(
-            "desk is locked",
-            Some(state.output_control.lock().revision),
-        ));
-    }
-    let context = http_context(&session).with_request_id(&request.request_id);
-    let result = output_runtime_service::execute_action(&state, Some(&session), context, command)
-        .map_err(OutputRuntimeHttpError::action)?;
-    Ok(Json(wire_outcome(result)).into_response())
+    let _activation = state.active_show.acquire().await;
+    state.programming.run_desk_operation(session.desk.id, || {
+        if read_desk_lock(&state, session.desk.id).locked {
+            return Err(OutputRuntimeHttpError::conflict(
+                "desk is locked",
+                Some(state.output.control_projection().revision),
+            ));
+        }
+        let context = http_context(&session).with_request_id(&request.request_id);
+        let result =
+            output_runtime_service::execute_action(&state, Some(&session), context, command)
+                .map_err(OutputRuntimeHttpError::action)?;
+        Ok(Json(wire_outcome(result)).into_response())
+    })
 }
 
 async fn output_runtime_snapshot(
@@ -66,7 +67,7 @@ async fn output_runtime_snapshot(
 ) -> Result<Json<wire::OutputRuntimeSnapshot>, super::ApiError> {
     let session = session_for_desk(&state, &headers, &desk)?;
     let identity = parse_identity(&identity)?;
-    let _activation = state.activation_lock.clone().lock_owned().await;
+    let _activation = state.active_show.acquire().await;
     let snapshot =
         output_runtime_service::snapshot(&state, &session, http_context(&session), identity)?;
     Ok(Json(wire_snapshot(snapshot)))

@@ -60,40 +60,32 @@ fn cue_selection_snapshot(list_id: light_core::CueListId) -> EngineSnapshot {
 fn cue_commands_use_the_desk_selected_concrete_playback() {
     let (state, data_dir) = test_state();
     let (user, first_desk, second_desk) = {
-        let store = state.desk.lock();
-        let user = store.users().unwrap().remove(0);
-        let first = store.add_desk("Front", "front").unwrap();
-        let second = store.add_desk("Wing", "wing").unwrap();
+        let user = state.installation.users().unwrap().remove(0);
+        let first = state.installation.add_desk("Front", "front").unwrap();
+        let second = state.installation.add_desk("Wing", "wing").unwrap();
         (user, first, second)
     };
     let show_id = light_core::ShowId::new();
-    *state.active_show.write() = Some(ShowEntry {
+    state.active_show.replace_current(Some(ShowEntry {
         id: show_id,
         name: "Selection".into(),
         path: data_dir.join("selection.show").display().to_string(),
         revision: 0,
         updated_at: String::new(),
         revision_copy: None,
-    });
+    }));
     let list_id = light_core::CueListId::new();
     state
-        .engine
-        .replace_snapshot(cue_selection_snapshot(list_id))
+        .output.replace_snapshot(cue_selection_snapshot(list_id))
         .unwrap();
     state
-        .desk
-        .lock()
-        .set_selected_playback(first_desk.id, show_id, Some(1))
+        .installation.set_selected_playback(first_desk.id, show_id, Some(1))
         .unwrap();
     state
-        .desk
-        .lock()
-        .set_selected_playback(second_desk.id, show_id, Some(2))
+        .installation.set_selected_playback(second_desk.id, show_id, Some(2))
         .unwrap();
     state
-        .desk
-        .lock()
-        .set_desk_page(first_desk.id, show_id, 4)
+        .installation.set_desk_page(first_desk.id, show_id, 4)
         .unwrap();
     handle_playback_osc(
         &state,
@@ -103,16 +95,12 @@ fn cue_commands_use_the_desk_selected_concrete_playback() {
     );
     assert_eq!(
         state
-            .desk
-            .lock()
-            .selected_playback(first_desk.id, show_id)
+            .installation.selected_playback(first_desk.id, show_id)
             .unwrap(),
         Some(2)
     );
     state
-        .desk
-        .lock()
-        .set_selected_playback(first_desk.id, show_id, Some(1))
+        .installation.set_selected_playback(first_desk.id, show_id, Some(1))
         .unwrap();
     let first = Session {
         id: SessionId::new(),
@@ -147,7 +135,7 @@ fn cue_commands_use_the_desk_selected_concrete_playback() {
         Some(2.0),
         Some(1.0),
     );
-    let runtime = state.engine.playback_runtime();
+    let runtime = state.output.playback_runtime();
     let first_runtime = runtime
         .iter()
         .find(|item| item.playback_number == Some(1))
@@ -173,8 +161,7 @@ fn cue_commands_use_the_desk_selected_concrete_playback() {
     execute_programmer_command(&state, &first, "CUE SET 2 CUE 1").unwrap();
     execute_programmer_command(&state, &first, "CUE CUE SET 4 . 7 CUE 2").unwrap();
     let second_runtime = state
-        .engine
-        .playback_runtime()
+        .output.playback_runtime()
         .into_iter()
         .find(|item| item.playback_number == Some(2))
         .unwrap();
@@ -187,9 +174,7 @@ fn cue_commands_use_the_desk_selected_concrete_playback() {
     );
     assert_eq!(
         state
-            .desk
-            .lock()
-            .selected_playback(first.desk.id, show_id)
+            .installation.selected_playback(first.desk.id, show_id)
             .unwrap(),
         Some(1)
     );
@@ -206,12 +191,12 @@ fn execute_cue_and_assert_typed_event(
     loaded: Option<f64>,
 ) {
     let context = operator_action_context(session, source);
-    let before = state.application_events.latest_sequence();
+    let before = state.events.latest_sequence();
     execute_programmer_command_from(state, session, command, &context).unwrap();
-    assert_eq!(state.application_events.latest_sequence(), before + 1);
+    assert_eq!(state.events.latest_sequence(), before + 1);
 
     let light_application::EventReplay::Events(events) = state
-        .application_events
+        .events
         .replay(before, &light_application::EventFilter::default())
     else {
         panic!("expected retained Playback event");
@@ -352,7 +337,7 @@ fn bare_multi_head_selection_expands_to_children_and_steps_without_parent_identi
 #[test]
 fn authoritative_selection_surfaces_expand_a_multi_head_parent_to_child_rows() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let session = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -360,14 +345,13 @@ fn authoritative_selection_surfaces_expand_a_multi_head_parent_to_child_rows() {
         connected: true,
         desk: test_control_desk(),
     };
-    state.programmers.start(session.id, user.id);
+    state.programming.start(session.id, user.id);
     attach_session_command_context(&state, &session);
-    state.sessions.write().insert(session.id, session.clone());
+    state.sessions.insert_session(session.clone());
     let (fixture, children) = highlight_multi_head_fixture();
     let parent = fixture.fixture_id;
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             ..EngineSnapshot::default()
         })
@@ -393,11 +377,11 @@ fn authoritative_selection_surfaces_expand_a_multi_head_parent_to_child_rows() {
     );
     assert!(set.ok, "{:?}", set.error);
     assert_eq!(
-        state.programmers.get(session.id).unwrap().selected,
+        state.programming.get(session.id).unwrap().selected,
         children
     );
 
-    state.programmers.select(session.id, []);
+    state.programming.select(session.id, []);
     let gesture = dispatch_live_action(
         &state,
         &session,
@@ -420,7 +404,7 @@ fn authoritative_selection_surfaces_expand_a_multi_head_parent_to_child_rows() {
     );
     assert!(gesture.ok, "{:?}", gesture.error);
     assert_eq!(
-        state.programmers.get(session.id).unwrap().selected,
+        state.programming.get(session.id).unwrap().selected,
         children
     );
     let _ = std::fs::remove_dir_all(data_dir);

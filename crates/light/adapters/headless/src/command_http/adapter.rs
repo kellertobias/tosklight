@@ -4,10 +4,9 @@ use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource, ExecutionPolicy,
     ProgrammingCommand, ProgrammingLiveSnapshot, ProgrammingResult,
 };
-use light_programmer::ProgrammerRegistry;
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
 
-use super::super::{ApiError, AppState, Session};
+use super::super::{ApiError, AppState, Session, capability_resources::ProgrammingResource};
 
 pub(crate) enum ExistingCommandOutcome {
     Accepted {
@@ -128,12 +127,12 @@ fn execute_with_policy(
             // Cross-user reconciliation must not run while one user's mutation gate is held.
             let applied =
                 super::super::execute_programmer_command_from(state, session, command, context)?;
-            super::programming_ports::clear_command_line(&state.programmers, session)?;
+            super::programming_ports::clear_command_line(&state.programming, session)?;
             Ok(applied)
         }
         ExistingCommandPolicy::AtomicProgrammer => {
             state
-                .programmers
+                .programming
                 .with_staged_command(session.id, |staged_programmers| {
                     execute_staged(state, session, command, context, staged_programmers)
                 })
@@ -146,10 +145,10 @@ fn execute_staged(
     session: &Session,
     command: &str,
     context: &ActionContext,
-    staged_programmers: &ProgrammerRegistry,
+    staged_programmers: &ProgrammingResource,
 ) -> Result<usize, String> {
     let mut staged_state = state.clone();
-    staged_state.programmers = staged_programmers.clone();
+    staged_state.programming = staged_programmers.clone();
     let applied =
         super::super::execute_programmer_command_from(&staged_state, session, command, context)?;
     staged_programmers
@@ -268,7 +267,7 @@ pub(crate) fn route_osc_command_key(
     let Some(key) = osc_command_key(action) else {
         return false;
     };
-    let Ok(_activation) = state.activation_lock.clone().try_lock_owned() else {
+    let Ok(_activation) = state.active_show.try_acquire() else {
         publish_osc_rejection(
             state,
             session,

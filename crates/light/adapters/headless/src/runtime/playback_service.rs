@@ -88,7 +88,7 @@ pub(super) fn execute(
 ) -> Result<PlaybackResult, ApiError> {
     let ports = ServerPlaybackPorts::new(state, session, desk);
     state
-        .playback_service
+        .playback
         .handle(ActionEnvelope { context, command }, &ports)
         .map_err(action_error)
 }
@@ -101,7 +101,7 @@ pub(super) fn snapshot(
 ) -> Result<light_application::PlaybackRuntimeSnapshot, ApiError> {
     let ports = ServerPlaybackPorts::new(state, Some(session), Some(&session.desk));
     state
-        .playback_service
+        .playback
         .snapshot(&context, identities, &ports)
         .map_err(action_error)
 }

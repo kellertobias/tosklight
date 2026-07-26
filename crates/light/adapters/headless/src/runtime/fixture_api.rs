@@ -38,9 +38,8 @@ async fn fixture_definitions_snapshot(
     Ok(Json(wire::FixtureDefinitionsSnapshot {
         definitions: json_values(
             state
-                .fixture_library
-                .lock()
-                .definitions()
+                .installation
+                .fixture_definitions()
                 .map_err(ApiError::fixture)?,
         )?,
     }))
@@ -54,9 +53,8 @@ async fn fixture_profiles_snapshot(
     Ok(Json(wire::FixtureProfilesSnapshot {
         profiles: json_values(
             state
-                .fixture_library
-                .lock()
-                .profiles()
+                .installation
+                .fixture_profiles()
                 .map_err(ApiError::fixture)?,
         )?,
     }))
@@ -69,9 +67,8 @@ async fn fixture_library_warnings_snapshot(
     let _session = authenticate(&state, &headers)?;
     Ok(Json(wire::FixtureLibraryWarningsSnapshot {
         warnings: state
-            .fixture_library
-            .lock()
-            .migration_warnings()
+            .installation
+            .fixture_library_warnings()
             .map_err(ApiError::fixture)?,
     }))
 }
@@ -82,18 +79,10 @@ async fn fixture_profile_revisions(
     headers: HeaderMap,
 ) -> Result<Json<wire::FixtureProfileRevisionsSnapshot>, ApiError> {
     let _session = authenticate(&state, &headers)?;
-    let library = state.fixture_library.lock();
-    let profiles = library
-        .profile_revisions(id)
-        .map_err(ApiError::fixture)?
-        .into_iter()
-        .map(|revision| {
-            library
-                .profile(id, revision)
-                .map_err(ApiError::fixture)?
-                .ok_or_else(|| ApiError::not_found("fixture profile revision"))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let profiles = state
+        .installation
+        .fixture_profile_revisions(id)
+        .map_err(ApiError::fixture)?;
     Ok(Json(wire::FixtureProfileRevisionsSnapshot {
         profiles: json_values(profiles)?,
     }))
@@ -111,8 +100,11 @@ async fn fixture_library_action(
         request_id: request.request_id.clone(),
     };
     let signature = action_signature(&request.action)?;
-    let mut replay = state.fixture_library_replay.lock().await;
-    if let Some(outcome) = replay.get(&key, &signature)? {
+    if let Some(outcome) = state
+        .replay
+        .lookup_fixture_library(&key, &signature)
+        .await?
+    {
         return Ok(Json(outcome));
     }
     let result = execute_action(&state, request.action)?;
@@ -121,7 +113,10 @@ async fn fixture_library_action(
         replayed: false,
         result,
     };
-    replay.insert(key, signature, outcome.clone());
+    state
+        .replay
+        .insert_fixture_library(key, signature, outcome.clone())
+        .await;
     Ok(Json(outcome))
 }
 
@@ -140,9 +135,8 @@ fn execute_action(
             let expected = u32::try_from(expected_revision)
                 .map_err(|_| ApiError::bad_request("fixture profile revision exceeds u32"))?;
             let stored = state
-                .fixture_library
-                .lock()
-                .save_profile(profile, expected)
+                .installation
+                .save_fixture_profile(profile, expected)
                 .map_err(ApiError::fixture)?;
             emit(
                 state,
@@ -160,9 +154,8 @@ fn execute_action(
         } => {
             let id = light_core::FixtureId(profile_id);
             if !state
-                .fixture_library
-                .lock()
-                .delete_profile(id, revision)
+                .installation
+                .delete_fixture_profile(id, revision)
                 .map_err(ApiError::fixture)?
             {
                 return Err(ApiError::not_found("fixture profile revision"));
@@ -181,8 +174,7 @@ fn execute_action(
         Action::ImportPackage { package_base64 } => {
             let package = decode_archive(&package_base64, "fixture package")?;
             let stored = state
-                .fixture_library
-                .lock()
+                .installation
                 .import_fixture_package(&package)
                 .map_err(ApiError::fixture)?;
             emit(
@@ -203,9 +195,8 @@ fn execute_action(
             let source = decode_archive(&source_base64, "GDTF source archive")?;
             let id = light_core::FixtureId(profile_id);
             if !state
-                .fixture_library
-                .lock()
-                .set_profile_source_gdtf(id, revision, &source)
+                .installation
+                .attach_fixture_profile_gdtf(id, revision, &source)
                 .map_err(ApiError::fixture)?
             {
                 return Err(ApiError::not_found("fixture profile revision"));
@@ -224,13 +215,9 @@ fn execute_action(
             let definition: light_fixture::FixtureDefinition =
                 serde_json::from_value(definition)
                     .map_err(|error| ApiError::bad_request(error.to_string()))?;
-            let json = serde_json::to_string(&definition).map_err(|error| {
-                ApiError::internal(format!("fixture definition encoding failed: {error}"))
-            })?;
             let stored = state
-                .fixture_library
-                .lock()
-                .import_json(&json)
+                .installation
+                .import_fixture_definition(&definition)
                 .map_err(ApiError::fixture)?;
             emit(
                 state,
@@ -248,9 +235,8 @@ fn execute_action(
         } => {
             let id = light_core::FixtureId(definition_id);
             if !state
-                .fixture_library
-                .lock()
-                .delete(id, revision)
+                .installation
+                .delete_fixture_definition(id, revision)
                 .map_err(ApiError::fixture)?
             {
                 return Err(ApiError::not_found("fixture definition"));
@@ -275,12 +261,8 @@ async fn export_fixture_package(
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let _session = authenticate(&state, &headers)?;
-    let library = state.fixture_library.lock();
-    let profile = library
-        .profile(id, revision)
-        .map_err(ApiError::fixture)?
-        .ok_or_else(|| ApiError::not_found("fixture profile revision"))?;
-    let bytes = library
+    let (profile, bytes) = state
+        .installation
         .export_fixture_package(id, revision)
         .map_err(ApiError::fixture)?
         .ok_or_else(|| ApiError::not_found("fixture profile revision"))?;

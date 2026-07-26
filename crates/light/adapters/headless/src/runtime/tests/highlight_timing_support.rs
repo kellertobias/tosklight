@@ -34,9 +34,7 @@ fn persisted_programmer(
     session_id: SessionId,
 ) -> light_programmer::ProgrammerState {
     let session = state
-        .desk
-        .lock()
-        .persisted_sessions()
+        .installation.persisted_sessions()
         .unwrap()
         .into_iter()
         .find(|persisted| persisted.id == session_id)

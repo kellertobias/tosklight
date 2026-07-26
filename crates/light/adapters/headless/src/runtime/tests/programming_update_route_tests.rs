@@ -14,7 +14,7 @@ struct UpdateRouteScenario {
 impl UpdateRouteScenario {
     fn new() -> Self {
         let (state, data_dir) = test_state();
-        let user = state.desk.lock().users().unwrap().remove(0);
+        let user = state.installation.users().unwrap().remove(0);
         let mut desk = test_control_desk();
         desk.id = Uuid::new_v4();
         let session = Session {
@@ -24,14 +24,14 @@ impl UpdateRouteScenario {
             connected: true,
             desk,
         };
-        state.programmers.start(session.id, user.id);
+        state.programming.start(session.id, user.id);
         attach_session_command_context(&state, &session);
-        state.sessions.write().insert(session.id, session.clone());
+        state.sessions.insert_session(session.clone());
 
         let first = light_core::FixtureId::new();
         let added = light_core::FixtureId::new();
         let group_id = "front".to_owned();
-        state.programmers.select_expression(
+        state.programming.select_expression(
             session.id,
             vec![first, added],
             light_programmer::SelectionExpression::LiveGroup {
@@ -41,14 +41,14 @@ impl UpdateRouteScenario {
         );
         let show_path = data_dir.join("shows/programming-update-v2.show");
         let show_id = initialise_show(&show_path, "Programming Update v2").unwrap();
-        *state.active_show.write() = Some(ShowEntry {
+        state.active_show.replace_current(Some(ShowEntry {
             id: show_id,
             name: "Programming Update v2".into(),
             path: show_path.display().to_string(),
             revision: 0,
             updated_at: String::new(),
             revision_copy: None,
-        });
+        }));
         let mut body = serde_json::to_value(light_programmer::GroupDefinition {
             id: group_id.clone(),
             name: "Front".into(),
@@ -79,7 +79,7 @@ impl UpdateRouteScenario {
     }
 
     fn store(&self) -> ShowStore {
-        let entry = self.state.active_show.read().clone().unwrap();
+        let entry = self.state.active_show.current().clone().unwrap();
         ShowStore::open(entry.path).unwrap()
     }
 
@@ -121,19 +121,19 @@ async fn v2_update_locked_reads_and_settings_keep_exact_scope() {
     let revision = scenario.revision();
     scenario
         .state
-        .configuration
-        .write()
-        .update_settings_by_desk
-        .insert(
-            scenario.session.desk.id,
-            update::UpdateSettings {
-                other_target_modes: HashMap::from([(
-                    "future".into(),
-                    update::ExistingContentMode::AddNew,
-                )]),
-                ..Default::default()
-            },
-        );
+        .installation
+        .update_configuration(|configuration| {
+            configuration.update_settings_by_desk.insert(
+                scenario.session.desk.id,
+                update::UpdateSettings {
+                    other_target_modes: HashMap::from([(
+                        "future".into(),
+                        update::ExistingContentMode::AddNew,
+                    )]),
+                    ..Default::default()
+                },
+            );
+        });
     write_desk_lock(
         &scenario.state,
         scenario.session.desk.id,
@@ -143,7 +143,7 @@ async fn v2_update_locked_reads_and_settings_keep_exact_scope() {
         },
     )
     .unwrap();
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
 
     let preview = scenario
         .post(
@@ -185,7 +185,7 @@ async fn v2_update_locked_reads_and_settings_keep_exact_scope() {
             .len(),
         64
     );
-    assert_eq!(scenario.state.application_events.latest_sequence(), cursor);
+    assert_eq!(scenario.state.events.latest_sequence(), cursor);
     assert_eq!(scenario.revision(), revision);
 
     let blocked_action = scenario
@@ -197,7 +197,7 @@ async fn v2_update_locked_reads_and_settings_keep_exact_scope() {
         .await;
     assert_eq!(blocked_action.status(), StatusCode::CONFLICT);
     assert_eq!(json(blocked_action).await["kind"], "conflict");
-    assert_eq!(scenario.state.application_events.latest_sequence(), cursor);
+    assert_eq!(scenario.state.events.latest_sequence(), cursor);
 
     let settings_path = format!(
         "/api/v2/desks/{}/programming-update/settings",
@@ -259,7 +259,11 @@ async fn v2_update_locked_reads_and_settings_keep_exact_scope() {
     assert_eq!(saved.status(), StatusCode::OK);
     assert_eq!(json(saved).await["settings"]["cue_mode"], "existing_only");
     assert_eq!(
-        scenario.state.configuration.read().update_settings_by_desk[&scenario.session.desk.id]
+        scenario
+            .state
+            .installation
+            .configuration()
+            .update_settings_by_desk[&scenario.session.desk.id]
             .other_target_modes["future"],
         update::ExistingContentMode::AddNew
     );
@@ -270,7 +274,7 @@ async fn v2_update_locked_reads_and_settings_keep_exact_scope() {
 async fn v2_update_action_is_lossless_replay_safe_and_one_event() {
     let scenario = UpdateRouteScenario::new();
     let initial_revision = scenario.revision();
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
     let action = direct_group_action(&scenario, "group-add", "add_new");
 
     let changed = scenario
@@ -293,10 +297,8 @@ async fn v2_update_action_is_lossless_replay_safe_and_one_event() {
             &scenario.group_id,
         ),
     );
-    let light_application::EventReplay::Events(show_events) = scenario
-        .state
-        .application_events
-        .replay(cursor, &show_filter)
+    let light_application::EventReplay::Events(show_events) =
+        scenario.state.events.replay(cursor, &show_filter)
     else {
         panic!("the focused Programming update Show event must remain replayable")
     };
@@ -312,10 +314,8 @@ async fn v2_update_action_is_lossless_replay_safe_and_one_event() {
     let replay = json(replay).await;
     assert_eq!(replay["replayed"], true);
     assert_eq!(replay["event_sequence"], show_events[0].sequence);
-    let light_application::EventReplay::Events(replayed_show_events) = scenario
-        .state
-        .application_events
-        .replay(cursor, &show_filter)
+    let light_application::EventReplay::Events(replayed_show_events) =
+        scenario.state.events.replay(cursor, &show_filter)
     else {
         panic!("the focused Programming update Show event must remain replayable")
     };
@@ -345,10 +345,8 @@ async fn v2_update_action_is_lossless_replay_safe_and_one_event() {
         .await;
     assert_eq!(no_op.status(), StatusCode::BAD_REQUEST);
     assert_eq!(json(no_op).await["kind"], "invalid");
-    let light_application::EventReplay::Events(show_events_after_no_op) = scenario
-        .state
-        .application_events
-        .replay(cursor, &show_filter)
+    let light_application::EventReplay::Events(show_events_after_no_op) =
+        scenario.state.events.replay(cursor, &show_filter)
     else {
         panic!("the focused Programming update Show event must remain replayable")
     };
@@ -368,10 +366,8 @@ async fn v2_update_action_is_lossless_replay_safe_and_one_event() {
     );
     let stale_show = json(stale_show).await;
     assert_eq!(stale_show["current_show_revision"], committed_revision);
-    let light_application::EventReplay::Events(show_events_after_conflict) = scenario
-        .state
-        .application_events
-        .replay(cursor, &show_filter)
+    let light_application::EventReplay::Events(show_events_after_conflict) =
+        scenario.state.events.replay(cursor, &show_filter)
     else {
         panic!("the focused Programming update Show event must remain replayable")
     };

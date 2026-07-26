@@ -37,9 +37,7 @@ impl ServerPlaybackTopologyPorts {
         let session_is_live = self
             .state
             .sessions
-            .read()
-            .get(&SessionId(session_id))
-            .is_some_and(|session| session.token == self.session.token);
+            .session_token_matches(SessionId(session_id), &self.session.token);
         if !session_is_live {
             return Err(ActionError::new(
                 ActionErrorKind::Unauthorized,
@@ -89,7 +87,7 @@ impl ActiveShowPorts for ServerPlaybackTopologyPorts {
         _show_id: ShowId,
         operation: impl FnOnce() -> Result<T, ActionError>,
     ) -> Result<T, ActionError> {
-        let _activation = self.state.activation_lock.clone().blocking_lock_owned();
+        let _activation = self.state.active_show.acquire_blocking();
         operation()
     }
 

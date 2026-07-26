@@ -4,14 +4,11 @@ async fn file_input_stays_owned_until_session_close() {
     let app = router(state.clone());
     let (token, session_id) = login(&app, "Operator").await;
     let session = state
-        .sessions
-        .read()
-        .values()
+        .sessions.sessions().into_iter()
         .find(|session| session.token == token)
-        .cloned()
         .unwrap();
     state
-        .programmers
+        .programming
         .set_command_line(session.id, "COPY".into());
 
     let claimed = app
@@ -37,9 +34,9 @@ async fn file_input_stays_owned_until_session_close() {
 
     assert!(
         state
-            .file_input_contexts
-            .lock()
-            .contains_key(&session.desk.id)
+            .sessions
+            .file_input_context(session.desk.id)
+            .is_some()
     );
 
     let competing = app
@@ -73,7 +70,7 @@ async fn file_input_stays_owned_until_session_close() {
         .await
         .unwrap();
     assert_eq!(disconnected.status(), StatusCode::NO_CONTENT);
-    assert!(state.file_input_contexts.lock().is_empty());
+    assert_eq!(state.sessions.file_input_context_count(), 0);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -83,14 +80,11 @@ async fn losing_file_input_claim_does_not_consume_the_pending_command() {
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let session = state
-        .sessions
-        .read()
-        .values()
+        .sessions.sessions().into_iter()
         .find(|session| session.token == token)
-        .cloned()
         .unwrap();
     state
-        .programmers
+        .programming
         .set_command_line(session.id, "COPY".into());
 
     let winner = app
@@ -134,7 +128,7 @@ async fn losing_file_input_claim_does_not_consume_the_pending_command() {
         .unwrap();
     assert_eq!(loser.status(), StatusCode::CONFLICT);
     assert_eq!(
-        state.programmers.get(session.id).unwrap().command_line,
+        state.programming.get(session.id).unwrap().command_line,
         "COPY"
     );
     let _ = std::fs::remove_dir_all(data_dir);
@@ -275,9 +269,7 @@ async fn sound_to_light_is_authoritative_per_speed_group_and_capture_is_desk_sco
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let primary_desk = state
-        .sessions
-        .read()
-        .values()
+        .sessions.sessions().into_iter()
         .find(|session| session.token == token)
         .unwrap()
         .desk
@@ -330,7 +322,7 @@ async fn sound_to_light_is_authoritative_per_speed_group_and_capture_is_desk_sco
         post_sound_observation(&app, &same_desk_token, &observation).await;
     assert_eq!(same_desk_observation.status(), StatusCode::OK);
 
-    let other_desk = state.desk.lock().add_desk("Other", "other").unwrap();
+    let other_desk = state.installation.add_desk("Other", "other").unwrap();
     let other_token = login_to_speed_group_desk(&app, other_desk.id).await;
     let contested = post_sound_observation(&app, &other_token, &observation).await;
     assert_eq!(contested.status(), StatusCode::CONFLICT);
@@ -362,13 +354,11 @@ async fn sound_to_light_is_authoritative_per_speed_group_and_capture_is_desk_sco
     assert_eq!(current["snapshot"]["source"], "manual");
     assert_eq!(current["snapshot"]["effective_bpm"], 111.0);
     assert_eq!(current["configuration"]["enabled"], false);
-    assert!(state.sound_capture_owners.lock()[0].is_none());
+    assert!(state.output.sound_capture_owner(0).is_none());
 
     let persisted: DeskConfiguration = serde_json::from_str(
         &state
-            .desk
-            .lock()
-            .setting("server_configuration")
+            .installation.setting("server_configuration")
             .unwrap()
             .unwrap(),
     )
@@ -409,14 +399,20 @@ fn osc_speed_group_button_performs_the_authoritative_learn_action() {
         enabled: true,
         ..SoundToLightConfig::default()
     };
-    state.speed_groups.lock()[0]
-        .set_sound_config(enabled.clone())
+    state
+        .output
+        .set_speed_group_sound_config(0, enabled.clone())
         .unwrap();
-    state.configuration.write().speed_group_sound_to_light[0] = enabled;
-    state.sound_capture_owners.lock()[0] = Some(SoundCaptureOwner {
-        desk_id: Uuid::new_v4(),
-        last_seen_millis: 1,
+    state.installation.update_configuration(|configuration| {
+        configuration.speed_group_sound_to_light[0] = enabled;
     });
+    state.output.set_sound_capture_owner(
+        0,
+        Some(SoundCaptureOwner {
+            desk_id: Uuid::new_v4(),
+            last_seen_millis: 1,
+        }),
+    );
 
     handle_timing_osc(
         &state,
@@ -424,10 +420,10 @@ fn osc_speed_group_button_performs_the_authoritative_learn_action() {
         &[OscArgument::Bool(true)],
     );
 
-    assert!(!state.speed_groups.lock()[0].sound_config().enabled);
-    assert!(!state.configuration.read().speed_group_sound_to_light[0].enabled);
-    assert!(state.sound_capture_owners.lock()[0].is_none());
-    let event = state.audit_events.lock().back().cloned().unwrap();
+    assert!(!state.output.speed_group_sound_config(0).enabled);
+    assert!(!state.installation.configuration().speed_group_sound_to_light[0].enabled);
+    assert!(state.output.sound_capture_owner(0).is_none());
+    let event = state.events.audit_events().last().cloned().unwrap();
     assert_eq!(event.kind, "speed_group_action");
     assert_eq!(event.payload["source"], "osc");
     assert_eq!(event.payload["action"], "learn");

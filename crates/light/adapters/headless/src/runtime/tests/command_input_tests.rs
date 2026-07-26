@@ -62,14 +62,9 @@ fn osc_keypad_uses_the_same_scoped_selection_edits_as_the_ui() {
 #[test]
 fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
-    let (front, wing) = {
-        let store = state.desk.lock();
-        (
-            store.add_desk("Front", "front").unwrap(),
-            store.add_desk("Wing", "wing").unwrap(),
-        )
-    };
+    let user = state.installation.users().unwrap().remove(0);
+    let front = state.installation.add_desk("Front", "front").unwrap();
+    let wing = state.installation.add_desk("Wing", "wing").unwrap();
     let ui = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -92,12 +87,12 @@ fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
         desk: wing,
     };
     for session in [&ui, &second_front, &wing_ui] {
-        state.programmers.start(session.id, session.user.id);
+        state.programming.start(session.id, session.user.id);
         attach_session_command_context(&state, session);
-        state.sessions.write().insert(session.id, session.clone());
+        state.sessions.insert_session(session.clone());
     }
-    state.programmers.set_command_line(ui.id, "GROUP".into());
-    state.programmers.set_command_target(ui.id, "GROUP".into());
+    state.programming.set_command_line(ui.id, "GROUP".into());
+    state.programming.set_command_target(ui.id, "GROUP".into());
 
     write_desk_lock(
         &state,
@@ -129,7 +124,7 @@ fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
             source: Some(source.into()),
         },
     );
-    assert_eq!(state.programmers.get(ui.id).unwrap().command_line, "GROUP");
+    assert_eq!(state.programming.get(ui.id).unwrap().command_line, "GROUP");
 
     write_desk_lock(&state, front.id, &DeskLockConfiguration::default()).unwrap();
     handle_control_event(
@@ -140,28 +135,28 @@ fn osc_and_ui_share_the_unlocked_desk_command_context_not_the_user_session() {
             source: Some(source.into()),
         },
     );
-    assert_eq!(state.programmers.get(ui.id).unwrap().command_line, "G7");
+    assert_eq!(state.programming.get(ui.id).unwrap().command_line, "G7");
     assert_eq!(
-        state.programmers.get(second_front.id).unwrap().command_line,
+        state.programming.get(second_front.id).unwrap().command_line,
         "G7"
     );
     assert!(
         state
-            .programmers
+            .programming
             .get(wing_ui.id)
             .unwrap()
             .command_line
             .is_empty()
     );
-    assert_eq!(state.programmers.command_target(wing_ui.id), "FIXTURE");
+    assert_eq!(state.programming.command_target(wing_ui.id), "FIXTURE");
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[test]
 fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
-    let front = state.desk.lock().add_desk("Front", "front").unwrap();
+    let user = state.installation.users().unwrap().remove(0);
+    let front = state.installation.add_desk("Front", "front").unwrap();
     let ui = Session {
         id: SessionId::new(),
         user: user.clone(),
@@ -177,9 +172,9 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
         desk: front.clone(),
     };
     for session in [&ui, &second_ui] {
-        state.programmers.start(session.id, session.user.id);
+        state.programming.start(session.id, session.user.id);
         attach_session_command_context(&state, session);
-        state.sessions.write().insert(session.id, session.clone());
+        state.sessions.insert_session(session.clone());
     }
 
     // Five patched fixtures, deliberately stored in reverse order: the spread must follow the
@@ -196,8 +191,7 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
         fixtures.push(fixture);
     }
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: fixtures.into(),
             revision: 1,
             ..EngineSnapshot::default()
@@ -236,17 +230,17 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
     // The physical keypad continues the one shared desk command line: every UI session on the
     // same desk sees the identical text a software keypad would have produced.
     let typed = "F1 THRU 5 AT 100 THRU 0 THRU 100";
-    assert_eq!(state.programmers.get(ui.id).unwrap().command_line, typed);
+    assert_eq!(state.programming.get(ui.id).unwrap().command_line, typed);
     assert_eq!(
-        state.programmers.get(second_ui.id).unwrap().command_line,
+        state.programming.get(second_ui.id).unwrap().command_line,
         typed
     );
 
     press("enter");
-    assert!(state.programmers.get(ui.id).unwrap().command_line.is_empty());
+    assert!(state.programming.get(ui.id).unwrap().command_line.is_empty());
     assert!(
         state
-            .programmers
+            .programming
             .get(second_ui.id)
             .unwrap()
             .command_line
@@ -254,7 +248,7 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
     );
 
     // Normative resolve_spread result for `100 THRU 0 THRU 100` over five fixtures.
-    let programmer = state.programmers.get(ui.id).unwrap();
+    let programmer = state.programming.get(ui.id).unwrap();
     for (number, level) in [(1, 1.0), (2, 0.5), (3, 0.0), (4, 0.5), (5, 1.0)] {
         let fixture_id = ids[&number];
         let values = programmer
@@ -280,22 +274,17 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
     // The mutation landed exactly once: one values event and one accepted history entry.
     let filter = light_application::EventFilter::default()
         .with_object(light_application::EventObject::programming_values(ui.user.id.0));
-    let light_application::EventReplay::Events(events) = state.application_events.replay(0, &filter)
+    let light_application::EventReplay::Events(events) = state.events.replay(0, &filter)
     else {
         panic!("the values event history should remain replayable")
     };
     assert_eq!(events.len(), 1);
-    let histories = state.command_history.lock();
-    let executed = histories
-        .get(&front.id)
-        .map(|history| {
-            history
-                .iter()
-                .filter(|entry| entry.command == typed)
-                .cloned()
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
+    let executed = state
+        .programming
+        .command_history(front.id)
+        .into_iter()
+        .filter(|entry| entry.command == typed)
+        .collect::<Vec<_>>();
     assert_eq!(
         executed.len(),
         1,
@@ -303,14 +292,13 @@ fn osc_keypad_continues_the_shared_desk_command_line_and_lands_the_spread_once()
     );
     assert_eq!(executed[0].status, "accepted");
     assert_eq!(executed[0].source, "osc");
-    drop(histories);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[test]
 fn file_input_context_follows_the_desk_not_the_shared_programmer_session() {
     let (state, data_dir) = test_state();
-    let user = state.desk.lock().users().unwrap().remove(0);
+    let user = state.installation.users().unwrap().remove(0);
     let mut front = test_control_desk();
     front.id = Uuid::new_v4();
     front.osc_alias = "front".into();
@@ -338,16 +326,19 @@ fn file_input_context_follows_the_desk_not_the_shared_programmer_session() {
         connected: true,
         desk: wing,
     };
-    state.file_input_contexts.lock().insert(
-        owner.desk.id,
-        file_manager::FileInputContext {
-            instance_id: "front-files".into(),
-            action: file_manager::FileInputAction::Copy,
-            session_id: owner.id,
-            desk_id: owner.desk.id,
-            expires_at: Instant::now() + Duration::from_secs(60),
-        },
-    );
+    state
+        .sessions
+        .try_claim_file_input_context(
+            file_manager::FileInputContext {
+                instance_id: "front-files".into(),
+                action: file_manager::FileInputAction::Copy,
+                session_id: owner.id,
+                desk_id: owner.desk.id,
+                expires_at: Instant::now() + Duration::from_secs(60),
+            },
+            || Ok(()),
+        )
+        .unwrap();
 
     assert!(file_manager::route_osc_input(
         &state,
@@ -361,16 +352,16 @@ fn file_input_context_follows_the_desk_not_the_shared_programmer_session() {
     ));
     assert!(
         state
-            .file_input_contexts
-            .lock()
-            .contains_key(&owner.desk.id)
+            .sessions
+            .file_input_context(owner.desk.id)
+            .is_some()
     );
     assert!(file_manager::route_osc_input(
         &state,
         &same_desk_hardware,
         "escape"
     ));
-    assert!(state.file_input_contexts.lock().is_empty());
+    assert_eq!(state.sessions.file_input_context_count(), 0);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -404,7 +395,7 @@ fn competing_file_input_context_claims_are_atomic() {
     });
 
     assert_eq!(results.iter().filter(|claimed| **claimed).count(), 1);
-    assert_eq!(state.file_input_contexts.lock().len(), 1);
+    assert_eq!(state.sessions.file_input_context_count(), 1);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -412,9 +403,7 @@ fn competing_file_input_context_claims_are_atomic() {
 fn synthetic_osc_sessions_publish_start_and_removal_on_unsubscribe_and_timeout() {
     let (state, data_dir) = test_state();
     state
-        .desk
-        .lock()
-        .add_desk("OSC lifecycle main", "osc-lifecycle-main")
+        .installation.add_desk("OSC lifecycle main", "osc-lifecycle-main")
         .unwrap();
     let subscribe = |client: &str| {
         assert!(handle_subscription_osc(
@@ -428,42 +417,39 @@ fn synthetic_osc_sessions_publish_start_and_removal_on_unsubscribe_and_timeout()
             Some("127.0.0.1:19010"),
         ));
         state
-            .osc_subscribers
-            .lock()
-            .get(client)
+            .integrations
+            .osc_subscriber(client)
             .unwrap_or_else(|| panic!("subscriber {client} was not retained"))
             .session_id
     };
 
     let first = subscribe("lifecycle-unsubscribe");
-    assert!(state.sessions.read().contains_key(&first));
+    assert!(state.sessions.contains_session(first));
     assert!(handle_subscription_osc(
         &state,
         "/light/unsubscribe",
         &[OscArgument::String("lifecycle-unsubscribe".into())],
         Some("127.0.0.1:19010"),
     ));
-    assert!(!state.sessions.read().contains_key(&first));
-    assert!(state.programmers.active_for_sessions().is_empty());
+    assert!(!state.sessions.contains_session(first));
+    assert!(state.programming.active_for_sessions().is_empty());
 
     let second = subscribe("lifecycle-timeout");
-    state
-        .osc_subscribers
-        .lock()
-        .get_mut("lifecycle-timeout")
-        .unwrap()
-        .last_seen = Instant::now() - Duration::from_secs(21);
+    state.integrations.set_osc_last_seen(
+        "lifecycle-timeout",
+        Instant::now() - Duration::from_secs(21),
+    );
     send_osc_feedback(&state, false);
-    assert!(!state.sessions.read().contains_key(&second));
-    assert!(!state
-        .osc_subscribers
-        .lock()
-        .contains_key("lifecycle-timeout"));
+    assert!(!state.sessions.contains_session(second));
+    assert!(state
+        .integrations
+        .osc_subscriber("lifecycle-timeout")
+        .is_none());
 
     let filter = light_application::EventFilter::default()
         .with_object(light_application::EventObject::programming_lifecycle());
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(0, &filter)
+        state.events.replay(0, &filter)
     else {
         panic!("synthetic session lifecycle events should remain replayable")
     };
@@ -488,14 +474,10 @@ fn synthetic_osc_sessions_publish_start_and_removal_on_unsubscribe_and_timeout()
 fn synthetic_osc_resubscribe_reuses_an_orphan_session_without_transient_lifecycle_rows() {
     let (state, data_dir) = test_state();
     state
-        .desk
-        .lock()
-        .add_desk("OSC lifecycle main", "osc-lifecycle-main")
+        .installation.add_desk("OSC lifecycle main", "osc-lifecycle-main")
         .unwrap();
     let second = state
-        .desk
-        .lock()
-        .add_desk("OSC lifecycle second", "osc-lifecycle-second")
+        .installation.add_desk("OSC lifecycle second", "osc-lifecycle-second")
         .unwrap();
     let subscribe = |desk: &str| {
         assert!(handle_subscription_osc(
@@ -508,21 +490,25 @@ fn synthetic_osc_resubscribe_reuses_an_orphan_session_without_transient_lifecycl
             ],
             Some("127.0.0.1:19010"),
         ));
-        state.osc_subscribers.lock()["lifecycle-replace"].session_id
+        state
+            .integrations
+            .osc_subscriber("lifecycle-replace")
+            .unwrap()
+            .session_id
     };
 
     let session_id = subscribe("main");
-    let before = state.application_events.latest_sequence();
+    let before = state.events.latest_sequence();
     assert_eq!(subscribe(&second.osc_alias), session_id);
     let lifecycle_filter = light_application::EventFilter::default()
         .with_object(light_application::EventObject::programming_lifecycle());
     let light_application::EventReplay::Events(lifecycle_events) =
-        state.application_events.replay(before, &lifecycle_filter)
+        state.events.replay(before, &lifecycle_filter)
     else {
         panic!("the focused Programmer lifecycle history must remain replayable")
     };
     assert!(lifecycle_events.is_empty());
-    assert_eq!(state.sessions.read().len(), 1);
-    assert_eq!(state.programmers.active_for_sessions().len(), 1);
+    assert_eq!(state.sessions.session_count(), 1);
+    assert_eq!(state.programming.active_for_sessions().len(), 1);
     let _ = std::fs::remove_dir_all(data_dir);
 }

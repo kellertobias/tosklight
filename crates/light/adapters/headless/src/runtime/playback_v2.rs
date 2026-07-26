@@ -44,7 +44,7 @@ async fn playback_action(
         request.map_err(|error| PlaybackHttpError::invalid(error.body_text()))?;
     let (request_id, command) =
         wire::application_command(request).map_err(PlaybackHttpError::invalid)?;
-    let _activation = state.activation_lock.clone().lock_owned().await;
+    let _activation = state.active_show.acquire().await;
     show.verify(&state).map_err(PlaybackHttpError::api)?;
     let context = http_context(&session).with_request_id(request_id);
     let playback_context = context.clone();
@@ -81,7 +81,7 @@ async fn playback_snapshot(
     let Json(request) = request.map_err(|error| PlaybackHttpError::invalid(error.body_text()))?;
     let identities =
         wire::application_identities(request.identities).map_err(PlaybackHttpError::invalid)?;
-    let _activation = state.activation_lock.clone().lock_owned().await;
+    let _activation = state.active_show.acquire().await;
     show.verify(&state).map_err(PlaybackHttpError::api)?;
     let context = http_context(&session);
     let snapshot = playback_service::snapshot(&state, &session, context, &identities)
@@ -94,16 +94,20 @@ async fn playback_overview(
     headers: HeaderMap,
 ) -> Result<Json<PlaybackOverview>, ApiError> {
     let session = authenticate(&state, &headers)?;
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let (active_page, selected_playback) = state
         .active_show
-        .read()
+        .current()
         .as_ref()
         .map(|show| {
-            let desk = state.desk.lock();
             (
-                desk.desk_page(session.desk.id, show.id).unwrap_or(1),
-                desk.selected_playback(session.desk.id, show.id)
+                state
+                    .installation
+                    .desk_page(session.desk.id, show.id)
+                    .unwrap_or(1),
+                state
+                    .installation
+                    .selected_playback(session.desk.id, show.id)
                     .unwrap_or(None),
             )
         })
@@ -112,7 +116,7 @@ async fn playback_overview(
         cue_lists: json_values(&snapshot.cue_lists)?,
         pool: json_values(&snapshot.playbacks)?,
         pages: json_values(&snapshot.playback_pages)?,
-        active: json_values(&state.engine.playback_runtime_status())?,
+        active: json_values(&state.output.playback_runtime_status())?,
         desk: runtime_wire::desk(session.desk),
         active_page,
         selected_playback,

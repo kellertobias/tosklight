@@ -14,9 +14,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use light_application::{
-    ActionContext, ActionEnvelope, ActionError, ActionSource, ActiveShowService, ProgrammingService,
-};
+use light_application::{ActionContext, ActionEnvelope, ActionError, ActionSource};
 use light_wire::v2::programming_update::{
     ProgrammingUpdateActionRequest, ProgrammingUpdatePreviewRequest,
     ProgrammingUpdateSettingsUpdateOutcome, ProgrammingUpdateSettingsUpdateRequest,
@@ -154,46 +152,50 @@ async fn put_settings(
         "programming-update-settings",
         &request.request_id,
     );
-    let mut replay = state.desk_management_replay.lock().await;
-    if let Some(value) = replay
-        .get(&replay_key, &fingerprint)
+    if let Some(value) = state
+        .replay
+        .lookup_desk_management(&replay_key, &fingerprint)
+        .await
         .map_err(ProgrammingUpdateHttpError::api)?
     {
         return Ok(Json(value).into_response());
     }
-    let operation_lock = state.programming.desk_lock(desk_id);
-    let _operation = operation_lock.lock();
-    if read_desk_lock(&state, desk_id).locked {
-        return Err(ProgrammingUpdateHttpError::conflict("desk is locked"));
-    }
-    let current = update_settings_for(&state, desk_id);
-    let mut settings = current.clone();
-    programming_update_wire::apply_settings(&mut settings, request.settings);
-    if settings != current {
-        let previous = state
-            .configuration
-            .write()
-            .update_settings_by_desk
-            .insert(desk_id, settings.clone());
-        if let Err(error) = persist_server_configuration(&state) {
-            restore_settings(&state, desk_id, previous);
-            return Err(ProgrammingUpdateHttpError::api(error));
+    let outcome = state.programming.run_desk_operation(desk_id, || {
+        if read_desk_lock(&state, desk_id).locked {
+            return Err(ProgrammingUpdateHttpError::conflict("desk is locked"));
         }
-        emit(
-            &state,
-            "update_settings_changed",
-            serde_json::json!({"desk_id":desk_id,"settings":settings}),
-        );
-    }
-    let outcome = ProgrammingUpdateSettingsUpdateOutcome {
-        request_id: request.request_id.clone(),
-        replayed: false,
-        desk_id,
-        settings: programming_update_wire::wire_settings(desk_id, &settings).settings,
-    };
+        let current = update_settings_for(&state, desk_id);
+        let mut settings = current.clone();
+        programming_update_wire::apply_settings(&mut settings, request.settings);
+        if settings != current {
+            let previous = state.installation.update_configuration(|configuration| {
+                configuration
+                    .update_settings_by_desk
+                    .insert(desk_id, settings.clone())
+            });
+            if let Err(error) = persist_server_configuration(&state) {
+                restore_settings(&state, desk_id, previous);
+                return Err(ProgrammingUpdateHttpError::api(error));
+            }
+            emit(
+                &state,
+                "update_settings_changed",
+                serde_json::json!({"desk_id":desk_id,"settings":settings}),
+            );
+        }
+        Ok(ProgrammingUpdateSettingsUpdateOutcome {
+            request_id: request.request_id.clone(),
+            replayed: false,
+            desk_id,
+            settings: programming_update_wire::wire_settings(desk_id, &settings).settings,
+        })
+    })?;
     let value = serde_json::to_value(&outcome)
         .map_err(|error| ProgrammingUpdateHttpError::invalid(error.to_string()))?;
-    replay.insert(replay_key, fingerprint, value);
+    state
+        .replay
+        .insert_desk_management(replay_key, fingerprint, value)
+        .await;
     Ok(Json(outcome).into_response())
 }
 
@@ -202,14 +204,15 @@ fn restore_settings(
     desk_id: Uuid,
     previous: Option<light_application::programming_update::UpdateSettings>,
 ) {
-    let mut configuration = state.configuration.write();
-    if let Some(previous) = previous {
-        configuration
-            .update_settings_by_desk
-            .insert(desk_id, previous);
-    } else {
-        configuration.update_settings_by_desk.remove(&desk_id);
-    }
+    state.installation.update_configuration(|configuration| {
+        if let Some(previous) = previous {
+            configuration
+                .update_settings_by_desk
+                .insert(desk_id, previous);
+        } else {
+            configuration.update_settings_by_desk.remove(&desk_id);
+        }
+    });
 }
 
 async fn run_update<T, F>(
@@ -221,8 +224,8 @@ async fn run_update<T, F>(
 where
     T: Send + 'static,
     F: FnOnce(
-            &ProgrammingService,
-            &ActiveShowService,
+            &super::capability_resources::ProgrammingResource,
+            &super::capability_resources::ActiveShowResource,
             &ServerProgrammingUpdatePorts,
         ) -> Result<T, ActionError>
         + Send
@@ -231,7 +234,7 @@ where
     tokio::task::spawn_blocking(move || {
         let ports =
             ServerProgrammingUpdatePorts::new(state.clone(), session, false, require_unlocked);
-        operation(&state.programming, &state.active_show_service, &ports)
+        operation(&state.programming, &state.active_show, &ports)
     })
     .await
     .map_err(ProgrammingUpdateHttpError::blocking)?

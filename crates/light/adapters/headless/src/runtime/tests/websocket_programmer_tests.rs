@@ -4,8 +4,7 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
     let fixture = schema_v2_direct_fixture().0;
     let fixture_id = fixture.fixture_id;
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             revision: 1,
             ..EngineSnapshot::default()
@@ -39,7 +38,7 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
         ),
     );
     assert!(response.ok, "{:?}", response.error);
-    let values = state.programmers.get(session.id).unwrap().values;
+    let values = state.programming.get(session.id).unwrap().values;
     assert_eq!(values.len(), 2);
     assert!(values.iter().all(|value| value.fade));
     assert_eq!(values[0].changed_at, values[1].changed_at);
@@ -69,11 +68,11 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
     );
     assert!(!rejected.ok);
     assert_eq!(
-        serde_json::to_value(state.programmers.get(session.id).unwrap().values).unwrap(),
+        serde_json::to_value(state.programming.get(session.id).unwrap().values).unwrap(),
         serde_json::to_value(values).unwrap()
     );
-    assert!(state.programmers.undo(session.id));
-    assert!(state.programmers.get(session.id).unwrap().values.is_empty());
+    assert!(state.programming.undo(session.id));
+    assert!(state.programming.get(session.id).unwrap().values.is_empty());
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -83,8 +82,7 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
     let fixture = schema_v2_direct_fixture().0;
     let fixture_id = fixture.fixture_id;
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             ..EngineSnapshot::default()
         })
@@ -122,7 +120,7 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
         desk: session.desk.clone(),
     };
     state
-        .programmers
+        .programming
         .start(same_user_session.id, same_user_session.user.id);
     let same_user_update = dispatch_live_action(
         &state,
@@ -145,7 +143,7 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
     );
     assert!(same_user_update.ok, "one user owns authority across their sessions");
 
-    let other_user = state.desk.lock().add_user("Other operator").unwrap();
+    let other_user = state.installation.add_user("Other operator").unwrap();
     let other_session = Session {
         id: SessionId::new(),
         user: other_user,
@@ -154,7 +152,7 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
         desk: test_control_desk(),
     };
     state
-        .programmers
+        .programming
         .start(other_session.id, other_session.user.id);
     let competing_update = dispatch_live_action(
         &state,
@@ -177,8 +175,8 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
     );
     assert!(competing_update.ok, "different users own independent programmers");
     assert_ne!(
-        state.programmers.get(session.id).unwrap().id,
-        state.programmers.get(other_session.id).unwrap().id
+        state.programming.get(session.id).unwrap().id,
+        state.programming.get(other_session.id).unwrap().id
     );
 
     let mut foreign = live_action_frame(
@@ -226,8 +224,7 @@ async fn websocket_actions_are_typed_owned_and_revision_checked() {
 async fn group_master_set_never_replaces_a_snapshot_during_show_activation() {
     let (state, data_dir) = test_state();
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             groups: vec![light_programmer::GroupDefinition {
                 id: "front".into(),
                 master: 1.0,
@@ -251,7 +248,7 @@ async fn group_master_set_never_replaces_a_snapshot_during_show_activation() {
         }))
         .unwrap();
 
-    let activation = state.activation_lock.clone().lock_owned().await;
+    let activation = state.active_show.acquire().await;
     let rejected = dispatch_live_action(
         &state,
         &session,
@@ -264,7 +261,7 @@ async fn group_master_set_never_replaces_a_snapshot_during_show_activation() {
             .as_deref()
             .is_some_and(|error| error.contains("active show is changing"))
     );
-    assert_eq!(state.engine.snapshot().groups[0].master, 1.0);
+    assert_eq!(state.output.snapshot().groups[0].master, 1.0);
 
     drop(activation);
     let applied = dispatch_live_action(
@@ -273,7 +270,7 @@ async fn group_master_set_never_replaces_a_snapshot_during_show_activation() {
         live_action_frame(&session, "group-master", action),
     );
     assert!(applied.ok, "{:?}", applied.error);
-    assert_eq!(state.engine.snapshot().groups[0].master, 0.5);
+    assert_eq!(state.output.snapshot().groups[0].master, 0.5);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -286,8 +283,7 @@ async fn compatibility_selection_publishes_one_typed_interaction_event() {
     let fixture_definition = schema_v2_direct_fixture().0;
     let fixture = fixture_definition.fixture_id;
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture_definition].into(),
             ..EngineSnapshot::default()
         })
@@ -317,7 +313,7 @@ async fn compatibility_selection_publishes_one_typed_interaction_event() {
         light_application::EventObject::programming_selection(session.desk.id),
     );
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(0, &filter)
+        state.events.replay(0, &filter)
     else {
         panic!("the interaction event should remain replayable")
     };
@@ -365,7 +361,7 @@ async fn compatibility_command_line_publishes_only_its_scoped_component() {
         light_application::EventObject::programming_command_line(session.desk.id),
     );
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(0, &filter)
+        state.events.replay(0, &filter)
     else {
         panic!("the command-line event should remain replayable")
     };
@@ -379,7 +375,7 @@ async fn compatibility_command_line_publishes_only_its_scoped_component() {
     assert_eq!(change.command_line().unwrap().visible_text(), "GROUP 2");
     assert!(change.selection().is_none());
 
-    let sequence = state.application_events.latest_sequence();
+    let sequence = state.events.latest_sequence();
     let value_only = dispatch_live_action(
         &state,
         &session,
@@ -398,12 +394,12 @@ async fn compatibility_command_line_publishes_only_its_scoped_component() {
         ),
     );
     assert!(value_only.ok, "{:?}", value_only.error);
-    assert_eq!(state.application_events.latest_sequence(), sequence + 1);
+    assert_eq!(state.events.latest_sequence(), sequence + 1);
     let filter = light_application::EventFilter::default().with_object(
         light_application::EventObject::programming_priority(session.user.id.0),
     );
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(sequence, &filter)
+        state.events.replay(sequence, &filter)
     else {
         panic!("the priority event should remain replayable")
     };
@@ -426,8 +422,7 @@ async fn live_actions_publish_only_authoritative_changed_projections() {
     let fixture_definition = schema_v2_direct_fixture().0;
     let fixture = fixture_definition.fixture_id;
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture_definition].into(),
             groups: vec![light_programmer::GroupDefinition {
                 id: "front".into(),
@@ -444,7 +439,7 @@ async fn live_actions_publish_only_authoritative_changed_projections() {
     let values_filter = light_application::EventFilter::default().with_object(
         light_application::EventObject::programming_values(session.user.id.0),
     );
-    let before = state.application_events.latest_sequence();
+    let before = state.events.latest_sequence();
     let no_op = dispatch_live_action(
         &state,
         &session,
@@ -455,7 +450,7 @@ async fn live_actions_publish_only_authoritative_changed_projections() {
     );
     assert!(no_op.ok, "{:?}", no_op.error);
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(before, &values_filter)
+        state.events.replay(before, &values_filter)
     else {
         panic!("the values event stream should remain replayable")
     };
@@ -483,7 +478,7 @@ async fn live_actions_publish_only_authoritative_changed_projections() {
         light_application::EventObject::programming_selection(session.desk.id),
     );
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(0, &selection_filter)
+        state.events.replay(0, &selection_filter)
     else {
         panic!("the selection event should remain replayable")
     };
@@ -519,7 +514,7 @@ async fn live_actions_publish_only_authoritative_changed_projections() {
     );
     assert!(values.ok, "{:?}", values.error);
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(0, &values_filter)
+        state.events.replay(0, &values_filter)
     else {
         panic!("the values event should remain replayable")
     };
@@ -578,7 +573,7 @@ async fn live_actions_publish_only_authoritative_changed_projections() {
         light_application::EventObject::programming_preload_values(session.user.id.0),
     );
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(0, &preload_filter)
+        state.events.replay(0, &preload_filter)
     else {
         panic!("the preload values event should remain replayable")
     };
@@ -611,7 +606,7 @@ async fn live_actions_publish_only_authoritative_changed_projections() {
         light_application::EventObject::programming_priority(session.user.id.0),
     );
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(0, &priority_filter)
+        state.events.replay(0, &priority_filter)
     else {
         panic!("the priority event should remain replayable")
     };
@@ -634,13 +629,12 @@ async fn transient_control_retriggers_remain_projection_quiet_and_repeated_relea
     let (fixture, action_id, _) = schema_v2_direct_fixture();
     let fixture_id = fixture.fixture_id;
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             ..EngineSnapshot::default()
         })
         .unwrap();
-    let before_application_sequence = state.application_events.latest_sequence();
+    let before_application_sequence = state.events.latest_sequence();
     for (request_id, active, expect_transient_values) in [
         ("momentary-on", true, true),
         ("momentary-retrigger", true, true),
@@ -668,7 +662,7 @@ async fn transient_control_retriggers_remain_projection_quiet_and_repeated_relea
         assert!(response.ok, "{:?}", response.error);
         assert_eq!(
             state
-                .programmers
+                .programming
                 .get(session.id)
                 .unwrap()
                 .transient_values
@@ -680,7 +674,7 @@ async fn transient_control_retriggers_remain_projection_quiet_and_repeated_relea
         light_application::EventObject::programming_values(session.user.id.0),
     );
     let light_application::EventReplay::Events(events) = state
-        .application_events
+        .events
         .replay(before_application_sequence, &values_filter)
     else {
         panic!("the values event stream should remain replayable")
@@ -698,8 +692,7 @@ async fn direct_programmer_writes_preserve_resolved_fade_for_recording() {
     let fixture_definition = schema_v2_direct_fixture().0;
     let fixture = fixture_definition.fixture_id;
     state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture_definition].into(),
             groups: vec![light_programmer::GroupDefinition {
                 id: "1".into(),
@@ -765,7 +758,7 @@ async fn direct_programmer_writes_preserve_resolved_fade_for_recording() {
     );
     assert!(group_response.ok);
 
-    let direct = state.programmers.get(session.id).unwrap();
+    let direct = state.programming.get(session.id).unwrap();
     assert_eq!(direct.values[0].fade_millis, Some(3_000));
     assert_eq!(
         direct.group_values["1"][&light_core::AttributeKey::intensity()].fade_millis,
@@ -773,7 +766,7 @@ async fn direct_programmer_writes_preserve_resolved_fade_for_recording() {
     );
 
     execute_programmer_command(&state, &session, "GROUP 1 AT 25").unwrap();
-    let command = state.programmers.get(session.id).unwrap();
+    let command = state.programming.get(session.id).unwrap();
     assert_eq!(
         command.group_values["1"][&light_core::AttributeKey::intensity()].fade_millis,
         Some(3_000),

@@ -11,7 +11,7 @@ pub(super) fn programmer_value_timing(state: &AppState, timing: CommandTiming) -
     if timing.fade {
         return timing;
     }
-    let configuration = state.configuration.read();
+    let configuration = state.installation.configuration();
     if !configuration.command_line_at_uses_programmer_fade {
         return timing;
     }
@@ -36,14 +36,14 @@ pub(super) fn set_command_fixture_intensities(
         )
     });
     if timing.fade {
-        state.programmers.set_many_faded_with_timing(
+        state.programming.set_many_faded_with_timing(
             session.id,
             assignments,
             timing.fade_millis,
             timing.delay_millis,
         );
     } else {
-        state.programmers.set_many_immediate_with_delay(
+        state.programming.set_many_immediate_with_delay(
             session.id,
             assignments,
             timing.delay_millis,
@@ -59,7 +59,7 @@ pub(super) fn set_command_group_intensity(
     timing: CommandTiming,
 ) {
     if timing.fade {
-        state.programmers.set_group_faded_with_timing(
+        state.programming.set_group_faded_with_timing(
             session.id,
             group_id,
             light_core::AttributeKey::intensity(),
@@ -68,7 +68,7 @@ pub(super) fn set_command_group_intensity(
             timing.delay_millis,
         );
     } else {
-        state.programmers.set_group_immediate_with_delay(
+        state.programming.set_group_immediate_with_delay(
             session.id,
             group_id,
             light_core::AttributeKey::intensity(),

@@ -49,26 +49,20 @@ async fn lifecycle_tracks_same_user_desks_foreign_users_disconnect_and_remove_on
     let scenario = CommandHttpScenario::new().await;
     let second_desk = scenario
         .state
-        .desk
-        .lock()
-        .add_desk("Lifecycle second", "lifecycle-second")
+        .installation.add_desk("Lifecycle second", "lifecycle-second")
         .unwrap();
     let (second_token, second_user) =
         login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);
     let second_session = scenario
         .state
-        .sessions
-        .read()
-        .values()
+        .sessions.sessions().into_iter()
         .find(|session| session.token == second_token)
         .unwrap()
         .id;
     let other = scenario
         .state
-        .desk
-        .lock()
-        .add_user("Lifecycle other")
+        .installation.add_user("Lifecycle other")
         .unwrap();
     let (other_token, other_user) =
         login_on_desk(&scenario, "Lifecycle other", scenario.session.desk.id).await;
@@ -153,7 +147,7 @@ fn replay_lifecycle_events(state: &AppState) -> Vec<Arc<light_application::Event
     let filter = light_application::EventFilter::default()
         .with_object(light_application::EventObject::programming_lifecycle());
     let light_application::EventReplay::Events(events) =
-        state.application_events.replay(0, &filter)
+        state.events.replay(0, &filter)
     else {
         panic!("lifecycle events should remain replayable")
     };

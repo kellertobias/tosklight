@@ -12,7 +12,7 @@ async fn preload_playback_queue_snapshot_is_exact_user_authenticated_and_narrow(
         .await;
     assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
 
-    scenario.state.programmers.queue_preload_playback_action(
+    scenario.state.programming.queue_preload_playback_action(
         scenario.session.id,
         7,
         None,

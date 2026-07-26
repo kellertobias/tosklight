@@ -83,7 +83,7 @@ pub(super) fn group_projection(
     Ok(PlaybackTargetProjection::Group {
         group_id: group_id.to_owned(),
         master: group.master,
-        flash_level: ports.state.engine.group_master_flash(group_id),
+        flash_level: ports.state.output.group_master_flash(group_id),
     })
 }
 
@@ -92,7 +92,10 @@ pub(super) fn speed_projection(
     group: &str,
 ) -> Result<PlaybackTargetProjection, ActionError> {
     let index = speed_group_index(group).map_err(|error| invalid(error.message))?;
-    let snapshot = ports.state.speed_groups.lock()[index].snapshot(application_millis(ports.state));
+    let snapshot = ports
+        .state
+        .output
+        .speed_group_snapshot(index, application_millis(ports.state));
     Ok(PlaybackTargetProjection::SpeedGroup {
         group: group.to_owned(),
         runtime: Box::new(speed_runtime(snapshot)),
@@ -159,15 +162,15 @@ fn sound_loss_reason(reason: ControlSoundLossReason) -> SoundLossReason {
 }
 
 pub(super) fn grand_master_projection(ports: &ServerPlaybackPorts<'_>) -> PlaybackTargetProjection {
-    let control = ports.state.output_control.lock();
-    let level = control.options.grand_master;
+    let control = ports.state.output.control_projection();
+    let level = control.grand_master;
     let flash_active = control.grand_master_flash;
     PlaybackTargetProjection::GrandMaster(GrandMasterRuntimeProjection {
         level,
         effective_level: if flash_active { 1.0 } else { level },
-        blackout: control.options.blackout,
+        blackout: control.blackout,
         flash_active,
-        dynamics_paused: ports.state.engine.playback_dynamics().paused,
+        dynamics_paused: ports.state.output.playback_dynamics().paused,
     })
 }
 

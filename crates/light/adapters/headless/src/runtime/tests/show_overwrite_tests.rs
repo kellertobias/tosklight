@@ -40,9 +40,7 @@ async fn prepare_overwrite_source(
     );
     save_show_revision(app, token, &source_id, "Source Revision").await;
     let revision_path = state
-        .desk
-        .lock()
-        .show_revision(
+        .installation.show_revision(
             light_core::ShowId(Uuid::parse_str(&source_id).unwrap()),
             1,
         )

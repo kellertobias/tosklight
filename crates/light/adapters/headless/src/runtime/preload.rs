@@ -115,9 +115,8 @@ pub(super) fn commit_preload(
 ) -> Result<serde_json::Value, String> {
     // Match the normal action and render order from show identity through semantic publication.
     let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
+        .active_show
+        .try_acquire()
         .map_err(|_| "the active show is changing; retry Preload GO".to_owned())?;
     commit_preload_while_show_stable(state, session)
 }
@@ -127,7 +126,7 @@ pub(super) fn commit_preload_while_show_stable(
     session: &Session,
 ) -> Result<serde_json::Value, String> {
     let context = compatibility_context(session);
-    let completed = state.playback_service.run_unit_of_work(CommitPreload {
+    let completed = state.playback.run_unit_of_work(CommitPreload {
         state,
         session,
         context,
@@ -147,7 +146,7 @@ pub(super) fn commit_preload_lifecycle_while_show_stable(
     context: &light_application::ActionContext,
     request: &light_application::ProgrammingPreloadLifecycleRequest,
 ) -> Result<light_application::ProgrammingPreloadCommitResult, light_application::ActionError> {
-    let completed = state.playback_service.run_unit_of_work(CommitTypedPreload {
+    let completed = state.playback.run_unit_of_work(CommitTypedPreload {
         state,
         session,
         context: context.clone(),
@@ -169,7 +168,7 @@ impl light_application::PlaybackUnitOfWork for CommitPreload<'_> {
     fn execute(self) -> light_application::PlaybackOperation<Self::Output> {
         let result = self
             .state
-            .programmers
+            .programming
             .with_transaction(self.session.id, || {
                 transaction::commit_preload_transaction(self.state, self.session, self.context)
             });
@@ -206,7 +205,7 @@ impl light_application::PlaybackUnitOfWork for CommitTypedPreload<'_> {
         };
         let result = self
             .state
-            .programmers
+            .programming
             .with_transaction(self.session.id, || {
                 transaction::commit_preload_transaction(self.state, self.session, self.context)
             })

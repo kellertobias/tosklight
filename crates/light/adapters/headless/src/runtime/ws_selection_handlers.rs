@@ -20,11 +20,11 @@ pub(super) fn ws_programmer_align(
     let input: Input =
         serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
     let selected = state
-        .programmers
+        .programming
         .get(session.id)
         .ok_or("programmer does not exist")?
         .selected;
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let mut supported = Vec::new();
     let mut unsupported = Vec::new();
     for fixture_id in selected {
@@ -72,7 +72,7 @@ pub(super) fn ws_programmer_align(
             input.to,
             *wraps,
         )?;
-        state.programmers.set(
+        state.programming.set(
             session.id,
             *fixture,
             light_core::AttributeKey(input.attribute.clone()),
@@ -81,6 +81,6 @@ pub(super) fn ws_programmer_align(
     }
     persist_programmer(state, session).map_err(|e| e.message)?;
     Ok(
-        serde_json::json!({"programmer":state.programmers.get(session.id),"unsupported_fixtures":unsupported}),
+        serde_json::json!({"programmer":state.programming.get(session.id),"unsupported_fixtures":unsupported}),
     )
 }

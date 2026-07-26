@@ -392,13 +392,50 @@ fn accepted_choice_selection_clears_the_command_and_choice_atomically() {
 }
 
 #[test]
-fn desk_ordering_uses_one_lock_per_live_desk() {
+fn desk_operations_serialize_same_desk_without_blocking_other_desks() {
     let harness = Harness::new(ActionSource::Osc);
-    let same = harness.service.desk_lock(harness.context.desk_id);
-    let same_again = harness.service.desk_lock(harness.context.desk_id);
-    let other = harness.service.desk_lock(Uuid::new_v4());
-    assert!(std::sync::Arc::ptr_eq(&same, &same_again));
-    assert!(!std::sync::Arc::ptr_eq(&same, &other));
+    let service = Arc::new(harness.service.clone());
+    let desk_id = harness.context.desk_id;
+    let other_desk_id = Uuid::new_v4();
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let first = {
+        let service = Arc::clone(&service);
+        thread::spawn(move || {
+            service.run_desk_operation(desk_id, || {
+                entered_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+            });
+        })
+    };
+    entered_rx.recv().unwrap();
+
+    let (same_tx, same_rx) = mpsc::channel();
+    let same = {
+        let service = Arc::clone(&service);
+        thread::spawn(move || {
+            service.run_desk_operation(desk_id, || same_tx.send(()).unwrap());
+        })
+    };
+    let (other_tx, other_rx) = mpsc::channel();
+    let other = {
+        let service = Arc::clone(&service);
+        thread::spawn(move || {
+            service.run_desk_operation(other_desk_id, || other_tx.send(()).unwrap());
+        })
+    };
+
+    other_rx
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("an unrelated desk must remain independently executable");
+    assert!(same_rx.try_recv().is_err());
+    release_tx.send(()).unwrap();
+    same_rx
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("the same desk must continue after the first operation");
+    first.join().unwrap();
+    same.join().unwrap();
+    other.join().unwrap();
 }
 
 struct OrderingPorts {

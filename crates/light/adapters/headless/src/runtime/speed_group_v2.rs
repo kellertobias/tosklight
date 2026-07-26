@@ -34,13 +34,13 @@ async fn action(
         request.expected_revision,
         application_action(request.action).map_err(SpeedGroupHttpError::api)?,
     );
-    let _activation = state.activation_lock.clone().lock_owned().await;
-    let desk_operation = state.programming.desk_lock(session.desk.id);
-    let _desk_operation = desk_operation.lock();
-    let context = http_context(&session).with_request_id(&request.request_id);
-    let result = speed_group_service::execute_http_action(&state, &session, context, command)
-        .map_err(SpeedGroupHttpError::action)?;
-    Ok(Json(wire_outcome(result)).into_response())
+    let _activation = state.active_show.acquire().await;
+    state.programming.run_desk_operation(session.desk.id, || {
+        let context = http_context(&session).with_request_id(&request.request_id);
+        let result = speed_group_service::execute_http_action(&state, &session, context, command)
+            .map_err(SpeedGroupHttpError::action)?;
+        Ok(Json(wire_outcome(result)).into_response())
+    })
 }
 
 async fn snapshot(

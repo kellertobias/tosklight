@@ -12,7 +12,7 @@ pub(super) fn execute_set_command(
         }
         let group_id = &tokens[1];
         if !state
-            .engine
+            .output
             .snapshot()
             .groups
             .iter()
@@ -44,7 +44,7 @@ pub(super) fn execute_set_command(
         }
         return Ok(1);
     }
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let (address, used) = parse_playback_address(tokens, false, &snapshot)?;
     if used != tokens.len() {
         return Err("unexpected tokens after playback selection".into());
@@ -77,7 +77,7 @@ pub(super) fn assign_page_slot(
     playback: u16,
 ) -> Result<(), String> {
     let (entry, store) = active_show_store(state)?;
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     validate_cuelist_assignment(&snapshot, playback)?;
     let object = store
         .objects("playback_page")

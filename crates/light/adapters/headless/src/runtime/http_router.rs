@@ -3,7 +3,7 @@
 use super::*;
 
 pub(super) fn build(state: AppState) -> Router {
-    let test_bench = state.manual_clock.is_some();
+    let test_bench = state.output.has_test_clock();
     let router = Router::new()
         .merge(help::router::<AppState>())
         .merge(event_transport::router())

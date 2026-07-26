@@ -33,7 +33,7 @@ impl ServerPlaybackPorts<'_> {
         surface: PlaybackSurface,
     ) -> bool {
         self.state
-            .programmers
+            .programming
             .capture_mode(session.id)
             .is_some_and(|mode| mode.blind)
             && pending.is_some()
@@ -55,7 +55,7 @@ impl ServerPlaybackPorts<'_> {
             light_programmer::PreloadPlaybackQueueSurface::try_from(surface_name(surface))
                 .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error))?;
         self.state
-            .programmers
+            .programming
             .queue_preload_playback_action_with_origin(
                 session.id,
                 number,

@@ -9,7 +9,9 @@ use uuid::Uuid;
 
 use crate::tolerant_json::TolerantJson;
 
-use super::super::{ApiError, AppState, Session, authenticate, emit, persist_programmer};
+use super::super::{
+    ApiError, AppState, Session, SessionFileInputRoute, authenticate, emit, persist_programmer,
+};
 use super::super::{desk_management_v2::ReplayKey, show_objects_v2::validate_request_id};
 
 const FILE_INPUT_CONTEXT_TTL: Duration = Duration::from_secs(120);
@@ -46,11 +48,7 @@ fn context_response(context: &FileInputContext) -> FileInputContextResponse {
 }
 
 fn prune_input_contexts(state: &AppState) {
-    let now = Instant::now();
-    state
-        .file_input_contexts
-        .lock()
-        .retain(|_, context| context.expires_at > now);
+    state.sessions.prune_file_input_contexts(Instant::now());
 }
 
 pub(crate) fn try_claim_input_context(
@@ -58,21 +56,9 @@ pub(crate) fn try_claim_input_context(
     context: FileInputContext,
     prepare: impl FnOnce() -> Result<(), ApiError>,
 ) -> Result<(), ApiError> {
-    let mut contexts = state.file_input_contexts.lock();
-    contexts.retain(|_, current| current.expires_at > Instant::now());
-    if let Some(existing) = contexts.get(&context.desk_id)
-        && existing.instance_id != context.instance_id
-    {
-        return Err(ApiError::conflict(
-            "another File Manager instance owns this session's file input context",
-        ));
-    }
-    // Keep the desk-context lock through the synchronous pending-command
-    // transition. A losing pane can therefore never consume the command before
-    // discovering that another pane already won the claim.
-    prepare()?;
-    contexts.insert(context.desk_id, context);
-    Ok(())
+    state
+        .sessions
+        .try_claim_file_input_context(context, prepare)
 }
 
 pub(super) async fn input_context(
@@ -83,9 +69,9 @@ pub(super) async fn input_context(
     prune_input_contexts(&state);
     Ok(Json(
         state
-            .file_input_contexts
-            .lock()
-            .get(&session.desk.id)
+            .sessions
+            .file_input_context(session.desk.id)
+            .as_ref()
             .map(context_response),
     ))
 }
@@ -100,8 +86,11 @@ pub(super) async fn claim_input_context(
     let key = ReplayKey::new(session.id, "file-input-claim", &input.request_id);
     let fingerprint =
         serde_json::to_value(&input).map_err(|error| ApiError::internal(error.to_string()))?;
-    let mut replay = state.desk_management_replay.lock().await;
-    if let Some(value) = replay.get(&key, &fingerprint)? {
+    if let Some(value) = state
+        .replay
+        .lookup_desk_management(&key, &fingerprint)
+        .await?
+    {
         return Ok(Json(value));
     }
     let instance_id = validate_instance_id(&input.instance_id)?;
@@ -125,7 +114,10 @@ pub(super) async fn claim_input_context(
     }
     emit_claim_changed(&state, session.id, session.desk.id, &context, true);
     let value = super::intent_value(context_response(&context), &input.request_id, false)?;
-    replay.insert(key, fingerprint, value.clone());
+    state
+        .replay
+        .insert_desk_management(key, fingerprint, value.clone())
+        .await;
     Ok(Json(value))
 }
 
@@ -152,7 +144,7 @@ fn prepare_pending_claim(
         return Ok(());
     }
     let command_line = state
-        .programmers
+        .programming
         .get(session.id)
         .map(|programmer| programmer.command_line)
         .ok_or_else(|| ApiError::not_found("programmer"))?;
@@ -162,10 +154,10 @@ fn prepare_pending_claim(
         ));
     }
     state
-        .programmers
+        .programming
         .set_command_line(session.id, String::new());
     if let Err(error) = persist_programmer(state, session) {
-        state.programmers.set_command_line(session.id, command_line);
+        state.programming.set_command_line(session.id, command_line);
         let _ = persist_programmer(state, session);
         return Err(error);
     }
@@ -202,20 +194,16 @@ pub(super) async fn release_input_context(
     let key = ReplayKey::new(session.id, "file-input-release", &input.request_id);
     let fingerprint =
         serde_json::to_value(&input).map_err(|error| ApiError::internal(error.to_string()))?;
-    let mut replay = state.desk_management_replay.lock().await;
-    if let Some(value) = replay.get(&key, &fingerprint)? {
+    if let Some(value) = state
+        .replay
+        .lookup_desk_management(&key, &fingerprint)
+        .await?
+    {
         return Ok(Json(value));
     }
-    let released = {
-        let mut contexts = state.file_input_contexts.lock();
-        let matches = contexts.get(&session.desk.id).is_some_and(|context| {
-            input
-                .instance_id
-                .as_deref()
-                .is_none_or(|instance| instance == context.instance_id)
-        });
-        matches.then(|| contexts.remove(&session.desk.id)).flatten()
-    };
+    let released = state
+        .sessions
+        .release_file_input_context(session.desk.id, input.instance_id.as_deref());
     let was_released = released.is_some();
     if let Some(context) = released {
         emit_claim_changed(&state, session.id, session.desk.id, &context, false);
@@ -225,7 +213,10 @@ pub(super) async fn release_input_context(
         &input.request_id,
         false,
     )?;
-    replay.insert(key, fingerprint, value.clone());
+    state
+        .replay
+        .insert_desk_management(key, fingerprint, value.clone())
+        .await;
     Ok(Json(value))
 }
 
@@ -241,26 +232,18 @@ pub(super) fn pending_file_action(command_line: &str) -> Option<FileInputAction>
 
 pub(crate) fn route_osc_input(state: &AppState, session: &Session, action: &str) -> bool {
     prune_input_contexts(state);
-    let context = {
-        let mut contexts = state.file_input_contexts.lock();
-        let Some(context) = contexts.get_mut(&session.desk.id) else {
-            return false;
-        };
-        if context.desk_id != session.desk.id {
-            return false;
+    match state.sessions.route_file_input(
+        session.desk.id,
+        action,
+        Instant::now() + FILE_INPUT_CONTEXT_TTL,
+    ) {
+        SessionFileInputRoute::Unclaimed => false,
+        SessionFileInputRoute::Claimed => true,
+        SessionFileInputRoute::Dispatch(context) => {
+            emit_input_action(state, session, &context, action);
+            true
         }
-        context.expires_at = Instant::now() + FILE_INPUT_CONTEXT_TTL;
-        if !matches!(action, "enter" | "escape" | "esc") {
-            return true;
-        }
-        let context = context.clone();
-        if matches!(action, "escape" | "esc") {
-            contexts.remove(&session.desk.id);
-        }
-        context
-    };
-    emit_input_action(state, session, &context, action);
-    true
+    }
 }
 
 fn emit_input_action(
@@ -285,13 +268,7 @@ fn emit_input_action(
 }
 
 pub(crate) fn release_session_input(state: &AppState, session: &Session, reason: &str) {
-    let released = {
-        let mut contexts = state.file_input_contexts.lock();
-        let owned = contexts
-            .get(&session.desk.id)
-            .is_some_and(|context| context.session_id == session.id);
-        owned.then(|| contexts.remove(&session.desk.id)).flatten()
-    };
+    let released = state.sessions.release_session_file_input(session);
     if let Some(context) = released {
         emit(
             state,

@@ -48,7 +48,7 @@ async fn programmer_undo_removes_a_newly_recorded_preset() {
         .press_key(&scenario.token, "UND", "undo-new-preset-recording")
         .await;
     assert_eq!(undone.status(), StatusCode::OK);
-    let entry = scenario.state.active_show.read().clone().unwrap();
+    let entry = scenario.state.active_show.current().clone().unwrap();
     assert!(
         ShowStore::open(&entry.path)
             .unwrap()
@@ -63,7 +63,7 @@ async fn programmer_undo_removes_a_newly_recorded_preset() {
 #[tokio::test]
 async fn preset_record_route_is_authoritative_replay_safe_and_sparse_on_no_change() {
     let (scenario, show_id) = scenario_with_recordable_value().await;
-    let baseline = scenario.state.application_events.latest_sequence();
+    let baseline = scenario.state.events.latest_sequence();
     let request = preset_record_request("preset-route-record", "mixed", 7, 0);
     let response = scenario
         .preset_recording_action(&show_id, Some(&scenario.token), request.clone())
@@ -80,7 +80,7 @@ async fn preset_record_route_is_authoritative_replay_safe_and_sparse_on_no_chang
     let event_sequence = first.event_sequence().unwrap();
     assert_eq!(event_sequence, baseline + 1);
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         baseline + 1
     );
 
@@ -92,7 +92,7 @@ async fn preset_record_route_is_authoritative_replay_safe_and_sparse_on_no_chang
     assert!(replay.replayed());
     assert_eq!(replay.event_sequence(), Some(event_sequence));
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         baseline + 1
     );
 
@@ -112,7 +112,7 @@ async fn preset_record_route_is_authoritative_replay_safe_and_sparse_on_no_chang
     assert_eq!(no_change.event_sequence(), None);
     assert_eq!(no_change.preset().revision, 1);
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         baseline + 1
     );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
@@ -208,7 +208,7 @@ async fn plain_preset_and_group_record_commands_use_typed_capabilities() {
 async fn osc_record_key_sequence_commits_through_the_typed_preset_capability() {
     let (scenario, show_id) = scenario_with_recordable_value().await;
     let source: SocketAddr = "127.0.0.1:9017".parse().unwrap();
-    scenario.state.osc_subscribers.lock().insert(
+    scenario.state.integrations.register_osc_subscriber(
         "preset-record".into(),
         OscSubscriber {
             desk_alias: "main".into(),
@@ -236,7 +236,7 @@ async fn osc_record_key_sequence_commits_through_the_typed_preset_capability() {
     assert_eq!(
         scenario
             .state
-            .programmers
+            .programming
             .get(scenario.session.id)
             .unwrap()
             .command_line,
@@ -280,14 +280,14 @@ async fn websocket_preset_request_replay_skips_interaction_side_effects() {
 
     let first = dispatch_live_action(&scenario.state, &scenario.session, command());
     assert!(first.ok, "{:?}", first.error);
-    let first_sequence = scenario.state.application_events.latest_sequence();
+    let first_sequence = scenario.state.events.latest_sequence();
     let first_history = scenario.history_len();
     assert_eq!(first_history, 1);
 
     let replay = dispatch_live_action(&scenario.state, &scenario.session, command());
     assert!(replay.ok, "{:?}", replay.error);
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         first_sequence
     );
     assert_eq!(scenario.history_len(), first_history);

@@ -6,12 +6,12 @@ pub(super) fn predicted_preload_temp_state(
     number: u16,
 ) -> bool {
     let mut active = state
-        .engine
+        .output
         .playback_runtime_status()
         .into_iter()
         .find(|status| status.playback.playback_number == Some(number))
         .is_some_and(|status| status.temporary_active);
-    if let Some(programmer) = state.programmers.get(session) {
+    if let Some(programmer) = state.programming.get(session) {
         for pending in programmer
             .preload_playback_pending
             .iter()
@@ -122,7 +122,7 @@ pub(super) fn select_cuelist_contents(
     session: &Session,
     cue_list_id: light_core::CueListId,
 ) -> Result<(), ApiError> {
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let cue_list = snapshot
         .cue_lists
         .iter()
@@ -153,7 +153,7 @@ pub(super) fn select_cuelist_contents(
         .map(|group| (group.id.clone(), group.clone()))
         .collect::<HashMap<_, _>>();
     let fixtures = light_programmer::resolve_selection_references(&items, &groups);
-    state.programmers.select_expression(
+    state.programming.select_expression(
         session.id,
         fixtures,
         light_programmer::SelectionExpression::PlaybackContents { items },
@@ -170,7 +170,7 @@ pub(super) fn select_group_playback(
     live: bool,
 ) -> Result<(), ApiError> {
     let groups = state
-        .engine
+        .output
         .snapshot()
         .groups
         .iter()
@@ -179,7 +179,7 @@ pub(super) fn select_group_playback(
     let fixtures =
         light_programmer::resolve_group(group_id, &groups).map_err(ApiError::bad_request)?;
     if live {
-        state.programmers.select_expression(
+        state.programming.select_expression(
             session.id,
             fixtures,
             light_programmer::SelectionExpression::LiveGroup {
@@ -188,7 +188,7 @@ pub(super) fn select_group_playback(
             },
         );
     } else {
-        state.programmers.select(session.id, fixtures);
+        state.programming.select(session.id, fixtures);
     }
     persist_programmer(state, session)?;
     reconcile_highlight_selection(state, session, "group_playback_selection");
@@ -204,7 +204,7 @@ pub(super) fn set_group_playback_master(
         return Err(ApiError::bad_request("playback master must be within 0-1"));
     }
     state
-        .engine
+        .output
         .set_group_master(group_id, value)
         .map_err(|error| ApiError::bad_request(error.to_string()))
 }

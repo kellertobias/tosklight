@@ -16,7 +16,7 @@ impl ShowContext {
     pub(super) fn resolve(&self, state: &AppState) -> Result<ShowId, ApiError> {
         let active = state
             .active_show
-            .read()
+            .current()
             .as_ref()
             .map(|show| show.id)
             .ok_or_else(|| ApiError::conflict("no show is active"))?;
@@ -36,7 +36,7 @@ impl ShowContext {
         };
         let active = state
             .active_show
-            .read()
+            .current()
             .as_ref()
             .map(|show| show.id)
             .ok_or_else(|| ApiError::conflict("no show is active"))?;
@@ -66,14 +66,14 @@ pub(super) struct DeskContext(Option<Uuid>);
 
 impl DeskContext {
     fn resolve(&self, state: &AppState) -> Result<ControlDesk, ApiError> {
-        let store = state.desk.lock();
         match self.0 {
-            Some(id) => store
+            Some(id) => state
+                .installation
                 .control_desk(id)
                 .map_err(ApiError::store)?
                 .ok_or_else(|| ApiError::not_found("X-Tosk-Desk control desk")),
             None => {
-                let mut desks = store.desks().map_err(ApiError::store)?;
+                let mut desks = state.installation.desks().map_err(ApiError::store)?;
                 if desks.len() > 1 {
                     desks.sort_by(|left, right| {
                         left.name

@@ -7,7 +7,7 @@ async fn programmer_values_snapshot_returns_authenticated_projection_and_safe_cu
         .await;
     assert_eq!(response.status(), StatusCode::OK);
 
-    let expected_cursor = scenario.state.application_events.latest_sequence();
+    let expected_cursor = scenario.state.events.latest_sequence();
     let response = scenario.values_snapshot().await;
     assert_eq!(response.status(), StatusCode::OK);
     let snapshot: light_wire::v2::programming::ProgrammingValuesSnapshot =
@@ -28,7 +28,7 @@ async fn programmer_values_snapshot_returns_authenticated_projection_and_safe_cu
     assert_eq!(
         scenario
             .state
-            .programmers
+            .programming
             .get(scenario.session.id)
             .unwrap()
             .selected,
@@ -71,7 +71,7 @@ async fn capture_mode_snapshot_is_user_owned_and_shared_between_the_users_desks(
         serde_json::from_value(json(response).await).unwrap();
     assert_eq!(
         snapshot.cursor.sequence,
-        scenario.state.application_events.latest_sequence()
+        scenario.state.events.latest_sequence()
     );
     assert_eq!(snapshot.projection.user_id, scenario.session.user.id.0);
     assert_eq!(snapshot.projection.revision, 1);
@@ -81,9 +81,7 @@ async fn capture_mode_snapshot_is_user_owned_and_shared_between_the_users_desks(
 
     let second_desk = scenario
         .state
-        .desk
-        .lock()
-        .add_desk("Second capture desk", "second-capture")
+        .installation.add_desk("Second capture desk", "second-capture")
         .unwrap();
     let (second_token, second_user) =
         login_on_desk(&scenario, "Operator", second_desk.id).await;
@@ -127,7 +125,7 @@ async fn capture_mode_event_is_user_scoped_replaceable_and_has_no_desk_scope() {
         light_application::EventObject::programming_capture_mode(scenario.session.user.id.0),
     );
     let light_application::EventReplay::Events(events) =
-        scenario.state.application_events.replay(0, &filter)
+        scenario.state.events.replay(0, &filter)
     else {
         panic!("the focused capture-mode event should remain replayable")
     };
@@ -210,7 +208,7 @@ async fn active_preload_rejects_normal_values_without_mutation_or_values_event()
         light_application::EventObject::programming_values(scenario.session.user.id.0),
     );
     let light_application::EventReplay::Events(values_events) =
-        scenario.state.application_events.replay(0, &values_filter)
+        scenario.state.events.replay(0, &values_filter)
     else {
         panic!("the focused Programmer values history should remain replayable")
     };
@@ -246,7 +244,7 @@ async fn programmer_values_actions_are_atomic_revisioned_replay_safe_and_sparse_
     let replay = json(scenario.values_action(set).await).await;
     assert_eq!(replay["replayed"], true);
     assert_values_changed(&replay, "values-set", 1, 2);
-    assert_eq!(scenario.state.application_events.latest_sequence(), 3);
+    assert_eq!(scenario.state.events.latest_sequence(), 3);
 
     let batch = serde_json::json!({
         "request_id": "values-batch",
@@ -290,7 +288,7 @@ async fn programmer_values_actions_are_atomic_revisioned_replay_safe_and_sparse_
     assert_eq!(no_op["revision"], 3);
     assert!(no_op.get("projection").is_none());
     assert!(no_op.get("event_sequence").is_none());
-    assert_eq!(scenario.state.application_events.latest_sequence(), 6);
+    assert_eq!(scenario.state.events.latest_sequence(), 6);
 
     let conflict = scenario
         .values_action(serde_json::json!({
@@ -308,8 +306,7 @@ async fn programmer_values_actions_are_atomic_revisioned_replay_safe_and_sparse_
     assert_only_values_events(&scenario, 3);
     assert!(!scenario
         .state
-        .audit_events
-        .lock()
+        .events.audit_events()
         .iter()
         .any(|event| event.kind == "programmer_changed"));
     let _ = std::fs::remove_dir_all(scenario.data_dir);
@@ -321,9 +318,7 @@ async fn programmer_values_http_shares_one_user_between_desks_and_isolates_other
     let fixture = scenario.install_direct_fixture();
     let second_desk = scenario
         .state
-        .desk
-        .lock()
-        .add_desk("Second desk", "second-values")
+        .installation.add_desk("Second desk", "second-values")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);
@@ -350,7 +345,7 @@ async fn programmer_values_http_shares_one_user_between_desks_and_isolates_other
     assert_eq!(second["projection"]["fixture_values"].as_array().unwrap().len(), 1);
     assert_eq!(second["projection"]["group_values"].as_array().unwrap().len(), 1);
 
-    let other_user = scenario.state.desk.lock().add_user("Other values user").unwrap();
+    let other_user = scenario.state.installation.add_user("Other values user").unwrap();
     let (other_token, logged_in_user) = login_on_desk(
         &scenario,
         "Other values user",
@@ -390,17 +385,13 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
     let fixture = scenario.install_direct_fixture();
     let second_desk = scenario
         .state
-        .desk
-        .lock()
-        .add_desk("Lifecycle peer", "lifecycle-peer")
+        .installation.add_desk("Lifecycle peer", "lifecycle-peer")
         .unwrap();
     let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, scenario.session.user.id.0);
     let second_session = scenario
         .state
-        .sessions
-        .read()
-        .values()
+        .sessions.sessions().into_iter()
         .find(|session| session.token == second_token)
         .unwrap()
         .id;
@@ -418,11 +409,11 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
     );
     let old_programmer_id = scenario
         .state
-        .programmers
+        .programming
         .get(scenario.session.id)
         .unwrap()
         .id;
-    let cursor = scenario.state.application_events.latest_sequence();
+    let cursor = scenario.state.events.latest_sequence();
 
     let response = scenario
         .app
@@ -444,21 +435,21 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
     let user_id = scenario.session.user.id;
-    assert_eq!(scenario.state.programmers.normal_values_revision(user_id), 2);
-    assert_eq!(scenario.state.programmers.capture_mode_revision(user_id), 2);
-    assert_eq!(scenario.state.programmers.priority_revision(user_id), 1);
+    assert_eq!(scenario.state.programming.normal_values_revision(user_id), 2);
+    assert_eq!(scenario.state.programming.capture_mode_revision(user_id), 2);
+    assert_eq!(scenario.state.programming.priority_revision(user_id), 1);
     for session_id in [scenario.session.id, second_session] {
-        let programmer = scenario.state.programmers.get(session_id).unwrap();
+        let programmer = scenario.state.programming.get(session_id).unwrap();
         assert!(programmer.values.is_empty());
         assert!(programmer.group_values.is_empty());
         assert_eq!(
-            scenario.state.programmers.capture_mode(session_id),
+            scenario.state.programming.capture_mode(session_id),
             Some(Default::default())
         );
     }
     let light_application::EventReplay::Events(events) = scenario
         .state
-        .application_events
+        .events
         .replay(cursor, &light_application::EventFilter::default())
     else {
         panic!("the lifecycle events should remain replayable")
@@ -517,22 +508,21 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
     assert_eq!(
         scenario
             .state
-            .audit_events
-            .lock()
+            .events.audit_events()
             .iter()
             .filter(|event| event.kind == "programmer_cleared")
             .count(),
         1
     );
 
-    let lifecycle_cursor = scenario.state.application_events.latest_sequence();
+    let lifecycle_cursor = scenario.state.events.latest_sequence();
     let stale = scenario.values_action(old_request).await;
     assert_eq!(stale.status(), StatusCode::CONFLICT);
     let stale = json(stale).await;
     assert_eq!(stale["current_revision"], 2);
     assert_eq!(stale["retryable"], false);
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
+        scenario.state.events.latest_sequence(),
         lifecycle_cursor
     );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
@@ -645,7 +635,7 @@ fn assert_only_values_events(scenario: &CommandHttpScenario, expected: usize) {
     );
     let light_application::EventReplay::Events(events) = scenario
         .state
-        .application_events
+        .events
         .replay(0, &filter)
     else {
         panic!("the focused values event history should remain replayable")
@@ -687,7 +677,7 @@ fn color_range_fixture(number: u32, attributes: &[&str]) -> light_fixture::Patch
 fn programmer_color_values(
     scenario: &CommandHttpScenario,
 ) -> impl Fn(light_core::FixtureId, &str) -> Option<f32> + use<> {
-    let programmer = scenario.state.programmers.get(scenario.session.id).unwrap();
+    let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
     move |fixture: light_core::FixtureId, attribute: &str| {
         programmer
             .values
@@ -710,8 +700,7 @@ async fn color_range_resolves_rgb_and_cmy_channels_server_side_in_selection_orde
     ];
     scenario
         .state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![rgb_first, cmy_middle, rgb_last].into(),
             revision: 1,
             ..EngineSnapshot::default()
@@ -768,8 +757,7 @@ async fn color_range_supports_a_full_revolution_back_to_the_start_color() {
     let ids: Vec<_> = fixtures.iter().map(|fixture| fixture.fixture_id).collect();
     scenario
         .state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: fixtures.into(),
             revision: 1,
             ..EngineSnapshot::default()
@@ -812,8 +800,7 @@ async fn color_range_rejects_out_of_range_payloads_without_mutation() {
     let id = fixture.fixture_id;
     scenario
         .state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             revision: 1,
             ..EngineSnapshot::default()
@@ -856,8 +843,7 @@ async fn set_selection_resolves_the_spread_server_side_in_selection_order() {
     }
     scenario
         .state
-        .engine
-        .replace_snapshot(EngineSnapshot {
+        .output.replace_snapshot(EngineSnapshot {
             fixtures: fixtures.into(),
             revision: 1,
             ..EngineSnapshot::default()
@@ -882,7 +868,7 @@ async fn set_selection_resolves_the_spread_server_side_in_selection_order() {
     let response = scenario.values_action(action).await;
     assert_eq!(response.status(), StatusCode::OK);
 
-    let programmer = scenario.state.programmers.get(scenario.session.id).unwrap();
+    let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
     let value_of = |fixture: light_core::FixtureId| {
         programmer
             .values

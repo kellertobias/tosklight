@@ -7,14 +7,13 @@ async fn playback_action_ws_frame_uses_typed_service_and_ui_source_once() {
     let (token, _) = login(&app, "Operator").await;
     let session = state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .find(|session| session.token == token)
-        .cloned()
         .unwrap();
     open_test_show(&app, &token).await;
     install_playback(&state);
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
     let request_id = "ws-playback-action";
 
     let response = dispatch_live_action(
@@ -48,7 +47,7 @@ async fn playback_action_ws_frame_uses_typed_service_and_ui_source_once() {
     assert_eq!(payload["resolved"]["playback_number"], 1);
     assert_eq!(payload["projection"]["runtime"]["current"]["number"], 1.0);
     assert_eq!(payload["replayed"], false);
-    let light_application::EventReplay::Events(events) = state.application_events.replay(
+    let light_application::EventReplay::Events(events) = state.events.replay(
         cursor,
         &light_application::EventFilter::for_desk(session.desk.id),
     ) else {
@@ -78,14 +77,13 @@ async fn playback_action_ws_frame_rejects_mismatched_request_identity_without_mu
     let (token, _) = login(&app, "Operator").await;
     let session = state
         .sessions
-        .read()
-        .values()
+        .sessions()
+        .into_iter()
         .find(|session| session.token == token)
-        .cloned()
         .unwrap();
     open_test_show(&app, &token).await;
     install_playback(&state);
-    let cursor = state.application_events.latest_sequence();
+    let cursor = state.events.latest_sequence();
 
     let response = dispatch_live_action(
         &state,
@@ -113,8 +111,8 @@ async fn playback_action_ws_frame_rejects_mismatched_request_identity_without_mu
             .unwrap()
             .contains("action payload request_id must match the frame request_id")
     );
-    assert_eq!(state.application_events.latest_sequence(), cursor);
-    assert!(state.engine.playback_runtime().is_empty());
+    assert_eq!(state.events.latest_sequence(), cursor);
+    assert!(state.output.playback_runtime().is_empty());
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -151,7 +149,7 @@ fn install_playback(state: &AppState) {
         cue_list_id: cue_list.id,
     };
     state
-        .engine
+        .output
         .replace_snapshot(EngineSnapshot {
             cue_lists: vec![cue_list].into(),
             playbacks: vec![light_playback::PlaybackDefinition {

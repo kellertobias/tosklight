@@ -1,7 +1,7 @@
 use super::*;
 
 fn preset_object(
-    store: &ShowStore,
+    store: &ActiveShowRepository,
     address: light_programmer::PresetAddress,
 ) -> Result<light_show::VersionedObject, String> {
     let requested = address.storage_key();
@@ -17,7 +17,7 @@ fn preset_object(
 }
 
 fn preset_destination(
-    store: &ShowStore,
+    store: &ActiveShowRepository,
     source: light_programmer::PresetAddress,
     token: &str,
 ) -> Result<light_programmer::PresetAddress, String> {
@@ -101,7 +101,7 @@ pub(super) fn delete_group_command(
     if body.len() != 2 {
         return Err("expected DELETE GROUP <group-number>".into());
     }
-    let snapshot = state.engine.snapshot();
+    let snapshot = state.output.snapshot();
     let (entry, store) = active_show_store(state)?;
     let id = &body[1];
     if let Some(dependent) = snapshot.groups.iter().find(|group| {

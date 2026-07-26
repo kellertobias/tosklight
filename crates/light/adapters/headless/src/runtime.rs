@@ -59,8 +59,8 @@ use light_control::{
 };
 use light_core::{ATTRIBUTE_REGISTRY, ApplicationClock, ManualClock, SessionId};
 use light_engine::{
-    Engine, EnginePlaybackCommand, EnginePlaybackOutcome, EngineSnapshot, PoolPlaybackAction,
-    PreparedEngineSnapshot, RenderOptions,
+    Engine, EngineError, EnginePlaybackCommand, EnginePlaybackOutcome, EngineSnapshot,
+    PoolPlaybackAction, PreparedEngineSnapshot, RenderOptions,
 };
 use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
 use light_output::{NetworkOutput, OutputHealth};
@@ -68,9 +68,11 @@ use light_programmer::{
     HighlightAction, HighlightFixture, HighlightMode, HighlightRegistry, HighlightSelectionWrite,
     HighlightState, ProgrammerRegistry, is_duplicate_osc_action,
 };
+#[cfg(test)]
+use light_show::ShowStore;
 use light_show::{
     AtomicObjectDelete, ControlDesk, DeskStore, DeskUser, PersistedSession, RevisionCopySource,
-    ScreenConfiguration, ShowEntry, ShowRevision, ShowStore, initialise_show, validate_show_file,
+    ScreenConfiguration, ShowEntry, ShowRevision, initialise_show, validate_show_file,
 };
 use parking_lot::{Mutex, RwLock};
 use rust_embed::RustEmbed;
@@ -99,6 +101,8 @@ mod api_error;
 mod api_types;
 mod auth_backup;
 mod boundaries;
+mod capabilities;
+mod capability_resources;
 mod command_parse;
 mod command_playback_addresses;
 mod command_presets;
@@ -188,6 +192,8 @@ mod store_api;
 mod store_preload_targets;
 mod test_bench;
 mod update_api;
+
+pub(crate) use capabilities::active_show::repository::ActiveShowRepository;
 mod update_plans;
 mod virtual_playback_zones_http;
 mod ws_dispatch;
@@ -204,6 +210,7 @@ use api_error::*;
 use api_types::*;
 use auth_backup::*;
 use boundaries::*;
+use capability_resources::*;
 use command_parse::*;
 use command_playback_addresses::*;
 use command_presets::*;

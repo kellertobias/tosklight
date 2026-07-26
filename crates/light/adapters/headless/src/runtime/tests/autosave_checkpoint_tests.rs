@@ -13,7 +13,7 @@ async fn recovery_checkpoints_follow_the_autosave_interval() {
         .unwrap();
     assert_eq!(opened.status(), StatusCode::OK);
     assert_eq!(
-        state.configuration.read().autosave_interval_seconds,
+        state.installation.configuration().autosave_interval_seconds,
         30,
         "operator-facing default is 30 s"
     );
@@ -85,7 +85,7 @@ async fn autosave_interval_is_validated_operator_configuration() {
             .unwrap();
         assert_eq!(response.status(), expected, "autosave interval {value}");
     }
-    assert_eq!(state.configuration.read().autosave_interval_seconds, 600);
+    assert_eq!(state.installation.configuration().autosave_interval_seconds, 600);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

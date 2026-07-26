@@ -90,10 +90,10 @@ fn send_highlight_feedback(
     fixtures: &[HighlightFixture],
     groups: &HashMap<String, light_programmer::GroupDefinition>,
 ) {
-    let Some(session) = state.sessions.read().get(&subscriber.session_id).cloned() else {
+    let Some(session) = state.sessions.session(subscriber.session_id) else {
         return;
     };
-    let Some(selection) = state.programmers.selection(subscriber.session_id) else {
+    let Some(selection) = state.programming.selection(subscriber.session_id) else {
         return;
     };
     let context = programming_context(&session, light_application::ActionSource::Osc, None);
@@ -109,7 +109,7 @@ fn send_highlight_feedback(
                 .is_some_and(|programmer| programmer.blind || programmer.preview),
         },
     );
-    let Ok(highlight) = state.highlight_service.snapshot(&context, &ports) else {
+    let Ok(highlight) = state.highlight.snapshot(&context, &ports) else {
         return;
     };
     let prefix = format!("/light/{}/feedback/highlight", subscriber.desk_alias);
@@ -156,7 +156,7 @@ pub(super) fn send_programmer_osc_feedback(
         format!("{prefix}/page"),
         vec![OscArgument::Int(i32::from(page))],
     );
-    let programmer = state.programmers.get(subscriber.session_id);
+    let programmer = state.programming.get(subscriber.session_id);
     let command_line = programmer
         .as_ref()
         .map(|programmer| programmer.command_line.clone())
