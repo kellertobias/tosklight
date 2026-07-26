@@ -17,6 +17,7 @@ architecture(){
   node --test "$ROOT/tools/cargo-workspace-lints.test.mjs"
   node --test "$ROOT/tools/check-control-state-labels.test.mjs"
   node --test "$ROOT/tools/run-release-performance.test.mjs"
+  node --test "$ROOT/tools/run-sustained-output-benchmark.test.mjs"
   node --test "$ROOT/tools/semantic-test-docs/"*.test.mjs
   node "$ROOT/tools/check-architecture.mjs"
   node --test "$ROOT/tools/source-size/source-size.test.mjs"

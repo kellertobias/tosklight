@@ -107,7 +107,7 @@ fn dense_fixture_layout_fills_every_slot_and_reports_fixture_count() {
     let scenario = BenchmarkScenario::build(config, ProtocolSelection::ArtNet, None).unwrap();
     let rendered = scenario.engine.render(Default::default()).unwrap();
     assert_eq!(scenario.fixture_count, 128);
-    assert_eq!(scenario.fixture_footprint, 8);
+    assert_eq!(scenario.fixture_footprint, Some(8));
     assert_eq!(rendered.universes.len(), 2);
     assert!(rendered.patched_slots.values().all(|slots| *slots == 512));
 }

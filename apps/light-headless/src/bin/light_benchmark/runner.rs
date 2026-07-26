@@ -3,12 +3,10 @@ use crate::light_benchmark::{
     loopback::LoopbackDelivery,
     metadata,
     report::{
-        BenchmarkReport, ContributionSources, DeadlineReport, OutputReport, PhaseReport,
-        RunConfiguration, ScenarioReport, coverage,
+        BenchmarkReport, ContributionSources, DeadlineReport, FrameRateReport, OutputReport,
+        PhaseReport, RunConfiguration, ScenarioReport, coverage,
     },
-    scenario::{
-        BenchmarkScenario, PROGRAMMER_ASSIGNMENT_DIVISOR, SLOTS_PER_UNIVERSE, animated_slot,
-    },
+    scenario::{BenchmarkScenario, SLOTS_PER_UNIVERSE},
     statistics::distribution,
 };
 use chrono::Duration as ChronoDuration;
@@ -22,19 +20,37 @@ use std::{
 
 const CID: [u8; 16] = [0x42; 16];
 const SOURCE_NAME: &str = "ToskLight output benchmark";
+const SAMPLED_DIAGNOSTIC_SECONDS: u64 = 1;
 
 pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
     let mut scenarios = Vec::with_capacity(arguments.profiles.len());
     for profile in &arguments.profiles {
         let mut config = profile.config();
+        let required_minimum_hz = config.rate_hz;
+        if let Some(rate_hz) = arguments.rate_hz {
+            if rate_hz < required_minimum_hz {
+                return Err(format!(
+                    "scheduled rate {rate_hz} Hz is below the {:?} profile floor of {required_minimum_hz} Hz",
+                    profile
+                ));
+            }
+            config.rate_hz = rate_hz;
+        }
         if let Some(fixtures_per_universe) = arguments.fixtures_per_universe {
             config.fixtures_per_universe = fixtures_per_universe;
         }
-        eprintln!(
-            "benchmarking {:?}: {} fully packed universes, {} fixtures per universe at {} Hz",
-            profile, config.universes, config.fixtures_per_universe, config.rate_hz
-        );
-        scenarios.push(run_scenario(arguments, config)?);
+        if arguments.demo_show {
+            eprintln!(
+                "benchmarking {:?}: mixed-fixture demo show across {} fully packed universes at {} Hz",
+                profile, config.universes, config.rate_hz
+            );
+        } else {
+            eprintln!(
+                "benchmarking {:?}: {} fully packed universes, {} fixtures per universe at {} Hz",
+                profile, config.universes, config.fixtures_per_universe, config.rate_hz
+            );
+        }
+        scenarios.push(run_scenario(arguments, config, required_minimum_hz)?);
     }
     let required_floor_met = required_floor_result(&scenarios);
     let show_mutation = arguments
@@ -46,7 +62,7 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
         .then(crate::light_benchmark::patch_mutation::run)
         .transpose()?;
     Ok(BenchmarkReport {
-        schema_version: 4,
+        schema_version: 5,
         benchmark: "tosklight_render_to_protocol_encoding_pipeline",
         reference: metadata::capture(arguments.hardware_label.as_deref()),
         configuration: RunConfiguration {
@@ -84,17 +100,13 @@ fn required_floor_result_for(
     Some(required.all(|(_, met)| met))
 }
 
-fn run_scenario(arguments: &Arguments, config: ProfileConfig) -> Result<ScenarioReport, String> {
-    let loopback = match arguments.transport {
-        Transport::EncodeOnly => None,
-        Transport::Loopback => Some(
-            LoopbackDelivery::start()
-                .map_err(|error| format!("bind safe UDP loopback benchmark transport: {error}"))?,
-        ),
-    };
-    let destination = loopback.as_ref().map(LoopbackDelivery::destination);
-    let scenario = BenchmarkScenario::build(config, arguments.protocol, destination)?;
-    let mut state = TickState::default();
+fn run_scenario(
+    arguments: &Arguments,
+    config: ProfileConfig,
+    required_minimum_hz: u16,
+) -> Result<ScenarioReport, String> {
+    let (loopback, scenario) = prepare_scenario(arguments, config)?;
+    let mut state = TickState::new(arguments.seconds);
     let warmup_started = Instant::now();
     let warmup_duration = Duration::from_secs(arguments.warmup_seconds);
     let mut warmup_ticks = 0_u64;
@@ -143,7 +155,7 @@ fn run_scenario(arguments: &Arguments, config: ProfileConfig) -> Result<Scenario
         if sample.pipeline_completed_at > deadline {
             state.deadline_misses += 1;
         }
-        state.record(sample);
+        state.record(sample, tick, config.rate_hz);
         tick += 1;
     }
     let elapsed = measured_at.elapsed();
@@ -151,19 +163,32 @@ fn run_scenario(arguments: &Arguments, config: ProfileConfig) -> Result<Scenario
         &scenario,
         warmup_ticks + expected_ticks,
         config.rate_hz,
-        expected_ticks,
+        u64::from(config.rate_hz) * SAMPLED_DIAGNOSTIC_SECONDS,
     )?;
     let loopback_summary = loopback.map(LoopbackDelivery::finish);
     let achieved = state.completed_ticks as f64 / elapsed.as_secs_f64();
-    let met_configured_rate = state.dropped_ticks == 0 && state.deadline_misses == 0;
+    let frame_rate = frame_rate_report(
+        &state.completed_ticks_by_second,
+        arguments.seconds,
+        required_minimum_hz,
+        state.completed_ticks,
+        elapsed,
+    );
+    let met_configured_rate = frame_rate.gate_met;
+    let diagnostic_batches = scenario.sampled_batches(scenario.logical_start);
+    let diagnostic_samples = diagnostic_batches
+        .iter()
+        .map(light_engine::ContributionBatch::len)
+        .sum();
     Ok(ScenarioReport {
         profile: config.profile,
         expectation: config.expectation,
         universes: config.universes,
         slots_per_universe: SLOTS_PER_UNIVERSE,
         fixture_count: scenario.fixture_count,
-        fixtures_per_universe: config.fixtures_per_universe,
+        fixtures_per_universe: (!arguments.demo_show).then_some(config.fixtures_per_universe),
         fixture_footprint: scenario.fixture_footprint,
+        fixture_inventory: scenario.fixture_inventory.clone(),
         configured_rate_hz: config.rate_hz,
         warmup_ticks,
         warmup_elapsed_seconds: warmup_elapsed.as_secs_f64(),
@@ -172,6 +197,7 @@ fn run_scenario(arguments: &Arguments, config: ProfileConfig) -> Result<Scenario
         achieved_ticks_per_second: achieved,
         elapsed_seconds: elapsed.as_secs_f64(),
         met_configured_rate,
+        frame_rate,
         deadline: DeadlineReport {
             period_microseconds: 1_000_000.0 / f64::from(config.rate_hz),
             dropped_ticks: state.dropped_ticks,
@@ -200,16 +226,46 @@ fn run_scenario(arguments: &Arguments, config: ProfileConfig) -> Result<Scenario
             programmer_fixture_values: true,
             static_group_programming: true,
             playback_attribute_phaser: true,
-            exclusive_phaser_fixture_channel: animated_slot(scenario.fixture_footprint) + 1,
-            phaser_slot_has_static_or_programmer_value: false,
-            programmer_slot_fraction: match PROGRAMMER_ASSIGNMENT_DIVISOR {
-                4 => "1/4",
-                _ => "configured divisor",
-            },
+            phaser_attribute: scenario.phaser_attribute.0.clone(),
+            phaser_attribute_has_static_or_programmer_value: scenario
+                .phaser_overlaps_static_or_programmer,
+            programmer_assignment_fraction: scenario.programmer_assignment_fraction,
+            sampled_replacement_diagnostic_batches: diagnostic_batches.len(),
+            sampled_replacement_diagnostic_samples: diagnostic_samples,
+            sampled_batch_construction_in_timed_pipeline: false,
         },
         sampled_contributions,
         loopback: loopback_summary,
     })
+}
+
+fn prepare_scenario(
+    arguments: &Arguments,
+    config: ProfileConfig,
+) -> Result<(Option<LoopbackDelivery>, BenchmarkScenario), String> {
+    let loopback = match arguments.transport {
+        Transport::EncodeOnly => None,
+        Transport::Loopback => Some(
+            LoopbackDelivery::start()
+                .map_err(|error| format!("bind safe UDP loopback benchmark transport: {error}"))?,
+        ),
+    };
+    let destination = loopback.as_ref().map(LoopbackDelivery::destination);
+    let scenario = if arguments.demo_show {
+        let package_dir = arguments
+            .fixture_package_dir
+            .as_deref()
+            .ok_or_else(|| "--demo-show requires --fixture-package-dir".to_owned())?;
+        crate::light_benchmark::demo_show::build(
+            config,
+            arguments.protocol,
+            destination,
+            std::path::Path::new(package_dir),
+        )?
+    } else {
+        BenchmarkScenario::build(config, arguments.protocol, destination)?
+    };
+    Ok((loopback, scenario))
 }
 
 #[derive(Default)]
@@ -228,10 +284,18 @@ struct TickState {
     wire_bytes: u64,
     checksum: u64,
     full_universe_assertions: u64,
+    completed_ticks_by_second: Vec<u64>,
 }
 
 impl TickState {
-    fn record(&mut self, sample: TickSample) {
+    fn new(seconds: u64) -> Self {
+        Self {
+            completed_ticks_by_second: vec![0; seconds as usize],
+            ..Default::default()
+        }
+    }
+
+    fn record(&mut self, sample: TickSample, scheduled_tick: u64, rate_hz: u16) {
         self.total.push(sample.total);
         self.render.push(sample.render);
         self.encode.push(sample.encode);
@@ -242,6 +306,10 @@ impl TickState {
         self.wire_bytes += sample.wire_bytes;
         self.checksum = self.checksum.rotate_left(7) ^ sample.checksum;
         self.full_universe_assertions += 1;
+        let second = scheduled_tick / u64::from(rate_hz);
+        if let Some(completed) = self.completed_ticks_by_second.get_mut(second as usize) {
+            *completed += 1;
+        }
     }
 }
 
@@ -265,10 +333,9 @@ fn run_tick(
     rate_hz: u16,
 ) -> Result<TickSample, String> {
     let logical_nanos = logical_tick.saturating_mul(1_000_000_000) / u64::from(rate_hz);
-    scenario.clock.set(
-        scenario.logical_start
-            + ChronoDuration::nanoseconds(i64::try_from(logical_nanos).unwrap_or(i64::MAX)),
-    );
+    let logical_time = scenario.logical_start
+        + ChronoDuration::nanoseconds(i64::try_from(logical_nanos).unwrap_or(i64::MAX));
+    scenario.clock.set(logical_time);
     let total_started = Instant::now();
     let render_started = Instant::now();
     let rendered = scenario
@@ -383,6 +450,32 @@ fn tick_at(elapsed: Duration, rate_hz: u16) -> u64 {
     let nanos = elapsed.as_nanos();
     let tick = nanos.saturating_mul(u128::from(rate_hz)) / 1_000_000_000;
     tick.min(u128::from(u64::MAX)) as u64
+}
+
+fn frame_rate_report(
+    completed_ticks_by_second: &[u64],
+    measured_seconds: u64,
+    required_minimum_hz: u16,
+    completed_ticks: u64,
+    elapsed: Duration,
+) -> FrameRateReport {
+    let required = u64::from(required_minimum_hz);
+    let minimum = completed_ticks_by_second.iter().copied().min().unwrap_or(0);
+    let windows_below_minimum = completed_ticks_by_second
+        .iter()
+        .filter(|completed| **completed < required)
+        .count() as u64;
+    let average = completed_ticks as f64 / measured_seconds as f64;
+    FrameRateReport {
+        required_minimum_hz,
+        average_completed_hz: average,
+        wall_clock_average_completed_hz: completed_ticks as f64 / elapsed.as_secs_f64(),
+        minimum_one_second_completed_hz: minimum as f64,
+        one_second_windows: completed_ticks_by_second.len() as u64,
+        windows_below_minimum,
+        gate_met: average >= f64::from(required_minimum_hz) && windows_below_minimum == 0,
+        definition: "average uses completed scheduled frames over the configured measurement duration; minimum is the fewest completed scheduled frames in any non-overlapping one-second interval",
+    }
 }
 
 #[cfg(test)]

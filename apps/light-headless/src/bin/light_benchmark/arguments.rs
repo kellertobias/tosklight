@@ -59,6 +59,9 @@ pub struct Arguments {
     pub mutation_gate: bool,
     pub patch_gate: bool,
     pub fixtures_per_universe: Option<u16>,
+    pub rate_hz: Option<u16>,
+    pub demo_show: bool,
+    pub fixture_package_dir: Option<String>,
 }
 
 pub enum ParseOutcome {
@@ -130,6 +133,9 @@ impl Default for Arguments {
             mutation_gate: false,
             patch_gate: false,
             fixtures_per_universe: None,
+            rate_hz: None,
+            demo_show: false,
+            fixture_package_dir: None,
         }
     }
 }
@@ -188,6 +194,22 @@ impl Arguments {
                     }
                     parsed.fixtures_per_universe = Some(value);
                 }
+                "--rate-hz" => {
+                    parsed.rate_hz = Some(parse_bounded_u64(
+                        &required_value(&mut arguments, &argument)?,
+                        1,
+                        240,
+                        "rate Hz",
+                    )? as u16);
+                }
+                "--demo-show" => parsed.demo_show = true,
+                "--fixture-package-dir" => {
+                    let path = required_value(&mut arguments, &argument)?;
+                    if path.trim().is_empty() {
+                        return Err("fixture package directory must not be empty".into());
+                    }
+                    parsed.fixture_package_dir = Some(path);
+                }
                 "--help" | "-h" => return Ok(ParseOutcome::Help),
                 _ => return Err(format!("unknown argument: {argument}")),
             }
@@ -208,6 +230,9 @@ impl Arguments {
            --warmup-seconds N          Unpaced warmup duration, 0-60 (default: 1)\n\
           --hardware-label TEXT        Reference-machine description included in JSON\n\
           --fixtures-per-universe N    Equal-size fixtures filling every universe (1-128)\n\
+          --rate-hz N                  Scheduled output rate, 1-240 (profile floor still applies)\n\
+          --demo-show                  Use the real mixed-fixture sustained demo show\n\
+          --fixture-package-dir PATH   Fixture packages used by --demo-show\n\
           --mutation-gate              Run the large-show incremental mutation gate\n\
           --patch-gate                 Run the real persisted Patch transaction gate\n\
           -h, --help\n"
@@ -289,6 +314,11 @@ mod tests {
             "Test host",
             "--fixtures-per-universe",
             "32",
+            "--rate-hz",
+            "110",
+            "--demo-show",
+            "--fixture-package-dir",
+            "assets/fixture-library",
             "--mutation-gate",
             "--patch-gate",
         ]);
@@ -299,6 +329,12 @@ mod tests {
         assert_eq!(arguments.warmup_seconds, 2);
         assert_eq!(arguments.hardware_label.as_deref(), Some("Test host"));
         assert_eq!(arguments.fixtures_per_universe, Some(32));
+        assert_eq!(arguments.rate_hz, Some(110));
+        assert!(arguments.demo_show);
+        assert_eq!(
+            arguments.fixture_package_dir.as_deref(),
+            Some("assets/fixture-library")
+        );
         assert!(arguments.mutation_gate);
         assert!(arguments.patch_gate);
     }
@@ -308,6 +344,8 @@ mod tests {
         assert!(Arguments::parse(["--universes".into(), "64".into()]).is_err());
         assert!(Arguments::parse(["--seconds".into(), "0".into()]).is_err());
         assert!(Arguments::parse(["--protocol".into(), "udp".into()]).is_err());
+        assert!(Arguments::parse(["--rate-hz".into(), "0".into()]).is_err());
+        assert!(Arguments::parse(["--rate-hz".into(), "241".into()]).is_err());
         assert!(Arguments::parse(["--fixtures-per-universe".into(), "3".into()]).is_err());
         assert!(Arguments::parse(["--fixtures-per-universe".into(), "256".into()]).is_err());
     }

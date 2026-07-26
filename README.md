@@ -138,9 +138,7 @@ production codec and `--transport loopback` for separately reported, safe local 
 timing. Loopback is benchmark-owned and is not presented as production `NetworkOutput` socket
 delivery. Each scenario preserves that ordinary scheduled pipeline as its floor measurement, then
 reports an unpaced render-only diagnostic with four prebuilt sampled batches replacing a realistic
-slice of Programmer and Playback assignments. Batch construction is deliberately outside the timed
-path, so this comparison measures replacement-index lookup, arbitration, and projection rather than
-an unspecified future sampler. The JSON explicitly identifies unavailable CPU, allocation,
+slice of Programmer and Playback assignments. The JSON explicitly identifies unavailable CPU, allocation,
 sub-render phase, production socket, and sound-to-light measurements; do not infer those values from
 total latency. Run it on each target, including Raspberry Pi-class hardware, before choosing that
 desk's configured universe ceiling, and retain the JSON with the exact hardware label.
@@ -148,6 +146,29 @@ desk's configured universe ceiling, and retain the JSON with the exact hardware 
 preparation, and generation installation against paired 120- and 1,200-fixture projections; it
 fails when untouched projections are rebuilt, the result diverges from the full compiler, or p95
 latency scales with fixture count.
+
+For the sustained complex-show acceptance run, use:
+
+```sh
+npm run benchmark:sustained-output -- --seconds 120 \
+  --hardware-label "machine model, CPU, RAM, OS and power mode"
+```
+
+Use `--seconds 60` for the one-minute variant. This release run loads the shipped fixture packages
+and patches 20 Showtec Sunstrip LED RGB 42206 in 30 Channel mode, 40 ROBE Robin 600X LEDWash in
+Mode 1, 32 ROBE Robin DLS Profile in Mode 1, and 32 ROBE Robin LEDBeam 150 in Standard 16-bit mode.
+Those fixtures occupy 4,288 slots. It fills the remaining 12,096 slots with 4,000 Generic RGB LED
+fixtures in three-channel RGB virtual-dimmer mode and 24 in four-channel RGBD mode so fixtures do
+not cross universe boundaries. The resulting 4,148-fixture show fills all 16,384 slots across 32
+universes.
+
+Every timed frame evaluates overlapping Group, Cue/Playback, phaser, and Programmer contributions
+before both Art-Net and sACN encoding and UDP loopback delivery. The command schedules 125 Hz to
+prove operational headroom above the 100 Hz floor and also reports sampled replacement
+contributions as a separate render-only diagnostic. It retains JSON and stderr under
+`.artifacts/performance`, prints the average frame rate and the minimum completed frame rate across
+every one-second interval, and exits non-zero if the average or any interval falls below 100 Hz.
+Dropped, deferred, and late frames remain explicit diagnostics.
 
 ## Implementation status
 

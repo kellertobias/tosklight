@@ -39,8 +39,9 @@ pub struct ScenarioReport {
     pub universes: u16,
     pub slots_per_universe: u16,
     pub fixture_count: usize,
-    pub fixtures_per_universe: u16,
-    pub fixture_footprint: u16,
+    pub fixtures_per_universe: Option<u16>,
+    pub fixture_footprint: Option<u16>,
+    pub fixture_inventory: crate::light_benchmark::scenario::ScenarioFixtureInventory,
     pub configured_rate_hz: u16,
     pub warmup_ticks: u64,
     pub warmup_elapsed_seconds: f64,
@@ -49,12 +50,25 @@ pub struct ScenarioReport {
     pub achieved_ticks_per_second: f64,
     pub elapsed_seconds: f64,
     pub met_configured_rate: bool,
+    pub frame_rate: FrameRateReport,
     pub deadline: DeadlineReport,
     pub phases: PhaseReport,
     pub output: OutputReport,
     pub contribution_sources: ContributionSources,
     pub sampled_contributions: SampledContributionReport,
     pub loopback: Option<LoopbackSummary>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FrameRateReport {
+    pub required_minimum_hz: u16,
+    pub average_completed_hz: f64,
+    pub wall_clock_average_completed_hz: f64,
+    pub minimum_one_second_completed_hz: f64,
+    pub one_second_windows: u64,
+    pub windows_below_minimum: u64,
+    pub gate_met: bool,
+    pub definition: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -90,9 +104,12 @@ pub struct ContributionSources {
     pub programmer_fixture_values: bool,
     pub static_group_programming: bool,
     pub playback_attribute_phaser: bool,
-    pub exclusive_phaser_fixture_channel: u16,
-    pub phaser_slot_has_static_or_programmer_value: bool,
-    pub programmer_slot_fraction: &'static str,
+    pub phaser_attribute: String,
+    pub phaser_attribute_has_static_or_programmer_value: bool,
+    pub programmer_assignment_fraction: &'static str,
+    pub sampled_replacement_diagnostic_batches: usize,
+    pub sampled_replacement_diagnostic_samples: usize,
+    pub sampled_batch_construction_in_timed_pipeline: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -141,12 +158,12 @@ pub fn coverage(transport: Transport) -> MeasurementCoverage {
     };
     MeasurementCoverage {
         contribution_sampling: CoverageItem {
-            status: "partially_measured",
-            note: "built-in Playback phaser sampling is included in the ordinary render; external batches are prepared before timing so only their replacement lookup, arbitration, and projection cost is measured",
+            status: "measured_and_diagnostic",
+            note: "built-in Playback phaser sampling is included in every timed frame; external sampled replacement batches are measured separately",
         },
         arbitration: CoverageItem {
             status: "measured_combined",
-            note: "ordinary arbitration is included in engine_render_combined; multiple prebuilt sampled replacement batches are reported separately per scenario",
+            note: "Group, Cue/Playback, Programmer, and phaser contributions are included in engine_render_combined",
         },
         fixture_projection: CoverageItem {
             status: "included_not_separately_instrumented",

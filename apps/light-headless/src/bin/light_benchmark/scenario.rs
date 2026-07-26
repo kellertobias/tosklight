@@ -17,6 +17,7 @@ use light_playback::{
     PlaybackDefinition, PlaybackFaderMode, PlaybackTarget, RestartMode, WrapMode,
 };
 use light_programmer::{GroupDefinition, ProgrammerRegistry};
+use serde::Serialize;
 use std::{net::SocketAddr, sync::Arc};
 use uuid::Uuid;
 
@@ -26,15 +27,38 @@ pub const SAMPLED_ASSIGNMENT_DIVISOR: usize = 8;
 pub const SAMPLED_BATCH_COUNT: usize = 4;
 pub const GROUP_ID: &str = "benchmark.static-group";
 
+#[derive(Clone, Debug, Serialize)]
+pub struct FixtureInventoryEntry {
+    pub manufacturer: String,
+    pub name: String,
+    pub mode: String,
+    pub quantity: usize,
+    pub footprint: u16,
+    pub dmx_slots: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ScenarioFixtureInventory {
+    pub scenario: &'static str,
+    pub entries: Vec<FixtureInventoryEntry>,
+    pub manufacturer_fixture_slots: usize,
+    pub rgb_par_fill_slots: usize,
+    pub total_slots: usize,
+}
+
 pub struct BenchmarkScenario {
     pub engine: Engine,
     pub clock: Arc<ManualClock>,
     pub logical_start: chrono::DateTime<Utc>,
     pub universes: u16,
     pub fixture_count: usize,
-    pub fixture_footprint: u16,
+    pub fixture_footprint: Option<u16>,
     pub packet_count: usize,
-    programmers: ProgrammerRegistry,
+    pub fixture_inventory: ScenarioFixtureInventory,
+    pub(super) programmers: ProgrammerRegistry,
+    pub(super) phaser_attribute: AttributeKey,
+    pub(super) phaser_overlaps_static_or_programmer: bool,
+    pub(super) programmer_assignment_fraction: &'static str,
 }
 
 impl BenchmarkScenario {
@@ -107,19 +131,31 @@ impl BenchmarkScenario {
             logical_start,
             universes: config.universes,
             fixture_count,
-            fixture_footprint,
+            fixture_footprint: Some(fixture_footprint),
             packet_count,
+            fixture_inventory: ScenarioFixtureInventory {
+                scenario: "synthetic_equal_footprint",
+                entries: vec![FixtureInventoryEntry {
+                    manufacturer: "ToskLight Benchmark".into(),
+                    name: format!("Fully packed {fixture_footprint}-slot fixture"),
+                    mode: "Synthetic".into(),
+                    quantity: fixture_count,
+                    footprint: fixture_footprint,
+                    dmx_slots: fixture_count * usize::from(fixture_footprint),
+                }],
+                manufacturer_fixture_slots: fixture_count * usize::from(fixture_footprint),
+                rgb_par_fill_slots: 0,
+                total_slots: fixture_count * usize::from(fixture_footprint),
+            },
             programmers,
+            phaser_attribute: slot_attribute(animated_slot(fixture_footprint)),
+            phaser_overlaps_static_or_programmer: false,
+            programmer_assignment_fraction: "1/4 of mapped slots",
         })
     }
 
     pub fn sampled_batches(&self, at: chrono::DateTime<Utc>) -> Vec<ContributionBatch> {
-        sampled_batches(
-            &self.engine,
-            &self.programmers,
-            at,
-            animated_slot(self.fixture_footprint),
-        )
+        sampled_batches(&self.engine, &self.programmers, at, &self.phaser_attribute)
     }
 }
 
@@ -127,7 +163,7 @@ fn sampled_batches(
     engine: &Engine,
     programmers: &ProgrammerRegistry,
     at: chrono::DateTime<Utc>,
-    animated_slot: u16,
+    phaser_attribute: &AttributeKey,
 ) -> Vec<ContributionBatch> {
     let mut buckets = (0..SAMPLED_BATCH_COUNT)
         .map(|_| Vec::new())
@@ -148,7 +184,7 @@ fn sampled_batches(
     for contribution in engine
         .playback_contributions_at(at)
         .into_iter()
-        .filter(|contribution| contribution.value.attribute != slot_attribute(animated_slot))
+        .filter(|contribution| contribution.value.attribute != *phaser_attribute)
         .step_by(SAMPLED_ASSIGNMENT_DIVISOR)
     {
         buckets[index % SAMPLED_BATCH_COUNT].push(ContributionSample::replacing_playback(

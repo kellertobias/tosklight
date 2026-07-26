@@ -1,4 +1,5 @@
 mod arguments;
+mod demo_show;
 mod loopback;
 mod metadata;
 mod mutation;

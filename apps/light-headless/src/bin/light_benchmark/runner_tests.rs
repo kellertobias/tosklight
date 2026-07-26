@@ -29,3 +29,18 @@ fn required_floor_status_distinguishes_failure_from_not_run() {
         Some(true)
     );
 }
+
+#[test]
+fn frame_rate_report_requires_every_measured_second_to_meet_the_floor() {
+    let passing = frame_rate_report(&[100, 100], 2, 100, 200, Duration::from_secs_f64(1.991));
+    assert_eq!(passing.average_completed_hz, 100.0);
+    assert_eq!(passing.minimum_one_second_completed_hz, 100.0);
+    assert_eq!(passing.windows_below_minimum, 0);
+    assert!(passing.gate_met);
+
+    let dropped = frame_rate_report(&[100, 99], 2, 100, 199, Duration::from_secs_f64(1.991));
+    assert_eq!(dropped.average_completed_hz, 99.5);
+    assert_eq!(dropped.minimum_one_second_completed_hz, 99.0);
+    assert_eq!(dropped.windows_below_minimum, 1);
+    assert!(!dropped.gate_met);
+}
