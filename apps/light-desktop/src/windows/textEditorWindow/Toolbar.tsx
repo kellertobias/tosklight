@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import { Button, Select } from "../../components/common";
+import { Button, Select } from "@tosklight/ui";
 import type { TextEditorController } from "./controller";
 
 function saveDisabled(controller: TextEditorController) {

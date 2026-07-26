@@ -1,7 +1,7 @@
 import type { RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useCommandHistory } from "../../../features/commandHistory/CommandHistoryState";
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 
 export function CommandLineHistoryPanel({
 	open,

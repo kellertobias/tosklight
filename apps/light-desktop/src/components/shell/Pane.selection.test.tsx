@@ -35,32 +35,40 @@ vi.mock("../../windows/WindowRegistry", () => ({
 		file_manager: () => <div>File Manager body</div>,
 	},
 }));
-vi.mock("../common", () => ({ Button: () => null }));
+vi.mock("@tosklight/ui", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@tosklight/ui")>();
+	return { ...actual, Button: () => null };
+});
 vi.mock("../shared/SourceLegend", () => ({ SourceLegend: () => null }));
-vi.mock("../window-kit", () => ({
-	WindowHeader: ({
-		info,
-		onTitleClick,
-		titleActionLabel,
-	}: {
-		info?: { primary: React.ReactNode };
-		onTitleClick?: () => void;
-		titleActionLabel?: string;
-	}) => (
-		<header>
-			{info?.primary}
-			{onTitleClick && (
-				<button
-					type="button"
-					aria-label={titleActionLabel}
-					onClick={onTitleClick}
-				>
-					Title action
-				</button>
-			)}
-		</header>
-	),
-}));
+vi.mock("@tosklight/ui/window-kit", async (importOriginal) => {
+	const actual =
+		await importOriginal<typeof import("@tosklight/ui/window-kit")>();
+	return {
+		...actual,
+		WindowHeader: ({
+			info,
+			onTitleClick,
+			titleActionLabel,
+		}: {
+			info?: { primary: React.ReactNode };
+			onTitleClick?: () => void;
+			titleActionLabel?: string;
+		}) => (
+			<header>
+				{info?.primary}
+				{onTitleClick && (
+					<button
+						type="button"
+						aria-label={titleActionLabel}
+						onClick={onTitleClick}
+					>
+						Title action
+					</button>
+				)}
+			</header>
+		),
+	};
+});
 vi.mock("./PaneChromeContext", () => ({
 	PaneChromeProvider: ({ children }: React.PropsWithChildren) => children,
 }));

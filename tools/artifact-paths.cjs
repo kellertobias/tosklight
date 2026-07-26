@@ -34,6 +34,7 @@ const artifactPaths = Object.freeze({
   cargo: absolute(configured("CARGO_TARGET_DIR", path.join(artifactRoot, layout.BUILD_CARGO))),
   controlFrontend: artifact("LIGHT_CONTROL_FRONTEND_DIR", "FRONTEND_CONTROL"),
   hardwareFrontend: artifact("LIGHT_HARDWARE_FRONTEND_DIR", "FRONTEND_HARDWARE"),
+  storybook: artifact("LIGHT_STORYBOOK_UI_DIR", "STORYBOOK_UI"),
   manual: artifact("LIGHT_MANUAL_ROOT", "MANUAL_ROOT"),
   iconContactSheets: artifact("LIGHT_ICON_CONTACT_SHEETS_DIR", "ICON_CONTACT_SHEETS"),
   release: artifact("LIGHT_RELEASE_DIR", "RELEASE_ROOT"),

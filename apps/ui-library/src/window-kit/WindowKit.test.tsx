@@ -1,0 +1,288 @@
+import {
+	cleanup,
+	fireEvent,
+	render as rtlRender,
+	screen,
+} from "@testing-library/react";
+import type { ReactElement } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ModalProvider } from "../modals/ModalStack";
+import {
+	ButtonGrid,
+	DataTable,
+	GridButton,
+	WindowHeader,
+	WindowScrollArea,
+	WindowSettings,
+} from ".";
+
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: ModalProvider });
+
+describe("window kit", () => {
+	afterEach(cleanup);
+	it("renders two-line information, grouped actions, and Settings last", () => {
+		const { container } = render(
+			<WindowHeader
+				title="Stage"
+				info={{
+					primary: "1 selected",
+					secondary: <span className="test-legend">Shift for range</span>,
+				}}
+				search={{ value: "" }}
+				onSearch={vi.fn()}
+				actions={[
+					[{ id: "one", label: "First", onClick: vi.fn() }],
+					[{ id: "two", label: "Second", onClick: vi.fn() }],
+				]}
+				settings
+				onSettings={vi.fn()}
+			/>,
+		);
+		expect(screen.getByText("Stage")).toBeInTheDocument();
+		expect(screen.getByText("Shift for range")).toHaveClass("test-legend");
+		expect(screen.getByText("Shift for range").parentElement?.tagName).toBe(
+			"SMALL",
+		);
+		expect(
+			[...container.querySelectorAll(".ui-window-action-groups button")].map(
+				(button) => button.textContent,
+			),
+		).toEqual(["First", "Second", "⚙Settings"]);
+		expect(
+			container.querySelectorAll(".ui-titlebar-search-divider"),
+		).toHaveLength(1);
+		const header = container.querySelector(".ui-window-header");
+		const search = screen
+			.getByRole("textbox", { name: "Search Stage" })
+			.closest(".ui-window-header-search");
+		const actionGroups = container.querySelector(".ui-window-action-groups");
+		expect(header).not.toBeNull();
+		expect(search).not.toBeNull();
+		expect(actionGroups).not.toBeNull();
+		if (!header || !search || !actionGroups)
+			throw new Error("Missing window header controls");
+		expect([...header.children].indexOf(search)).toBeLessThan(
+			[...header.children].indexOf(actionGroups),
+		);
+	});
+	it("renders standard controlled search only when a callback is supplied", () => {
+		const onSearch = vi.fn();
+		const { rerender } = render(<WindowHeader title="Groups" />);
+		expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+		rerender(
+			<WindowHeader
+				title="Groups"
+				search={{ value: "" }}
+				onSearch={onSearch}
+			/>,
+		);
+		const input = screen.getByRole("textbox", { name: "Search Groups" });
+		fireEvent.change(input, { target: { value: "front" } });
+		expect(onSearch).toHaveBeenCalledWith("front");
+	});
+	it("makes an armed window-title action pointer and keyboard operable", () => {
+		const remove = vi.fn();
+		render(
+			<WindowHeader
+				title="Fixture Sheet"
+				onTitleClick={remove}
+				titleActionLabel="Remove Fixture Sheet pane"
+			/>,
+		);
+		const title = screen.getByRole("button", {
+			name: "Remove Fixture Sheet pane",
+		});
+		fireEvent.click(title);
+		fireEvent.keyDown(title, { key: "Enter" });
+		fireEvent.keyDown(title, { key: " " });
+		expect(remove).toHaveBeenCalledTimes(3);
+	});
+	it("preserves window chrome while adding a pane drag-handle class", () => {
+		const { container } = render(
+			<WindowHeader
+				title="Stage"
+				dragHandleProps={{ className: "pane-drag-handle" }}
+			/>,
+		);
+		expect(container.querySelector("header")).toHaveClass(
+			"ui-window-header",
+			"pane-drag-handle",
+		);
+	});
+	it("switches settings tabs and closes", () => {
+		const close = vi.fn();
+		render(
+			<WindowSettings
+				title="Pane Settings"
+				tabs={[
+					{ id: "pane", label: "Pane Settings", content: "Size" },
+					{ id: "pool", label: "Pool", content: "Family" },
+				]}
+				onClose={close}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("tab", { name: "Pool" }));
+		expect(screen.getByText("Family")).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
+		expect(close).toHaveBeenCalledOnce();
+	});
+	it("renders built-in settings as an anchored popover without a backdrop", () => {
+		render(
+			<WindowSettings
+				modal={false}
+				anchor={new DOMRect(900, 10, 90, 38)}
+				title="Stage Settings"
+				tabs={[{ id: "stage", label: "Stage", content: "Display" }]}
+				onClose={() => undefined}
+			/>,
+		);
+		const dialog = screen.getByRole("dialog", { name: "Stage Settings" });
+		expect(dialog).toHaveClass("popover");
+		expect(dialog.closest(".ui-window-settings-backdrop")).toBeNull();
+	});
+	it("keeps selected and active rows independent and navigates empty rows", () => {
+		const active = vi.fn();
+		render(
+			<DataTable
+				rows={[{ id: "one" }, { id: "two" }]}
+				columns={[{ id: "name", header: "Name", render: (row) => row.id }]}
+				rowKey={(row) => row.id}
+				selected={(row) => row.id === "two"}
+				activeIndex={0}
+				onActiveIndexChange={active}
+				emptyRows={1}
+			/>,
+		);
+		const rows = screen.getAllByRole("row");
+		expect(rows[2]).toHaveClass("selected");
+		expect(rows[1]).toHaveClass("active");
+		fireEvent.keyDown(rows[2], { key: "ArrowDown" });
+		expect(active).toHaveBeenCalledWith(2);
+	});
+	it("exposes button grid states", () => {
+		render(
+			<ButtonGrid>
+				<GridButton number="1" primary="Open" state="active" />
+				<GridButton number="2" primary="Empty" state="empty" />
+				<GridButton number="3" primary="Disabled" state="disabled" />
+				<GridButton number="4" primary="Store" state="store-target" />
+			</ButtonGrid>,
+		);
+		expect(screen.getByRole("button", { name: /Open/ })).toHaveClass("active");
+		expect(screen.getByRole("button", { name: /Empty/ })).toHaveClass("empty");
+		expect(screen.getByRole("button", { name: /Disabled/ })).toBeDisabled();
+		expect(screen.getByRole("button", { name: /Store/ })).toHaveClass(
+			"store-target",
+		);
+	});
+	it("uses the untransformed column width for every button-grid row", () => {
+		const realGetComputedStyle = window.getComputedStyle.bind(window);
+		const computedStyle = vi
+			.spyOn(window, "getComputedStyle")
+			.mockImplementation((element) => {
+				const style = realGetComputedStyle(element);
+				if (element.tagName === "BUTTON")
+					Object.defineProperty(style, "width", { value: "117.25px" });
+				return style;
+			});
+		const rect = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockImplementation(function (this: HTMLElement) {
+				const width = this.tagName === "BUTTON" ? 114.319 : 400;
+				return {
+					x: 0,
+					y: 0,
+					top: 0,
+					right: width,
+					bottom: width,
+					left: 0,
+					width,
+					height: width,
+					toJSON: () => ({}),
+				};
+			});
+		render(
+			<ButtonGrid>
+				<GridButton number="1" primary="One" />
+				<GridButton number="2" primary="Two" />
+			</ButtonGrid>,
+		);
+		expect(
+			screen.getByRole("button", { name: /One/ }).parentElement,
+		).toHaveStyle({ "--grid-row-size": "117.25px" });
+		computedStyle.mockRestore();
+		rect.mockRestore();
+	});
+	it("recalculates square rows after responsive width changes without reacting to height-only changes", () => {
+		let width = 142;
+		let notifyResize: () => void = () => undefined;
+		const realResizeObserver = globalThis.ResizeObserver;
+		const realGetComputedStyle = window.getComputedStyle.bind(window);
+		globalThis.ResizeObserver = class {
+			constructor(callback: ResizeObserverCallback) {
+				notifyResize = () => callback([], this);
+			}
+			observe() {}
+			unobserve() {}
+			disconnect() {}
+			takeRecords() {
+				return [];
+			}
+		};
+		const computedStyle = vi
+			.spyOn(window, "getComputedStyle")
+			.mockImplementation((element) => {
+				const style = realGetComputedStyle(element);
+				if (element.tagName === "BUTTON")
+					Object.defineProperty(style, "width", { value: `${width}px` });
+				return style;
+			});
+		render(
+			<ButtonGrid>
+				<GridButton number="1" primary="One" />
+				<GridButton number="2" primary="Two" />
+			</ButtonGrid>,
+		);
+		const grid = screen.getByRole("button", { name: /One/ }).parentElement;
+		expect(grid).not.toBeNull();
+		if (!grid) throw new Error("Button grid was not rendered");
+		expect(grid).toHaveStyle({ "--grid-row-size": "142px" });
+
+		width = 96.5;
+		notifyResize();
+		expect(grid).toHaveStyle({ "--grid-row-size": "96.5px" });
+
+		notifyResize();
+		expect(grid).toHaveStyle({ "--grid-row-size": "96.5px" });
+		computedStyle.mockRestore();
+		globalThis.ResizeObserver = realResizeObserver;
+	});
+	it("lets compact non-pool surfaces opt out of square row measurement", () => {
+		render(
+			<ButtonGrid square={false}>
+				<GridButton number="1" primary="Shortcut" />
+			</ButtonGrid>,
+		);
+		const grid = screen.getByRole("button", { name: /Shortcut/ }).parentElement;
+		expect(grid).not.toBeNull();
+		if (!grid) throw new Error("Compact button grid was not rendered");
+		expect(grid).toHaveClass("compact-grid");
+		expect(grid.style.getPropertyValue("--grid-row-size")).toBe("");
+	});
+	it("shows the unified empty state instead of window content", () => {
+		render(
+			<WindowScrollArea
+				emptyState={{
+					title: "Nothing here",
+					description: "Add an item to get started.",
+					icon: "◇",
+				}}
+			>
+				<span>Hidden content</span>
+			</WindowScrollArea>,
+		);
+		expect(screen.getByRole("status")).toHaveTextContent("Nothing here");
+		expect(screen.getByText("Add an item to get started.")).toBeInTheDocument();
+		expect(screen.queryByText("Hidden content")).not.toBeInTheDocument();
+	});
+});

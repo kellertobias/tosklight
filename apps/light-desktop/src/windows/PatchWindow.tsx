@@ -6,11 +6,11 @@ import {
 	useState,
 } from "react";
 import type { WindowProps } from "./windowTypes";
-import { Button } from "../components/common";
+import { Button } from "@tosklight/ui";
 import { FixturePatchSetupContent } from "../components/setup/FixturePatchSetup";
 import { PatchFeatureBoundary } from "../features/patch/PatchFeatureBoundary";
 import { MediaServerSetup } from "../components/setup/MediaServerSetup";
-import { WindowHeader, WindowScrollArea } from "../components/window-kit";
+import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
 import { StageWindow } from "./StageWindow";
 import { usePatchPreviewHighlightDmx } from "../features/configuration/ConfigurationState";
 import { useHighlightActions } from "../features/highlight/HighlightState";

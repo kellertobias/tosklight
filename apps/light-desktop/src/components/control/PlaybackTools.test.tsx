@@ -2,14 +2,17 @@ import {
 	act,
 	cleanup,
 	fireEvent,
-	render,
+	render as rtlRender,
 	screen,
 	waitFor,
 	within,
 } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SpeedGroupId, SpeedGroupSoundState } from "../../api/types";
 import { PlaybackTools } from "./PlaybackTools";
+
+const render = (ui: Parameters<typeof rtlRender>[0]) => rtlRender(ui, { wrapper: ModalProvider });
 
 const dispatch = vi.fn();
 const state = {

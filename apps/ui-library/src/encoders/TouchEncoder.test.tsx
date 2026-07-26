@@ -1,0 +1,202 @@
+import { cleanup, fireEvent, render as rtlRender, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ModalProvider } from "../modals/ModalStack";
+import {
+	TOUCH_ENCODER_COARSE_THRESHOLD_PX,
+	TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS,
+	TOUCH_ENCODER_DRAG_DEAD_ZONE_PX,
+	TouchEncoder,
+} from "./TouchEncoder";
+
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: ModalProvider });
+
+afterEach(() => {
+	cleanup();
+	vi.useRealTimers();
+});
+
+function renderEncoder(
+	overrides: Partial<Parameters<typeof TouchEncoder>[0]> = {},
+) {
+	const onStep = vi.fn();
+	const onSet = vi.fn();
+	render(
+		<TouchEncoder
+			label="Enc 1 · Pan"
+			display="50%"
+			value={0.5}
+			onStep={onStep}
+			onSet={onSet}
+			{...overrides}
+		/>,
+	);
+	return { onStep, onSet };
+}
+
+describe("TouchEncoder", () => {
+	it("uses one continuous surface with fine tap zones and explicit absolute entry", () => {
+		const { onStep } = renderEncoder();
+		const surface = document.querySelector(".touch-encoder-surface");
+		expect(surface).not.toBeNull();
+		fireEvent.click(
+			surface?.querySelector(".touch-encoder-tap-positive") as Element,
+		);
+		fireEvent.click(
+			surface?.querySelector(".touch-encoder-tap-negative") as Element,
+		);
+		expect(onStep).toHaveBeenNthCalledWith(1, 0.01);
+		expect(onStep).toHaveBeenNthCalledWith(2, -0.01);
+		expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+		for (const removedName of ["+10", "+1", "−1", "−10"])
+			expect(
+				screen.queryByRole("button", { name: removedName }),
+			).not.toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("button", { name: "Set Value" }));
+		expect(
+			screen.getByRole("dialog", { name: "Enc 1 · Pan value" }),
+		).toBeInTheDocument();
+		expect(onStep).toHaveBeenCalledTimes(2);
+	});
+
+	it("uses one undo group while transitioning fine, coarse, fine, and reverse", () => {
+		vi.useFakeTimers();
+		const { onStep } = renderEncoder();
+		const encoder = screen.getByRole("group", { name: "Enc 1 · Pan" });
+		fireEvent.pointerDown(encoder, {
+			pointerId: 7,
+			button: 0,
+			clientY: 120,
+		});
+		fireEvent.pointerMove(encoder, {
+			pointerId: 7,
+			clientY: 120 - TOUCH_ENCODER_DRAG_DEAD_ZONE_PX - 1,
+		});
+		vi.advanceTimersByTime(TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS);
+		fireEvent.pointerMove(encoder, {
+			pointerId: 7,
+			clientY: 120 - TOUCH_ENCODER_COARSE_THRESHOLD_PX,
+		});
+		vi.advanceTimersByTime(TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS);
+		fireEvent.pointerMove(encoder, {
+			pointerId: 7,
+			clientY: 120 - TOUCH_ENCODER_DRAG_DEAD_ZONE_PX - 1,
+		});
+		vi.advanceTimersByTime(TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS);
+		fireEvent.pointerMove(encoder, {
+			pointerId: 7,
+			clientY: 120 + TOUCH_ENCODER_DRAG_DEAD_ZONE_PX + 1,
+		});
+		vi.advanceTimersByTime(TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS);
+		fireEvent.pointerUp(encoder, { pointerId: 7, clientY: 140 });
+
+		expect(onStep.mock.calls.map(([delta]) => delta)).toEqual([
+			0.01, 0.1, 0.01, -0.01,
+		]);
+		const groups = new Set(onStep.mock.calls.map((call) => call[1]));
+		expect(groups.size).toBe(1);
+		expect([...groups][0]).toEqual(expect.any(String));
+	});
+
+	it("can drag from every semantic zone and cancel stops repetition without a trailing action", () => {
+		vi.useFakeTimers();
+		const { onStep } = renderEncoder();
+		const encoder = screen.getByRole("group", { name: "Enc 1 · Pan" });
+		const zones = [
+			document.querySelector(".touch-encoder-tap-positive"),
+			screen.getByRole("button", { name: "Set Value" }),
+			document.querySelector(".touch-encoder-tap-negative"),
+		];
+		zones.forEach((zone, index) => {
+			fireEvent.pointerDown(zone as Element, {
+				pointerId: index + 1,
+				button: 0,
+				clientY: 100,
+			});
+			fireEvent.pointerMove(encoder, {
+				pointerId: index + 1,
+				clientY: 70,
+			});
+			vi.advanceTimersByTime(TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS);
+			fireEvent.pointerCancel(encoder, {
+				pointerId: index + 1,
+				clientY: 70,
+			});
+		});
+		const callsAfterCancel = onStep.mock.calls.length;
+		vi.advanceTimersByTime(TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS * 3);
+		expect(callsAfterCancel).toBe(3);
+		expect(onStep).toHaveBeenCalledTimes(callsAfterCancel);
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+	});
+
+	it("maps wheel direction to fine steps and Shift to coarse steps", () => {
+		const { onStep } = renderEncoder();
+		const encoder = screen.getByRole("group", { name: "Enc 1 · Pan" });
+		fireEvent.wheel(encoder, { deltaY: -10 });
+		fireEvent.wheel(encoder, { deltaY: 10, shiftKey: true });
+		expect(onStep).toHaveBeenNthCalledWith(1, 0.01);
+		expect(onStep).toHaveBeenNthCalledWith(2, -0.1);
+	});
+
+	it("supports fine keyboard steps and keyboard absolute entry", () => {
+		const { onStep } = renderEncoder();
+		const encoder = screen.getByRole("group", { name: "Enc 1 · Pan" });
+		fireEvent.keyDown(encoder, { key: "ArrowUp" });
+		fireEvent.keyDown(encoder, { key: "ArrowLeft" });
+		expect(onStep).toHaveBeenNthCalledWith(1, 0.01);
+		expect(onStep).toHaveBeenNthCalledWith(2, -0.01);
+		fireEvent.keyDown(encoder, { key: "Enter" });
+		expect(screen.getByRole("dialog")).toBeInTheDocument();
+		expect(encoder).toHaveAccessibleDescription(
+			/Upper and lower surface taps step the value/u,
+		);
+	});
+
+	it("shows indexed values as constrained instead of applying a normalized step", () => {
+		const { onStep } = renderEncoder({ indexed: true, display: "Gobo 3" });
+		expect(screen.getByText("Indexed value")).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Set Value" })).toBeDisabled();
+		const encoder = screen.getByRole("group", { name: "Enc 1 · Pan" });
+		expect(encoder).toHaveAttribute("aria-disabled", "true");
+		fireEvent.wheel(encoder, {
+			deltaY: -10,
+		});
+		fireEvent.click(
+			document.querySelector(".touch-encoder-tap-positive") as Element,
+		);
+		expect(onStep).not.toHaveBeenCalled();
+	});
+
+	it("keeps Release off the encoder face and offers it only in Set Value", () => {
+		const onRelease = vi.fn();
+		const { onSet } = renderEncoder({ canRelease: true, onRelease });
+
+		expect(
+			screen.queryByRole("button", { name: "Release Pan" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Set Value" }));
+		fireEvent.click(screen.getByRole("button", { name: "Release" }));
+
+		expect(onRelease).toHaveBeenCalledOnce();
+		expect(onSet).not.toHaveBeenCalled();
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+	});
+
+	it("does not offer modal Release without both ownership and a callback", () => {
+		const rendered = renderEncoder({ canRelease: true });
+		fireEvent.click(screen.getByRole("button", { name: "Set Value" }));
+		expect(
+			screen.queryByRole("button", { name: "Release" }),
+		).not.toBeInTheDocument();
+
+		cleanup();
+		renderEncoder({ canRelease: false, onRelease: vi.fn() });
+		fireEvent.click(screen.getByRole("button", { name: "Set Value" }));
+		expect(
+			screen.queryByRole("button", { name: "Release" }),
+		).not.toBeInTheDocument();
+		expect(rendered.onSet).not.toHaveBeenCalled();
+	});
+});

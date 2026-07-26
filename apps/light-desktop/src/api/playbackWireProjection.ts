@@ -102,6 +102,11 @@ function decodeCueRuntime(
 			runtime.fader_pickup_required,
 			`${path}.fader_pickup_required`,
 		),
+		fader_pickup_target: nullable(
+			runtime.fader_pickup_target,
+			`${path}.fader_pickup_target`,
+			numberAt,
+		),
 		flash: booleanAt(runtime.flash, `${path}.flash`),
 		temporary: booleanAt(runtime.temporary, `${path}.temporary`),
 		temporary_active: booleanAt(

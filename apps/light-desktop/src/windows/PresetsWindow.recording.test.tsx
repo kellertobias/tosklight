@@ -79,6 +79,8 @@ beforeEach(() => {
 	mocks.preload.armed = false;
 	mocks.preload.active = false;
 	mocks.state.storeArmed = true;
+	mocks.state.updateArmed = false;
+	mocks.state.presetSetArmed = false;
 	mocks.presets = [];
 	mocks.dispatch.mockClear();
 	mocks.record.mockReset();
@@ -91,6 +93,47 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("PresetsWindow normal recording boundary", () => {
+	it("keeps 200 family-numbered slots and their stable qualified identities", () => {
+		mocks.state.storeArmed = false;
+		mocks.presets = [
+			{
+				kind: "preset",
+				id: "2.5",
+				revision: 2,
+				updated_at: "",
+				body: {
+					name: "Lavender",
+					number: 5,
+					family: "Color",
+					values: {},
+				},
+			},
+		];
+		const { container } = render(<PresetsWindow compact />);
+		const cards = container.querySelectorAll(".preset-card");
+
+		expect(cards).toHaveLength(200);
+		expect(cards[4]).toHaveTextContent("Lavender");
+		expect(cards[4]).toHaveTextContent("5");
+		expect(cards[4]).toHaveAttribute("data-pool-slot-id", "2.5");
+		expect(cards[199]).toHaveAttribute("data-pool-slot-id", "2.200");
+	});
+
+	it("preserves store, update, and Set targets across all shared-grid slots", () => {
+		mocks.state.updateArmed = true;
+		mocks.state.presetSetArmed = true;
+		const { container } = render(<PresetsWindow compact />);
+		const cards = container.querySelectorAll(".preset-card");
+
+		expect(cards).toHaveLength(200);
+		expect(cards[0]).toHaveClass("store-target", "update-target", "set-target");
+		expect(cards[199]).toHaveClass(
+			"store-target",
+			"update-target",
+			"set-target",
+		);
+	});
+
 	it("recalls an existing Preset through the scoped typed action", () => {
 		mocks.state.storeArmed = false;
 		mocks.presets = [

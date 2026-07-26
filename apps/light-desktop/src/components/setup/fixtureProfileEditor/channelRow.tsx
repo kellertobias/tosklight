@@ -3,7 +3,7 @@ import type {
 	FixtureChannel,
 	FixtureMode,
 } from "../../../api/types";
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 
 function TouchChannelDragHandle({
 	channelId,

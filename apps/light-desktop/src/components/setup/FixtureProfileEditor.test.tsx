@@ -1,11 +1,12 @@
 import {
 	cleanup,
 	fireEvent,
-	render,
+	render as rtlRender,
 	screen,
 	waitFor,
 	within,
 } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
 	AttributeDescriptor,
@@ -24,6 +25,11 @@ import {
 	blankFunction,
 	blankHead,
 } from "./fixtureProfileModel";
+
+const render = (ui: Parameters<typeof rtlRender>[0]) => {
+	const result = rtlRender(ui, { wrapper: ModalProvider });
+	return { ...result, container: result.baseElement as HTMLElement };
+};
 
 vi.mock("../files/RootConfinedFilePickerButton", () => ({
 	RootConfinedFilePickerButton: ({ label }: { label: string }) => (
@@ -814,7 +820,7 @@ describe("FixtureProfileEditor mode layout and ordering", () => {
 			screen.getByRole("dialog", { name: "Mode notes" }),
 		).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Enter · New line" }));
-		fireEvent.click(screen.getByRole("button", { name: "Done · Confirm" }));
+		fireEvent.click(screen.getByRole("button", { name: "Done" }));
 		expect(within(mode).getByLabelText("Mode notes")).toHaveValue("\n");
 	});
 });

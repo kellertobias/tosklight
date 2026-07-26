@@ -194,6 +194,7 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 						master: active.master ?? 0,
 						fader_position: active.fader_position ?? active.master ?? 0,
 						fader_pickup_required: Boolean(active.fader_pickup_required),
+						fader_pickup_target: active.fader_pickup_target ?? null,
 						flash: Boolean(active.flash),
 						temporary: Boolean(active.temporary),
 						temporary_active: Boolean(active.temporary_active),
@@ -1031,7 +1032,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		);
 	});
 
-	it("makes one configured faderless touch button fill its playback section", () => {
+	it("keeps a faderless playback identity separate from its configured action", () => {
 		assignPlayback({
 			buttons: ["flash", "none", "none"],
 			button_count: 1,
@@ -1039,17 +1040,15 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		});
 		const { container } = render(<PlaybackFaderBank count={1} />);
 		const action = screen.getByRole("button", { name: "FLASH" });
-		expect(action).toHaveClass("single-button-playback-action");
-		expect(action).toHaveTextContent("1 · Front Wash");
 		expect(action).toHaveTextContent("FLASH");
 		expect(
 			container.querySelector(".faderless-playback-actions"),
-		).not.toBeInTheDocument();
+		).toBeInTheDocument();
 		expect(
-			screen.queryByRole("button", {
+			screen.getByRole("button", {
 				name: "Playback representation page 1 playback 1",
 			}),
-		).not.toBeInTheDocument();
+		).toHaveTextContent("1 · Front Wash");
 		expect(
 			screen.queryByRole("button", { name: "DISABLED" }),
 		).not.toBeInTheDocument();
@@ -1116,7 +1115,7 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 		expect(screen.queryByRole("slider")).not.toBeInTheDocument();
 	});
 
-	it("shows X-fade direction/progress and safe-pickup feedback from runtime state", () => {
+	it("shows X-fade direction/progress without pickup presentation in touch mode", () => {
 		assignPlayback({ fader: "x_fade" });
 		mocks.playbacks.active = [
 			{
@@ -1130,14 +1129,62 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 				flash: false,
 				fader_position: 0.25,
 				fader_pickup_required: true,
+				fader_pickup_target: 0,
 				manual_xfade_position: 0.25,
 				manual_xfade_direction: "towards_high",
 				manual_xfade_progress: 0.25,
 			},
 		];
 		render(<PlaybackFaderBank count={1} />);
-		expect(screen.getByText("Pickup: lower to zero")).toBeInTheDocument();
+		expect(screen.getByText("Travel towards high")).toBeInTheDocument();
 		expect(screen.getByText("Cue 1 → 2 · 25%")).toBeInTheDocument();
+		expect(screen.queryByText(/Physical/)).not.toBeInTheDocument();
+		expect(
+			document.querySelector(".hardware-fader-pickup-difference"),
+		).not.toBeInTheDocument();
+	});
+
+	it("uses the authoritative pickup target only while hardware authority requires it", () => {
+		assignPlayback();
+		mocks.hardwareConnected = true;
+		mocks.playbacks.active = [
+			{
+				playback_number: 7,
+				cue_list_id: "front",
+				cue_index: 0,
+				current_cue_number: 1,
+				enabled: false,
+				master: 1,
+				fader_position: 0.8,
+				fader_pickup_required: true,
+				fader_pickup_target: 0.1,
+			},
+		];
+		const rendered = render(<PlaybackFaderBank count={1} />);
+		const fader = document.querySelector(".hardware-fader");
+		expect(fader).toHaveAttribute("data-pickup-physical", "0.8");
+		expect(fader).toHaveAttribute("data-pickup-target", "0.1");
+		expect(fader).toHaveAttribute("data-pickup-direction", "lower");
+		expect(screen.getByText("Physical 80% · Target 10%")).toBeInTheDocument();
+		expect(screen.getByText("Lower to 10%")).toBeInTheDocument();
+		expect(
+			document.querySelector(".hardware-fader-pickup-difference"),
+		).toBeInTheDocument();
+		expect(document.querySelector("article")).not.toHaveClass(
+			"pickup-required",
+		);
+
+		mocks.playbacks.active[0] = {
+			...mocks.playbacks.active[0],
+			fader_position: 0.8,
+			fader_pickup_required: false,
+			fader_pickup_target: null,
+		};
+		rendered.rerender(<PlaybackFaderBank key="replacement-authority" count={1} />);
+		expect(
+			document.querySelector(".hardware-fader-pickup-difference"),
+		).not.toBeInTheDocument();
+		expect(screen.queryByText(/Physical/)).not.toBeInTheDocument();
 	});
 
 	it("recognizes the marked click produced by a playback right-click", () => {

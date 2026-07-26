@@ -4,7 +4,7 @@ import {
 	MultiValueToggleField,
 	SelectField,
 	SwitchField,
-} from "../common";
+} from "@tosklight/ui";
 import {
 	cueUpdateModes,
 	existingContentModes,

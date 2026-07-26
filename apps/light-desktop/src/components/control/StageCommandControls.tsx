@@ -3,7 +3,7 @@ import { useApp } from "../../state/AppContext";
 import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotState";
 import { VerticalTouchFader } from "./VerticalTouchFader";
 import { DualVerticalTouchFader } from "./DualVerticalTouchFader";
-import { Button } from "../common";
+import { Button } from "@tosklight/ui";
 import { HardwareEncoderDisplay } from "./HardwareEncoderDisplay";
 
 export function StageCommandControls() {

@@ -1,5 +1,4 @@
-import { Button, ModalTitleBar, Select } from "../../common";
-import { SearchBar } from "../../common/SearchBar";
+import { Button, ModalRegistration, ModalTitleBar, Select } from "@tosklight/ui";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { isDmxPatchable } from "../patchUtils";
 import { usePatchController } from "./controller";
@@ -9,15 +8,35 @@ import { beginPlacement, chooseFamily } from "./placementDraft";
 export function FixtureBrowser() {
 	const controller = usePatchController();
 	if (!controller.ui.browserOpen) return null;
+	const close = () => controller.ui.setBrowserOpen(false);
 	return (
-		<div className="stacked-modal-layer">
+		<ModalRegistration onClose={close}>
+			<div className="stacked-modal-layer">
 			<section className="nested-modal fixture-browser-modal">
 				<ModalTitleBar
 					className="fixture-browser-header"
 					title="Add fixture"
-					search={<FixtureBrowserSearch />}
+					search={{
+						value: controller.ui.query,
+						ariaLabel: "Search",
+						placeholder: "Search manufacturer, fixture, mode, or type",
+						settings: [{
+							kind: "select",
+							id: "type",
+							label: "Fixture type",
+							value: controller.ui.typeFilter,
+							options: [
+								{ value: "", label: "All" },
+								...controller.data.types.map((type) => ({ value: type, label: type })),
+							],
+						}],
+						onSettingChange: (_, value) =>
+							controller.ui.setTypeFilter(String(value)),
+						onClearSettings: () => controller.ui.setTypeFilter(""),
+					}}
+					onSearch={controller.ui.setQuery}
 					closeLabel="Close Add fixture"
-					onClose={() => controller.ui.setBrowserOpen(false)}
+					onClose={close}
 				/>
 				<div className="fixture-picker-columns">
 					<ManufacturerColumn />
@@ -25,21 +44,8 @@ export function FixtureBrowser() {
 					<ModeColumn />
 				</div>
 			</section>
-		</div>
-	);
-}
-
-function FixtureBrowserSearch() {
-	const { ui, data } = usePatchController();
-	return (
-		<SearchBar
-			value={ui.query}
-			onChange={ui.setQuery}
-			filters={[{ id: "type", label: "Fixture type", options: data.types }]}
-			values={{ type: ui.typeFilter }}
-			onFilterChange={(_, value) => ui.setTypeFilter(value)}
-			placeholder="Search manufacturer, fixture, mode, or type"
-		/>
+			</div>
+		</ModalRegistration>
 	);
 }
 

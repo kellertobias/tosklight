@@ -1,7 +1,7 @@
 import type { PatchedFixture } from "../../api/types";
 import { usePatch, usePatchView } from "../../features/patch/PatchContext";
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
-import { Button } from "../common";
+import { Button } from "@tosklight/ui";
 
 const slots = (["x", "y", "z"] as const)
 	.flatMap((axis) => [

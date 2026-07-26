@@ -8,7 +8,7 @@ import { LeftDock } from "./components/shell/LeftDock";
 import { WorkspaceView } from "./components/shell/WorkspaceView";
 import { NativeDragStrip } from "./components/shell/NativeDragStrip";
 import { useScreenWindowPersistence } from "./platform/desktop";
-import { LoadingSurface } from "./components/common";
+import { LoadingSurface } from "./components/common/LoadingSurface";
 import { ConnectionState } from "./components/shell/ConnectionState";
 import { DeskLoadingOverlay } from "./components/shell/DeskLoadingOverlay";
 import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";

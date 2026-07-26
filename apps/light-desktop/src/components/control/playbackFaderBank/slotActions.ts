@@ -4,7 +4,7 @@ import type {
 	PointerEvent as ReactPointerEvent,
 } from "react";
 import type { Cue, PlaybackDefinition } from "../../../api/types";
-import type { VerticalTouchFaderAction } from "../VerticalTouchFader";
+import type { VerticalTouchFaderAction } from "@tosklight/ui/faders";
 import {
 	isPlaybackControlTarget,
 	isPlaybackSetClickArmed,

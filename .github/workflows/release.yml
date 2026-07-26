@@ -182,9 +182,47 @@ jobs:
             .artifacts/test/results
           if-no-files-found: ignore
 
+  help-screenshots:
+    name: Documentation / Deterministic help screenshots
+    needs: [metadata, unit]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Install Chrome for Playwright
+        run: npx playwright install --with-deps chrome
+
+      - name: Build Storybook and verify reviewed help screenshots
+        run: npm run test:help-screenshots
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: help-screenshots
+          path: docs/help/assets/screenshots
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: help-screenshot-diffs
+          path: .artifacts/test/help-screenshots
+          if-no-files-found: ignore
+
   manual:
     name: Documentation / Operator manual
-    needs: metadata
+    needs: [metadata, help-screenshots]
     runs-on: ubuntu-22.04
     env:
       LIGHT_MANUAL_VERSION: ${{ needs.metadata.outputs.version }}
@@ -208,6 +246,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: help-screenshots
+          path: docs/help/assets/screenshots
+
       - run: npm run manual
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -217,7 +260,7 @@ jobs:
           if-no-files-found: error
 
   visual-assets:
-    name: Documentation / Screenshots and product demo
+    name: Documentation / Product demo
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [metadata, unit, e2e]
     runs-on: ubuntu-22.04
@@ -248,18 +291,8 @@ jobs:
           npx playwright install --with-deps chrome
           sudo apt-get install -y ffmpeg
 
-      - name: Generate help screenshots
-        run: npm run test:help-screenshots
-
       - name: Generate the product-demo video
         run: npm run test:demo
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
-        with:
-          name: help-screenshots
-          path: docs/help/assets/screenshots
-          if-no-files-found: warn
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
@@ -461,7 +494,7 @@ jobs:
   pages-build:
     name: Documentation / Assemble static website
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [metadata, manual, visual-assets, release-performance]
+    needs: [metadata, manual, help-screenshots, visual-assets, release-performance]
     runs-on: ubuntu-22.04
     env:
       LIGHT_RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
@@ -523,6 +556,7 @@ jobs:
       - unit
       - e2e
       - manual
+      - help-screenshots
       - visual-assets
       - build
     runs-on: ubuntu-22.04

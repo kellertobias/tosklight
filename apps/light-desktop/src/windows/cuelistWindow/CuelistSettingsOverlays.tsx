@@ -1,4 +1,4 @@
-import { Button, NumberField } from "../../components/common";
+import { Button, ModalRegistration, NumberField } from "@tosklight/ui";
 import type { CuelistSettingsController } from "./useCuelistSettings";
 
 export function RenumberCuesDialog({
@@ -21,12 +21,13 @@ export function RenumberCuesDialog({
 		setRenumberError("");
 	};
 	return (
-		<div
-			className="modal-backdrop"
-			onPointerDown={(event) => {
-				if (event.target === event.currentTarget) close();
-			}}
-		>
+		<ModalRegistration onClose={close}>
+			<div
+				className="modal-backdrop"
+				onPointerDown={(event) => {
+					if (event.target === event.currentTarget) close();
+				}}
+			>
 			<form
 				className="modal-card"
 				role="dialog"
@@ -64,7 +65,8 @@ export function RenumberCuesDialog({
 					<Button type="submit">Renumber</Button>
 				</div>
 			</form>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 
@@ -76,8 +78,10 @@ export function UnsavedSettingsDialog({
 	discard: () => void;
 }) {
 	if (!controller.closeConfirm) return null;
+	const stay = () => controller.setCloseConfirm(false);
 	return (
-		<div className="modal-backdrop">
+		<ModalRegistration onClose={stay}>
+			<div className="modal-backdrop">
 			<section
 				className="modal-card cuelist-settings-close-confirm"
 				role="dialog"
@@ -92,11 +96,12 @@ export function UnsavedSettingsDialog({
 					<Button className="danger" onClick={discard}>
 						Discard changes
 					</Button>
-					<Button onClick={() => controller.setCloseConfirm(false)}>
+					<Button onClick={stay}>
 						Stay
 					</Button>
 				</div>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }

@@ -1,5 +1,5 @@
 import type { ProgrammerLifecycleRow } from "../../../features/programmerLifecycle/contracts";
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 import { ProgrammerList } from "./ProgrammerList";
 import type {
 	RunningCueListSource,

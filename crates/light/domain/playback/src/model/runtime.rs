@@ -84,6 +84,9 @@ pub struct ActivePlayback {
     /// Off at a non-zero physical position latches the fader until it reaches zero.
     #[serde(default)]
     pub fader_pickup_required: bool,
+    /// Exact physical position that releases the non-motorized fader latch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fader_pickup_target: Option<f32>,
     #[serde(default)]
     pub flash: bool,
     #[serde(default)]
@@ -284,6 +287,7 @@ pub(crate) fn new_active_playback(
         master,
         fader_position: master,
         fader_pickup_required: false,
+        fader_pickup_target: None,
         flash: false,
         master_transition: None,
         temporary: false,

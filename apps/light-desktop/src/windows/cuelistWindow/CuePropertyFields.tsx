@@ -7,7 +7,7 @@ import {
 	NumberField,
 	SelectField,
 	TextField,
-} from "../../components/common";
+} from "@tosklight/ui";
 import { cueTrigger, cueTriggerKind } from "./cueFormatting";
 
 export interface CueFieldRefs {

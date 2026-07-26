@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useApp } from "../../state/AppContext";
-import { Button } from "../common";
+import { Button } from "@tosklight/ui";
 
 export function GroupsPoolButton({ shortcutsVisible, onToggleShortcuts, fromStage = false, stageOrigin = "builtin" }: { shortcutsVisible: boolean; onToggleShortcuts: () => void; fromStage?: boolean; stageOrigin?: "builtin" | "desk" }) {
   const { dispatch } = useApp();

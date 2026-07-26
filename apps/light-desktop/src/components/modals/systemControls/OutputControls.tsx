@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from "react";
-import { Button } from "../../common";
-import { HorizontalTouchFader } from "../../control/HorizontalTouchFader";
+import { Button } from "@tosklight/ui";
+import { HorizontalTouchFader } from "@tosklight/ui/faders";
 
 interface OutputControlsProps {
 	master: number | null;

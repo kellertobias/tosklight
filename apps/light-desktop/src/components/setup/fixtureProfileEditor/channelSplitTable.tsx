@@ -4,7 +4,7 @@ import type {
 	FixtureChannel,
 	FixtureMode,
 } from "../../../api/types";
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 import { channelSplit } from "../fixtureProfileModel";
 import {
 	moveChannel,

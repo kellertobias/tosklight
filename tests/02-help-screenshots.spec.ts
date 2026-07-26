@@ -1,9 +1,10 @@
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "./bench/core/fixtures";
-import type { ApiDriver } from "./bench/core/api";
 import type { Page } from "@playwright/test";
+import type { ApiDriver } from "./bench/core/api";
+import { expect, test } from "./bench/core/fixtures";
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(180_000);
@@ -11,9 +12,24 @@ test.use({ viewport: { width: 1600, height: 1100 } });
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SCREENSHOT_DIR = path.join(ROOT, "docs/help/assets/screenshots");
+const LIVE_CAPTURE_DIR = path.join(
+  ROOT,
+  ".artifacts/test/help-screenshots/live-app",
+);
 const PANE_SCREENSHOT_DIR = path.join(SCREENSHOT_DIR, "panes");
 const WORKFLOW_SCREENSHOT_DIR = path.join(SCREENSHOT_DIR, "workflows");
 const SCREENSHOT_TEXT_FILE = "documentation-cue-notes.md";
+const screenshotManifest = JSON.parse(
+  fsSync.readFileSync(
+    path.join(ROOT, "docs/help/screenshot-manifest.json"),
+    "utf8",
+  ),
+) as { entries: Array<{ file: string; source: "storybook" | "live-app" }> };
+const liveScreenshotFiles = new Set(
+  screenshotManifest.entries
+    .filter((entry) => entry.source === "live-app")
+    .map((entry) => entry.file),
+);
 
 interface ShowEntry { id: string; name: string }
 interface VersionedObject<T = Record<string, unknown>> { id: string; revision: number; body: T }
@@ -22,16 +38,18 @@ interface PatchedFixtureBody { fixture_id: string; fixture_number?: number; logi
 test("captures help and README screenshots from the default show desk @ui @docs", async ({ page, desk, api }) => {
   page.setDefaultTimeout(12_000);
   await fs.mkdir(SCREENSHOT_DIR, { recursive: true });
+  await fs.mkdir(path.join(LIVE_CAPTURE_DIR, "panes"), { recursive: true });
+  await fs.mkdir(path.join(LIVE_CAPTURE_DIR, "workflows"), { recursive: true });
   await fs.mkdir(PANE_SCREENSHOT_DIR, { recursive: true });
   await fs.mkdir(WORKFLOW_SCREENSHOT_DIR, { recursive: true });
   await Promise.all(
     (await fs.readdir(PANE_SCREENSHOT_DIR))
-      .filter((file) => file.endsWith(".png"))
+      .filter((file) => liveScreenshotFiles.has(`panes/${file}`))
       .map((file) => fs.unlink(path.join(PANE_SCREENSHOT_DIR, file))),
   );
   await Promise.all(
     (await fs.readdir(WORKFLOW_SCREENSHOT_DIR))
-      .filter((file) => file.endsWith(".png"))
+      .filter((file) => liveScreenshotFiles.has(`workflows/${file}`))
       .map((file) => fs.unlink(path.join(WORKFLOW_SCREENSHOT_DIR, file))),
   );
   await openSeededDefaultStageShow(api);
@@ -58,11 +76,11 @@ test("captures help and README screenshots from the default show desk @ui @docs"
   await page.getByRole("button", { name: "BUILT-INS" }).click();
   await page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
   await expect(page.locator(".fixture-window")).toBeVisible();
-  await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "next" });
+  await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "next" }, true, undefined, { deskId: api.session!.desk.id });
   await expect(page.locator('.fixture-window [data-step-selection="active"]')).toHaveCount(1);
   await expect(page.locator('.fixture-window [data-step-selection="base"]').first()).toBeVisible();
   await page.screenshot({ path: shot("fixture-sheet-programmer.png"), fullPage: true });
-  await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "all" });
+  await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "all" }, true, undefined, { deskId: api.session!.desk.id });
 
   await captureWorkflowReference(page);
   const patch = await api.patch();
@@ -82,11 +100,11 @@ test("captures help and README screenshots from the default show desk @ui @docs"
 });
 
 function shot(file: string): string {
-  return path.join(SCREENSHOT_DIR, file);
+  return capturePath(file);
 }
 
 function workflowShot(file: string): string {
-  return path.join(WORKFLOW_SCREENSHOT_DIR, file);
+  return capturePath(`workflows/${file}`);
 }
 
 const workflowScreenshots = [
@@ -122,8 +140,8 @@ async function openSeededDefaultStageShow(api: ApiDriver): Promise<ShowEntry> {
     data_base64: bytes.toString("base64"),
     overwrite: false,
   });
-  await seedScreenshotProgramming(api, show.id);
   await api.openShow(show.id, { transition: "hold_current" });
+  await seedScreenshotProgramming(api, show.id);
   return show;
 }
 
@@ -291,7 +309,14 @@ async function capturePaneReference(page: Page, selectedDmx: { universe: number;
 }
 
 function paneShot(file: string): string {
-  return path.join(PANE_SCREENSHOT_DIR, file);
+  return capturePath(`panes/${file}`);
+}
+
+function capturePath(file: string): string {
+  return path.join(
+    liveScreenshotFiles.has(file) ? SCREENSHOT_DIR : LIVE_CAPTURE_DIR,
+    file,
+  );
 }
 
 async function seedScreenshotProgramming(api: ApiDriver, showId: string) {

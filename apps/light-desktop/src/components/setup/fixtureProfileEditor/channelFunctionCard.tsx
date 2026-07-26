@@ -3,7 +3,7 @@ import type {
 	ChannelFunctionBehavior,
 	FixtureChannel,
 } from "../../../api/types";
-import { Button, NumberField, SelectField, TextField } from "../../common";
+import { Button, NumberField, SelectField, TextField } from "@tosklight/ui";
 import { maxRaw } from "../fixtureProfileModel";
 import { attributeOptions, replaceFunctionBehavior } from "./channelModel";
 

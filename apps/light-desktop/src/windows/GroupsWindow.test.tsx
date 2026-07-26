@@ -2,12 +2,15 @@ import {
 	act,
 	cleanup,
 	fireEvent,
-	render,
+	render as rtlRender,
 	screen,
 	waitFor,
 } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GroupsWindow } from "./GroupsWindow";
+
+const render = (ui: Parameters<typeof rtlRender>[0]) => rtlRender(ui, { wrapper: ModalProvider });
 
 const mocks = vi.hoisted(() => ({
 	dispatch: vi.fn(),
@@ -124,7 +127,10 @@ function buttonForText(text: string, index = 0) {
 }
 
 describe("GroupsWindow action routing", () => {
-	afterEach(() => cleanup());
+	afterEach(() => {
+		cleanup();
+		vi.useRealTimers();
+	});
 
 	beforeEach(() => {
 		mocks.dispatch.mockReset();
@@ -145,6 +151,30 @@ describe("GroupsWindow action routing", () => {
 		mocks.groups[0].body.color = undefined;
 		mocks.groups[0].body.icon = undefined;
 		mocks.groups[1].revision = 1;
+	});
+
+	it("keeps 200 ordered slots with stable stored and empty identities", () => {
+		const { container } = render(<GroupsWindow />);
+		const cards = container.querySelectorAll(".group-card");
+
+		expect(cards).toHaveLength(200);
+		expect(cards[3]).toHaveTextContent("Stored Empty");
+		expect(cards[3]).toHaveAttribute("data-pool-slot-id", "4");
+		expect(cards[4]).toHaveTextContent("Stored Populated");
+		expect(cards[4]).toHaveAttribute("data-pool-slot-id", "5");
+		expect(cards[199]).toHaveAttribute("data-pool-slot-id", "200");
+	});
+
+	it("preserves press-and-hold Group context behavior through the shared pool grid", () => {
+		vi.useFakeTimers();
+		render(<GroupsWindow />);
+		const card = buttonForText("Stored Empty");
+
+		fireEvent.pointerDown(card);
+		act(() => vi.advanceTimersByTime(600));
+		fireEvent.pointerUp(card);
+
+		expect(screen.getByLabelText("Stored Empty master")).toBeInTheDocument();
 	});
 
 	it("refuses every apparent empty-slot interaction while runtime loads", () => {
@@ -284,7 +314,7 @@ describe("GroupsWindow action routing", () => {
 			target: { value: "Copy Center Spot" },
 		});
 		fireEvent.click(screen.getByRole("button", { name: /#718596/ }));
-		fireEvent.click(screen.getByRole("option", { name: "Use color #1bd6ec" }));
+		fireEvent.click(screen.getByRole("option", { name: "Use color #06b6d4" }));
 		fireEvent.click(screen.getByRole("button", { name: /Choose icon/ }));
 		fireEvent.click(await screen.findByRole("button", { name: "Use ★" }));
 		fireEvent.click(screen.getByRole("button", { name: "Save group" }));
@@ -296,7 +326,7 @@ describe("GroupsWindow action routing", () => {
 					type: "update_properties",
 					properties: {
 						name: "Copy Center Spot",
-						color: "#1bd6ec",
+						color: "#06b6d4",
 						icon: "★",
 					},
 				},

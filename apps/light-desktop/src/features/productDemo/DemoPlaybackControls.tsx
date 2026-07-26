@@ -1,13 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Button, Input } from "../../components/common";
+import {
+	type CSSProperties,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
+import { Button, Input } from "@tosklight/ui";
 import {
 	DEMO_PLAYBACK_STRIP_BUTTONS,
 	DEMO_PLAYBACK_STRIP_SLOTS,
 	DEMO_PLAYBACK_TOP_SLOTS,
 } from "./demoPlaybackMapping";
 import {
-	useDemoPlaybackControls,
 	type DemoPlaybackControlsValue,
+	useDemoPlaybackControls,
 } from "./useDemoPlaybackControls";
 
 interface DemoPlaybackButtonProps {
@@ -66,12 +72,14 @@ function DemoPlaybackStrip({
 }) {
 	const value = controls.faderLevel(slot);
 	const enabled = value !== null;
+	const faderId = `product-demo-playback-${slot}-fader`;
 	return (
 		<article className="product-demo-playback-strip">
 			<b>PB {slot}</b>
 			<DemoPlaybackButton controls={controls} slot={slot} />
 			<label
 				className="product-demo-playback-fader"
+				htmlFor={faderId}
 				style={
 					enabled
 						? ({ "--demo-playback-level": value } as CSSProperties)
@@ -81,6 +89,7 @@ function DemoPlaybackStrip({
 				<span>FADER</span>
 				<strong>{enabled ? `${Math.round(value * 100)}%` : "—"}</strong>
 				<Input
+					id={faderId}
 					aria-label={`Playback ${slot} fader`}
 					disabled={!enabled}
 					type="range"
@@ -109,6 +118,14 @@ function DemoPlaybackStrip({
 
 export function DemoPlaybackControls() {
 	const controls = useDemoPlaybackControls();
+	return <DemoPlaybackControlsView controls={controls} />;
+}
+
+export function DemoPlaybackControlsView({
+	controls,
+}: {
+	controls: DemoPlaybackControlsValue;
+}) {
 	const pending = controls.status.kind === "ready" ? null : controls.status;
 	return (
 		<section

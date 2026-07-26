@@ -11,7 +11,7 @@ import {
 } from "../../features/mediaServers/MediaServersContext";
 import type { MediaServerFixture, PatchedFixture } from "../../api/types";
 import { usePatch, usePatchView } from "../../features/patch/PatchContext";
-import { Button, FormLayout, NumberField, TextField } from "../common";
+import { Button, FormLayout, NumberField, TextField } from "@tosklight/ui";
 
 type Draft = { ip: string; port: number };
 

@@ -1,5 +1,5 @@
-import { Button } from "../../components/common";
-import { WindowHeader } from "../../components/window-kit";
+import { Button } from "@tosklight/ui";
+import { WindowHeader } from "@tosklight/ui/window-kit";
 import type { SetupWindowController } from "./controller";
 
 export const SETUP_SECTIONS = [

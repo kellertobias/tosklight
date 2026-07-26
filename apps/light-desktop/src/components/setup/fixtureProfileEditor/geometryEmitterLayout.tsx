@@ -1,5 +1,5 @@
 import type { GeometryEmitter } from "../../../api/types";
-import { Button, NumberField, SelectField } from "../../common";
+import { Button, NumberField, SelectField } from "@tosklight/ui";
 import { VectorFields } from "./geometryPreview";
 
 type Layout = GeometryEmitter["layout"];

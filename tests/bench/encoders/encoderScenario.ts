@@ -221,12 +221,7 @@ export class BrowserEncoders {
 			"ENCODER DRAG",
 			`${rate} continuous ${direction} on ${catalog.familyLabel} ${catalog.label}.`,
 		);
-		await this.desk.click(
-			this.page.getByRole("button", {
-				name: catalog.familyLabel,
-				exact: true,
-			}),
-		);
+		await this.activateFamily(catalog.familyLabel);
 		const control = this.softwareControl(catalog.label);
 		await expect(control).toBeVisible();
 		const box = await control.boundingBox();
@@ -382,9 +377,7 @@ export class BrowserEncoders {
 		label: string,
 		value: AttributeValue,
 	): Promise<void> {
-		await this.desk.click(
-			this.page.getByRole("button", { name: family, exact: true }),
-		);
+		await this.activateFamily(family);
 		const control = this.softwareControl(label);
 		if (!(await control.isVisible()))
 			throw new Error(
@@ -410,9 +403,7 @@ export class BrowserEncoders {
 		operation: "add" | "subtract",
 		steps: number,
 	): Promise<void> {
-		await this.desk.click(
-			this.page.getByRole("button", { name: family, exact: true }),
-		);
+		await this.activateFamily(family);
 		const control = this.softwareControl(label);
 		await expect(control).toBeVisible();
 		const sign = operation === "add" ? "+" : "−";
@@ -424,6 +415,27 @@ export class BrowserEncoders {
 			await this.desk.click(
 				control.getByRole("button", { name: `${sign}1`, exact: true }),
 			);
+	}
+
+	private async activateFamily(family: string): Promise<void> {
+		const familyButton = this.page.getByRole("button", {
+			name: family,
+			exact: true,
+		});
+		if (!(await familyButton.isVisible())) {
+			const fixtures = this.page
+				.locator("[aria-label='Built-ins']")
+				.getByRole("button", { name: "Fixtures", exact: true });
+			if (!(await fixtures.isVisible()))
+				await this.page
+					.getByRole("button", { name: "BUILT-INS", exact: true })
+					.click();
+			await expect(fixtures).toBeVisible();
+			await fixtures.click();
+			await expect(this.page.locator(".fixture-window")).toBeVisible();
+		}
+		await expect(familyButton).toBeVisible();
+		await this.desk.click(familyButton);
 	}
 
 	private softwareControl(label: string): Locator {

@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { Button } from "../../components/common";
+import { Button } from "@tosklight/ui";
 import { useApp } from "../../state/AppContext";
 import type {
 	StageFixturePresentation,

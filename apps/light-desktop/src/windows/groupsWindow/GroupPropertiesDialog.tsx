@@ -7,7 +7,7 @@ import {
 	IconPickerField,
 	ModalPortal,
 	TextField,
-} from "../../components/common";
+} from "@tosklight/ui";
 import type { Group } from "./model";
 
 export function GroupPropertiesDialog({
@@ -41,7 +41,7 @@ export function GroupPropertiesDialog({
 	};
 
 	return (
-		<ModalPortal>
+		<ModalPortal onClose={onClose}>
 			<div
 				className="stacked-modal-layer"
 				onPointerDown={(event) =>

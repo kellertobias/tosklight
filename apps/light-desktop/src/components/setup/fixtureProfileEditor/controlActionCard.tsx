@@ -1,5 +1,5 @@
 import type { FixtureMode } from "../../../api/types";
-import { Button, NumberField, SelectField, TextField } from "../../common";
+import { Button, NumberField, SelectField, TextField } from "@tosklight/ui";
 import { maxRaw } from "../fixtureProfileModel";
 
 type ControlAction = FixtureMode["control_actions"][number];

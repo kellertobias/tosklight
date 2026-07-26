@@ -1,4 +1,4 @@
-import { Button, TextArea } from "../../components/common";
+import { Button, TextArea } from "@tosklight/ui";
 import type { TextEditorController } from "./controller";
 
 export function TextEditorMessages({

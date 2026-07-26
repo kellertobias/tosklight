@@ -4,7 +4,7 @@ import {
 	programmerValuesMutationKey,
 	type ProgrammerValuesMutationQueueController,
 } from "../../../features/programmerValues/useProgrammerValuesMutationQueue";
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 import { colorRangeMutation, hsvToRgb, type PickerColor } from "../specialColor";
 import { normalizedPointerPosition } from "./pointer";
 

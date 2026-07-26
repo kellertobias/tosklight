@@ -1,6 +1,6 @@
 import type { FixtureDefinition } from "../../../api/types";
-import { Button, Select } from "../../common";
-import { WindowScrollArea } from "../../window-kit";
+import { Button, Select } from "@tosklight/ui";
+import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import type { FixtureLibraryFamily } from "./model";
 

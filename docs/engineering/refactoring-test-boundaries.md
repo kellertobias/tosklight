@@ -34,7 +34,8 @@ The root suite currently contains 35 specifications and 17,372 lines. It is a sy
 | `01-foundational-dimmers-and-groups.spec.ts` | legacy WS command execution, UI keypad/touch, HTTP v1 setup, bench time | HTTP Programmer/show projections, UI projection, Art-Net and sACN output |
 | `02-cue-semantic-contracts.spec.ts` | legacy WS and HTTP cue/programmer operations with UI playback gestures | HTTP cue/runtime projections, UI projection, output wire at virtual-time checkpoints |
 | `02-cues-tracking-and-arbitration.spec.ts` | paired legacy WS and visible UI Move/Copy workflows | HTTP show revisions and runtime state, UI status/dialogs, virtual-time output |
-| `02-help-screenshots.spec.ts` | visible UI navigation and keypad setup | deterministic screenshots and UI projection |
+| `apps/ui-library/storybook/tests/help-screenshots.spec.ts` | static deterministic application stories, with no Light server | complete screenshot-manifest validation, reviewed image diffs, dimensions, blank/error/network guards |
+| `02-help-screenshots.spec.ts` | visible production UI navigation for manifest entries still marked `live-app` | smaller real-app screenshot and composition acceptance set |
 | `03-network-output-protocols.spec.ts` | HTTP v1 route/patch mutation, legacy WS/UI programming, receiver and fault bench controls | Art-Net/sACN packets, route diagnostics and audit, UI route state |
 | `04-osc-api-and-cross-surface.spec.ts` | OSC hardware input alongside legacy WS, HTTP v1, and visible UI | OSC feedback, HTTP authoritative state/events, Art-Net/sACN output, UI desk isolation |
 | `05-desktop-process-integration.spec.ts` | packaged desktop launch/termination | desktop and child-server PID ownership/termination |

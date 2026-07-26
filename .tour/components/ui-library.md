@@ -1,48 +1,46 @@
 ---
 slug: ui-library
 title: UI Library
-summary: "App-local presentation primitives and their executable verification contract."
+summary: "The @tosklight/ui presentation library, contained Storybook, and application-owned compositions."
 order: 20
 ---
 
 # UI Library
 
-There is no tracked shared UI package or Storybook configuration. The primitives live inside
-`apps/light-desktop`.
-`docs/plans/Next/58-shared-frontend-libraries.md` specifies the intended split into a
-component/window-system library plus an app-layout library, but it is specification only.
+The tracked presentation library lives at `apps/ui-library` and keeps the workspace package
+identity `@tosklight/ui`. Low-level reusable views, styles, stories, and component tests live there.
+Functional ToskLight compositions remain in `apps/light-desktop`.
 
-Knowing that saves searching for `@tosklight/ui` source that does not exist. Ignored `dist/` and
-`storybook-static/` files are generated remnants, not an ownership boundary or recoverable source.
+The contained Storybook application lives at `apps/ui-library/storybook`. Its configuration
+discovers colocated stories from both the library and desktop application; it may provide
+deterministic fixtures and provider harnesses, but it does not own parallel visual implementations.
 
 ## Where the primitives are
 
 | Path | Contents |
 | --- | --- |
-| `apps/light-desktop/src/components/window-kit/` | `WindowKit.tsx` (window chrome and pane primitives), `SelectionList.tsx`, `index.ts` |
-| `apps/light-desktop/src/components/common/` | `controls.tsx`, `FaderControls.tsx`, `ModalPortal.tsx`, `ModalTitleBar.tsx`, `SearchBar.tsx`, `TouchSelect.tsx`; barrel at `index.ts` |
-| `apps/light-desktop/src/components/common/controls/` | `foundation.tsx`, `formFields.tsx`, `textInputs.tsx`, `choices.tsx`, `pickers.tsx`, `InputModal.tsx` |
-| `apps/light-desktop/src/components/shell/` | App and desk layout — `AppShell`, `DeskGrid`, `Pane`, `PaneChromeContext`, `WorkspaceView` |
-| `apps/light-desktop/src/components/shared/` | Semi-generic domain widgets — `SourceValue`, `SourceLegend`, `GroupStrip`, `FixtureColorDot`, `RecordModeDialog` |
+| `apps/ui-library/src/` | `@tosklight/ui` source, public family entry points, styles, component tests, and low-level stories |
+| `apps/ui-library/storybook/config/` | Storybook discovery, preview styling, manager theme, and global configuration |
+| `apps/ui-library/storybook/tests/` | Deterministic real-browser story verification |
+| `apps/light-desktop/src/components/` | Product shell, Dock, command controls, adapters, and functional compositions |
+| `apps/light-desktop/src/windows/` | Complete ToskLight windows; application stories are colocated here as they are added |
 
-`apps/light-hardware-controls/src/components/` has its own unshared `ControlButton.tsx` and
-`TouchFader.tsx`. That duplication is one thing the extraction would resolve.
+Compatibility modules at former desktop component paths may re-export `@tosklight/ui`, but
+production consumers should import the package identity rather than relative paths into the
+library.
 
 ## Live catalog
 
-```
-?ui-kit=1
-```
-
-`components/window-kit/UiKitCatalog.tsx` renders every primitive on one page. Check it before
-writing a new control.
+Run `npm run storybook` from the repository root. The contained catalog serves on
+`http://127.0.0.1:6006`; its discovery roots cover both focused package contracts and colocated
+application-owned functional stories.
 
 ## Visual system
 
-`apps/light-desktop/src/styles/` holds eight CSS layers imported in cascade order by `src/styles.css`.
-Order matters. Further global sheets sit at `apps/light-desktop/src/*.css`: `window-kit.css`,
-`hardware.css`, `chrome.css`, `help.css`, `workflow-themes.css`, `playback-colors.css`,
-`hardware-dense.css`, `fixture-address.css`, `cuelist-settings-layout.css`, `product-demo.css`.
+`apps/ui-library/src/styles.css` is the public shared style entry point.
+`apps/light-desktop/src/styles.css` imports it before the application-owned layers. Storybook loads
+the desktop entry point so the catalog uses the same cascade, background, fonts, density, and mode
+styling as the live application.
 
 ## Shared code
 
@@ -63,19 +61,18 @@ contract consistent across surfaces.
 
 ## Executable contract
 
-There is no standalone package gate. `npm run test:unit` runs the app-local component tests,
-Control UI typecheck, and production build. `npm run test:e2e-ui` exercises the real browser and
-operator layouts. Run both when changing shared presentation behavior.
-
-A future extraction is one coherent change: add tracked package source and its consumers together,
-then add package-specific tests or Storybook gates. Do not revive root scripts before that contract
-exists.
+`npm run test:ui-package` typechecks `@tosklight/ui` and runs its component suite.
+`npm run storybook:build` creates the deterministic static artifact, and
+`npm run test:storybook` exercises it in serial Chrome. `npm run test:unit` keeps the package and
+application integration gates together; use `npm run test:e2e-ui` for real operator workflows that
+Storybook cannot prove.
 
 ## Read first
 
-1. `src/components/window-kit/UiKitCatalog.tsx`, then open `?ui-kit=1`
-2. `src/components/window-kit/WindowKit.tsx`
-3. `src/components/common/controls/foundation.tsx`
-4. `src/components/common/index.ts` — the barrel shows what is public
-5. `src/styles.css` — cascade order
-6. `packages/light-controls/src/programmerKeypad.ts`
+1. `apps/ui-library/src/index.ts` and its family entry points
+2. `apps/ui-library/src/window-kit/WindowKit.tsx`
+3. `apps/ui-library/src/common/controls/foundation.tsx`
+4. `apps/ui-library/src/styles.css`
+5. `apps/ui-library/storybook/config/main.ts`
+6. `apps/light-desktop/src/styles.css`
+7. `packages/light-controls/src/programmerKeypad.ts`

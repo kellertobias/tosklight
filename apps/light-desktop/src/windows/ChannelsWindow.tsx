@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePatchedFixturesView } from "../features/patch/PatchState";
 import type { PatchedFixture, VisualizationSnapshot } from "../api/types";
-import { Button } from "../components/common";
+import { Button, ModalRegistration } from "@tosklight/ui";
 import { VerticalTouchFader } from "../components/control/VerticalTouchFader";
-import { FaderView, WindowHeader } from "../components/window-kit";
+import { FaderView, WindowHeader } from "@tosklight/ui/window-kit";
 import {
 	useProgrammingSelectionActions,
 	useProgrammingSelectionView,
@@ -20,7 +20,7 @@ import type { WindowProps } from "./windowTypes";
 
 const PAGE_SIZE = 20;
 
-interface Channel {
+export interface Channel {
 	number: number;
 	fixture: PatchedFixture;
 	name: string;
@@ -52,35 +52,75 @@ export function ChannelsWindow({ active = true, compact }: WindowProps) {
 			mutations,
 		);
 	};
-	usePagePickerDismissal(pagePickerOpen, setPagePickerOpen);
+	return (
+		<ChannelsWindowView
+			channels={channels}
+			compact={compact}
+			page={page}
+			pages={pages}
+			pagePickerOpen={pagePickerOpen}
+			selectedFixtureIds={selectedFixtureIds}
+			valuesReady={values.canWrite}
+			onPage={setPage}
+			onPagePickerOpen={setPagePickerOpen}
+			onSelect={(fixtureId) =>
+				void selectionActions?.replace({ resolvedFixtures: [fixtureId] })
+			}
+			onSetIntensity={(fixtureId, level) => void setIntensity(fixtureId, level)}
+		/>
+	);
+}
+
+export function ChannelsWindowView({
+	channels,
+	compact,
+	page,
+	pages,
+	pagePickerOpen,
+	selectedFixtureIds,
+	valuesReady,
+	onPage,
+	onPagePickerOpen,
+	onSelect,
+	onSetIntensity,
+}: {
+	channels: readonly Channel[];
+	compact?: boolean;
+	page: number;
+	pages: number;
+	pagePickerOpen: boolean;
+	selectedFixtureIds: ReadonlySet<string>;
+	valuesReady: boolean;
+	onPage(page: number): void;
+	onPagePickerOpen(open: boolean): void;
+	onSelect(fixtureId: string): void;
+	onSetIntensity(fixtureId: string, level: number): void;
+}) {
+	usePagePickerDismissal(pagePickerOpen, onPagePickerOpen);
 	return (
 		<div className="channels-window">
 			{!compact && (
 				<ChannelHeader
 					page={page}
 					pages={pages}
-					onPage={setPage}
-					onOpenPicker={() => setPagePickerOpen(true)}
+					onPage={onPage}
+					onOpenPicker={() => onPagePickerOpen(true)}
 				/>
 			)}
 			<ChannelFaderBank
 				channels={channels.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)}
 				page={page}
 				selectedFixtureIds={selectedFixtureIds}
-				valuesReady={values.canWrite}
-				onSelect={(fixtureId) =>
-					void selectionActions?.replace({ resolvedFixtures: [fixtureId] })
-				}
-				onSetIntensity={(fixtureId, level) =>
-					void setIntensity(fixtureId, level)
-				}
+				valuesReady={valuesReady}
+				onSelect={onSelect}
+				onSetIntensity={onSetIntensity}
 			/>
 			{pagePickerOpen && (
 				<ChannelPagePicker
 					page={page}
 					pages={pages}
-					onPage={setPage}
-					onClose={() => setPagePickerOpen(false)}
+					onPage={onPage}
+					onClose={() => onPagePickerOpen(false)}
 				/>
 			)}
 		</div>
@@ -207,12 +247,13 @@ function ChannelPagePicker({
 	onClose(): void;
 }) {
 	return createPortal(
-		<div
-			className="stacked-modal-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && onClose()
-			}
-		>
+		<ModalRegistration onClose={onClose}>
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onClose()
+				}
+			>
 			<div
 				className="nested-modal channel-page-modal"
 				role="dialog"
@@ -238,7 +279,8 @@ function ChannelPagePicker({
 					))}
 				</div>
 			</div>
-		</div>,
+			</div>
+		</ModalRegistration>,
 		document.body,
 	);
 }

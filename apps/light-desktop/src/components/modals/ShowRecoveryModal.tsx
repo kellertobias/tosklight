@@ -6,7 +6,7 @@ import {
 	useSessionSnapshot,
 } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useShowLifecycle } from "../../features/showLifecycle/ShowLifecycleContext";
-import { Button, ModalTitleBar } from "../common";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 
 export function ShowRecoveryModal() {
   const lifecycle = useShowLifecycle();
@@ -31,7 +31,7 @@ export function ShowRecoveryModal() {
     setBusy(false);
   };
   const alternatives = lifecycle.shows.filter((show) => show.id !== activeShowId);
-  return <div className="show-recovery-layer" role="alertdialog" aria-modal="true" aria-label="Show recovery required">
+  return <ModalRegistration policy={{ escape: false, backdrop: false, explicit: false }} onClose={() => undefined}><div className="show-recovery-layer" role="alertdialog" aria-modal="true" aria-label="Show recovery required">
     <section className="show-recovery-card">
       <ModalTitleBar title="Show File Could Not Be Loaded"/>
       <p>The active show file might be corrupted or incompatible with this version. It has not been changed or deleted.</p>
@@ -47,5 +47,5 @@ export function ShowRecoveryModal() {
       <small>This creates and activates a separate empty show. The damaged file remains available for recovery.</small>
       <ServerErrorNotice />
     </section>
-  </div>;
+  </div></ModalRegistration>;
 }

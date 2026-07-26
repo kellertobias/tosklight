@@ -1,16 +1,17 @@
+import { PoolGrid, type PoolSlotViewModel } from "@tosklight/ui/pools";
 import { useRef } from "react";
-import { requestUpdateTarget } from "../../components/control/updateWorkflow";
 import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
-import { ButtonGrid, WindowScrollArea } from "../../components/window-kit";
-import { useApp } from "../../state/AppContext";
-import { GroupCard } from "./GroupCard";
-import type { FixtureMetadata, Group } from "./model";
+import { requestUpdateTarget } from "../../components/control/updateWorkflow";
+import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import {
 	captureGroupRecordingTarget,
 	emptyGroupRecordingTarget,
 	type GroupRecordingTarget,
 } from "../../features/groupRecording/target";
 import { useGroupSelectionActions } from "../../features/groupSelection/useGroupSelectionActions";
+import { useApp } from "../../state/AppContext";
+import { GroupCard } from "./GroupCard";
+import type { FixtureMetadata, Group } from "./model";
 
 export function GroupPoolGrid({
 	active = true,
@@ -66,35 +67,59 @@ export function GroupPoolGrid({
 				: emptyGroupRecordingTarget(id),
 		).finally(() => dispatch({ type: "SET_STORE_ARMED", value: false }));
 	};
+	const slots: PoolSlotViewModel<string>[] = cards.flatMap((group, index) =>
+		group
+			? [
+					{
+						id: group.id,
+						position: index,
+						card: {
+							number: index + 1,
+							primary: group.body.name ?? `Group ${index + 1}`,
+						},
+					},
+				]
+			: [],
+	);
 
 	return (
 		<WindowScrollArea>
-			<ButtonGrid className="card-pool">
-				{cards.map((group, index) => (
-					<GroupCard
-						key={index + 1}
-						group={group}
-						index={index}
-						knownFixtureIds={knownFixtureIds}
-						capabilities={capabilities}
-						selected={command.selectedGroupId === group?.id}
-						storeArmed={state.storeArmed}
-						updateArmed={state.updateArmed}
-						beginHold={() => {
-							if (group && !state.updateArmed) {
-								hold.current = window.setTimeout(
-									() => onOpenContext(group.id),
-									600,
-								);
-							}
-						}}
-						cancelHold={cancelHold}
-						openContext={() => group && onOpenContext(group.id)}
-						dereference={() => group && void runCommand(`DEGRP ${group.id}`)}
-						select={() => selectCard(group, index)}
-					/>
-				))}
-			</ButtonGrid>
+			<PoolGrid
+				slots={slots}
+				slotCount={cards.length}
+				emptySlot={(index) => ({
+					id: String(index + 1),
+					position: index,
+					card: { number: index + 1, primary: "Empty", states: ["empty"] },
+				})}
+				renderSlot={(_, index) => {
+					const group = cards[index] ?? null;
+					return (
+						<GroupCard
+							group={group}
+							index={index}
+							poolSlotId={String(group?.id ?? index + 1)}
+							knownFixtureIds={knownFixtureIds}
+							capabilities={capabilities}
+							selected={command.selectedGroupId === group?.id}
+							storeArmed={state.storeArmed}
+							updateArmed={state.updateArmed}
+							beginHold={() => {
+								if (group && !state.updateArmed) {
+									hold.current = window.setTimeout(
+										() => onOpenContext(group.id),
+										600,
+									);
+								}
+							}}
+							cancelHold={cancelHold}
+							openContext={() => group && onOpenContext(group.id)}
+							dereference={() => group && void runCommand(`DEGRP ${group.id}`)}
+							select={() => selectCard(group, index)}
+						/>
+					);
+				}}
+			/>
 		</WindowScrollArea>
 	);
 }

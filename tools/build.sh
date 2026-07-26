@@ -410,6 +410,7 @@ print_artifact_path() {
     test-results) printf '%s\n' "$LIGHT_TEST_RESULTS_DIR" ;;
     playwright-report) printf '%s\n' "$LIGHT_PLAYWRIGHT_REPORT_DIR" ;;
     visual-inspection) printf '%s\n' "$LIGHT_VISUAL_INSPECTION_DIR" ;;
+    storybook) printf '%s\n' "$LIGHT_STORYBOOK_UI_DIR" ;;
     *) echo "error: unknown artifact path: $1" >&2; return 2 ;;
   esac
 }

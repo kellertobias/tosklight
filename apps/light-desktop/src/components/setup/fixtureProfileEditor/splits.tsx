@@ -1,5 +1,5 @@
 import type { FixtureMode } from "../../../api/types";
-import { Button, NumberField } from "../../common";
+import { Button, NumberField } from "@tosklight/ui";
 import { channelSplit, reorder } from "../fixtureProfileModel";
 
 export function SplitManager({

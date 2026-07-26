@@ -1,4 +1,4 @@
-import { Button, ModalTitleBar, SearchBar } from "../../common";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 
 export function ManufacturerLookup({
 	manufacturers,
@@ -23,12 +23,13 @@ export function ManufacturerLookup({
 		)
 		.sort((left, right) => left.localeCompare(right));
 	return (
-		<div
-			className="stacked-modal-layer manufacturer-lookup-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && onClose()
-			}
-		>
+		<ModalRegistration onClose={onClose}>
+			<div
+				className="stacked-modal-layer manufacturer-lookup-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onClose()
+				}
+			>
 			<section
 				className="nested-modal manufacturer-lookup"
 				role="dialog"
@@ -37,14 +38,12 @@ export function ManufacturerLookup({
 			>
 				<ModalTitleBar
 					title="Manufacturer lookup"
-					search={
-						<SearchBar
-							value={query}
-							onChange={onQuery}
-							ariaLabel="Search manufacturers"
-							placeholder="Search manufacturers"
-						/>
-					}
+					search={{
+						value: query,
+						ariaLabel: "Search manufacturers",
+						placeholder: "Search manufacturers",
+					}}
+					onSearch={onQuery}
 					closeLabel="Close manufacturer lookup"
 					onClose={onClose}
 				/>
@@ -70,7 +69,8 @@ export function ManufacturerLookup({
 					)}
 				</div>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 
@@ -92,7 +92,8 @@ export function ConfirmDialog({
 	onSecondary: () => void;
 }) {
 	return (
-		<div className="stacked-modal-layer fixture-confirm-layer">
+		<ModalRegistration onClose={onSecondary}>
+			<div className="stacked-modal-layer fixture-confirm-layer">
 			<section
 				className="nested-modal fixture-confirm-dialog"
 				role="alertdialog"
@@ -110,6 +111,7 @@ export function ConfirmDialog({
 					</Button>
 				</div>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }

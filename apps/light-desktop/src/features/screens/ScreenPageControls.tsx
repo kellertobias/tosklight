@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { ScreenConfiguration } from "../../api/types";
-import { Button } from "../../components/common";
+import { Button } from "@tosklight/ui";
 import {
 	canAdvancePlaybackPage,
 	nextPlaybackPageNumber,

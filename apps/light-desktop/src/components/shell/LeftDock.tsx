@@ -5,7 +5,7 @@ import type { BuiltInWindow } from "../../types";
 import { useActiveShow } from "../../features/deskSnapshot/DeskSnapshotState";
 import appMark from "../../../src-tauri/icons/mark-shadow.svg";
 import { DeskSettingsModal } from "../modals/DeskSettingsModal";
-import { Button } from "../common";
+import { Button } from "@tosklight/ui";
 import { useShowIndicator } from "./showIndicator";
 
 export const builtIns: Array<[BuiltInWindow, string, string]> = [

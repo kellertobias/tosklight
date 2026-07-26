@@ -5,7 +5,7 @@ import {
 	NumberField,
 	SelectField,
 	TextField,
-} from "../../common";
+} from "@tosklight/ui";
 import { VectorFields } from "./geometryPreview";
 
 type Motion = NonNullable<GeometryNode["motion"]>;

@@ -1,12 +1,16 @@
 import { useMemo } from "react";
-import type { PatchedFixture, StoredGroup, VersionedObject } from "../../api/types";
+import type {
+	PatchedFixture,
+	StoredGroup,
+	VersionedObject,
+} from "../../api/types";
 import { groups as fallbackGroups } from "../../data/mockData";
 import {
 	useActiveShowId,
 	useBootstrapReady,
 } from "../../features/deskSnapshot/DeskSnapshotState";
-import { usePatchedFixturesView } from "../../features/patch/PatchState";
 import { useGroupRuntimeAuthority } from "../../features/groupRuntime/groupRuntimeAuthority";
+import { usePatchedFixturesView } from "../../features/patch/PatchState";
 
 export type Group = VersionedObject<StoredGroup>;
 
@@ -38,15 +42,13 @@ function fallbackGroupPool(): Group[] {
 
 function groupCards(groups: readonly Group[]) {
 	return Array.from(
-		{ length: 40 },
+		{ length: 200 },
 		(_, index) =>
 			groups.find((group) => group.id === String(index + 1)) ?? null,
 	);
 }
 
-function fixtureMetadata(
-	fixtures: readonly PatchedFixture[],
-): FixtureMetadata {
+function fixtureMetadata(fixtures: readonly PatchedFixture[]): FixtureMetadata {
 	const knownFixtureIds = new Set<string>();
 	const fixtureNames = new Map<string, string>();
 	const capabilities = new Map<string, Set<string>>();

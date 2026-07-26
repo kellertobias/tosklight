@@ -1,7 +1,7 @@
 import { memo } from "react";
 import type { ConnectionStatus } from "../../../api/types";
 import { useOutputRuntimeBlackout } from "../../../features/outputRuntime/OutputRuntimeView";
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 
 export const CommandLineStatus = memo(function CommandLineStatus({
 	status,

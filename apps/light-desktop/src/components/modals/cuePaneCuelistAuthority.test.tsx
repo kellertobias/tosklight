@@ -1,11 +1,12 @@
 import {
 	cleanup,
 	fireEvent,
-	render,
+	render as rtlRender,
 	screen,
 	waitFor,
 	within,
 } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition } from "../../api/types";
 import type { ShowObject, ShowObjectKind } from "../../features/showObjects/contracts";
@@ -17,6 +18,8 @@ import type {
 } from "../../features/showObjects/transport";
 import { ShowObjectsViewProvider } from "../../features/showObjects/ShowObjectsView";
 import { PaneSettingsModal } from "./PaneSettingsModal";
+
+const render = (ui: Parameters<typeof rtlRender>[0]) => rtlRender(ui, { wrapper: ModalProvider });
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 const REPLACEMENT_SHOW_ID = "22222222-2222-4222-8222-222222222222";

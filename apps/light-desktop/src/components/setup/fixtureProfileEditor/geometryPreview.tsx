@@ -5,7 +5,7 @@ import {
 	buildFixtureProfileGeometryPreview,
 	disposeScene,
 } from "../../../windows/stage3dScene";
-import { NumberField } from "../../common";
+import { NumberField } from "@tosklight/ui";
 
 export function VectorFields({
 	label,

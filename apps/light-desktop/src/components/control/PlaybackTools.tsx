@@ -5,7 +5,7 @@ import { useConfigurationActions } from "../../features/configuration/Configurat
 import type { SpeedGroupId } from "../../api/types";
 import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import { useApp } from "../../state/AppContext";
-import { Button } from "../common";
+import { Button, ModalRegistration } from "@tosklight/ui";
 import { useCommandLineSurface } from "./commandLine/useCommandLineSurface";
 import { PlaybackPageControl } from "./PlaybackPageControl";
 import { ProgrammerFadeFader } from "./ProgrammerFadeFader";
@@ -275,12 +275,13 @@ function SoundToLightLoading({
 	onClose: () => void;
 }) {
 	return createPortal(
-		<div
-			className="stacked-modal-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && onClose()
-			}
-		>
+		<ModalRegistration onClose={onClose}>
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onClose()
+				}
+			>
 			<section
 				className="nested-modal"
 				role="dialog"
@@ -302,7 +303,8 @@ function SoundToLightLoading({
 							"Speed Group configuration is not available.")}
 				</p>
 			</section>
-		</div>,
+			</div>
+		</ModalRegistration>,
 		document.body,
 	);
 }

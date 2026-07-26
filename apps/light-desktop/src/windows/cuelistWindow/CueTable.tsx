@@ -1,5 +1,5 @@
 import type { Cue, PlaybackSnapshot } from "../../api/types";
-import { WindowScrollArea } from "../../components/window-kit";
+import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { cueTriggerKind } from "./cueFormatting";
 
 export interface CueTableEmptyState {

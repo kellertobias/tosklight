@@ -9,7 +9,7 @@ import {
 } from "../../features/highlight/HighlightState";
 import { usePatchView } from "../../features/patch/PatchContext";
 import { usePatchFixturesById } from "../../features/patch/PatchState";
-import { Button } from "../common";
+import { Button } from "@tosklight/ui";
 
 function fixtureDetails(fixture: HighlightFixtureSummary | null, patch: readonly PatchedFixture[]) {
   if (!fixture) return null;

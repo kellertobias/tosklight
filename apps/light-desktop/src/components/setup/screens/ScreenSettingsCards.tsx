@@ -11,7 +11,7 @@ import {
 	SelectField,
 	SwitchField,
 	TextField,
-} from "../../common";
+} from "@tosklight/ui";
 import { PlaybackLayoutModal } from "../PlaybackLayoutModal";
 import {
 	playbackLayoutLegacyFields,

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
-import { Button } from "../common";
+import { Button } from "@tosklight/ui";
 
 export function NativeDragStrip() {
   const desktop = useDesktopBridge();

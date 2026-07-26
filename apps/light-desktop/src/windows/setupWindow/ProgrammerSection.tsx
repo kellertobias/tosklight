@@ -1,4 +1,4 @@
-import { FormLayout, SwitchField } from "../../components/common";
+import { FormLayout, SwitchField } from "@tosklight/ui";
 import {
 	RecordDefaultsFields,
 	UpdateDefaultsFields,

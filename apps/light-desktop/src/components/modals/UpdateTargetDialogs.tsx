@@ -6,7 +6,7 @@ import type {
 	UpdateSettings,
 	UpdateTargetFilter,
 } from "../../api/types";
-import { Button, SelectField } from "../common";
+import { Button, ModalRegistration, SelectField } from "@tosklight/ui";
 import {
 	modeLabel,
 	targetFamilyLabel,
@@ -36,12 +36,13 @@ export function UpdateSettingsDialog({
 	onCancel,
 }: UpdateSettingsDialogProps) {
 	return (
-		<div
-			className="modal-backdrop update-workflow-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && onCancel()
-			}
-		>
+		<ModalRegistration onClose={onCancel}>
+			<div
+				className="modal-backdrop update-workflow-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onCancel()
+				}
+			>
 			<section
 				className="modal-card update-settings-modal workflow-theme update-workflow"
 				role="dialog"
@@ -77,7 +78,8 @@ export function UpdateSettingsDialog({
 					</Button>
 				</div>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 
@@ -183,12 +185,13 @@ export function UpdateTargetMenu<T extends UpdateMenuEntry>({
 	onCancel,
 }: UpdateTargetMenuProps<T>) {
 	return (
-		<div
-			className="modal-backdrop update-workflow-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && onCancel()
-			}
-		>
+		<ModalRegistration onClose={onCancel}>
+			<div
+				className="modal-backdrop update-workflow-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onCancel()
+				}
+			>
 			<section
 				className="modal-card update-target-menu workflow-theme update-workflow"
 				role="dialog"
@@ -256,7 +259,8 @@ export function UpdateTargetMenu<T extends UpdateMenuEntry>({
 					<Button onClick={onCancel}>Cancel</Button>
 				</div>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 
@@ -268,7 +272,8 @@ export function UpdateResultDialog({
 	onClose: () => void;
 }) {
 	return (
-		<div className="modal-backdrop update-workflow-layer">
+		<ModalRegistration onClose={onClose}>
+			<div className="modal-backdrop update-workflow-layer">
 			<section
 				className="modal-card update-result-modal workflow-theme update-workflow"
 				role="dialog"
@@ -312,6 +317,7 @@ export function UpdateResultDialog({
 					</Button>
 				</div>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }

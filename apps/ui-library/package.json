@@ -1,0 +1,55 @@
+{
+  "name": "@tosklight/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": [
+    "./src/styles.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./controls": "./src/controls.ts",
+    "./forms": "./src/forms.ts",
+    "./input": "./src/input.ts",
+    "./modals": "./src/modals.ts",
+    "./window-kit": "./src/window-kit.ts",
+    "./tables": "./src/tables.ts",
+    "./grids": "./src/grids.ts",
+    "./faders": "./src/faders.ts",
+    "./encoders": "./src/encoders.ts",
+    "./desktop": "./src/desktop.ts",
+    "./playback": "./src/playback.ts",
+    "./pools": "./src/pools.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --pretty false",
+    "test": "vitest run",
+    "storybook": "storybook dev -c storybook/config -p 6006",
+    "storybook:build": "node storybook/build.mjs",
+    "test:storybook": "npm run storybook:build && playwright test --config storybook/playwright.config.ts",
+    "test:help-screenshots": "npm run storybook:build && playwright test --config storybook/playwright.config.ts storybook/tests/help-screenshots.spec.ts"
+  },
+  "peerDependencies": {
+    "react": ">=19",
+    "react-dom": ">=19"
+  },
+  "devDependencies": {
+    "@storybook/addon-a11y": "10.5.4",
+    "@storybook/addon-docs": "10.5.4",
+    "@storybook/addon-vitest": "10.5.4",
+    "@storybook/react-vite": "10.5.4",
+    "@testing-library/jest-dom": "latest",
+    "@testing-library/react": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "jsdom": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "storybook": "10.5.4",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest"
+  }
+}

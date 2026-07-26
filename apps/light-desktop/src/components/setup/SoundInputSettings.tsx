@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSessionSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
-import { Button, SelectField } from "../common";
+import { Button, SelectField } from "@tosklight/ui";
 import { useSoundDeviceSelection } from "../control/useSoundDeviceSelection";
 
 export function SoundInputSettings() {

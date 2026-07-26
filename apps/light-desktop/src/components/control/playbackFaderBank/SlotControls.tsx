@@ -1,8 +1,9 @@
 import type { PlaybackDefinition } from "../../../api/types";
-import { Button } from "../../common";
-import type { VerticalTouchFaderAction } from "../VerticalTouchFader";
+import { Button } from "@tosklight/ui";
+import type { VerticalTouchFaderAction } from "@tosklight/ui/faders";
 import { assignPlayback, isPlaybackSetClickArmed } from "./actions";
 import type { PlaybackBankController } from "./controller";
+import type { PlaybackSnapshotActive } from "./types";
 
 export function PlaybackActionButtons({
 	actions,
@@ -16,28 +17,26 @@ export function PlaybackActionButtons({
 	));
 }
 
-export function SingleFaderlessButton({
-	action,
-	slot,
-	playback,
+export function PlaybackRuntimeStatus({
+	active,
 }: {
-	action: VerticalTouchFaderAction;
-	slot: number;
-	playback: PlaybackDefinition | null;
+	active: PlaybackSnapshotActive | undefined;
 }) {
-	const { id, label, className, ...props } = action;
+	const status = active?.flash
+		? ["flash", "FLASH HELD"]
+		: active?.swap_active
+			? ["swap", "SWAP HELD"]
+			: active?.loaded_cue_number != null
+				? ["loaded", "LOADED"]
+				: null;
+	if (!status) return null;
 	return (
-		<Button
-			{...props}
-			aria-label={typeof label === "string" ? label : undefined}
-			className={`${className ?? ""} single-button-playback-action`}
-			key={id}
+		<span
+			className={`playback-status playback-status-${status[0]}`}
+			role="status"
 		>
-			<b>
-				{slot} · {playback?.name ?? "Empty"}
-			</b>
-			<span>{label}</span>
-		</Button>
+			{status[1]}
+		</span>
 	);
 }
 

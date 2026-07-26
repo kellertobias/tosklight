@@ -32,6 +32,7 @@ export function useFileManagerState(suppliedInstanceId?: string) {
 	const [sidePanel, setSidePanel] = useState<FileManagerSidePanel>("none");
 	const [propertiesVisible, setPropertiesVisible] = useState(true);
 	const [headerMenu, setHeaderMenu] = useState<FileHeaderMenu | null>(null);
+	const [query, setQuery] = useState("");
 	const [message, setMessage] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [previewUrl, setPreviewUrl] = useState("");
@@ -82,6 +83,8 @@ export function useFileManagerState(suppliedInstanceId?: string) {
 		setPropertiesVisible,
 		headerMenu,
 		setHeaderMenu,
+		query,
+		setQuery,
 		message,
 		setMessage,
 		busy,

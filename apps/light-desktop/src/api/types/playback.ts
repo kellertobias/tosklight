@@ -88,6 +88,7 @@ export interface PlaybackSnapshot {
 		master: number;
 		fader_position?: number;
 		fader_pickup_required?: boolean;
+		fader_pickup_target?: number | null;
 		flash: boolean;
 		transition_timing_bypassed?: boolean;
 		manual_xfade_position?: number;

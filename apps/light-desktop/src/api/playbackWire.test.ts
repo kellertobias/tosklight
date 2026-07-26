@@ -35,6 +35,34 @@ function validOutcome() {
 }
 
 describe("Playback wire validation", () => {
+	it("preserves the authoritative pickup target independently of master and physical position", () => {
+		const projection = cueProjection();
+		if (projection.target !== "cue_list" || !projection.runtime)
+			throw new Error("fixture must contain a running Cuelist");
+		const decoded = decodePlaybackOutcome({
+			...validOutcome(),
+			projection: {
+				...projection,
+				runtime: {
+					...projection.runtime,
+					master: 1,
+					fader_position: 0.8,
+					fader_pickup_required: true,
+					fader_pickup_target: 0.1,
+				},
+			},
+		});
+		expect(decoded.projection.target).toBe("cue_list");
+		if (
+			decoded.projection.target === "cue_list" &&
+			decoded.projection.runtime
+		) {
+			expect(decoded.projection.runtime.master).toBe(1);
+			expect(decoded.projection.runtime.fader_position).toBe(0.8);
+			expect(decoded.projection.runtime.fader_pickup_target).toBe(0.1);
+		}
+	});
+
 	it("decodes every requested address shape into validated data", () => {
 		for (const [requested, resolved] of [
 			[

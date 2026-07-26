@@ -4,7 +4,7 @@ import type {
 	UpdateMode,
 	UpdatePreview,
 } from "../../api/types";
-import { Button } from "../common";
+import { Button, ModalRegistration } from "@tosklight/ui";
 import {
 	cueUpdateModes,
 	existingContentModes,
@@ -39,12 +39,13 @@ export function UpdateOperationDialog({
 	const stats = updatePreviewStats(preview);
 	const cueModes = preview.target.family.type === "cue";
 	return (
-		<div
-			className="modal-backdrop update-workflow-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && onCancel()
-			}
-		>
+		<ModalRegistration onClose={onCancel}>
+			<div
+				className="modal-backdrop update-workflow-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onCancel()
+				}
+			>
 			<section
 				className="modal-card update-operation-modal workflow-theme update-workflow"
 				role="dialog"
@@ -155,6 +156,7 @@ export function UpdateOperationDialog({
 					</Button>
 				</div>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }

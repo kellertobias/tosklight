@@ -4,11 +4,12 @@ import {
 	Button,
 	FormField,
 	FormLayout,
+	ModalRegistration,
 	ModalTitleBar,
 	SelectField,
 	TextAreaField,
 	TextField,
-} from "../common";
+} from "@tosklight/ui";
 import { useDeskLockActions } from "../../features/deskLock/DeskLockActionsProvider";
 import { useDeskLock } from "../../features/deskLock/DeskLockState";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
@@ -36,7 +37,8 @@ export function DeskLockSettingsModal({ onClose }: { onClose: () => void }) {
 		if (saved) onClose();
 	};
 	return (
-		<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
+		<ModalRegistration onClose={onClose}>
+			<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
 			<section className="nested-modal desk-lock-settings-modal" role="dialog" aria-modal="true" aria-label="Desk Lock">
 				<ModalTitleBar
 					title="Desk Lock"
@@ -83,6 +85,7 @@ export function DeskLockSettingsModal({ onClose }: { onClose: () => void }) {
 				</FormLayout>
 				<ServerErrorNotice alert />
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }

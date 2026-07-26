@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { PatchedFixture } from "../../../api/types";
-import { Button, Select } from "../../common";
+import { Button, Select } from "@tosklight/ui";
 import { conflicts, fixtureRanges } from "../patchUtils";
 
 const DMX_GRID_COLUMNS = 16;

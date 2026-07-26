@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render as rtlRender, screen } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { VisualizationSnapshot } from "../../api/types";
 import { selectFixturesForSelection } from "../../features/patch/selectors";
@@ -7,6 +8,8 @@ import type {
 	ProgrammerGroupValue,
 } from "../../features/programmerValues/contracts";
 import { ParameterControls } from "./ParameterControls";
+
+const render = (ui: Parameters<typeof rtlRender>[0]) => rtlRender(ui, { wrapper: ModalProvider });
 
 const state = {
 	stageMode: "select",
@@ -47,6 +50,10 @@ const preloadProgrammerValues = vi.hoisted(() => ({
 const normalValuesActions = vi.hoisted(() => ({
 	batch: vi.fn(async () => null),
 	applyIntent: vi.fn(async () => null),
+}));
+const commandLine = vi.hoisted(() => ({
+	text: "FIXTURE",
+	reset: vi.fn(async () => true),
 }));
 const preloadValuesActions = vi.hoisted(() => ({
 	batch: vi.fn(async () => null),
@@ -172,6 +179,11 @@ vi.mock(
 					}
 				: null,
 		useProgrammingSelectionActions: () => null,
+		useProgrammingDeleteCommandActive: () =>
+			commandLine.text.trim().toUpperCase() === "DELETE",
+		useProgrammingCommandLineActions: () => ({
+			reset: commandLine.reset,
+		}),
 	}),
 );
 vi.mock(
@@ -221,6 +233,7 @@ afterEach(() => {
 	captureMode.projection.preview = false;
 	captureMode.projection.preloadCaptureProgrammer = true;
 	visualization.snapshot = null;
+	commandLine.text = "FIXTURE";
 	vi.clearAllMocks();
 });
 
@@ -307,9 +320,9 @@ describe("ParameterControls projection lifecycle", () => {
 		];
 
 		render(<ParameterControls />);
-		const encoder = screen.getByRole("region", { name: "Enc 1 · Dimmer" });
+		const encoder = screen.getByRole("group", { name: "Enc 1 · Dimmer" });
 		expect(encoder).toHaveTextContent("25%");
-		fireEvent.click(screen.getByRole("button", { name: "+10" }));
+		fireEvent.keyDown(encoder, { key: "ArrowUp" });
 
 		expect(preloadValuesActions.batch).toHaveBeenCalledWith({
 			requestId: expect.any(String),
@@ -318,7 +331,7 @@ describe("ParameterControls projection lifecycle", () => {
 					action: "set_fixture",
 					fixtureId: "fixture-1",
 					attribute: "intensity",
-					value: { kind: "normalized", value: 0.35 },
+					value: { kind: "normalized", value: 0.26 },
 					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 				},
 			],
@@ -609,6 +622,79 @@ describe("ParameterControls hardware encoders", () => {
 		expect(screen.getByRole("heading", { name: "Tilt" })).toBeInTheDocument();
 	});
 
+	it("releases an owned value on exact DELETE plus hardware encoder press and resets DELETE", async () => {
+		server.bootstrap.hardware_connected = true;
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [{
+			fixture_id: "fixture-1",
+			logical_heads: [],
+			definition: {
+				heads: [{
+					shared: true,
+					parameters: [{ attribute: "intensity", capabilities: [] }],
+				}],
+			},
+		}];
+		programmerValues.view.fixtureValues = [{
+			fixtureId: "fixture-1",
+			attribute: "intensity",
+			value: { kind: "normalized", value: 0.5 },
+			programmerOrder: 1,
+			fade: false,
+			fadeMillis: null,
+			delayMillis: null,
+		}];
+		commandLine.text = "DELETE";
+		render(<ParameterControls />);
+
+		fireEvent(
+			window,
+			new CustomEvent("light:encoder-action", {
+				detail: { control: "encode/1", value: "press" },
+			}),
+		);
+
+		await vi.waitFor(() => expect(commandLine.reset).toHaveBeenCalledOnce());
+		expect(normalValuesActions.batch).toHaveBeenCalledWith({
+			requestId: expect.any(String),
+			mutations: [{
+				action: "release_fixture",
+				fixtureId: "fixture-1",
+				attribute: "intensity",
+			}],
+		});
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+	});
+
+	it("does not release, create zero, reset DELETE, or open Set Value without scoped ownership", () => {
+		server.bootstrap.hardware_connected = true;
+		server.selectedFixtures = ["fixture-1"];
+		server.patch.fixtures = [{
+			fixture_id: "fixture-1",
+			logical_heads: [],
+			definition: {
+				heads: [{
+					shared: true,
+					parameters: [{ attribute: "intensity", capabilities: [] }],
+				}],
+			},
+		}];
+		commandLine.text = "DELETE";
+		render(<ParameterControls />);
+
+		fireEvent(
+			window,
+			new CustomEvent("light:encoder-action", {
+				detail: { control: "encode/1", value: "press" },
+			}),
+		);
+
+		expect(normalValuesActions.batch).not.toHaveBeenCalled();
+		expect(normalValuesActions.applyIntent).not.toHaveBeenCalled();
+		expect(commandLine.reset).not.toHaveBeenCalled();
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+	});
+
 	it("spreads a typed hardware encoder range over the ordered fixture selection", () => {
 		server.bootstrap.hardware_connected = true;
 		server.selectedFixtures = ["fixture-3", "fixture-1", "fixture-2"];
@@ -783,7 +869,8 @@ describe("ParameterControls programmer targets and alignment", () => {
 			},
 		];
 		render(<ParameterControls />);
-		fireEvent.click(screen.getByRole("button", { name: "Release Dimmer" }));
+		fireEvent.click(screen.getByRole("button", { name: "Set Value" }));
+		fireEvent.click(screen.getByRole("button", { name: "Release" }));
 		expect(normalValuesActions.batch).toHaveBeenCalledWith({
 			requestId: expect.any(String),
 			mutations: [
@@ -850,11 +937,11 @@ describe("ParameterControls Group targets and alignment", () => {
 		render(<ParameterControls />);
 
 		expect(
-			screen.getByRole("region", { name: "Enc 1 · Dimmer" }),
+			screen.getByRole("group", { name: "Enc 1 · Dimmer" }),
 		).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Position" }));
 		expect(
-			screen.getByRole("region", { name: "Enc 1 · Pan" }),
+			screen.getByRole("group", { name: "Enc 1 · Pan" }),
 		).toBeInTheDocument();
 		expect(legacyPlaybackAccess).not.toHaveBeenCalled();
 	});

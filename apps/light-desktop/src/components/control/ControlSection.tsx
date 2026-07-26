@@ -4,9 +4,35 @@ import { ControlRightPane } from "./ControlRightPane";
 import { useApp } from "../../state/AppContext";
 import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotState";
 
+export function ControlSectionView({
+  mode,
+  hardware,
+  commandLine,
+  left,
+  right,
+}: {
+  mode: "programmer" | "playbacks";
+  hardware: boolean;
+  commandLine: React.ReactNode;
+  left: React.ReactNode;
+  right: React.ReactNode;
+}) {
+  return <section className={`control-section ${mode} ${hardware ? "hardware-connected" : "touch-connected"}`}>
+    {commandLine}
+    {left}
+    {right}
+  </section>;
+}
+
 export function ControlSection() {
   const { state } = useApp();
   const hardwareConnected = useHardwareConnected();
   const hardware = Boolean(hardwareConnected || state.midiProfile);
-  return <section className={`control-section ${state.controlMode} ${hardware ? "hardware-connected" : "touch-connected"}`}><CommandLineBar /><ControlLeftPane /><ControlRightPane /></section>;
+  return <ControlSectionView
+    commandLine={<CommandLineBar />}
+    hardware={hardware}
+    left={<ControlLeftPane />}
+    mode={state.controlMode}
+    right={<ControlRightPane />}
+  />;
 }

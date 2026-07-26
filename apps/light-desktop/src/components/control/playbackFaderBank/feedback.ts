@@ -134,7 +134,6 @@ export function playbackFaderModeFeedback(
 	playback: PlaybackDefinition | null,
 	active: PlaybackSnapshotActive | undefined,
 ) {
-	if (active?.fader_pickup_required) return "Pickup: lower to zero";
 	if (playback?.fader === "x_fade")
 		return active?.manual_xfade_direction === "towards_low"
 			? "Travel towards low"

@@ -19,6 +19,7 @@ export function legacyPlaybackRuntime(
 		master: runtime.master,
 		fader_position: runtime.fader_position,
 		fader_pickup_required: runtime.fader_pickup_required,
+		fader_pickup_target: runtime.fader_pickup_target,
 		flash: runtime.flash,
 		transition_timing_bypassed: runtime.transition_timing_bypassed,
 		manual_xfade_position: runtime.manual_xfade_position,

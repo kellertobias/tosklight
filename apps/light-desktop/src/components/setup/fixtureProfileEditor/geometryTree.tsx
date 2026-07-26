@@ -1,5 +1,5 @@
 import type { FixtureMode, GeometryNode } from "../../../api/types";
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 import type { GeometryTemplateName } from "../fixtureProfileModel";
 
 export type GeometrySelection = { type: "node" | "emitter"; id: string } | null;

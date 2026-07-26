@@ -1,16 +1,17 @@
-import { ModalTitleBar } from "../../components/common";
+import { ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { DeskLockSettingsModal } from "../../components/setup/DeskLockSettingsModal";
 import { FixtureLibrarySetup } from "../../components/setup/FixtureLibrarySetup";
 import type { SetupWindowController } from "./controller";
 
 function FixtureLibraryDialog({ onClose }: { onClose: () => void }) {
 	return (
-		<div
-			className="stacked-modal-layer fixture-library-modal-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && onClose()
-			}
-		>
+		<ModalRegistration onClose={onClose}>
+			<div
+				className="stacked-modal-layer fixture-library-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onClose()
+				}
+			>
 			<section
 				className="fixture-library-modal"
 				role="dialog"
@@ -29,7 +30,8 @@ function FixtureLibraryDialog({ onClose }: { onClose: () => void }) {
 					<FixtureLibrarySetup />
 				</div>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 

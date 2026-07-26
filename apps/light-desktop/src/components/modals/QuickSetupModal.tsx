@@ -18,7 +18,7 @@ import {
 } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useShowLifecycle } from "../../features/showLifecycle/ShowLifecycleContext";
 import { useScreens } from "../../features/screens/ScreensContext";
-import { Button, ModalTitleBar } from "../common";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import type {
 	MvrExportPreview,
 	MvrImportPreview,
@@ -649,25 +649,27 @@ function QuickSetupNavigation({ model }: { model: QuickSetupModel }) {
 
 function QuickSetupModalView({ model }: { model: QuickSetupModel }) {
 	return (
-		<div
-			className="modal-backdrop"
-			onPointerDown={(event) => {
-				if (event.currentTarget === event.target) model.actions.close();
-			}}
-		>
-			<section
-				className="modal-card show-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Show"
+		<ModalRegistration onClose={model.actions.close}>
+			<div
+				className="modal-backdrop"
+				onPointerDown={(event) => {
+					if (event.currentTarget === event.target) model.actions.close();
+				}}
 			>
-				<QuickSetupTitleBar model={model} />
-				<QuickSetupShowDetails model={model} />
-				<QuickSetupNavigation model={model} />
-				<QuickSetupDialogs model={model} />
-				<ServerErrorNotice />
-			</section>
-		</div>
+				<section
+					className="modal-card show-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Show"
+				>
+					<QuickSetupTitleBar model={model} />
+					<QuickSetupShowDetails model={model} />
+					<QuickSetupNavigation model={model} />
+					<QuickSetupDialogs model={model} />
+					<ServerErrorNotice />
+				</section>
+			</div>
+		</ModalRegistration>
 	);
 }
 

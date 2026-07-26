@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type MutableRefObject } from "react";
 import { useFiles } from "../../features/files/FilesContext";
-import { Button, type ButtonProps } from "../common/controls";
+import { Button, type ButtonProps } from "@tosklight/ui";
 import { openFileManagerPicker } from "../../windows/FileManagerPickerHost";
 
 export interface RootConfinedFilePickerButtonProps {

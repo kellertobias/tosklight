@@ -1,5 +1,5 @@
 import type { PatchedFixture } from "../../../api/types";
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 import { VerticalTouchFader } from "../../control/VerticalTouchFader";
 
 type BeamFamily = "Beam" | "Shapers";

@@ -9,8 +9,7 @@ import type {
   SpeedGroupSoundState,
   SpeedGroupSource,
 } from "../../api/types";
-import { Button, FormField, FormLayout, Input, NumberField, SelectField } from "../common";
-import { ModalTitleBar } from "../common/ModalTitleBar";
+import { Button, FormField, FormLayout, Input, ModalRegistration, ModalTitleBar, NumberField, SelectField } from "@tosklight/ui";
 import { type SoundCaptureStatus } from "./soundToLightAnalyzer";
 import "./SoundToLightModal.css";
 
@@ -199,7 +198,7 @@ function DirtyCloseConfirmation({
   onStay: () => void;
 }) {
   if (!visible) return null;
-  return <div className="stacked-modal-layer" onPointerDown={(event) => event.stopPropagation()}>
+  return <ModalRegistration onClose={onStay}><div className="stacked-modal-layer" onPointerDown={(event) => event.stopPropagation()}>
     <section className="nested-modal" role="alertdialog" aria-modal="true" aria-label="Unsaved Speed Group settings">
       <h3>Save Speed Group changes?</h3>
       <p>This Speed Group has unapplied settings.</p>
@@ -209,7 +208,7 @@ function DirtyCloseConfirmation({
         <Button onClick={onStay}>Stay</Button>
       </footer>
     </section>
-  </div>;
+  </div></ModalRegistration>;
 }
 
 function selectedSource(value: string, group: SpeedGroupId): SpeedGroupSource {
@@ -308,23 +307,12 @@ export function SoundToLightModal({
     }
   };
   const requestClose = () => dirty ? setConfirmClose(true) : onClose();
-  useEffect(() => {
-    const escape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || confirmClose) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (dirty) setConfirmClose(true);
-      else onClose();
-    };
-    document.addEventListener("keydown", escape, true);
-    return () => document.removeEventListener("keydown", escape, true);
-  }, [confirmClose, dirty, onClose]);
   const selectSource = (value: string) => {
     const next = selectedSource(value, group);
     setSource(next);
     setDraft((current) => ({ ...current, enabled: next.type === "sound_to_light" }));
   };
-  return createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && requestClose()}>
+  return createPortal(<ModalRegistration onClose={requestClose}><div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && requestClose()}>
     <section className="nested-modal sound-to-light-modal" role="dialog" aria-modal="true" aria-label={`Speed Group ${group} Sound to Light`}>
       <ModalTitleBar
         title={`Speed Group ${group}`}
@@ -362,5 +350,5 @@ export function SoundToLightModal({
         onStay={() => setConfirmClose(false)}
       />
     </section>
-  </div>, document.body);
+  </div></ModalRegistration>, document.body);
 }

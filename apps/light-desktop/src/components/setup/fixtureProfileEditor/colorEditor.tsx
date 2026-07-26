@@ -3,7 +3,7 @@ import type {
 	FixtureMode,
 	HeadColorSystem,
 } from "../../../api/types";
-import { FormLayout, NumberField, SelectField } from "../../common";
+import { FormLayout, NumberField, SelectField } from "@tosklight/ui";
 import { reconcileColorSystemHighlightDefaults } from "../fixtureProfileModel";
 import {
 	AdditiveColorEditor,

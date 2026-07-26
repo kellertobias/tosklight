@@ -3,11 +3,12 @@ import type { PropsWithChildren } from "react";
 import {
 	Button,
 	Input,
+	ModalRegistration,
 	ModalTitleBar,
 	NumberField,
 	SelectField,
 	TextInput,
-} from "../common";
+} from "@tosklight/ui";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
 import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { SelectiveShowImportModal } from "./SelectiveShowImportModal";
@@ -22,14 +23,16 @@ function StackedModal({
 	onClose,
 }: PropsWithChildren<{ onClose: () => void }>) {
 	return createPortal(
-		<div
-			className="stacked-modal-layer"
-			onPointerDown={(event) => {
-				if (event.target === event.currentTarget) onClose();
-			}}
-		>
-			{children}
-		</div>,
+		<ModalRegistration onClose={onClose}>
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) => {
+					if (event.target === event.currentTarget) onClose();
+				}}
+			>
+				{children}
+			</div>
+		</ModalRegistration>,
 		document.body,
 	);
 }

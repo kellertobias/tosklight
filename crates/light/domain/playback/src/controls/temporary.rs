@@ -25,6 +25,7 @@ impl PlaybackEngine {
         playback.master = master;
         playback.fader_position = master;
         playback.fader_pickup_required = false;
+        playback.fader_pickup_target = None;
         playback.master_transition = None;
         playback.activated_at = now + ChronoDuration::microseconds(1);
         playback.paused = false;

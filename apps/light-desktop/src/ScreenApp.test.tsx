@@ -29,7 +29,7 @@ vi.mock("./features/screens/ScreensContext", () => ({
 vi.mock("./platform/desktop", () => ({
 	useScreenWindowPersistence: () => ({ current: false }),
 }));
-vi.mock("./components/common", () => ({
+vi.mock("./components/common/LoadingSurface", () => ({
 	LoadingSurface: () => <div data-testid="screen-surface" />,
 }));
 vi.mock("./components/shell/ConnectionState", () => ({

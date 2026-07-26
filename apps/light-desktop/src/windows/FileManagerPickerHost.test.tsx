@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Button } from "../components/common/controls";
+import { Button } from "@tosklight/ui";
 import { FileManagerPickerHost, openFileManagerPicker } from "./FileManagerPickerHost";
 import {
 	HOSTED_PICKER_TEST_CONTROL,
@@ -92,7 +92,7 @@ describe("FileManagerPickerHost", () => {
     act(() => { result = openFileManagerPicker({ target: "files", multiple: true, allowedExtensions: [".gdtf"] }); });
 
     expect(screen.getByRole("button", { name: "Open system file picker" })).toBeVisible();
-    const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const input = view.baseElement.querySelector<HTMLInputElement>('input[type="file"]')!;
     expect(input).toHaveAttribute("accept", ".gdtf");
     expect(input).toHaveAttribute("multiple");
     fireEvent.change(input, { target: { files: [new File(["fixture"], "tour.gdtf", { type: "application/zip" })] } });
@@ -109,7 +109,7 @@ describe("FileManagerPickerHost", () => {
     let result!: Promise<unknown>;
     act(() => { result = openFileManagerPicker({ target: "files", allowedExtensions: ["gdtf"] }); });
 
-    const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const input = view.baseElement.querySelector<HTMLInputElement>('input[type="file"]')!;
     fireEvent.change(input, { target: { files: [new File(["image"], "wrong.png")] } });
     expect(screen.getByRole("alert")).toHaveTextContent("Choose only .gdtf files");
     fireEvent.click(screen.getByRole("button", { name: "Cancel mock" }));
@@ -121,7 +121,7 @@ describe("FileManagerPickerHost", () => {
     const view = render(<FileManagerPickerHost />);
     act(() => { void openFileManagerPicker({ target: "folders", multiple: false }); });
 
-    const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const input = view.baseElement.querySelector<HTMLInputElement>('input[type="file"]')!;
     expect(input).toHaveAttribute("webkitdirectory");
     expect(input).toHaveAttribute("multiple");
     expect(input).not.toHaveAttribute("accept");

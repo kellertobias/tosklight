@@ -6,14 +6,8 @@ const sources = import.meta.glob("/src/**/*.tsx", {
   import: "default",
 }) as Record<string, string>;
 
-function ownsRawControls(file: string) {
-  return file.includes("/components/common/controls/")
-    || file.endsWith("/components/common/ModalTitleBar.tsx");
-}
-
 function ownsLegacyInputUsage(file: string) {
-  return file.endsWith("/components/control/commandLine/CommandInput.tsx")
-    || file.includes("/components/common/controls/");
+  return file.endsWith("/components/control/commandLine/CommandInput.tsx");
 }
 
 function isTestSource(file: string) {
@@ -24,8 +18,7 @@ describe("shared-control enforcement", () => {
   it("keeps raw controls inside the shared primitive implementation", () => {
     const offenders = Object.entries(sources)
       .filter(([file]) => !isTestSource(file))
-      .filter(([file, source]) => !ownsRawControls(file)
-        && /<(?:button|input|select|textarea)\b/.test(source))
+      .filter(([, source]) => /<(?:button|input|select|textarea)\b/.test(source))
       .map(([file]) => file);
 
     expect(offenders).toEqual([]);

@@ -1,4 +1,4 @@
-import { useEffect, type CSSProperties } from "react";
+import { type CSSProperties, useEffect } from "react";
 import { legacyPlaybackRuntime } from "../../../features/playbackRuntime/legacy";
 import type { PlaybackBankController } from "./controller";
 import { playbackFaderValue } from "./feedback";
@@ -14,7 +14,7 @@ export function PlaybackSlot({
 	controller: PlaybackBankController;
 	slotData: PlaybackSlotProjection;
 }) {
-	const { playback, cue, group, slot, row } = slotData;
+	const { playback, cue, slot, row } = slotData;
 	const runtimeProjection = playback
 		? controller.runtimeProjections.get(playback.number)
 		: undefined;
@@ -27,11 +27,7 @@ export function PlaybackSlot({
 		? Math.min(configuredButtons, playback.button_count ?? configuredButtons)
 		: configuredButtons;
 	const hasFader = (row?.has_fader ?? true) && (playback?.has_fader ?? true);
-	const value = playbackFaderValue(
-		playback,
-		active,
-		runtimeProjection,
-	);
+	const value = playbackFaderValue(playback, active, runtimeProjection);
 	useEffect(
 		() => () => controller.heldActions.releaseSlot(slot),
 		[controller.heldActions, playback, slot],
@@ -56,7 +52,7 @@ export function PlaybackSlot({
 		slot,
 		currentCue,
 	);
-	const className = `${playback ? "playback-colored" : ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.fader_pickup_required ? "pickup-required" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""}`;
+	const className = `${playback ? "playback-colored" : ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""}`;
 	const cardStyle = playback
 		? ({
 				"--playback-color": playback.color ?? "#20c997",

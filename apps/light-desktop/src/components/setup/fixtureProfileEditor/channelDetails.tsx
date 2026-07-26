@@ -5,7 +5,7 @@ import type {
 	FixtureChannel,
 	FixtureMode,
 } from "../../../api/types";
-import { Button, ModalTitleBar } from "../../common";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { ChannelCoreFields, ChannelFields } from "./channelFields";
 import { ChannelFunctionsModal } from "./channelFunctions";
 
@@ -26,12 +26,13 @@ export function ChannelEditorModal({
 }) {
 	const [functionsOpen, setFunctionsOpen] = useState(false);
 	return (
-		<div
-			className="stacked-modal-layer fixture-channel-editor-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && onClose()
-			}
-		>
+		<ModalRegistration onClose={onClose}>
+			<div
+				className="stacked-modal-layer fixture-channel-editor-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onClose()
+				}
+			>
 			<section
 				className="nested-modal fixture-channel-editor-modal"
 				role="dialog"
@@ -68,6 +69,7 @@ export function ChannelEditorModal({
 					/>
 				)}
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }

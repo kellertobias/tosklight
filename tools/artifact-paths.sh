@@ -38,6 +38,7 @@ light_init_artifact_paths() {
   export LIGHT_CARGO_TARGET_DIR="$CARGO_TARGET_DIR"
   light_export_path LIGHT_CONTROL_FRONTEND_DIR "$repository_root" "${LIGHT_CONTROL_FRONTEND_DIR-$LIGHT_ARTIFACTS_DIR/$FRONTEND_CONTROL}" || return 1
   light_export_path LIGHT_HARDWARE_FRONTEND_DIR "$repository_root" "${LIGHT_HARDWARE_FRONTEND_DIR-$LIGHT_ARTIFACTS_DIR/$FRONTEND_HARDWARE}" || return 1
+  light_export_path LIGHT_STORYBOOK_UI_DIR "$repository_root" "${LIGHT_STORYBOOK_UI_DIR-$LIGHT_ARTIFACTS_DIR/$STORYBOOK_UI}" || return 1
   light_export_path LIGHT_PNPM_STORE_DIR "$repository_root" "${LIGHT_PNPM_STORE_DIR-$LIGHT_ARTIFACTS_DIR/$CACHE_PNPM}" || return 1
   light_export_path LIGHT_MANUAL_ROOT "$repository_root" "${LIGHT_MANUAL_ROOT-$LIGHT_ARTIFACTS_DIR/$MANUAL_ROOT}" || return 1
   light_export_path LIGHT_ICON_CONTACT_SHEETS_DIR "$repository_root" "${LIGHT_ICON_CONTACT_SHEETS_DIR-$LIGHT_ARTIFACTS_DIR/$ICON_CONTACT_SHEETS}" || return 1

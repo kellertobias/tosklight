@@ -1,10 +1,11 @@
 import {
 	Button,
+	ModalRegistration,
 	ModalTitleBar,
 	NumberField,
 	Select,
 	TextInput,
-} from "../../common";
+} from "@tosklight/ui";
 import { fixtureDefinitionKey, maxRaw } from "../fixtureProfileModel";
 import { usePatchController } from "./controller";
 import { saveEdit, saveHighlightEdit, saveSplitEdit } from "./editSave";
@@ -21,8 +22,10 @@ export function MultipatchVectorDialog() {
 	const controller = usePatchController();
 	const edit = controller.ui.multipatchEdit;
 	if (!edit || edit.kind === "address") return null;
+	const close = () => requestMultipatchEditClose(controller);
 	return (
-		<div className="stacked-modal-layer">
+		<ModalRegistration onClose={close}>
+			<div className="stacked-modal-layer">
 			<section className="nested-modal patch-edit-modal">
 				<ModalTitleBar
 					title={`Set multi-patch ${vectorEditTitle(edit.kind, edit.axis)}`}
@@ -35,12 +38,13 @@ export function MultipatchVectorDialog() {
 						</Button>
 					}
 					closeLabel={`Cancel multi-patch ${edit.kind}`}
-					onClose={() => requestMultipatchEditClose(controller)}
+					onClose={close}
 				/>
 				<EditError />
 				<VectorInputs kind={edit.kind} axis={edit.axis} />
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 
@@ -52,8 +56,10 @@ export function MultipatchAddressDialog() {
 	} = controller.data;
 	if (controller.ui.multipatchEdit?.kind !== "address" || !fixture || !instance)
 		return null;
+	const close = () => closeMultipatchEdit(controller);
 	return (
-		<div className="stacked-modal-layer fixture-address-layer">
+		<ModalRegistration onClose={close}>
+			<div className="stacked-modal-layer fixture-address-layer">
 			<FixtureAddressScreen
 				fixture={fixture}
 				instance={instance}
@@ -64,10 +70,11 @@ export function MultipatchAddressDialog() {
 				error={controller.ui.editError}
 				onSingleValue={controller.ui.setEditText}
 				onSplitValues={controller.ui.setEditSplitDrafts}
-				onCancel={() => closeMultipatchEdit(controller)}
+				onCancel={close}
 				onConfirm={() => void saveMultipatchEdit(controller)}
 			/>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 
@@ -75,8 +82,10 @@ export function FixtureEditDialog() {
 	const controller = usePatchController();
 	const { edit } = controller.ui;
 	if (!edit || !controller.data.selected || edit === "address") return null;
+	const close = () => requestFixtureEditClose(controller);
 	return (
-		<div className="stacked-modal-layer">
+		<ModalRegistration onClose={close}>
+			<div className="stacked-modal-layer">
 			<section className="nested-modal patch-edit-modal">
 				<ModalTitleBar
 					title={`Set fixture ${
@@ -99,12 +108,13 @@ export function FixtureEditDialog() {
 						)
 					}
 					closeLabel={`Cancel fixture ${edit}`}
-					onClose={() => requestFixtureEditClose(controller)}
+					onClose={close}
 				/>
 				<EditError />
 				<FixtureEditFields />
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 
@@ -261,8 +271,10 @@ export function FixtureAddressDialog() {
 	const selected = controller.data.selected;
 	if (controller.ui.edit !== "address" || controller.ui.pending || !selected)
 		return null;
+	const close = () => cancelEdit(controller);
 	return (
-		<div className="stacked-modal-layer fixture-address-layer">
+		<ModalRegistration onClose={close}>
+			<div className="stacked-modal-layer fixture-address-layer">
 			<FixtureAddressScreen
 				fixture={selected}
 				fixtures={controller.data.all}
@@ -272,14 +284,15 @@ export function FixtureAddressDialog() {
 				error={controller.ui.editError}
 				onSingleValue={controller.ui.setEditText}
 				onSplitValues={controller.ui.setEditSplitDrafts}
-				onCancel={() => cancelEdit(controller)}
+				onCancel={close}
 				onConfirm={() =>
 					definitionSplits(selected.definition).length > 1
 						? saveSplitEdit(controller)
 						: saveEdit(controller)
 				}
 			/>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 

@@ -1123,6 +1123,7 @@ fn cue_projection(number: u16, cue_number: f64) -> PlaybackRuntimeProjection {
                 master: 1.0,
                 fader_position: 1.0,
                 fader_pickup_required: false,
+                fader_pickup_target: None,
                 flash: false,
                 temporary: false,
                 temporary_active: false,

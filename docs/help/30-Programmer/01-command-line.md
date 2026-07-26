@@ -52,7 +52,7 @@ The **Desk key** is the button shown on the touchscreen keypad or console. The *
 | `[CUE]` | Cue | `[KBD:SHIFT]` + `[KBD:?]` | Separate a playback address from its cue number. |
 | `[SET]` | Set | `[KBD:HOME]` | Set a value, assign a control, or open configuration. |
 | `[REC]` | Record | `[KBD:END]` | Store cues, presets, and groups. Hold for record options. |
-| `[DEL]` | Delete | `[KBD:SHIFT]` + `[KBD:´]` | Delete a cue, preset, or other supported element. |
+| `[DEL]` | Delete | `[KBD:SHIFT]` + `[KBD:´]` | Delete a cue, preset, or other supported element. With attached hardware, press `[DEL]` and then an assigned encoder to release that encoder's scoped programmer value. |
 | `[MOV]` | Move | `[KBD:SHIFT]` + `[KBD:#]` | Move a cue or preset. |
 | `[CPY]` | Copy | `[KBD:SHIFT]` + `[KBD:+]` | Copy a cue or preset. |
 | `[ENT]` | Enter | `[KBD:ENTER]` | Confirm the command. |
@@ -178,6 +178,12 @@ Double-pressing a group in the Groups pool also dereferences it. A group recorde
 ## Setting values
 
 `<selection> [AT] <value> [ENTER]` assigns a value to the selection. A plain number is an intensity value from 0 through 100. A value containing `[ . ]` references a preset.
+
+Pressing a physical encoder normally opens its **Set Value** modal. When that parameter has a
+programmer value for the current selection, **Release** in the modal removes that programmer
+ownership; it does not set the value to zero. On attached hardware, `[DEL]` followed by that
+encoder's push performs the same release directly and then clears `[DEL]`. If the encoder has no
+scoped programmer value, the push does not create or release a value and `[DEL]` remains armed.
 
 | Value | Example | Result |
 | --- | --- | --- |

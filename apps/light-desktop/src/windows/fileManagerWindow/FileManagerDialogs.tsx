@@ -3,7 +3,7 @@ import {
 	CheckboxField,
 	TextArea,
 	TextInput,
-} from "../../components/common";
+} from "@tosklight/ui";
 import { validItemName } from "./fileUtilities";
 import type { FileManagerController } from "./useFileManagerController";
 

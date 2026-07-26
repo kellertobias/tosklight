@@ -36,6 +36,7 @@ export function cueProjection(
 			master: 1,
 			fader_position: 1,
 			fader_pickup_required: false,
+			fader_pickup_target: null,
 			flash: false,
 			temporary: false,
 			temporary_active: false,

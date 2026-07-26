@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Button } from "../../common";
-import { SearchBar } from "../../common/SearchBar";
+import { Button } from "@tosklight/ui";
+import { SearchBar } from "@tosklight/ui";
 import type { FixtureImportModal } from "./transfers";
 
 interface FixtureLibraryToolbarProps {
@@ -40,11 +40,18 @@ export function FixtureLibraryToolbar({
 					<SearchBar
 						value={query}
 						onChange={setQuery}
-						filters={[
-							{ id: "type", label: "Fixture type", options: fixtureTypes },
-						]}
-						values={{ type: typeFilter }}
-						onFilterChange={(_, value) => setTypeFilter(value)}
+						settings={[{
+							kind: "select",
+							id: "type",
+							label: "Fixture type",
+							value: typeFilter,
+							options: [
+								{ value: "", label: "All" },
+								...fixtureTypes.map((type) => ({ value: type, label: type })),
+							],
+						}]}
+						onSettingChange={(_, value) => setTypeFilter(String(value))}
+						onClearSettings={() => setTypeFilter("")}
 						placeholder="Search manufacturer, fixture, mode, or type"
 					/>,
 					searchTarget,

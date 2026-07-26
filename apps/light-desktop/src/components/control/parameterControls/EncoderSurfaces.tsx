@@ -1,5 +1,9 @@
 import { HardwareEncoderDisplay } from "../HardwareEncoderDisplay";
-import { TouchEncoder } from "../TouchEncoder";
+import { TouchEncoder } from "@tosklight/ui/encoders";
+import {
+	useProgrammingCommandLineActions,
+	useProgrammingDeleteCommandActive,
+} from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { formatNormalizedValue, parameterLabels } from "./model";
 import type { ParameterController } from "./useParameterController";
 
@@ -41,10 +45,14 @@ function EncoderSurface({
 	controller,
 	attribute,
 	index,
+	deleteArmed,
+	resetCommandLine,
 }: {
 	controller: ParameterController;
 	attribute: string | null;
 	index: number;
+	deleteArmed: boolean;
+	resetCommandLine(): Promise<boolean>;
 }) {
 	if (!attribute)
 		return (
@@ -70,6 +78,7 @@ function EncoderSurface({
 				activateOnHardwarePress
 				target={{ label, value: discrete ?? display }}
 				editValue={discrete ? undefined : value * 100}
+				canRelease={hasScopedValue}
 				onEdit={
 					discrete || !controller.canWriteValues
 						? undefined
@@ -86,9 +95,18 @@ function EncoderSurface({
 				}
 				onRelease={
 					hasScopedValue && controller.canWriteValues
-						? () => void controller.releaseParameter(attribute)
+						? () => controller.releaseParameter(attribute).then(() => undefined)
 						: undefined
 				}
+				onHardwarePress={() => {
+					if (!deleteArmed) return false;
+					if (hasScopedValue && controller.canWriteValues) {
+						void controller
+							.releaseParameter(attribute)
+							.then(() => resetCommandLine());
+					}
+					return true;
+				}}
 			/>
 		);
 	return (
@@ -120,6 +138,10 @@ export function EncoderSurfaces({
 }: {
 	controller: ParameterController;
 }) {
+	const deleteArmed = useProgrammingDeleteCommandActive(
+		controller.hardwareConnected,
+	);
+	const commandLineActions = useProgrammingCommandLineActions();
 	if (!controller.selectedFixtureIds.length && !controller.selectedGroupId)
 		return (
 			<div className="parameter-empty">
@@ -135,6 +157,10 @@ export function EncoderSurfaces({
 					controller={controller}
 					attribute={attribute}
 					index={index}
+					deleteArmed={deleteArmed}
+					resetCommandLine={() =>
+						commandLineActions?.reset() ?? Promise.resolve(false)
+					}
 				/>
 			))}
 		</>

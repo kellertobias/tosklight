@@ -60,16 +60,15 @@ export function HardwareCueRows({
 					}
 					key={`${kind}-${index}`}
 				>
-					<i />
 					<span>{cue?.number ?? "—"}</span>
 					<b>{cue?.name || (cue ? `Cue ${cue.number}` : "—")}</b>
-					<small>
-						{kind === "next" && effectiveNextIsLoaded
-							? "LOADED NEXT"
-							: cue?.fade_millis
-								? `${(cue.fade_millis / 1000).toFixed(1)}s`
-								: ""}
-					</small>
+					{(kind === "next" && effectiveNextIsLoaded) || cue?.fade_millis ? (
+						<small>
+							{kind === "next" && effectiveNextIsLoaded
+								? "LOADED NEXT"
+								: `${((cue?.fade_millis ?? 0) / 1000).toFixed(1)}s`}
+						</small>
+					) : null}
 				</div>
 			))}
 		</div>

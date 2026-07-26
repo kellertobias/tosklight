@@ -55,6 +55,7 @@ fn cue_list_runtime(
         master: runtime.master,
         fader_position: runtime.fader_position,
         fader_pickup_required: runtime.fader_pickup_required,
+        fader_pickup_target: runtime.fader_pickup_target,
         flash: runtime.flash,
         temporary: runtime.temporary,
         temporary_active: runtime.temporary_active,

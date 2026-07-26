@@ -1,8 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render as rtlRender, screen, waitFor, within } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SoundToLightConfig, SpeedGroupSoundState } from "../../api/types";
 import { inactiveCaptureStatus } from "./soundToLightAnalyzer";
 import { SoundToLightModal } from "./SoundToLightModal";
+
+const render = (ui: Parameters<typeof rtlRender>[0]) => rtlRender(ui, { wrapper: ModalProvider });
 
 const configuration: SoundToLightConfig = {
   enabled: false,
@@ -70,17 +73,17 @@ describe("SoundToLightModal", () => {
     await waitFor(() => expect(onPreview).toHaveBeenCalledWith("A", expect.objectContaining({ frequency: { type: "custom", low_hz: 59, high_hz: 180 } })));
     fireEvent.click(within(lowControl as HTMLElement).getByRole("button", { name: "Open number pad" }));
     let numberPad = screen.getByRole("dialog", { name: "Low frequency" });
-    fireEvent.click(within(numberPad).getByRole("button", { name: "←" }));
-    fireEvent.click(within(numberPad).getByRole("button", { name: "←" }));
+    fireEvent.click(within(numberPad).getByRole("button", { name: "⌫" }));
+    fireEvent.click(within(numberPad).getByRole("button", { name: "⌫" }));
     fireEvent.click(within(numberPad).getByRole("button", { name: "4" }));
     fireEvent.click(within(numberPad).getByRole("button", { name: "5" }));
     fireEvent.click(within(numberPad).getByRole("button", { name: "ENTER" }));
     const highControl = screen.getByLabelText("Custom high frequency").closest(".ui-number-control")!;
     fireEvent.click(within(highControl as HTMLElement).getByRole("button", { name: "Open number pad" }));
     numberPad = screen.getByRole("dialog", { name: "High frequency" });
-    fireEvent.click(within(numberPad).getByRole("button", { name: "←" }));
-    fireEvent.click(within(numberPad).getByRole("button", { name: "←" }));
-    fireEvent.click(within(numberPad).getByRole("button", { name: "←" }));
+    fireEvent.click(within(numberPad).getByRole("button", { name: "⌫" }));
+    fireEvent.click(within(numberPad).getByRole("button", { name: "⌫" }));
+    fireEvent.click(within(numberPad).getByRole("button", { name: "⌫" }));
     fireEvent.click(within(numberPad).getByRole("button", { name: "1" }));
     fireEvent.click(within(numberPad).getByRole("button", { name: "4" }));
     fireEvent.click(within(numberPad).getByRole("button", { name: "0" }));

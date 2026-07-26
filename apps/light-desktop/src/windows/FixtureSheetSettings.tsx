@@ -1,5 +1,5 @@
-import { Select, SwitchField } from "../components/common";
-import { WindowSettings } from "../components/window-kit";
+import { Select, SwitchField } from "@tosklight/ui";
+import { WindowSettings } from "@tosklight/ui/window-kit";
 import { useApp } from "../state/AppContext";
 import type {
 	FixtureSheetColumn,

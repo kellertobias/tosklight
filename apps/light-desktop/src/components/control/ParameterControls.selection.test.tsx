@@ -142,19 +142,23 @@ vi.mock("./VerticalTouchFader", () => ({
 		</button>
 	),
 }));
-vi.mock("./TouchEncoder", () => ({
-	TouchEncoder: ({
-		label,
-		onSet,
-	}: {
-		label: string;
-		onSet: (value: number) => void;
-	}) => (
-		<button type="button" onClick={() => onSet(0.5)}>
-			{label}
-		</button>
-	),
-}));
+vi.mock("@tosklight/ui/encoders", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@tosklight/ui/encoders")>();
+	return {
+		...actual,
+		TouchEncoder: ({
+			label,
+			onSet,
+		}: {
+			label: string;
+			onSet: (value: number) => void;
+		}) => (
+			<button type="button" onClick={() => onSet(0.5)}>
+				{label}
+			</button>
+		),
+	};
+});
 
 function fixture(fixtureId: string) {
 	return {

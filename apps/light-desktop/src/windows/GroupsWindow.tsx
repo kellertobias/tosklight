@@ -8,7 +8,7 @@ import {
 	type RecordMode,
 	RecordModeDialog,
 } from "../components/shared/RecordModeDialog";
-import { WindowHeader } from "../components/window-kit";
+import { WindowHeader } from "@tosklight/ui/window-kit";
 import { useGroupRecording } from "../features/groupRecording/GroupRecordingProvider";
 import type { GroupRecordingTarget } from "../features/groupRecording/target";
 import { useApp } from "../state/AppContext";

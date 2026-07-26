@@ -51,6 +51,9 @@ fn runtime_projection(status: &PlaybackRuntimeStatus) -> CueListRuntimeProjectio
         master: playback.master,
         fader_position: playback.fader_position,
         fader_pickup_required: playback.fader_pickup_required,
+        fader_pickup_target: playback
+            .fader_pickup_required
+            .then(|| playback.fader_pickup_target.unwrap_or(0.0)),
         flash: playback.flash,
         temporary: playback.temporary,
         temporary_active: status.temporary_active,

@@ -10,7 +10,7 @@ import { useProgrammerPreloadLifecycleView } from "../../features/programmerPrel
 import { useProgrammingSelectionView } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { useSelectedPatchedFixtures } from "../../features/patch/PatchState";
 import { useApp } from "../../state/AppContext";
-import { Button, ModalPortal } from "../common";
+import { Button, ModalPortal } from "@tosklight/ui";
 import { compatibleSpecialDialogActions } from "./SpecialDialogsModal";
 import { OutputControls } from "./systemControls/OutputControls";
 import { RunningSections } from "./systemControls/RunningSections";
@@ -146,7 +146,7 @@ export function SystemControlsModal() {
 		model.playbackAuthority.dynamics.length +
 		(model.preload.active ? 1 : 0);
 	return (
-		<ModalPortal>
+		<ModalPortal onClose={model.close}>
 			<div
 				className="modal-backdrop"
 				onPointerDown={(event) => {

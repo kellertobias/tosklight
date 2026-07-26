@@ -18,7 +18,7 @@ import {
 	SHOW_ID,
 	settleSession,
 } from "../../features/programmingInteraction/testFixtures";
-import { Button } from "../common";
+import { Button } from "@tosklight/ui";
 import { CommandLineBar } from "./CommandLineBar";
 import {
 	UPDATE_SETTINGS_EVENT,

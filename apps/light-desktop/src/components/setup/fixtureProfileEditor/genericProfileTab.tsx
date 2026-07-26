@@ -6,7 +6,7 @@ import {
 	SelectField,
 	TextAreaField,
 	TextField,
-} from "../../common";
+} from "@tosklight/ui";
 import { AssetField } from "./assets";
 
 const FIXTURE_TYPES = [

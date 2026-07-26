@@ -1,6 +1,6 @@
 import { type MutableRefObject, useLayoutEffect } from "react";
 import type { SelectiveImportOutcome } from "../../api/selectiveImportModels";
-import { Button, ModalTitleBar, SelectField } from "../common";
+import { Button, ModalTitleBar, SelectField } from "@tosklight/ui";
 import {
 	CatalogSelection,
 	PreviewDetails,

@@ -1,4 +1,4 @@
-import { FormLayout, NumberField, TextField } from "../../components/common";
+import { FormLayout, NumberField, TextField } from "@tosklight/ui";
 import { useDmxDiagnostics } from "../../features/dmxDiagnostics/DmxDiagnosticsContext";
 import { OutputRoutesSetup } from "../../components/setup/OutputRoutesSetup";
 import type { SetupWindowController } from "./controller";

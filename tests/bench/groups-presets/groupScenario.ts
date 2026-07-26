@@ -218,7 +218,7 @@ export class BrowserGroups {
 				},
 			});
 		} else if (route === "pool") {
-			await this.commands.via.api.type("SET");
+			await this.commands.via.ui.type("SET");
 			await this.desk.click(this.groupCard(number));
 			const dialog = this.page.getByRole("dialog", { name: "Group properties" });
 			await dialog.getByLabel("Group name").fill(properties.name);

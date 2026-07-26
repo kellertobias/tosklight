@@ -1,0 +1,111 @@
+.console-search {
+  position: relative;
+  min-width: 260px;
+  display: flex;
+  align-items: stretch;
+  margin-left: auto;
+}
+
+.console-search-input {
+  position: relative;
+  min-width: 0;
+  display: block;
+  flex: 1;
+}
+
+.console-search-input > .console-search-icon {
+  position: absolute;
+  z-index: 2;
+  color: var(--muted);
+}
+
+.console-search-input > span.console-search-icon {
+  left: 13px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.console-search-input > button.console-search-options {
+  left: 0;
+  top: 0;
+  width: 58px;
+  min-width: 58px;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.console-search-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.console-search-input > .ui-text-control > .ui-input {
+  height: 100%;
+  padding-left: 40px;
+}
+
+.console-search.has-options .console-search-input > .ui-text-control > .ui-input {
+  padding-left: 58px;
+}
+
+.search-filter-modal {
+  width: min(520px, calc(100vw - 30px));
+  padding: 0;
+  overflow: hidden;
+}
+
+.search-filter-modal > .ui-modal-titlebar {
+  margin: 0;
+}
+
+.search-settings-body {
+  padding: 18px;
+  overflow: auto;
+}
+
+.search-settings-fields {
+  gap: 12px;
+}
+
+.search-settings-fields .ui-form-field {
+  margin: 0;
+}
+
+.search-settings-fields .ui-switch-control {
+  min-height: 48px;
+}
+
+.search-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 18px 18px;
+}
+
+@media (max-width: 700px) {
+  .search-settings-fields .ui-form-field.labels-side {
+    grid-template-columns: minmax(108px, 42%) minmax(0, 1fr);
+    column-gap: 10px;
+  }
+
+  .search-settings-fields .ui-form-field.labels-side > label {
+    text-align: right;
+  }
+
+  .search-settings-fields .ui-form-field.labels-side > .ui-form-control,
+  .search-settings-fields .ui-form-field.labels-side > small {
+    grid-column: 2;
+  }
+}

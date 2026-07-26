@@ -6,7 +6,7 @@ import type {
 	SelectiveImportProfileConflictResolution,
 	SelectiveImportProfileKey,
 } from "../../api/selectiveImportModels";
-import { CheckboxField, SelectField } from "../common";
+import { CheckboxField, SelectField } from "@tosklight/ui";
 import {
 	actionLabel,
 	humanize,

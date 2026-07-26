@@ -1,4 +1,4 @@
-import { Button, Input } from "../../components/common";
+import { Button, Input } from "@tosklight/ui";
 import type { GroupManagementOperation } from "../../features/groupManagement/contracts";
 import { useGroupManagement } from "../../features/groupManagement/GroupManagementProvider";
 import {

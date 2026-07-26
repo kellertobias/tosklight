@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ClientSummary } from "../../../api/types";
-import { Button, ModalTitleBar } from "../../common";
-import { WindowScrollArea } from "../../window-kit";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
+import { WindowScrollArea } from "@tosklight/ui/window-kit";
 
 function defaultScreenGroupId(heading: string) {
 	return `client-group-${heading.replaceAll(" ", "-").toLowerCase()}`;
@@ -102,7 +102,8 @@ function RemoveClientConfirmation({
 	onConfirm: () => void;
 }) {
 	return (
-		<div className="stacked-modal-layer">
+		<ModalRegistration onClose={onCancel}>
+			<div className="stacked-modal-layer">
 			<section
 				className="nested-modal default-screen-remove-confirm"
 				role="alertdialog"
@@ -128,7 +129,8 @@ function RemoveClientConfirmation({
 					</Button>
 				</div>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 
@@ -172,12 +174,13 @@ export function DefaultScreenPicker({
 		},
 	].filter((group) => group.clients.length > 0);
 	return (
-		<div
-			className="stacked-modal-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && onClose()
-			}
-		>
+		<ModalRegistration onClose={onClose}>
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onClose()
+				}
+			>
 			<section
 				className="nested-modal default-screen-picker"
 				role="dialog"
@@ -235,6 +238,7 @@ export function DefaultScreenPicker({
 					}}
 				/>
 			)}
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }

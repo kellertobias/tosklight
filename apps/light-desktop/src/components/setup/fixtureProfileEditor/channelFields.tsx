@@ -10,7 +10,7 @@ import {
 	NumberField,
 	SelectField,
 	TextField,
-} from "../../common";
+} from "@tosklight/ui";
 import { maxRaw, resolutionBytes } from "../fixtureProfileModel";
 import {
 	applyCanonicalChannelAttribute,

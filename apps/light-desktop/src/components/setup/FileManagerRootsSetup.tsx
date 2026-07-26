@@ -1,5 +1,5 @@
 import type { DeskConfiguration } from "../../api/types";
-import { Button, FormLayout, SelectField, SwitchField, TextField } from "../common";
+import { Button, FormLayout, SelectField, SwitchField, TextField } from "@tosklight/ui";
 
 export type FileManagerRootConfiguration = DeskConfiguration["file_manager_roots"][number];
 

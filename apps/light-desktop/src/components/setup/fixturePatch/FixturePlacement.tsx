@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { Button, Select } from "../../common";
+import { Button, ModalRegistration, Select } from "@tosklight/ui";
 import {
 	ConsoleNumberField,
 	ConsoleTextField,
@@ -30,8 +30,10 @@ export function FixturePlacement() {
 	const controller = usePatchController();
 	const definition = controller.data.definition;
 	if (!controller.ui.placementOpen || !definition) return null;
+	const close = () => requestPlacementClose(controller);
 	return (
-		<div className="stacked-modal-layer">
+		<ModalRegistration onClose={close}>
+			<div className="stacked-modal-layer">
 			<section className="nested-modal fixture-placement-modal">
 				<PlacementHeader controller={controller} />
 				<div className="placement-grid">
@@ -41,7 +43,8 @@ export function FixturePlacement() {
 					)}
 				</div>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 

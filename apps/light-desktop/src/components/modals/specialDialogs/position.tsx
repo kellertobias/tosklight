@@ -7,7 +7,7 @@ import {
 	programmerValuesMutationKey,
 	type ProgrammerValuesMutationQueueController,
 } from "../../../features/programmerValues/useProgrammerValuesMutationQueue";
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 import {
 	moveLampPositions,
 	resolveLampPositions,

@@ -9,7 +9,7 @@ import {
 import { ServerErrorNotice } from "../shell/ServerErrorNotice";
 import { useSelectedPatchedFixtures } from "../../features/patch/PatchState";
 import { useApp } from "../../state/AppContext";
-import { Button, ModalPortal } from "../common";
+import { Button, ModalPortal } from "@tosklight/ui";
 import {
 	availableSpecialDialogAttributes,
 	BeamShapersDialog,
@@ -85,7 +85,7 @@ export function SpecialDialogsModal() {
 			: [];
 
 	return (
-		<ModalPortal>
+		<ModalPortal onClose={close}>
 			<div
 				className="modal-backdrop"
 				onPointerDown={(event) => {

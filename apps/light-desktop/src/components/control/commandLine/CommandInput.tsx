@@ -1,10 +1,10 @@
 import { useCallback } from "react";
 import type { CommandTargetMode } from "../../../controlSurface/commandTarget";
 import { useApp } from "../../../state/AppContext";
-import { Button, Input } from "../../common";
+import { Button, Input } from "@tosklight/ui";
 import { CommandLineStatusBoundary } from "./CommandLineStatusBoundary";
 
-export function CommandInput({
+export function CommandInputView({
 	playback,
 	hardware,
 	completed,
@@ -15,6 +15,8 @@ export function CommandInput({
 	onReplace,
 	onExecute,
 	onOpenHistory,
+	onToggleMode,
+	status,
 }: {
 	playback: boolean;
 	hardware: boolean;
@@ -26,22 +28,15 @@ export function CommandInput({
 	onReplace: (value: string, pristine?: boolean) => void;
 	onExecute: () => Promise<void>;
 	onOpenHistory: () => void;
+	onToggleMode: () => void;
+	status: React.ReactNode;
 }) {
-	const { state, dispatch } = useApp();
-	const openSystemControls = useCallback(
-		() =>
-			dispatch({
-				type: "SET_MODAL",
-				modal: "systemControlsOpen",
-				value: true,
-			}),
-		[dispatch],
-	);
+	const { state } = useApp();
 	return (
 		<>
 			<Button
 				className={`mode-toggle ${playback ? "playbacks-active" : ""}`}
-				onClick={() => dispatch({ type: "TOGGLE_CONTROL_MODE" })}
+				onClick={onToggleMode}
 			>
 				<span className="mode-icon">{playback ? "▶" : "⌨"}</span>
 				<span>
@@ -77,7 +72,7 @@ export function CommandInput({
 						ESC
 					</Button>
 				)}
-				<CommandLineStatusBoundary onOpen={openSystemControls} />
+				{status}
 			</div>
 			{completed && (
 				<span
@@ -90,4 +85,22 @@ export function CommandInput({
 			)}
 		</>
 	);
+}
+
+export function CommandInput(props: Omit<React.ComponentProps<typeof CommandInputView>, "onToggleMode" | "status">) {
+	const { dispatch } = useApp();
+	const openSystemControls = useCallback(
+		() =>
+			dispatch({
+				type: "SET_MODAL",
+				modal: "systemControlsOpen",
+				value: true,
+			}),
+		[dispatch],
+	);
+	return <CommandInputView
+		{...props}
+		onToggleMode={() => dispatch({ type: "TOGGLE_CONTROL_MODE" })}
+		status={<CommandLineStatusBoundary onOpen={openSystemControls} />}
+	/>;
 }

@@ -1,10 +1,11 @@
 import { useRef } from "react";
+import { pointerToGridCell } from "@tosklight/ui/desktop";
 import { GRID_COLUMNS, GRID_ROWS, type DeskModel, type GridRect } from "../../types";
 import { useApp } from "../../state/AppContext";
 import { Pane } from "./Pane";
 import { WindowPicker } from "../modals/WindowPicker";
 import { PaneSettingsModal } from "../modals/PaneSettingsModal";
-import { Button } from "../common";
+import { Button } from "@tosklight/ui";
 
 export function DeskGrid({ desk }: { desk: DeskModel }) {
   const { state, dispatch } = useApp();
@@ -12,8 +13,10 @@ export function DeskGrid({ desk }: { desk: DeskModel }) {
   const empty = desk.panes.length === 0;
   const openAtPointer = (event: React.PointerEvent<HTMLElement>) => {
     const rect = ref.current!.getBoundingClientRect();
-    const x = Math.max(1, Math.min(GRID_COLUMNS, Math.floor((event.clientX - rect.left) / rect.width * GRID_COLUMNS) + 1));
-    const y = Math.max(1, Math.min(GRID_ROWS, Math.floor((event.clientY - rect.top) / rect.height * GRID_ROWS) + 1));
+    const { x, y } = pointerToGridCell(event.clientX, event.clientY, rect, {
+      columns: GRID_COLUMNS,
+      rows: GRID_ROWS,
+    });
     dispatch({ type: "OPEN_WINDOW_PICKER", rect: { x, y, width: 6, height: 6 } });
   };
   return <div className={`desk-grid ${state.paneSettingsId ? "editing" : ""}`} data-desktop-id={desk.id} data-desktop-name={desk.name} aria-label={`${desk.name} Desktop grid`} ref={ref} onPointerDown={(event) => { if (event.target === event.currentTarget) openAtPointer(event); }}>

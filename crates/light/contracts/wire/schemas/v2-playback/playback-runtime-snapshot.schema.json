@@ -62,6 +62,13 @@
         "fader_pickup_required": {
           "type": "boolean"
         },
+        "fader_pickup_target": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
         "fader_position": {
           "type": "number",
           "format": "float"
@@ -145,6 +152,7 @@
         "master",
         "fader_position",
         "fader_pickup_required",
+        "fader_pickup_target",
         "flash",
         "temporary",
         "temporary_active",

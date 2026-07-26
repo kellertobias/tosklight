@@ -8,7 +8,7 @@ import { isSetContextClick } from "../../../disableContextMenu";
 import {
 	type VerticalTouchFaderAction,
 	VerticalTouchFaderSurface,
-} from "../VerticalTouchFader";
+} from "@tosklight/ui/faders";
 import { openPlaybackConfiguration } from "./actions";
 import type { PlaybackBankController } from "./controller";
 import {
@@ -22,7 +22,7 @@ import {
 	PlaybackAssignmentTarget,
 	PlaybackConfigurationTarget,
 	PlaybackRepresentation,
-	SingleFaderlessButton,
+	PlaybackRuntimeStatus,
 } from "./SlotControls";
 import type { PlaybackSlotProjection, PlaybackSnapshotActive } from "./types";
 
@@ -56,8 +56,6 @@ export function TouchPlaybackCard({
 	interceptClick,
 }: TouchPlaybackCardProps) {
 	const { playback, slot, row, rowIndex } = slotData;
-	const singleFaderlessAction =
-		!hasFader && touchActions.length === 1 ? touchActions[0] : null;
 	const display = playbackFaderDisplay(
 		playback,
 		active,
@@ -89,13 +87,12 @@ export function TouchPlaybackCard({
 				playback={playback}
 				slot={slot}
 			/>
-			{!singleFaderlessAction && (
-				<PlaybackRepresentation
-					controller={controller}
-					playback={playback}
-					slot={slot}
-				/>
-			)}
+			<PlaybackRepresentation
+				controller={controller}
+				playback={playback}
+				slot={slot}
+			/>
+			<PlaybackRuntimeStatus active={active} />
 			{hasFader && (
 				<VerticalTouchFaderSurface
 					hardware={controller.hardware}
@@ -120,14 +117,7 @@ export function TouchPlaybackCard({
 					}
 				/>
 			)}
-			{singleFaderlessAction && (
-				<SingleFaderlessButton
-					action={singleFaderlessAction}
-					slot={slot}
-					playback={playback}
-				/>
-			)}
-			{!hasFader && !singleFaderlessAction && touchActions.length > 0 && (
+			{!hasFader && touchActions.length > 0 && (
 				<footer
 					className={`faderless-playback-actions action-count-${touchActions.length}`}
 					style={

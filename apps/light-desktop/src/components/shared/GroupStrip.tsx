@@ -1,9 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { useBootstrapReady } from "../../features/deskSnapshot/DeskSnapshotState";
-import { useCommandLineSurface } from "../control/commandLine/useCommandLineSurface";
-import { requestUpdateTarget } from "../control/updateWorkflow";
 import { groups } from "../../data/mockData";
-import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
+import { useBootstrapReady } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useGroupRecording } from "../../features/groupRecording/GroupRecordingProvider";
 import {
 	captureGroupRecordingTarget,
@@ -12,9 +9,12 @@ import {
 } from "../../features/groupRecording/target";
 import { useGroupSelectionActions } from "../../features/groupSelection/useGroupSelectionActions";
 import { usePortableGroups } from "../../features/showObjects/ShowObjectsState";
+import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 import { useApp } from "../../state/AppContext";
-import { Button } from "../common";
-import { ButtonGrid } from "../window-kit";
+import { Button } from "@tosklight/ui";
+import { useCommandLineSurface } from "../control/commandLine/useCommandLineSurface";
+import { requestUpdateTarget } from "../control/updateWorkflow";
+import { ButtonGrid } from "@tosklight/ui/window-kit";
 import { type RecordMode, RecordModeDialog } from "./RecordModeDialog";
 
 const MIN_SHORTCUT_SIZE = 88;
@@ -182,6 +182,7 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 			</header>
 			<ButtonGrid
 				ref={gridRef}
+				square={false}
 				className="card-pool group-shortcut-grid"
 				style={{ "--group-shortcut-columns": slotCount } as React.CSSProperties}
 			>

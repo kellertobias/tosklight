@@ -1,5 +1,5 @@
 import { useConnectionStatus } from "../../features/shellStatus/ShellStatusState";
-import { Button } from "../../components/common";
+import { Button } from "@tosklight/ui";
 import {
 	useBootstrapSnapshot,
 	useSessionSnapshot,

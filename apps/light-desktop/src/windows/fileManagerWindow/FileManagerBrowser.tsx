@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Button } from "../../components/common";
+import { Button } from "@tosklight/ui";
 import { useFiles } from "../../features/files/FilesContext";
 import {
 	extension,
@@ -261,6 +261,10 @@ function DirectoryContents({
 }) {
 	const server = useFiles();
 	const { state, navigation, operations, editor, picker } = controller;
+	const normalizedQuery = state.query.trim().toLocaleLowerCase();
+	const visibleEntries = (state.listing?.entries ?? []).filter((entry) =>
+		entry.name.toLocaleLowerCase().includes(normalizedQuery),
+	);
 	return (
 		<main
 			className={state.view === "grid" ? "file-grid" : "file-list"}
@@ -275,7 +279,7 @@ function DirectoryContents({
 					<b>Modified</b>
 				</div>
 			)}
-			{state.listing?.entries.map((item) => {
+			{visibleEntries.map((item) => {
 				const value = { rootId: navigation.rootId, entry: item };
 				const key = `${value.rootId}:${item.path}`;
 				const selectedItem =
@@ -333,8 +337,12 @@ function DirectoryContents({
 					</Button>
 				);
 			})}
-			{state.listing && !state.listing.entries.length && (
-				<p className="file-empty-directory">This folder is empty.</p>
+			{state.listing && !visibleEntries.length && (
+				<p className="file-empty-directory">
+					{normalizedQuery
+						? `No files or folders match “${state.query}”.`
+						: "This folder is empty."}
+				</p>
 			)}
 			{!state.listing && navigation.rootId && !state.busy && (
 				<p className="file-empty-directory">The directory is unavailable.</p>

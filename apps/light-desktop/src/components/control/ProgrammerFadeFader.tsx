@@ -1,6 +1,7 @@
 import { useProgrammerFadeMillis } from "../../features/configuration/ConfigurationState";
 import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
-import { TouchValueButton, VerticalTouchFader } from "./VerticalTouchFader";
+import { TouchValueButton } from "@tosklight/ui/faders";
+import { VerticalTouchFader } from "./VerticalTouchFader";
 
 export function ProgrammerFadeFader({ compact = false }: { compact?: boolean }) {
   const configurationActions = useConfigurationActions();

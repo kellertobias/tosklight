@@ -1,5 +1,5 @@
 import type { AttributeDescriptor, FixtureMode } from "../../../api/types";
-import { ModalTitleBar } from "../../common";
+import { ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { ChannelsEditor } from "./channels";
 import { ColorEditor } from "./colorEditor";
 import { GeometryEditor } from "./geometryEditor";
@@ -29,12 +29,13 @@ export function ModeEditor({
 	const editedMode = mode;
 	const modeTab = tab;
 	return (
-		<div
-			className="stacked-modal-layer fixture-mode-editor-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && onClose()
-			}
-		>
+		<ModalRegistration onClose={onClose}>
+			<div
+				className="stacked-modal-layer fixture-mode-editor-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onClose()
+				}
+			>
 			<section
 				className="nested-modal fixture-mode-editor-modal"
 				role="dialog"
@@ -72,6 +73,7 @@ export function ModeEditor({
 					)}
 				</div>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }

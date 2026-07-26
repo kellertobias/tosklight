@@ -1,4 +1,4 @@
-import { WindowHeader } from "../../components/window-kit";
+import { WindowHeader } from "@tosklight/ui/window-kit";
 import type { WindowProps } from "../windowTypes";
 import { CueProperties } from "./CueProperties";
 import { CueTable, type CueTableEmptyState } from "./CueTable";

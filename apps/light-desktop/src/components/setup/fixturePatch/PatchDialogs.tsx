@@ -1,4 +1,4 @@
-import { Button, TextInput } from "../../common";
+import { Button, ModalRegistration, TextInput } from "@tosklight/ui";
 import { fixtureRange } from "../patchUtils";
 import { usePatchController } from "./controller";
 import { cancelEdit } from "./editSession";
@@ -16,8 +16,10 @@ import { closePlacement } from "./placementDraft";
 export function PlacementCloseConfirm() {
 	const controller = usePatchController();
 	if (!controller.ui.placementCloseConfirm) return null;
+	const stay = () => controller.ui.setPlacementCloseConfirm(false);
 	return (
-		<div className="stacked-modal-layer">
+		<ModalRegistration onClose={stay}>
+			<div className="stacked-modal-layer">
 			<section
 				className="nested-modal patch-small-modal"
 				role="dialog"
@@ -33,12 +35,13 @@ export function PlacementCloseConfirm() {
 					<Button className="danger" onClick={() => closePlacement(controller)}>
 						Yes, close
 					</Button>
-					<Button onClick={() => controller.ui.setPlacementCloseConfirm(false)}>
+					<Button onClick={stay}>
 						Stay in Add Fixture
 					</Button>
 				</footer>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 
@@ -46,8 +49,10 @@ export function EditCloseConfirm() {
 	const controller = usePatchController();
 	const target = controller.ui.editCloseConfirm;
 	if (!target) return null;
+	const keepEditing = () => controller.ui.setEditCloseConfirm(null);
 	return (
-		<div className="stacked-modal-layer">
+		<ModalRegistration onClose={keepEditing}>
+			<div className="stacked-modal-layer">
 			<section
 				className="nested-modal patch-small-modal"
 				role="dialog"
@@ -73,12 +78,13 @@ export function EditCloseConfirm() {
 					>
 						Discard changes
 					</Button>
-					<Button onClick={() => controller.ui.setEditCloseConfirm(null)}>
+					<Button onClick={keepEditing}>
 						Keep editing
 					</Button>
 				</footer>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 
@@ -86,8 +92,10 @@ export function DeleteConfirm() {
 	const controller = usePatchController();
 	const fixture = controller.ui.deleteConfirm;
 	if (!fixture) return null;
+	const abort = () => controller.ui.setDeleteConfirm(null);
 	return (
-		<div className="stacked-modal-layer">
+		<ModalRegistration onClose={abort}>
+			<div className="stacked-modal-layer">
 			<section
 				className="nested-modal patch-small-modal"
 				role="alertdialog"
@@ -113,20 +121,23 @@ export function DeleteConfirm() {
 					>
 						Unpatch fixture
 					</Button>
-					<Button onClick={() => controller.ui.setDeleteConfirm(null)}>
+					<Button onClick={abort}>
 						Abort
 					</Button>
 				</footer>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 
 export function AddLayerDialog() {
 	const controller = usePatchController();
 	if (controller.ui.layerModal !== "add") return null;
+	const close = () => controller.ui.setLayerModal(null);
 	return (
-		<div className="stacked-modal-layer">
+		<ModalRegistration onClose={close}>
+			<div className="stacked-modal-layer">
 			<section className="nested-modal patch-small-modal">
 				<h3>Add layer</h3>
 				<TextInput
@@ -138,7 +149,7 @@ export function AddLayerDialog() {
 					onKeyboardCommit={(value) => void createLayer(controller, value)}
 				/>
 				<footer>
-					<Button onClick={() => controller.ui.setLayerModal(null)}>
+					<Button onClick={close}>
 						Cancel
 					</Button>
 					<Button onClick={() => void createLayer(controller)}>
@@ -146,7 +157,8 @@ export function AddLayerDialog() {
 					</Button>
 				</footer>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 
@@ -154,8 +166,13 @@ export function PatchConflictDialog() {
 	const controller = usePatchController();
 	const { pending, blockedBy, editError } = controller.ui;
 	if (!pending || !controller.data.selected) return null;
+	const keepPatch = () => {
+		controller.ui.setPending(null);
+		controller.ui.setBlockedBy([]);
+	};
 	return (
-		<div className="stacked-modal-layer">
+		<ModalRegistration onClose={keepPatch}>
+			<div className="stacked-modal-layer">
 			<section
 				className="nested-modal conflict-modal"
 				role="dialog"
@@ -174,10 +191,7 @@ export function PatchConflictDialog() {
 				</p>
 				<footer>
 					<Button
-						onClick={() => {
-							controller.ui.setPending(null);
-							controller.ui.setBlockedBy([]);
-						}}
+						onClick={keepPatch}
 					>
 						Keep old patch / mode
 					</Button>
@@ -192,7 +206,8 @@ export function PatchConflictDialog() {
 					</Button>
 				</footer>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }
 

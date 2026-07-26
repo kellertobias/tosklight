@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import type { MultiPatchInstance, PatchedFixture } from "../../../api/types";
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 import { isDmxPatchable } from "../patchUtils";
 import { usePatchController } from "./controller";
 import { armEdit, selectSplitAddress } from "./editSession";

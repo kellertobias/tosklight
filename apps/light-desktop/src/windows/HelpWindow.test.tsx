@@ -1,7 +1,28 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { useState } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HelpCatalogEntry } from "../api/types";
-import { HelpMarkdown, HelpNavigation } from "./HelpWindow";
+import {
+  filterHelpEntries,
+  HelpMarkdown,
+  HelpNavigation,
+  HelpWindow,
+  HelpWindowView,
+} from "./HelpWindow";
+
+const helpClient = vi.hoisted(() => ({
+  helpCatalog: vi.fn(),
+  helpTopic: vi.fn(),
+}));
+vi.mock("../api/client/api", () => ({
+  createLightApi: () => ({ help: helpClient }),
+}));
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.clearAllMocks();
+});
 
 describe("help key rendering", () => {
   it("renders normal and numeric-range keys as keycaps", () => {
@@ -68,5 +89,65 @@ describe("help navigation", () => {
     expect(screen.getByRole("button", { name: "Collapse Show Setup" })).toHaveAttribute("aria-expanded", "true");
     const child = screen.getByRole("button", { name: "Fixtures & Patch" });
     expect(child.closest(".help-nav-row")).toHaveStyle({ paddingLeft: "28px" });
+  });
+
+  it("filters nested topics while retaining their real folder hierarchy", () => {
+    expect(filterHelpEntries(entries, "fixtures")).toEqual([{
+      ...entries[1],
+      children: [entries[1].children[0]],
+    }]);
+    expect(filterHelpEntries(entries, "show setup")).toEqual([entries[1]]);
+    expect(filterHelpEntries(entries, "missing")).toEqual([]);
+  });
+
+  it("uses typed window search and preserves a clear empty-result state", () => {
+    function SearchableHelp() {
+      const [query, setQuery] = useState("");
+      return <HelpWindowView
+        catalog={{ topics: entries, errors: [], live: true }}
+        onQueryChange={setQuery}
+        onSelect={vi.fn()}
+        query={query}
+        selected={null}
+        topic={null}
+      />;
+    }
+    render(<SearchableHelp />);
+    expect(screen.getByText("Live documentation")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search Help" }), { target: { value: "Fixtures" } });
+    expect(screen.queryByRole("button", { name: "Quickstart" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show Setup" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search Help" }), { target: { value: "No such topic" } });
+    expect(screen.getByText("No matching help topics.")).toBeInTheDocument();
+  });
+});
+
+describe("live Help adapter", () => {
+  it("loads the catalog and selected topic, then refreshes live documentation", async () => {
+    vi.useFakeTimers();
+    const catalog = {
+      topics: [{ id: "00-quickstart.md", title: "Quickstart", kind: "topic" as const, children: [] }],
+      errors: [],
+      live: true,
+    };
+    helpClient.helpCatalog.mockResolvedValue(catalog);
+    helpClient.helpTopic.mockResolvedValue({
+      id: "00-quickstart.md",
+      title: "Quickstart",
+      markdown: "# Quickstart",
+      live: true,
+    });
+
+    render(<HelpWindow />);
+    await act(async () => undefined);
+    await act(async () => undefined);
+    expect(helpClient.helpCatalog).toHaveBeenCalledOnce();
+    expect(helpClient.helpTopic).toHaveBeenCalledWith("00-quickstart.md");
+    expect(screen.getByRole("heading", { name: "Quickstart" })).toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+    await act(async () => undefined);
+    expect(helpClient.helpCatalog).toHaveBeenCalledTimes(2);
+    expect(helpClient.helpTopic).toHaveBeenCalledTimes(2);
   });
 });

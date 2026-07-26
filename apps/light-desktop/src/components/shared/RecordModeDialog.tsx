@@ -1,4 +1,4 @@
-import { Button, ModalPortal } from "../common";
+import { Button, ModalPortal } from "@tosklight/ui";
 
 export type RecordMode = "merge" | "overwrite";
 
@@ -11,7 +11,7 @@ export function RecordModeDialog({
   onChoose: (mode: RecordMode) => void;
   onCancel: () => void;
 }) {
-  return <ModalPortal>
+  return <ModalPortal onClose={onCancel}>
     <div
       className="modal-backdrop"
       onPointerDown={(event) => event.target === event.currentTarget && onCancel()}

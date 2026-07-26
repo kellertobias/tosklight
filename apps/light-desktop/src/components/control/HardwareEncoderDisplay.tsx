@@ -1,69 +1,30 @@
-import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import { Button } from "../common";
-import { ModalNumberInput, submitEncoderValue } from "../input/ModalInputControls";
-
-export type HardwareEncoderTarget = {
-  label: string;
-  value: string;
-  role?: string;
-};
+import { useEffect, useRef } from "react";
+import {
+  HardwareEncoderDisplayView,
+  type HardwareEncoderDisplayHandle,
+  type HardwareEncoderDisplayProps,
+} from "@tosklight/ui/encoders";
 
 export function HardwareEncoderDisplay({
-  slot,
-  target,
-  secondary,
-  editValue,
-  onEdit,
-  onEditRange,
-  onRelease,
   activateOnHardwarePress = false,
-}: {
-  slot: number;
-  target?: HardwareEncoderTarget;
-  secondary?: HardwareEncoderTarget;
-  editValue?: number;
-  onEdit?: (value: number) => void;
-  onEditRange?: (points: number[]) => void;
-  onRelease?: () => void;
+  onHardwarePress,
+  ...props
+}: HardwareEncoderDisplayProps & {
   activateOnHardwarePress?: boolean;
+  /** Return true when the application handled the press and Set Value must stay closed. */
+  onHardwarePress?: () => boolean;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [inputValue, setInputValue] = useState("");
-  const openEditor = useCallback(() => {
-    setInputValue(String(Number((editValue ?? 0).toFixed(1))));
-    setEditing(true);
-  }, [editValue]);
+  const display = useRef<HardwareEncoderDisplayHandle>(null);
   useEffect(() => {
-    if (!activateOnHardwarePress || !onEdit) return;
+    if (!activateOnHardwarePress) return;
     const handleEncoder = (event: Event) => {
       const { control, value } = (event as CustomEvent<{ control: string; value?: string }>).detail;
-      if (control === `encode/${slot}` && value === "press") openEditor();
+      if (control !== `encode/${props.slot}` || value !== "press") return;
+      if (onHardwarePress?.()) return;
+      if (props.onEdit) display.current?.activate();
     };
     window.addEventListener("light:encoder-action", handleEncoder);
     return () => window.removeEventListener("light:encoder-action", handleEncoder);
-  }, [activateOnHardwarePress, onEdit, openEditor, slot]);
-  const submit = () => {
-    if (submitEncoderValue(inputValue, onEdit, onEditRange)) setEditing(false);
-  };
-  if (!target) return <section className="hardware-encoder-display unassigned" aria-label={`Encoder ${slot} unassigned`}>
-    <header><b>Unassigned</b><small>Enc {slot}</small></header>
-  </section>;
-  const content = <>
-      <header><b title={target.label}>{target.label}</b><small>Enc {slot}</small></header>
-      <div className="hardware-encoder-target"><strong>{target.value}</strong>{target.role && <span>{target.role}</span>}</div>
-      {secondary && <div className="hardware-encoder-target secondary"><b title={secondary.label}>{secondary.label}</b><strong>{secondary.value}</strong>{secondary.role && <span>{secondary.role}</span>}</div>}
-  </>;
-  const displayClassName = `hardware-encoder-display ${secondary ? "dual-target" : "single-target"}`;
-  return <>
-    {onEdit
-      ? <Button className={displayClassName} aria-label={`Encoder ${slot}: ${target.label}, ${target.value}`} onClick={openEditor}>{content}</Button>
-      : <section className={displayClassName} aria-label={`Encoder ${slot}: ${target.label}, ${target.value}`}>{content}</section>}
-    {editing && createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && setEditing(false)}><section className="nested-modal direct-value-modal hardware-encoder-modal" role="dialog" aria-modal="true" aria-label={`Encoder ${slot} value`}>
-      <Button className="modal-close" aria-label="Close encoder value" onClick={() => setEditing(false)}>×</Button>
-      <h3>{target.label}</h3><strong>{inputValue || "0"}</strong>
-      <ModalNumberInput value={inputValue} onChange={setInputValue} onEnter={submit} onEscape={() => setEditing(false)} replaceOnFirstInput allowThrough={Boolean(onEditRange)} />
-      {onRelease && <footer className="modal-actions"><Button variant="danger" aria-label={`Release ${target.label}`} onClick={() => { onRelease(); setEditing(false); }}>Release</Button></footer>}
-    </section></div>, document.body)}
-  </>;
+  }, [activateOnHardwarePress, onHardwarePress, props.onEdit, props.slot]);
+  return <HardwareEncoderDisplayView ref={display} {...props} />;
 }

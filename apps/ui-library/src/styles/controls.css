@@ -1,0 +1,335 @@
+.ui-button {
+  min-height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: var(--panel2);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.ui-button.ui-compact {
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.ui-button.ui-primary,
+.ui-button.is-active {
+  border-color: var(--cyan);
+  background: #0a252b;
+  color: var(--cyan);
+}
+
+.ui-button.ui-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.ui-button.ui-danger {
+  border-color: #743136;
+  background: #301417;
+  color: var(--red);
+}
+
+.ui-button.ui-success {
+  border-color: var(--green);
+  background: #10351b;
+  color: var(--green);
+}
+
+.ui-button.ui-warning {
+  border-color: var(--amber);
+  background: #2b220c;
+  color: var(--amber);
+}
+
+.ui-button.is-full-width {
+  width: 100%;
+}
+
+.ui-button.is-icon-only {
+  width: 50px;
+  padding: 0;
+}
+
+.ui-button.ui-compact.is-icon-only {
+  width: 38px;
+}
+
+.ui-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: ui-spin 0.7s linear infinite;
+}
+
+@keyframes ui-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ui-input,
+.ui-textarea {
+  width: 100%;
+  min-height: 50px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: #11171c;
+  color: var(--text);
+}
+
+.ui-textarea {
+  min-height: 100px;
+  padding: 10px 12px;
+}
+
+.ui-large-text-control {
+  width: 100%;
+  min-width: 0;
+  height: 144px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  grid-template-rows: repeat(3, 48px);
+  overflow: hidden;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: #11171c;
+}
+
+.ui-large-text-control:focus-within {
+  outline: 2px solid #70e8f7;
+  outline-offset: 2px;
+}
+
+.ui-large-text-control > .ui-textarea {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  min-width: 0;
+  height: 144px;
+  min-height: 144px;
+  padding: 10px 12px;
+  resize: none;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 17px;
+  line-height: 22px;
+  outline: 0 !important;
+}
+
+.ui-large-text-control > .ui-button {
+  grid-column: 2;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--line2);
+  border-bottom: 1px solid var(--line2);
+  border-radius: 0;
+  background: #182028;
+  color: var(--cyan);
+}
+
+.ui-large-text-control > .ui-large-text-down {
+  grid-row: 2;
+}
+
+.ui-large-text-control > .ui-large-text-keyboard {
+  grid-row: 3;
+  border-bottom: 0;
+}
+
+.ui-large-text-control svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ui-keyboard-icon {
+  display: inline-block;
+  font-size: 26px;
+  line-height: 1;
+  transform: scale(1.1);
+}
+
+.ui-input.ui-compact {
+  min-height: 38px;
+}
+
+.ui-field-error {
+  color: #ff7b84 !important;
+}
+
+.ui-multi-value-toggle {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #090d10;
+}
+
+.ui-multi-value-toggle > .ui-button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+}
+
+.ui-multi-value-toggle > .ui-button.is-active {
+  background: #153541;
+  color: var(--cyan);
+  box-shadow: 0 1px 8px #0008;
+}
+
+.ui-check-control,
+.ui-switch-control {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 11px;
+  padding: 8px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: #11171c;
+  cursor: pointer;
+}
+
+.ui-check-control > input,
+.ui-switch-control > input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.ui-check-mark {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line2);
+  border-radius: 6px;
+  background: #090d10;
+  color: transparent;
+  font-weight: 900;
+}
+
+.ui-check-control input:checked + .ui-check-mark {
+  border-color: var(--cyan);
+  background: #0a3038;
+  color: var(--cyan);
+}
+
+.ui-switch-track {
+  position: relative;
+  width: 50px;
+  height: 30px;
+  flex: none;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: #090d10;
+}
+
+.ui-switch-track i {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.14s ease, background 0.14s ease;
+}
+
+.ui-switch-control input:checked + .ui-switch-track {
+  border-color: var(--cyan);
+  background: #0a3038;
+}
+
+.ui-switch-control input:checked + .ui-switch-track i {
+  background: var(--cyan);
+  transform: translateX(20px);
+}
+
+.ui-check-state {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.horizontal-touch-fader {
+  --fader-level: 1;
+  position: relative;
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  overflow: hidden;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel2);
+  touch-action: none;
+}
+
+.horizontal-touch-fader::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--fader-color-dark), var(--fader-color));
+  transform: scaleX(var(--fader-level));
+  transform-origin: left;
+}
+
+.horizontal-touch-fader span,
+.horizontal-touch-fader strong {
+  position: relative;
+  z-index: 1;
+}
+
+.horizontal-touch-fader strong {
+  color: var(--cyan);
+  font-size: 22px;
+}
+
+.horizontal-touch-fader input {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+}
+
+.horizontal-touch-fader.disabled {
+  filter: grayscale(1);
+  opacity: 0.42;
+}

@@ -4,8 +4,8 @@ import {
 	HorizontalFaderField,
 	MultiValueToggleField,
 	SwitchField,
-} from "../../components/common";
-import { WindowHeader, WindowSettings } from "../../components/window-kit";
+} from "@tosklight/ui";
+import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
 import type { StageOptionsModel } from "./types";

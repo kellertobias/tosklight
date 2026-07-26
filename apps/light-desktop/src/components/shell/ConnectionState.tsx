@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useDeskConnection } from "../../features/deskConnection/DeskConnectionContext";
 import { useBootstrapReady } from "../../features/deskSnapshot/DeskSnapshotState";
 import { configuredServerUrl } from "../../api/client/serverLocation";
-import { Button, LoadingSurface, TextField } from "../common";
+import { Button, TextField } from "@tosklight/ui";
+import { LoadingSurface } from "../common/LoadingSurface";
 import { useDesktopBridge } from "../../platform/desktop";
 
 export function ConnectionState() {

@@ -1,6 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { TextArea } from "../../components/common";
+import { TextArea } from "@tosklight/ui";
 import type { TextEditorController } from "./controller";
 
 export function TextEditorContent({

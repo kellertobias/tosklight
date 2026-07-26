@@ -25,14 +25,14 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 |---:|---|---|
 | 00 | [Programmer relative encoders and fade-time scope](finished/00-programmer-relative-encoders-and-fade-time-scope.md) | Completed cross-surface encoder behavior contract. |
 | 01 | [Unpatched fixtures from Add Fixture](finished/01-unpatched-fixtures-on-add-fixture.md) | Completed **Empty** address workflow. |
-| 02 | [Shared frontend components and deterministic screenshots](pending/storybook%20changes/02-shared-frontend-components-and-storybook-screenshots.WORKING.md) | Concurrent Storybook lane; move the UI library to `apps/ui-library`, validate production components in Storybook, then make accepted stories the documentation screenshot source. |
-| 03 | [Consistent pool-object colors](pending/03-consistent-pool-object-colors.md) | Waiting for accepted shared pool primitives from plan 02. |
-| 04 | [Empty-selection object target selection](pending/04-empty-selection-object-target-selection.md) | Waiting for stable application pool adapters from plan 02. |
-| 05 | [Warm frontend state for instant surface switching](pending/05-warm-frontend-state-for-instant-switching.md) | Waiting for stable frontend provider and Storybook-harness boundaries from plan 02. |
+| 02 | [Shared frontend components and deterministic screenshots](finished/storybook%20changes/02-shared-frontend-components-and-storybook-screenshots.DONE.md) | Completed production UI-library adoption, Storybook validation, and deterministic/live documentation screenshot ownership. |
+| 03 | [Consistent pool-object colors](pending/03-consistent-pool-object-colors.md) | Next unblocked plan; consume the accepted shared pool primitives from plan 02. |
+| 04 | [Empty-selection object target selection](pending/04-empty-selection-object-target-selection.md) | Queued after plan 03; stable application pool adapters are now available. |
+| 05 | [Warm frontend state for instant surface switching](pending/05-warm-frontend-state-for-instant-switching.md) | Queued after plan 04; the frontend provider and Storybook-harness prerequisite is complete. |
 | 06 | [Exclusive active-show mutation boundary](finished/06-exclusive-active-show-mutation-boundary.md) | Completed single transaction owner for active-show writes. |
 | 07a | [Backend Highlight application service](finished/07a-highlight-application-service.md) | Completed independent backend prerequisite; existing HTTP, WebSocket, OSC, persistence, output, event, and feedback behavior now shares one application service. |
-| 07b | [Typed commands and capability events](pending/07b-typed-commands-and-capability-events.md) | Waiting for stable desktop providers, generated-client consumers, and frontend verification after plan 02 and the completed Highlight service. |
-| 08 | [Typed control-surface interaction routing](pending/08-typed-control-surface-interaction-routing.md) | Waiting for plan 02's component callback and modal/interaction boundaries. |
+| 07b | [Typed commands and capability events](pending/07b-typed-commands-and-capability-events.md) | Queued after plans 03–05; its plan 02 frontend prerequisite and Highlight-service prerequisite are complete. |
+| 08 | [Typed control-surface interaction routing](pending/08-typed-control-surface-interaction-routing.md) | Queued after plan 07b; plan 02's component callback and modal/interaction boundaries are stable. |
 | 09 | [Patch performance benchmarks](pending/09-patch-performance-benchmarks.md) | Waiting for plan 02 and plan 05's stable client-store and visible-paint path. |
 | 10 | [Complete shared control-surface contracts](pending/10-complete-shared-control-surface-contracts.md) | Waiting for plans 07–08 to stabilize typed command and interaction names. |
 | 11 | [Packaged operator and reference-hardware verification](pending/11-packaged-operator-and-reference-hardware-verification.md) | Waiting for the accepted frontend and access to the required reference hardware. |
@@ -43,30 +43,26 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 Product-roadmap work under `docs/plans/Next` and `docs/plans/Later` remains separate unless a queue
 file explicitly links it as its behavior contract.
 
-## Concurrent Storybook lane
+## Completed Storybook lane
 
-Plans under `pending/storybook changes/` form one frontend-owned lane. A `.WORKING.md` suffix marks
-its active ownership. That lane may run concurrently with the lowest-numbered unblocked plan only
-when its files, contracts, runtime state, and verification do not overlap.
+The frontend-owned Storybook lane completed on 2026-07-26 and is archived under
+`finished/storybook changes/`. Every lane plan has a `.DONE.md` suffix and a Result section; no
+active `.WORKING.md` plan remains. Plans 03–05, 07b, and 08–13 may now consume its stable shared
+components, application adapters, providers, generated consumers, and downstream typed contracts.
 
-Plan 02 is currently active in that lane. Plans 03–05, 07b, and 08–13 record explicit dependencies
-on its shared components, application adapters, providers, generated consumers, or downstream
-typed contracts. Plans 06, 07a, and 14 completed independently.
+## Completed Storybook handoff
 
-## Storybook handoff and continuation contract
+The frontend lane was handed back after its owner:
 
-The frontend lane is handed back only when its owner:
-
-1. completes every plan in `pending/storybook changes/`, including focused and proportionate
+1. completed every plan in the Storybook lane, including focused and proportionate
    broader verification;
-2. adds the required Result and commit information to the lane plans;
-3. moves the complete `pending/storybook changes/` directory to
+2. added the required Result and commit information to the lane plans;
+3. moved the complete `pending/storybook changes/` directory to
    `finished/storybook changes/`; and
-4. commits that coherent lane without leaving an active `.WORKING.md` plan behind.
+4. prepared the coherent lane without leaving an active `.WORKING.md` plan behind.
 
 The directory move is the machine-readable signal that plan 02 and the frontend contracts it owns
-are stable. A partially renamed plan or a remaining file under `pending/storybook changes/` does
-not clear the dependency.
+are stable. That signal is now present.
 
 After that signal, continue plans 03, 04, 05, 07b, 08, 09, 10, 11, 12, and 13 in numeric dependency
 order. Before claiming each new plan, query the large Codex usage window with the Tosken Raider MCP

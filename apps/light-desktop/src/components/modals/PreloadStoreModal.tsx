@@ -15,7 +15,7 @@ import {
 	NumberField,
 	SelectField,
 	TextField,
-} from "../common";
+} from "@tosklight/ui";
 
 type StoreTarget = "preset" | "cue";
 type PresetRecordMode = "merge" | "overwrite" | "add_missing_fixtures";
@@ -67,7 +67,7 @@ export function PreloadStoreModal() {
 	};
 
 	return (
-		<ModalPortal>
+		<ModalPortal onClose={close}>
 			<div
 				className="modal-backdrop"
 				onPointerDown={(event) => {

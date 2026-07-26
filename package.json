@@ -14,6 +14,7 @@
   "workspaces": [
     "apps/light-desktop",
     "apps/light-hardware-controls",
+    "apps/ui-library",
     "packages/*"
   ],
   "scripts": {
@@ -45,7 +46,13 @@
     "test:e2e-ui": "bash tools/test.sh e2e-ui",
     "test:app-icons": "bash tools/test.sh app-icons",
     "test:artifact-paths": "bash tools/test.sh artifact-paths",
+    "test:ui-package": "npm run typecheck --workspace @tosklight/ui && npm run test --workspace @tosklight/ui",
+    "storybook": "npm run storybook --workspace @tosklight/ui",
+    "storybook:build": "npm run storybook:build --workspace @tosklight/ui",
+    "test:storybook": "npm run test:storybook --workspace @tosklight/ui",
     "test:help-screenshots": "bash tools/test.sh help-screenshots",
+    "test:help-screenshots:update": "UPDATE_HELP_SCREENSHOTS=1 bash tools/test.sh help-screenshots",
+    "test:help-screenshots-live": "bash tools/test.sh help-screenshots-live",
     "test:record": "bash tools/test.sh record",
     "test:demo": "bash tools/test.sh demo",
     "test:all": "bash tools/test.sh all",

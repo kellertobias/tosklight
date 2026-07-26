@@ -62,12 +62,15 @@ fn off_requires_zero_pickup_without_moving_the_recorded_fader() {
     let runtime = &engine.runtime()[0];
     assert_eq!(runtime.fader_position, 0.6);
     assert!(runtime.fader_pickup_required);
+    assert_eq!(runtime.fader_pickup_target, Some(0.0));
 
     engine.set_master(1, 0.9).unwrap();
     assert!(!engine.runtime()[0].enabled);
     assert_eq!(engine.runtime()[0].master, 1.0);
+    assert_eq!(engine.runtime()[0].fader_pickup_target, Some(0.0));
     engine.set_master(1, 0.0).unwrap();
     assert!(!engine.runtime()[0].fader_pickup_required);
+    assert_eq!(engine.runtime()[0].fader_pickup_target, None);
     assert!(!engine.runtime()[0].enabled);
     engine.set_master(1, 0.4).unwrap();
     assert!(engine.runtime()[0].enabled);

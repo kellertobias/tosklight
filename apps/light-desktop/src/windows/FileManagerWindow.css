@@ -1,4 +1,1 @@
 /* Ordered imports preserve the File Manager cascade. */
-@import "./fileManager/chrome.css";
-@import "./fileManager/browser.css";
-@import "./fileManager/operations.css";

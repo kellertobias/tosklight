@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { useLayoutEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Button } from "../../components/common/controls";
+import { Button } from "@tosklight/ui";
 import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import type {
 	SelectionActionOutcome,

@@ -1,20 +1,20 @@
-import { useMemo, useState } from "react";
-import { useHighlightSnapshot } from "../features/highlight/HighlightState";
+import { type ReactNode, useMemo, useState } from "react";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import { SourceLegend } from "../components/shared/SourceLegend";
-import { WindowHeader } from "../components/window-kit";
+import { WindowHeader } from "@tosklight/ui/window-kit";
+import { useHighlightSnapshot } from "../features/highlight/HighlightState";
+import { useProgrammerPreloadLifecycleView } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import {
 	useProgrammingSelectionActions,
 	useProgrammingSelectionView,
 } from "../features/programmingInteraction/ProgrammingInteractionView";
-import { useProgrammerPreloadLifecycleView } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useApp } from "../state/AppContext";
 import type { FixtureSheetColumn } from "../types";
 import {
 	DEFAULT_FIXTURE_SHEET_COLUMNS,
 	FixtureSheetSettings,
 } from "./FixtureSheetSettings";
-import { FixtureSheetTable } from "./FixtureSheetTable";
+import { FixtureSheetTableView as FixtureSheetTable } from "@tosklight/ui/tables";
 import { fixtureSheetColumns } from "./fixtureSheetColumns";
 import { useFixtureSheetCuelistAuthority } from "./fixtureSheetCuelistAuthority";
 import {
@@ -82,18 +82,80 @@ export function FixtureSheetWindow({
 	);
 
 	return (
+		<FixtureSheetWindowView
+			compact={compact}
+			selectionCount={selection?.selected.length ?? 0}
+			info={<SourceLegend />}
+			activeValuesLoading={activeValuesLoading}
+			groupRuntimeLoading={groupRuntimeLoading}
+			onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())}
+			table={
+				<FixtureSheetTable
+					activeRow={activeRow}
+					columns={columns}
+					onActivate={(fixtureId) =>
+						void selectionActions?.gesture({
+							source: { type: "fixture", fixtureId },
+							resolvedFixtures: [fixtureId],
+						})
+					}
+					onActiveRowChange={setActiveRow}
+					presentStep={presentStep}
+					rows={rows}
+					selectedFixtureIds={selectedFixtureIds}
+				/>
+			}
+			groups={groupsVisible ? <GroupStrip active={active} /> : null}
+			settings={
+				settingsAnchor ? (
+					<FixtureSheetSettings
+						activeOnly={activeOnly}
+						anchor={settingsAnchor}
+						cueLists={cuelistFilter.cueLists}
+						cueListId={cueListId}
+						fixtureOrder={fixtureOrder}
+						groupsVisible={groupsVisible}
+						includedHeads={includedHeads}
+						onClose={() => setSettingsAnchor(null)}
+					/>
+				) : null
+			}
+		/>
+	);
+}
+
+export function FixtureSheetWindowView({
+	compact,
+	selectionCount,
+	info,
+	activeValuesLoading,
+	groupRuntimeLoading,
+	onSettings,
+	table,
+	groups,
+	settings,
+}: {
+	compact?: boolean;
+	selectionCount: number;
+	info?: ReactNode;
+	activeValuesLoading?: boolean;
+	groupRuntimeLoading?: boolean;
+	onSettings?: (anchor: HTMLElement) => void;
+	table: ReactNode;
+	groups?: ReactNode;
+	settings?: ReactNode;
+}) {
+	return (
 		<div className="fixture-window">
 			{!compact && (
 				<WindowHeader
 					title="Fixture Sheet"
 					info={{
-						primary: `${selection?.selected.length ?? 0} selected`,
-						secondary: <SourceLegend />,
+						primary: `${selectionCount} selected`,
+						secondary: info,
 					}}
 					settings
-					onSettings={(anchor) =>
-						setSettingsAnchor(anchor.getBoundingClientRect())
-					}
+					onSettings={onSettings}
 				/>
 			)}
 			{activeValuesLoading && (
@@ -106,33 +168,9 @@ export function FixtureSheetWindow({
 					Group runtime loading…
 				</p>
 			)}
-			<FixtureSheetTable
-				activeRow={activeRow}
-				columns={columns}
-				onActivate={(fixtureId) =>
-					void selectionActions?.gesture({
-						source: { type: "fixture", fixtureId },
-						resolvedFixtures: [fixtureId],
-					})
-				}
-				onActiveRowChange={setActiveRow}
-				presentStep={presentStep}
-				rows={rows}
-				selectedFixtureIds={selectedFixtureIds}
-			/>
-			{groupsVisible && <GroupStrip active={active} />}
-			{settingsAnchor && (
-				<FixtureSheetSettings
-					activeOnly={activeOnly}
-					anchor={settingsAnchor}
-					cueLists={cuelistFilter.cueLists}
-					cueListId={cueListId}
-					fixtureOrder={fixtureOrder}
-					groupsVisible={groupsVisible}
-					includedHeads={includedHeads}
-					onClose={() => setSettingsAnchor(null)}
-				/>
-			)}
+			{table}
+			{groups}
+			{settings}
 		</div>
 	);
 }

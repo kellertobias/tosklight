@@ -1,5 +1,5 @@
 import type { FixtureMode, FixtureProfile } from "../../../api/types";
-import { Button, LargeTextField, TextField } from "../../common";
+import { Button, LargeTextField, TextField } from "@tosklight/ui";
 
 export function ModesTab({
 	draft,

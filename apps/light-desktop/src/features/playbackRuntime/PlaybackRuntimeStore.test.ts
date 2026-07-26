@@ -57,6 +57,25 @@ function enabledProjection(playbackNumber: number, enabled: boolean) {
 	};
 }
 
+function pickupProjection(
+	playbackNumber: number,
+	physicalPosition: number,
+	pickupTarget: number,
+) {
+	const projection = cueProjection(playbackNumber);
+	if (projection.target !== "cue_list" || !projection.runtime)
+		throw new Error("fixture must contain a running Cuelist");
+	return {
+		...projection,
+		runtime: {
+			...projection.runtime,
+			fader_position: physicalPosition,
+			fader_pickup_required: true,
+			fader_pickup_target: pickupTarget,
+		},
+	};
+}
+
 function telemetrySample(playbackNumber: number, fadeProgress: number) {
 	return {
 		playback_number: playbackNumber,
@@ -300,6 +319,28 @@ describe("PlaybackRuntimeStore", () => {
 		expect(store.getSnapshot().projections.size).toBe(0);
 		expect(store.getSnapshot().pendingKeys.size).toBe(0);
 		expect(emissions).toBe(0);
+	});
+
+	it("retains authoritative pickup targets across feedback and clears them on authority replacement", () => {
+		const store = new PlaybackRuntimeStore();
+		const identity = playbackIdentity(1);
+		store.reset(SHOW_ID, DESK_ID, "authority-a");
+		store.installSnapshot(
+			playbackSnapshot([identity], 10, [pickupProjection(1, 0.8, 0.1)]),
+			[identity],
+		);
+		store.applyProjection(pickupProjection(1, 0.7, 0.1), 11);
+
+		const projection = store
+			.getSnapshot()
+			.projections.get("playback:1")?.[0];
+		expect(
+			projection?.target === "cue_list" &&
+				projection.runtime?.fader_pickup_target,
+		).toBe(0.1);
+
+		store.reset(SHOW_ID, DESK_ID, "authority-b");
+		expect(store.getSnapshot().projections.size).toBe(0);
 	});
 
 	it("keeps a newer event over a delayed no-change response", () => {

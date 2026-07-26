@@ -1,8 +1,9 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { Button } from "../../components/common";
+import { Button } from "@tosklight/ui";
 import { usePaneChromeTargets } from "../../components/shell/PaneChromeContext";
-import { WindowHeader } from "../../components/window-kit";
+import { SearchBar } from "@tosklight/ui";
+import { WindowHeader } from "@tosklight/ui/window-kit";
 import { FileMenuIcon } from "./FileMenuIcon";
 import type { FileHeaderMenuKind } from "./types";
 import type { FileManagerController } from "./useFileManagerController";
@@ -327,12 +328,19 @@ export function FileManagerHeader({
 			</Button>
 		</div>
 	);
+	const search = {
+		value: state.query,
+		placeholder: "File or folder name",
+		ariaLabel: "Search File Manager",
+	};
 	return (
 		<>
 			{!paneChrome && !controller.picker && (
 				<WindowHeader
 					title="File Manager"
 					info={{ primary: controller.purpose, secondary: pathControl }}
+					search={search}
+					onSearch={state.setQuery}
 					toolbar={actions}
 					actions={
 						controller.closeable && controller.app
@@ -354,7 +362,13 @@ export function FileManagerHeader({
 				/>
 			)}
 			{paneChrome?.info && createPortal(pathControl, paneChrome.info)}
-			{paneChrome?.toolbar && createPortal(actions, paneChrome.toolbar)}
+			{paneChrome?.toolbar && createPortal(
+				<>
+					<SearchBar {...search} onChange={state.setQuery} />
+					{actions}
+				</>,
+				paneChrome.toolbar,
+			)}
 			<HeaderMenu controller={controller} />
 		</>
 	);

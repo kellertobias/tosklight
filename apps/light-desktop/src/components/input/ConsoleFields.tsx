@@ -1,5 +1,5 @@
 import { type FocusEvent } from "react";
-import { NumberInput, TextInput } from "../common";
+import { NumberInput, TextInput } from "@tosklight/ui";
 
 function selectAll(event: FocusEvent<HTMLInputElement>) { event.currentTarget.select(); }
 

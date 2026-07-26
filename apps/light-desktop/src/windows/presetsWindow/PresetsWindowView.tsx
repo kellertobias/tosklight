@@ -1,3 +1,4 @@
+import { PoolGrid, type PoolSlotViewModel } from "@tosklight/ui/pools";
 import type { CSSProperties } from "react";
 import {
 	Button,
@@ -7,17 +8,16 @@ import {
 	ModalPortal,
 	SwitchField,
 	TextField,
-} from "../../components/common";
+} from "@tosklight/ui";
 import {
 	type RecordMode,
 	RecordModeDialog,
 } from "../../components/shared/RecordModeDialog";
 import {
-	ButtonGrid,
 	WindowHeader,
 	WindowScrollArea,
 	WindowSettings,
-} from "../../components/window-kit";
+} from "@tosklight/ui/window-kit";
 import type { PresetCard } from "../../features/presetRecording/presetCards";
 import {
 	normalizePresetFamily,
@@ -88,10 +88,36 @@ export function PresetCardGrid({
 	setArmed,
 	onActivate,
 }: PresetCardGridProps) {
+	const slots: PoolSlotViewModel<string>[] = cards.flatMap((preset, index) =>
+		preset
+			? [
+					{
+						id: preset.id,
+						position: index,
+						card: {
+							number: `${normalizePresetFamily(preset.body.family)} ${preset.body.number}`,
+							primary: preset.body.name,
+						},
+					},
+				]
+			: [],
+	);
 	return (
 		<WindowScrollArea>
-			<ButtonGrid className="card-pool">
-				{cards.map((preset, index) => {
+			<PoolGrid
+				slots={slots}
+				slotCount={cards.length}
+				emptySlot={(index) => ({
+					id: presetStorageKey(presetAddress(family, index + 1)),
+					position: index,
+					card: {
+						number: `${family} ${index + 1}`,
+						primary: "Empty",
+						states: ["empty"],
+					},
+				})}
+				renderSlot={(_, index) => {
+					const preset = cards[index] ?? null;
 					const storedFamily = normalizePresetFamily(preset?.body.family);
 					const filtered = Boolean(preset && storedFamily !== family);
 					const id =
@@ -100,7 +126,6 @@ export function PresetCardGrid({
 					return (
 						<Button
 							disabled={filtered}
-							key={index + 1}
 							className={`preset-card pool-cell preset-family-${preset ? storedFamily.toLowerCase() : family.toLowerCase()} ${!preset ? "empty" : ""} ${filtered ? "filtered" : ""} ${storeArmed ? "store-target" : ""} ${updateArmed ? "update-target" : ""} ${setArmed ? "set-target" : ""}`}
 							style={cardStyle(colorsEnabled, customization)}
 							onClick={() => onActivate(index)}
@@ -117,8 +142,8 @@ export function PresetCardGrid({
 							/>
 						</Button>
 					);
-				})}
-			</ButtonGrid>
+				}}
+			/>
 		</WindowScrollArea>
 	);
 }
@@ -254,7 +279,7 @@ export function PresetCustomizationDialog({
 	onClose,
 }: PresetCustomizationDialogProps) {
 	return (
-		<ModalPortal>
+		<ModalPortal onClose={onClose}>
 			<div
 				className="stacked-modal-layer"
 				onPointerDown={(event) =>

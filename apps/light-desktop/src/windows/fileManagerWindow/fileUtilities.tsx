@@ -5,7 +5,7 @@ import type {
 	FileOperationResult,
 	FileRoot,
 } from "../../api/types";
-import { Button, TextArea } from "../../components/common";
+import { Button, TextArea } from "@tosklight/ui";
 import type {
 	FileManagerOperationKind,
 	FileManagerPickerOptions,

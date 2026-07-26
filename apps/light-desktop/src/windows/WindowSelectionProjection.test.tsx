@@ -198,24 +198,28 @@ vi.mock("./fixtureSheetProjection", () => ({
 vi.mock("./fixtureSheetStep", () => ({
 	createFixtureStepPresenter: () => () => ({}),
 }));
-vi.mock("./FixtureSheetTable", () => ({
-	FixtureSheetTable: ({
-		onActivate,
-		selectedFixtureIds,
-	}: {
-		onActivate: (fixtureId: string) => void;
-		selectedFixtureIds: ReadonlySet<string>;
-	}) => (
-		<div
-			data-testid="fixture-sheet-selection"
-			data-selection={[...selectedFixtureIds].join(",")}
-		>
-			<button type="button" onClick={() => onActivate(FIXTURE_2)}>
-				Activate fixture 2
-			</button>
-		</div>
-	),
-}));
+vi.mock("@tosklight/ui/tables", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@tosklight/ui/tables")>();
+	return {
+		...actual,
+		FixtureSheetTableView: ({
+			onActivate,
+			selectedFixtureIds,
+		}: {
+			onActivate: (fixtureId: string) => void;
+			selectedFixtureIds: ReadonlySet<string>;
+		}) => (
+			<div
+				data-testid="fixture-sheet-selection"
+				data-selection={[...selectedFixtureIds].join(",")}
+			>
+				<button type="button" onClick={() => onActivate(FIXTURE_2)}>
+					Activate fixture 2
+				</button>
+			</div>
+		),
+	};
+});
 vi.mock("../components/setup/FixturePatchSetup", () => ({
 	FixturePatchSetupContent: ({
 		onStagePreview,

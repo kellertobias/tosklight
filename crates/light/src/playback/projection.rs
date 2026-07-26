@@ -100,6 +100,7 @@ pub struct CueListRuntimeProjection {
     pub master: f32,
     pub fader_position: f32,
     pub fader_pickup_required: bool,
+    pub fader_pickup_target: Option<f32>,
     pub flash: bool,
     pub temporary: bool,
     pub temporary_active: bool,

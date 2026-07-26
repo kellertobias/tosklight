@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Button, ModalPortal, ModalTitleBar } from "../../components/common";
+import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import { type CueDraftActions, CuePropertyFields } from "./CuePropertyFields";
 import { cueTrigger, cueTriggerKind, formatCueSeconds } from "./cueFormatting";
 
@@ -155,7 +155,7 @@ function CueTriggerModal({
 		void actions.save(next);
 	};
 	return (
-		<ModalPortal>
+		<ModalPortal onClose={close}>
 			<div
 				className="stacked-modal-layer"
 				onPointerDown={(event) =>

@@ -1,4 +1,4 @@
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 import {
 	alignModes,
 	compactFamilyLabels,

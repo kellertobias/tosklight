@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useFiles } from "../features/files/FilesContext";
-import { Button, Input, ModalTitleBar } from "../components/common";
+import { Button, Input, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { PaneChromeProvider } from "../components/shell/PaneChromeContext";
 import { extension, FileManager } from "./FileManagerWindow";
 import {
@@ -120,14 +120,15 @@ export function FileManagerPickerHost() {
 			}),
 		);
   };
-  return <div className="file-picker-backdrop" role="dialog" aria-modal="true" aria-label="Choose files or folders">
+  const cancel = () => complete(request.onCancel);
+  return <ModalRegistration onClose={cancel}><div className="file-picker-backdrop" role="dialog" aria-modal="true" aria-label="Choose files or folders">
     <div className="file-picker-surface">
       <ModalTitleBar
         title="File Manager"
         details={<><b>{purpose}</b><small><span className="pane-chrome-info-target" ref={setChromeInfo} /></small></>}
         actions={<span className="pane-chrome-toolbar-target" ref={setChromeToolbar} />}
         closeLabel="Close File Manager"
-		onClose={() => complete(request.onCancel)}
+		onClose={cancel}
       />
       <PaneChromeProvider value={{ info: chromeInfo, toolbar: chromeToolbar }}>
         <FileManager
@@ -156,7 +157,7 @@ export function FileManagerPickerHost() {
         />
       </footer>}
     </div>
-  </div>;
+  </div></ModalRegistration>;
 }
 
 function normalizeHostedPickerRequest(value: unknown): HostedPickerRequest | null {

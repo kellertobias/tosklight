@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import postcss from "postcss";
 import {
   evaluateTestCommandBoundaries,
   readTestSources,
@@ -276,6 +277,163 @@ function typeScriptDependencyDirections() {
     fail("generated wire DTOs must be consumed and validated by the frontend API boundary");
 }
 
+function sharedUiDependencyDirections() {
+  const packageRoot = path.join(repositoryRoot, "apps/ui-library");
+  const sourceRoot = path.join(packageRoot, "src");
+  const appsRoot = path.join(repositoryRoot, "apps");
+  const desktopSourceRoot = path.join(repositoryRoot, "apps/light-desktop/src");
+  const manifestPath = path.join(packageRoot, "package.json");
+  if (!fs.existsSync(manifestPath) || !fs.existsSync(sourceRoot)) {
+    fail("apps/ui-library must contain tracked source and a package manifest");
+    return;
+  }
+
+  const packageCssRules = new Set();
+  const cssRuleContext = (rule) => {
+    const ancestors = [];
+    for (let parent = rule.parent; parent && parent.type !== "root"; parent = parent.parent)
+      if (parent.type === "atrule")
+        ancestors.unshift(`@${parent.name} ${parent.params}`);
+    return ancestors.join("|");
+  };
+  const cssRuleSignature = (rule) => {
+    const declarations = rule.nodes
+      .filter((node) => node.type === "decl")
+      .map((node) => `${node.prop}:${node.value}${node.important ? "!important" : ""}`)
+      .sort()
+      .join(";");
+    return declarations
+      ? `${cssRuleContext(rule)}\0${rule.selector}\0${declarations}`
+      : null;
+  };
+  for (const file of walk(sourceRoot).filter((candidate) => candidate.endsWith(".css"))) {
+    const stylesheet = postcss.parse(fs.readFileSync(file, "utf8"), { from: file });
+    stylesheet.walkRules((rule) => {
+      const signature = cssRuleSignature(rule);
+      if (signature) packageCssRules.add(signature);
+    });
+  }
+  for (const file of walk(desktopSourceRoot).filter((candidate) => candidate.endsWith(".css"))) {
+    const stylesheet = postcss.parse(fs.readFileSync(file, "utf8"), { from: file });
+    stylesheet.walkRules((rule) => {
+      const signature = cssRuleSignature(rule);
+      if (signature && packageCssRules.has(signature))
+        fail(`${relative(file)} duplicates the package-owned ${rule.selector} rule verbatim`);
+    });
+  }
+
+  const retiredDesktopCompatibilityModules = [
+    "components/common/FaderControls.tsx",
+    "components/common/ModalPortal.tsx",
+    "components/common/ModalTitleBar.tsx",
+    "components/common/SearchBar.tsx",
+    "components/common/TouchSelect.tsx",
+    "components/common/controls.tsx",
+    "components/common/controls/InputModal.tsx",
+    "components/common/controls/choices.tsx",
+    "components/common/controls/formFields.tsx",
+    "components/common/controls/foundation.tsx",
+    "components/common/controls/pickers.tsx",
+    "components/common/controls/textInputs.tsx",
+    "components/common/index.ts",
+    "components/control/HorizontalTouchFader.tsx",
+    "components/control/TouchEncoder.tsx",
+    "components/input/ModalEscapeManager.tsx",
+    "components/input/ModalInputControls.tsx",
+    "components/window-kit/SelectionList.tsx",
+    "components/window-kit/UiKitCatalog.tsx",
+    "components/window-kit/WindowKit.tsx",
+    "components/window-kit/index.ts",
+    "windows/FixtureSheetTable.tsx",
+  ];
+  for (const retired of retiredDesktopCompatibilityModules) {
+    const file = path.join(desktopSourceRoot, retired);
+    if (fs.existsSync(file))
+      fail(`${relative(file)} is retired migration scaffolding; import @tosklight/ui directly`);
+  }
+
+  for (const registeredOverlay of [
+    "components/modals/DeskLockOverlay.tsx",
+    "components/modals/QuitConfirmOverlay.tsx",
+    "components/modals/ShowRecoveryModal.tsx",
+    "components/modals/WindowPicker.tsx",
+    "windows/FileManagerPickerHost.tsx",
+  ]) {
+    const file = path.join(desktopSourceRoot, registeredOverlay);
+    if (!fs.readFileSync(file, "utf8").includes("<ModalRegistration"))
+      fail(`${relative(file)} must participate in the shared modal stack`);
+  }
+
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  for (const reactPackage of ["react", "react-dom"]) {
+    if (!manifest.peerDependencies?.[reactPackage])
+      fail(`apps/ui-library must declare ${reactPackage} as a peer dependency`);
+    if (manifest.dependencies?.[reactPackage])
+      fail(`apps/ui-library must not install a second ${reactPackage} runtime`);
+  }
+
+  const forbiddenSourcePatterns = [
+    ["application context", /\b(?:useApp|useServer)\b/u],
+    ["WindowRegistry", /\bWindowRegistry\b/u],
+    ["Tauri integration", /@tauri-apps|src-tauri/u],
+    ["server fetch", /\bfetch\s*\(/u],
+    ["WebSocket integration", /\b(?:new\s+)?WebSocket\s*\(/u],
+    ["server API path", /["'`]\/api(?:\/|["'`])/u],
+  ];
+  for (const file of walk(sourceRoot).filter((candidate) => /\.[cm]?tsx?$/u.test(candidate))) {
+    const source = fs.readFileSync(file, "utf8");
+    for (const specifier of localImports(source)) {
+      const resolved = path.resolve(path.dirname(file), specifier);
+      if (resolved.startsWith(appsRoot) && !resolved.startsWith(packageRoot))
+        fail(`${relative(file)} imports application source through ${specifier}`);
+    }
+    if (/(?:from|import)\s*["'][^"']*light-desktop/u.test(source))
+      fail(`${relative(file)} imports the desktop application; keep that dependency one-way`);
+    for (const [description, pattern] of forbiddenSourcePatterns) {
+      if (pattern.test(source))
+        fail(`${relative(file)} imports or embeds ${description}; keep it in an application adapter`);
+    }
+  }
+
+  for (const file of walk(desktopSourceRoot).filter((candidate) => /\.[cm]?tsx?$/u.test(candidate))) {
+    const name = relative(file);
+    const source = fs.readFileSync(file, "utf8");
+    const production = !/\.(?:stories|test|spec)\.[cm]?tsx?$/u.test(name);
+    if (!production) continue;
+    for (const specifier of localImports(source)) {
+      const resolved = path.resolve(path.dirname(file), specifier);
+      if (resolved.startsWith(packageRoot))
+        fail(`${name} imports the UI library by relative path; use @tosklight/ui`);
+      if (
+        resolved.includes(`${path.sep}storybook${path.sep}`) ||
+        /\.stories$/u.test(resolved)
+      )
+        fail(`${name} imports Storybook-only source through ${specifier}`);
+    }
+    if (/from\s*["'][^"']*(?:storybook|\.stories)["']/u.test(source))
+      fail(`${name} imports Storybook-only source`);
+    if (name === "apps/light-desktop/src/main.tsx" && /ui-kit|UiKitCatalog/u.test(source))
+      fail(`${name} must use the contained Storybook instead of the retired UI Kit route`);
+    if (/search\s*=\s*\{\s*<SearchBar\b/u.test(source))
+      fail(`${name} renders SearchBar through arbitrary window/modal chrome; use typed search props`);
+
+    const rawModalLayers = source.match(
+      /className=(?:"[^"]*(?:modal-backdrop|stacked-modal-layer)[^"]*"|\{[^}\n]*(?:modal-backdrop|stacked-modal-layer)[^}\n]*\})/gu,
+    )?.length ?? 0;
+    const registeredModalLayers =
+      (source.match(/<ModalRegistration\b/gu)?.length ?? 0) +
+      (source.match(/<ModalPortal\b[^>]*\bonClose=/gu)?.length ?? 0);
+    if (rawModalLayers > 0 && rawModalLayers !== registeredModalLayers)
+      fail(`${name} has ${rawModalLayers} application modal layers but ${registeredModalLayers} shared-stack registrations`);
+  }
+
+  for (const file of walk(sourceRoot).filter((candidate) => /\.[cm]?tsx?$/u.test(candidate))) {
+    const source = fs.readFileSync(file, "utf8");
+    if (/search\s*=\s*\{\s*<SearchBar\b/u.test(source))
+      fail(`${relative(file)} renders SearchBar through arbitrary window/modal chrome; use typed search props`);
+  }
+}
+
 const legacyPlaybackPatterns = [
   ["server.playbacks", /\bserver\s*\.\s*playbacks\b/u],
   ["state.playbacks", /\bstate\s*\.\s*playbacks\b/u],
@@ -347,6 +505,7 @@ desktopHostIsCompositionRoot();
 activeShowMutationDirections();
 playbackOwnershipBoundaries();
 typeScriptDependencyDirections();
+sharedUiDependencyDirections();
 legacyPlaybackSnapshotBoundaries();
 testCommandBoundaries();
 privateTestBoundaries();

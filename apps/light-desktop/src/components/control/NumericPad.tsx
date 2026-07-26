@@ -3,7 +3,7 @@ import {
 	softwareKeyLabel,
 } from "@tosklight/light-controls/programmer-keypad";
 import type { SoftwareKey } from "./softwareKeypad";
-import { Button } from "../common";
+import { Button } from "@tosklight/ui";
 import { HighlightControls } from "./HighlightControls";
 import { useNumericPadController } from "./numericPad/useNumericPadController";
 import { ProgrammerFadeFader } from "./ProgrammerFadeFader";

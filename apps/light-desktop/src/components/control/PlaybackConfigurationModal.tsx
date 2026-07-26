@@ -1,13 +1,13 @@
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
 import type { PlaybackButtonAction, PlaybackDefinition } from "../../api/types";
-import { Button, ColorPickerField, FormField, FormLayout, MultiValueToggleField, SelectField, SwitchField, TextField } from "../common";
-import { ModalTitleBar } from "../common/ModalTitleBar";
-import { SelectionTree, WindowScrollArea, type SelectionListOption } from "../window-kit";
+import { Button, ColorPickerField, DEFAULT_COLORS, FormLayout, GroupedSelectionField, ModalRegistration, MultiValueToggleField, SelectField, SwitchField, TextField } from "@tosklight/ui";
+import { ModalTitleBar } from "@tosklight/ui";
+import { SelectionTree, WindowScrollArea, type SelectionListOption } from "@tosklight/ui/window-kit";
 import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 import { useCueLists, usePortableGroups } from "../../features/showObjects/ShowObjectsState";
 
-export const PLAYBACK_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e", "#20c997", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#ec4899", "#f43f5e", "#f8fafc"] as const;
+export const PLAYBACK_COLORS = DEFAULT_COLORS;
 
 type PlaybackTab = "function" | "behavior" | "layout";
 type PlaybackFamily = "cue_list" | "group" | "speed_group" | "special" | "none";
@@ -114,7 +114,7 @@ export function PlaybackConfigurationDialog({ playback, page, slot, empty = fals
     if (type !== draft.target.type) setDraft(withFunctionDefaults(draft, type, cueLists[0]?.id ?? "", groups[0]?.id ?? ""));
   };
 
-  return createPortal(<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
+  return createPortal(<ModalRegistration onClose={onClose}><div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className="nested-modal playback-configuration-modal" role="dialog" aria-modal="true" aria-label="Playback Configuration" data-page={page} data-slot={slot} data-topology={topology}>
       <ModalTitleBar
         title={`Playback Configuration · ${page}.${slot}`}
@@ -134,7 +134,7 @@ export function PlaybackConfigurationDialog({ playback, page, slot, empty = fals
         {failure && <p role="alert" className="modal-error">{failure}</p>}
       </div>
     </section>
-  </div>, document.body);
+  </div></ModalRegistration>, document.body);
 }
 
 function PlaybackFunctionTab({ family, draft, virtual, presentation, cueLists, groups, onFamilyChange, onSpecialChange, onDraftChange }: {
@@ -166,7 +166,7 @@ function PlaybackFunctionTab({ family, draft, virtual, presentation, cueLists, g
     <section className={`playback-function-identity ${family === "none" ? "inactive" : ""}`}>
       <FormLayout columns={2} minColumnWidth={220}>
         <TextField label="Playback name" value={draft.name} maxLength={80} disabled={family === "none"} onChange={(event) => onDraftChange({ ...draft, name: event.target.value })}/>
-        <ColorPickerField label="Playback color" colors={[...PLAYBACK_COLORS]} value={draft.color ?? "#20c997"} disabled={family === "none"} onChange={(color) => onDraftChange({ ...draft, color })}/>
+        <ColorPickerField label="Playback color" value={draft.color ?? "#20c997"} disabled={family === "none"} onChange={(color) => onDraftChange({ ...draft, color })}/>
       </FormLayout>
     </section>
   </div>;
@@ -193,11 +193,17 @@ function PlaybackLayoutTab({ draft, options, onDraftChange }: { draft: PlaybackD
 }
 
 function LayoutChoiceField({ kind, label, value, options, onChange, disabled = false }: { kind: "button" | "fader"; label: string; value: LayoutChoice; options: Array<{ value: LayoutChoice; label: string; description: string }>; onChange: (value: LayoutChoice) => void; disabled?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const selected = options.find((option) => option.value === value);
   const groups = groupLayoutChoices(kind, options);
-  const emptyButton = kind === "button" && value === "none";
-  return <FormField label={label}><Button className={`ui-select-trigger playback-layout-choice-trigger ${emptyButton ? "is-empty" : ""}`} disabled={disabled} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}><span>{emptyButton ? "Empty Button" : selected?.label ?? value}</span><i aria-hidden="true">›</i></Button>{open && createPortal(<div className="stacked-modal-layer playback-layout-choice-layer" onPointerDown={(event) => event.target === event.currentTarget && setOpen(false)}><section className="nested-modal playback-layout-choice-modal" role="dialog" aria-modal="true" aria-label={`Choose ${label} function`}><ModalTitleBar title={`Choose ${label} function`} actions={kind === "button" ? <Button variant="danger" onClick={() => { onChange("none"); setOpen(false); }}>Empty Button</Button> : undefined} closeLabel={`Close ${label} function choices`} onClose={() => setOpen(false)}/><WindowScrollArea className="playback-layout-choice-scroll"><div className="playback-layout-choice-groups">{groups.map((group) => <section key={group.label}><h3>{group.label}</h3><div className="playback-layout-choice-options">{group.options.map((option) => <Button key={option.value} active={option.value === value} onClick={() => { onChange(option.value); setOpen(false); }}><b>{option.label}</b><small>{option.description}</small></Button>)}</div></section>)}</div></WindowScrollArea></section></div>, document.body)}</FormField>;
+  return <GroupedSelectionField
+    label={label}
+    dialogTitle={`Choose ${label} function`}
+    closeLabel={`Close ${label} function choices`}
+    value={value}
+    groups={groups}
+    onChange={onChange}
+    disabled={disabled}
+    clearAction={kind === "button" ? { label: "Empty Button", value: "none" } : undefined}
+  />;
 }
 
 function groupLayoutChoices(kind: "button" | "fader", options: Array<{ value: LayoutChoice; label: string; description: string }>) {

@@ -1,4 +1,5 @@
 /* Ordered imports preserve the original global cascade. */
+@import "@tosklight/ui/styles.css";
 @import "./styles/foundation.css";
 @import "./styles/shared-controls.css";
 @import "./styles/control-surface.css";

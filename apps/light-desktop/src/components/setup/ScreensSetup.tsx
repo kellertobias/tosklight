@@ -6,7 +6,7 @@ import type {
 import { useScreens } from "../../features/screens/ScreensContext";
 import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
-import { Button } from "../common";
+import { Button } from "@tosklight/ui";
 import { PlaybackLayoutModal } from "./PlaybackLayoutModal";
 import {
 	createScreenConfiguration,

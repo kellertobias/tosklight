@@ -19,8 +19,8 @@ import { usePlaybackTopologyActions } from "../../features/playbackTopology/Play
 import { usePlaybackPagesView } from "../../features/playbackTopology/PlaybackTopologyView";
 import type { ShowObject } from "../../features/showObjects/contracts";
 import { useApp } from "../../state/AppContext";
-import { Button } from "../common";
-import { ModalNumberInput } from "../input/ModalInputControls";
+import { Button, ModalRegistration } from "@tosklight/ui";
+import { ModalCaretValue, ModalNumberInput } from "@tosklight/ui/input";
 import { HighlightErrorAlert } from "./HighlightControls";
 import {
 	PlaybackPageMenu,
@@ -37,6 +37,7 @@ export function HardwareControlSummary() {
 		useState<ShowObject<"playback_page"> | null>(null);
 	const [timeInput, setTimeInput] = useState<"prog" | "cue" | null>(null);
 	const [inputValue, setInputValue] = useState("");
+	const [caret, setCaret] = useState(0);
 	const taps = useRef<Record<string, number[]>>({});
 	const playbackDesk = usePlaybackDeskView();
 	const runtimeActions = usePlaybackRuntimeActions();
@@ -50,8 +51,10 @@ export function HardwareControlSummary() {
 	const runtimeReady = runtimeStatus.status === "ready";
 	const page = runtimeReady ? (playbackDesk?.active_page ?? null) : null;
 	const openTime = (kind: "prog" | "cue", value: number) => {
+		const next = String(Number(value.toFixed(1)));
 		setTimeInput(kind);
-		setInputValue(String(Number(value.toFixed(1))));
+		setInputValue(next);
+		setCaret(next.length);
 	};
 	const activePage =
 		topology.pages.find((item) => item.body.number === page) ?? null;
@@ -135,12 +138,12 @@ export function HardwareControlSummary() {
 			/>
 			{timeInput &&
 				createPortal(
-					<div
-						className="stacked-modal-layer"
-						onPointerDown={(event) =>
-							event.target === event.currentTarget && setTimeInput(null)
-						}
-					>
+					<ModalRegistration onClose={() => setTimeInput(null)}><div
+							className="stacked-modal-layer"
+							onPointerDown={(event) =>
+								event.target === event.currentTarget && setTimeInput(null)
+							}
+						>
 						<section
 							className="nested-modal direct-value-modal"
 							role="dialog"
@@ -153,16 +156,17 @@ export function HardwareControlSummary() {
 								×
 							</Button>
 							<h3>{timeInput === "prog" ? "Prog. Fade" : "Cue Fade"}</h3>
-							<strong>{inputValue || "0"}</strong>
+							<ModalCaretValue value={inputValue} caret={caret} />
 							<ModalNumberInput
 								value={inputValue}
 								onChange={setInputValue}
+								onCaretChange={setCaret}
 								onEnter={submitTime}
 								onEscape={() => setTimeInput(null)}
 								replaceOnFirstInput
 							/>
 						</section>
-					</div>,
+						</div></ModalRegistration>,
 					document.body,
 				)}
 			<PlaybackPageMenu open={pagesOpen} onClose={() => setPagesOpen(false)} />

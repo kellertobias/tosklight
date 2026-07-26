@@ -1,11 +1,13 @@
 import {
 	cleanup,
 	fireEvent,
-	render,
+	render as rtlRender,
 	screen,
 	waitFor,
 	within,
 } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition } from "../../api/types";
 import {
@@ -13,6 +15,8 @@ import {
 	PlaybackConfigurationDialog,
 	withFunctionDefaults,
 } from "./PlaybackConfigurationModal";
+
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: ModalProvider });
 
 const mocks = vi.hoisted(() => ({
 	savePlaybackSlot: vi.fn(),

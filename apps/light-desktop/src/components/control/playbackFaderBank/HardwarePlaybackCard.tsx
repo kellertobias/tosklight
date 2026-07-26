@@ -3,9 +3,9 @@ import type {
 	MouseEvent as ReactMouseEvent,
 	PointerEvent as ReactPointerEvent,
 } from "react";
+import { HardwarePlaybackFaderView } from "@tosklight/ui/playback";
 import type { PlaybackRuntimeProjection } from "../../../api/types";
-import { Input } from "../../common";
-import type { VerticalTouchFaderAction } from "../VerticalTouchFader";
+import type { VerticalTouchFaderAction } from "@tosklight/ui/faders";
 import { activateHardwareCard } from "./actions";
 import type { PlaybackBankController } from "./controller";
 import { playbackFaderDisplay } from "./feedback";
@@ -15,6 +15,7 @@ import {
 	PlaybackActionButtons,
 	PlaybackAssignmentTarget,
 	PlaybackConfigurationTarget,
+	PlaybackRuntimeStatus,
 } from "./SlotControls";
 import type { PlaybackSlotProjection, PlaybackSnapshotActive } from "./types";
 
@@ -102,6 +103,7 @@ export function HardwarePlaybackCard({
 					{controller.activePageNumber}.{slot}
 				</strong>
 			</header>
+			<PlaybackRuntimeStatus active={active} />
 			{cue ? (
 				<HardwareCueRows
 					cues={cue.cues}
@@ -114,7 +116,6 @@ export function HardwarePlaybackCard({
 			) : group ? (
 				<div className="hardware-cue-list single">
 					<div className="hardware-cue-row current">
-						<i />
 						<span>GRP</span>
 						<b>{group.body.name ?? `Group ${group.id}`}</b>
 						<small>{value}% master</small>
@@ -128,38 +129,32 @@ export function HardwarePlaybackCard({
 					<PlaybackActionButtons actions={actions} />
 				</footer>
 				{hasFader && (
-					// biome-ignore lint/a11y/noLabelWithoutControl: Input renders the native range control inside this label.
-					<label
-						className="hardware-fader"
-						style={
-							{
-								"--hardware-fader-level": `${value}%`,
-							} as CSSProperties
+					<HardwarePlaybackFaderView
+						ariaLabel={`Page ${controller.activePageNumber} playback ${slot} fader`}
+						disabled={!playback || !controller.runtimeActions}
+						display={display}
+						value={value}
+						pickup={
+							active?.fader_pickup_required &&
+							active.fader_pickup_target != null
+								? {
+										physicalPosition: active.fader_position ?? 0,
+										pickupTarget: active.fader_pickup_target,
+									}
+								: undefined
 						}
-					>
-						<i />
-						<b>{display}</b>
-						<Input
-							aria-label={`Page ${controller.activePageNumber} playback ${slot} fader`}
-							type="range"
-							min="0"
-							max="100"
-							step="0.1"
-							value={value}
-							disabled={!playback || !controller.runtimeActions}
-							onInput={(event) =>
-								playback &&
-								void controller.runtimeActions?.poolPlaybackAction(
-									playback.number,
-									"master",
-									{
-										value: Number(event.currentTarget.value) / 100,
-										surface: "physical",
-									},
-								)
-							}
-						/>
-					</label>
+						onChange={(next) =>
+							playback &&
+							void controller.runtimeActions?.poolPlaybackAction(
+								playback.number,
+								"master",
+								{
+									value: next / 100,
+									surface: "physical",
+								},
+							)
+						}
+					/>
 				)}
 			</div>
 		</article>

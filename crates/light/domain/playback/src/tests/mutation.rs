@@ -176,11 +176,9 @@ fn master_and_pickup_changes_are_detected_without_runtime_snapshots() {
         engine.set_master_mutation(1, 0.0).unwrap().effect,
         PlaybackRuntimeEffect::None
     );
-    engine
-        .active
-        .get_mut(&PlaybackKey::Number(1))
-        .unwrap()
-        .fader_pickup_required = true;
+    let active = engine.active.get_mut(&PlaybackKey::Number(1)).unwrap();
+    active.fader_pickup_required = true;
+    active.fader_pickup_target = Some(0.0);
     assert_eq!(
         engine.set_master_mutation(1, 0.0).unwrap().effect,
         PlaybackRuntimeEffect::Durable

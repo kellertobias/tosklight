@@ -1,5 +1,5 @@
-import { Button } from "../../common";
-import { WindowHeader } from "../../window-kit";
+import { Button } from "@tosklight/ui";
+import { WindowHeader } from "@tosklight/ui/window-kit";
 import { usePatchController } from "./controller";
 import { selectLayer, setFixtureNumber } from "./fixtureActions";
 import { addMultipatch } from "./multipatchActions";

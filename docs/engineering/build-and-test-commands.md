@@ -19,6 +19,8 @@ the steps in the right order. Run `npm run` to list every script.
 
 ```sh
 npm run dev                        # Light headless + Tauri app with UI hot reload
+npm run storybook                  # shared operator components, no Light server
+npm run storybook:build            # deterministic static Storybook artifact
 npm run open                 # debug builds, stop old instances, open the app
 npm run manual               # PDF and HTML manuals from docs/help
 npm run bundle [install]    # release artifacts for macOS, Windows, Linux
@@ -26,11 +28,15 @@ npm run clean                # remove reproducible artifacts
 npm run artifact-path -- NAME            # resolve an artifact path
 
 npm run test:architecture          # dependency direction + source size
+npm run test:ui-package            # shared UI typecheck + component tests
+npm run test:storybook             # static Storybook + serial Chrome gate
 npm run test:unit                  # architecture + tsc/vite + cargo + vitest
 npm run test:e2e-api               # Playwright @api, no browser
 npm run test:e2e-ui                # Playwright @ui, real Chrome
 npm run test:e2e -- [spec]            # everything, or one focused spec
-npm run test:help-screenshots      # regenerate help images — only when intentional
+npm run test:help-screenshots      # static Storybook screenshot manifest/diff gate
+npm run test:help-screenshots:update # update reviewed Storybook-owned help images
+npm run test:help-screenshots-live # remaining real-app visual acceptance images
 npm run test:all                   # unit then e2e
 
 cargo run -p light-wire --example generate-contracts   # regenerate wire TS + schemas
@@ -53,6 +59,8 @@ Open `http://127.0.0.1:5000`. A new desk contains one enabled `Operator` user.
 | Command | What it does |
 | --- | --- |
 | `npm run open` | The authoritative desktop path. Checks runtime migration, stops running instances (launchd + `light-headless`/`ToskLight`/vite), writes Tauri configs, runs the root workspace install, builds the control UI, builds `light-headless`, builds both Tauri debug bundles, copies the headless binary into `ToskLight.app/Contents/MacOS/light-headless`, submits it as launchd job `de.tokenet.tosklight.dev-server`, waits for readiness, **verifies the launchd PID owns that readiness**, and opens the app. |
+| `npm run storybook` | Serves the tracked `@tosklight/ui` package and its deterministic mock stories at `http://127.0.0.1:6006`, without a Light server or mutable show. |
+| `npm run storybook:build` | Builds the static review artifact under `.artifacts/build/storybook/ui`. |
 | `npm run manual` | Auto-provisions a pinned Python venv at `.artifacts/cache/manual-venv`, then builds and verifies the PDF and the HTML manual. See the [manual authoring guide](../help/99-Development/04-manual-and-help-screenshots.md). |
 | `npm run bundle` | Cross-platform release. macOS universal binary via `lipo`, plus Windows `x86_64-pc-windows-gnu` and Linux `x86_64`/`aarch64-unknown-linux-musl` via `cargo zigbuild`. Release Tauri bundles for both apps; each server zipped with `assets/fixture-library`. Requires `cargo, npm, ditto, zip, lipo, rustup, cargo-zigbuild, zig`. |
 | `npm run bundle:install` | The above, then install into `~/Applications` and open. |
@@ -79,12 +87,16 @@ code.**
 | Command | What it runs |
 | --- | --- |
 | `npm run test:architecture` | `tools/check-architecture.mjs`, the source-size unit tests, and `tools/check-source-size.mjs`. See [below](#what-test-architecture-actually-checks). |
-| `npm run test:unit` | `architecture` → root bench type/unit tests → both Light frontends' `tsc`/Vite builds → `cargo test --workspace --exclude light-desktop --exclude light-hardware-controls --no-default-features` → both Light frontends' Vitest suites. |
+| `npm run test:ui-package` | Typechecks `@tosklight/ui` and runs its focused Vitest component suite. |
+| `npm run test:storybook` | Builds static Storybook, serves it locally, and enumerates every story in serial real Chrome. It rejects blank or unstable stories, browser errors, REST/WebSocket dependencies, invalid modal stacking, and invalid 24×18 desktop geometry. |
+| `npm run test:unit` | `architecture` → root bench type/unit tests → shared UI type/component tests → both Light frontends' `tsc`/Vite builds → `cargo test --workspace --exclude light-desktop --exclude light-hardware-controls --no-default-features` → both Light frontends' Vitest suites. |
 | `npm run test:bench-unit` | Root Vitest coverage for the reusable helpers under `tests/bench`. |
 | `npm run test:e2e -- [args]` | Builds the UI and server, then Playwright with the root config. |
 | `npm run test:e2e-api` | Playwright `--grep '@api'`. API-only contracts and constructed failure, persistence, concurrency, and wire conditions that cannot be driven truthfully through UI. |
 | `npm run test:e2e-ui` | Playwright `--grep '@ui' --grep-invert '@(demo\|docs)\b'`. Real Chrome operator workflows, including OSC and attached-hardware surfaces. Generated visual documentation runs separately. |
-| `npm run test:help-screenshots` | Runs the dedicated `@ui @docs` scenario and **wipes and regenerates** `docs/help/assets/screenshots/`. Only run when intentionally refreshing images, and review the diffs visually. |
+| `npm run test:help-screenshots` | Builds static Storybook and serially checks every entry in `docs/help/screenshot-manifest.json`. Story-owned captures require stable IDs/dimensions, no blank output, no browser errors or live REST/WebSocket requests, and no unreviewed pixel diff. It does not launch Light. |
+| `npm run test:help-screenshots:update` | Writes reviewed candidates for manifest entries whose source is `storybook`. Inspect every image diff, then rerun the non-update gate. |
+| `npm run test:help-screenshots-live` | Smaller, separately named production browser/server path for manifest entries still marked `live-app`; Storybook-owned captures cannot be overwritten by this command. |
 | `npm run test:record` | Serial narrated video of the whole catalog, assembled with ffmpeg into `.artifacts/test/visual-inspection/`. |
 | `npm run test:demo` | The product walkthrough; refreshes `assets/demo.show`. |
 | `npm run test:app-icons` | Asserts the required Tauri icon set for both apps. |
@@ -96,23 +108,26 @@ Test layering:
 | Layer | Where | Runner |
 | --- | --- | --- |
 | Rust unit/integration | each crate's `tests/` or feature-local modules | cargo |
-| TS unit/component | `apps/light-desktop/src/**/*.test.ts(x)` and `tests/bench/**/*.test.ts` | vitest |
+| TS unit/component | `apps/ui-library/src/**/*.test.ts(x)`, `apps/light-desktop/src/**/*.test.ts(x)`, and `tests/bench/**/*.test.ts` | vitest |
 | Type/build gate | `tsc --noEmit && vite build` | tsc/vite |
+| Deterministic component browser | `apps/ui-library/src/**/*.stories.tsx` and `apps/light-desktop/src/**/*.stories.tsx`, asserted by `apps/ui-library/storybook/tests/` | Storybook + Playwright |
 | Acceptance | root `tests/`, using the bench in `tests/bench/` | Playwright |
 
-There is no tracked `@tosklight/ui` package or Storybook configuration. Presentation primitives
-are app-local under `apps/light-desktop/src/components/common/` and
-`apps/light-desktop/src/components/window-kit/`. Their supported replacement contract is:
+`apps/ui-library` is the authoritative source for the `@tosklight/ui` presentation primitives. Compatibility
+modules at the former Control UI paths may re-export package components or retain thin
+application-owned adapters while migration is in progress. The supported package contract is:
 
 ```sh
-npm run test:unit     # component tests plus Control UI typecheck and production build
-npm run test:e2e-ui   # real-browser operator and layout acceptance
+npm run test:ui-package  # component types and behavior
+npm run test:storybook   # deterministic real-browser presentation and interaction
+npm run test:unit        # all package/application/unit integration
+npm run test:e2e-ui      # real application composition and operator workflows
 ```
 
-The former `storybook`, `storybook:build`, and `test:ui-package` root scripts were retired because
-they selected a nonexistent workspace. A future shared-library extraction must add tracked source,
-consumers, and executable package gates together; generated `dist/` or Storybook output is not
-source.
+The static Storybook output is reproducible and ignored; tracked package source, stories, and tests
+remain the source of truth. During refactoring plan 02, Storybook is a review surface first. It does
+not become the documentation-screenshot source until the review gate is accepted and the tracked
+screenshot manifest is implemented.
 
 Acceptance tests act through the same public surfaces an operator uses — visible UI, exact OSC, the
 command-line HTTP API, or explicit deterministic bench controls. `pairedScenario(...)` registers an
@@ -203,7 +218,8 @@ Start with the smallest relevant check, then widen by risk.
 | API-only failure construction, restart, migration, or wire behaviour | `npm run test:e2e-api` |
 | Desktop lifecycle, native windows, server supervision | Focused Rust/Tauri tests locally; the GitHub Actions release build probes the newly built desktop process on macOS, Linux, and Windows |
 | `docs/help/` content | `npm run dev` to check live help, then `npm run manual` |
-| Panes, or anything the help images show | `npm run test:help-screenshots`, then review diffs visually |
+| Storybook-owned panes or help images | `npm run test:help-screenshots:update`, review diffs visually, then `npm run test:help-screenshots` |
+| Manifest entries still marked live-app | `npm run test:help-screenshots-live`, then review only those image diffs |
 | Real operator behaviour, before handoff | `npm run open` |
 
 Use `cargo fmt` for Rust formatting. Do not run standalone `rustfmt` against workspace files.
@@ -227,6 +243,7 @@ Everything reproducible lives under ignored `.artifacts/`:
 
 ```
 .artifacts/build/cargo            CARGO_TARGET_DIR
+.artifacts/build/storybook/ui/    static shared-UI review artifact
 .artifacts/cache/manual-venv      manual generator venv
 .artifacts/generated/manual/      PDF, HTML site, deployable ZIP
 .artifacts/release/               release binaries and app zips
@@ -237,7 +254,8 @@ Everything reproducible lives under ignored `.artifacts/`:
 ```
 
 Override the root with `LIGHT_ARTIFACTS_DIR`, or the data directory with `LIGHT_DATA_DIR`. Resolve
-any path for a script with `npm run artifact-path -- NAME`.
+any path for a script with `npm run artifact-path -- NAME` (`storybook` resolves the static UI
+artifact).
 
 ## CI
 

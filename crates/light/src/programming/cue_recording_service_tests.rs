@@ -612,6 +612,7 @@ fn runtime_projection(show_id: ShowId, playback: u16, cue_id: Uuid) -> PlaybackR
                 master: 1.0,
                 fader_position: 1.0,
                 fader_pickup_required: false,
+                fader_pickup_target: None,
                 flash: false,
                 temporary: false,
                 temporary_active: false,

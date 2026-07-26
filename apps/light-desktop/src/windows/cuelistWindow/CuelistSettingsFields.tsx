@@ -4,7 +4,7 @@ import {
 	NumberField,
 	SelectField,
 	SwitchField,
-} from "../../components/common";
+} from "@tosklight/ui";
 import type { CuelistSettingsController } from "./useCuelistSettings";
 
 export function CuelistSettingsFields({

@@ -1,5 +1,5 @@
 import type { FixtureMode } from "../../../api/types";
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 import { uuid } from "../fixtureProfileModel";
 import { ControlActionCard } from "./controlActionCard";
 

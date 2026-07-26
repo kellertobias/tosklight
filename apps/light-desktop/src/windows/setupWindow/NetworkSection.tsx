@@ -4,7 +4,7 @@ import {
 	FormField,
 	FormLayout,
 	TextField,
-} from "../../components/common";
+} from "@tosklight/ui";
 import { MatterBridgeSettings } from "../../components/setup/MatterBridgeSettings";
 import { SoundInputSettings } from "../../components/setup/SoundInputSettings";
 import type { SetupWindowController } from "./controller";

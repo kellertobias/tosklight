@@ -1,5 +1,5 @@
 import { useApp } from "../../state/AppContext";
-import { Button } from "../common";
+import { Button } from "@tosklight/ui";
 
 export function ShowRecoveryFileManager({ onOpenFixtureLibrary }: { onOpenFixtureLibrary: () => void }) {
   const { dispatch } = useApp();

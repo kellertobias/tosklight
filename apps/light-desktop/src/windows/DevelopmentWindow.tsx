@@ -15,9 +15,9 @@ import {
   SwitchField,
   TextField,
   type SelectOption,
-} from "../components/common";
+} from "@tosklight/ui";
 import { VerticalTouchFader } from "../components/control/VerticalTouchFader";
-import { WindowFrame, WindowScrollArea } from "../components/window-kit";
+import { WindowFrame, WindowScrollArea } from "@tosklight/ui/window-kit";
 
 export const DEVELOPMENT_VIEW_OPTIONS: SelectOption<DevelopmentView>[] = [
   { value: "forms", label: "Form elements" },

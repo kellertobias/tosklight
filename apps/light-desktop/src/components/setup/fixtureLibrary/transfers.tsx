@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import type { FixtureDefinition } from "../../../api/types";
-import { ModalTitleBar } from "../../common";
+import { ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { RootConfinedFilePickerButton } from "../../files/RootConfinedFilePickerButton";
 import { fixtureProfileFromDefinitions } from "../fixtureProfileModel";
 import { importGdtfData } from "./gdtf";
@@ -122,7 +122,8 @@ export function FixtureImportDialogs({
 	return (
 		<>
 			{modal === "gdtf" && (
-				<div className="stacked-modal-layer">
+				<ModalRegistration onClose={close}>
+					<div className="stacked-modal-layer">
 					<section className="nested-modal gdtf-import-modal">
 						<ModalTitleBar
 							title="Import GDTF"
@@ -141,10 +142,12 @@ export function FixtureImportDialogs({
 							onFiles={(files) => importGdtfFile(files[0])}
 						/>
 					</section>
-				</div>
+					</div>
+				</ModalRegistration>
 			)}
 			{modal === "package" && (
-				<div className="stacked-modal-layer">
+				<ModalRegistration onClose={close}>
+					<div className="stacked-modal-layer">
 					<section className="nested-modal fixture-package-import-modal">
 						<ModalTitleBar
 							title="Import fixture"
@@ -163,7 +166,8 @@ export function FixtureImportDialogs({
 							onFiles={(files) => importPackage(files[0])}
 						/>
 					</section>
-				</div>
+					</div>
+				</ModalRegistration>
 			)}
 		</>
 	);

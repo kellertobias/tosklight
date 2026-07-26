@@ -10,9 +10,9 @@ import {
 } from "../../features/virtualPlaybackZones/contracts";
 import { useApp } from "../../state/AppContext";
 import { GRID_COLUMNS, GRID_ROWS, type PaneModel } from "../../types";
-import { TouchSelect } from "../common/TouchSelect";
-import { Button, FormLayout, MultiValueToggleField, NumberField, SelectField, SwitchField, TextField } from "../common";
-import { WindowSettings, type WindowSettingsTab } from "../window-kit";
+import { TouchSelect } from "@tosklight/ui";
+import { Button, FormLayout, MultiValueToggleField, NumberField, SelectField, SwitchField, TextField } from "@tosklight/ui";
+import { WindowSettings, type WindowSettingsTab } from "@tosklight/ui/window-kit";
 import { DEVELOPMENT_VIEW_OPTIONS } from "../../windows/DevelopmentWindow";
 import { requestPaneRemoval } from "../shell/paneRemovalGuard";
 import { PRESET_FAMILIES } from "../../presetFamilies";

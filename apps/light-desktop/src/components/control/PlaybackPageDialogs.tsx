@@ -10,7 +10,7 @@ import { usePlaybackTopologyActions } from "../../features/playbackTopology/Play
 import { usePlaybackPagesView } from "../../features/playbackTopology/PlaybackTopologyView";
 import { normalizePlaybackPageName } from "../../features/playbackTopology/pageNames";
 import type { ShowObject } from "../../features/showObjects/contracts";
-import { Button, ModalTitleBar, TextInput } from "../common";
+import { Button, ModalRegistration, ModalTitleBar, TextInput } from "@tosklight/ui";
 import {
 	useOpenedPageMenuAuthority,
 	usePlaybackPageMenuEscape,
@@ -136,12 +136,12 @@ export function PlaybackPageMenu({
 		if (selected) onClose();
 	};
 	return createPortal(
-		<div
-			className="stacked-modal-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && requestClose()
-			}
-		>
+		<ModalRegistration onClose={requestClose}><div
+				className="stacked-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && requestClose()
+				}
+			>
 			<section
 				className="nested-modal playback-page-modal"
 				role="dialog"
@@ -194,7 +194,7 @@ export function PlaybackPageMenu({
 				openKeyboardInitially
 				onClose={() => setRenamePage(null)}
 			/>
-		</div>,
+			</div></ModalRegistration>,
 		document.body,
 	);
 }
@@ -315,12 +315,16 @@ function OpenPlaybackPageRenameDialog({
 		if (current && outcome) onClose();
 	};
 	return createPortal(
-		<div
-			className="stacked-modal-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && !operation.busy && onClose()
-			}
+		<ModalRegistration
+			policy={{ escape: !operation.busy }}
+			onClose={onClose}
 		>
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && !operation.busy && onClose()
+				}
+			>
 			<section
 				className="nested-modal playback-page-name-modal"
 				role="dialog"
@@ -367,7 +371,8 @@ function OpenPlaybackPageRenameDialog({
 					</Button>
 				</footer>
 			</section>
-		</div>,
+			</div>
+		</ModalRegistration>,
 		document.body,
 	);
 }

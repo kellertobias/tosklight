@@ -1,6 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render as rtlRender, screen } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TouchValueButton, VerticalTouchFader } from "./VerticalTouchFader";
+import { TouchValueButton } from "@tosklight/ui/faders";
+import { VerticalTouchFader } from "./VerticalTouchFader";
+
+const render = (ui: Parameters<typeof rtlRender>[0]) => rtlRender(ui, { wrapper: ModalProvider });
 
 let hardwareConnected = false;
 vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({ useHardwareConnected: () => hardwareConnected }));

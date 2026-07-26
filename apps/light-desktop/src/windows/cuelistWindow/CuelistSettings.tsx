@@ -1,4 +1,4 @@
-import { Button, ModalPortal, ModalTitleBar } from "../../components/common";
+import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import { CuelistSettingsFields } from "./CuelistSettingsFields";
 import {
 	RenumberCuesDialog,
@@ -63,7 +63,7 @@ export function CuelistSettings(props: CuelistSettingsProps) {
 	const { draft, requestClose, settingsError, submit, setRenumberOpen } =
 		controller;
 	return (
-		<ModalPortal>
+		<ModalPortal onClose={requestClose}>
 			<div
 				className="stacked-modal-layer cuelist-settings-backdrop"
 				onPointerDown={(event) => {

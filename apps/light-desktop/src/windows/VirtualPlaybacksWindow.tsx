@@ -1,4 +1,4 @@
-import { Button, FormLayout, TextField } from "../components/common";
+import { Button, FormLayout, ModalRegistration, TextField } from "@tosklight/ui";
 import { VirtualPlaybackConfigurationModal } from "../components/control/VirtualPlaybackConfigurationModal";
 import { VirtualPlaybackGrid } from "../components/control/virtualPlayback/VirtualPlaybackGrid";
 import { useVirtualPlaybackController } from "../components/control/virtualPlayback/useVirtualPlaybackController";
@@ -108,7 +108,7 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 	);
 }
 
-function VirtualPlaybackToolbar(props: {
+export function VirtualPlaybackToolbar(props: {
 	pageNumber: number;
 	rows: number;
 	columns: number;
@@ -162,12 +162,13 @@ function CreateZoneModal(props: {
 	onCreate(): void;
 }) {
 	return (
-		<div
-			className="stacked-modal-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && props.onClose()
-			}
-		>
+		<ModalRegistration onClose={props.onClose}>
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && props.onClose()
+				}
+			>
 			<section
 				className="nested-modal virtual-playback-zone-modal"
 				role="dialog"
@@ -205,6 +206,7 @@ function CreateZoneModal(props: {
 				</footer>
 				{props.error && <p className="modal-error">{props.error}</p>}
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }

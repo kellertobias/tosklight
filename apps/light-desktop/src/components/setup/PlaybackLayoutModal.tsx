@@ -8,12 +8,13 @@ import type { PlaybackSurfaceLayout } from "../../api/types";
 import {
 	Button,
 	FormLayout,
+	ModalRegistration,
 	ModalTitleBar,
 	NumberField,
 	SelectField,
 	SwitchField,
-} from "../common";
-import { WindowScrollArea } from "../window-kit";
+} from "@tosklight/ui";
+import { WindowScrollArea } from "@tosklight/ui/window-kit";
 
 export function reorderPlaybackRows(
 	rows: PlaybackSurfaceLayout["rows"],
@@ -282,12 +283,13 @@ export function PlaybackLayoutModal({
 	};
 
 	return (
-		<div
-			className="stacked-modal-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && onClose()
-			}
-		>
+		<ModalRegistration onClose={onClose}>
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onClose()
+				}
+			>
 			<section
 				className="nested-modal playback-layout-modal"
 				role="dialog"
@@ -331,6 +333,7 @@ export function PlaybackLayoutModal({
 					))}
 				</WindowScrollArea>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }

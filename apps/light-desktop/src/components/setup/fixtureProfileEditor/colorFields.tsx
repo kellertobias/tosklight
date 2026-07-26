@@ -6,7 +6,7 @@ import {
 	NumberField,
 	SelectField,
 	TextField,
-} from "../../common";
+} from "@tosklight/ui";
 import { xyyToXyz, xyzToXyy } from "../fixtureProfileModel";
 
 export function AdditiveColorEditor({

@@ -200,11 +200,13 @@ impl PlaybackEngine {
         }
         let position_changed = active.fader_position != value;
         active.fader_position = value;
-        let released = value == 0.0;
+        let target = active.fader_pickup_target.unwrap_or(0.0);
+        let released = value == target;
         let changed = position_changed || released;
         if released {
             active.fader_pickup_required = false;
-            active.master = 0.0;
+            active.fader_pickup_target = None;
+            active.master = target;
         }
         Some(durable_effect(changed))
     }
@@ -253,6 +255,7 @@ fn activate_normal(playback: &mut ActivePlayback, number: u16) -> bool {
         || !playback.enabled
         || playback.temporary
         || playback.fader_pickup_required
+        || playback.fader_pickup_target.is_some()
         || playback.master_transition.is_some()
         || playback.deleted_cue_transition_source.is_some()
         || playback.transition_timing_bypassed
@@ -265,6 +268,7 @@ fn activate_normal(playback: &mut ActivePlayback, number: u16) -> bool {
     playback.enabled = true;
     playback.temporary = false;
     playback.fader_pickup_required = false;
+    playback.fader_pickup_target = None;
     playback.master_transition = None;
     playback.deleted_cue_transition_source = None;
     reset_manual_transition(playback);
@@ -276,6 +280,7 @@ fn deactivate(playback: &mut ActivePlayback) -> bool {
     let changed = playback.enabled
         || playback.flash
         || playback.fader_pickup_required != pickup_required
+        || playback.fader_pickup_target != pickup_required.then_some(0.0)
         || playback.master_transition.is_some()
         || playback.deleted_cue_hold.is_some()
         || playback.deleted_cue_transition_source.is_some()
@@ -285,6 +290,7 @@ fn deactivate(playback: &mut ActivePlayback) -> bool {
     playback.activation = None;
     playback.flash = false;
     playback.fader_pickup_required = pickup_required;
+    playback.fader_pickup_target = pickup_required.then_some(0.0);
     playback.master_transition = None;
     playback.deleted_cue_hold = None;
     playback.deleted_cue_transition_source = None;

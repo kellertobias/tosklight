@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import type { AttributeDescriptor, FixtureProfile } from "../../../api/types";
-import { Button, ModalTitleBar } from "../../common";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { ConfirmDialog, ManufacturerLookup } from "./dialogs";
 import { GenericProfileTab } from "./genericProfileTab";
 import { ModeEditor } from "./modeEditor";
@@ -144,12 +144,13 @@ export function FixtureProfileEditor({
 		onClose,
 	});
 	return (
-		<div
-			className="stacked-modal-layer fixture-profile-editor-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && editor.requestClose()
-			}
-		>
+		<ModalRegistration onClose={editor.requestClose}>
+			<div
+				className="stacked-modal-layer fixture-profile-editor-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && editor.requestClose()
+				}
+			>
 			<section
 				className="nested-modal fixture-profile-editor-modal"
 				role="dialog"
@@ -212,6 +213,7 @@ export function FixtureProfileEditor({
 				manufacturers={manufacturers}
 				onClose={onClose}
 			/>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }

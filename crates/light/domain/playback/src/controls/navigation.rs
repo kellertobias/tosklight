@@ -212,6 +212,7 @@ fn inactive_playback(number: u16, cue_list_id: CueListId, now: DateTime<Utc>) ->
         master: 0.0,
         fader_position: 0.0,
         fader_pickup_required: false,
+        fader_pickup_target: None,
         flash: false,
         master_transition: None,
         temporary: false,

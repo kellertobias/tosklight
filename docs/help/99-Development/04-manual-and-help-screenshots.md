@@ -14,7 +14,29 @@ The stable outputs are:
 
 ## Refresh screenshots
 
-Run `./test help-screenshots` only when intentionally updating documentation images. The serial Playwright test loads a deterministic show, drives the real browser desk, and writes the software keypad, every available pane and pane-settings dialog, and the setup-workflow gallery to `docs/help/assets/screenshots`. The test checks the exact expected filenames, so adding a pane or a documented setup surface requires an intentional coverage update. Reference the files with ordinary relative Markdown image syntax so Help, PDF, and HTML use the identical image.
+`docs/help/screenshot-manifest.json` is the complete source contract for the PNG files under
+`docs/help/assets/screenshots`. Every tracked PNG has exactly one entry containing its stable
+filename, source, viewport, dark theme, software/hardware mode, and deterministic interaction list.
+Storybook-owned entries name an existing application story. A screenshot that cannot yet be
+represented truthfully has `source: "live-app"`, a null story ID, and an explicit reason.
+
+Run `npm run test:help-screenshots` to build static Storybook and check the reviewed screenshots
+serially without launching Light or opening a mutable show. The gate rejects incomplete manifests,
+missing story IDs, live REST/WebSocket traffic, console or page errors, blank captures, dimension
+drift, and pixel differences above the review threshold. Candidate images are always written below
+`.artifacts/test/help-screenshots/storybook`.
+
+After inspecting those candidates, run `npm run test:help-screenshots:update` to replace only the
+Storybook-owned files in `docs/help/assets/screenshots`, inspect every Git image diff, and then rerun
+the check command. Filenames remain unchanged so in-app Help, PDF, HTML manual, and Pages all consume
+the same reviewed assets.
+
+`npm run test:help-screenshots-live` is the separately named real-app path. It retains the smaller
+set of screenshots still marked `live-app` in the manifest, including pane-settings and
+setup/fixture-library/MVR workflow surfaces that do not yet have honest deterministic application
+stories. The command still drives the production browser desk and server; Storybook-owned captures
+from that run go only to `.artifacts/test/help-screenshots/live-app` and cannot overwrite their
+reviewed documentation files.
 
 The Dynamics pane remains in screenshot generation so future UI changes are detected, but its screenshot is intentionally not embedded in the manual while Dynamics is a future feature. Development remains available through developer tooling, but it is not an operator **Open Window** choice and is therefore excluded from the Pane Reference screenshot set.
 
@@ -29,10 +51,19 @@ The expanded derivative resolves strokes, transforms, repeated patterns, and bin
 - Put operator-facing source in a numbered file or folder below `docs/help`.
 - Give every page exactly one first-level `# Title`; it becomes the Help navigation title, contents entry, running header, and index entry.
 - Use ordinary relative Markdown links and images. The manual build fails for broken local links or images.
-- Keep screenshots under `docs/help/assets/screenshots` and generate them through `./test help-screenshots`.
+- Keep screenshots under `docs/help/assets/screenshots`, add every PNG to
+  `docs/help/screenshot-manifest.json`, and use a real application story whenever one exists.
+- Never assign a convenient but inaccurate story ID. Keep unmatched workflow images on the
+  explicitly documented live-app path until an equivalent application story exists.
+- Refresh Storybook-owned images with `npm run test:help-screenshots:update`; use
+  `npm run test:help-screenshots-live` only for the remaining live-app entries.
 - Keep generated expanded icons beside their editable sources. Contact sheets belong under `.artifacts/generated/icon-contact-sheets` with only an ignored Help mirror; regenerate both through `npm run icons:contact-sheets`.
 - Add or update the matching row in [Help Coverage](02-help-coverage.md) when introducing a built-in window or major operator workflow.
 
 ## Release publication
 
-The Forgejo manual action validates both formats on pull requests and `main`, but publishes nothing to the Forgejo instance. GitHub builds and deploys the complete Pages site from mirrored `main`, including the HTML manual and its downloadable archive. Pull-request code receives no release or deployment credentials.
+The CI screenshot job builds static Storybook, checks the reviewed manifest, and uploads one
+`help-screenshots` artifact. The manual job downloads that exact artifact before rendering PDF and
+HTML, and the Pages job downloads the same artifact before assembling the public site. GitHub
+deploys the complete Pages site from mirrored `main`; pull-request code receives no release or
+deployment credentials.

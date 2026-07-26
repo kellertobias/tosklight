@@ -1,4 +1,4 @@
-import { WindowScrollArea } from "../components/window-kit";
+import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import type { WindowProps } from "./windowTypes";
 
 export function DynamicsWindow(_: WindowProps) {

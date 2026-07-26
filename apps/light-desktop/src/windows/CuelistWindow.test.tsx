@@ -2,11 +2,12 @@ import {
 	act,
 	cleanup,
 	fireEvent,
-	render,
+	render as rtlRender,
 	screen,
 	waitFor,
 	within,
 } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
 	CueList,
@@ -16,6 +17,8 @@ import type {
 import { PaneSettingsModal } from "../components/modals/PaneSettingsModal";
 import { createCommandLineTestAuthority } from "../features/programmingInteraction/testing/commandLineTestAuthority";
 import { CuelistWindow } from "./CuelistWindow";
+
+const render = (ui: Parameters<typeof rtlRender>[0]) => rtlRender(ui, { wrapper: ModalProvider });
 
 const mocks = vi.hoisted(() => ({
 	dispatch: vi.fn(),
@@ -1041,6 +1044,11 @@ describe("CuelistWindow pool recording", () => {
 		render(authority.wrap(<CuelistWindow compact cueListTab="pool" />));
 		await act(authority.settle);
 		expect(screen.getAllByText("Tap to record Cuelist")).toHaveLength(1000);
+		const cards = document.querySelectorAll(".cuelist-card");
+		expect(cards).toHaveLength(1000);
+		expect(cards[0]).toHaveAttribute("data-pool-slot-id", "1");
+		expect(cards[0]).toHaveClass("store-target");
+		expect(cards[999]).toHaveAttribute("data-pool-slot-id", "1000");
 		fireEvent.click(
 			screen.getAllByText("Tap to record Cuelist")[0].closest("button")!,
 		);

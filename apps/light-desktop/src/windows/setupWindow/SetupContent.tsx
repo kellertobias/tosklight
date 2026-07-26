@@ -1,6 +1,6 @@
 import { ServerErrorNotice } from "../../components/shell/ServerErrorNotice";
 import { ScreensSetup } from "../../components/setup/ScreensSetup";
-import { WindowScrollArea } from "../../components/window-kit";
+import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import type { SetupWindowController } from "./controller";
 import {
 	ShowsRecoverySection,

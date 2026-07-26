@@ -1,4 +1,4 @@
-import { Button } from "../../components/common";
+import { Button } from "@tosklight/ui";
 import type { Group } from "./model";
 
 function missingFixtureCount(
@@ -39,6 +39,7 @@ function emptyGroupHint(storeArmed: boolean, updateArmed: boolean) {
 export function GroupCard({
 	group,
 	index,
+	poolSlotId,
 	knownFixtureIds,
 	capabilities,
 	selected,
@@ -52,6 +53,7 @@ export function GroupCard({
 }: {
 	group: Group | null;
 	index: number;
+	poolSlotId: string;
 	knownFixtureIds: Set<string>;
 	capabilities: Map<string, Set<string>>;
 	selected: boolean;
@@ -68,6 +70,8 @@ export function GroupCard({
 	const unsupported = unsupportedValueCount(group, attributes, capabilities);
 	return (
 		<Button
+			data-pool-slot-id={poolSlotId}
+			data-pool-position={index}
 			className={`group-card pool-cell ${group?.body.derived_from ? "derived" : ""} ${group?.body.frozen_from ? "frozen" : ""} ${selected ? "selected" : !group || !group.body.fixtures.length ? "empty" : ""} ${storeArmed && !group ? "store-target" : ""} ${updateArmed ? "update-target" : ""}`}
 			style={group?.body.color ? { borderColor: group.body.color } : undefined}
 			onPointerDown={beginHold}
@@ -131,10 +135,22 @@ function GroupCardContent({
 			)}
 			{unsupported > 0 && <em>⚠ {unsupported} unsupported values</em>}
 			{group.body.derived_from && (
-				<em>Derived · {group.body.derived_from.rule.type}</em>
+				<em
+					className="pool-card-state-marker derived"
+					role="img"
+					aria-label={`Derived state, ${group.body.derived_from.rule.type} rule`}
+				>
+					Derived · {group.body.derived_from.rule.type}
+				</em>
 			)}
 			{group.body.frozen_from && (
-				<em>Frozen · rev {group.body.frozen_from.source_revision}</em>
+				<em
+					className="pool-card-state-marker frozen"
+					role="img"
+					aria-label={`Frozen state, revision ${group.body.frozen_from.source_revision}`}
+				>
+					Frozen · rev {group.body.frozen_from.source_revision}
+				</em>
 			)}
 			{group.body.color && (
 				<span

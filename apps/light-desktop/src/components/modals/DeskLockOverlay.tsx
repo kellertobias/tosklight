@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useDeskLockActions } from "../../features/deskLock/DeskLockActionsProvider";
 import { useDeskLock } from "../../features/deskLock/DeskLockState";
-import { Button, TextField } from "../common";
+import { Button, ModalRegistration, TextField } from "@tosklight/ui";
 import "./DeskLockOverlay.css";
 
 export function DeskLockOverlay() {
@@ -16,18 +16,22 @@ export function DeskLockOverlay() {
     if (ok) setPin("");
   };
   return (
-    <div
-      className="desk-lock-overlay"
-      role="dialog"
-      aria-label="Desk locked"
-      style={
-        deskLock.wallpaper
-          ? {
-              backgroundImage: `linear-gradient(#0008,#0008),url(${JSON.stringify(deskLock.wallpaper)})`,
-            }
-          : undefined
-      }
+    <ModalRegistration
+      policy={{ escape: false, backdrop: false, explicit: false }}
+      onClose={() => undefined}
     >
+      <div
+        className="desk-lock-overlay"
+        role="dialog"
+        aria-label="Desk locked"
+        style={
+          deskLock.wallpaper
+            ? {
+                backgroundImage: `linear-gradient(#0008,#0008),url(${JSON.stringify(deskLock.wallpaper)})`,
+              }
+            : undefined
+        }
+      >
       <section>
         <h1>Desk locked</h1>
         <p>{deskLock.message || "This desk is locked."}</p>
@@ -52,6 +56,7 @@ export function DeskLockOverlay() {
           Unlock Desk
         </Button>
       </section>
-    </div>
+      </div>
+    </ModalRegistration>
   );
 }

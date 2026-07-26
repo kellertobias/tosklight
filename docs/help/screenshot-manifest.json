@@ -1,0 +1,459 @@
+{
+	"version": 1,
+	"entries": [
+		{
+			"file": "cuelist-playback.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 1600, "height": 1100 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "Composite cue-list and live playback state has no equivalent deterministic application story."
+		},
+		{
+			"file": "default-desk-overview.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 1600, "height": 1100 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "The operator overview requires the complete dock, desktop panes, command line, and control surface; the current representative arrangement story renders only isolated panes."
+		},
+		{
+			"file": "fixture-sheet-programmer.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 1600, "height": 1100 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "The image documents Fixture Sheet stepping together with the complete programmer and playback surfaces; the current Fixture Sheet story renders only the isolated window."
+		},
+		{
+			"file": "help-command-line.png",
+			"source": "storybook",
+			"storyId": "application-windows-help--nested-topic",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "software-keypad.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 1600, "height": 339 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "The image is a tightly cropped complete programmer control surface; the current Programmer Software story overflows its canvas and cannot reproduce that crop truthfully."
+		},
+
+		{
+			"file": "panes/channels.png",
+			"source": "storybook",
+			"storyId": "application-windows-channels--two-row-bank",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "panes/cuelist-pool.png",
+			"source": "storybook",
+			"storyId": "application-windows-cuelists-and-cues--pool-compact",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "panes/cuelists.png",
+			"source": "storybook",
+			"storyId": "application-windows-cuelists-and-cues--pool",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "panes/cues.png",
+			"source": "storybook",
+			"storyId": "application-windows-cuelists-and-cues--cues-with-properties",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "panes/dmx.png",
+			"source": "storybook",
+			"storyId": "application-windows-dmx--selected-patched-channel",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "panes/dynamics.png",
+			"source": "storybook",
+			"storyId": "application-windows-dynamics--future-feature-empty-state",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "panes/file-manager.png",
+			"source": "storybook",
+			"storyId": "application-windows-file-manager--populated",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "panes/fixtures.png",
+			"source": "storybook",
+			"storyId": "application-windows-fixture-sheet--selected-and-active-steps",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "panes/groups.png",
+			"source": "storybook",
+			"storyId": "application-windows-pools--groups",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "panes/help.png",
+			"source": "storybook",
+			"storyId": "application-windows-help--nested-topic",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "panes/presets.png",
+			"source": "storybook",
+			"storyId": "application-windows-pools--presets",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+    {
+      "file": "panes/stage.png",
+      "source": "live-app",
+      "storyId": null,
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+      "interactions": [],
+      "reason": "The pane image includes Stage header actions and the production 3D composition; current Stage stories expose isolated 2D or 3D views."
+		},
+    {
+      "file": "panes/text-editor.png",
+      "source": "storybook",
+      "storyId": "application-windows-text-editor--split-markdown",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+      "interactions": []
+		},
+    {
+      "file": "panes/virtual-playbacks.png",
+      "source": "storybook",
+      "storyId": "application-virtual-playbacks--documentation-pane",
+			"viewport": { "width": 1496, "height": 761 },
+			"theme": "dark",
+			"mode": "software",
+      "interactions": []
+		},
+
+		{
+			"file": "panes/fixtures-settings.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 650, "height": 236 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "Pane Settings composition is still covered only by the live desktop."
+		},
+		{
+			"file": "panes/presets-settings.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 650, "height": 270 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "Pane Settings composition is still covered only by the live desktop."
+		},
+		{
+			"file": "panes/stage-settings.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 650, "height": 288 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "Pane Settings composition is still covered only by the live desktop."
+		},
+		{
+			"file": "panes/text-editor-settings.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 650, "height": 236 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "Pane Settings composition is still covered only by the live desktop."
+		},
+		{
+			"file": "panes/virtual-playbacks-settings.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 650, "height": 446 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "Pane Settings composition is still covered only by the live desktop."
+		},
+
+		{
+			"file": "workflows/desk-setup-timecode.png",
+			"source": "storybook",
+			"storyId": "application-windows-setup--timecode",
+			"viewport": { "width": 1496, "height": 756 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "workflows/show-patch.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 1496, "height": 756 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "The documented Show Patch contains representative patched fixtures; the current deterministic Patch story is an empty state."
+		},
+    {
+      "file": "workflows/stage-window-2d.png",
+      "source": "live-app",
+      "storyId": null,
+			"viewport": { "width": 1496, "height": 756 },
+			"theme": "dark",
+			"mode": "software",
+      "interactions": [],
+      "reason": "The workflow image includes the complete Stage header and Group shortcuts; the current Stage 2D story renders only the isolated view."
+		},
+
+    {
+      "file": "workflows/desk-setup-inputs.png",
+      "source": "storybook",
+      "storyId": "application-windows-setup--programmer",
+			"viewport": { "width": 1496, "height": 756 },
+			"theme": "dark",
+			"mode": "software",
+      "interactions": []
+		},
+		{
+			"file": "workflows/desk-setup-lock.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 650, "height": 424 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic Desk Lock dialog story exists."
+		},
+    {
+      "file": "workflows/desk-setup-network-api.png",
+      "source": "storybook",
+      "storyId": "application-windows-setup--network-and-inputs",
+			"viewport": { "width": 1496, "height": 756 },
+			"theme": "dark",
+			"mode": "software",
+      "interactions": []
+		},
+    {
+      "file": "workflows/desk-setup-output-engine.png",
+      "source": "storybook",
+      "storyId": "application-windows-setup--outputs",
+			"viewport": { "width": 1496, "height": 756 },
+			"theme": "dark",
+			"mode": "software",
+      "interactions": []
+		},
+    {
+      "file": "workflows/desk-setup-screens.png",
+      "source": "storybook",
+      "storyId": "application-windows-setup--screens-and-playback",
+			"viewport": { "width": 1496, "height": 756 },
+			"theme": "dark",
+			"mode": "software",
+      "interactions": []
+		},
+    {
+      "file": "workflows/desk-setup-shows-recovery.png",
+      "source": "storybook",
+      "storyId": "application-windows-setup--shows-and-recovery",
+			"viewport": { "width": 1496, "height": 756 },
+			"theme": "dark",
+			"mode": "software",
+      "interactions": []
+		},
+    {
+      "file": "workflows/desk-setup-users.png",
+      "source": "live-app",
+      "storyId": null,
+			"viewport": { "width": 1496, "height": 756 },
+			"theme": "dark",
+			"mode": "software",
+      "interactions": [],
+      "reason": "The production Users and sessions reference depends on authoritative bootstrap, session, and show-lifecycle state that the deterministic setup-section harness does not fabricate."
+		},
+		{
+			"file": "workflows/fixture-library-create.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 1576, "height": 1076 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic fixture-profile editor story exists."
+		},
+		{
+			"file": "workflows/fixture-library-import.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 560, "height": 186 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic GDTF import dialog story exists."
+		},
+		{
+			"file": "workflows/fixture-library-mode-editor.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 1560, "height": 1060 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic fixture-mode editor story exists."
+		},
+		{
+			"file": "workflows/fixture-library.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 1576, "height": 1076 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic Fixture Library story exists."
+		},
+		{
+			"file": "workflows/fixture-sheet-settings-columns.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 520, "height": 663 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic Fixture Sheet Columns settings story exists."
+		},
+		{
+			"file": "workflows/fixture-sheet-settings-view.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 520, "height": 611 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic Fixture Sheet View settings story exists."
+		},
+		{
+			"file": "workflows/mvr-export.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 820, "height": 214 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic MVR export dialog story exists."
+		},
+		{
+			"file": "workflows/mvr-new-show.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 820, "height": 170 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic MVR new-show dialog story exists."
+		},
+		{
+			"file": "workflows/patch-add-fixture.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 1576, "height": 1076 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic Add Fixture browser story exists."
+		},
+		{
+			"file": "workflows/show-change-user.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 650, "height": 238 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic Change User dialog story exists."
+		},
+		{
+			"file": "workflows/show-load-revisions.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 650, "height": 564 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic Load Show revisions story exists."
+		},
+		{
+			"file": "workflows/show-menu.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 720, "height": 494 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic production Show menu story exists."
+		},
+		{
+			"file": "workflows/stage-settings.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": { "width": 520, "height": 514 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "No deterministic Stage Settings dialog story exists."
+		}
+	]
+}

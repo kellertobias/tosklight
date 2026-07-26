@@ -1,15 +1,19 @@
 import {
 	cleanup,
 	fireEvent,
-	render,
+	render as rtlRender,
 	screen,
 	waitFor,
 } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition } from "../api/types";
 import { PaneSettingsModal } from "../components/modals/PaneSettingsModal";
+import { UPDATE_TARGET_EVENT } from "../components/control/updateWorkflow";
 import { cueProjection } from "../features/playbackRuntime/testFixtures";
 import { VirtualPlaybacksWindow } from "./VirtualPlaybacksWindow";
+
+const render = (ui: Parameters<typeof rtlRender>[0]) => rtlRender(ui, { wrapper: ModalProvider });
 
 const mocks = vi.hoisted(() => {
 	const loadSurface = vi.fn();
@@ -491,6 +495,62 @@ describe("VirtualPlaybacksWindow", () => {
 		});
 	});
 
+	it("preserves configured rows and columns through the shared grid view", () => {
+		const pane = mocks.state.desks[0].panes[0];
+		pane.virtualPlaybackRows = 2;
+		pane.virtualPlaybackColumns = 3;
+		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
+
+		expect(document.querySelectorAll(".virtual-playback-box")).toHaveLength(6);
+		expect(document.querySelector('[data-grid-position="5"]')).toHaveAttribute(
+			"data-virtual-playback-slot",
+			"6",
+		);
+	});
+
+	it("routes Update to the mapped Cuelist without firing the playback", () => {
+		mocks.state.updateArmed = true;
+		const update = vi.fn();
+		window.addEventListener(UPDATE_TARGET_EVENT, update);
+		try {
+			render(<VirtualPlaybacksWindow paneId="virtual-1" />);
+			fireEvent.click(
+				screen.getByRole("button", {
+					name: "Virtual playback page 1 cell 1 Front Wash",
+				}),
+			);
+			expect(update).toHaveBeenCalledOnce();
+			expect((update.mock.calls[0][0] as CustomEvent).detail).toEqual({
+				family: { type: "cue" },
+				object_id: "cue-1",
+				playback_number: 7,
+				validate_active_context: true,
+			});
+			expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+		} finally {
+			window.removeEventListener(UPDATE_TARGET_EVENT, update);
+		}
+	});
+
+	it("keeps momentary Shift-click zone selection inert", async () => {
+		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
+		await waitFor(() =>
+			expect(mocks.zoneCapability.loadSurface).toHaveBeenCalledWith("virtual-1"),
+		);
+		await waitFor(() =>
+			expect(screen.queryByText(/Loading zones/u)).not.toBeInTheDocument(),
+		);
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Virtual playback page 1 cell 1 Front Wash",
+			}),
+			{ shiftKey: true },
+		);
+
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+		expect(screen.getByText(/1 cells selected · Page 1 · 1×2/u)).toBeInTheDocument();
+	});
+
 	it("orders a held Flash release after its scoped press retry settles", async () => {
 		mocks.playback.buttons = ["flash", "none", "none"];
 		const press = deferred<null>();
@@ -558,6 +618,29 @@ describe("VirtualPlaybacksWindow", () => {
 				pressed: false,
 				surface: "virtual",
 			});
+		});
+	});
+
+	it("keeps Swap as a matched virtual press and release", async () => {
+		mocks.playback.buttons = ["swap", "none", "none"];
+		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
+		const cell = screen.getByRole("button", {
+			name: "Virtual playback page 1 cell 1 Front Wash",
+		});
+
+		fireEvent.pointerDown(cell, { pointerId: 7 });
+		fireEvent.pointerUp(cell, { pointerId: 7 });
+
+		await waitFor(() => expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2));
+		expect(mocks.poolPlaybackAction).toHaveBeenNthCalledWith(1, 7, "button", {
+			button: 1,
+			pressed: true,
+			surface: "virtual",
+		});
+		expect(mocks.poolPlaybackAction).toHaveBeenNthCalledWith(2, 7, "button", {
+			button: 1,
+			pressed: false,
+			surface: "virtual",
 		});
 	});
 

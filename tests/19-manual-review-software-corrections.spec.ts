@@ -2,6 +2,41 @@ import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./bench/core/fixtures";
 
 test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
+  test("POOL-SQUARE @ui › Group Pool cards remain square through pane resize and maximize", async ({ api, desk, page }) => {
+    await desk.open(api.baseUrl);
+    await page.getByRole("button", { name: "DESKTOPS", exact: true }).click();
+    await page.getByRole("button", { name: /New desktop/ }).click();
+    const grid = page.locator(".desk-grid");
+    const gridBox = await grid.boundingBox();
+    expect(gridBox).not.toBeNull();
+    await page.mouse.click(gridBox!.x + gridBox!.width * 0.15, gridBox!.y + gridBox!.height * 0.15);
+    await page.locator(".window-picker").getByRole("button", { name: "Group pool", exact: true }).click();
+
+    const pane = page.locator(".desk-pane").filter({ has: page.locator(".group-pool-window") });
+    await expect(pane).toBeVisible();
+    await expectPoolCardsSquare(pane);
+
+    const resize = pane.locator(".pane-resize-handle");
+    const resizeBox = await resize.boundingBox();
+    expect(resizeBox).not.toBeNull();
+    await page.mouse.move(resizeBox!.x + resizeBox!.width / 2, resizeBox!.y + resizeBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(gridBox!.x + gridBox!.width * 0.72, gridBox!.y + gridBox!.height * 0.72, { steps: 5 });
+    await page.mouse.up();
+    await expectPoolCardsSquare(pane);
+
+    await pane.getByRole("button", { name: "Settings", exact: true }).click();
+    const settings = page.getByRole("dialog", { name: "Pane Settings" });
+    await settings.getByRole("button", { name: "Maximize pane", exact: true }).click();
+    await expect(pane).toHaveAttribute("aria-expanded", "true");
+    await expectPoolCardsSquare(pane);
+
+    await expect(settings).toBeVisible();
+    await settings.getByRole("button", { name: "Restore pane", exact: true }).click();
+    await expect(pane).toHaveAttribute("aria-expanded", "false");
+    await expectPoolCardsSquare(pane);
+  });
+
   test("MANUAL-019 @supplemental-ui › saved workspaces are Desktops while physical control surfaces remain desks", async ({ api, bench, desk, page }) => {
     const physicalDesk = { ...api.session!.desk };
     const sessionId = api.session!.session_id;
@@ -354,6 +389,21 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await expect.poll(async () => (await api.request<any>("GET", "/api/v2/bootstrap", undefined, false)).active_show.id).toBe(copy.id);
   });
 });
+
+async function expectPoolCardsSquare(pane: Locator): Promise<void> {
+  const cards = pane.locator(".group-card");
+  await expect(cards.first()).toBeVisible();
+  const geometry = await cards.evaluateAll((elements) => elements.slice(0, 12).map((element) => {
+    const bounds = element.getBoundingClientRect();
+    return { width: bounds.width, height: bounds.height };
+  }));
+  for (const bounds of geometry) {
+    expect(Math.abs(bounds.width - bounds.height)).toBeLessThanOrEqual(1);
+  }
+  const scroller = pane.locator(".ui-window-scroller");
+  expect(await scroller.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  expect(await scroller.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+}
 
 function dockEntry(page: Page, name: string): Locator {
   return page.locator(".dock-entry").filter({ hasText: name }).first();

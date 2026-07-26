@@ -1,6 +1,6 @@
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import type { MultiPatchInstance, PatchedFixture } from "../../../api/types";
-import { Button, ModalTitleBar } from "../../common";
+import { Button, ModalTitleBar } from "@tosklight/ui";
 import { parsePatchAddress } from "../../input/ConsoleFields";
 import { conflicts, firstFreeAddress } from "../patchUtils";
 import {

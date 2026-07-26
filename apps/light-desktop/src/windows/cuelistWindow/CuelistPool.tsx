@@ -1,23 +1,24 @@
+import { PoolGrid, type PoolSlotViewModel } from "@tosklight/ui/pools";
 import { useMemo, useRef, useState } from "react";
 import type { PlaybackDefinition, PlaybackPage } from "../../api/types";
-import { Button, SearchBar } from "../../components/common";
+import { Button } from "@tosklight/ui";
+import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import {
 	cueUpdateTarget,
 	requestUpdateTarget,
 } from "../../components/control/updateWorkflow";
+import { loadRecordSettings } from "../../components/setup/ProgrammerDefaults";
 import {
 	ButtonGrid,
 	WindowHeader,
 	WindowScrollArea,
-} from "../../components/window-kit";
+} from "@tosklight/ui/window-kit";
+import { useCueRecording } from "../../features/cueRecording/CueRecordingProvider";
 import { runtimeMaster } from "../../features/playbackRuntime/legacy";
 import { usePlaybackProjectionMap } from "../../features/playbackRuntime/PlaybackRuntimeView";
-import { useCueRecording } from "../../features/cueRecording/CueRecordingProvider";
 import { usePlaybackPages } from "../../features/showObjects/ShowObjectsState";
 import { useShowObjectKindsView } from "../../features/showObjects/ShowObjectsView";
 import { useApp } from "../../state/AppContext";
-import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
-import { loadRecordSettings } from "../../components/setup/ProgrammerDefaults";
 import { useCuelistPool } from "./useCuelistSelection";
 
 interface CuelistPoolProps {
@@ -35,6 +36,7 @@ interface CuelistPoolProps {
 
 interface PoolSlotProps {
 	number: number;
+	poolPosition: number;
 	playback: PlaybackDefinition | null;
 	selectedCuelist: number | null;
 	runtimeMaster: number | null;
@@ -53,6 +55,8 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 	const { number, playback, runtimeMaster, usage } = props;
 	return (
 		<Button
+			data-pool-slot-id={number}
+			data-pool-position={props.poolPosition}
 			className={`pool-cell cuelist-card ${playback ? "" : "empty"} ${runtimeMaster != null ? "running" : ""} ${props.selectedCuelist === number && playback ? "selected" : ""} ${props.storeArmed ? "store-target" : ""} ${props.updateArmed ? "update-target" : ""} ${props.setTarget ? "set-target" : ""}`}
 			onPointerDown={props.onPointerDown}
 			onPointerUp={props.onPointerEnd}
@@ -207,6 +211,31 @@ export function CuelistPool(props: CuelistPoolProps) {
 		pages.map((object) => object.body),
 		runtimes,
 	);
+	const poolSlots: PoolSlotViewModel<number>[] = filteredPool.map((slot) => ({
+		id: slot.number,
+		position: slot.number - 1,
+		card: {
+			number: slot.number,
+			primary: slot.playback?.name ?? "Empty",
+		},
+	}));
+	const renderSlot = (
+		slot: (typeof filteredPool)[number],
+		poolPosition: number,
+	) => (
+		<CuelistPoolSlot
+			key={slot.number}
+			{...slot}
+			poolPosition={poolPosition}
+			selectedCuelist={props.selectedCuelist}
+			storeArmed={state.storeArmed}
+			updateArmed={state.updateArmed}
+			setTarget={state.cueListSetTarget === slot.number}
+			onPointerDown={() => startHold(slot.number, slot.playback)}
+			onPointerEnd={clearHold}
+			onClick={() => click(slot.number, slot.playback)}
+		/>
+	);
 	const workflowMessage =
 		state.cueListSetTarget != null
 			? `Cuelist ${state.cueListSetTarget} selected · touch a playback fader to assign it.`
@@ -224,14 +253,12 @@ export function CuelistPool(props: CuelistPoolProps) {
 							<span className="cuelist-workflow-status">{workflowMessage}</span>
 						) : undefined,
 					}}
-					search={
-						<SearchBar
-							value={search}
-							onChange={setSearch}
-							ariaLabel="Search Cuelists"
-							placeholder="Number or name"
-						/>
-					}
+					search={{
+						value: search,
+						ariaLabel: "Search Cuelists",
+						placeholder: "Number or name",
+					}}
+					onSearch={setSearch}
 					actions={[]}
 				/>
 			)}
@@ -249,21 +276,23 @@ export function CuelistPool(props: CuelistPoolProps) {
 							}
 				}
 			>
-				<ButtonGrid className="card-pool cuelist-pool-grid">
-					{filteredPool.map((slot) => (
-						<CuelistPoolSlot
-							key={slot.number}
-							{...slot}
-							selectedCuelist={props.selectedCuelist}
-							storeArmed={state.storeArmed}
-							updateArmed={state.updateArmed}
-							setTarget={state.cueListSetTarget === slot.number}
-							onPointerDown={() => startHold(slot.number, slot.playback)}
-							onPointerEnd={clearHold}
-							onClick={() => click(slot.number, slot.playback)}
-						/>
-					))}
-				</ButtonGrid>
+				{search ? (
+					<ButtonGrid className="card-pool cuelist-pool-grid">
+						{filteredPool.map(renderSlot)}
+					</ButtonGrid>
+				) : (
+					<PoolGrid
+						className="cuelist-pool-grid"
+						slots={poolSlots}
+						slotCount={1000}
+						emptySlot={(index) => ({
+							id: index + 1,
+							position: index,
+							card: { number: index + 1, primary: "Empty", states: ["empty"] },
+						})}
+						renderSlot={(_, index) => renderSlot(filteredPool[index], index)}
+					/>
+				)}
 			</WindowScrollArea>
 			{props.settings}
 		</div>

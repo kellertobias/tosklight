@@ -5,7 +5,7 @@ import {
 	SelectField,
 	SwitchField,
 	TextField,
-} from "../../common";
+} from "@tosklight/ui";
 import { GeometryEmitterLayout } from "./geometryEmitterLayout";
 import { VectorFields } from "./geometryPreview";
 

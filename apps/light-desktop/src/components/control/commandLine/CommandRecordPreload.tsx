@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useApp } from "../../../state/AppContext";
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 
 export function CommandRecordPreload({
 	hasRecordableContent,

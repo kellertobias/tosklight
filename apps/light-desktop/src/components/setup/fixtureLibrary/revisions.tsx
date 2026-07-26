@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import type { FixtureDefinition, FixtureProfile } from "../../../api/types";
-import { Button } from "../../common";
+import { Button, ModalRegistration } from "@tosklight/ui";
 
 interface FixtureRevisionHistoryOptions {
 	selectedMode: FixtureDefinition | null;
@@ -81,12 +81,13 @@ export function FixtureRevisionHistory({
 	onEdit,
 }: FixtureRevisionHistoryProps) {
 	return (
-		<div
-			className="stacked-modal-layer"
-			onPointerDown={(event) =>
-				event.target === event.currentTarget && onClose()
-			}
-		>
+		<ModalRegistration onClose={onClose}>
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onClose()
+				}
+			>
 			<section
 				className="nested-modal fixture-revision-history"
 				role="dialog"
@@ -131,6 +132,7 @@ export function FixtureRevisionHistory({
 					into a show because each patch embeds its own portable snapshot.
 				</p>
 			</section>
-		</div>
+			</div>
+		</ModalRegistration>
 	);
 }

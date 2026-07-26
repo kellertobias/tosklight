@@ -4,7 +4,7 @@ import {
   useDeskConfiguration,
   useMatterEnabled,
 } from "../../features/configuration/ConfigurationState";
-import { Button, SwitchField } from "../common";
+import { Button, SwitchField } from "@tosklight/ui";
 
 export function MatterBridgeSettings() {
   const matter = useMediaServers()?.matter ?? null;

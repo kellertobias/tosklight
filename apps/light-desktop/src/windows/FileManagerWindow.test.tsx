@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileEntry } from "../api/types";
-import { Button } from "../components/common/controls";
+import { Button } from "@tosklight/ui";
 import { requestPaneRemoval } from "../components/shell/paneRemovalGuard";
 import { createCommandLineTestAuthority } from "../features/programmingInteraction/testing/commandLineTestAuthority";
 import {
@@ -303,6 +303,14 @@ describe("FileManager layout", () => {
 			"alpha.txt, file",
 			"image.png, file",
 		]);
+		const search = screen.getByRole("textbox", { name: "Search File Manager" });
+		fireEvent.change(search, { target: { value: "image" } });
+		expect(screen.queryByRole("button", { name: "alpha.txt, file" })).not.toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "image.png, file" })).toBeVisible();
+		fireEvent.change(search, { target: { value: "missing" } });
+		expect(screen.getByText("No files or folders match “missing”.")).toBeVisible();
+		fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+		expect(screen.getByRole("button", { name: "alpha.txt, file" })).toBeVisible();
 
 		fireEvent.click(screen.getByRole("button", { name: "alpha.txt, file" }));
 		fireEvent.click(screen.getByRole("button", { name: "Edit" }));

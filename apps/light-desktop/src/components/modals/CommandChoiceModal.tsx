@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useCueTransfer } from "../../features/cueTransfer/CueTransferProvider";
 import { useProgrammingPendingCommandChoiceView } from "../../features/programmingInteraction/ProgrammingInteractionView";
-import { Button, ModalTitleBar } from "../common";
+import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { useCommandLineSurface } from "../control/commandLine/useCommandLineSurface";
 
 export function CommandChoiceModal() {
@@ -27,7 +27,8 @@ export function CommandChoiceModal() {
 		void commandLine.cancelChoice();
 	};
 	return createPortal(
-		<div className="stacked-modal-layer command-choice-layer">
+		<ModalRegistration onClose={cancel}>
+			<div className="stacked-modal-layer command-choice-layer">
 			<section
 				className="nested-modal command-choice-modal"
 				role="dialog"
@@ -56,7 +57,8 @@ export function CommandChoiceModal() {
 					</Button>
 				</div>
 			</section>
-		</div>,
+			</div>
+		</ModalRegistration>,
 		document.body,
 	);
 }

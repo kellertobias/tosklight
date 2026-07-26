@@ -5,13 +5,21 @@ import type { HelpCatalog, HelpCatalogEntry, HelpTopic } from "../api/types";
 import { createLightApi } from "../api/client/api";
 import type { WindowProps } from "./windowTypes";
 import { prepareHelpMarkdown, safeHelpUrl } from "./helpMarkdown";
-import { WindowHeader, WindowScrollArea } from "../components/window-kit";
-import { Button } from "../components/common";
+import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
+import { Button } from "@tosklight/ui";
 
-export function HelpMarkdown({ markdown }: { markdown: string }) {
+export type HelpUrlTransform = (url: string, kind: "link" | "image") => string | undefined;
+
+export function HelpMarkdown({
+  markdown,
+  urlTransform = safeHelpUrl,
+}: {
+  markdown: string;
+  urlTransform?: HelpUrlTransform;
+}) {
   return <ReactMarkdown
     remarkPlugins={[remarkGfm]}
-    urlTransform={(url, key) => safeHelpUrl(url, key === "src" ? "image" : "link") ?? ""}
+    urlTransform={(url, key) => urlTransform(url, key === "src" ? "image" : "link") ?? ""}
     components={{
       code({ className, children, ...props }) {
         const value = String(children).replace(/\n$/, "");
@@ -46,6 +54,16 @@ function firstTopic(items: HelpCatalogEntry[]): string | null {
     if (child) return child;
   }
   return null;
+}
+
+export function filterHelpEntries(entries: HelpCatalogEntry[], query: string): HelpCatalogEntry[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) return entries;
+  return entries.flatMap((entry) => {
+    if (entry.title.toLocaleLowerCase().includes(normalized)) return [entry];
+    const children = filterHelpEntries(entry.children, normalized);
+    return children.length ? [{ ...entry, children }] : [];
+  });
 }
 
 export function HelpNavigation({
@@ -89,9 +107,9 @@ export function HelpWindow({ compact }: WindowProps) {
   const client = useMemo(() => createLightApi().help, []);
   const [catalog, setCatalog] = useState<HelpCatalog | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [topic, setTopic] = useState<HelpTopic | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   const loadCatalog = useCallback(async () => {
     try {
@@ -114,6 +132,47 @@ export function HelpWindow({ compact }: WindowProps) {
     return () => window.clearInterval(timer);
   }, [catalog?.live, selected, loadCatalog, loadTopic]);
 
+  return <HelpWindowView
+    catalog={catalog}
+    compact={compact}
+    error={error}
+    loading={!catalog && !error}
+    onSelect={setSelected}
+    onQueryChange={setQuery}
+    query={query}
+    selected={selected}
+    topic={topic}
+  />;
+}
+
+export interface HelpWindowViewProps {
+  catalog: HelpCatalog | null;
+  topic: HelpTopic | null;
+  selected: string | null;
+  loading?: boolean;
+  error?: string | null;
+  compact?: boolean;
+  defaultExpanded?: readonly string[];
+  onSelect: (id: string) => void;
+  query: string;
+  onQueryChange: (value: string) => void;
+  urlTransform?: HelpUrlTransform;
+}
+
+export function HelpWindowView({
+  catalog,
+  topic,
+  selected,
+  loading = false,
+  error = null,
+  compact,
+  defaultExpanded = [],
+  onSelect,
+  query,
+  onQueryChange,
+  urlTransform,
+}: HelpWindowViewProps) {
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(defaultExpanded));
   const toggleFolder = useCallback((id: string) => {
     setExpanded((current) => {
       const next = new Set(current);
@@ -121,19 +180,29 @@ export function HelpWindow({ compact }: WindowProps) {
       return next;
     });
   }, []);
+  const visibleTopics = useMemo(
+    () => filterHelpEntries(catalog?.topics ?? [], query),
+    [catalog?.topics, query],
+  );
 
   return <div className={`help-window ${compact ? "compact" : ""}`}>
-    {!compact && <WindowHeader title="Help" info={catalog?.live ? { primary: "Live documentation" } : undefined} />}
+    {!compact && <WindowHeader
+      title="Help"
+      info={catalog?.live ? { primary: "Live documentation" } : undefined}
+      search={{ value: query, ariaLabel: "Search Help" }}
+      onSearch={onQueryChange}
+    />}
     <div className="help-layout">
       <nav aria-label="Help topics">
-        {catalog && <HelpNavigation entries={catalog.topics} expanded={expanded} selected={selected} onSelect={setSelected} onToggle={toggleFolder}/>}
+        {catalog && <HelpNavigation entries={visibleTopics} expanded={expanded} selected={selected} onSelect={onSelect} onToggle={toggleFolder}/>}
         {catalog && catalog.topics.length === 0 && <p>No help topics found.</p>}
+        {catalog && catalog.topics.length > 0 && visibleTopics.length === 0 && <p>No matching help topics.</p>}
       </nav>
       <WindowScrollArea><main className="help-content">
         {error && <p className="modal-error">Unable to load help: {error}</p>}
         {catalog?.errors.map((message) => <p className="modal-warning" key={message}>{message}</p>)}
-        {!catalog && !error && <p>Loading help…</p>}
-        {topic && <HelpMarkdown markdown={topic.markdown}/>}
+        {loading && !error && <p>Loading help…</p>}
+        {topic && <HelpMarkdown markdown={topic.markdown} urlTransform={urlTransform}/>}
       </main></WindowScrollArea>
     </div>
   </div>;

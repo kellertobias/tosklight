@@ -1,6 +1,6 @@
 import { FixtureColorDot } from "../components/shared/FixtureColorDot";
 import { SourceValue } from "../components/shared/SourceValue";
-import type { DataTableColumn } from "../components/window-kit";
+import type { DataTableColumn } from "@tosklight/ui/window-kit";
 import type { FixtureSheetRow } from "./fixtureSheetProjection";
 import type { FixtureStepPresenter } from "./fixtureSheetStep";
 

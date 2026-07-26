@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { disposeScene } from "../../../windows/stage3dScene";
-import { Button } from "../../common";
+import { Button } from "@tosklight/ui";
 import { RootConfinedFilePickerButton } from "../../files/RootConfinedFilePickerButton";
 
 function fileAsDataUrl(file: File) {

@@ -2,7 +2,10 @@
 
 ## Status
 
-**Specification only.** This plan defines how existing Control UI components should be extracted into a reusable repository-local package. It does not move components, change Storybook, alter application imports, create a worktree, or change runtime behavior.
+**Completed 2026-07-26.** The production Control UI components are owned by the repository-local
+`apps/ui-library` package, the desktop consumes its public exports directly, Storybook renders the
+same package views and application adapters, and the deterministic/live documentation screenshot
+split is complete.
 
 ## Problem
 
@@ -14,7 +17,7 @@ Not every file under `apps/light-desktop/src/components` can move unchanged. Som
 
 ## Goal
 
-Create a private workspace package, `packages/ui`, that provides the composable operator-interface building blocks used by ToskLight and future repository applications.
+Create a private workspace package, `apps/ui-library`, published inside the workspace as `@tosklight/ui`, that provides the composable operator-interface building blocks used by ToskLight and future repository applications.
 
 At minimum, the package must own:
 
@@ -39,11 +42,11 @@ Existing Control UI components and their current operator behavior are the sourc
 4. Do not redesign, restyle, rename operator labels, or normalize geometry as part of extraction.
 5. Do not maintain an app implementation and a separately rewritten Storybook implementation of the same component.
 
-Temporary modules at old Control UI paths may re-export package components during migration. This keeps existing application imports and behavior stable while making `packages/ui` authoritative.
+Temporary modules at old Control UI paths may re-export package components during migration. This keeps existing application imports and behavior stable while making `apps/ui-library` authoritative.
 
 ## Package boundaries
 
-### `packages/ui` owns
+### `apps/ui-library` owns
 
 - React presentation and local interaction state;
 - package-owned view-model and callback types;
@@ -295,7 +298,7 @@ Every public component story must expose useful controls for its configuration a
 
 - Retain useful workspace and Storybook configuration.
 - Remove or supersede package components that were independently recreated.
-- Move directly reusable components and tests into `packages/ui`.
+- Move directly reusable components and tests into `apps/ui-library`.
 - Leave temporary re-export modules at old app paths where needed.
 - Move the exact styles required by those components.
 - Build Storybook stories around the extracted components.
@@ -351,7 +354,7 @@ Before removing app-local implementations:
 
 ## Acceptance coverage
 
-1. Forms and form fields have one authoritative implementation in `packages/ui` and cover all current Control UI variants.
+1. Forms and form fields have one authoritative implementation in `apps/ui-library` and cover all current Control UI variants.
 2. Keyboard, numpad, and direct-entry controls work standalone and in nested modals.
 3. Window chrome, sidebars, title controls, settings, search, bottom regions, and scrolling are package-owned and compose without extra layout HTML.
 4. The reusable desktop surface uses the same 24 by 18 grid geometry and constrained pane behavior as the application.
@@ -371,3 +374,28 @@ Before removing app-local implementations:
 This plan does not redesign the visual system, change operator terminology, alter persisted desk or show formats, change backend APIs, implement relative programmer semantics, modify playback runtime behavior, or define new Tauri multi-window behavior.
 
 Help-file PNG generation from accepted Storybook stories may build on this package, but the screenshot-generation pipeline should be specified and implemented separately after the stories are stable.
+
+## Result
+
+- `apps/ui-library` is the tracked `@tosklight/ui` workspace with explicit family exports,
+  package-owned styles, typecheck, unit tests, Storybook, and interaction coverage.
+- Forms, input modals, keyboard and numpad surfaces, faders, encoders, window chrome, tables, grid
+  desktop primitives, playback views, pool views, and modal-stack infrastructure have one shared
+  production implementation.
+- The desktop uses direct package imports and retains only typed application adapters for live
+  state, server actions, persistence, Tauri integration, and complete workflow composition.
+- The app-local compatibility re-exports, separate UI-kit route, duplicate shared CSS rules, and
+  independent modal Escape manager were removed. Architecture checks prevent those boundaries
+  from returning.
+- The package modal provider owns registration, deterministic ordering, root portals, focus
+  restoration, and top-only Escape across package and application-owned dialogs.
+- Storybook contains deterministic production application stories as well as package stories.
+  Its gate requires autodocs, representative coverage for every public component, nonblank
+  rendering, exact application background tokens, no unexpected REST/WebSocket traffic, and
+  focused operator interactions.
+- The documentation screenshot contract contains 47 reviewed images: 20 Storybook-owned images
+  and 27 explicitly justified live-application images.
+
+Final acceptance passed with 217 Storybook checks, 106 UI-package tests, 1,993 desktop tests, the
+complete repository unit gate, both package typechecks, architecture checks, the static and live
+help-screenshot gates, the 141-page manual build, and the Pages generator.

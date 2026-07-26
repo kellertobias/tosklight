@@ -5,12 +5,21 @@ import {
 	TextEditorPaneChrome,
 	TextEditorToolbar,
 } from "./textEditorWindow/Toolbar";
+import type { TextEditorController } from "./textEditorWindow/controller";
 import type { WindowProps } from "./windowTypes";
 
 export { listTextEditorFiles } from "./textEditorWindow/files";
 
 export function TextEditorWindow({ paneId }: WindowProps) {
 	const controller = useTextEditorController(paneId);
+	return <TextEditorWindowView controller={controller} />;
+}
+
+export function TextEditorWindowView({
+	controller,
+}: {
+	controller: TextEditorController;
+}) {
 	return (
 		<section
 			className="text-editor"

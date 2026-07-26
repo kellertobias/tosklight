@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FixtureMode } from "../../../api/types";
-import { Button, CheckboxField, TextField } from "../../common";
+import { Button, CheckboxField, TextField } from "@tosklight/ui";
 import { blankHead, reorder } from "../fixtureProfileModel";
 
 type Head = FixtureMode["heads"][number];
