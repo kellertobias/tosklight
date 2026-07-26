@@ -7,7 +7,7 @@ import { PlaybackConfigurationDialog } from "../control/PlaybackConfigurationMod
 import { type RecordMode, RecordModeDialog } from "../shared/RecordModeDialog";
 
 const meta = {
-	title: "Application/Modal workflows",
+	title: "ToskLight/Modal workflows",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 } satisfies Meta;

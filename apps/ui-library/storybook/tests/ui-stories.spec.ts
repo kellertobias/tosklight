@@ -27,84 +27,84 @@ const packageBackground = readFileSync(
 	"utf8",
 ).match(/--bg:\s*(#[0-9a-f]{6})/iu)?.[1];
 const publicComponentStoryCoverage: Record<string, string> = {
-	Button: "controls-production-controls--button-playground",
-	CommandLine: "application-command-line--interactive",
-	CommandSection: "application-command-section--configurable",
-	ProgrammerKeypadView: "application-command-section--programmer-software",
-	PlaybackToolsView: "application-command-section--playbacks-software",
+	Button: "controls-buttons--button-playground",
+	CommandLine: "tosklight-command-line--interactive",
+	CommandSection: "tosklight-command-section--configurable",
+	ProgrammerKeypadView: "tosklight-command-section--programmer-software",
+	PlaybackToolsView: "tosklight-command-section--playbacks-software",
 	HardwareControlSummaryView:
-		"application-command-section--playbacks-hardware-connected",
-	FormLayout: "controls-production-controls--forms",
-	FormField: "controls-production-controls--forms",
-	Field: "controls-production-controls--forms",
-	TextInput: "controls-production-controls--forms",
-	NumberInput: "controls-production-controls--forms",
-	Input: "controls-production-controls--forms",
-	TextArea: "controls-production-controls--forms",
-	LargeTextInput: "controls-production-controls--forms",
-	TextField: "controls-production-controls--forms",
-	NumberField: "controls-production-controls--forms",
-	TextAreaField: "controls-production-controls--forms",
-	LargeTextField: "controls-production-controls--forms",
-	MultiValueToggle: "controls-production-controls--forms",
-	MultiValueToggleField: "controls-production-controls--forms",
-	SelectField: "controls-production-controls--forms",
-	Select: "controls-production-controls--forms",
-	CheckboxField: "controls-production-controls--forms",
-	SwitchField: "controls-production-controls--forms",
-	IconPickerField: "controls-production-controls--forms",
-	ColorPickerField: "controls-production-controls--forms",
-	FileDropField: "controls-production-controls--forms",
-	GroupedSelectionField: "controls-production-controls--forms",
-	SearchBar: "controls-production-controls--search-and-touch-select",
-	TouchSelect: "controls-production-controls--search-and-touch-select",
-	HorizontalFader: "faders-horizontal-fader--default",
-	HorizontalFaderField: "faders-horizontal-fader--states",
-	HorizontalTouchFader: "faders-horizontal-fader--default",
-	InputModal: "input-keyboard-and-numpad--input-modal-configurations",
-	ModalNumberInput: "input-keyboard-and-numpad--number-pad",
-	ModalNumberValue: "input-keyboard-and-numpad--number-pad",
-	ModalNumberEditor: "input-keyboard-and-numpad--number-pad",
-	ModalTextKeyboard: "input-keyboard-and-numpad--keyboard",
-	ModalCaretValue: "input-keyboard-and-numpad--keyboard",
-	ModalPortal: "modals-production-modal-stack--portal-primitive",
-	ModalTitleBar: "modals-production-modal-stack--title-bar-configuration",
+		"tosklight-command-section--playbacks-hardware-connected",
+	FormLayout: "controls-forms--form-components",
+	FormField: "controls-forms--form-components",
+	Field: "controls-forms--input-fields",
+	TextInput: "controls-forms--input-fields",
+	NumberInput: "controls-forms--input-fields",
+	Input: "controls-forms--input-fields",
+	TextArea: "controls-forms--input-fields",
+	LargeTextInput: "controls-forms--input-fields",
+	TextField: "controls-forms--input-fields",
+	NumberField: "controls-forms--input-fields",
+	TextAreaField: "controls-forms--input-fields",
+	LargeTextField: "controls-forms--input-fields",
+	MultiValueToggle: "controls-forms--form-components",
+	MultiValueToggleField: "controls-forms--form-components",
+	SelectField: "controls-forms--form-components",
+	Select: "controls-forms--form-components",
+	CheckboxField: "controls-forms--form-components",
+	SwitchField: "controls-forms--form-components",
+	IconPickerField: "controls-forms--form-components",
+	ColorPickerField: "controls-forms--form-components",
+	FileDropField: "controls-forms--form-components",
+	GroupedSelectionField: "controls-forms--form-components",
+	SearchBar: "controls-forms--search",
+	TouchSelect: "controls-forms--form-components",
+	HorizontalFader: "controls-faders-horizontal-fader--default",
+	HorizontalFaderField: "controls-faders-horizontal-fader--states",
+	HorizontalTouchFader: "controls-faders-horizontal-fader--default",
+	InputModal: "controls-keyboard-and-numpad--input-modal-configurations",
+	ModalNumberInput: "controls-keyboard-and-numpad--number-pad",
+	ModalNumberValue: "controls-keyboard-and-numpad--number-pad",
+	ModalNumberEditor: "controls-keyboard-and-numpad--number-pad",
+	ModalTextKeyboard: "controls-keyboard-and-numpad--keyboard",
+	ModalCaretValue: "controls-keyboard-and-numpad--keyboard",
+	ModalPortal: "window-system-modals--portal-primitive",
+	ModalTitleBar: "window-system-modals--title-bar-configuration",
 	TitleBarSearchDivider:
-		"modals-production-modal-stack--title-bar-configuration",
-	ModalProvider: "modals-production-modal-stack--three-deep",
-	ModalLayer: "modals-production-modal-stack--close-policies",
-	ModalFrame: "modals-production-modal-stack--close-policies",
-	ModalRegistration: "modals-production-modal-stack--application-registration",
-	WindowHeader: "windows-production-window-kit--header-configurations",
-	WindowSettings: "windows-production-window-kit--settings-configurations",
-	WindowFrame: "windows-production-window-kit--configuration",
-	WindowScrollArea: "windows-production-window-kit--scroll-and-empty-states",
-	DataTable: "tables-generic-table--interactive",
-	ButtonGrid: "windows-production-window-kit--pool-grid",
-	GridButton: "windows-production-window-kit--pool-grid",
-	SelectionList: "windows-production-window-kit--selection-list-states",
-	SelectionTree: "windows-production-window-kit--multi-step-selection",
-	FixtureSheetTableView: "tables-fixture-sheet--step-selection",
-	VerticalTouchFaderSurface: "faders-vertical-touch-fader--software",
-	TouchValueButton: "faders-vertical-touch-fader--direct-value-button",
-	FaderView: "faders-vertical-touch-fader--fader-view-composition",
-	TouchEncoder: "encoders-production-encoder-surfaces--individual-touch",
+		"window-system-modals--title-bar-configuration",
+	ModalProvider: "window-system-modals--three-deep",
+	ModalLayer: "window-system-modals--close-policies",
+	ModalFrame: "window-system-modals--close-policies",
+	ModalRegistration: "window-system-modals--application-registration",
+	WindowHeader: "window-system-production-window-kit--header-configurations",
+	WindowSettings: "window-system-production-window-kit--settings-configurations",
+	WindowFrame: "window-system-production-window-kit--configuration",
+	WindowScrollArea: "window-system-production-window-kit--scroll-and-empty-states",
+	DataTable: "tables-and-grids-generic-table--interactive",
+	ButtonGrid: "window-system-production-window-kit--pool-grid",
+	GridButton: "window-system-production-window-kit--pool-grid",
+	SelectionList: "window-system-production-window-kit--selection-list-states",
+	SelectionTree: "window-system-production-window-kit--multi-step-selection",
+	FixtureSheetTableView: "tables-and-grids-fixture-grid--step-selection",
+	VerticalTouchFaderSurface: "controls-faders-vertical-touch-fader--software",
+	TouchValueButton: "controls-faders-vertical-touch-fader--direct-value-button",
+	FaderView: "controls-faders-vertical-touch-fader--fader-view-composition",
+	TouchEncoder: "controls-encoders--individual-touch",
 	HardwareEncoderDisplayView:
-		"encoders-production-encoder-surfaces--individual-hardware",
-	EncoderSection: "encoders-production-encoder-surfaces--configurable-family",
-	GridDesktop: "desktop-24-×-18-grid-manager--constrained-placement",
-	PaneView: "desktop-24-×-18-grid-manager--drag-and-resize",
-	TouchPlaybackCardView: "playbacks-playback-bank--configurable-playback",
+		"controls-encoders--individual-hardware",
+	EncoderSection: "controls-encoders--configurable-family",
+	GridDesktop: "window-system-desktop-grid-manager--constrained-placement",
+	PaneView: "window-system-desktop-grid-manager--drag-and-resize",
+	TouchPlaybackCardView: "controls-playbacks--configurable-playback",
 	HardwarePlaybackCardView:
-		"playbacks-playback-bank--eight-by-two-hardware-bank",
-	HardwareCueRowsView: "playbacks-playback-bank--eight-by-two-hardware-bank",
+		"controls-playbacks--eight-by-two-hardware-bank",
+	HardwareCueRowsView: "controls-playbacks--eight-by-two-hardware-bank",
 	HardwarePlaybackFaderView:
-		"playbacks-playback-bank--eight-by-two-hardware-bank",
-	PlaybackBankView: "playbacks-playback-bank--eight-by-two-touch-bank",
-	VirtualPlaybackGridView: "playbacks-virtual-playback-grid--sparse-grid",
-	PoolCard: "pools-production-pool-cards--scaling-and-every-state",
-	PoolGrid: "pools-generic-pool-window--sparse",
-	PoolWindow: "pools-generic-pool-window--sparse",
+		"controls-playbacks--eight-by-two-hardware-bank",
+	PlaybackBankView: "controls-playbacks--eight-by-two-touch-bank",
+	VirtualPlaybackGridView: "tables-and-grids-virtual-playback-grid--sparse-grid",
+	PoolCard: "tables-and-grids-pools-production-pool-cards--scaling-and-every-state",
+	PoolGrid: "tables-and-grids-pools-generic-pool-window--sparse",
+	PoolWindow: "tables-and-grids-pools-generic-pool-window--sparse",
 };
 
 test.describe.configure({ mode: "serial" });
@@ -215,7 +215,7 @@ test("configured search keeps the standard magnifier size and adds width only fo
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=controls-production-controls--search-and-touch-select&viewMode=story",
+		"/iframe.html?id=controls-forms--search&viewMode=story",
 	);
 	const plainIcon = page.locator(
 		".console-search:not(.has-options) .console-search-icon > svg",
@@ -281,21 +281,21 @@ test("DMX application stories render the production matrix, inspector, and sourc
 }) => {
 	await page.setViewportSize({ width: 1496, height: 761 });
 	await page.goto(
-		"/iframe.html?id=application-windows-dmx--values-output-summary&viewMode=story",
+		"/iframe.html?id=tosklight-windows-dmx--values-output-summary&viewMode=story",
 	);
 	await expect(page.getByText("DMX Output", { exact: true })).toBeVisible();
 	await expect(
 		page.getByRole("button", { name: "Values as dots" }),
 	).toBeVisible();
 	await expect(page.getByRole("button", { name: "Sources" })).toBeVisible();
-	await expect(page.locator(".dmx-universe")).toHaveCount(2);
-	await expect(page.locator(".dmx-universe button")).toHaveCount(1_024);
+	await expect(page.locator(".dmx-universe")).toHaveCount(4);
+	await expect(page.locator(".dmx-universe button")).toHaveCount(2_048);
 	await expect(page.locator(".dmx-info-pane")).toContainText("Output summary");
 	await expect(page.locator(".ui-data-table")).toHaveCount(0);
 	await expect(page.locator(".ui-selection-tree")).toHaveCount(0);
 
 	await page.goto(
-		"/iframe.html?id=application-windows-dmx--selected-patched-channel&viewMode=story",
+		"/iframe.html?id=tosklight-windows-dmx--selected-patched-channel&viewMode=story",
 	);
 	await expect(page.locator(".dmx-row button.selected")).toHaveCount(1, {
 		timeout: 15_000,
@@ -308,7 +308,7 @@ test("DMX application stories render the production matrix, inspector, and sourc
 	).toBeVisible();
 
 	await page.goto(
-		"/iframe.html?id=application-windows-dmx--sources-with-overrides&viewMode=story",
+		"/iframe.html?id=tosklight-windows-dmx--sources-with-overrides&viewMode=story",
 	);
 	const source = page.locator(".dmx-detail-list article").first();
 	await source.getByRole("button", { name: "Release" }).click();
@@ -317,7 +317,7 @@ test("DMX application stories render the production matrix, inspector, and sourc
 	).toHaveText("1.13:released");
 
 	await page.goto(
-		"/iframe.html?id=application-windows-dmx--sources-empty&viewMode=story",
+		"/iframe.html?id=tosklight-windows-dmx--sources-empty&viewMode=story",
 	);
 	await expect(
 		page.getByText("No raw DMX overrides are active."),
@@ -329,7 +329,7 @@ test("Help application stories render real navigation, Markdown, search, and sta
 }) => {
 	await page.setViewportSize({ width: 1496, height: 761 });
 	await page.goto(
-		"/iframe.html?id=application-windows-help--quick-start&viewMode=story",
+		"/iframe.html?id=tosklight-windows-help--quick-start&viewMode=story",
 	);
 	await expect(page.getByText("Help", { exact: true })).toBeVisible();
 	await expect(page.getByText("Live documentation")).toBeVisible();
@@ -361,7 +361,7 @@ test("Help application stories render real navigation, Markdown, search, and sta
 	await expect(page.getByText("No matching help topics.")).toBeVisible();
 
 	await page.goto(
-		"/iframe.html?id=application-windows-help--loading&viewMode=story",
+		"/iframe.html?id=tosklight-windows-help--loading&viewMode=story",
 	);
 	const loadingPane = page.locator(".help-topic-pane");
 	const loadingState = loadingPane.locator(".ui-window-empty-state");
@@ -387,7 +387,7 @@ test("Help application stories render real navigation, Markdown, search, and sta
 		0,
 	);
 	await page.goto(
-		"/iframe.html?id=application-windows-help--empty-catalog&viewMode=story",
+		"/iframe.html?id=tosklight-windows-help--empty-catalog&viewMode=story",
 	);
 	const emptyState = page.locator(".help-topic-pane .ui-window-empty-state");
 	await expect(
@@ -395,13 +395,13 @@ test("Help application stories render real navigation, Markdown, search, and sta
 	).toBeVisible();
 	await expect(emptyState.locator(".help-state-icon")).toBeVisible();
 	await page.goto(
-		"/iframe.html?id=application-windows-help--catalog-error&viewMode=story",
+		"/iframe.html?id=tosklight-windows-help--catalog-error&viewMode=story",
 	);
 	await expect(
 		page.getByText("Unable to load help: Catalog request failed"),
 	).toBeVisible();
 	await page.goto(
-		"/iframe.html?id=application-windows-help--catalog-warning&viewMode=story",
+		"/iframe.html?id=tosklight-windows-help--catalog-warning&viewMode=story",
 	);
 	await expect(
 		page.getByText("One optional help topic could not be indexed."),
@@ -411,7 +411,7 @@ test("Help application stories render real navigation, Markdown, search, and sta
 	await expect(warning).toHaveCSS("border-top-color", "rgb(217, 133, 37)");
 
 	await page.goto(
-		"/iframe.html?id=application-windows-help--search-results&viewMode=story",
+		"/iframe.html?id=tosklight-windows-help--search-results&viewMode=story",
 	);
 	await expect(page.getByRole("textbox", { name: "Search Help" })).toHaveValue(
 		"Command Line",
@@ -425,7 +425,7 @@ test("Help application stories render real navigation, Markdown, search, and sta
 	await expect(page.locator(".help-content h1")).toHaveText("Command Line");
 
 	await page.goto(
-		"/iframe.html?id=application-windows-help--search-no-results&viewMode=story",
+		"/iframe.html?id=tosklight-windows-help--search-no-results&viewMode=story",
 	);
 	await expect(page.getByRole("textbox", { name: "Search Help" })).toHaveValue(
 		"No such topic",
@@ -438,7 +438,7 @@ test("application shell stories preserve Dock and software or hardware control m
 }) => {
 	await page.setViewportSize({ width: 1496, height: 761 });
 	await page.goto(
-		"/iframe.html?id=application-shell-and-control--dock-desktops&viewMode=story",
+		"/iframe.html?id=tosklight-shell-and-control--dock-desktops&viewMode=story",
 	);
 	await expect(page.locator(".left-dock")).toBeVisible();
 	const dockModeToggle = page.getByRole("button", {
@@ -495,13 +495,13 @@ test("application shell stories preserve Dock and software or hardware control m
 	).toContain("dock-list-swap-builtins");
 
 	await page.goto(
-		"/iframe.html?id=application-shell-and-control--dock-built-ins&viewMode=story",
+		"/iframe.html?id=tosklight-shell-and-control--dock-built-ins&viewMode=story",
 	);
 	await expect(page.getByRole("button", { name: "Stage" })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Fixtures" })).toBeVisible();
 
 	await page.goto(
-		"/iframe.html?id=application-shell-and-control--programmer-software&viewMode=story",
+		"/iframe.html?id=tosklight-shell-and-control--programmer-software&viewMode=story",
 	);
 	await expect(
 		page.locator(".control-section.programmer.touch-connected"),
@@ -513,7 +513,7 @@ test("application shell stories preserve Dock and software or hardware control m
 	await expect(page.locator(".numeric-pad")).toBeVisible();
 
 	await page.goto(
-		"/iframe.html?id=application-shell-and-control--playbacks-software&viewMode=story",
+		"/iframe.html?id=tosklight-shell-and-control--playbacks-software&viewMode=story",
 	);
 	await expect(page.locator(".playback-tools")).toBeVisible();
 	await expect(page.locator(".numeric-pad")).toHaveCount(0);
@@ -522,7 +522,7 @@ test("application shell stories preserve Dock and software or hardware control m
 	await expect(page.locator(".playback-card")).toHaveCount(16);
 
 	await page.goto(
-		"/iframe.html?id=application-shell-and-control--playbacks-hardware-connected&viewMode=story",
+		"/iframe.html?id=tosklight-shell-and-control--playbacks-hardware-connected&viewMode=story",
 	);
 	await expect(
 		page.locator(".control-section.playbacks.hardware-connected"),
@@ -540,7 +540,7 @@ test("application control stories cover parameter families, playback banks, and 
 }) => {
 	await page.setViewportSize({ width: 1496, height: 761 });
 	await page.goto(
-		"/iframe.html?id=application-shell-and-control--parameter-families-and-touch-encoders&viewMode=story",
+		"/iframe.html?id=tosklight-shell-and-control--parameter-families-and-touch-encoders&viewMode=story",
 	);
 	for (const family of [
 		"Intensity",
@@ -559,7 +559,7 @@ test("application control stories cover parameter families, playback banks, and 
 	await expect(page.locator(".touch-encoder")).toHaveCount(4);
 
 	await page.goto(
-		"/iframe.html?id=application-shell-and-control--playback-bank-touch&viewMode=story",
+		"/iframe.html?id=tosklight-shell-and-control--playback-bank-touch&viewMode=story",
 	);
 	await expect(page.locator('[data-playback-bank-mode="touch"]')).toBeVisible();
 	await expect(
@@ -569,7 +569,7 @@ test("application control stories cover parameter families, playback banks, and 
 	).toHaveCount(4);
 
 	await page.goto(
-		"/iframe.html?id=application-shell-and-control--playback-bank-hardware&viewMode=story",
+		"/iframe.html?id=tosklight-shell-and-control--playback-bank-hardware&viewMode=story",
 	);
 	await expect(
 		page.locator(
@@ -578,7 +578,7 @@ test("application control stories cover parameter families, playback banks, and 
 	).toHaveCount(4);
 
 	await page.goto(
-		"/iframe.html?id=application-shell-and-control--keypad-programmer-fade-preload-highlight-and-step&viewMode=story",
+		"/iframe.html?id=tosklight-shell-and-control--keypad-programmer-fade-preload-highlight-and-step&viewMode=story",
 	);
 	await expect(page.getByText("Prog. Fade", { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "PRELOAD GO" })).toBeVisible();
@@ -591,7 +591,7 @@ test("the serverless command line is interactive and used as the Storybook comma
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=application-command-line--interactive&viewMode=story",
+		"/iframe.html?id=tosklight-command-line--interactive&viewMode=story",
 	);
 	const command = page.getByRole("textbox", { name: "Command line" });
 	await expect(command).toHaveValue("FIXTURE 1 AT 68");
@@ -641,7 +641,7 @@ test("Command Section follows the global hardware context and production control
 }) => {
 	await page.setViewportSize({ width: 1496, height: 761 });
 	await page.goto(
-		"/iframe.html?id=application-command-section--programmer-software&viewMode=story&globals=mode:software",
+		"/iframe.html?id=tosklight-command-section--programmer-software&viewMode=story&globals=mode:software",
 	);
 	await expect(
 		page.locator(".control-section.programmer.touch-connected"),
@@ -685,6 +685,19 @@ test("Command Section follows the global hardware context and production control
 	);
 	await expect(page.locator(".mode-toggle")).toHaveCSS("margin-left", "0px");
 	await expect(page.locator(".mode-toggle")).toHaveCSS("width", "116px");
+	await expect(page.getByRole("button", { name: "Dynamics" })).toHaveCSS(
+		"color",
+		"rgb(27, 214, 236)",
+	);
+	await expect(page.getByRole("button", { name: "Dynamics" })).not.toHaveCSS(
+		"border-color",
+		"rgb(27, 214, 236)",
+	);
+	await page.getByRole("button", { name: "Dynamics" }).click();
+	await expect(page.getByRole("button", { name: "Dynamics" })).toHaveCSS(
+		"border-color",
+		"rgb(27, 214, 236)",
+	);
 
 	for (const key of ["SET", "SHIFT"]) {
 		const button = page.locator(`[data-keypad-key="${key}"]`).first();
@@ -696,7 +709,7 @@ test("Command Section follows the global hardware context and production control
 	}
 
 	await page.goto(
-		"/iframe.html?id=application-command-section--configurable&viewMode=story&globals=mode:software&args=clearState:selection;previousEnabled:false;nextEnabled:false;preloadArmed:true",
+		"/iframe.html?id=tosklight-command-section--configurable&viewMode=story&globals=mode:software&args=clearState:selection;previousEnabled:false;nextEnabled:false;preloadArmed:true",
 	);
 	await expect(page.locator('[data-keypad-key="CLR"]').first()).toHaveClass(
 		/clear-active/u,
@@ -721,7 +734,7 @@ test("Command Section follows the global hardware context and production control
 	);
 
 	await page.goto(
-		"/iframe.html?id=application-command-section--configurable&viewMode=story&globals=mode:software&args=clearState:active-values",
+		"/iframe.html?id=tosklight-command-section--configurable&viewMode=story&globals=mode:software&args=clearState:active-values",
 	);
 	await expect(page.locator('[data-keypad-key="CLR"]').first()).toHaveClass(
 		/clear-warning/u,
@@ -732,7 +745,7 @@ test("Command Section follows the global hardware context and production control
 	);
 
 	await page.goto(
-		"/iframe.html?id=application-command-section--playbacks-software&viewMode=story&globals=mode:software",
+		"/iframe.html?id=tosklight-command-section--playbacks-software&viewMode=story&globals=mode:software",
 	);
 	const playbackCards = page.locator(".playback-card");
 	await expect(playbackCards).toHaveCount(16);
@@ -756,7 +769,7 @@ test("Command Section follows the global hardware context and production control
 	}
 
 	await page.goto(
-		"/iframe.html?id=application-command-section--configurable&viewMode=story&globals=mode:hardware",
+		"/iframe.html?id=tosklight-command-section--configurable&viewMode=story&globals=mode:hardware",
 	);
 	await expect(
 		page.locator(".control-section.programmer.hardware-connected"),
@@ -770,7 +783,7 @@ test("Command Section follows the global hardware context and production control
 	await expect(page.locator(".hardware-control-summary")).toBeVisible();
 
 	await page.goto(
-		"/iframe.html?id=application-command-line--interactive&viewMode=story&globals=mode:hardware",
+		"/iframe.html?id=tosklight-command-line--interactive&viewMode=story&globals=mode:hardware",
 	);
 	await expect(page.locator(".command-line-bar.hardware-mode")).toBeVisible();
 	await expect(page.getByRole("button", { name: "ESC" })).toHaveCount(0);
@@ -780,7 +793,7 @@ test("touch and hardware encoder stories exercise continuous input, modal entry,
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=encoders-production-encoder-surfaces--individual-touch&viewMode=story",
+		"/iframe.html?id=controls-encoders--individual-touch&viewMode=story",
 	);
 	const encoder = page.getByRole("group", { name: "Enc 1 · Dimmer" });
 	const value = encoder.locator(".touch-encoder-value");
@@ -935,7 +948,7 @@ test("touch and hardware encoder stories exercise continuous input, modal entry,
 		"individual-touch-indexed",
 	]) {
 		await page.goto(
-			`/iframe.html?id=encoders-production-encoder-surfaces--${constrained}&viewMode=story`,
+			`/iframe.html?id=controls-encoders--${constrained}&viewMode=story`,
 		);
 		const constrainedEncoder = page.getByRole("group");
 		await expect(constrainedEncoder).toHaveAttribute("aria-disabled", "true");
@@ -947,7 +960,7 @@ test("touch and hardware encoder stories exercise continuous input, modal entry,
 	}
 
 	await page.goto(
-		"/iframe.html?id=encoders-production-encoder-surfaces--individual-hardware&viewMode=story",
+		"/iframe.html?id=controls-encoders--individual-hardware&viewMode=story",
 	);
 	const hardwareEncoder = page.getByRole("button", {
 		name: "Encoder 1: Pan, 80° ... 100°",
@@ -1094,7 +1107,7 @@ test("touch and hardware encoder stories exercise continuous input, modal entry,
 	).toBeVisible();
 
 	await page.goto(
-		"/iframe.html?id=encoders-production-encoder-surfaces--configurable-family&viewMode=story",
+		"/iframe.html?id=controls-encoders--configurable-family&viewMode=story",
 	);
 	await expect(page.getByText("RGBW · AUV", { exact: true })).toBeVisible();
 	await expect(page.locator(".touch-encoder")).toHaveCount(6);
@@ -1177,12 +1190,12 @@ test("the consolidated playback stories cover controls, touch, hardware, loaded,
 		).entries,
 	).filter(
 		(entry) =>
-			entry.type === "story" && entry.title === "Playbacks/Playback bank",
+			entry.type === "story" && entry.title === "Controls/Playbacks",
 	);
 	expect(entries).toHaveLength(3);
 
 	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--configurable-playback&viewMode=story",
+		"/iframe.html?id=controls-playbacks--configurable-playback&viewMode=story",
 	);
 	const configurable = page.locator(".playback-card");
 	await expect(configurable).toHaveCount(1);
@@ -1192,7 +1205,7 @@ test("the consolidated playback stories cover controls, touch, hardware, loaded,
 
 	for (const mode of ["touch", "hardware"] as const) {
 		await page.goto(
-			`/iframe.html?id=playbacks-playback-bank--eight-by-two-${mode}-bank&viewMode=story`,
+			`/iframe.html?id=controls-playbacks--eight-by-two-${mode}-bank&viewMode=story`,
 		);
 		const bank = page.locator(".playback-fader-bank");
 		const cards = bank.locator(".playback-card");
@@ -1230,7 +1243,7 @@ test("the consolidated playback stories cover controls, touch, hardware, loaded,
 	}
 
 	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--eight-by-two-touch-bank&viewMode=story",
+		"/iframe.html?id=controls-playbacks--eight-by-two-touch-bank&viewMode=story",
 	);
 	const loadedStatus = page.locator(".playback-summary-loaded");
 	await expect(loadedStatus).toHaveCount(1);
@@ -1334,12 +1347,12 @@ test("the consolidated playback stories cover controls, touch, hardware, loaded,
 	).toBeLessThanOrEqual(2);
 
 	const beatCard = page.locator(
-		".touch-playback-card[data-playback-row='1'][data-playback-kind='speed-group']",
+		".touch-playback-card[data-playback-row='1'][data-playback-kind='dynamic']",
 	);
 	const [beatWidgetBox, beatTrackBox, bpmBox] = await Promise.all([
 		beatCard.locator(".playback-top-widget").boundingBox(),
 		beatCard.locator(".playback-beat-track").boundingBox(),
-		beatCard.getByText("128 BPM", { exact: true }).boundingBox(),
+		beatCard.getByText("120 BPM", { exact: true }).boundingBox(),
 	]);
 	expect(beatTrackBox?.height).toBeCloseTo(beatWidgetBox?.height ?? 0, 0);
 	expect(beatTrackBox?.x).toBeCloseTo(beatWidgetBox?.x ?? 0, 0);
@@ -1377,7 +1390,7 @@ test("the consolidated playback stories cover controls, touch, hardware, loaded,
 	});
 
 	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--eight-by-two-hardware-bank&viewMode=story",
+		"/iframe.html?id=controls-playbacks--eight-by-two-hardware-bank&viewMode=story",
 	);
 	const compactCuelist = page.locator(
 		".hardware-playback-card[data-playback-row='0'][data-playback-kind='cue-list']",
@@ -1537,7 +1550,7 @@ test("playback group controls enforce row action rules and touch or hardware hei
 	page,
 }) => {
 	for (const mode of ["touch", "hardware"] as const) {
-		const story = `playbacks-playback-bank--eight-by-two-${mode}-bank`;
+		const story = `controls-playbacks--eight-by-two-${mode}-bank`;
 		const expectedHeight = mode === "touch" ? 280 : 140;
 		await page.goto(
 			`/iframe.html?id=${story}&viewMode=story&args=playbacksWide:8;playbacksHigh:2;availableWidth:640`,
@@ -1675,13 +1688,13 @@ test("application Stage stories render deterministic 2D fixtures and the real 3D
 }) => {
 	await page.setViewportSize({ width: 1496, height: 761 });
 	await page.goto(
-		"/iframe.html?id=application-windows-stage--stage-2-d&viewMode=story",
+		"/iframe.html?id=tosklight-windows-stage--stage-2-d&viewMode=story",
 	);
 	await expect(page.locator(".stage-fixture")).toHaveCount(5);
 	await expect(page.locator(".stage-fixture.selected")).toHaveCount(1);
 
 	await page.goto(
-		"/iframe.html?id=application-windows-stage--stage-3-d&viewMode=story",
+		"/iframe.html?id=tosklight-windows-stage--stage-3-d&viewMode=story",
 	);
 	await expect(page.locator(".stage-3d-canvas")).toBeVisible();
 	await expect(page.locator(".stage-3d-canvas canvas")).toBeVisible();
@@ -1691,14 +1704,14 @@ test("generic and application-owned pool stories preserve their slot contracts",
 	page,
 }) => {
 	for (const storyId of [
-		"pools-generic-pool-window--empty",
-		"pools-generic-pool-window--sparse",
+		"tables-and-grids-pools-generic-pool-window--empty",
+		"tables-and-grids-pools-generic-pool-window--sparse",
 	]) {
 		await page.goto(`/iframe.html?id=${storyId}&viewMode=story`);
 		await expect(page.locator(".pool-card")).toHaveCount(200);
 	}
 	await page.goto(
-		"/iframe.html?id=application-windows-pools--groups&viewMode=story",
+		"/iframe.html?id=tosklight-windows-pools--groups&viewMode=story",
 	);
 	await expect(page.locator(".group-card")).toHaveCount(200);
 	await expect(page.locator(".group-card").nth(3)).toHaveAttribute(
@@ -1712,23 +1725,21 @@ test("generic and application-owned pool stories preserve their slot contracts",
 	);
 
 	await page.goto(
-		"/iframe.html?id=application-windows-pools--presets&viewMode=story",
+		"/iframe.html?id=tosklight-windows-pools--presets&viewMode=story",
 	);
 	await expect(page.locator(".preset-card")).toHaveCount(200);
 	await expect(page.locator(".preset-card").nth(4)).toHaveAttribute(
 		"data-pool-slot-id",
 		"2.5",
 	);
-	await expect(page.locator(".preset-card").last()).toHaveClass(
-		/store-target/u,
-	);
+	await expect(page.locator(".preset-card.store-target")).toHaveCount(0);
 	await page.locator(".preset-card").nth(4).click();
 	await expect(page.getByLabel("Preset pool interaction")).toHaveText(
 		"Activated Color 5",
 	);
 
 	await page.goto(
-		"/iframe.html?id=application-windows-cuelists-and-cues--pool&viewMode=story",
+		"/iframe.html?id=tosklight-windows-cuelists-and-cues--pool&viewMode=story",
 	);
 	await expect(page.locator(".cuelist-card")).toHaveCount(1000);
 	await expect(page.locator(".cuelist-card").first()).toHaveAttribute(
@@ -1747,7 +1758,7 @@ test("generic and application-owned pool stories preserve their slot contracts",
 	await expect(page.locator(".cuelist-card")).toHaveCount(1000);
 
 	await page.goto(
-		"/iframe.html?id=pools-generic-pool-window--extended&viewMode=story",
+		"/iframe.html?id=tables-and-grids-pools-generic-pool-window--extended&viewMode=story",
 	);
 	await expect(page.locator(".pool-card")).toHaveCount(260);
 });
@@ -1757,7 +1768,7 @@ test("the narrow generic pool keeps touch-sized boxes in a scrollable window", a
 }) => {
 	await page.setViewportSize({ width: 430, height: 844 });
 	await page.goto(
-		"/iframe.html?id=pools-generic-pool-window--narrow&viewMode=story",
+		"/iframe.html?id=tables-and-grids-pools-generic-pool-window--narrow&viewMode=story",
 	);
 	const scroller = page.locator(".ui-window-scroller");
 	const firstCard = page.locator(".pool-card").first();
@@ -1781,13 +1792,13 @@ test("pool cards stay square across width, height, resize, overflow, and applica
 }) => {
 	await page.setViewportSize({ width: 1496, height: 900 });
 	const genericStories = [
-		"pools-generic-pool-window--empty",
-		"pools-generic-pool-window--sparse",
-		"pools-generic-pool-window--narrow-tall",
-		"pools-generic-pool-window--narrow-short",
-		"pools-generic-pool-window--wide-tall",
-		"pools-generic-pool-window--wide-short",
-		"pools-generic-pool-window--extended",
+		"tables-and-grids-pools-generic-pool-window--empty",
+		"tables-and-grids-pools-generic-pool-window--sparse",
+		"tables-and-grids-pools-generic-pool-window--narrow-tall",
+		"tables-and-grids-pools-generic-pool-window--narrow-short",
+		"tables-and-grids-pools-generic-pool-window--wide-tall",
+		"tables-and-grids-pools-generic-pool-window--wide-short",
+		"tables-and-grids-pools-generic-pool-window--extended",
 	];
 	const widths = new Map<string, number>();
 	for (const storyId of genericStories) {
@@ -1803,19 +1814,19 @@ test("pool cards stay square across width, height, resize, overflow, and applica
 	}
 	expect(
 		Math.abs(
-			(widths.get("pools-generic-pool-window--narrow-tall") ?? 0) -
-				(widths.get("pools-generic-pool-window--narrow-short") ?? 0),
+			(widths.get("tables-and-grids-pools-generic-pool-window--narrow-tall") ?? 0) -
+				(widths.get("tables-and-grids-pools-generic-pool-window--narrow-short") ?? 0),
 		),
 	).toBeLessThanOrEqual(1);
 	expect(
 		Math.abs(
-			(widths.get("pools-generic-pool-window--wide-tall") ?? 0) -
-				(widths.get("pools-generic-pool-window--wide-short") ?? 0),
+			(widths.get("tables-and-grids-pools-generic-pool-window--wide-tall") ?? 0) -
+				(widths.get("tables-and-grids-pools-generic-pool-window--wide-short") ?? 0),
 		),
 	).toBeLessThanOrEqual(1);
 
 	await page.goto(
-		"/iframe.html?id=pools-generic-pool-window--extended&viewMode=story",
+		"/iframe.html?id=tables-and-grids-pools-generic-pool-window--extended&viewMode=story",
 	);
 	const extendedScroller = page.locator(".ui-window-scroller");
 	expect(
@@ -1825,7 +1836,7 @@ test("pool cards stay square across width, height, resize, overflow, and applica
 	).toBe(true);
 
 	await page.goto(
-		"/iframe.html?id=pools-generic-pool-window--live-resize&viewMode=story",
+		"/iframe.html?id=tables-and-grids-pools-generic-pool-window--live-resize&viewMode=story",
 	);
 	const before = await expectSquarePool(page);
 	await page.getByRole("button", { name: "Resize pool viewport" }).click();
@@ -1835,15 +1846,15 @@ test("pool cards stay square across width, height, resize, overflow, and applica
 	await expectSquarePool(page);
 
 	for (const [storyId, selector] of [
-		["application-windows-pools--groups-narrow-short", ".group-card"],
-		["application-windows-pools--groups-wide-tall", ".group-card"],
-		["application-windows-pools--presets-narrow-short", ".preset-card"],
-		["application-windows-pools--presets-wide-tall", ".preset-card"],
+		["tosklight-windows-pools--groups-narrow-short", ".group-card"],
+		["tosklight-windows-pools--groups-wide-tall", ".group-card"],
+		["tosklight-windows-pools--presets-narrow-short", ".preset-card"],
+		["tosklight-windows-pools--presets-wide-tall", ".preset-card"],
 		[
-			"application-windows-cuelists-and-cues--pool-narrow-short",
+			"tosklight-windows-cuelists-and-cues--pool-narrow-short",
 			".cuelist-card",
 		],
-		["application-windows-cuelists-and-cues--pool-wide-tall", ".cuelist-card"],
+		["tosklight-windows-cuelists-and-cues--pool-wide-tall", ".cuelist-card"],
 	] as const) {
 		await page.goto(`/iframe.html?id=${storyId}&viewMode=story`);
 		await expectSquarePool(page, selector);
@@ -1855,7 +1866,7 @@ test("the Cuelist pool uses its target minimum and fills the available width", a
 }) => {
 	await page.setViewportSize({ width: 1280, height: 760 });
 	await page.goto(
-		"/iframe.html?id=application-windows-cuelists-and-cues--pool-wide-tall&viewMode=story",
+		"/iframe.html?id=tosklight-windows-cuelists-and-cues--pool-wide-tall&viewMode=story",
 	);
 	const grid = page.locator(".cuelist-pool-grid");
 	const firstCard = page.locator(".cuelist-card").first();
@@ -1900,7 +1911,7 @@ test("configured colors and derived or frozen states use complete outlines and r
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=pools-generic-pool-window--every-card-state&viewMode=story",
+		"/iframe.html?id=tables-and-grids-pools-generic-pool-window--every-card-state&viewMode=story",
 	);
 	const configured = page
 		.getByRole("button", { name: /Configured color/u })
@@ -1934,7 +1945,7 @@ test("configured colors and derived or frozen states use complete outlines and r
 	}
 
 	await page.goto(
-		"/iframe.html?id=application-windows-pools--groups-status-markers&viewMode=story",
+		"/iframe.html?id=tosklight-windows-pools--groups-status-markers&viewMode=story",
 	);
 	await expect(page.getByLabel(/Derived state/u)).toBeVisible();
 	await expect(page.getByLabel(/Frozen state/u)).toBeVisible();
@@ -1944,7 +1955,7 @@ test("production pool cards use dashed empty cards and semantic workflow colors"
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=pools-production-pool-cards--scaling-and-every-state&viewMode=story",
+		"/iframe.html?id=tables-and-grids-pools-production-pool-cards--scaling-and-every-state&viewMode=story",
 	);
 	const empty = page.getByRole("button", { name: /Empty/u });
 	const recordTarget = page.getByRole("button", { name: /Record here/u });
@@ -1974,7 +1985,7 @@ test("pool names wrap inside the top-left region and both filled treatments are 
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=pools-production-pool-cards--scaling-and-every-state&viewMode=story",
+		"/iframe.html?id=tables-and-grids-pools-production-pool-cards--scaling-and-every-state&viewMode=story",
 	);
 	const longName = page.getByText(
 		"Front Wash With A Deliberately Long Operator Name",
@@ -2002,7 +2013,7 @@ test("pool names wrap inside the top-left region and both filled treatments are 
 		.locator("xpath=ancestor::button[contains(@class, 'pool-card')]")
 		.evaluate((element) => getComputedStyle(element).backgroundColor);
 	await page.goto(
-		"/iframe.html?id=pools-production-pool-cards--outline-only-filled-cards&viewMode=story",
+		"/iframe.html?id=tables-and-grids-pools-production-pool-cards--outline-only-filled-cards&viewMode=story",
 	);
 	const outlineBackground = await page
 		.getByText("Blue", { exact: true })
@@ -2043,7 +2054,7 @@ test("the application Virtual Playbacks adapter uses a stable faderless pool gri
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=application-virtual-playbacks--sparse-grid&viewMode=story",
+		"/iframe.html?id=tosklight-virtual-playbacks--sparse-grid&viewMode=story",
 	);
 	await expect(page.locator(".virtual-playback-box")).toHaveCount(12);
 	await expect(page.locator(".playback-fader-bank")).toHaveCount(0);
@@ -2053,7 +2064,7 @@ test("the application Virtual Playbacks adapter uses a stable faderless pool gri
 	).toBeVisible();
 
 	await page.goto(
-		"/iframe.html?id=application-virtual-playbacks--page-switching&viewMode=story",
+		"/iframe.html?id=tosklight-virtual-playbacks--page-switching&viewMode=story",
 	);
 	const first = page.locator('[data-grid-position="0"]');
 	await expect(first).toContainText("Main");
@@ -2068,13 +2079,13 @@ test("Virtual Playback GO and held actions retain click versus press-release sem
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=application-virtual-playbacks--sparse-grid&viewMode=story",
+		"/iframe.html?id=tosklight-virtual-playbacks--sparse-grid&viewMode=story",
 	);
 	await page.getByRole("button", { name: /cell 1 Main/u }).click();
 	await expect(page.getByRole("status")).toHaveText("Action 7");
 
 	await page.goto(
-		"/iframe.html?id=application-virtual-playbacks--held-flash-and-swap&viewMode=story",
+		"/iframe.html?id=tosklight-virtual-playbacks--held-flash-and-swap&viewMode=story",
 	);
 	const flash = page.getByRole("button", { name: /cell 1 Bump/u });
 	const bounds = await flash.boundingBox();
@@ -2099,7 +2110,7 @@ test("the application Virtual Playbacks stories cover adapter-owned targeting an
 		["exclusion-zone-state", '[data-grid-position="3"]', "exclusion-selected"],
 	] as const) {
 		await page.goto(
-			`/iframe.html?id=application-virtual-playbacks--${story}&viewMode=story`,
+			`/iframe.html?id=tosklight-virtual-playbacks--${story}&viewMode=story`,
 		);
 		await expect(page.locator(selector)).toHaveClass(
 			new RegExp(className, "u"),
@@ -2111,14 +2122,14 @@ test("the application Virtual Playbacks stories cover adapter-owned targeting an
 		"Front alternates",
 	);
 	await page.goto(
-		"/iframe.html?id=application-virtual-playbacks--unavailable-slots&viewMode=story",
+		"/iframe.html?id=tosklight-virtual-playbacks--unavailable-slots&viewMode=story",
 	);
 	await expect(
 		page.getByRole("button", { name: /cell 128 empty/u }),
 	).toBeDisabled();
 
 	await page.goto(
-		"/iframe.html?id=playbacks-virtual-playback-grid--every-state&viewMode=story",
+		"/iframe.html?id=tables-and-grids-virtual-playback-grid--every-state&viewMode=story",
 	);
 	const empty = page.locator('[data-grid-position="1"]');
 	const unavailable = page.locator('[data-grid-position="2"]');
@@ -2148,7 +2159,7 @@ test("Virtual Playback cards use outline, full-fill, edge-status, and artwork hi
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=application-virtual-playbacks--running-transition&viewMode=story",
+		"/iframe.html?id=tosklight-virtual-playbacks--running-transition&viewMode=story",
 	);
 	const card = page.locator('[data-grid-position="0"]');
 	const inactive = await card.evaluate((element) => {
@@ -2183,7 +2194,7 @@ test("Virtual Playback cards use outline, full-fill, edge-status, and artwork hi
 	).not.toBe(running.background);
 
 	await page.goto(
-		"/iframe.html?id=application-virtual-playbacks--icon-and-image-artwork&viewMode=story",
+		"/iframe.html?id=tosklight-virtual-playbacks--icon-and-image-artwork&viewMode=story",
 	);
 	const icon = page.locator('[data-grid-position="0"] .pool-card-icon');
 	const image = page.locator('[data-grid-position="1"] .pool-card-image');
@@ -2209,7 +2220,7 @@ test("Virtual Playback cards use outline, full-fill, edge-status, and artwork hi
 		["update-state", "Update"],
 	] as const) {
 		await page.goto(
-			`/iframe.html?id=application-virtual-playbacks--${story}&viewMode=story`,
+			`/iframe.html?id=tosklight-virtual-playbacks--${story}&viewMode=story`,
 		);
 		await expect(page.locator(".pool-card-workflow").first()).toHaveText(label);
 	}
@@ -2219,7 +2230,7 @@ test("nested modal story keeps deterministic stack order and top-only Escape", a
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=modals-production-modal-stack--three-deep&viewMode=story",
+		"/iframe.html?id=window-system-modals--three-deep&viewMode=story",
 	);
 	await page.getByRole("button", { name: "Open nested modal" }).click();
 	await page.getByRole("button", { name: "Open third modal" }).click();
@@ -2246,7 +2257,7 @@ test("modal close policies, title configuration, and programmatic close are inte
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=modals-production-modal-stack--close-policies&viewMode=story",
+		"/iframe.html?id=window-system-modals--close-policies&viewMode=story",
 	);
 	const policyDialog = page.getByRole("dialog", { name: "Policy modal" });
 	await expect(policyDialog).toBeVisible();
@@ -2261,7 +2272,7 @@ test("modal close policies, title configuration, and programmatic close are inte
 	await expect(policyDialog).toBeVisible();
 
 	await page.goto(
-		"/iframe.html?id=modals-production-modal-stack--title-bar-configuration&viewMode=story",
+		"/iframe.html?id=window-system-modals--title-bar-configuration&viewMode=story",
 	);
 	await page.getByRole("tab", { name: "Advanced" }).click();
 	await expect(page.getByLabel("Active modal tab")).toHaveText("advanced");
@@ -2288,7 +2299,7 @@ test("modal close policies, title configuration, and programmatic close are inte
 	await expect(search).toHaveValue("");
 
 	await page.goto(
-		"/iframe.html?id=modals-production-modal-stack--programmatic-close&viewMode=story",
+		"/iframe.html?id=window-system-modals--programmatic-close&viewMode=story",
 	);
 	await page.getByRole("button", { name: "Close target by ID" }).click();
 	await expect(
@@ -2304,7 +2315,7 @@ test("configured search children share stack order, focus, form geometry, and di
 }) => {
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await page.goto(
-		"/iframe.html?id=modals-production-modal-stack--title-bar-configuration&viewMode=story",
+		"/iframe.html?id=window-system-modals--title-bar-configuration&viewMode=story",
 	);
 	const owner = page.locator('[data-modal-id="configured-title"]');
 	const keyboardTrigger = page.getByRole("button", { name: "Open keyboard" });
@@ -2396,12 +2407,12 @@ test("configured search children share stack order, focus, form geometry, and di
 	}
 
 	await page.goto(
-		"/iframe.html?id=modals-production-modal-stack--search-without-adjacent-buttons&viewMode=story",
+		"/iframe.html?id=window-system-modals--search-without-adjacent-buttons&viewMode=story",
 	);
 	await expect(page.locator(".ui-titlebar-search-divider")).toHaveCount(0);
 
 	await page.goto(
-		"/iframe.html?id=modals-production-modal-stack--window-title-bar-search&viewMode=story",
+		"/iframe.html?id=window-system-modals--window-title-bar-search&viewMode=story",
 	);
 	await expect(page.locator(".ui-titlebar-search-divider")).toHaveCount(1);
 	await page.setViewportSize({ width: 620, height: 760 });
@@ -2427,7 +2438,7 @@ test("title-bar search dividers remain prominently two CSS pixels at DPR 1 and 2
 		});
 		const dprPage = await context.newPage();
 		await dprPage.goto(
-			"/iframe.html?id=modals-production-modal-stack--title-bar-configuration&viewMode=story",
+			"/iframe.html?id=window-system-modals--title-bar-configuration&viewMode=story",
 		);
 		const divider = dprPage.locator(".ui-titlebar-search-divider").first();
 		await expect(divider).toBeVisible();
@@ -2449,8 +2460,8 @@ test("generic and Fixture Sheet tables retain a single row-separator owner at DP
 		});
 		const dprPage = await context.newPage();
 		for (const story of [
-			"tables-generic-table--interactive",
-			"tables-fixture-sheet--step-selection",
+			"tables-and-grids-generic-table--interactive",
+			"tables-and-grids-fixture-grid--step-selection",
 		]) {
 			await dprPage.goto(`/iframe.html?id=${story}&viewMode=story`);
 			const table = dprPage.locator(".ui-data-table").first();
@@ -2544,11 +2555,11 @@ test("window and modal chrome embed borderless searches at their title-bar heigh
 			};
 		});
 	await page.goto(
-		"/iframe.html?id=windows-production-window-kit--configuration&viewMode=story",
+		"/iframe.html?id=window-system-production-window-kit--configuration&viewMode=story",
 	);
 	const windowSearch = await measure();
 	await page.goto(
-		"/iframe.html?id=modals-production-modal-stack--title-bar-configuration&viewMode=story",
+		"/iframe.html?id=window-system-modals--title-bar-configuration&viewMode=story",
 	);
 	const modalSearch = await measure();
 	expect(windowSearch.borderWidths).toEqual(["0px", "0px", "0px", "0px"]);
@@ -2589,7 +2600,7 @@ test("modal title details stay grouped and vertically centered with their headin
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=modals-production-modal-stack--close-policies&viewMode=story",
+		"/iframe.html?id=window-system-modals--close-policies&viewMode=story",
 	);
 	const titleCopy = page.locator(".ui-modal-title-copy");
 	await expect(titleCopy).toHaveCSS("justify-content", "center");
@@ -2619,7 +2630,7 @@ test("desktop story uses the real 24 × 18 non-overlapping geometry", async ({
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=desktop-24-%C3%97-18-grid-manager--constrained-placement&viewMode=story",
+		"/iframe.html?id=window-system-desktop-grid-manager--constrained-placement&viewMode=story",
 	);
 	const paneLocator = page.locator(".desk-pane");
 	await expect(paneLocator).toHaveCount(3);
@@ -2659,7 +2670,7 @@ test("desktop panes drag, resize, maximize, and request an empty-grid placement"
 }) => {
 	await page.setViewportSize({ width: 1600, height: 1000 });
 	await page.goto(
-		"/iframe.html?id=desktop-24-%C3%97-18-grid-manager--drag-and-resize&viewMode=story",
+		"/iframe.html?id=window-system-desktop-grid-manager--drag-and-resize&viewMode=story",
 	);
 	const grid = page.locator(".desk-grid");
 	const group = page.locator('[data-pane-id="groups"]');
@@ -2699,14 +2710,14 @@ test("desktop panes drag, resize, maximize, and request an empty-grid placement"
 	await expect(group).toHaveAttribute("data-grid-width", "10");
 
 	await page.goto(
-		"/iframe.html?id=desktop-24-%C3%97-18-grid-manager--maximized&viewMode=story",
+		"/iframe.html?id=window-system-desktop-grid-manager--maximized&viewMode=story",
 	);
 	const maximized = page.getByRole("region", { name: "Fixture Sheet pane" });
 	await expect(maximized).toHaveAttribute("aria-expanded", "true");
 	await expect(maximized.locator(".pane-resize-handle")).toHaveCount(0);
 
 	await page.goto(
-		"/iframe.html?id=desktop-24-%C3%97-18-grid-manager--empty-grid&viewMode=story",
+		"/iframe.html?id=window-system-desktop-grid-manager--empty-grid&viewMode=story",
 	);
 	await page.getByRole("button", { name: /24 × 18 desktop grid/u }).click({
 		position: { x: 760, y: 380 },
@@ -2720,7 +2731,7 @@ test("button variants expose animated loading, larger icon-only controls, icons,
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=controls-production-controls--buttons&viewMode=story",
+		"/iframe.html?id=controls-buttons--buttons&viewMode=story",
 	);
 	const loading = page.getByRole("button", { name: "Loading" });
 	await expect(loading).toHaveAttribute("aria-busy", "true");
@@ -2738,7 +2749,7 @@ test("button variants expose animated loading, larger icon-only controls, icons,
 	expect(iconOnlySize).toBeGreaterThan(regularSize);
 
 	await page.goto(
-		"/iframe.html?id=controls-production-controls--buttons-with-icons&viewMode=story",
+		"/iframe.html?id=controls-buttons--buttons-with-icons&viewMode=story",
 	);
 	await expect(page.locator(".ui-button")).toHaveCount(6);
 	await expect(page.locator(".ui-button-icon")).toHaveCount(6);
@@ -2754,7 +2765,7 @@ test("button variants expose animated loading, larger icon-only controls, icons,
 	}
 
 	await page.goto(
-		"/iframe.html?id=controls-production-controls--left-aligned-buttons&viewMode=story",
+		"/iframe.html?id=controls-buttons--left-aligned-buttons&viewMode=story",
 	);
 	await expect(page.locator(".ui-button.is-left-aligned")).toHaveCount(6);
 	for (const button of await page.locator(".ui-button").all()) {
@@ -2766,7 +2777,7 @@ test("direct value opens a modal with the touch fader left of the number pad", a
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=faders-vertical-touch-fader--direct-value-button&viewMode=story",
+		"/iframe.html?id=controls-faders-vertical-touch-fader--direct-value-button&viewMode=story",
 	);
 	const trigger = page.locator(".touch-value-button > .ui-button");
 	await expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
@@ -2861,14 +2872,14 @@ test("direct value opens a modal with the touch fader left of the number pad", a
 });
 
 for (const storyId of [
-	"controls-production-controls--button-playground",
-	"input-keyboard-and-numpad--number-pad",
-	"faders-vertical-touch-fader--software",
-	"encoders-production-encoder-surfaces--individual-touch",
-	"application-virtual-playbacks--narrow-touch",
-	"pools-generic-pool-window--narrow",
-	"modals-production-modal-stack--close-policies",
-	"modals-production-modal-stack--title-bar-configuration",
+	"controls-buttons--button-playground",
+	"controls-keyboard-and-numpad--number-pad",
+	"controls-faders-vertical-touch-fader--software",
+	"controls-encoders--individual-touch",
+	"tosklight-virtual-playbacks--narrow-touch",
+	"tables-and-grids-pools-generic-pool-window--narrow",
+	"window-system-modals--close-policies",
+	"window-system-modals--title-bar-configuration",
 ]) {
 	test(`${storyId} renders at a touch-oriented viewport`, async ({ page }) => {
 		await page.setViewportSize({ width: 430, height: 844 });
@@ -2884,7 +2895,7 @@ test("named application windows use production Fixture, Cuelist, Patch, and Setu
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=application-windows-fixture-sheet--selected-and-active-steps&viewMode=story",
+		"/iframe.html?id=tosklight-windows-fixture-sheet--selected-and-active-steps&viewMode=story",
 	);
 	await expect(page.getByText("Fixture Sheet", { exact: true })).toBeVisible();
 	await expect(page.locator(".ui-data-table-row:not(.empty)")).toHaveCount(5);
@@ -2923,28 +2934,28 @@ test("named application windows use production Fixture, Cuelist, Patch, and Setu
 	]);
 
 	await page.goto(
-		"/iframe.html?id=application-windows-cuelists-and-cues--pool&viewMode=story",
+		"/iframe.html?id=tosklight-windows-cuelists-and-cues--pool&viewMode=story",
 	);
 	await expect(page.getByText("Cuelist Pool", { exact: true })).toBeVisible();
 	await expect(page.getByText("Main Sequence", { exact: true })).toBeVisible();
 	await page.goto(
-		"/iframe.html?id=application-windows-cuelists-and-cues--cues-with-properties&viewMode=story",
+		"/iframe.html?id=tosklight-windows-cuelists-and-cues--cues-with-properties&viewMode=story",
 	);
 	await expect(
 		page.getByText(/Cuelist View · Cuelist 1 · Main Sequence/u),
 	).toBeVisible();
-	await expect(page.getByRole("row")).toHaveCount(3);
+	await expect(page.getByRole("row")).toHaveCount(9);
 	await expect(page.getByText("Opening Look", { exact: true })).toBeVisible();
 	await expect(page.locator(".cue-properties")).toBeVisible();
 	await page.goto(
-		"/iframe.html?id=application-windows-cuelists-and-cues--fixed-cues-unavailable&viewMode=story",
+		"/iframe.html?id=tosklight-windows-cuelists-and-cues--fixed-cues-unavailable&viewMode=story",
 	);
 	await expect(
 		page.getByText("Fixed Cuelist is unavailable", { exact: true }),
 	).toBeVisible();
 
 	await page.goto(
-		"/iframe.html?id=application-windows-patch--empty-patch&viewMode=story",
+		"/iframe.html?id=tosklight-windows-patch--empty-patch&viewMode=story",
 	);
 	await expect(page.getByText("Show Patch", { exact: true })).toBeVisible();
 	await expect(page.locator(".patch-table")).toBeVisible();
@@ -2952,7 +2963,7 @@ test("named application windows use production Fixture, Cuelist, Patch, and Setu
 		page.getByText("No fixtures in this layer.", { exact: true }),
 	).toBeVisible();
 	await page.goto(
-		"/iframe.html?id=application-windows-patch--filled-patch&viewMode=story",
+		"/iframe.html?id=tosklight-windows-patch--filled-patch&viewMode=story",
 	);
 	await expect(
 		page.getByText("10 fixtures · 3 layers", { exact: true }),
@@ -2997,7 +3008,7 @@ test("named application windows use production Fixture, Cuelist, Patch, and Setu
 	).toBe(true);
 
 	await page.goto(
-		"/iframe.html?id=application-windows-setup--timecode&viewMode=story",
+		"/iframe.html?id=tosklight-windows-setup--timecode&viewMode=story",
 	);
 	await expect(page.getByText("Desk Setup", { exact: true })).toBeVisible();
 	await expect(page.getByRole("heading", { name: "Timecode" })).toBeVisible();
@@ -3007,12 +3018,12 @@ test("named application windows use production Fixture, Cuelist, Patch, and Setu
 	).toBeVisible();
 });
 
-test("Forms story keeps state, scrolling, fader, pickers, grouped selections, and file drop interactive", async ({
+test("Form stories keep inputs, scrolling, fader, pickers, grouped selections, and file drop interactive", async ({
 	page,
 }) => {
 	await page.setViewportSize({ width: 1100, height: 720 });
 	await page.goto(
-		"/iframe.html?id=controls-production-controls--forms&viewMode=story",
+		"/iframe.html?id=controls-forms--input-fields&viewMode=story",
 	);
 	const canvas = page.locator(".forms-story-canvas");
 	await expect(canvas).toBeVisible();
@@ -3026,15 +3037,6 @@ test("Forms story keeps state, scrolling, fader, pickers, grouped selections, an
 	await expect
 		.poll(() => canvas.evaluate((element) => element.scrollTop))
 		.toBeGreaterThan(0);
-
-	await canvas.evaluate((element) => {
-		element.scrollTop = 0;
-	});
-	await page.getByRole("radio", { name: "3D" }).click();
-	await expect(page.getByRole("radio", { name: "3D" })).toHaveAttribute(
-		"aria-checked",
-		"true",
-	);
 
 	const valueWithFader = page.getByRole("textbox", {
 		name: "Value with fader",
@@ -3105,6 +3107,16 @@ test("Forms story keeps state, scrolling, fader, pickers, grouped selections, an
 			element.selectionEnd,
 		]),
 	).toEqual([8, 28]);
+
+	await page.goto(
+		"/iframe.html?id=controls-forms--form-components&viewMode=story",
+	);
+	await expect(canvas).toBeVisible();
+	await page.getByRole("radio", { name: "3D" }).click();
+	await expect(page.getByRole("radio", { name: "3D" })).toHaveAttribute(
+		"aria-checked",
+		"true",
+	);
 
 	await expect(page.locator('input[type="file"]')).toHaveCount(0);
 	await expect(page.locator('input[type="range"]')).toHaveCount(1);
@@ -3245,7 +3257,7 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 }) => {
 	await page.setViewportSize({ width: 1100, height: 760 });
 	await page.goto(
-		"/iframe.html?id=input-keyboard-and-numpad--input-modal-configurations&viewMode=story",
+		"/iframe.html?id=controls-keyboard-and-numpad--input-modal-configurations&viewMode=story",
 	);
 	const numberModal = page.getByRole("dialog", { name: "Fade time" });
 	await expect(numberModal.locator(".modal-caret-value > i")).toHaveCSS(
@@ -3292,7 +3304,7 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 	await expect(numberPreview).toContainText("62.98");
 
 	await page.goto(
-		"/iframe.html?id=input-keyboard-and-numpad--empty-text-input-modal&viewMode=story",
+		"/iframe.html?id=controls-keyboard-and-numpad--empty-text-input-modal&viewMode=story",
 	);
 	const textModal = page.getByRole("dialog", { name: "Fixture name" });
 	const preview = textModal.getByRole("textbox", {
@@ -3358,7 +3370,7 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 	await expect(shift).toHaveAttribute("data-shift-state", "inactive");
 
 	await page.goto(
-		"/iframe.html?id=input-keyboard-and-numpad--multiline-input-modal&viewMode=story",
+		"/iframe.html?id=controls-keyboard-and-numpad--multiline-input-modal&viewMode=story",
 	);
 	const multiline = page.getByRole("dialog", { name: "Fixture name" });
 	const multilineEditor = multiline.getByRole("textbox", {
@@ -3595,7 +3607,7 @@ test("production marketing and application modal stories preserve their real com
 }) => {
 	await page.setViewportSize({ width: 1920, height: 1080 });
 	await page.goto(
-		"/iframe.html?id=application-marketing--complete-product-demo&viewMode=story",
+		"/iframe.html?id=tosklight-marketing--complete-product-demo&viewMode=story",
 	);
 	await expect(page.getByTestId("product-demo")).toBeVisible();
 	await expect(
@@ -3614,7 +3626,7 @@ test("production marketing and application modal stories preserve their real com
 	).toBeVisible();
 
 	await page.goto(
-		"/iframe.html?id=application-modal-workflows--playback-configuration&viewMode=story",
+		"/iframe.html?id=tosklight-modal-workflows--playback-configuration&viewMode=story",
 	);
 	await expect(
 		page.getByRole("dialog", { name: "Playback Configuration" }),
@@ -3628,7 +3640,7 @@ test("production marketing and application modal stories preserve their real com
 	await expect(page.getByText("Top button", { exact: true })).toBeVisible();
 
 	await page.goto(
-		"/iframe.html?id=application-modal-workflows--record-existing-target&viewMode=story",
+		"/iframe.html?id=tosklight-modal-workflows--record-existing-target&viewMode=story",
 	);
 	await expect(
 		page.getByRole("dialog", { name: "Record to Cuelist 1" }),
@@ -3641,7 +3653,7 @@ test("marketing pools use catalog assets and keep vacant slots uncolored", async
 	page,
 }) => {
 	await page.goto(
-		"/iframe.html?id=application-marketing--groups-window&viewMode=story",
+		"/iframe.html?id=tosklight-marketing--groups-window&viewMode=story",
 	);
 	const populatedGroups = page.locator(".group-card:not(.empty)");
 	await expect(populatedGroups).toHaveCount(5);
@@ -3677,7 +3689,7 @@ test("marketing pools use catalog assets and keep vacant slots uncolored", async
 	});
 
 	await page.goto(
-		"/iframe.html?id=application-marketing--position-presets-window&viewMode=story",
+		"/iframe.html?id=tosklight-marketing--position-presets-window&viewMode=story",
 	);
 	const populatedPositions = page.locator(".preset-card:not(.empty)");
 	await expect(populatedPositions).toHaveCount(6);

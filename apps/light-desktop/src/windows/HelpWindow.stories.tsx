@@ -18,7 +18,7 @@ import {
 } from "./HelpWindow";
 
 const meta = {
-  title: "Application/Windows/Help",
+  title: "ToskLight/Windows/Help",
   tags: ["autodocs"],
   parameters: { layout: "fullscreen" },
 } satisfies Meta;

@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { SearchBar, TouchSelect } from "./index";
 import {
-  Button,
   CheckboxField,
   ColorPickerField,
   FileDropField,
@@ -18,128 +17,32 @@ import {
   SwitchField,
   TextAreaField,
   TextField,
-  type ButtonVariant,
 } from "../controls";
 import { HorizontalFaderField } from "./FaderControls";
 
 const meta = {
-  title: "Controls/Production controls",
-  component: Button,
+  title: "Controls/Forms",
+  component: FormLayout,
   tags: ["autodocs"],
   parameters: {
     layout: "fullscreen",
     docs: { source: { type: "dynamic" } },
   },
-  argTypes: {
-    variant: {
-      control: "select",
-      options: ["primary", "secondary", "ghost", "danger", "success", "warning"],
-    },
-    size: { control: "inline-radio", options: ["default", "compact"] },
-    active: { control: "boolean" },
-    loading: { control: "boolean" },
-    disabled: { control: "boolean" },
-    fullWidth: { control: "boolean" },
-    iconOnly: { control: "boolean" },
-    icon: { control: "text" },
-    contentAlign: {
-      control: "inline-radio",
-      options: ["center", "left"],
-    },
+  args: {
+    children: null,
   },
-} satisfies Meta<typeof Button>;
+} satisfies Meta<typeof FormLayout>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const ButtonPlayground: Story = {
-  args: {
-    children: "Apply",
-    variant: "secondary",
-    size: "default",
-    active: false,
-    loading: false,
-    disabled: false,
-    fullWidth: false,
-    iconOnly: false,
-    contentAlign: "center",
-  },
-  render: (args) => <Button {...args} />,
-};
-
-export const Buttons: Story = {
-  render: () => (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
-      <Button variant="primary">Primary</Button>
-      <Button variant="secondary">Secondary</Button>
-      <Button variant="ghost">Ghost</Button>
-      <Button variant="danger">Danger</Button>
-      <Button variant="success">Success</Button>
-      <Button variant="warning">Warning</Button>
-      <Button active>Active</Button>
-      <Button disabled>Disabled</Button>
-      <Button loading>Save</Button>
-      <Button size="compact">Compact</Button>
-      <Button iconOnly icon="⚙" aria-label="Settings" />
-      <Button fullWidth>Full width</Button>
-    </div>
-  ),
-};
-
-const buttonVariantExamples: Array<{
-  variant: ButtonVariant;
-  label: string;
-  icon: string;
-}> = [
-  { variant: "primary", label: "Primary", icon: "▶" },
-  { variant: "secondary", label: "Secondary", icon: "✎" },
-  { variant: "ghost", label: "Ghost", icon: "◇" },
-  { variant: "danger", label: "Danger", icon: "⌫" },
-  { variant: "success", label: "Success", icon: "✓" },
-  { variant: "warning", label: "Warning", icon: "⚠" },
-];
-
-export const ButtonsWithIcons: Story = {
-  render: () => (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-      {buttonVariantExamples.map(({ variant, label, icon }) => (
-        <Button key={variant} variant={variant} icon={icon}>
-          {label}
-        </Button>
-      ))}
-    </div>
-  ),
-};
-
-export const LeftAlignedButtons: Story = {
-  render: () => (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(220px, 1fr))", gap: 10 }}>
-      {buttonVariantExamples.map(({ variant, label }) => (
-        <Button key={variant} variant={variant} contentAlign="left" fullWidth>
-          {label}
-        </Button>
-      ))}
-    </div>
-  ),
-};
-
-function FormsExample() {
+function InputFieldsExample() {
   const [name, setName] = useState("Main Stage");
   const [password, setPassword] = useState("operator");
   const [rows, setRows] = useState("4");
   const [scale, setScale] = useState("1.25");
   const [faderValue, setFaderValue] = useState("42");
   const [presetValue, setPresetValue] = useState("50");
-  const [mode, setMode] = useState("software");
-  const [stageView, setStageView] = useState("2d");
-  const [level, setLevel] = useState(68);
-  const [fullscreen, setFullscreen] = useState(true);
-  const [locked, setLocked] = useState(false);
-  const [icon, setIcon] = useState("◇");
-  const [color, setColor] = useState("#1bd6ec");
-  const [buttonAction, setButtonAction] = useState("go");
-  const [faderAction, setFaderAction] = useState("master");
-  const [fileState, setFileState] = useState("No file selected");
   const notes = [
     "House opens at 18:30.",
     "Preset the front wash at 42%.",
@@ -154,15 +57,6 @@ function FormsExample() {
     "Save a revision after sound check.",
     "Operator handover begins at 19:15.",
   ].join("\n");
-  const selectionGroups = [
-    { label: "Step Control", options: [
-      { value: "go", label: "GO", icon: "▶", description: "Advance to the next cue." },
-      { value: "go-minus", label: "GO MINUS", description: "Return to the previous cue." },
-    ] },
-    { label: "Temporary State", options: [
-      { value: "flash", label: "FLASH", icon: "⚡", description: "Output while the button is held." },
-    ] },
-  ] as const;
   const valuePresets = {
     groups: [
       {
@@ -187,10 +81,19 @@ function FormsExample() {
   return (
     <div className="forms-story-canvas">
       <section>
-        <h2>Top labels</h2>
+        <h2>Text inputs</h2>
         <FormLayout columns={2} labelPlacement="top">
           <TextField label="Name" description="Visible operator name" required clearable value={name} onChange={(event) => setName(event.target.value)} />
           <TextField label="Password" secure value={password} onChange={(event) => setPassword(event.target.value)} />
+          <TextField label="Compact name" controlSize="compact" defaultValue="Front Wash" />
+          <TextField label="Required field" error="Required" required />
+          <TextAreaField label="Notes" defaultValue={notes} placeholder="Add operator notes" />
+          <LargeTextField label="Large text" defaultValue={"Line one\nLine two\nLine three"} />
+        </FormLayout>
+      </section>
+      <section>
+        <h2>Number inputs</h2>
+        <FormLayout columns={2} labelPlacement="top">
           <NumberField label="Rows" value={rows} min={1} max={18} onValueChange={setRows} />
           <NumberField label="Scale" value={scale} allowDecimal step={0.05} unit="×" onValueChange={setScale} />
           <NumberField label="Value with fader" value={faderValue} allowDecimal min={0} max={100}
@@ -200,6 +103,42 @@ function FormsExample() {
             modalPresets={valuePresets} onValueChange={setPresetValue}
             onModalRelease={() => setPresetValue("")} modalReleaseLabel="Release value" />
           <NumberField label="Fixed value" value="512" showStepButtons={false} disabled />
+        </FormLayout>
+      </section>
+    </div>
+  );
+}
+
+export const InputFields: Story = {
+  render: () => <InputFieldsExample />,
+};
+
+function FormComponentsExample() {
+  const [mode, setMode] = useState("software");
+  const [stageView, setStageView] = useState("2d");
+  const [level, setLevel] = useState(68);
+  const [fullscreen, setFullscreen] = useState(true);
+  const [locked, setLocked] = useState(false);
+  const [icon, setIcon] = useState("◇");
+  const [color, setColor] = useState("#1bd6ec");
+  const [buttonAction, setButtonAction] = useState("go");
+  const [faderAction, setFaderAction] = useState("master");
+  const [fileState, setFileState] = useState("No file selected");
+  const [universe, setUniverse] = useState(1);
+  const selectionGroups = [
+    { label: "Step Control", options: [
+      { value: "go", label: "GO", icon: "▶", description: "Advance to the next cue." },
+      { value: "go-minus", label: "GO MINUS", description: "Return to the previous cue." },
+    ] },
+    { label: "Temporary State", options: [
+      { value: "flash", label: "FLASH", icon: "⚡", description: "Output while the button is held." },
+    ] },
+  ] as const;
+  return (
+    <div className="forms-story-canvas">
+      <section>
+        <h2>Selection and state controls</h2>
+        <FormLayout columns={2} labelPlacement="top">
           <SelectField label="Mode" value={mode} options={[
             { value: "software", label: "Software" },
             { value: "hardware", label: "Hardware" },
@@ -213,21 +152,23 @@ function FormsExample() {
           <CheckboxField label="Desktop lock" stateLabel="Prevent layout changes" checked={locked} onChange={(event) => setLocked(event.target.checked)} />
           <IconPickerField label="Icon" value={icon} defaultGroup="gobo" onChange={setIcon} />
           <ColorPickerField label="Color" value={color} onChange={setColor} />
-          <TextAreaField label="Notes" defaultValue={notes} placeholder="Add operator notes" />
-          <LargeTextField label="Large text" defaultValue={"Line one\nLine two\nLine three"} />
-          <TextField label="Required field" error="Required" required />
+          <FormField label="Native select">
+            <Select aria-label="Universe type" defaultValue="1">
+              <option value="1">Universe 1</option>
+              <option value="2">Universe 2</option>
+            </Select>
+          </FormField>
+          <TouchSelect
+            label="Universe"
+            value={universe}
+            options={[1, 2, 3, 4]}
+            onChange={setUniverse}
+          />
         </FormLayout>
       </section>
       <section>
         <h2>Side labels and compatibility controls</h2>
         <FormLayout columns={2} labelPlacement="side" labelWidth={130}>
-          <TextField label="Compact name" controlSize="compact" defaultValue="Front Wash" />
-          <FormField label="Native select">
-            <Select aria-label="Universe" defaultValue="1">
-              <option value="1">Universe 1</option>
-              <option value="2">Universe 2</option>
-            </Select>
-          </FormField>
           <FileDropField label="Fixture profile"
             constraints={{ extensions: [".gdtf", ".toskfixture"], mimeTypes: ["application/zip"], multiple: false }}
             selectedLabel={fileState}
@@ -266,13 +207,12 @@ function FormsExample() {
   );
 }
 
-export const Forms: Story = {
-  render: () => <FormsExample />,
+export const FormComponents: Story = {
+  render: () => <FormComponentsExample />,
 };
 
-function SearchAndSelectExample() {
+function SearchExample() {
   const [search, setSearch] = useState("wash");
-  const [universe, setUniverse] = useState(1);
   const [filter, setFilter] = useState("");
   return (
     <div style={{ width: 720, display: "grid", gap: 16 }}>
@@ -294,16 +234,10 @@ function SearchAndSelectExample() {
         onSettingChange={(_, value) => setFilter(String(value))}
         onClearSettings={() => setFilter("")}
       />
-      <TouchSelect
-        label="Universe"
-        value={universe}
-        options={[1, 2, 3, 4]}
-        onChange={setUniverse}
-      />
     </div>
   );
 }
 
-export const SearchAndTouchSelect: Story = {
-  render: () => <SearchAndSelectExample />,
+export const Search: Story = {
+  render: () => <SearchExample />,
 };

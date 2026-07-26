@@ -15,7 +15,7 @@ interface GenericPoolArgs {
 }
 
 const meta: Meta<GenericPoolArgs> = {
-	title: "Pools/Generic pool window",
+	title: "Tables and Grids/Pools/Generic pool window",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	args: {

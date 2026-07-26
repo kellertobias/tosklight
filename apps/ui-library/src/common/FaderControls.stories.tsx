@@ -13,7 +13,7 @@ interface FaderStoryArgs {
 }
 
 const meta = {
-  title: "Faders/Horizontal fader",
+  title: "Controls/Faders/Horizontal fader",
   tags: ["autodocs"],
   parameters: {
     layout: "fullscreen",

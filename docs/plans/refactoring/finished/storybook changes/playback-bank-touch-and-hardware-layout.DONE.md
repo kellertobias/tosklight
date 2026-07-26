@@ -75,16 +75,18 @@ Do not communicate those different meanings with anonymous yellow shapes.
 
 If the bank story demonstrates a loaded cue, pickup requirement, held Flash, or held Swap:
 
-- show the state with a compact text label such as **LOADED**, **PICKUP**, **FLASH**, or **SWAP**
-  at a stable location;
+- show **LOADED** in the summary detail position normally used for fade time;
+- show pickup direction, physical level, and target directly on the hardware fader;
+- show held Flash or Swap by changing the configured button itself, without a separate
+  **FLASH HELD** or **SWAP HELD** label;
 - use color as supporting feedback rather than the only explanation;
 - keep the playback's configured color distinct from amber warning/state color;
 - ensure the state remains readable in grayscale and at the supported touch viewport; and
 - remove the indicator immediately when the mock state is cleared.
 
-The default Touch Bank and Hardware Bank stories should present a clean normal state. Put unusual
-runtime states in separately named stories so the operator is never left guessing why a card is
-yellow.
+The two bank stories keep ordinary playbacks readable while placing representative loaded, held,
+and hardware-pickup states directly in the 8-by-2 examples. The configurable story exposes those
+states as controls, so separate one-off state stories are unnecessary.
 
 ## Touch bank
 
@@ -170,22 +172,19 @@ Do not solve the collision by removing the mode, current cue, or percentage.
 
 ## Storybook states
 
-Update `Playbacks/Playback bank` to provide distinct, truthfully named stories for:
+Keep `Playbacks/Playback bank` intentionally limited to three stories:
 
-- clean normal Touch Bank;
-- clean normal Hardware Bank;
-- running playback with visible fader gradient and current cue;
-- loaded-next cue with an explicit **LOADED** label;
-- valid pickup-required playback with a fader and explicit **PICKUP** feedback;
-- faderless **Bump** playback with a separate **FLASH** action;
-- held Flash and held Swap feedback;
-- zero, mid, and full fader levels;
-- short and deliberately long playback/cue/action labels; and
-- empty/unassigned playback.
+- **Configurable Playback**, whose Storybook Controls select touch or hardware mode, family,
+  title, page and slot, summary text and progress, one/two/three buttons and their labels,
+  active-button feedback, fader presence and level, empty and selected state, and hardware
+  pickup physical/target positions;
+- **Eight By Two Touch Bank**, with one-button faderless playbacks above matching
+  three-button-plus-fader playbacks; and
+- **Eight By Two Hardware Bank**, with the same objects and control shapes plus one pickup from
+  above and one pickup from below.
 
-The default stories must not combine loaded, pickup-required, held-action, selected, and
-playback-color states merely to exercise CSS. Each exceptional story should isolate the state it
-is intended to explain.
+The two banks carry representative loaded, selected, active-button, family, and empty examples.
+Touch never renders pickup feedback.
 
 ## Verification
 
@@ -240,17 +239,16 @@ Implemented and accepted on 2026-07-26.
 - The package and live touch bank now keep playback identity and a single faderless configured
   action in separate controls. **3 · Bump** remains the playback title while **FLASH** remains its
   press/release action.
-- Pickup styling and text are suppressed when a playback has no fader. Loaded, pickup, held Flash,
-  and held Swap states now have explicit compact status text rather than color or dashed chrome
-  alone.
+- Pickup styling and text are suppressed when a playback has no fader. Loaded state occupies the
+  summary's trailing fade-time position, pickup state is explained on the hardware fader, and
+  held Flash or Swap feedback appears on the configured button rather than as a floating label.
 - Removed empty cue-row marker elements. Hardware rows allocate width to cue number, cue name, and
   an optional real status; absent status consumes no column. Hardware addresses remain compact at
   the top right, action space was widened, and the fader column was reduced.
 - Playback faders explicitly retain their level-clipped configured-color gradient. Mode/label and
   percentage use separate reserved areas with a contrast-backed numeric value.
-- Added isolated Storybook states for normal touch/hardware banks, running, loaded, valid pickup,
-  faderless Bump, held Flash/Swap, zero/mid/full levels, long labels, and empty playback, plus
-  focused geometry/state assertions.
+- Consolidated the playback section to one freely configurable playback plus representative
+  eight-by-two touch and hardware banks, with focused geometry/state assertions.
 
 Focused verification completed:
 
@@ -261,3 +259,31 @@ Focused verification completed:
 The complete UI and desktop unit suites, both TypeScript gates, production Storybook build, and
 all 209 integrated Storybook Playwright checks subsequently passed. Browser review exposed and
 confirmed the fix for the inherited label/value overlap on the production fader surface.
+
+A final live-adoption audit found that the desktop bank still duplicated the shared card markup
+while reusing only its fader and action primitives. The touch and hardware desktop adapters now
+render `TouchPlaybackCardView`, `HardwarePlaybackCardView`, and `HardwareCueRowsView` directly,
+supplying only live controller callbacks, cue timing/projection data, and application-owned
+assignment/configuration overlays. The package owns the bank grid, card color hierarchy, cue-row
+markup, and touch/hardware geometry. Component markers are asserted in both the live adapter test
+and the application Storybook stories so this split cannot silently return.
+
+The design-reference refinement adds the complete playback family and hardware-shape contract:
+
+- cue lists default to warm green, group masters to orange, dynamics to magenta, speed groups to
+  cyan, special masters to white, and empty slots to opaque gray; custom playback colors still
+  override those defaults;
+- one button, one button plus fader, two buttons, three buttons, and three buttons plus fader are
+  demonstrated in both touch and hardware modes;
+- the touch identity, `page.playback` address, cue/status progress, speed beat indicators,
+  selected outline, and family-colored fader are package-owned;
+- hardware cards show button assignments on the left and the bottom-up, full-width fader value
+  indication on the right, reducing previous/current/next cue context to the current cue when
+  shallow;
+- empty slots never expose a disabled or decorative fader; and
+- dedicated 8 by 2 stories show eight one-button playbacks above eight three-button-plus-fader
+  playbacks, with the lower row receiving the additional height.
+
+The live desktop adapter now derives the same family model and runtime summaries as Storybook.
+The former generic `#20c997` playback default is treated as a legacy fallback and resolves to the
+family default at presentation time; explicitly configured playback colors remain intact.

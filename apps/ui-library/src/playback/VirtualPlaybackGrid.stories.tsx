@@ -13,7 +13,7 @@ interface VirtualGridArgs {
 }
 
 const meta: Meta<VirtualGridArgs> = {
-	title: "Playbacks/Virtual playback grid",
+	title: "Tables and Grids/Virtual playback grid",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	args: { rows: 3, columns: 4, width: 920 },

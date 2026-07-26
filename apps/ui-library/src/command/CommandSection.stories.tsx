@@ -12,7 +12,7 @@ type CommandSectionStoryArgs = ComponentProps<typeof CommandSection> & {
 };
 
 const meta = {
-	title: "Application/Command section",
+	title: "ToskLight/Command section",
 	component: CommandSection,
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },

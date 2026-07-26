@@ -19,7 +19,7 @@ import { Stage3dView } from "./stageWindow/Stage3dView";
 import { StageHeader } from "./stageWindow/StageHeader";
 
 const meta = {
-	title: "Application/Windows/Stage",
+	title: "ToskLight/Windows/Stage",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	excludeStories: /^(Marketing|marketing)/,

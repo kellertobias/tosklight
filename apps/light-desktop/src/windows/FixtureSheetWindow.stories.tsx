@@ -181,7 +181,7 @@ function FixtureSheetStory({ compact = false }: { compact?: boolean }) {
 }
 
 const meta = {
-	title: "Application/Windows/Fixture Sheet",
+	title: "ToskLight/Windows/Fixture Sheet",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 } satisfies Meta;

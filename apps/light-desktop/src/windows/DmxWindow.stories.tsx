@@ -10,7 +10,7 @@ import type { DmxSnapshot } from "../api/types";
 import { DmxWindowView, type DmxWindowViewProps } from "./DmxWindow";
 
 const meta = {
-  title: "Application/Windows/DMX",
+  title: "ToskLight/Windows/DMX",
   tags: ["autodocs"],
   parameters: { layout: "fullscreen" },
 } satisfies Meta;

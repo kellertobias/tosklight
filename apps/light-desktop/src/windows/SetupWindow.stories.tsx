@@ -352,7 +352,7 @@ export function MarketingFixtureLibraryWindow() {
 }
 
 const meta = {
-	title: "Application/Windows/Setup",
+	title: "ToskLight/Windows/Setup",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	excludeStories: /^(Marketing|marketing)/,

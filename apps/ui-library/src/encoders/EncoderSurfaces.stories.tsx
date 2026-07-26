@@ -21,7 +21,7 @@ interface EncoderStoryProps {
 }
 
 const meta: Meta<EncoderStoryProps> = {
-	title: "Encoders/Production encoder surfaces",
+	title: "Controls/Encoders",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	argTypes: {

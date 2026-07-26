@@ -34,7 +34,7 @@
 		{
 			"file": "help-command-line.png",
 			"source": "storybook",
-			"storyId": "application-windows-help--nested-topic",
+			"storyId": "tosklight-windows-help--nested-topic",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -54,7 +54,7 @@
 		{
 			"file": "panes/channels.png",
 			"source": "storybook",
-			"storyId": "application-windows-channels--two-row-bank",
+			"storyId": "tosklight-windows-channels--two-row-bank",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -63,7 +63,7 @@
 		{
 			"file": "panes/cuelist-pool.png",
 			"source": "storybook",
-			"storyId": "application-windows-cuelists-and-cues--pool-compact",
+			"storyId": "tosklight-windows-cuelists-and-cues--pool-compact",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -72,7 +72,7 @@
 		{
 			"file": "panes/cuelists.png",
 			"source": "storybook",
-			"storyId": "application-windows-cuelists-and-cues--pool",
+			"storyId": "tosklight-windows-cuelists-and-cues--pool",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -81,7 +81,7 @@
 		{
 			"file": "panes/cues.png",
 			"source": "storybook",
-			"storyId": "application-windows-cuelists-and-cues--cues-with-properties",
+			"storyId": "tosklight-windows-cuelists-and-cues--cues-with-properties",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -90,7 +90,7 @@
 		{
 			"file": "panes/dmx.png",
 			"source": "storybook",
-			"storyId": "application-windows-dmx--selected-patched-channel",
+			"storyId": "tosklight-windows-dmx--selected-patched-channel",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -99,7 +99,7 @@
 		{
 			"file": "panes/dynamics.png",
 			"source": "storybook",
-			"storyId": "application-windows-dynamics--future-feature-empty-state",
+			"storyId": "tosklight-windows-dynamics--future-feature-empty-state",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -108,7 +108,7 @@
 		{
 			"file": "panes/file-manager.png",
 			"source": "storybook",
-			"storyId": "application-windows-file-manager--populated",
+			"storyId": "tosklight-windows-file-manager--populated",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -117,7 +117,7 @@
 		{
 			"file": "panes/fixtures.png",
 			"source": "storybook",
-			"storyId": "application-windows-fixture-sheet--selected-and-active-steps",
+			"storyId": "tosklight-windows-fixture-sheet--selected-and-active-steps",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -126,7 +126,7 @@
 		{
 			"file": "panes/groups.png",
 			"source": "storybook",
-			"storyId": "application-windows-pools--groups",
+			"storyId": "tosklight-windows-pools--groups",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -135,7 +135,7 @@
 		{
 			"file": "panes/help.png",
 			"source": "storybook",
-			"storyId": "application-windows-help--nested-topic",
+			"storyId": "tosklight-windows-help--nested-topic",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -144,7 +144,7 @@
 		{
 			"file": "panes/presets.png",
 			"source": "storybook",
-			"storyId": "application-windows-pools--presets",
+			"storyId": "tosklight-windows-pools--presets",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -163,7 +163,7 @@
     {
       "file": "panes/text-editor.png",
       "source": "storybook",
-      "storyId": "application-windows-text-editor--split-markdown",
+      "storyId": "tosklight-windows-text-editor--split-markdown",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -172,7 +172,7 @@
     {
       "file": "panes/virtual-playbacks.png",
       "source": "storybook",
-      "storyId": "application-virtual-playbacks--documentation-pane",
+      "storyId": "tosklight-virtual-playbacks--documentation-pane",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
@@ -233,7 +233,7 @@
 		{
 			"file": "workflows/desk-setup-timecode.png",
 			"source": "storybook",
-			"storyId": "application-windows-setup--timecode",
+			"storyId": "tosklight-windows-setup--timecode",
 			"viewport": { "width": 1496, "height": 756 },
 			"theme": "dark",
 			"mode": "software",
@@ -263,7 +263,7 @@
     {
       "file": "workflows/desk-setup-inputs.png",
       "source": "storybook",
-      "storyId": "application-windows-setup--programmer",
+      "storyId": "tosklight-windows-setup--programmer",
 			"viewport": { "width": 1496, "height": 756 },
 			"theme": "dark",
 			"mode": "software",
@@ -282,7 +282,7 @@
     {
       "file": "workflows/desk-setup-network-api.png",
       "source": "storybook",
-      "storyId": "application-windows-setup--network-and-inputs",
+      "storyId": "tosklight-windows-setup--network-and-inputs",
 			"viewport": { "width": 1496, "height": 756 },
 			"theme": "dark",
 			"mode": "software",
@@ -291,7 +291,7 @@
     {
       "file": "workflows/desk-setup-output-engine.png",
       "source": "storybook",
-      "storyId": "application-windows-setup--outputs",
+      "storyId": "tosklight-windows-setup--outputs",
 			"viewport": { "width": 1496, "height": 756 },
 			"theme": "dark",
 			"mode": "software",
@@ -300,7 +300,7 @@
     {
       "file": "workflows/desk-setup-screens.png",
       "source": "storybook",
-      "storyId": "application-windows-setup--screens-and-playback",
+      "storyId": "tosklight-windows-setup--screens-and-playback",
 			"viewport": { "width": 1496, "height": 756 },
 			"theme": "dark",
 			"mode": "software",
@@ -309,7 +309,7 @@
     {
       "file": "workflows/desk-setup-shows-recovery.png",
       "source": "storybook",
-      "storyId": "application-windows-setup--shows-and-recovery",
+      "storyId": "tosklight-windows-setup--shows-and-recovery",
 			"viewport": { "width": 1496, "height": 756 },
 			"theme": "dark",
 			"mode": "software",

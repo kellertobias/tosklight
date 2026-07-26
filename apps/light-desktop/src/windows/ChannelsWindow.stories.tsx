@@ -41,7 +41,7 @@ function ChannelsStory({ compact = false }: { compact?: boolean }) {
 }
 
 const meta = {
-	title: "Application/Windows/Channels",
+	title: "ToskLight/Windows/Channels",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 } satisfies Meta;

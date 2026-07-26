@@ -43,7 +43,7 @@ function DocumentationCanvas({
 const preview: Preview = {
   decorators: [
     (Story, context) => (
-      <DocumentationCanvas application={context.title.startsWith("Application/")}>
+      <DocumentationCanvas application={context.title.startsWith("ToskLight/")}>
         <ModalProvider>
           <Story />
         </ModalProvider>
@@ -56,16 +56,34 @@ const preview: Preview = {
       storySort: {
         order: [
           "Controls",
-          "Input",
-          "Tables",
-          "Faders",
-          "Encoders",
-          "Playbacks",
-          "Pools",
-          "Modals",
-          "Desktop",
-          "Windows",
-          "Application",
+          [
+            "Buttons",
+            "Forms",
+            "Keyboard and numpad",
+            "Faders",
+            "Encoders",
+            "Playbacks",
+          ],
+          "Tables and Grids",
+          [
+            "Generic table",
+            "Fixture grid",
+            "Pools",
+            "Virtual playback grid",
+            "DMX patch grid",
+          ],
+          "Window System",
+          ["Modals", "Production window kit", "Desktop"],
+          "ToskLight",
+          [
+            "Windows",
+            "Shell and control",
+            "Virtual Playbacks",
+            "Modal workflows",
+            "Command line",
+            "Command section",
+            "Marketing",
+          ],
         ],
       },
     },

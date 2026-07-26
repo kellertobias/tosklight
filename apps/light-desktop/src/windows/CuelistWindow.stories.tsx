@@ -188,7 +188,7 @@ export function MarketingCuesWindow() {
 }
 
 const meta = {
-	title: "Application/Windows/Cuelists and Cues",
+	title: "ToskLight/Windows/Cuelists and Cues",
 	component: CuelistWindow,
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },

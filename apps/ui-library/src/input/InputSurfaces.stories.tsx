@@ -17,7 +17,7 @@ interface InputStoryArgs {
 }
 
 const meta = {
-	title: "Input/Keyboard and numpad",
+	title: "Controls/Keyboard and numpad",
 	tags: ["autodocs"],
 	parameters: {
 		layout: "fullscreen",

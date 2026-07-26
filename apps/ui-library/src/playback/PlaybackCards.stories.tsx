@@ -35,7 +35,7 @@ interface ConfigurablePlaybackStoryProps {
 }
 
 const meta: Meta<ConfigurablePlaybackStoryProps> = {
-	title: "Playbacks/Playback bank",
+	title: "Controls/Playbacks",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	argTypes: {
@@ -53,6 +53,7 @@ const meta: Meta<ConfigurablePlaybackStoryProps> = {
 			control: "select",
 			options: [
 				"cue-list",
+				"dynamic",
 				"group-master",
 				"speed-group",
 				"special-master",
@@ -137,8 +138,8 @@ const bankExamples: Array<{
 		summary: { label: "12 Fixtures", detail: "62%" },
 	},
 	{
-		kind: "cue-list",
-		name: "House Sequence",
+		kind: "dynamic",
+		name: "Profiles Circle",
 		summary: {
 			label: "120 BPM",
 			detail: "running",

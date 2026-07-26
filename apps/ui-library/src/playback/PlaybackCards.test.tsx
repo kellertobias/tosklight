@@ -239,7 +239,7 @@ describe("playback card views", () => {
 			<TouchPlaybackCardView
 				model={{
 					...model,
-					kind: "speed-group",
+					kind: "dynamic",
 					summary: {
 						label: "120 BPM",
 						detail: "running",
@@ -250,7 +250,7 @@ describe("playback card views", () => {
 			/>,
 		);
 		const card = document.querySelector('[data-ui-component="touch-playback-card"]');
-		expect(card).toHaveAttribute("data-playback-kind", "speed-group");
+		expect(card).toHaveAttribute("data-playback-kind", "dynamic");
 		expect(card).toHaveAttribute("data-button-count", "2");
 		expect(card).toHaveAttribute("data-has-fader", "true");
 		expect(card).toHaveClass("selected");

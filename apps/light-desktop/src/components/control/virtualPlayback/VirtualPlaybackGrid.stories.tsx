@@ -22,7 +22,7 @@ interface VirtualPlaybackStoryArgs {
 }
 
 const meta = {
-	title: "Application/Virtual Playbacks",
+	title: "ToskLight/Virtual Playbacks",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	args: { rows: 3, columns: 4, width: 920 },

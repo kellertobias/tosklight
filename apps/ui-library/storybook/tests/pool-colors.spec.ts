@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 const STORY =
-	"/iframe.html?id=pools-production-pool-cards--consistent-object-type-colors&viewMode=story";
+	"/iframe.html?id=tables-and-grids-pools-production-pool-cards--consistent-object-type-colors&viewMode=story";
 const EVERY_STATE_STORY =
-	"/iframe.html?id=pools-production-pool-cards--scaling-and-every-state&viewMode=story";
+	"/iframe.html?id=tables-and-grids-pools-production-pool-cards--scaling-and-every-state&viewMode=story";
 
 test("pool colors preserve defaults, modes, contrast, and non-color states", async ({
 	page,

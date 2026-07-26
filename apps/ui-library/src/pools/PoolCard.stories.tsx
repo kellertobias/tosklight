@@ -15,7 +15,7 @@ interface PoolStoryProps {
 }
 
 const meta: Meta<PoolStoryProps> = {
-	title: "Pools/Production pool cards",
+	title: "Tables and Grids/Pools/Production pool cards",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	argTypes: {

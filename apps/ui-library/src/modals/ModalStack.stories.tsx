@@ -13,7 +13,7 @@ import {
 } from "../modals";
 
 const meta = {
-  title: "Modals/Production modal stack",
+  title: "Window System/Modals",
   component: ModalFrame,
   tags: ["autodocs"],
   parameters: { layout: "fullscreen" },

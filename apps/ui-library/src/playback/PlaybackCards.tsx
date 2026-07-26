@@ -12,6 +12,7 @@ import {
 
 export type PlaybackCardKind =
 	| "cue-list"
+	| "dynamic"
 	| "group-master"
 	| "speed-group"
 	| "special-master"
@@ -22,6 +23,7 @@ export const PLAYBACK_CARD_DEFAULT_COLORS: Record<
 	string
 > = {
 	"cue-list": "#63b46c",
+	dynamic: "#cf4aa8",
 	"group-master": "#e79a26",
 	"speed-group": "#27c6d5",
 	"special-master": "#e8edf1",

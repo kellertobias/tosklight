@@ -254,7 +254,7 @@ export function MarketingPositionPresetsWindow(viewport: PoolViewport = {}) {
 }
 
 const meta = {
-	title: "Application/Windows/Pools",
+	title: "ToskLight/Windows/Pools",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	excludeStories: /^(Marketing|marketing)/,

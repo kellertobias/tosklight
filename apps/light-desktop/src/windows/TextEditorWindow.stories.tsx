@@ -62,7 +62,7 @@ function TextEditorStory() {
 }
 
 const meta = {
-	title: "Application/Windows/Text Editor",
+	title: "ToskLight/Windows/Text Editor",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	render: () => <div style={{ height: 713 }}><TextEditorStory /></div>,

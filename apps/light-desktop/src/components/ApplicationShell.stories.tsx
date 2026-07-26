@@ -36,7 +36,7 @@ import type { ParameterController } from "./control/parameterControls/useParamet
 import { LeftDock } from "./shell/LeftDock";
 
 const meta = {
-	title: "Application/Shell and control",
+	title: "ToskLight/Shell and control",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 } satisfies Meta;

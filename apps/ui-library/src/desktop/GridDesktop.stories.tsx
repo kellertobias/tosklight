@@ -15,7 +15,7 @@ const initialPanes: PaneViewModel[] = [
 ];
 
 const meta = {
-  title: "Desktop/24 × 18 grid manager",
+  title: "Window System/Desktop/Grid manager",
   component: GridDesktop,
   tags: ["autodocs"],
   parameters: { layout: "fullscreen" },

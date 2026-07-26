@@ -204,11 +204,11 @@ Completed result as of 2026-07-26:
   composition (`ProductDemoSurfaceView` and `DemoApplicationScreenView`), deterministic DMX
   presentation (`DemoDmxGridView`), and demo playback surface (`DemoPlaybackControlsView`).
   Runtime controllers still supply those same views in the live application.
-- `Application/Marketing / Complete Product Demo` composes the production Product Demo layout,
+- `ToskLight/Marketing / Complete Product Demo` composes the production Product Demo layout,
   shell, Dock, desktop grid, Stage 2D and 3D views, DMX view and output grids, playback controls,
   command line, and keypad from deterministic typed fixtures. It mounts `AppProvider` but not
   `ServerRuntime`, Patch transport, REST, WebSocket, OSC, filesystem, or Tauri boundaries.
-- `Application/Modal workflows` renders the production Playback Configuration and existing-target
+- `ToskLight/Modal workflows` renders the production Playback Configuration and existing-target
   Record workflows. The Playback story supplies the existing Show Objects store boundary and
   exercises Function, Behavior, and Layout tabs without mutable-show writes.
 - Application-owned stories now cover the required Dock, representative desktop, Stage, command
@@ -219,7 +219,7 @@ Verified evidence:
 
 - `npm run typecheck --workspace @tosklight/light-desktop` passed.
 - `npm run typecheck --workspace @tosklight/ui` passed.
-- `npm run test:storybook --workspace @tosklight/ui -- --grep 'Application/(Marketing|Modal workflows)'`
+- `npm run test:storybook --workspace @tosklight/ui -- --grep 'ToskLight/(Marketing|Modal workflows)'`
   built Storybook and passed all 3 deterministic render checks; the shared request guard observed
   no REST or WebSocket requests and the console/error guard remained empty.
 - The focused Playwright test
@@ -239,3 +239,52 @@ Deliberate residual boundary:
 - The complete shared Storybook gate passed all 217 Playwright checks. Architecture, CI workflow
   validation, Pages generation, Help/manual generation, screenshot ownership, and marketing
   screenshot consumer checks also passed in the integrated run.
+
+Final adoption follow-up:
+
+- The command line now follows the same boundary. Package-owned `CommandLine` renders the
+  complete command input, mode switch, DMX/timecode/blackout status, history, error, Record, and
+  Preload surface without importing application state, server contexts, or transports.
+  `CommandLineBar` is the runtime adapter that supplies authoritative values and actions, while the
+  dedicated interactive Storybook story exercises the same component without issuing API or
+  WebSocket requests. The former parallel desktop command-section components were removed.
+- A live-versus-Storybook comparison caught parallel touch and hardware playback-card markup in
+  the desktop adapter. The desktop now renders the package-owned playback card views directly and
+  retains only its runtime/controller boundary and overlays.
+- The application playback stories and the live adapter suite assert the package component
+  markers for both touch and hardware modes. This turns the “same production component” boundary
+  into executable evidence instead of relying on matching class names.
+- The same audit removed the live desktop's parallel grid and pane markup. `DeskGrid` and `Pane`
+  now provide application state and window content to `GridDesktop` and `PaneView`, which are the
+  components rendered by the desktop Storybook stories.
+- The command-area boundary now includes the complete lower desk, not only its command row.
+  Package-owned `CommandSection` performs the Programmer/Playbacks and
+  software/hardware-connected switch, while callback-driven `ProgrammerKeypadView`,
+  `PlaybackToolsView`, and `HardwareControlSummaryView` keep live authorities in desktop
+  adapters. The production `ControlSection` uses this shared composition directly.
+- `ToskLight/Command section` provides a configurable serverless story plus fixed
+  software Programmer, software Playbacks, hardware Programmer, and hardware Playbacks states.
+  They include the command line, encoder families, keypad, representative cue-list/group/speed/
+  Dynamic/special/empty playbacks, cue rows, Page selection, Programmer Fade, Cue Fade, command
+  keys, and Speed Groups A–E. The application-shell and Product Demo stories reuse the same
+  fixture instead of partial keypad or duplicate-encoder substitutes.
+- The final production-parity review removed the fabricated “Intensity encoders” section,
+  switched the Storybook fixture to the desktop `ParameterControlView`, made the encoder surface
+  consume the available height, restored HIGH/PREV/NEXT/ALL and SET/SHIFT interaction feedback,
+  rendered both configured playback rows with production Page chevrons, and made the global
+  software/hardware context switch both `CommandLine` and the complete `CommandSection`.
+- Hardware encoder target classes are now namespaced. This prevents the application-wide
+  `.primary` style from painting a false cyan background inside the hardware encoder while
+  preserving the standalone hardware encoder presentation.
+- The Programmer keypad now owns the production semantic key treatment: command/action keys are
+  amber, Enter is cyan, and Clear exposes idle, selected-fixtures, and blinking active-values
+  states. The configurable Command Section story also controls PREV/NEXT availability and the
+  Preload Go state, including the amber command line. The Programmer/Playbacks mode button no
+  longer uses the negative left offset.
+- The Preload Go button now keeps pending detail in its tooltip and renders only `PRELOAD GO`.
+  The Programmer/Playbacks toggle uses the midpoint geometry: 116px wide with no horizontal
+  offset.
+- Dynamics now keeps only cyan text while idle and gains its cyan outline when active. Fixture
+  Sheet and Patch stories use the repository-owned SVGs from `assets/icons/fixture-type`; the
+  Patch table also uses that catalog-backed mapping in production instead of parallel inline
+  glyphs.

@@ -7,7 +7,7 @@ import {
 } from "../faders";
 
 const meta = {
-  title: "Faders/Vertical touch fader",
+  title: "Controls/Faders/Vertical touch fader",
   component: VerticalTouchFaderSurface,
   tags: ["autodocs"],
   parameters: {

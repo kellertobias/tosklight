@@ -35,6 +35,7 @@ const speedGroups: readonly SpeedGroupViewModel[] = [120, 96, 72, 48, 24].map(
 function ProgrammerSurface({ hardware }: { hardware: boolean }) {
 	const { state, dispatch } = useApp();
 	const [family, setFamily] = useState<ParameterFamily>("Intensity");
+	const [dynamicsMode, setDynamicsMode] = useState(false);
 	const [normalized, setNormalized] = useState(
 		() =>
 			new Map<string, number>([
@@ -82,8 +83,8 @@ function ProgrammerSurface({ hardware }: { hardware: boolean }) {
 		setFamily,
 		alignMode: null,
 		setAlignMode: () => undefined,
-		dynamicsMode: false,
-		setDynamicsMode: () => undefined,
+		dynamicsMode,
+		setDynamicsMode,
 		hardwareConnected: hardware,
 		selectedFixtureIds: ["front-left", "front-right"],
 		selectedGroupId: null,
@@ -121,7 +122,7 @@ const playbackKinds = [
 	"cue-list",
 	"group-master",
 	"speed-group",
-	"cue-list",
+	"dynamic",
 	"special-master",
 	"special-master",
 	"cue-list",
@@ -131,7 +132,7 @@ const playbackNames = [
 	"Opening Sequence",
 	"Front Wash",
 	"Speed Group A",
-	"Matinee Sequence",
+	"Circle Dynamic",
 	"Playback Fade Time",
 	"Grand Master",
 	"House Presets",

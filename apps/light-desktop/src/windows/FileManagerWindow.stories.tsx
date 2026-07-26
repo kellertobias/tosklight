@@ -107,7 +107,7 @@ const source: FilesContextValue = {
 };
 
 const meta = {
-	title: "Application/Windows/File Manager",
+	title: "ToskLight/Windows/File Manager",
 	component: FileManager,
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },

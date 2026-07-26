@@ -31,7 +31,7 @@ import { Stage2dView } from "./windows/stageWindow/Stage2dView";
 import { Stage3dView } from "./windows/stageWindow/Stage3dView";
 
 const meta = {
-	title: "Application/Marketing",
+	title: "ToskLight/Marketing",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 } satisfies Meta;

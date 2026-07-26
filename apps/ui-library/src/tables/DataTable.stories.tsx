@@ -31,7 +31,7 @@ interface GenericTableArgs {
 }
 
 const meta = {
-  title: "Tables/Generic table",
+  title: "Tables and Grids/Generic table",
   tags: ["autodocs"],
   parameters: {
     layout: "fullscreen",

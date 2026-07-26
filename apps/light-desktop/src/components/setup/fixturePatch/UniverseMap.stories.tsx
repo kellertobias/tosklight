@@ -6,8 +6,9 @@ import { blankFixtureProfile } from "../fixtureProfileModel";
 import { UniverseMap, type UniverseMapProposal } from "./UniverseMap";
 
 const meta = {
-	title: "Controls/DMX patch grid",
+	title: "Tables and Grids/DMX patch grid",
 	component: UniverseMap,
+	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	decorators: [
 		(Story) => (

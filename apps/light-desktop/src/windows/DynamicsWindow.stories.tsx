@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { DynamicsWindow } from "./DynamicsWindow";
 
 const meta = {
-	title: "Application/Windows/Dynamics",
+	title: "ToskLight/Windows/Dynamics",
 	component: DynamicsWindow,
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },

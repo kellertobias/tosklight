@@ -7,7 +7,7 @@ import {
 } from "./CommandLine";
 
 const meta = {
-	title: "Application/Command line",
+	title: "ToskLight/Command line",
 	component: CommandLine,
 	tags: ["autodocs"],
 	parameters: {

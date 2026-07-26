@@ -24,7 +24,7 @@ interface WindowStoryArgs {
 }
 
 const meta = {
-  title: "Windows/Production window kit",
+  title: "Window System/Production window kit",
   tags: ["autodocs"],
   parameters: {
     layout: "fullscreen",

@@ -22,7 +22,7 @@ import type {
 import { PatchWindow } from "./PatchWindow";
 
 const meta = {
-	title: "Application/Windows/Patch",
+	title: "ToskLight/Windows/Patch",
 	component: PatchWindow,
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
