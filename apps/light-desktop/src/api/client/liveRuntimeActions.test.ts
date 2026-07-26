@@ -8,22 +8,21 @@ const SHOW_ID = "22222222-2222-4222-8222-222222222222";
 const CORRELATION_ID = "33333333-3333-4333-8333-333333333333";
 
 function transportReturning(value: unknown) {
-	const commandWithRequestId = vi.fn(async (..._args: unknown[]) => value);
+	const sendAction = vi.fn(async (..._args: unknown[]) => value);
 	return {
 		transport: {
 			request: vi.fn(),
 			blob: vi.fn(),
 			absoluteUrl: vi.fn(),
-			command: vi.fn(),
-			commandWithRequestId,
+			sendAction,
 		} as unknown as LiveClientTransport,
-		commandWithRequestId,
+		sendAction,
 	};
 }
 
 describe("typed live runtime actions", () => {
 	it("sends one correlated Speed Group action frame", async () => {
-		const { transport, commandWithRequestId } = transportReturning({
+		const { transport, sendAction } = transportReturning({
 			request_id: "speed-1",
 			correlation_id: CORRELATION_ID,
 			authority_id: AUTHORITY_ID,
@@ -53,21 +52,23 @@ describe("typed live runtime actions", () => {
 				action: { type: "set_bpm", group: "A", bpm: 128 },
 			}),
 		).resolves.toMatchObject({ requestId: "speed-1", status: "changed" });
-		expect(commandWithRequestId).toHaveBeenCalledOnce();
-		expect(commandWithRequestId).toHaveBeenCalledWith(
-			"speed_group.action",
+		expect(sendAction).toHaveBeenCalledOnce();
+		expect(sendAction).toHaveBeenCalledWith(
 			{
-				request_id: "speed-1",
-				expected_authority_id: AUTHORITY_ID,
-				expected_revision: 4,
-				action: { type: "set_bpm", group: "A", bpm: 128 },
+				type: "speed_group",
+				request: {
+					request_id: "speed-1",
+					expected_authority_id: AUTHORITY_ID,
+					expected_revision: 4,
+					action: { type: "set_bpm", group: "A", bpm: 128 },
+				},
 			},
 			"speed-1",
 		);
 	});
 
 	it("keeps combined Grand Master and blackout in one frame", async () => {
-		const { transport, commandWithRequestId } = transportReturning({
+		const { transport, sendAction } = transportReturning({
 			request_id: "output-1",
 			correlation_id: CORRELATION_ID,
 			projection: {
@@ -93,15 +94,17 @@ describe("typed live runtime actions", () => {
 				blackout: true,
 			}),
 		).resolves.toMatchObject({ requestId: "output-1", status: "changed" });
-		expect(commandWithRequestId).toHaveBeenCalledOnce();
-		expect(commandWithRequestId).toHaveBeenCalledWith(
-			"output_runtime.action",
+		expect(sendAction).toHaveBeenCalledOnce();
+		expect(sendAction).toHaveBeenCalledWith(
 			{
-				request_id: "output-1",
-				expected_show_id: SHOW_ID,
-				expected_revision: 7,
-				grand_master: 0.4,
-				blackout: true,
+				type: "output_runtime",
+				request: {
+					request_id: "output-1",
+					expected_show_id: SHOW_ID,
+					expected_revision: 7,
+					grand_master: 0.4,
+					blackout: true,
+				},
 			},
 			"output-1",
 		);
@@ -109,7 +112,7 @@ describe("typed live runtime actions", () => {
 
 	it("sends DMX override, Highlight, and Patch Preview as single live frames", async () => {
 		const state = { active: true, mode: "all" };
-		const { transport, commandWithRequestId } = transportReturning(state);
+		const { transport, sendAction } = transportReturning(state);
 		const client = new MediaOutputApiClient(transport);
 
 		await client.setDmxOverride(2, 17, 128);
@@ -118,36 +121,44 @@ describe("typed live runtime actions", () => {
 			client.setPatchPreviewHighlight(true, ["fixture-a"]),
 		).resolves.toEqual(state);
 
-		expect(commandWithRequestId).toHaveBeenCalledTimes(3);
-		expect(commandWithRequestId).toHaveBeenNthCalledWith(
+		expect(sendAction).toHaveBeenCalledTimes(3);
+		expect(sendAction).toHaveBeenNthCalledWith(
 			1,
-			"dmx.override",
 			{
-				request_id: expect.any(String),
-				universe: 2,
-				address: 17,
-				value: 128,
+				type: "dmx_override",
+				request: {
+					request_id: expect.any(String),
+					universe: 2,
+					address: 17,
+					value: 128,
+				},
 			},
 			expect.any(String),
 		);
-		expect(commandWithRequestId).toHaveBeenNthCalledWith(
+		expect(sendAction).toHaveBeenNthCalledWith(
 			2,
-			"highlight.action",
-			{ request_id: expect.any(String), action: "all" },
-			expect.any(String),
-		);
-		expect(commandWithRequestId).toHaveBeenNthCalledWith(
-			3,
-			"patch_preview_highlight.action",
 			{
-				request_id: expect.any(String),
-				active: true,
-				fixture_ids: ["fixture-a"],
+				type: "highlight",
+				request: { request_id: expect.any(String), action: "all" },
 			},
 			expect.any(String),
 		);
-		for (const call of commandWithRequestId.mock.calls) {
-			expect((call[1] as { request_id: string }).request_id).toBe(call[2]);
+		expect(sendAction).toHaveBeenNthCalledWith(
+			3,
+			{
+				type: "patch_preview_highlight",
+				request: {
+					request_id: expect.any(String),
+					active: true,
+					fixture_ids: ["fixture-a"],
+				},
+			},
+			expect.any(String),
+		);
+		for (const call of sendAction.mock.calls) {
+			expect(
+				(call[0] as { request: { request_id: string } }).request.request_id,
+			).toBe(call[1]);
 		}
 	});
 });

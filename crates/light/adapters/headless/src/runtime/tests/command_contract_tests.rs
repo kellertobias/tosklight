@@ -543,24 +543,25 @@ fn spd_grp_commands_preserve_precision_mapping_relative_changes_and_phase_links(
 }
 
 #[test]
-fn legacy_speed_execution_resets_the_authoritative_command_line() {
+fn typed_speed_execution_resets_the_authoritative_command_line() {
     let scenario = CommandContractScenario::new();
     assert!(scenario.state.programmers.set_command_line(
         scenario.session.id,
         "SPD GRP 1 AT 120".into()
     ));
 
-    let response = dispatch_ws_command(
+    let response = dispatch_live_action(
         &scenario.state,
         &scenario.session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "speed-reset".into(),
-            session_id: scenario.session.id,
-            expected_revision: None,
-            command: "programmer.execute".into(),
-            payload: serde_json::json!({"value":"SPD GRP 1 AT 120"}),
-        },
+        live_action_frame(
+            &scenario.session,
+            "speed-reset",
+            light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    value: "SPD GRP 1 AT 120".into(),
+                },
+            ),
+        ),
     );
 
     assert!(response.ok, "{:?}", response.error);

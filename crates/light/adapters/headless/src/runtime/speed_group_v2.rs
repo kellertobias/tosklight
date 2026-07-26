@@ -1,8 +1,10 @@
 //! Authenticated revisioned actions and repair projection for retained/manual Speed Groups.
 
+use super::{AppState, DeskContext, Session, session_for_desk, speed_group_service};
+use crate::tolerant_json::TolerantJson;
 use axum::{
     Json, Router,
-    extract::{Path, State, rejection::JsonRejection},
+    extract::{State, rejection::JsonRejection},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
@@ -12,26 +14,18 @@ use light_application::{
     SpeedGroupOutcome, SpeedGroupProjection, SpeedGroupResult, SpeedGroupSnapshot,
 };
 use light_wire::v2::{events::EventSnapshotCursor, speed_group as wire};
-use uuid::Uuid;
-
-use super::{AppState, Session, authenticate, speed_group_service};
-use crate::tolerant_json::TolerantJson;
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route(
-        "/api/v2/desks/{desk_id}/speed-groups",
-        get(snapshot).post(action),
-    )
+    Router::new().route("/api/v2/speed-groups", get(snapshot).post(action))
 }
 
 async fn action(
     State(state): State<AppState>,
-    Path(desk_id): Path<String>,
+    desk: DeskContext,
     headers: HeaderMap,
     request: Result<TolerantJson<wire::SpeedGroupActionRequest>, JsonRejection>,
 ) -> Result<Response, SpeedGroupHttpError> {
-    let session =
-        authenticated_desk(&state, &headers, &desk_id).map_err(SpeedGroupHttpError::api)?;
+    let session = session_for_desk(&state, &headers, &desk).map_err(SpeedGroupHttpError::api)?;
     let TolerantJson(request) =
         request.map_err(|error| SpeedGroupHttpError::invalid(error.body_text()))?;
     validate_request_id(&request.request_id).map_err(SpeedGroupHttpError::invalid)?;
@@ -51,28 +45,12 @@ async fn action(
 
 async fn snapshot(
     State(state): State<AppState>,
-    Path(desk_id): Path<String>,
+    desk: DeskContext,
     headers: HeaderMap,
 ) -> Result<Json<wire::SpeedGroupSnapshot>, super::ApiError> {
-    let session = authenticated_desk(&state, &headers, &desk_id)?;
+    let session = session_for_desk(&state, &headers, &desk)?;
     let snapshot = speed_group_service::snapshot(&state, &session, http_context(&session))?;
     Ok(Json(wire_snapshot(snapshot)))
-}
-
-fn authenticated_desk(
-    state: &AppState,
-    headers: &HeaderMap,
-    path_desk_id: &str,
-) -> Result<Session, super::ApiError> {
-    let session = authenticate(state, headers)?;
-    let desk_id = Uuid::parse_str(path_desk_id)
-        .map_err(|_| super::ApiError::bad_request("desk_id must be a UUID"))?;
-    if session.desk.id != desk_id {
-        return Err(super::ApiError::forbidden(
-            "session is not authorized for this desk",
-        ));
-    }
-    Ok(session)
 }
 
 fn http_context(session: &Session) -> ActionContext {

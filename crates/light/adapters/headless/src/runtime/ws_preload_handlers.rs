@@ -2,7 +2,7 @@ use super::*;
 
 pub(super) fn ws_programmer_preload_lifecycle_action(
     state: &AppState,
-    command: &WsCommand,
+    command: &WsActionRequest,
     context: &light_application::ActionContext,
     ports: &command_http::ServerProgrammingPorts<'_>,
 ) -> Result<WsTypedProgrammingAction, String> {
@@ -29,25 +29,14 @@ pub(super) fn ws_programmer_preload_lifecycle_action(
             ports,
         )
         .map_err(|error| error.message)?;
-    let interaction_changed = result.interaction_event_sequence.is_some();
-    let preload_values_changed = result.values_event_sequence.is_some();
-    let preload_queue_changed = result.queue_event_sequence.is_some();
-    let replayed = result.replayed;
     let payload = serde_json::to_value(command_http::preload_lifecycle_outcome(result))
         .map_err(|error| error.to_string())?;
-    Ok(WsTypedProgrammingAction {
-        payload,
-        interaction_changed,
-        values_changed: false,
-        preload_values_changed,
-        preload_queue_changed,
-        replayed,
-    })
+    Ok(WsTypedProgrammingAction { payload })
 }
 
 pub(super) fn ws_programmer_preload_values_action(
     state: &AppState,
-    command: &WsCommand,
+    command: &WsActionRequest,
     context: &light_application::ActionContext,
     ports: &command_http::ServerProgrammingPorts<'_>,
 ) -> Result<WsTypedProgrammingAction, String> {
@@ -76,183 +65,15 @@ pub(super) fn ws_programmer_preload_values_action(
         .programming
         .handle_preload_values(action, ports)
         .map_err(|error| error.message)?;
-    let preload_values_changed = matches!(
-        result.outcome,
-        light_application::ProgrammingPreloadValuesOutcome::Changed { .. }
-    );
-    let replayed = result.replayed;
     let payload = serde_json::to_value(command_http::preload_values_outcome(request_id, result))
         .map_err(|error| error.to_string())?;
-    Ok(WsTypedProgrammingAction {
-        payload,
-        interaction_changed: false,
-        values_changed: false,
-        preload_values_changed,
-        preload_queue_changed: false,
-        replayed,
-    })
-}
-
-pub(super) fn ws_programmer_clear(
-    state: &AppState,
-    session: &Session,
-    _command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    state.programmers.clear_values(session.id);
-    persist_programmer(state, session).map_err(|e| e.message)?;
-    Ok(serde_json::json!({"cleared":true}))
-}
-
-pub(super) fn ws_preload_enter(
-    state: &AppState,
-    _session: &Session,
-    _command: &WsCommand,
-    context: &light_application::ActionContext,
-    ports: &command_http::ServerProgrammingPorts<'_>,
-) -> Result<WsTypedProgrammingAction, String> {
-    let result = typed_preload_action(
-        state,
-        context,
-        ports,
-        light_application::ProgrammingPreloadLifecycleAction::Enter,
-    )?;
-    Ok(compatibility_action(
-        serde_json::json!({"blind":true}),
-        result,
-    ))
-}
-
-pub(super) fn ws_preload_go(
-    state: &AppState,
-    session: &Session,
-    _command: &WsCommand,
-    context: &light_application::ActionContext,
-    ports: &command_http::ServerProgrammingPorts<'_>,
-) -> Result<WsTypedProgrammingAction, String> {
-    let show_id = state
-        .active_show
-        .read()
-        .as_ref()
-        .map(|show| show.id)
-        .ok_or("no active show is loaded")?;
-    let current = light_application::ProgrammingPreloadRevisionExpectation::Current;
-    let result = typed_preload_action(
-        state,
-        context,
-        ports,
-        light_application::ProgrammingPreloadLifecycleAction::Go {
-            show_id,
-            expected_show_revision: current,
-            expected_playback_event_sequence: current,
-        },
-    )?;
-    let payload = compatibility_go_payload(&result)?;
-    if !result.replayed
-        && result.state == light_application::ProgrammingPreloadLifecycleState::Changed
-    {
-        emit_compatibility_go(state, session, &payload);
-    }
-    Ok(compatibility_action(payload, result))
-}
-
-pub(super) fn ws_preload_group_set(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    #[derive(Deserialize)]
-    struct Input {
-        group_id: String,
-        attribute: String,
-        value: f32,
-    }
-    let input: Input =
-        serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    if !(0.0..=1.0).contains(&input.value) {
-        return Err("value must be within 0-1".into());
-    }
-    state.programmers.set_group(
-        session.id,
-        input.group_id,
-        light_core::AttributeKey(input.attribute),
-        light_core::AttributeValue::Normalized(input.value),
-    );
-    persist_programmer(state, session).map_err(|e| e.message)?;
-    let programmer = state.programmers.get(session.id);
-    let pending = programmer
-        .as_ref()
-        .is_some_and(|programmer| programmer.blind && programmer.preload_capture_programmer);
-    Ok(serde_json::json!({"pending":pending,"programmer":programmer}))
-}
-
-pub(super) fn ws_preload_clear(
-    state: &AppState,
-    _session: &Session,
-    _command: &WsCommand,
-    context: &light_application::ActionContext,
-    ports: &command_http::ServerProgrammingPorts<'_>,
-) -> Result<WsTypedProgrammingAction, String> {
-    let result = typed_preload_action(
-        state,
-        context,
-        ports,
-        light_application::ProgrammingPreloadLifecycleAction::ClearPending,
-    )?;
-    Ok(compatibility_action(
-        serde_json::json!({"pending_cleared":true,"active_unchanged":true}),
-        result,
-    ))
-}
-
-pub(super) fn ws_preload_release(
-    state: &AppState,
-    _session: &Session,
-    _command: &WsCommand,
-    context: &light_application::ActionContext,
-    ports: &command_http::ServerProgrammingPorts<'_>,
-) -> Result<WsTypedProgrammingAction, String> {
-    let result = typed_preload_action(
-        state,
-        context,
-        ports,
-        light_application::ProgrammingPreloadLifecycleAction::Release,
-    )?;
-    let released = result.state == light_application::ProgrammingPreloadLifecycleState::Changed;
-    Ok(compatibility_action(
-        serde_json::json!({"released":released}),
-        result,
-    ))
-}
-
-fn typed_preload_action(
-    state: &AppState,
-    context: &light_application::ActionContext,
-    ports: &command_http::ServerProgrammingPorts<'_>,
-    action: light_application::ProgrammingPreloadLifecycleAction,
-) -> Result<light_application::ProgrammingPreloadLifecycleResult, String> {
-    let current = light_application::ProgrammingPreloadRevisionExpectation::Current;
-    state
-        .programming
-        .handle_preload_lifecycle(
-            light_application::ActionEnvelope {
-                context: context.clone(),
-                command: light_application::ProgrammingPreloadLifecycleRequest {
-                    expected_capture_mode_revision: current,
-                    expected_values_revision: current,
-                    expected_queue_revision: current,
-                    expected_selection_revision: current,
-                    action,
-                },
-            },
-            ports,
-        )
-        .map_err(|error| error.message)
+    Ok(WsTypedProgrammingAction { payload })
 }
 
 pub(super) fn ws_programmer_command_line(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
+    command: &WsActionRequest,
 ) -> Result<serde_json::Value, String> {
     #[derive(Deserialize)]
     struct Input {
@@ -274,7 +95,7 @@ pub(super) fn ws_programmer_command_line(
 pub(super) fn ws_programmer_command_target(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
+    command: &WsActionRequest,
 ) -> Result<serde_json::Value, String> {
     #[derive(Deserialize)]
     struct Input {
@@ -294,7 +115,7 @@ pub(super) fn ws_programmer_command_target(
 pub(super) fn ws_programmer_execute(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
+    command: &WsActionRequest,
     context: Option<&light_application::ActionContext>,
 ) -> Result<serde_json::Value, String> {
     #[derive(Deserialize)]

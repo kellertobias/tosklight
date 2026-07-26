@@ -203,7 +203,7 @@ scenario(
 
 scenario(
 	"CROSS-002",
-	"browser live-reconciles external REST and command-WebSocket mutations",
+	"browser live-reconciles external REST and typed live-action mutations",
 	async (t) => {
 		await t.show.use(Show.CompactRig);
 		await t.app.open();

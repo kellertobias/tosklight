@@ -60,25 +60,19 @@ function decodedInteractionSnapshot() {
 
 function clientReturning(value: unknown) {
 	const request = vi.fn(async (_path: string, _init?: RequestInit) => value);
-	const commandWithRequestId = vi.fn(
-		async (
-			_command: string,
-			_payload: unknown,
-			_requestId: string,
-			_revision?: number,
-		) => value,
+	const sendAction = vi.fn(
+		async (_action: unknown, _requestId: string) => value,
 	);
 	const transport = {
 		request,
-		commandWithRequestId,
+		sendAction,
 		blob: vi.fn(),
 		absoluteUrl: vi.fn(),
-		command: vi.fn(),
 	} as unknown as LiveClientTransport;
 	return {
 		client: new ProgrammingApiClient(transport),
 		request,
-		commandWithRequestId,
+		sendAction,
 	};
 }
 
@@ -93,7 +87,7 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 			replayed: false,
 			warning: null,
 		};
-		const { client, commandWithRequestId } = clientReturning(response);
+		const { client, sendAction } = clientReturning(response);
 
 		await expect(
 			client.programmerValuesLiveAction(USER_ID, {
@@ -103,14 +97,16 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 				action: { action: "clear" },
 			}),
 		).resolves.toMatchObject({ requestId: "values-1", status: "no_change" });
-		expect(commandWithRequestId).toHaveBeenCalledOnce();
-		expect(commandWithRequestId).toHaveBeenCalledWith(
-			"programmer.values.action",
+		expect(sendAction).toHaveBeenCalledOnce();
+		expect(sendAction).toHaveBeenCalledWith(
 			{
-				request_id: "values-1",
-				expected_revision: 2,
-				expected_capture_mode_revision: 1,
-				action: { type: "clear" },
+				type: "programming_values",
+				request: {
+					request_id: "values-1",
+					expected_revision: 2,
+					expected_capture_mode_revision: 1,
+					action: { type: "clear" },
+				},
 			},
 			"values-1",
 		);
@@ -119,9 +115,9 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 	it("loads a strictly validated desk interaction snapshot", async () => {
 		const { client, request } = clientReturning(interactionSnapshot());
 
-		await expect(client.programmingInteractionSnapshot(DESK_ID)).resolves.toEqual(
-			decodedInteractionSnapshot(),
-		);
+		await expect(
+			client.programmingInteractionSnapshot(DESK_ID),
+		).resolves.toEqual(decodedInteractionSnapshot());
 		expect(request).toHaveBeenCalledWith(
 			"/api/v2/programming-interaction/snapshot",
 			{ headers: { "x-tosk-desk": DESK_ID } },
@@ -133,24 +129,25 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 		value.projection.desk_id = "99999999-9999-4999-8999-999999999999";
 		const { client } = clientReturning(value);
 
-		await expect(client.programmingInteractionSnapshot(DESK_ID)).rejects.toThrow(
-			"requested desk",
-		);
+		await expect(
+			client.programmingInteractionSnapshot(DESK_ID),
+		).rejects.toThrow("requested desk");
 	});
 
 	it("replaces command text with optimistic concurrency", async () => {
-		const { client, commandWithRequestId } = clientReturning(commandLine(5));
+		const { client, sendAction } = clientReturning(commandLine(5));
 
 		await expect(
 			client.replaceProgrammingCommandLine(DESK_ID, "FIXTURE 8", 4),
 		).resolves.toEqual(decodedCommandLine(5));
-		expect(commandWithRequestId).toHaveBeenCalledOnce();
-		const [command, payload, requestId] = commandWithRequestId.mock.calls[0];
-		expect(command).toBe("programmer.command_line.replace");
-		expect(payload).toEqual({
-			request_id: requestId,
-			expected_revision: 4,
-			text: "FIXTURE 8",
+		expect(sendAction).toHaveBeenCalledOnce();
+		const [action, requestId] = sendAction.mock.calls[0];
+		expect(action).toEqual({
+			type: "command_line_replace",
+			request: {
+				expected_revision: 4,
+				text: "FIXTURE 8",
+			},
 		});
 		expect(requestId).toEqual(expect.any(String));
 	});
@@ -165,7 +162,7 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 			event_sequence: 13,
 			replayed: false,
 		};
-		const { client, commandWithRequestId } = clientReturning(response);
+		const { client, sendAction } = clientReturning(response);
 
 		await expect(
 			client.applyProgrammingSelection(DESK_ID, {
@@ -183,15 +180,49 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 			eventSequence: 13,
 			warning: null,
 		});
-		expect(commandWithRequestId).toHaveBeenCalledWith(
-			"programmer.selection.action",
+		expect(sendAction).toHaveBeenCalledWith(
 			{
-				request_id: "selection-1",
-				action: "replace",
-				fixtures: [FIXTURE_ID],
-				expected_revision: 2,
+				type: "programming_selection",
+				request: {
+					request_id: "selection-1",
+					action: "replace",
+					fixtures: [FIXTURE_ID],
+					expected_revision: 2,
+				},
 			},
 			"selection-1",
 		);
+	});
+
+	it("generates fixture presets through the persisted HTTP intent boundary", async () => {
+		const requestId = "55555555-5555-4555-8555-555555555555";
+		const { client, request, sendAction } = clientReturning({
+			request_id: requestId,
+			correlation_id: "66666666-6666-4666-8666-666666666666",
+			show_revision: 8,
+			event_sequence: 12,
+			created: [],
+		});
+		vi.spyOn(crypto, "randomUUID").mockReturnValueOnce(requestId);
+
+		await expect(
+			client.generateFixturePresets([FIXTURE_ID], 7),
+		).resolves.toEqual({
+			created: [],
+			showRevision: 8,
+		});
+		expect(request).toHaveBeenCalledWith(
+			"/api/v2/preset-profile-generation/update",
+			{
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					request_id: requestId,
+					expected_show_revision: 7,
+					fixture_ids: [FIXTURE_ID],
+				}),
+			},
+		);
+		expect(sendAction).not.toHaveBeenCalled();
 	});
 });

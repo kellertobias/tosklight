@@ -1,6 +1,16 @@
-import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	expectTypeOf,
+	it,
+	vi,
+} from "vitest";
+import type { EventPayload } from "../generated/light-wire";
+import type { BootstrapSnapshot, SessionResponse } from "../types";
 import { LightClientRuntime } from "./runtime";
-import type { BootstrapSnapshot, ServerEvent, SessionResponse } from "../types";
+import type { LiveClientTransport } from "./transport";
 
 class FakeWebSocket {
 	static readonly OPEN = 1;
@@ -69,9 +79,9 @@ describe("LightClientRuntime", () => {
 		expectTypeOf<ReturnType<LightClientRuntime["bootstrap"]>>().toEqualTypeOf<
 			Promise<BootstrapSnapshot>
 		>();
-		expectTypeOf<ReturnType<LightClientRuntime["command"]>>().toEqualTypeOf<
-			Promise<unknown>
-		>();
+		expectTypeOf<
+			ReturnType<LightClientRuntime["capabilityTransport"]>
+		>().toEqualTypeOf<LiveClientTransport>();
 		expectTypeOf<ReturnType<LightClientRuntime["onEvent"]>>().toEqualTypeOf<
 			() => boolean
 		>();
@@ -94,7 +104,7 @@ describe("LightClientRuntime", () => {
 		await connecting;
 		expect(JSON.parse(socket.sent[0])).toEqual({
 			type: "subscribe",
-			filter: { capabilities: ["system"] },
+			filter: { capabilities: ["system", "output", "desk", "show"] },
 			capacity: 256,
 			rate_limits: [],
 		});
@@ -108,21 +118,87 @@ describe("LightClientRuntime", () => {
 		const listener = vi.fn();
 		const unsubscribe = client.onEvent(listener);
 		const socket = await openEvents(client);
-		const event: ServerEvent = {
-			revision: 4,
-			kind: "programmer_changed",
-			payload: { session_id: "session-a" },
-		};
+		const event = {
+			type: "server_configuration_changed",
+			change: { revision: 4 },
+		} satisfies EventPayload;
 
-		socket.emitMessage(facadeEvent(event));
+		socket.emitMessage(typedEvent(event));
 		expect(listener).toHaveBeenCalledWith(event);
 		expect(unsubscribe()).toBe(true);
 		expect(unsubscribe()).toBe(false);
-		socket.emitMessage(facadeEvent({ ...event, revision: 5 }));
+		socket.emitMessage(
+			typedEvent({
+				type: "server_configuration_changed",
+				change: { revision: 5 },
+			}),
+		);
 		expect(listener).toHaveBeenCalledOnce();
 	});
 
-	it("correlates command responses and rejects commands after the timeout", async () => {
+	it("maps typed operator notifications without a generic facade payload", async () => {
+		const client = connectedClient();
+		const listener = vi.fn();
+		client.onEvent(listener);
+		const socket = await openEvents(client);
+
+		const event = {
+			type: "operator_notification",
+			notification: {
+				type: "desk_action",
+				revision: 7,
+				notification: {
+					action: "clear",
+					control: null,
+					value: null,
+					session_id: "session-a",
+					desk_id: "desk-a",
+					desk_alias: "main",
+				},
+			},
+		} satisfies EventPayload;
+		socket.emitMessage(typedEvent(event));
+
+		expect(listener).toHaveBeenCalledWith(event);
+	});
+
+	it("forwards authoritative typed Highlight state", async () => {
+		const client = connectedClient();
+		const listener = vi.fn();
+		client.onEvent(listener);
+		const socket = await openEvents(client);
+		const state = {
+			active: true,
+			mode: "selection",
+			output_enabled: true,
+			capture_only: false,
+			remembered: [],
+			active_index: null,
+			active_fixture: null,
+			can_previous: false,
+			can_next: false,
+			owner_user_id: "user-a",
+			owner_user_name: "Operator",
+			message: null,
+		};
+
+		const event = {
+			type: "highlight_changed",
+			change: {
+				revision: 9,
+				desk_id: "desk-a",
+				user_id: "user-a",
+				action: "on",
+				source: null,
+				state,
+			},
+		} satisfies EventPayload;
+		socket.emitMessage(typedEvent(event));
+
+		expect(listener).toHaveBeenCalledWith(event);
+	});
+
+	it("correlates action responses and rejects actions after the timeout", async () => {
 		vi.useFakeTimers();
 		vi.spyOn(crypto, "randomUUID")
 			.mockReturnValueOnce("00000000-0000-4000-8000-000000000001")
@@ -130,16 +206,18 @@ describe("LightClientRuntime", () => {
 		const client = connectedClient();
 		const socket = await openEvents(client);
 
-		const command = client.command("programmer.clear", {});
+		const command = client
+			.capabilityTransport()
+			.sendAction({ type: "programmer_undo" });
 		expect(JSON.parse(socket.sent[1])).toEqual({
-			protocol_version: 1,
+			type: "action",
+			protocol_version: 2,
 			request_id: "00000000-0000-4000-8000-000000000001",
 			session_id: "session-a",
-			command: "programmer.clear",
-			payload: {},
+			action: { type: "programmer_undo" },
 		});
 		socket.emitMessage({
-			protocol_version: 1,
+			protocol_version: 2,
 			request_id: "00000000-0000-4000-8000-000000000001",
 			ok: true,
 			revision: 8,
@@ -148,8 +226,8 @@ describe("LightClientRuntime", () => {
 		await expect(command).resolves.toEqual({ revision: 8 });
 
 		const timedOut = expect(
-			client.command("programmer.undo", {}),
-		).rejects.toThrow("Command timed out: programmer.undo");
+			client.capabilityTransport().sendAction({ type: "programmer_undo" }),
+		).rejects.toThrow("Action timed out: programmer_undo");
 		await vi.advanceTimersByTimeAsync(5_000);
 		await timedOut;
 	});
@@ -159,8 +237,19 @@ describe("LightClientRuntime", () => {
 		const client = connectedClient();
 		const first = await openEvents(client);
 		const unresolved = expect(
-			client.command("playback.action", { request_id: "playback-a" }),
-		).rejects.toThrow("Command timed out: playback.action");
+			client.capabilityTransport().sendAction(
+				{
+					type: "playback",
+					request: {
+						request_id: "playback-a",
+						address: { kind: "playback", playback_number: 1 },
+						action: { type: "go", pressed: true },
+						surface: "physical",
+					},
+				},
+				"playback-a",
+			),
+		).rejects.toThrow("Action timed out: playback");
 		expect(first.sent).toHaveLength(2);
 
 		const reconnecting = client.connectEvents();
@@ -173,7 +262,9 @@ describe("LightClientRuntime", () => {
 		expect(replacement.sent.map((message) => JSON.parse(message))).toEqual([
 			{
 				type: "subscribe",
-				filter: { capabilities: ["system"] },
+				filter: {
+					capabilities: ["system", "output", "desk", "show"],
+				},
 				capacity: 256,
 				rate_limits: [],
 			},
@@ -183,7 +274,7 @@ describe("LightClientRuntime", () => {
 		expect(replacement.sent).toHaveLength(1);
 	});
 
-	it("closes a gapped facade subscription so connection bootstrap repairs state", async () => {
+	it("closes a gapped typed subscription so connection bootstrap repairs state", async () => {
 		const client = connectedClient();
 		const onClose = vi.fn();
 		const connecting = client.connectEvents(onClose);
@@ -204,14 +295,11 @@ describe("LightClientRuntime", () => {
 	});
 });
 
-function facadeEvent(notification: ServerEvent) {
+function typedEvent(payload: EventPayload) {
 	return {
 		type: "event",
 		event: {
-			payload: {
-				type: "facade_notification",
-				notification,
-			},
+			payload,
 		},
 	};
 }

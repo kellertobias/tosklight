@@ -1,35 +1,5 @@
 use super::*;
 
-pub(in crate::runtime) fn validate_programmer_attribute_value(
-    value: &light_core::AttributeValue,
-) -> Result<(), String> {
-    match value {
-        light_core::AttributeValue::Normalized(value)
-            if !value.is_finite() || !(0.0..=1.0).contains(value) =>
-        {
-            return Err("normalized value must be within 0-1".into());
-        }
-        light_core::AttributeValue::Spread(_) => {
-            return Err("spread values require a Group programming command".into());
-        }
-        light_core::AttributeValue::Discrete(value) if value.trim().is_empty() => {
-            return Err("discrete value must contain a semantic identifier".into());
-        }
-        light_core::AttributeValue::ColorXyz(value)
-            if !value.x.is_finite()
-                || !value.y.is_finite()
-                || !value.z.is_finite()
-                || value.x < 0.0
-                || value.y < 0.0
-                || value.z < 0.0 =>
-        {
-            return Err("XYZ color components must be finite and non-negative".into());
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
 pub(in crate::runtime) fn profile_head_owner(
     fixture: &light_fixture::PatchedFixture,
     mode: &light_fixture::FixtureMode,

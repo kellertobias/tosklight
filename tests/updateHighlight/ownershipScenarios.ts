@@ -142,17 +142,19 @@ test("HIGHLIGHT-005 @supplemental-ui › Highlight errors remain reachable above
 		const server = socket.connectToServer();
 		socket.onMessage((message) => {
 			const parsed = JSON.parse(String(message)) as {
-				command?: string;
+				type?: string;
+				action?: { type?: string };
 				request_id?: string;
 			};
 			if (
-				parsed.command === "highlight.action" &&
+				parsed.type === "action" &&
+				parsed.action?.type === "highlight" &&
 				parsed.request_id &&
 				nextHighlightError
 			) {
 				socket.send(
 					JSON.stringify({
-						protocol_version: 1,
+						protocol_version: 2,
 						request_id: parsed.request_id,
 						ok: false,
 						revision: 0,

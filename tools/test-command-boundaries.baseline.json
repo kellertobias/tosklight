@@ -1,20 +1,7 @@
 {
 	"version": 2,
-	"directActionCommands": {
-		"tests/04-osc-api-and-cross-surface.spec.ts": 5,
-		"tests/09-cue-delete-websocket-compatibility.spec.ts": 1,
-		"tests/09-cue-navigation-websocket-compatibility.spec.ts": 6
-	},
-	"directActionFamilies": {
-		"not.a.command": 1,
-		"programmer.command_line": 1,
-		"programmer.command_target": 1,
-		"programmer.execute": 7,
-		"programmer.group.set": 2
-	},
-	"compatibilityCommands": {
-		"tests/support/catalog.ts": 1,
-		"tests/support/foundational/apiState.ts": 1
-	},
+	"directActionCommands": {},
+	"directActionFamilies": {},
+	"compatibilityCommands": {},
 	"compatibilityFamilies": {}
 }

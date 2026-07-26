@@ -72,7 +72,7 @@ async fn preload_values_batch_is_atomic_revisioned_replay_safe_and_sparse_on_no_
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()[header::ETAG], "\"1\"");
     let changed = json(response).await;
-    assert_preload_values_changed(&changed, "preload-batch", 1, 3);
+    assert_preload_values_changed(&scenario, &changed, "preload-batch", 1);
     assert_eq!(changed["capture_mode_revision"], 1);
     assert_eq!(changed["projection"]["fixture_values"][0]["fade"], true);
     assert_eq!(
@@ -86,8 +86,8 @@ async fn preload_values_batch_is_atomic_revisioned_replay_safe_and_sparse_on_no_
 
     let replay = json(scenario.preload_values_action(batch).await).await;
     assert_eq!(replay["replayed"], true);
-    assert_preload_values_changed(&replay, "preload-batch", 1, 3);
-    assert_eq!(scenario.state.application_events.latest_sequence(), 3);
+    assert_preload_values_changed(&scenario, &replay, "preload-batch", 1);
+    assert_only_preload_values_events(&scenario, 1);
 
     let exact = json(
         scenario
@@ -110,7 +110,7 @@ async fn preload_values_batch_is_atomic_revisioned_replay_safe_and_sparse_on_no_
     assert_eq!(exact["revision"], 1);
     assert!(exact.get("projection").is_none());
     assert!(exact.get("event_sequence").is_none());
-    assert_eq!(scenario.state.application_events.latest_sequence(), 3);
+    assert_only_preload_values_events(&scenario, 1);
 
     let conflict = scenario
         .preload_values_action(preload_fixture_request(
@@ -156,7 +156,7 @@ async fn preload_values_share_one_user_across_desks_and_reject_foreign_actions()
         .await;
     assert_eq!(peer.status(), StatusCode::OK);
     let peer = json(peer).await;
-    assert_preload_values_changed(&peer, "peer-preload", 1, 4);
+    assert_preload_values_changed(&scenario, &peer, "peer-preload", 1);
     let snapshot = json(scenario.preload_values_snapshot().await).await;
     assert_eq!(snapshot["projection"]["revision"], 1);
     assert_eq!(snapshot["projection"]["fixture_values"].as_array().unwrap().len(), 1);
@@ -267,7 +267,12 @@ async fn preload_values_fixture_and_group_releases_are_individual_atomic_actions
             .await,
     )
     .await;
-    assert_preload_values_changed(&fixture_release, "release-preload-fixture", 2, 4);
+    assert_preload_values_changed(
+        &scenario,
+        &fixture_release,
+        "release-preload-fixture",
+        2,
+    );
     assert!(
         fixture_release["projection"]["fixture_values"]
             .as_array()
@@ -297,7 +302,7 @@ async fn preload_values_fixture_and_group_releases_are_individual_atomic_actions
             .await,
     )
     .await;
-    assert_preload_values_changed(&group_release, "release-preload-group", 3, 5);
+    assert_preload_values_changed(&scenario, &group_release, "release-preload-group", 3);
     assert!(
         group_release["projection"]["group_values"]
             .as_array()
@@ -329,16 +334,37 @@ fn preload_fixture_request(
 }
 
 fn assert_preload_values_changed(
+    scenario: &CommandHttpScenario,
     value: &serde_json::Value,
     request_id: &str,
     revision: u64,
-    sequence: u64,
 ) {
     assert_eq!(value["request_id"], request_id);
     assert_eq!(value["status"], "changed");
     assert_eq!(value["revision"], revision);
     assert_eq!(value["projection"]["revision"], revision);
-    assert_eq!(value["event_sequence"], sequence);
+    let filter = light_application::EventFilter::default().with_object(
+        light_application::EventObject::programming_preload_values(
+            scenario.session.user.id.0,
+        ),
+    );
+    let light_application::EventReplay::Events(events) =
+        scenario.state.application_events.replay(0, &filter)
+    else {
+        panic!("the focused Preload values event history should remain replayable")
+    };
+    let event = events
+        .iter()
+        .find(|event| {
+            matches!(
+                &event.payload,
+                light_application::ApplicationEvent::Programming(
+                    light_application::ProgrammingEvent::PreloadValuesChanged(change)
+                ) if change.projection.revision == revision
+            )
+        })
+        .expect("the response revision must have a focused Preload values event");
+    assert_eq!(value["event_sequence"], event.sequence);
     assert!(Uuid::parse_str(value["correlation_id"].as_str().unwrap()).is_ok());
 }
 

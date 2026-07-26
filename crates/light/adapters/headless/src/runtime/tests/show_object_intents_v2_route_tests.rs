@@ -106,7 +106,6 @@ async fn layout_and_patch_intents_preserve_unknown_fields_and_replay_once() {
             }
         }
     });
-    let before_events = state.facade_events.latest_sequence();
     let before_application_events = state.application_events.latest_sequence();
     let (status, saved_layout) = post_show_object_intent(
         &app,
@@ -124,10 +123,16 @@ async fn layout_and_patch_intents_preserve_unknown_fields_and_replay_once() {
         true
     );
     assert_eq!(saved_layout["object"]["body"]["activeDeskId"], "main");
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        before_application_events + 1
-    );
+    let show_filter = light_application::EventFilter::default()
+        .with_capability(light_application::EventCapability::Show);
+    let light_application::EventReplay::Events(layout_events) = state
+        .application_events
+        .replay(before_application_events, &show_filter)
+    else {
+        panic!("the focused user-layout Show event must remain replayable")
+    };
+    assert_eq!(layout_events.len(), 1);
+    assert_eq!(saved_layout["event_sequence"], layout_events[0].sequence);
     let after_layout_application_event = state.application_events.latest_sequence();
 
     let (status, replayed) = post_show_object_intent(
@@ -141,11 +146,13 @@ async fn layout_and_patch_intents_preserve_unknown_fields_and_replay_once() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(replayed["replayed"], true);
     assert_eq!(replayed["object"], saved_layout["object"]);
-    assert_eq!(state.facade_events.latest_sequence(), before_events + 1);
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        after_layout_application_event
-    );
+    let light_application::EventReplay::Events(replayed_layout_events) = state
+        .application_events
+        .replay(before_application_events, &show_filter)
+    else {
+        panic!("the focused user-layout Show event must remain replayable")
+    };
+    assert_eq!(replayed_layout_events.len(), 1);
 
     let (status, saved_layer) = post_show_object_intent(
         &app,
@@ -167,10 +174,14 @@ async fn layout_and_patch_intents_preserve_unknown_fields_and_replay_once() {
     assert!(saved_layer["event_sequence"].as_u64().is_some());
     assert_eq!(saved_layer["object"]["body"]["name"], "Front truss");
     assert_eq!(saved_layer["object"]["body"]["future_patch_field"], "kept");
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        after_layout_application_event + 1
-    );
+    let light_application::EventReplay::Events(layer_events) = state
+        .application_events
+        .replay(after_layout_application_event, &show_filter)
+    else {
+        panic!("the focused Patch-layer Show event must remain replayable")
+    };
+    assert_eq!(layer_events.len(), 1);
+    assert_eq!(saved_layer["event_sequence"], layer_events[0].sequence);
 
     let (status, stale) = post_show_object_intent(
         &app,

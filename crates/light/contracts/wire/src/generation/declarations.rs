@@ -11,6 +11,7 @@ use crate::v2::files::*;
 use crate::v2::fixture_library::*;
 use crate::v2::group_management::*;
 use crate::v2::group_recording::*;
+use crate::v2::live_action::*;
 use crate::v2::output_control::*;
 use crate::v2::output_runtime::*;
 use crate::v2::patch::*;
@@ -58,7 +59,38 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(selective_import(config));
     declarations.extend(show_library(config));
     declarations.extend(interaction(config));
+    declarations.extend(live_actions(config));
     declarations
+}
+
+fn live_actions(config: &Config) -> Vec<String> {
+    vec![
+        LiveActionMessageType::decl(config),
+        PresetRecallLiveActionRequest::decl(config),
+        CommandLineReplaceLiveActionRequest::decl(config),
+        CommandLineSetLiveActionRequest::decl(config),
+        CommandTargetLiveActionRequest::decl(config),
+        CommandLineExecuteLiveActionRequest::decl(config),
+        CommandTargetHttpActionRequest::decl(config),
+        CommandTargetHttpActionOutcome::decl(config),
+        ProgrammerUndoHttpActionOutcome::decl(config),
+        ProgrammerCaptureModeLiveActionRequest::decl(config),
+        ProgrammerCaptureModeHttpActionRequest::decl(config),
+        ProgrammerCaptureModeOutcome::decl(config),
+        ProgrammingAlignMode::decl(config),
+        ProgrammingAlignLiveActionRequest::decl(config),
+        ProgrammingAlignHttpActionRequest::decl(config),
+        ProgrammingAlignOutcome::decl(config),
+        FixtureControlLiveActionRequest::decl(config),
+        FixtureControlHttpActionRequest::decl(config),
+        FixtureControlKind::decl(config),
+        FixtureControlOutcome::decl(config),
+        GenerateFixturePresetsRequest::decl(config),
+        GeneratedFixturePreset::decl(config),
+        GenerateFixturePresetsOutcome::decl(config),
+        LiveAction::decl(config),
+        LiveActionFrame::decl(config),
+    ]
 }
 
 fn files(config: &Config) -> Vec<String> {
@@ -502,7 +534,26 @@ fn event_payload(config: &Config) -> Vec<String> {
         FixtureProfileIdentity::decl(config),
         ManagedAssetReference::decl(config),
         SelectiveImportChange::decl(config),
-        FacadeNotification::decl(config),
+        NotificationRevision::decl(config),
+        HardwareConnectionNotification::decl(config),
+        HighlightChange::decl(config),
+        ScreenNotificationKind::decl(config),
+        ScreenNotification::decl(config),
+        ShowLibraryNotificationKind::decl(config),
+        ShowLibraryNotification::decl(config),
+        FixtureLibraryNotificationKind::decl(config),
+        FixtureLibraryNotification::decl(config),
+        MediaNotificationKind::decl(config),
+        MediaNotification::decl(config),
+        DeskActionNotification::decl(config),
+        FileInputNotification::decl(config),
+        FileOperationItemNotification::decl(config),
+        FileOperationNotification::decl(config),
+        GroupConfigurationNotification::decl(config),
+        UpdateTargetFamilyNotification::decl(config),
+        UpdateTargetNotification::decl(config),
+        UpdateWorkflowNotification::decl(config),
+        OperatorNotification::decl(config),
         EventPayload::decl(config),
         EventEnvelope::decl(config),
         EventClientMessage::decl(config),

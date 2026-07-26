@@ -271,7 +271,6 @@ async fn v2_update_action_is_lossless_replay_safe_and_one_event() {
     let scenario = UpdateRouteScenario::new();
     let initial_revision = scenario.revision();
     let cursor = scenario.state.application_events.latest_sequence();
-    let compatibility = subscribe_facade_events(&scenario.state);
     let action = direct_group_action(&scenario, "group-add", "add_new");
 
     let changed = scenario
@@ -287,18 +286,24 @@ async fn v2_update_action_is_lossless_replay_safe_and_one_event() {
         changed["projection"]["body"]["future_group"]["retained"],
         true
     );
-    assert_eq!(changed["event_sequence"], cursor + 1);
+    let show_filter = light_application::EventFilter::default().with_object(
+        light_application::EventObject::show_storage_object(
+            scenario.show_id,
+            "group",
+            &scenario.group_id,
+        ),
+    );
+    let light_application::EventReplay::Events(show_events) = scenario
+        .state
+        .application_events
+        .replay(cursor, &show_filter)
+    else {
+        panic!("the focused Programming update Show event must remain replayable")
+    };
+    assert_eq!(show_events.len(), 1);
+    assert_eq!(changed["event_sequence"], show_events[0].sequence);
     let committed_revision = changed["show_revision"].as_u64().unwrap();
     assert_eq!(changed_etag, format!("\"{committed_revision}\""));
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
-    assert!(
-        drain_facade_notifications(&compatibility)
-            .into_iter()
-            .all(|event| event.kind != "show_object_changed")
-    );
 
     let replay = scenario
         .post("actions", action, Some(initial_revision))
@@ -306,11 +311,15 @@ async fn v2_update_action_is_lossless_replay_safe_and_one_event() {
     assert_eq!(replay.status(), StatusCode::OK);
     let replay = json(replay).await;
     assert_eq!(replay["replayed"], true);
-    assert_eq!(replay["event_sequence"], cursor + 1);
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
+    assert_eq!(replay["event_sequence"], show_events[0].sequence);
+    let light_application::EventReplay::Events(replayed_show_events) = scenario
+        .state
+        .application_events
+        .replay(cursor, &show_filter)
+    else {
+        panic!("the focused Programming update Show event must remain replayable")
+    };
+    assert_eq!(replayed_show_events.len(), 1);
 
     let collision = scenario
         .post(
@@ -336,10 +345,14 @@ async fn v2_update_action_is_lossless_replay_safe_and_one_event() {
         .await;
     assert_eq!(no_op.status(), StatusCode::BAD_REQUEST);
     assert_eq!(json(no_op).await["kind"], "invalid");
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
+    let light_application::EventReplay::Events(show_events_after_no_op) = scenario
+        .state
+        .application_events
+        .replay(cursor, &show_filter)
+    else {
+        panic!("the focused Programming update Show event must remain replayable")
+    };
+    assert_eq!(show_events_after_no_op.len(), 1);
 
     let stale_show = scenario
         .post(
@@ -355,10 +368,14 @@ async fn v2_update_action_is_lossless_replay_safe_and_one_event() {
     );
     let stale_show = json(stale_show).await;
     assert_eq!(stale_show["current_show_revision"], committed_revision);
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        cursor + 1
-    );
+    let light_application::EventReplay::Events(show_events_after_conflict) = scenario
+        .state
+        .application_events
+        .replay(cursor, &show_filter)
+    else {
+        panic!("the focused Programming update Show event must remain replayable")
+    };
+    assert_eq!(show_events_after_conflict.len(), 1);
 
     let stored = scenario
         .store()

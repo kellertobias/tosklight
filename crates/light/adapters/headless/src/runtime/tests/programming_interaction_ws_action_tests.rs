@@ -19,14 +19,17 @@ async fn command_line_replace_ws_is_exact_correlated_and_replay_safe() {
         "text": "FIXTURE 101",
         "future_field": true
     });
-    let response = dispatch_ws_command(
+    let response = dispatch_live_action(
         &state,
         &session,
-        interaction_command(
+        live_action_frame(
             &session,
             "command-line-1",
-            "programmer.command_line.replace",
-            command_payload.clone(),
+            serde_json::from_value(serde_json::json!({
+                "type":"command_line_replace",
+                "request":command_payload.clone()
+            }))
+            .unwrap(),
         ),
     );
     assert!(response.ok, "{:?}", response.error);
@@ -34,14 +37,17 @@ async fn command_line_replace_ws_is_exact_correlated_and_replay_safe() {
     assert_eq!(payload["text"], "FIXTURE 101");
     assert_eq!(payload["revision"], revision + 1);
 
-    let replay = dispatch_ws_command(
+    let replay = dispatch_live_action(
         &state,
         &session,
-        interaction_command(
+        live_action_frame(
             &session,
             "command-line-1",
-            "programmer.command_line.replace",
-            command_payload,
+            serde_json::from_value(serde_json::json!({
+                "type":"command_line_replace",
+                "request":command_payload
+            }))
+            .unwrap(),
         ),
     );
     assert!(replay.ok, "{:?}", replay.error);
@@ -55,18 +61,21 @@ async fn command_line_replace_ws_is_exact_correlated_and_replay_safe() {
         revision + 1
     );
 
-    let stale = dispatch_ws_command(
+    let stale = dispatch_live_action(
         &state,
         &session,
-        interaction_command(
+        live_action_frame(
             &session,
             "command-line-stale",
-            "programmer.command_line.replace",
-            serde_json::json!({
-                "request_id": "command-line-stale",
-                "expected_revision": revision,
-                "text": "GROUP"
-            }),
+            serde_json::from_value(serde_json::json!({
+                "type":"command_line_replace",
+                "request":{
+                    "request_id": "command-line-stale",
+                    "expected_revision": revision,
+                    "text": "GROUP"
+                }
+            }))
+            .unwrap(),
         ),
     );
     assert!(!stale.ok);
@@ -106,14 +115,17 @@ async fn selection_action_ws_uses_typed_service_and_request_identity() {
         "expected_revision": revision,
         "future_field": true
     });
-    let response = dispatch_ws_command(
+    let response = dispatch_live_action(
         &state,
         &session,
-        interaction_command(
+        live_action_frame(
             &session,
             "selection-1",
-            "programmer.selection.action",
-            selection_payload.clone(),
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_selection",
+                "request":selection_payload.clone()
+            }))
+            .unwrap(),
         ),
     );
     assert!(response.ok, "{:?}", response.error);
@@ -126,14 +138,17 @@ async fn selection_action_ws_uses_typed_service_and_request_identity() {
     );
     assert_eq!(payload["replayed"], false);
 
-    let replay = dispatch_ws_command(
+    let replay = dispatch_live_action(
         &state,
         &session,
-        interaction_command(
+        live_action_frame(
             &session,
             "selection-1",
-            "programmer.selection.action",
-            selection_payload,
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_selection",
+                "request":selection_payload
+            }))
+            .unwrap(),
         ),
     );
     assert!(replay.ok, "{:?}", replay.error);
@@ -143,18 +158,21 @@ async fn selection_action_ws_uses_typed_service_and_request_identity() {
         revision + 1
     );
 
-    let mismatched = dispatch_ws_command(
+    let mismatched = dispatch_live_action(
         &state,
         &session,
-        interaction_command(
+        live_action_frame(
             &session,
             "selection-envelope",
-            "programmer.selection.action",
-            serde_json::json!({
-                "request_id": "selection-payload",
-                "action": "apply_rule",
-                "rule": {"type": "all"}
-            }),
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_selection",
+                "request":{
+                    "request_id": "selection-payload",
+                    "action": "apply_rule",
+                    "rule": {"type": "all"}
+                }
+            }))
+            .unwrap(),
         ),
     );
     assert!(!mismatched.ok);
@@ -162,7 +180,7 @@ async fn selection_action_ws_uses_typed_service_and_request_identity() {
         mismatched
             .error
             .unwrap()
-            .contains("request_id must match the WebSocket request_id")
+            .contains("action payload request_id must match the frame request_id")
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -242,10 +260,18 @@ async fn selection_action_ws_accepts_the_complete_action_union() {
             "rule_applied",
         ),
     ] {
-        let response = dispatch_ws_command(
+        let response = dispatch_live_action(
             &state,
             &session,
-            interaction_command(&session, request_id, "programmer.selection.action", payload),
+            live_action_frame(
+                &session,
+                request_id,
+                serde_json::from_value(serde_json::json!({
+                    "type":"programming_selection",
+                    "request":payload
+                }))
+                .unwrap(),
+            ),
         );
         assert!(response.ok, "{request_id}: {:?}", response.error);
         assert_eq!(response.payload.unwrap()["action"], accepted_action);
@@ -262,22 +288,6 @@ fn session_for_token(state: &AppState, token: &str) -> Session {
         .find(|session| session.token == token)
         .cloned()
         .unwrap()
-}
-
-fn interaction_command(
-    session: &Session,
-    request_id: &str,
-    command: &str,
-    payload: serde_json::Value,
-) -> WsCommand {
-    WsCommand {
-        protocol_version: 1,
-        request_id: request_id.into(),
-        session_id: session.id,
-        expected_revision: None,
-        command: command.into(),
-        payload,
-    }
 }
 
 async fn open_default_show(app: &Router, token: &str) {

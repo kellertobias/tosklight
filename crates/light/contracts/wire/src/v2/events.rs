@@ -8,6 +8,7 @@ use super::{
     programmer_lifecycle::ProgrammingLifecycleChange,
     programmer_priority::ProgrammerPriorityChange,
     programming::{ProgrammingCaptureModeChange, ProgrammingValuesChange},
+    runtime::RuntimeHighlightState,
     speed_group::SpeedGroupChange,
     virtual_playback_zones::VirtualPlaybackExclusionZonesChange,
 };
@@ -211,18 +212,234 @@ pub enum EventPayload {
     VirtualPlaybackExclusionZonesChanged {
         change: VirtualPlaybackExclusionZonesChange,
     },
-    FacadeNotification {
-        notification: FacadeNotification,
+    HighlightChanged {
+        change: HighlightChange,
+    },
+    ServerConfigurationChanged {
+        change: NotificationRevision,
+    },
+    ScreensChanged {
+        change: ScreenNotification,
+    },
+    ShowLibraryChanged {
+        change: ShowLibraryNotification,
+    },
+    FixtureLibraryChanged {
+        change: FixtureLibraryNotification,
+    },
+    MediaChanged {
+        change: MediaNotification,
+    },
+    HardwareConnectionChanged {
+        change: HardwareConnectionNotification,
+    },
+    OperatorNotification {
+        notification: OperatorNotification,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct NotificationRevision {
+    #[ts(type = "number")]
+    pub revision: u64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct HardwareConnectionNotification {
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub connected: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ScreenNotificationKind {
+    Configuration,
+    ScreenPage,
+    PlaybackPage,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ScreenNotification {
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub kind: ScreenNotificationKind,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ShowLibraryNotificationKind {
+    ShowOpened,
+    ShowRenamed,
+    ShowRolledBack,
+    ShowUploaded,
+    ShowDeleted,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ShowLibraryNotification {
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub kind: ShowLibraryNotificationKind,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum FixtureLibraryNotificationKind {
+    Library,
+    Profile,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureLibraryNotification {
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub kind: FixtureLibraryNotificationKind,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaNotificationKind {
+    ThumbnailsRefreshed,
+    PreviewRefreshed,
+    ServerOffline,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct MediaNotification {
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub kind: MediaNotificationKind,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct HighlightChange {
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub desk_id: Uuid,
+    pub user_id: Uuid,
+    pub action: Option<String>,
+    pub source: Option<String>,
+    pub state: RuntimeHighlightState,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DeskActionNotification {
+    pub action: Option<String>,
+    pub control: Option<String>,
+    pub value: Option<String>,
+    pub session_id: Option<String>,
+    pub desk_id: Option<String>,
+    pub desk_alias: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FileInputNotification {
+    pub action: String,
+    pub instance_id: String,
+    pub session_id: String,
+    pub source_session_id: Option<String>,
+    pub desk_id: Option<String>,
+    pub operation: Option<String>,
+    pub source: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FileOperationItemNotification {
+    pub source_root_id: String,
+    pub source: String,
+    pub destination_root_id: Option<String>,
+    pub destination: Option<String>,
+    pub status: String,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FileOperationNotification {
+    pub operation: String,
+    pub items: Vec<FileOperationItemNotification>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct GroupConfigurationNotification {
+    pub group_id: String,
+    pub desk_id: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateTargetFamilyNotification {
+    Cue,
+    Preset,
+    Group,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct UpdateTargetNotification {
+    pub family: UpdateTargetFamilyNotification,
+    pub object_id: String,
+    pub playback_number: Option<u16>,
+    pub cue_id: Option<String>,
+    pub cue_number: Option<f64>,
+    pub validate_active_context: Option<bool>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum UpdateWorkflowNotification {
+    Armed {
+        desk_id: String,
+        armed: bool,
+    },
+    TargetRequested {
+        desk_id: String,
+        target: UpdateTargetNotification,
+    },
+    TargetRejected {
+        desk_id: String,
+        error: Option<String>,
+    },
+    TargetsRequested {
+        desk_id: String,
+    },
+    SettingsRequested {
+        desk_id: String,
     },
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-pub struct FacadeNotification {
-    #[ts(type = "number")]
-    pub revision: u64,
-    pub kind: String,
-    #[ts(type = "unknown")]
-    pub payload: serde_json::Value,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OperatorNotification {
+    DeskAction {
+        #[ts(type = "number")]
+        revision: u64,
+        notification: DeskActionNotification,
+    },
+    FileInput {
+        #[ts(type = "number")]
+        revision: u64,
+        notification: FileInputNotification,
+    },
+    FileOperation {
+        #[ts(type = "number")]
+        revision: u64,
+        notification: FileOperationNotification,
+    },
+    GroupConfiguration {
+        #[ts(type = "number")]
+        revision: u64,
+        notification: GroupConfigurationNotification,
+    },
+    UpdateWorkflow {
+        #[ts(type = "number")]
+        revision: u64,
+        notification: UpdateWorkflowNotification,
+    },
+    CommandHistoryChanged {
+        #[ts(type = "number")]
+        revision: u64,
+        desk_id: String,
+    },
 }
 
 #[cfg(test)]

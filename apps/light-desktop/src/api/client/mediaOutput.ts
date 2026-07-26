@@ -1,10 +1,7 @@
 import type {
-	DmxSnapshot,
-	HighlightAction,
-	HighlightState,
-	MediaServerFixture,
-	VisualizationSnapshot,
-} from "../types";
+	OutputRuntimeActionOutcome,
+	OutputRuntimeActionRequest,
+} from "../../features/outputRuntime/contracts";
 import type {
 	DmxOverrideRequest,
 	HighlightActionRequest,
@@ -12,14 +9,17 @@ import type {
 	MediaThumbnailRefreshRequest,
 	PatchPreviewHighlightRequest,
 } from "../generated/light-wire";
-import type {
-	OutputRuntimeActionOutcome,
-	OutputRuntimeActionRequest,
-} from "../../features/outputRuntime/contracts";
 import {
 	decodeOutputRuntimeActionOutcome,
 	encodeOutputRuntimeActionRequest,
 } from "../outputRuntimeWire";
+import type {
+	DmxSnapshot,
+	HighlightAction,
+	HighlightState,
+	MediaServerFixture,
+	VisualizationSnapshot,
+} from "../types";
 import type { LiveClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
 
@@ -97,9 +97,8 @@ export class MediaOutputApiClient {
 		request: OutputRuntimeActionRequest,
 	): Promise<OutputRuntimeActionOutcome> {
 		const wireRequest = encodeOutputRuntimeActionRequest(request);
-		const value = await this.transport.commandWithRequestId(
-			"output_runtime.action",
-			wireRequest,
+		const value = await this.transport.sendAction(
+			{ type: "output_runtime", request: wireRequest },
 			wireRequest.request_id,
 		);
 		return decodeOutputRuntimeActionOutcome(value, showId, request);
@@ -113,9 +112,8 @@ export class MediaOutputApiClient {
 			address,
 			value,
 		} satisfies DmxOverrideRequest;
-		return this.transport.commandWithRequestId(
-			"dmx.override",
-			request,
+		return this.transport.sendAction(
+			{ type: "dmx_override", request },
 			requestId,
 		);
 	}
@@ -130,9 +128,8 @@ export class MediaOutputApiClient {
 			request_id: requestId,
 			action,
 		} satisfies HighlightActionRequest;
-		return this.transport.commandWithRequestId(
-			"highlight.action",
-			request,
+		return this.transport.sendAction(
+			{ type: "highlight", request },
 			requestId,
 		) as Promise<HighlightState>;
 	}
@@ -144,9 +141,8 @@ export class MediaOutputApiClient {
 			active,
 			fixture_ids: fixtureIds,
 		} satisfies PatchPreviewHighlightRequest;
-		return this.transport.commandWithRequestId(
-			"patch_preview_highlight.action",
-			request,
+		return this.transport.sendAction(
+			{ type: "patch_preview_highlight", request },
 			requestId,
 		) as Promise<{ active: boolean; allowed: boolean }>;
 	}

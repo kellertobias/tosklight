@@ -18,20 +18,21 @@ fn cue_move_copy_requires_a_choice_and_preserves_plain_status_and_move_copy_axes
 }
 
 #[test]
-fn legacy_choice_selection_resets_the_authoritative_command_once() {
+fn typed_choice_selection_resets_the_authoritative_command_once() {
     let scenario = CueTransferScenario::new();
     let dispatch = |request_id: &str, value: &str| {
-        dispatch_ws_command(
+        dispatch_live_action(
             &scenario.state,
             &scenario.session,
-            WsCommand {
-                protocol_version: 1,
-                request_id: request_id.into(),
-                session_id: scenario.session.id,
-                expected_revision: None,
-                command: "programmer.execute".into(),
-                payload: serde_json::json!({"value":value}),
-            },
+            live_action_frame(
+                &scenario.session,
+                request_id,
+                light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                    light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                        value: value.into(),
+                    },
+                ),
+            ),
         )
     };
     let pending = dispatch("pending-copy", "COPY SET 1 CUE 2 AT SET 2 CUE 2");
@@ -142,17 +143,18 @@ fn verify_pending_cue_transfer_choice(
     scenario: &CueTransferScenario,
     before: &CueTransferBaseline,
 ) {
-    let response = dispatch_ws_command(
+    let response = dispatch_live_action(
         &scenario.state,
         &scenario.session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "pending-copy".into(),
-            session_id: scenario.session.id,
-            expected_revision: None,
-            command: "programmer.execute".into(),
-            payload: serde_json::json!({"value":"COPY SET 1 CUE 2 AT SET 2 CUE 2"}),
-        },
+        live_action_frame(
+            &scenario.session,
+            "pending-copy",
+            light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    value: "COPY SET 1 CUE 2 AT SET 2 CUE 2".into(),
+                },
+            ),
+        ),
     );
     assert!(response.ok, "pending transfer failed: {:?}", response.error);
     let pending = &response.payload.unwrap()["pending_choice"];
@@ -205,10 +207,32 @@ fn execute_and_verify_cue_transfer(
         store.portable_revision().unwrap().value(),
         before.show_revision + 1
     );
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        before.event_sequence + u64::from(had_pending_choice) + 1
-    );
+    let show_filter = light_application::EventFilter::default()
+        .with_capability(light_application::EventCapability::Show);
+    let light_application::EventReplay::Events(show_events) = scenario
+        .state
+        .application_events
+        .replay(before.event_sequence, &show_filter)
+    else {
+        panic!("the focused Cue transfer Show event must remain replayable")
+    };
+    assert_eq!(show_events.len(), 1);
+    if had_pending_choice {
+        let command_filter =
+            light_application::EventFilter::for_desk(scenario.session.desk.id).with_object(
+                light_application::EventObject::programming_command_line(
+                    scenario.session.desk.id,
+                ),
+            );
+        let light_application::EventReplay::Events(command_events) = scenario
+            .state
+            .application_events
+            .replay(before.event_sequence, &command_filter)
+        else {
+            panic!("the focused pending-choice command-line event must remain replayable")
+        };
+        assert_eq!(command_events.len(), 1);
+    }
     assert_eq!(
         cue_transfer_backup_count(&scenario.data_dir),
         before.backup_count + 1
@@ -275,17 +299,18 @@ fn dispatch_cue_transfer(
     request_id: &str,
     value: &str,
 ) -> WsResponse {
-    dispatch_ws_command(
+    dispatch_live_action(
         &scenario.state,
         &scenario.session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: request_id.into(),
-            session_id: scenario.session.id,
-            expected_revision: None,
-            command: "programmer.execute".into(),
-            payload: serde_json::json!({"value":value}),
-        },
+        live_action_frame(
+            &scenario.session,
+            request_id,
+            light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    value: value.into(),
+                },
+            ),
+        ),
     )
 }
 

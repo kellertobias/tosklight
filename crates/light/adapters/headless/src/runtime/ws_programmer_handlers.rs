@@ -1,8 +1,34 @@
 use super::*;
 
+pub(super) fn ws_programmer_capture_mode(
+    state: &AppState,
+    session: &Session,
+    request: light_wire::v2::live_action::ProgrammerCaptureModeLiveActionRequest,
+) -> Result<light_wire::v2::live_action::ProgrammerCaptureModeOutcome, String> {
+    let request_id = request.request_id;
+    state.programmers.set_modes(
+        session.id,
+        request.blind,
+        request.preview,
+        None,
+        request.active_context,
+    );
+    persist_programmer(state, session).map_err(|error| error.message)?;
+    let programmer = state
+        .programmers
+        .get(session.id)
+        .ok_or_else(|| "programmer not found".to_owned())?;
+    Ok(light_wire::v2::live_action::ProgrammerCaptureModeOutcome {
+        request_id,
+        blind: programmer.blind,
+        preview: programmer.preview,
+        active_context: programmer.active_context.clone(),
+    })
+}
+
 pub(super) fn ws_programmer_command_line_replace(
     state: &AppState,
-    command: &WsCommand,
+    command: &WsActionRequest,
     context: &light_application::ActionContext,
     ports: &command_http::ServerProgrammingPorts<'_>,
 ) -> Result<WsTypedProgrammingAction, String> {
@@ -44,23 +70,14 @@ pub(super) fn ws_programmer_command_line_replace(
     {
         return Err(warning.clone());
     }
-    let interaction_changed = result.interaction_event_sequence.is_some();
-    let replayed = result.replayed;
     let payload = serde_json::to_value(command_http::command_line_from_state(result.command_line))
         .map_err(|error| error.to_string())?;
-    Ok(WsTypedProgrammingAction {
-        payload,
-        interaction_changed,
-        values_changed: false,
-        preload_values_changed: false,
-        preload_queue_changed: false,
-        replayed,
-    })
+    Ok(WsTypedProgrammingAction { payload })
 }
 
 pub(super) fn ws_programmer_selection_action(
     state: &AppState,
-    command: &WsCommand,
+    command: &WsActionRequest,
     context: &light_application::ActionContext,
     ports: &command_http::ServerProgrammingPorts<'_>,
 ) -> Result<WsTypedProgrammingAction, String> {
@@ -88,25 +105,16 @@ pub(super) fn ws_programmer_selection_action(
             ports,
         )
         .map_err(|error| error.message)?;
-    let interaction_changed = result.interaction_event_sequence.is_some();
-    let replayed = result.replayed;
     let payload = serde_json::to_value(
         command_http::selection_response(request_id, result).map_err(|error| error.message)?,
     )
     .map_err(|error| error.to_string())?;
-    Ok(WsTypedProgrammingAction {
-        payload,
-        interaction_changed,
-        values_changed: false,
-        preload_values_changed: false,
-        preload_queue_changed: false,
-        replayed,
-    })
+    Ok(WsTypedProgrammingAction { payload })
 }
 
 pub(super) fn ws_programmer_values_action(
     state: &AppState,
-    command: &WsCommand,
+    command: &WsActionRequest,
     context: &light_application::ActionContext,
     ports: &command_http::ServerProgrammingPorts<'_>,
 ) -> Result<WsTypedProgrammingAction, String> {
@@ -140,154 +148,14 @@ pub(super) fn ws_programmer_values_action(
             ports,
         )
         .map_err(|error| error.message)?;
-    let interaction_changed = result.interaction_event_sequence.is_some();
-    let values_changed = matches!(
-        result.outcome,
-        light_application::ProgrammingValuesOutcome::Changed { .. }
-    );
-    let replayed = result.replayed;
     let payload = serde_json::to_value(command_http::values_outcome(request_id, result))
         .map_err(|error| error.to_string())?;
-    Ok(WsTypedProgrammingAction {
-        payload,
-        interaction_changed,
-        values_changed,
-        preload_values_changed: false,
-        preload_queue_changed: false,
-        replayed,
-    })
-}
-
-pub(super) fn ws_programmer_group_set(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    #[derive(Deserialize)]
-    struct Input {
-        group_id: String,
-        attribute: String,
-        value: serde_json::Value,
-    }
-    let input: Input =
-        serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    let value = if let Some(value) = input.value.as_f64() {
-        light_core::AttributeValue::Normalized(value as f32)
-    } else {
-        serde_json::from_value::<light_core::AttributeValue>(input.value)
-            .map_err(|error| format!("group value is invalid: {error}"))?
-    };
-    match &value {
-        light_core::AttributeValue::Normalized(value)
-            if !value.is_finite() || !(0.0..=1.0).contains(value) =>
-        {
-            return Err("value must be within 0-1".into());
-        }
-        light_core::AttributeValue::Spread(points)
-            if points.len() < 2
-                || points
-                    .iter()
-                    .any(|value| !value.is_finite() || !(0.0..=1.0).contains(value)) =>
-        {
-            return Err("spread requires at least two values within 0-1".into());
-        }
-        light_core::AttributeValue::Normalized(_) | light_core::AttributeValue::Spread(_) => {}
-        _ => return Err("group value must be normalized or spread".into()),
-    }
-    if !state
-        .engine
-        .snapshot()
-        .groups
-        .iter()
-        .any(|group| group.id == input.group_id)
-    {
-        return Err("group does not exist".into());
-    }
-    let programmer_fade_millis = state.configuration.read().programmer_fade_millis;
-    state.programmers.set_group_faded_with_timing(
-        session.id,
-        input.group_id,
-        light_core::AttributeKey(input.attribute),
-        value,
-        Some(programmer_fade_millis),
-        None,
-    );
-    persist_programmer(state, session).map_err(|e| e.message)?;
-    Ok(serde_json::json!({"programmer":state.programmers.get(session.id)}))
-}
-
-pub(super) fn ws_programmer_group_release(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    #[derive(Deserialize)]
-    struct Input {
-        group_id: String,
-        attribute: String,
-    }
-    let input: Input =
-        serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    if !state
-        .engine
-        .snapshot()
-        .groups
-        .iter()
-        .any(|group| group.id == input.group_id)
-    {
-        return Err("group does not exist".into());
-    }
-    let released = state.programmers.release_group_attribute(
-        session.id,
-        &input.group_id,
-        &light_core::AttributeKey(input.attribute),
-    );
-    if released {
-        persist_programmer(state, session).map_err(|e| e.message)?;
-    }
-    Ok(serde_json::json!({"released":released,"programmer":state.programmers.get(session.id)}))
-}
-
-pub(super) fn ws_programmer_priority(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-    context: &light_application::ActionContext,
-    ports: &command_http::ServerProgrammingPorts<'_>,
-) -> Result<WsTypedProgrammingAction, String> {
-    #[derive(Deserialize)]
-    struct Input {
-        priority: i16,
-    }
-    let input: Input =
-        serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    let result = state
-        .programming
-        .handle_priority(
-            light_application::ActionEnvelope {
-                context: context.clone(),
-                command: light_application::ProgrammingPriorityRequest {
-                    expected_revision:
-                        light_application::ProgrammingPriorityRevisionExpectation::Current,
-                    priority: input.priority,
-                },
-            },
-            ports,
-        )
-        .map_err(|error| error.message)?;
-    Ok(WsTypedProgrammingAction {
-        payload: serde_json::json!({"programmer":state.programmers.get(session.id)}),
-        interaction_changed: false,
-        values_changed: false,
-        preload_values_changed: false,
-        preload_queue_changed: false,
-        replayed: result.replayed,
-    })
+    Ok(WsTypedProgrammingAction { payload })
 }
 
 pub(super) fn ws_programmer_priority_action(
     state: &AppState,
-    command: &WsCommand,
+    command: &WsActionRequest,
     context: &light_application::ActionContext,
     ports: &command_http::ServerProgrammingPorts<'_>,
 ) -> Result<WsTypedProgrammingAction, String> {
@@ -318,135 +186,19 @@ pub(super) fn ws_programmer_priority_action(
             ports,
         )
         .map_err(|error| error.message)?;
-    let replayed = result.replayed;
     let payload = serde_json::to_value(command_http::programmer_priority_outcome(result))
         .map_err(|error| error.to_string())?;
-    Ok(WsTypedProgrammingAction {
-        payload,
-        interaction_changed: false,
-        values_changed: false,
-        preload_values_changed: false,
-        preload_queue_changed: false,
-        replayed,
-    })
-}
-
-pub(super) fn ws_programmer_set(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    let input: ProgrammerSet =
-        serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    if !input.value.is_finite() || !(0.0..=1.0).contains(&input.value) {
-        return Err("value must be within 0-1".into());
-    }
-    let programmer_fade_millis = state.configuration.read().programmer_fade_millis;
-    state.programmers.set_faded_with_timing(
-        session.id,
-        input.fixture_id,
-        light_core::AttributeKey(input.attribute),
-        light_core::AttributeValue::Normalized(input.value),
-        Some(programmer_fade_millis),
-        None,
-    );
-    persist_programmer(state, session).map_err(|e| e.message)?;
-    Ok(serde_json::json!({"programmer":state.programmers.get(session.id)}))
-}
-
-pub(super) fn ws_programmer_set_many(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    let input: ProgrammerSetMany =
-        serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    let snapshot = state.engine.snapshot();
-    let fixture_exists = |fixture_id: light_core::FixtureId| {
-        snapshot.fixtures.iter().any(|fixture| {
-            fixture.fixture_id == fixture_id
-                || fixture
-                    .logical_heads
-                    .iter()
-                    .any(|head| head.fixture_id == fixture_id)
-        })
-    };
-    let mut assignments = Vec::with_capacity(input.assignments.len());
-    for assignment in input.assignments {
-        if assignment.attribute.trim().is_empty() {
-            return Err("attribute is required".into());
-        }
-        if !assignment.value.is_finite() || !(0.0..=1.0).contains(&assignment.value) {
-            return Err("value must be within 0-1".into());
-        }
-        if !fixture_exists(assignment.fixture_id) {
-            return Err("fixture does not exist".into());
-        }
-        assignments.push((
-            assignment.fixture_id,
-            light_core::AttributeKey(assignment.attribute),
-            light_core::AttributeValue::Normalized(assignment.value),
-        ));
-    }
-    let programmer_fade_millis = state.configuration.read().programmer_fade_millis;
-    state.programmers.set_many_faded_with_timing(
-        session.id,
-        assignments,
-        Some(programmer_fade_millis),
-        None,
-    );
-    persist_programmer(state, session).map_err(|e| e.message)?;
-    Ok(serde_json::json!({"programmer":state.programmers.get(session.id)}))
-}
-
-pub(super) fn ws_programmer_set_value(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    #[derive(Deserialize)]
-    struct Input {
-        fixture_id: light_core::FixtureId,
-        attribute: String,
-        value: light_core::AttributeValue,
-    }
-    let input: Input =
-        serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    if input.attribute.trim().is_empty() {
-        return Err("attribute is required".into());
-    }
-    validate_programmer_attribute_value(&input.value)?;
-    if !state.engine.snapshot().fixtures.iter().any(|fixture| {
-        fixture.fixture_id == input.fixture_id
-            || fixture
-                .logical_heads
-                .iter()
-                .any(|head| head.fixture_id == input.fixture_id)
-    }) {
-        return Err("fixture does not exist".into());
-    }
-    let programmer_fade_millis = state.configuration.read().programmer_fade_millis;
-    state.programmers.set_faded_with_timing(
-        session.id,
-        input.fixture_id,
-        light_core::AttributeKey(input.attribute),
-        input.value,
-        Some(programmer_fade_millis),
-        None,
-    );
-    persist_programmer(state, session).map_err(|e| e.message)?;
-    Ok(serde_json::json!({"programmer":state.programmers.get(session.id)}))
+    Ok(WsTypedProgrammingAction { payload })
 }
 
 pub(super) struct WsControlActionResult {
     pub(super) payload: serde_json::Value,
-    pub(super) transient_changed: bool,
 }
 
 pub(super) fn ws_programmer_control_action(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
+    command: &WsActionRequest,
 ) -> Result<WsControlActionResult, String> {
     #[derive(Deserialize)]
     struct Input {
@@ -464,26 +216,22 @@ pub(super) fn ws_programmer_control_action(
         input.active,
     )?;
     let transient_source = format!("fixture-control:{}:{}", input.fixture_id.0, input.action_id);
-    let (transient_generation, transient_changed) = match (kind, input.active) {
+    let transient_generation = match (kind, input.active) {
         (light_fixture::ControlActionKind::Latched, _) => {
             state.programmers.set_many(session.id, assignments);
             persist_programmer(state, session).map_err(|e| e.message)?;
-            (None, false)
+            None
         }
-        (_, true) => {
-            let generation = state.programmers.set_transient_action(
-                session.id,
-                transient_source.clone(),
-                assignments,
-            );
-            (generation, generation.is_some())
-        }
+        (_, true) => state.programmers.set_transient_action(
+            session.id,
+            transient_source.clone(),
+            assignments,
+        ),
         (_, false) => {
-            let changed =
-                state
-                    .programmers
-                    .release_transient_action(session.id, &transient_source, None);
-            (None, changed)
+            state
+                .programmers
+                .release_transient_action(session.id, &transient_source, None);
+            None
         }
     };
     if let (Some(duration_millis), Some(generation)) = (pulse_duration, transient_generation) {
@@ -522,52 +270,5 @@ pub(super) fn ws_programmer_control_action(
             "pulse_duration_millis":pulse_duration,
             "programmer":state.programmers.get(session.id),
         }),
-        transient_changed,
     })
-}
-
-pub(super) fn ws_preset_generate_fixture_values(
-    state: &AppState,
-    _session: &Session,
-    command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    #[derive(Deserialize)]
-    struct Input {
-        fixture_ids: Vec<light_core::FixtureId>,
-    }
-    let input: Input =
-        serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    generate_profile_presets(state, input.fixture_ids)
-}
-
-pub(super) fn ws_programmer_release(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    #[derive(Deserialize)]
-    struct Input {
-        fixture_id: light_core::FixtureId,
-        attribute: String,
-    }
-    let input: Input =
-        serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    if !state.engine.snapshot().fixtures.iter().any(|fixture| {
-        fixture.fixture_id == input.fixture_id
-            || fixture
-                .logical_heads
-                .iter()
-                .any(|head| head.fixture_id == input.fixture_id)
-    }) {
-        return Err("fixture does not exist".into());
-    }
-    let released = state.programmers.release_fixture_attribute(
-        session.id,
-        input.fixture_id,
-        &light_core::AttributeKey(input.attribute),
-    );
-    if released {
-        persist_programmer(state, session).map_err(|e| e.message)?;
-    }
-    Ok(serde_json::json!({"released":released,"programmer":state.programmers.get(session.id)}))
 }

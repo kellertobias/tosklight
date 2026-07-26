@@ -1,16 +1,7 @@
-import type { StoredGroup } from "../../api/types";
 import type { PresetFamily } from "../../presetFamilies";
 
 export interface ServerProgrammingContext {
 	undoProgrammer: () => Promise<void>;
-	setSelection: (fixtures: string[]) => Promise<void>;
-	selectionGesture: (
-		source:
-			| { type: "fixture"; fixture_id: string }
-			| { type: "live_group"; group_id: string }
-			| { type: "dereferenced_group"; group_id: string },
-		remove?: boolean,
-	) => Promise<void>;
 	controlFixtureAction: (
 		fixtureId: string,
 		actionId: string,
@@ -19,13 +10,6 @@ export interface ServerProgrammingContext {
 	generateFixturePresets: (
 		fixtureIds: string[],
 	) => Promise<import("../../api/types").GeneratedFixturePresetResult | null>;
-	applyGroup: (id: string) => Promise<void>;
-	selectGroup: (
-		id: string,
-		frozen?: boolean,
-		rule?: Record<string, unknown>,
-	) => Promise<void>;
-	selectionMacro: (rule: Record<string, unknown>) => Promise<void>;
 	alignSelection: (
 		attribute: string,
 		mode: "left" | "right" | "center" | "out",

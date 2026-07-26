@@ -1,5 +1,6 @@
-import type { ServerController } from "./model";
+import type { StoredPreset } from "../../api/types";
 import type { ServerCapabilities } from "./capabilityContracts";
+import type { ServerController } from "./model";
 
 /** Compatibility surface for transient fixture actions and preset generation only. */
 export function createFixtureProgrammingActions(
@@ -19,7 +20,30 @@ export function createFixtureProgrammingActions(
 			try {
 				if (!bootstrap?.active_show)
 					throw new Error("Open a show before generating presets");
-				const result = await api.programming.generateFixturePresets(fixtureIds);
+				const showId = bootstrap.active_show.id;
+				let authority = model.showObjectsStore.getSnapshot();
+				if (authority.showId !== showId || authority.showRevision == null) {
+					const hydrated =
+						await api.showObjects.collectionSnapshot<StoredPreset>(
+							showId,
+							"preset",
+						);
+					model.showObjectsStore.setCollection(
+						showId,
+						"preset",
+						hydrated.objects,
+						undefined,
+						hydrated.showRevision,
+					);
+					authority = model.showObjectsStore.getSnapshot();
+				}
+				if (authority.showId !== showId || authority.showRevision == null)
+					throw new Error("Preset authority is not ready");
+				const result = await api.programming.generateFixturePresets(
+					fixtureIds,
+					authority.showRevision,
+				);
+				model.showObjectsStore.installShowRevision(showId, result.showRevision);
 				setError(null);
 				return result;
 			} catch (reason) {

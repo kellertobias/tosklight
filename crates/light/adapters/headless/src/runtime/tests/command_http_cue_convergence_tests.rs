@@ -1,7 +1,9 @@
 #[tokio::test]
 async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
     let scenario = CommandHttpScenario::new().await;
-    let _show_id = scenario.create_and_open_show("Cue command convergence").await;
+    let _show_id = scenario
+        .create_and_open_show("Cue command convergence")
+        .await;
     set_cue_record_value(&scenario);
     let initial_revision = active_show_revision(&scenario);
     let compatibility_baseline = scenario.cue_list_compatibility_payloads().len();
@@ -42,7 +44,13 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
             .await;
         assert_eq!(response.status(), StatusCode::OK, "key {key} failed");
     }
-    assert!(stored_cue_list(&scenario, 32).2.cues.iter().any(|cue| cue.number == 1.0));
+    assert!(
+        stored_cue_list(&scenario, 32)
+            .2
+            .cues
+            .iter()
+            .any(|cue| cue.number == 1.0)
+    );
 
     let source: SocketAddr = "127.0.0.1:9026".parse().unwrap();
     let osc_alias = scenario.session.desk.osc_alias.clone();
@@ -71,25 +79,43 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
             Some("127.0.0.1:9026"),
         );
     }
-    assert!(stored_cue_list(&scenario, 34).2.cues.iter().any(|cue| cue.number == 1.0));
+    assert!(
+        stored_cue_list(&scenario, 34)
+            .2
+            .cues
+            .iter()
+            .any(|cue| cue.number == 1.0)
+    );
 
-    let ws_command = || WsCommand {
-        protocol_version: 1,
-        request_id: "cue-ws-record".into(),
-        session_id: scenario.session.id,
-        expected_revision: None,
-        command: "programmer.execute".into(),
-        payload: serde_json::json!({"value":"RECORD SET 33 CUE 1"}),
+    let ws_command = || {
+        live_action_frame(
+            &scenario.session,
+            "cue-ws-record",
+            light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    value: "RECORD SET 33 CUE 1".into(),
+                },
+            ),
+        )
     };
-    let ws = dispatch_ws_command(&scenario.state, &scenario.session, ws_command());
+    let ws = dispatch_live_action(&scenario.state, &scenario.session, ws_command());
     assert!(ws.ok, "{:?}", ws.error);
-    assert!(stored_cue_list(&scenario, 33).2.cues.iter().any(|cue| cue.number == 1.0));
+    assert!(
+        stored_cue_list(&scenario, 33)
+            .2
+            .cues
+            .iter()
+            .any(|cue| cue.number == 1.0)
+    );
     let sequence = scenario.state.application_events.latest_sequence();
     let history = scenario.history_len();
     let compatibility_before_replay = scenario.cue_list_compatibility_payloads().len();
-    let replay = dispatch_ws_command(&scenario.state, &scenario.session, ws_command());
+    let replay = dispatch_live_action(&scenario.state, &scenario.session, ws_command());
     assert!(replay.ok, "{:?}", replay.error);
-    assert_eq!(scenario.state.application_events.latest_sequence(), sequence);
+    assert_eq!(
+        scenario.state.application_events.latest_sequence(),
+        sequence
+    );
     assert_eq!(scenario.history_len(), history);
     assert_eq!(
         scenario.cue_list_compatibility_payloads().len(),
@@ -146,16 +172,13 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
         &[OscArgument::Float(0.84)],
         Some("127.0.0.1:9027"),
     );
-    assert_eq!(scenario.state.application_events.latest_sequence(), after_record);
+    assert_eq!(
+        scenario.state.application_events.latest_sequence(),
+        after_record
+    );
     assert_eq!(runtime_for_page_slot(&scenario, 9).master, 1.0);
 
-    assert_osc_surface_records(
-        &scenario,
-        10,
-        "button/3",
-        OscArgument::Bool(true),
-        None,
-    );
+    assert_osc_surface_records(&scenario, 10, "button/3", OscArgument::Bool(true), None);
     let flash_address = "/light/playback/4/10/button/3";
     handle_playback_osc(
         &scenario.state,
@@ -187,14 +210,19 @@ fn assert_osc_surface_records(
         .set_command_line(scenario.session.id, "RECORD".into());
     let address = format!("/light/playback/4/{slot}/{control}");
     let baseline = scenario.state.application_events.latest_sequence();
-    handle_playback_osc(
-        &scenario.state,
-        &address,
-        &[press],
-        Some("127.0.0.1:9027"),
-    );
-    let after_press = scenario.state.application_events.latest_sequence();
-    assert_eq!(after_press, baseline + 3);
+    handle_playback_osc(&scenario.state, &address, &[press], Some("127.0.0.1:9027"));
+    let action_filter = light_application::EventFilter::default()
+        .with_capability(light_application::EventCapability::Desk)
+        .with_capability(light_application::EventCapability::Playback)
+        .with_capability(light_application::EventCapability::Show);
+    let light_application::EventReplay::Events(action_events) = scenario
+        .state
+        .application_events
+        .replay(baseline, &action_filter)
+    else {
+        panic!("the focused OSC recording action events must remain replayable")
+    };
+    assert_eq!(action_events.len(), 3);
     let runtime = runtime_for_page_slot(scenario, slot);
     assert_eq!(runtime.current_cue_number, Some(1.0));
     assert_eq!(runtime.master, 1.0, "the fader action must be suppressed");
@@ -208,6 +236,7 @@ fn assert_osc_surface_records(
         ""
     );
     assert_osc_record_event_order(&scenario.state, baseline);
+    let after_press = scenario.state.application_events.latest_sequence();
     if let Some(release) = release {
         handle_playback_osc(
             &scenario.state,
@@ -215,7 +244,10 @@ fn assert_osc_surface_records(
             &[release],
             Some("127.0.0.1:9027"),
         );
-        assert_eq!(scenario.state.application_events.latest_sequence(), after_press);
+        assert_eq!(
+            scenario.state.application_events.latest_sequence(),
+            after_press
+        );
     }
 }
 
@@ -260,9 +292,13 @@ fn stored_cue_list(
 }
 
 fn assert_osc_record_event_order(state: &AppState, baseline: u64) {
+    let filter = light_application::EventFilter::default()
+        .with_capability(light_application::EventCapability::Show)
+        .with_capability(light_application::EventCapability::Playback)
+        .with_capability(light_application::EventCapability::Desk);
     let light_application::EventReplay::Events(events) = state
         .application_events
-        .replay(baseline, &light_application::EventFilter::default())
+        .replay(baseline, &filter)
     else {
         panic!("OSC Cue record events must remain replayable")
     };

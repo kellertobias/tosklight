@@ -612,9 +612,47 @@ export type ManagedAssetReference = { asset_id: string, revision: number, };
 
 export type SelectiveImportChange = { show_id: string, show_revision: number, objects: Array<SelectiveImportObjectChange>, profile_revisions: Array<FixtureProfileIdentity>, managed_assets: Array<ManagedAssetReference>, };
 
-export type FacadeNotification = { revision: number, kind: string, payload: unknown, };
+export type NotificationRevision = { revision: number, };
 
-export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programmer_priority_changed", change: ProgrammerPriorityChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_preload_playback_queue_changed", change: ProgrammingPreloadPlaybackQueueChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "playback_telemetry_sampled", tick: PlaybackTelemetryTick, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "speed_groups_changed", change: SpeedGroupChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, } | { "type": "virtual_playback_exclusion_zones_changed", change: VirtualPlaybackExclusionZonesChange, } | { "type": "facade_notification", notification: FacadeNotification, };
+export type HardwareConnectionNotification = { revision: number, connected: boolean, };
+
+export type HighlightChange = { revision: number, desk_id: string, user_id: string, action: string | null, source: string | null, state: RuntimeHighlightState, };
+
+export type ScreenNotificationKind = "configuration" | "screen_page" | "playback_page";
+
+export type ScreenNotification = { revision: number, kind: ScreenNotificationKind, };
+
+export type ShowLibraryNotificationKind = "show_opened" | "show_renamed" | "show_rolled_back" | "show_uploaded" | "show_deleted";
+
+export type ShowLibraryNotification = { revision: number, kind: ShowLibraryNotificationKind, };
+
+export type FixtureLibraryNotificationKind = "library" | "profile";
+
+export type FixtureLibraryNotification = { revision: number, kind: FixtureLibraryNotificationKind, };
+
+export type MediaNotificationKind = "thumbnails_refreshed" | "preview_refreshed" | "server_offline";
+
+export type MediaNotification = { revision: number, kind: MediaNotificationKind, };
+
+export type DeskActionNotification = { action: string | null, control: string | null, value: string | null, session_id: string | null, desk_id: string | null, desk_alias: string | null, };
+
+export type FileInputNotification = { action: string, instance_id: string, session_id: string, source_session_id: string | null, desk_id: string | null, operation: string | null, source: string | null, };
+
+export type FileOperationItemNotification = { source_root_id: string, source: string, destination_root_id: string | null, destination: string | null, status: string, error: string | null, };
+
+export type FileOperationNotification = { operation: string, items: Array<FileOperationItemNotification>, };
+
+export type GroupConfigurationNotification = { group_id: string, desk_id: string, };
+
+export type UpdateTargetFamilyNotification = "cue" | "preset" | "group";
+
+export type UpdateTargetNotification = { family: UpdateTargetFamilyNotification, object_id: string, playback_number: number | null, cue_id: string | null, cue_number: number | null, validate_active_context: boolean | null, };
+
+export type UpdateWorkflowNotification = { "type": "armed", desk_id: string, armed: boolean, } | { "type": "target_requested", desk_id: string, target: UpdateTargetNotification, } | { "type": "target_rejected", desk_id: string, error: string | null, } | { "type": "targets_requested", desk_id: string, } | { "type": "settings_requested", desk_id: string, };
+
+export type OperatorNotification = { "type": "desk_action", revision: number, notification: DeskActionNotification, } | { "type": "file_input", revision: number, notification: FileInputNotification, } | { "type": "file_operation", revision: number, notification: FileOperationNotification, } | { "type": "group_configuration", revision: number, notification: GroupConfigurationNotification, } | { "type": "update_workflow", revision: number, notification: UpdateWorkflowNotification, } | { "type": "command_history_changed", revision: number, desk_id: string, };
+
+export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programmer_priority_changed", change: ProgrammerPriorityChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_preload_playback_queue_changed", change: ProgrammingPreloadPlaybackQueueChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "playback_telemetry_sampled", tick: PlaybackTelemetryTick, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "speed_groups_changed", change: SpeedGroupChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, } | { "type": "virtual_playback_exclusion_zones_changed", change: VirtualPlaybackExclusionZonesChange, } | { "type": "highlight_changed", change: HighlightChange, } | { "type": "server_configuration_changed", change: NotificationRevision, } | { "type": "screens_changed", change: ScreenNotification, } | { "type": "show_library_changed", change: ShowLibraryNotification, } | { "type": "fixture_library_changed", change: FixtureLibraryNotification, } | { "type": "media_changed", change: MediaNotification, } | { "type": "hardware_connection_changed", change: HardwareConnectionNotification, } | { "type": "operator_notification", notification: OperatorNotification, };
 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 
@@ -1076,3 +1114,53 @@ export type ProgrammingSelectionActionRequest = { request_id: string, } & ({ "ac
 export type ProgrammingSelectionAcceptedAction = "replaced" | "gesture_applied" | "group_selected" | "rule_applied";
 
 export type ProgrammingSelectionActionOutcome = { request_id: string, correlation_id: string, action: ProgrammingSelectionAcceptedAction, applied: number, selection: ProgrammerSelectionProjection, event_sequence: number, replayed: boolean, warning?: string | null, };
+
+export type LiveActionMessageType = "action";
+
+export type PresetRecallLiveActionRequest = { request_id: string, show_id: string, request: PresetRecallRequest, };
+
+export type CommandLineReplaceLiveActionRequest = { expected_revision: number, text: string, };
+
+export type CommandLineSetLiveActionRequest = { value: string, };
+
+export type CommandTargetLiveActionRequest = { value: CommandTarget, };
+
+export type CommandLineExecuteLiveActionRequest = { value: string, };
+
+export type CommandTargetHttpActionRequest = { value: CommandTarget, };
+
+export type CommandTargetHttpActionOutcome = { request_id: string, target: CommandTarget, };
+
+export type ProgrammerUndoHttpActionOutcome = { request_id: string, changed: boolean, };
+
+export type ProgrammerCaptureModeLiveActionRequest = { request_id: string, blind: boolean | null, preview: boolean | null, active_context?: string | null, };
+
+export type ProgrammerCaptureModeHttpActionRequest = { blind: boolean | null, preview: boolean | null, active_context?: string | null, };
+
+export type ProgrammerCaptureModeOutcome = { request_id: string, blind: boolean, preview: boolean, active_context: string | null, };
+
+export type ProgrammingAlignMode = "left" | "right" | "center" | "out";
+
+export type ProgrammingAlignLiveActionRequest = { request_id: string, attribute: string, mode: ProgrammingAlignMode, from: number, to: number, };
+
+export type ProgrammingAlignHttpActionRequest = { attribute: string, mode: ProgrammingAlignMode, from: number, to: number, };
+
+export type ProgrammingAlignOutcome = { request_id: string, unsupported_fixtures: Array<string>, };
+
+export type FixtureControlLiveActionRequest = { request_id: string, fixture_id: string, action_id: string, active: boolean, };
+
+export type FixtureControlHttpActionRequest = { fixture_id: string, action_id: string, active: boolean, };
+
+export type FixtureControlKind = "latched" | "momentary" | "pulse";
+
+export type FixtureControlOutcome = { request_id: string, action_id: string, active: boolean, kind: FixtureControlKind, pulse_duration_millis: number | null, };
+
+export type GenerateFixturePresetsRequest = { request_id: string, expected_show_revision: number, fixture_ids: Array<string>, };
+
+export type GeneratedFixturePreset = { address: PresetRecordingAddress, number: number, name: string, family: string, };
+
+export type GenerateFixturePresetsOutcome = { request_id: string, correlation_id: string, replayed: boolean, show_revision: number, event_sequence: number, created: Array<GeneratedFixturePreset>, };
+
+export type LiveAction = { "type": "programming_selection", "request": ProgrammingSelectionActionRequest } | { "type": "programming_values", "request": ProgrammingValuesActionRequest } | { "type": "programmer_capture_mode", "request": ProgrammerCaptureModeLiveActionRequest } | { "type": "programmer_priority", "request": ProgrammerPriorityActionRequest } | { "type": "programmer_preload_lifecycle", "request": ProgrammingPreloadLifecycleRequest } | { "type": "programmer_preload_values", "request": ProgrammingPreloadValuesActionRequest } | { "type": "preset_recall", "request": PresetRecallLiveActionRequest } | { "type": "playback", "request": PlaybackActionRequest } | { "type": "speed_group", "request": SpeedGroupActionRequest } | { "type": "output_runtime", "request": OutputRuntimeActionRequest } | { "type": "dmx_override", "request": DmxOverrideRequest } | { "type": "highlight", "request": HighlightActionRequest } | { "type": "patch_preview_highlight", "request": PatchPreviewHighlightRequest } | { "type": "command_line_replace", "request": CommandLineReplaceLiveActionRequest } | { "type": "command_line_set", "request": CommandLineSetLiveActionRequest } | { "type": "command_target", "request": CommandTargetLiveActionRequest } | { "type": "command_line_execute", "request": CommandLineExecuteLiveActionRequest } | { "type": "programmer_undo" } | { "type": "programming_align", "request": ProgrammingAlignLiveActionRequest } | { "type": "fixture_control", "request": FixtureControlLiveActionRequest };
+
+export type LiveActionFrame = { type: LiveActionMessageType, protocol_version: number, request_id: string, session_id: string, action: LiveAction, };

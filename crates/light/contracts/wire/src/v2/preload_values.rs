@@ -15,12 +15,7 @@ pub struct ProgrammingPreloadColorXyz {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(
-    tag = "kind",
-    content = "value",
-    rename_all = "snake_case",
-    deny_unknown_fields
-)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum ProgrammingPreloadAttributeValue {
     Normalized(f32),
     Spread(Vec<f32>),

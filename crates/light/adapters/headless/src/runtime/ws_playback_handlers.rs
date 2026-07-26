@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn ws_playback_action(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
+    command: &WsActionRequest,
     context: Option<&light_application::ActionContext>,
 ) -> Result<serde_json::Value, String> {
     let request: light_wire::v2::playback::PlaybackActionRequest =

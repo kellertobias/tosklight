@@ -116,14 +116,14 @@ pub struct RuntimeAttributeDescriptor {
     pub default_unit: Option<String>,
 }
 
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeHighlightFixture {
     pub fixture_id: Uuid,
     pub name: Option<String>,
     pub number: Option<u32>,
 }
 
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeHighlightState {
     pub active: bool,
     pub mode: String,

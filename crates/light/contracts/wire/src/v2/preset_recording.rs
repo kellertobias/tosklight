@@ -17,7 +17,6 @@ pub enum PresetRecordingFamily {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PresetRecordingAddress {
     pub family: PresetRecordingFamily,
     #[schemars(range(min = 1))]
@@ -33,7 +32,6 @@ pub enum PresetRecordingMode {
 
 /// Requests action-time capture; recordable Programmer values never cross the client boundary.
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PresetRecordRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
@@ -134,7 +132,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn request_rejects_client_authored_values_and_unknown_fields() {
+    fn request_ignores_unknown_client_authored_values() {
         let input = serde_json::json!({
             "request_id": "record-1",
             "address": {"family": "color", "number": 7},
@@ -143,7 +141,9 @@ mod tests {
             "expected_object_revision": 0,
             "values": {"fixture": "forged"}
         });
-        assert!(serde_json::from_value::<PresetRecordRequest>(input).is_err());
+        let decoded: PresetRecordRequest = serde_json::from_value(input).unwrap();
+        assert_eq!(decoded.address.number, 7);
+        assert_eq!(decoded.name, "Color 7");
     }
 
     #[test]

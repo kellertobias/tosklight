@@ -25,6 +25,12 @@ import type {
 	SelectionActionOutcome,
 	SelectionActionRequest,
 } from "../../features/programmingInteraction/contracts";
+import type { PresetFamily } from "../../presetFamilies";
+import type {
+	GenerateFixturePresetsOutcome,
+	GenerateFixturePresetsRequest,
+	LiveAction,
+} from "../generated/light-wire";
 import {
 	decodePresetRecallOutcome,
 	encodePresetRecallRequest,
@@ -56,11 +62,6 @@ import {
 import type { GeneratedFixturePresetResult } from "../types";
 import type { LiveClientTransport } from "./transport";
 
-type SelectionGestureSource =
-	| { type: "fixture"; fixture_id: string }
-	| { type: "live_group"; group_id: string }
-	| { type: "dereferenced_group"; group_id: string };
-
 export class ProgrammingApiClient {
 	constructor(private readonly transport: LiveClientTransport) {}
 
@@ -80,12 +81,13 @@ export class ProgrammingApiClient {
 		expectedRevision: number,
 	): Promise<CommandLineProjection> {
 		const requestId = crypto.randomUUID();
-		const value = await this.transport.commandWithRequestId(
-			"programmer.command_line.replace",
+		const value = await this.transport.sendAction(
 			{
-				request_id: requestId,
-				expected_revision: expectedRevision,
-				text,
+				type: "command_line_replace",
+				request: {
+					expected_revision: expectedRevision,
+					text,
+				},
 			},
 			requestId,
 		);
@@ -97,9 +99,8 @@ export class ProgrammingApiClient {
 		request: SelectionActionRequest,
 	): Promise<SelectionActionOutcome> {
 		const wireRequest = encodeSelectionActionRequest(request);
-		const value = await this.transport.commandWithRequestId(
-			"programmer.selection.action",
-			wireRequest,
+		const value = await this.transport.sendAction(
+			{ type: "programming_selection", request: wireRequest },
 			wireRequest.request_id,
 		);
 		return decodeSelectionActionOutcome(value, request.requestId);
@@ -110,9 +111,8 @@ export class ProgrammingApiClient {
 		request: ProgrammerValuesActionRequest,
 	): Promise<ProgrammerValuesActionOutcome> {
 		const wireRequest = encodeProgrammerValuesActionRequest(request);
-		const value = await this.transport.commandWithRequestId(
-			"programmer.values.action",
-			wireRequest,
+		const value = await this.transport.sendAction(
+			{ type: "programming_values", request: wireRequest },
 			wireRequest.request_id,
 		);
 		return decodeProgrammerValuesActionOutcome(
@@ -127,9 +127,8 @@ export class ProgrammingApiClient {
 		request: ProgrammerPriorityActionRequest,
 	): Promise<ProgrammerPriorityActionOutcome> {
 		const wireRequest = encodeProgrammerPriorityActionRequest(request);
-		const value = await this.transport.commandWithRequestId(
-			"programmer.priority.action",
-			wireRequest,
+		const value = await this.transport.sendAction(
+			{ type: "programmer_priority", request: wireRequest },
 			wireRequest.request_id,
 		);
 		return decodeProgrammerPriorityActionOutcome(value, userId, request);
@@ -140,9 +139,15 @@ export class ProgrammingApiClient {
 		request: PresetRecallRequest,
 	): Promise<PresetRecallOutcome> {
 		const wireRequest = encodePresetRecallRequest(request);
-		const value = await this.transport.commandWithRequestId(
-			"preset.recall.action",
-			{ show_id: scope.showId, request: wireRequest },
+		const value = await this.transport.sendAction(
+			{
+				type: "preset_recall",
+				request: {
+					request_id: request.requestId,
+					show_id: scope.showId,
+					request: wireRequest,
+				},
+			},
 			request.requestId,
 		);
 		return decodePresetRecallOutcome(value, scope.userId, request);
@@ -153,9 +158,8 @@ export class ProgrammingApiClient {
 		request: ProgrammerPreloadLifecycleRequest,
 	): Promise<ProgrammerPreloadLifecycleOutcome> {
 		const wireRequest = encodeProgrammerPreloadLifecycleRequest(request);
-		const value = await this.transport.commandWithRequestId(
-			"programmer.preload.lifecycle.action",
-			wireRequest,
+		const value = await this.transport.sendAction(
+			{ type: "programmer_preload_lifecycle", request: wireRequest },
 			wireRequest.request_id,
 		);
 		return decodeProgrammerPreloadLifecycleOutcome(value, userId, request);
@@ -166,9 +170,8 @@ export class ProgrammingApiClient {
 		request: ProgrammerPreloadValuesActionRequest,
 	): Promise<ProgrammerPreloadValuesActionOutcome> {
 		const wireRequest = encodeProgrammerPreloadValuesActionRequest(request);
-		const value = await this.transport.commandWithRequestId(
-			"programmer.preload.values.action",
-			wireRequest,
+		const value = await this.transport.sendAction(
+			{ type: "programmer_preload_values", request: wireRequest },
 			wireRequest.request_id,
 		);
 		return decodeProgrammerPreloadValuesActionOutcome(
@@ -178,87 +181,122 @@ export class ProgrammingApiClient {
 		);
 	}
 
-	selectGroup(
-		groupId: string,
-		frozen = false,
-		rule: Record<string, unknown> = { type: "all" },
-	) {
-		return this.transport.command("group.select", {
-			group_id: groupId,
-			frozen,
-			rule,
-		});
-	}
-
-	selectionMacro(rule: Record<string, unknown>) {
-		return this.transport.command("selection.macro", { rule });
-	}
-
 	align(
 		attribute: string,
 		mode: "left" | "right" | "center" | "out",
 		from = 0,
 		to = 1,
 	) {
-		return this.transport.command("programmer.align", {
-			attribute,
-			mode,
-			from,
-			to,
-		});
+		const requestId = crypto.randomUUID();
+		return this.transport.sendAction(
+			{
+				type: "programming_align",
+				request: {
+					request_id: requestId,
+					attribute,
+					mode,
+					from,
+					to,
+				},
+			},
+			requestId,
+		);
 	}
 
 	controlFixtureAction(fixtureId: string, actionId: string, active: boolean) {
-		return this.transport.command("programmer.control_action", {
-			fixture_id: fixtureId,
-			action_id: actionId,
-			active,
-		});
+		const requestId = crypto.randomUUID();
+		return this.transport.sendAction(
+			{
+				type: "fixture_control",
+				request: {
+					request_id: requestId,
+					fixture_id: fixtureId,
+					action_id: actionId,
+					active,
+				},
+			},
+			requestId,
+		);
 	}
 
 	generateFixturePresets(
 		fixtureIds: string[],
-	): Promise<GeneratedFixturePresetResult> {
-		return this.transport.command("preset.generate_fixture_values", {
+		expectedShowRevision: number,
+	): Promise<GeneratedFixturePresetResult & { showRevision: number }> {
+		const requestId = crypto.randomUUID();
+		const request = {
+			request_id: requestId,
+			expected_show_revision: expectedShowRevision,
 			fixture_ids: fixtureIds,
-		}) as Promise<GeneratedFixturePresetResult>;
-	}
-
-	setGroupMaster(groupId: string, value: number) {
-		return this.transport.command("group.master.set", {
-			group_id: groupId,
-			value,
-		});
-	}
-
-	setGroupMasterFlash(groupId: string, value: number) {
-		return this.transport.command("group.master.flash", {
-			group_id: groupId,
-			value,
-		});
-	}
-
-	setSelection(fixtures: string[]) {
-		return this.transport.command("selection.set", { fixtures });
-	}
-
-	selectionGesture(source: SelectionGestureSource, remove = false) {
-		return this.transport.command("selection.gesture", { source, remove });
+		} satisfies GenerateFixturePresetsRequest;
+		return this.transport
+			.request<GenerateFixturePresetsOutcome>(
+				"/api/v2/preset-profile-generation/update",
+				{
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify(request),
+				},
+			)
+			.then((outcome) => {
+				if (outcome.request_id !== requestId)
+					throw new Error("Preset generation returned a mismatched request ID");
+				return {
+					created: outcome.created.map((preset) => ({
+						...preset,
+						address: {
+							...preset.address,
+							family: legacyPresetFamily(preset.address.family),
+						},
+					})),
+					showRevision: outcome.show_revision,
+				};
+			});
 	}
 
 	setCommandLine(value: string) {
-		return this.transport.command("programmer.command_line", { value });
+		return this.send({
+			type: "command_line_set",
+			request: { value },
+		});
 	}
 
 	setCommandTarget(value: "FIXTURE" | "GROUP") {
-		return this.transport.command("programmer.command_target", { value });
+		return this.send({
+			type: "command_target",
+			request: { value },
+		});
 	}
 
 	executeCommandLine(value: string) {
-		return this.transport.command("programmer.execute", { value });
+		return this.send({
+			type: "command_line_execute",
+			request: { value },
+		});
 	}
 
 	undoProgrammer() {
-		return this.transport.command("programmer.undo", {});
+		return this.send({ type: "programmer_undo" });
+	}
+
+	private send(action: LiveAction) {
+		return this.transport.sendAction(action);
+	}
+}
+
+function legacyPresetFamily(
+	family: "mixed" | "intensity" | "color" | "position" | "beam",
+): PresetFamily {
+	switch (family) {
+		case "mixed":
+			return "Mixed";
+		case "intensity":
+			return "Intensity";
+		case "color":
+			return "Color";
+		case "position":
+			return "Position";
+		case "beam":
+			return "Beam";
 	}
 }

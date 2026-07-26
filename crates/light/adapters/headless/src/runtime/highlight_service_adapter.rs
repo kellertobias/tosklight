@@ -1,7 +1,7 @@
 use super::*;
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, ActionSource, HighlightActionPublication,
-    HighlightCommand, HighlightEnvironment, HighlightPorts,
+    HighlightChange, HighlightCommand, HighlightEnvironment, HighlightPorts,
 };
 use light_programmer::{HighlightSelectionWrite, ProgrammerSelection};
 
@@ -179,7 +179,33 @@ impl HighlightPorts for HeadlessHighlightPorts<'_> {
             }),
             HighlightCommand::Status => return,
         };
-        emit(self.state, "highlight_changed", payload);
+        let action = match command {
+            HighlightCommand::Action { action, .. } => serde_json::to_value(action)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_owned)),
+            HighlightCommand::Reconcile { .. } | HighlightCommand::Status => None,
+        };
+        let source = match command {
+            HighlightCommand::Action { .. } if context.source == ActionSource::Osc => {
+                Some("osc".to_owned())
+            }
+            HighlightCommand::Reconcile { source } => Some(source.clone()),
+            HighlightCommand::Action { .. } | HighlightCommand::Status => None,
+        };
+        let revision = emit(self.state, "highlight_changed", payload);
+        self.state
+            .application_events
+            .publish(light_application::EventDraft::highlight_changed(
+                context,
+                HighlightChange {
+                    revision,
+                    desk_id: self.session.desk.id,
+                    user_id: self.session.user.id.0,
+                    action,
+                    source,
+                    state: state.clone(),
+                },
+            ));
     }
 
     fn publish_feedback(&self, context: &ActionContext) {
@@ -244,11 +270,6 @@ mod tests {
                 "ws_output_handlers.rs",
                 include_str!("ws_output_handlers.rs"),
                 "apply_highlight_action",
-            ),
-            (
-                "ws_preset_handlers.rs",
-                include_str!("ws_preset_handlers.rs"),
-                "execute_highlight",
             ),
         ];
         for (name, source, service_call) in adapters {

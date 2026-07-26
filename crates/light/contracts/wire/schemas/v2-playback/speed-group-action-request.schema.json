@@ -45,7 +45,6 @@
               "const": "set_bpm"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group",
@@ -67,7 +66,6 @@
               "const": "adjust_bpm"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "group",
@@ -88,7 +86,6 @@
               "const": "synchronize"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "source",

@@ -262,7 +262,7 @@ async fn synchronization_conflicts_persistence_warning_and_authority_replacement
         }),
     )
     .await;
-    assert_eq!(strict.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(strict.status(), StatusCode::OK);
 
     state
         .speed_group_persistence_failure
@@ -321,19 +321,20 @@ async fn typed_speed_group_ws_action_replays_before_lock_and_emits_once() {
         serde_json::json!({"type":"adjust_bpm","group":"B","delta_bpm":5.0}),
     );
     request["future_transport_hint"] = serde_json::json!(true);
-    let command = || WsCommand {
-        protocol_version: 1,
-        request_id: "ws-speed-adjust".into(),
-        session_id: session.id,
-        expected_revision: None,
-        command: "speed_group.action".into(),
-        payload: request.clone(),
+    let command = || {
+        live_action_frame(
+            &session,
+            "ws-speed-adjust",
+            light_wire::v2::live_action::LiveAction::SpeedGroup(
+                serde_json::from_value(request.clone()).unwrap(),
+            ),
+        )
     };
     let cursor = state.application_events.latest_sequence();
     let attempts = persistence_attempts(&state);
 
     let activation = state.activation_lock.clone().lock_owned().await;
-    let unstable = dispatch_ws_command(&state, &session, command());
+    let unstable = dispatch_live_action(&state, &session, command());
     assert!(!unstable.ok);
     assert!(
         unstable
@@ -345,7 +346,7 @@ async fn typed_speed_group_ws_action_replays_before_lock_and_emits_once() {
     assert_eq!(persistence_attempts(&state), attempts);
     assert_eq!(speed_group_events(&state, cursor).len(), 0);
 
-    let first = dispatch_ws_command(&state, &session, command());
+    let first = dispatch_live_action(&state, &session, command());
     assert!(first.ok, "{:?}", first.error);
     let payload = first.payload.unwrap();
     assert_eq!(payload["status"], "changed");
@@ -364,28 +365,28 @@ async fn typed_speed_group_ws_action_replays_before_lock_and_emits_once() {
         },
     )
     .unwrap();
-    let replay = dispatch_ws_command(&state, &session, command());
+    let replay = dispatch_live_action(&state, &session, command());
     assert!(replay.ok, "{:?}", replay.error);
     assert_eq!(replay.payload.unwrap()["replayed"], true);
     assert_eq!(persistence_attempts(&state), attempts + 1);
     assert_eq!(speed_group_events(&state, cursor).len(), 1);
 
     let current = speed_group_snapshot(&app, &token, session.desk.id).await;
-    let locked = dispatch_ws_command(
+    let locked = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "ws-speed-locked".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "speed_group.action".into(),
-            payload: speed_request(
-                "ws-speed-locked",
-                &current,
-                serde_json::json!({"type":"set_bpm","group":"C","bpm":140.0}),
+        live_action_frame(
+            &session,
+            "ws-speed-locked",
+            light_wire::v2::live_action::LiveAction::SpeedGroup(
+                serde_json::from_value(speed_request(
+                    "ws-speed-locked",
+                    &current,
+                    serde_json::json!({"type":"set_bpm","group":"C","bpm":140.0}),
+                ))
+                .unwrap(),
             ),
-        },
+        ),
     );
     assert!(!locked.ok);
     assert_eq!(locked.error.as_deref(), Some("desk is locked"));
@@ -408,7 +409,8 @@ fn speed_request(
 }
 
 async fn get_speed_groups(app: &Router, token: Option<&str>, desk_id: Uuid) -> Response {
-    let mut request = Request::get(format!("/api/v2/desks/{desk_id}/speed-groups"));
+    let mut request =
+        Request::get("/api/v2/speed-groups").header("x-tosk-desk", desk_id.to_string());
     if let Some(token) = token {
         request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }
@@ -432,8 +434,9 @@ async fn post_speed_groups(
 ) -> Response {
     app.clone()
         .oneshot(
-            Request::post(format!("/api/v2/desks/{desk_id}/speed-groups"))
+            Request::post("/api/v2/speed-groups")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-desk", desk_id.to_string())
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(payload.to_string()))
                 .unwrap(),

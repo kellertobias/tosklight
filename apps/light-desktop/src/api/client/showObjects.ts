@@ -1,15 +1,15 @@
 import type { PresetFamily } from "../../presetFamilies";
+import { ApiRequestError } from "../ApiRequestError";
 import type {
 	OutputRoute,
 	OutputRouteAction,
 	OutputRouteActionOutcome,
 	PreloadRecordAction,
+	ShowObjectActionOutcome,
 	ShowObjectCollectionSnapshot,
 	ShowObjectExactSnapshot,
-	ShowObjectActionOutcome,
 	UserLayoutPatch,
 } from "../generated/light-wire";
-import { ApiRequestError } from "../ApiRequestError";
 import type { VersionedObject } from "../types";
 import { type ClientTransport, jsonRequest } from "./transport";
 
@@ -43,12 +43,18 @@ export class ShowObjectsApiClient {
 		showId: string,
 		kind: string,
 	): Promise<VersionedObject<T>[]> {
-		const snapshot =
-			await this.transport.request<ShowObjectCollectionSnapshot>(
-				`/api/v2/objects/${encodeURIComponent(kind)}`,
-				{ headers: showScopeHeaders(showId) },
-			);
-		return snapshot.objects as VersionedObject<T>[];
+		return (await this.collectionSnapshot<T>(showId, kind)).objects;
+	}
+
+	async collectionSnapshot<T>(showId: string, kind: string) {
+		const snapshot = await this.transport.request<ShowObjectCollectionSnapshot>(
+			`/api/v2/objects/${encodeURIComponent(kind)}`,
+			{ headers: showScopeHeaders(showId) },
+		);
+		return {
+			objects: snapshot.objects as VersionedObject<T>[],
+			showRevision: snapshot.show_revision,
+		};
 	}
 
 	async object<T>(showId: string, kind: string, id: string) {
@@ -201,13 +207,12 @@ export class ShowObjectsApiClient {
 			request_id: crypto.randomUUID(),
 			action,
 		});
-		return this.transport.request(
-			"/api/v2/output-routes/actions",
-			{
+		return this.transport
+			.request("/api/v2/output-routes/actions", {
 				...request,
 				headers: { ...request.headers, ...showScopeHeaders(showId) },
-			},
-		).then((outcome) => outcome as OutputRouteActionOutcome);
+			})
+			.then((outcome) => outcome as OutputRouteActionOutcome);
 	}
 
 	private showObjectAction(

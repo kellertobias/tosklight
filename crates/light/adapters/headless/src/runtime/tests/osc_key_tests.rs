@@ -300,17 +300,18 @@ fn software_update_armed_state_is_shared_only_with_the_same_desk() {
         state.sessions.write().insert(session.id, session.clone());
     }
 
-    let armed = dispatch_ws_command(
+    let armed = dispatch_live_action(
         &state,
         &first,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "arm-update".into(),
-            session_id: first.id,
-            expected_revision: None,
-            command: "programmer.command_line".into(),
-            payload: serde_json::json!({"value":"UPDATE "}),
-        },
+        live_action_frame(
+            &first,
+            "arm-update",
+            light_wire::v2::live_action::LiveAction::CommandLineSet(
+                light_wire::v2::live_action::CommandLineSetLiveActionRequest {
+                    value: "UPDATE ".into(),
+                },
+            ),
+        ),
     );
     assert!(armed.ok);
     assert_eq!(
@@ -336,17 +337,18 @@ fn software_update_armed_state_is_shared_only_with_the_same_desk() {
     assert_eq!(event.payload["desk_id"], first.desk.id.to_string());
     assert_eq!(event.payload["armed"], true);
 
-    let disarmed = dispatch_ws_command(
+    let disarmed = dispatch_live_action(
         &state,
         &second,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "disarm-update".into(),
-            session_id: second.id,
-            expected_revision: None,
-            command: "programmer.command_line".into(),
-            payload: serde_json::json!({"value":""}),
-        },
+        live_action_frame(
+            &second,
+            "disarm-update",
+            light_wire::v2::live_action::LiveAction::CommandLineSet(
+                light_wire::v2::live_action::CommandLineSetLiveActionRequest {
+                    value: String::new(),
+                },
+            ),
+        ),
     );
     assert!(disarmed.ok);
     assert!(

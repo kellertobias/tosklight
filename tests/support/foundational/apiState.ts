@@ -1,7 +1,4 @@
-import {
-	type ApiDriver,
-	commandLineOwnership,
-} from "../../bench/core/api";
+import type { ApiDriver } from "../../bench/core/api";
 import { expect } from "../../bench/core/fixtures";
 import { clearProgrammerValues } from "../../bench/programmer/programmerValues";
 import {
@@ -47,14 +44,6 @@ export async function loadCompactRig(
 }
 
 export async function command(api: ApiDriver, value: string): Promise<void> {
-	const ownership = commandLineOwnership(value);
-	if (ownership.via === "compatibility") {
-		await api.executeCompatibilityProgrammerCommand({
-			family: ownership.family,
-			command: value,
-		});
-		return;
-	}
 	await api.executeCommandLine(value);
 }
 

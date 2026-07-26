@@ -32,7 +32,54 @@ async fn v2_socket_protocol_uses_live_auth_and_the_broad_snapshot_is_removed() {
 }
 
 #[tokio::test]
-async fn v2_subscription_dispatches_a_command_and_keeps_delivering_events() {
+async fn malformed_correlated_action_returns_v2_failure_without_mutating_programmer_state() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let mut protocols = HeaderMap::new();
+    protocols.insert(
+        header::SEC_WEBSOCKET_PROTOCOL,
+        format!("light.events.v2, light.token.{token}")
+            .parse()
+            .unwrap(),
+    );
+    let session = event_transport::authenticate_protocols(&state, &protocols).unwrap();
+    let before = serde_json::to_value(state.programmers.get(session.id)).unwrap();
+    let stream = event_transport::EventStream::subscribe(
+        &state.application_events,
+        &session,
+        Ok(light_wire::v2::events::EventClientMessage::Subscribe {
+            filter: Default::default(),
+            after_sequence: None,
+            capacity: Some(8),
+            rate_limits: Vec::new(),
+        }),
+    )
+    .unwrap();
+    let response = event_transport::client_response(
+        &stream,
+        &state,
+        &session,
+        event_transport::ClientMessage::Invalid {
+            request_id: Some("malformed-action".into()),
+            error: "invalid action frame: session_id is not a UUID".into(),
+        },
+    );
+    let event_transport::ServerMessage::Command(response) = response else {
+        panic!("correlated malformed actions must return an action response");
+    };
+    assert_eq!(response.protocol_version, 2);
+    assert_eq!(response.request_id, "malformed-action");
+    assert!(!response.ok);
+    assert_eq!(
+        serde_json::to_value(state.programmers.get(session.id)).unwrap(),
+        before
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn v2_subscription_dispatches_an_action_and_keeps_delivering_events() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -60,13 +107,12 @@ async fn v2_subscription_dispatches_a_command_and_keeps_delivering_events() {
         &stream,
         &state,
         &session,
-        event_transport::ClientMessage::Command(WsCommand {
-            protocol_version: 1,
+        event_transport::ClientMessage::Action(light_wire::v2::live_action::LiveActionFrame {
+            message_type: light_wire::v2::live_action::LiveActionMessageType::Action,
+            protocol_version: 2,
             request_id: "v2-multiplex-command".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "programmer.undo".into(),
-            payload: serde_json::Value::Null,
+            session_id: session.id.0,
+            action: light_wire::v2::live_action::LiveAction::ProgrammerUndo,
         }),
     );
     let event_transport::ServerMessage::Command(response) = response else {
@@ -96,7 +142,7 @@ async fn v2_subscription_dispatches_a_command_and_keeps_delivering_events() {
 }
 
 #[tokio::test]
-async fn v2_subscription_delivers_facade_notifications_from_the_emit_boundary() {
+async fn v2_subscription_delivers_typed_fixture_library_events_from_the_emit_boundary() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -109,14 +155,14 @@ async fn v2_subscription_delivers_facade_notifications_from_the_emit_boundary() 
     );
     let session = event_transport::authenticate_protocols(&state, &protocols).unwrap();
     let mut stream = event_transport::EventStream::subscribe(
-        &state.facade_events,
+        &state.application_events,
         &session,
         Ok(light_wire::v2::events::EventClientMessage::Subscribe {
             filter: light_wire::v2::events::EventSubscriptionFilter {
-                capabilities: vec![light_wire::v2::events::EventCapability::System],
+                capabilities: vec![light_wire::v2::events::EventCapability::Show],
                 ..Default::default()
             },
-            after_sequence: Some(state.facade_events.latest_sequence()),
+            after_sequence: Some(state.application_events.latest_sequence()),
             capacity: Some(32),
             rate_limits: Vec::new(),
         }),
@@ -125,22 +171,24 @@ async fn v2_subscription_delivers_facade_notifications_from_the_emit_boundary() 
 
     emit(
         &state,
-        "fixture_changed",
+        "fixture_profile_changed",
         serde_json::json!({"fixture_id": 42}),
     );
 
     let Some(light_wire::v2::events::EventServerMessage::Event { event }) = stream.next().await
     else {
-        panic!("expected the facade notification on the v2 event stream");
+        panic!("expected the fixture-library event on the v2 event stream");
     };
-    let light_wire::v2::events::EventPayload::FacadeNotification { notification } = event.payload
+    let light_wire::v2::events::EventPayload::FixtureLibraryChanged { change } = event.payload
     else {
-        panic!("expected a facade-notification payload");
+        panic!("expected a fixture-library payload");
     };
-    assert_eq!(notification.kind, "fixture_changed");
-    assert_eq!(notification.payload, serde_json::json!({"fixture_id": 42}));
     assert_eq!(
-        notification.revision,
+        change.kind,
+        light_wire::v2::events::FixtureLibraryNotificationKind::Profile
+    );
+    assert_eq!(
+        change.revision,
         state.audit_events.lock().back().unwrap().revision
     );
     let _ = std::fs::remove_dir_all(data_dir);

@@ -60,13 +60,13 @@ impl CueTransferRouteScenario {
             .clone()
             .oneshot(
                 Request::post("/api/v2/command-line/execute")
-                .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
-                .header("x-tosk-desk", self.session.desk.id.to_string())
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    serde_json::json!({"request_id":request_id,"command":command}).to_string(),
-                ))
-                .unwrap(),
+                    .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
+                    .header("x-tosk-desk", self.session.desk.id.to_string())
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({"request_id":request_id,"command":command}).to_string(),
+                    ))
+                    .unwrap(),
             )
             .await
             .unwrap()
@@ -77,12 +77,12 @@ impl CueTransferRouteScenario {
             .clone()
             .oneshot(
                 Request::put("/api/v2/command-line")
-                .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
-                .header("x-tosk-desk", self.session.desk.id.to_string())
-                .header(header::CONTENT_TYPE, "application/json")
-                .header(header::IF_MATCH, expected_revision.to_string())
-                .body(Body::from(serde_json::json!({"text":text}).to_string()))
-                .unwrap(),
+                    .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
+                    .header("x-tosk-desk", self.session.desk.id.to_string())
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::IF_MATCH, expected_revision.to_string())
+                    .body(Body::from(serde_json::json!({"text":text}).to_string()))
+                    .unwrap(),
             )
             .await
             .unwrap()
@@ -95,8 +95,7 @@ impl CueTransferRouteScenario {
         expected_show_revision: Option<u64>,
         body: serde_json::Value,
     ) -> Response {
-        let mut request =
-            Request::post("/api/v2/cues/transfer").header("x-tosk-show", show_id);
+        let mut request = Request::post("/api/v2/cues/transfer").header("x-tosk-show", show_id);
         if let Some(token) = token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }
@@ -139,10 +138,7 @@ async fn legacy_command_transfer_emits_only_its_temporary_per_object_facade_noti
     let scenario = CueTransferRouteScenario::new();
     let compatibility = scenario.compatibility_count();
     let response = scenario
-        .execute(
-            "legacy-transfer",
-            "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2",
-        )
+        .execute("legacy-transfer", "COPY PLAIN SET 1 CUE 2 AT SET 2 CUE 2")
         .await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
@@ -172,17 +168,18 @@ fn non_set_copy_and_move_remain_owned_by_legacy_preset_mutation() {
     store.put_object("preset", "2.1", &preset, 0).unwrap();
 
     let dispatch = |request_id: &str, value: &str| {
-        dispatch_ws_command(
+        dispatch_live_action(
             &scenario.state,
             &scenario.session,
-            WsCommand {
-                protocol_version: 1,
-                request_id: request_id.into(),
-                session_id: scenario.session.id,
-                expected_revision: None,
-                command: "programmer.execute".into(),
-                payload: serde_json::json!({"value":value}),
-            },
+            live_action_frame(
+                &scenario.session,
+                request_id,
+                light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                    light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                        value: value.into(),
+                    },
+                ),
+            ),
         )
     };
     let copied = dispatch("legacy-preset-copy", "COPY 2.1 AT 2");
@@ -236,7 +233,10 @@ async fn command_line_choice_replay_uses_current_authority_without_resurrecting_
             .pending_choice
             .is_none()
     );
-    assert_eq!(scenario.state.application_events.latest_sequence(), sequence);
+    assert_eq!(
+        scenario.state.application_events.latest_sequence(),
+        sequence
+    );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -283,17 +283,30 @@ async fn cue_transfer_route_returns_one_authoritative_batch_and_replays_without_
     assert!(!replayed);
     assert_eq!(show_id.to_string(), scenario.show_id);
     assert_eq!(*choice_id, pending.choice_id);
-    assert_eq!(summary.operation, light_wire::v2::command_line::CueTransferOperation::Copy);
-    assert_eq!(summary.mode, light_wire::v2::cue_transfer::CueTransferMode::Plain);
+    assert_eq!(
+        summary.operation,
+        light_wire::v2::command_line::CueTransferOperation::Copy
+    );
+    assert_eq!(
+        summary.mode,
+        light_wire::v2::cue_transfer::CueTransferMode::Plain
+    );
     assert_eq!(*show_revision, pending.show_revision + 1);
-    assert_eq!(projections.len(), 1, "plain Copy changes only the destination Cuelist");
+    assert_eq!(
+        projections.len(),
+        1,
+        "plain Copy changes only the destination Cuelist"
+    );
     assert_eq!(projections[0].body["future_cuelist_metadata"]["list"], 1);
     assert_eq!(*show_event_sequence, baseline + 1);
     assert_eq!(*interaction_event_sequence, Some(baseline + 2));
     assert!(command_line.pristine);
     assert!(command_line.pending_choice.is_none());
     assert!(persistence_warning.is_none());
-    assert_eq!(scenario.state.application_events.latest_sequence(), baseline + 2);
+    assert_eq!(
+        scenario.state.application_events.latest_sequence(),
+        baseline + 2
+    );
     assert_eq!(scenario.compatibility_count(), compatibility);
     assert_one_cue_transfer_show_event(&scenario.state, baseline);
 
@@ -311,7 +324,10 @@ async fn cue_transfer_route_returns_one_authoritative_batch_and_replays_without_
         replay,
         light_wire::v2::cue_transfer::CueTransferOutcome::Changed { replayed: true, .. }
     ));
-    assert_eq!(scenario.state.application_events.latest_sequence(), baseline + 2);
+    assert_eq!(
+        scenario.state.application_events.latest_sequence(),
+        baseline + 2
+    );
     assert_eq!(scenario.compatibility_count(), compatibility);
 
     let mut changed_replay = request;
@@ -339,14 +355,24 @@ async fn cue_transfer_route_rejects_forged_scope_and_reports_both_revision_autho
 
     assert_eq!(
         scenario
-            .transfer(&scenario.show_id, None, Some(pending.show_revision), request.clone())
+            .transfer(
+                &scenario.show_id,
+                None,
+                Some(pending.show_revision),
+                request.clone()
+            )
             .await
             .status(),
         StatusCode::UNAUTHORIZED
     );
     assert_eq!(
         scenario
-            .transfer(&scenario.show_id, Some(&scenario.token), None, request.clone())
+            .transfer(
+                &scenario.show_id,
+                Some(&scenario.token),
+                None,
+                request.clone()
+            )
             .await
             .status(),
         StatusCode::BAD_REQUEST
@@ -396,7 +422,10 @@ async fn cue_transfer_route_rejects_forged_scope_and_reports_both_revision_autho
         response.headers()[header::ETAG],
         format!("\"{}\"", pending.show_revision)
     );
-    assert_eq!(json(response).await["current_revision"], pending.show_revision);
+    assert_eq!(
+        json(response).await["current_revision"],
+        pending.show_revision
+    );
 
     assert_eq!(
         scenario
@@ -449,22 +478,30 @@ fn assert_exact_cue_transfer_authority(scenario: &CueTransferRouteScenario) {
     );
     for (forged, expected) in [
         (
-            light_application::ActionContext { user_id: Some(Uuid::new_v4()), ..valid.clone() },
+            light_application::ActionContext {
+                user_id: Some(Uuid::new_v4()),
+                ..valid.clone()
+            },
             light_application::ActionErrorKind::Forbidden,
         ),
         (
-            light_application::ActionContext { session_id: Some(Uuid::new_v4()), ..valid.clone() },
+            light_application::ActionContext {
+                session_id: Some(Uuid::new_v4()),
+                ..valid.clone()
+            },
             light_application::ActionErrorKind::Unauthorized,
         ),
         (
-            light_application::ActionContext { desk_id: Uuid::new_v4(), ..valid },
+            light_application::ActionContext {
+                desk_id: Uuid::new_v4(),
+                ..valid
+            },
             light_application::ActionErrorKind::Forbidden,
         ),
     ] {
-        let error = light_application::ProgrammingCueTransferPorts::authorize_cue_transfer(
-            &ports, &forged,
-        )
-        .unwrap_err();
+        let error =
+            light_application::ProgrammingCueTransferPorts::authorize_cue_transfer(&ports, &forged)
+                .unwrap_err();
         assert_eq!(error.kind, expected);
     }
 }

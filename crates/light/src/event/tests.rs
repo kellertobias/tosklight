@@ -57,29 +57,23 @@ fn next_event(subscription: &EventSubscription) -> Arc<EventEnvelope> {
 }
 
 #[test]
-fn facade_notification_is_global_lossless_runtime_projection() {
-    let notification = FacadeNotification {
+fn typed_fixture_library_event_is_global_lossless_show_projection() {
+    let notification = FixtureLibraryNotification {
         revision: 7,
-        kind: "fixture_changed".into(),
-        payload: serde_json::json!({"fixture_id": 42}),
+        kind: FixtureLibraryNotificationKind::Profile,
     };
-    let draft = EventDraft::facade_notification(notification.clone());
+    let event = ShowEvent::FixtureLibraryChanged(notification);
+    let draft = EventDraft::fixture_library_changed(notification);
 
     assert_eq!(draft.desk_id, None);
     assert_eq!(draft.class, EventClass::Projection);
     assert_eq!(
         draft.object,
-        Some(EventObject::new(
-            EventCapability::System,
-            "facade:fixture_changed",
-        ))
+        Some(EventObject::new(EventCapability::Show, "fixture-library"))
     );
     assert_eq!(draft.source, EventSource::Runtime);
     assert_eq!(draft.delivery, DeliveryPolicy::Lossless);
-    assert_eq!(
-        draft.payload,
-        ApplicationEvent::System(SystemEvent::FacadeNotification(notification))
-    );
+    assert_eq!(draft.payload, ApplicationEvent::Show(event));
 }
 
 #[test]

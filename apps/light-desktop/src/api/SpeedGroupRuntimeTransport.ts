@@ -111,7 +111,7 @@ export class HttpSpeedGroupRuntimeTransport
 	}
 
 	private speedGroupPath(scope: SpeedGroupRuntimeScope) {
-		return `${this.baseUrl}/api/v2/desks/${encodeURIComponent(scope.deskId)}/speed-groups`;
+		return `${this.baseUrl}/api/v2/speed-groups`;
 	}
 
 	private eventUrl() {
@@ -135,6 +135,7 @@ export class HttpSpeedGroupRuntimeTransport
 	private headers() {
 		const headers = new Headers({
 			authorization: `Bearer ${this.options.sessionToken}`,
+			"x-tosk-desk": this.options.authenticatedDeskId,
 		});
 		if (this.options.deskBoundaryToken)
 			headers.set("x-light-desk-token", this.options.deskBoundaryToken);

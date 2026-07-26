@@ -38,7 +38,7 @@ function useDeskLockPolling(state: ServerState) {
 	}, [api, session, deskLockStore]);
 }
 
-function useHighlightPolling(state: ServerState) {
+function useHighlightHydration(state: ServerState) {
 	const {
 		api,
 		session,
@@ -57,28 +57,23 @@ function useHighlightPolling(state: ServerState) {
 			return;
 		}
 		let cancelled = false;
-		const load = () => {
-			const request = ++highlightEpoch.current;
-			void highlightWrite.current
-				.catch(() => undefined)
-				.then(() => api.mediaOutput.highlight())
-				.then((next) => {
-					if (cancelled || request !== highlightEpoch.current) return;
-					setHighlight((current) => retainEquivalent(current, next));
-					if (!highlightErrorSticky.current) setHighlightError(null);
-				})
-				.catch((reason) => {
-					if (!cancelled && request === highlightEpoch.current)
-						setHighlightError(
-							reason instanceof Error ? reason.message : String(reason),
-						);
-				});
-		};
-		load();
-		const timer = window.setInterval(load, 2_000);
+		const request = ++highlightEpoch.current;
+		void highlightWrite.current
+			.catch(() => undefined)
+			.then(() => api.mediaOutput.highlight())
+			.then((next) => {
+				if (cancelled || request !== highlightEpoch.current) return;
+				setHighlight((current) => retainEquivalent(current, next));
+				if (!highlightErrorSticky.current) setHighlightError(null);
+			})
+			.catch((reason) => {
+				if (!cancelled && request === highlightEpoch.current)
+					setHighlightError(
+						reason instanceof Error ? reason.message : String(reason),
+					);
+			});
 		return () => {
 			cancelled = true;
-			window.clearInterval(timer);
 		};
 	}, [
 		api,
@@ -117,6 +112,6 @@ function useMatterPolling(state: ServerState) {
 export function useServerPolling(state: ServerState) {
 	useMediaPreviewCleanup(state);
 	useDeskLockPolling(state);
-	useHighlightPolling(state);
+	useHighlightHydration(state);
 	useMatterPolling(state);
 }

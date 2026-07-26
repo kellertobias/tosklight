@@ -43,7 +43,6 @@
               "format": "float"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "value"
@@ -64,7 +63,6 @@
               }
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "value"
@@ -81,7 +79,6 @@
               "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "value"
@@ -98,7 +95,6 @@
               "$ref": "#/$defs/ProgrammingPreloadColorXyz"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "value"
@@ -118,7 +114,6 @@
               "minimum": 0
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "value"
@@ -137,7 +132,6 @@
               "minimum": 0
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "value"

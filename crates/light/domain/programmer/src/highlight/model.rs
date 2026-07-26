@@ -59,7 +59,7 @@ pub fn is_duplicate_osc_action(
     })
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct HighlightState {
     /// HIGH state only. This is deliberately independent of `mode` and selection emptiness.
     pub active: bool,

@@ -124,10 +124,13 @@ export class BrowserSystemIntegrations {
 			const server = socket.connectToServer();
 			socket.onMessage((message) => {
 				const parsed = JSON.parse(String(message));
-				if (parsed.command === "highlight.action") {
+				if (
+					parsed.type === "action" &&
+					parsed.action?.type === "highlight"
+				) {
 					socket.send(
 						JSON.stringify({
-							protocol_version: 1,
+							protocol_version: 2,
 							request_id: parsed.request_id,
 							ok: false,
 							revision: 0,

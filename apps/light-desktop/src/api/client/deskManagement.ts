@@ -1,4 +1,8 @@
 import type {
+	SpeedGroupActionOutcome,
+	SpeedGroupActionRequest,
+} from "../../features/speedGroupRuntime/contracts";
+import type {
 	ConfigurationPatch,
 	ConfigurationUpdateRequest,
 	DeskLockConfigurationUpdateRequest,
@@ -7,6 +11,10 @@ import type {
 	SpeedGroupSettingsUpdateRequest,
 	UserCreateRequest,
 } from "../generated/light-wire";
+import {
+	decodeSpeedGroupActionOutcome,
+	encodeSpeedGroupActionRequest,
+} from "../speedGroupRuntimeWire";
 import type {
 	CommandHistoryEntry,
 	DeskConfiguration,
@@ -14,6 +22,7 @@ import type {
 	DeskUser,
 	MatterBridgeStatus,
 	OutputHealth,
+	PoolPresentationConfiguration,
 	ProgrammerState,
 	SoundObservation,
 	SoundToLightConfig,
@@ -21,18 +30,9 @@ import type {
 	SpeedGroupId,
 	SpeedGroupSoundState,
 	SpeedGroupSource,
-	PoolPresentationConfiguration,
 } from "../types";
 import type { LiveClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
-import type {
-	SpeedGroupActionOutcome,
-	SpeedGroupActionRequest,
-} from "../../features/speedGroupRuntime/contracts";
-import {
-	decodeSpeedGroupActionOutcome,
-	encodeSpeedGroupActionRequest,
-} from "../speedGroupRuntimeWire";
 
 export interface ConfigurationSnapshot {
 	configuration: DeskConfiguration;
@@ -62,9 +62,8 @@ export class DeskManagementApiClient {
 		request: SpeedGroupActionRequest,
 	): Promise<SpeedGroupActionOutcome> {
 		const wireRequest = encodeSpeedGroupActionRequest(request);
-		const value = await this.transport.commandWithRequestId(
-			"speed_group.action",
-			wireRequest,
+		const value = await this.transport.sendAction(
+			{ type: "speed_group", request: wireRequest },
 			wireRequest.request_id,
 		);
 		return decodeSpeedGroupActionOutcome(value, request);
@@ -244,8 +243,7 @@ function configurationPatch(
 		programmer_fade_millis: configuration.programmer_fade_millis,
 		command_line_at_uses_programmer_fade:
 			configuration.command_line_at_uses_programmer_fade,
-		sequence_master_fade_millis:
-			configuration.sequence_master_fade_millis,
+		sequence_master_fade_millis: configuration.sequence_master_fade_millis,
 		preload_programmer_changes: configuration.preload_programmer_changes,
 		preload_physical_playback_actions:
 			configuration.preload_physical_playback_actions,

@@ -82,15 +82,6 @@ fn application_event_count(state: &AppState, object: light_application::EventObj
     events.len()
 }
 
-fn audit_count(state: &AppState, kind: &str) -> usize {
-    state
-        .audit_events
-        .lock()
-        .iter()
-        .filter(|event| event.kind == kind)
-        .count()
-}
-
 #[tokio::test]
 async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_desks() {
     let scenario = CommandHttpScenario::new().await;
@@ -121,7 +112,10 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
     );
 
     // Replay is resolved before the now-stale selection precondition.
-    scenario.state.programmers.select(scenario.session.id, [fixture]);
+    scenario
+        .state
+        .programmers
+        .select(scenario.session.id, [fixture]);
     let cursor = scenario.state.application_events.latest_sequence();
     let replay = json(scenario.preload_lifecycle_action(enter).await).await;
     assert_eq!(replay["replayed"], true);
@@ -134,8 +128,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
         .lock()
         .add_desk("Preload lifecycle peer", "preload-lifecycle-peer")
         .unwrap();
-    let (second_token, second_user) =
-        login_on_desk(&scenario, "Operator", second_desk.id).await;
+    let (second_token, second_user) = login_on_desk(&scenario, "Operator", second_desk.id).await;
     assert_eq!(second_user, user_id);
     let peer_enter = lifecycle_request(
         "preload-enter-peer",
@@ -227,7 +220,13 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
     assert_eq!(committed["commit"]["show_revision"], show_revision);
     assert_eq!(committed["commit"]["executed_playback_actions"], 1);
     assert_eq!(committed["commit"]["executed"][0]["playback_number"], 1);
-    assert_eq!(committed["commit"]["runtime_changes"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        committed["commit"]["runtime_changes"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
     assert_eq!(
         committed["commit"]["playback_event_sequence_after"],
         committed["commit"]["runtime_changes"][0]["event_sequence"]
@@ -254,16 +253,16 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
         2
     );
     assert_eq!(
-        application_event_count(
-            &scenario.state,
-            light_application::EventObject::playback(1),
-        ),
+        application_event_count(&scenario.state, light_application::EventObject::playback(1),),
         1
     );
     let event_cursor = scenario.state.application_events.latest_sequence();
     let replay = json(scenario.preload_lifecycle_action(go).await).await;
     assert_eq!(replay["replayed"], true);
-    assert_eq!(scenario.state.application_events.latest_sequence(), event_cursor);
+    assert_eq!(
+        scenario.state.application_events.latest_sequence(),
+        event_cursor
+    );
 
     let reenter = lifecycle_request(
         "preload-reenter-peer",
@@ -285,13 +284,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
             .preload_values_action_for(
                 user_id,
                 &second_token,
-                preload_fixture_request(
-                    "preload-peer-pending",
-                    2,
-                    3,
-                    fixture.0,
-                    0.8,
-                ),
+                preload_fixture_request("preload-peer-pending", 2, 3, fixture.0, 0.8,),
             )
             .await
             .status(),
@@ -324,14 +317,18 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_user_des
     .await;
     assert_eq!(cleared["status"], "changed");
     assert_eq!(cleared["active"], true);
-    assert!(cleared["values_projection"]["fixture_values"]
-        .as_array()
-        .unwrap()
-        .is_empty());
-    assert!(cleared["queue_projection"]["actions"]
-        .as_array()
-        .unwrap()
-        .is_empty());
+    assert!(
+        cleared["values_projection"]["fixture_values"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        cleared["queue_projection"]["actions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 
     let clear_no_change = json(
         scenario
@@ -432,7 +429,12 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
     assert_eq!(stale_show["current_revision"], show_revision);
     assert!(stale_show.get("current_related_revision").is_none());
 
-    let other_user = scenario.state.desk.lock().add_user("Preload cursor other").unwrap();
+    let other_user = scenario
+        .state
+        .desk
+        .lock()
+        .add_user("Preload cursor other")
+        .unwrap();
     let other_desk = scenario
         .state
         .desk
@@ -470,12 +472,14 @@ async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorit
     let target = json(target).await;
     assert_eq!(target["current_revision"], current);
     assert_eq!(target["current_related_revision"], show_revision);
-    assert!(scenario
-        .state
-        .programmers
-        .capture_mode(scenario.session.id)
-        .unwrap()
-        .blind);
+    assert!(
+        scenario
+            .state
+            .programmers
+            .capture_mode(scenario.session.id)
+            .unwrap()
+            .blind
+    );
 
     for revision in 0..2_049 {
         let context = light_application::ActionContext::system(
@@ -563,143 +567,19 @@ async fn failed_typed_preload_go_rolls_back_programmer_queue_runtime_and_events(
         ))
         .await;
     assert_eq!(response.status(), StatusCode::CONFLICT);
-    assert!(json(response).await["error"]
-        .as_str()
-        .unwrap()
-        .contains("group playback"));
+    assert!(
+        json(response).await["error"]
+            .as_str()
+            .unwrap()
+            .contains("group playback")
+    );
     let after = scenario.state.programmers.get(scenario.session.id).unwrap();
-    assert_eq!(after.preload_playback_pending, before.preload_playback_pending);
+    assert_eq!(
+        after.preload_playback_pending,
+        before.preload_playback_pending
+    );
     assert_eq!(after.blind, before.blind);
     assert!(scenario.state.engine.playback_runtime().is_empty());
     assert_eq!(scenario.state.application_events.latest_sequence(), cursor);
-    let _ = std::fs::remove_dir_all(scenario.data_dir);
-}
-
-#[tokio::test]
-async fn preload_v1_compatibility_reuses_typed_actions_and_replays_without_duplicate_events() {
-    let scenario = CommandHttpScenario::new().await;
-    install_lifecycle_show(&scenario, "Preload v1 compatibility").await;
-    let command = |request_id: &str, name: &str| WsCommand {
-        protocol_version: 1,
-        request_id: request_id.into(),
-        session_id: scenario.session.id,
-        expected_revision: None,
-        command: name.into(),
-        payload: serde_json::json!({}),
-    };
-    let applied_before = audit_count(&scenario.state, "command_applied");
-    let changed_before = audit_count(&scenario.state, "programmer_changed");
-    let first = dispatch_ws_command(
-        &scenario.state,
-        &scenario.session,
-        command("preload-v1-enter", "preload.enter"),
-    );
-    assert!(first.ok, "{:?}", first.error);
-    assert_eq!(first.payload.unwrap(), serde_json::json!({"blind":true}));
-    assert_eq!(audit_count(&scenario.state, "command_applied"), applied_before + 1);
-    assert_eq!(audit_count(&scenario.state, "programmer_changed"), changed_before);
-    assert!(
-        dispatch_ws_command(
-            &scenario.state,
-            &scenario.session,
-            command("preload-v1-enter", "preload.enter"),
-        )
-        .ok
-    );
-    assert_eq!(audit_count(&scenario.state, "command_applied"), applied_before + 1);
-
-    scenario.state.programmers.queue_preload_playback_action(
-        scenario.session.id,
-        1,
-        None,
-        light_programmer::PreloadPlaybackQueueAction::Go,
-        light_programmer::PreloadPlaybackQueueSurface::Physical,
-    );
-    let committed_before = audit_count(&scenario.state, "preload_committed");
-    let playback_before = audit_count(&scenario.state, "playback_changed");
-    let first = dispatch_ws_command(
-        &scenario.state,
-        &scenario.session,
-        command("preload-v1-go", "preload.go"),
-    );
-    assert!(first.ok, "{:?}", first.error);
-    let payload = first.payload.unwrap();
-    assert_eq!(payload["active"], true);
-    assert_eq!(payload["playback_actions"][0]["action"], "go");
-    assert_eq!(payload["playback_actions"][0]["surface"], "physical");
-    assert_eq!(audit_count(&scenario.state, "preload_committed"), committed_before + 1);
-    assert_eq!(audit_count(&scenario.state, "playback_changed"), playback_before + 1);
-    let applied = audit_count(&scenario.state, "command_applied");
-    let changed = audit_count(&scenario.state, "programmer_changed");
-    assert!(
-        dispatch_ws_command(
-            &scenario.state,
-            &scenario.session,
-            command("preload-v1-go", "preload.go"),
-        )
-        .ok
-    );
-    assert_eq!(audit_count(&scenario.state, "preload_committed"), committed_before + 1);
-    assert_eq!(audit_count(&scenario.state, "playback_changed"), playback_before + 1);
-    assert_eq!(audit_count(&scenario.state, "command_applied"), applied);
-    assert_eq!(audit_count(&scenario.state, "programmer_changed"), changed);
-
-    let reenter = command("preload-v1-reenter", "preload.enter");
-    assert!(dispatch_ws_command(&scenario.state, &scenario.session, reenter).ok);
-    scenario.state.programmers.queue_preload_playback_action(
-        scenario.session.id,
-        1,
-        None,
-        light_programmer::PreloadPlaybackQueueAction::Go,
-        light_programmer::PreloadPlaybackQueueSurface::Virtual,
-    );
-    let cleared = dispatch_ws_command(
-        &scenario.state,
-        &scenario.session,
-        command("preload-v1-clear", "preload.clear"),
-    );
-    assert!(cleared.ok);
-    assert_eq!(
-        cleared.payload.unwrap(),
-        serde_json::json!({"pending_cleared":true,"active_unchanged":true})
-    );
-    let applied = audit_count(&scenario.state, "command_applied");
-    let changed = audit_count(&scenario.state, "programmer_changed");
-    assert!(
-        dispatch_ws_command(
-            &scenario.state,
-            &scenario.session,
-            command("preload-v1-clear", "preload.clear"),
-        )
-        .ok
-    );
-    assert_eq!(audit_count(&scenario.state, "command_applied"), applied);
-    assert_eq!(audit_count(&scenario.state, "programmer_changed"), changed);
-
-    let released = dispatch_ws_command(
-        &scenario.state,
-        &scenario.session,
-        command("preload-v1-release", "preload.release"),
-    );
-    assert!(released.ok);
-    assert_eq!(released.payload.unwrap(), serde_json::json!({"released":true}));
-    let applied = audit_count(&scenario.state, "command_applied");
-    assert!(
-        dispatch_ws_command(
-            &scenario.state,
-            &scenario.session,
-            command("preload-v1-release", "preload.release"),
-        )
-        .ok
-    );
-    assert_eq!(audit_count(&scenario.state, "command_applied"), applied);
-    let no_change = dispatch_ws_command(
-        &scenario.state,
-        &scenario.session,
-        command("preload-v1-release-empty", "preload.release"),
-    );
-    assert!(no_change.ok);
-    assert_eq!(no_change.payload.unwrap(), serde_json::json!({"released":false}));
-    assert_eq!(audit_count(&scenario.state, "command_applied"), applied);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

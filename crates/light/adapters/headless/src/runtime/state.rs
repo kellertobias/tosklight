@@ -46,7 +46,6 @@ pub(super) struct AppState {
     pub(super) active_show_backup_checkpoint: Arc<Mutex<Option<(light_core::ShowId, u64)>>>,
     pub(super) active_show_error: Arc<RwLock<Option<String>>>,
     pub(super) application_events: EventBus,
-    pub(super) facade_events: EventBus,
     pub(super) active_show_service: ActiveShowService,
     pub(super) playback_topology: PlaybackTopologyService,
     pub(super) show_patch: ShowPatchService,
@@ -57,6 +56,8 @@ pub(super) struct AppState {
     pub(super) show_object_replay: Arc<tokio::sync::Mutex<show_objects_v2::ShowObjectReplayCache>>,
     pub(super) show_object_intent_replay:
         Arc<tokio::sync::Mutex<show_object_intents_v2::ShowObjectIntentReplayCache>>,
+    pub(super) preset_generation_replay:
+        Arc<tokio::sync::Mutex<live_action_http::PresetGenerationReplayCache>>,
     pub(super) screen_configuration_replay:
         Arc<tokio::sync::Mutex<screen_configuration_v2::ScreenConfigurationReplayCache>>,
     pub(super) control_desk_configuration_replay:
@@ -82,7 +83,6 @@ pub(super) struct AppState {
     pub(super) shutdown: CancellationToken,
     pub(super) media_cache: Arc<Mutex<MediaCache>>,
     pub(super) media_status: Arc<RwLock<HashMap<light_core::FixtureId, MediaServerStatus>>>,
-    pub(super) input_locks: Arc<Mutex<HashMap<String, (light_core::UserId, Instant)>>>,
     pub(super) file_input_contexts: Arc<Mutex<HashMap<Uuid, file_manager::FileInputContext>>>,
     pub(super) osc_subscribers: Arc<Mutex<HashMap<String, OscSubscriber>>>,
     pub(super) osc_cue_record_suppression:

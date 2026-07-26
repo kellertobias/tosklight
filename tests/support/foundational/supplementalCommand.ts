@@ -215,7 +215,7 @@ export const commandApiBoundaries: FoundationalCase = {
 
 		// Cases 1–8: Group is the persistent default. Bare terms are live Groups while explicit
 		// Fixture terms remain scoped to only their own address term.
-		await api.setCompatibilityCommandTarget("GROUP");
+		await api.setCommandTarget("GROUP");
 		await select(api, []);
 		await enter(
 			"G1 + G2",
@@ -263,7 +263,7 @@ export const commandApiBoundaries: FoundationalCase = {
 
 		// Cases 9–16: Fixture is the persistent default. A single explicit Group prefix remains
 		// live; DEGRP expands only its own term to fixture references.
-		await api.setCompatibilityCommandTarget("FIXTURE");
+		await api.setCommandTarget("FIXTURE");
 		await enter(
 			"F1 + F2",
 			[1, 2],

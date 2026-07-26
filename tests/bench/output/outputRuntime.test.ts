@@ -175,8 +175,8 @@ function assertNarrowCalls(fetchMock: ReturnType<typeof outputFetch>) {
 	const urls = fetchMock.mock.calls.map(([input]) => String(input));
 	expect(urls).toEqual([
 		"http://desk.local/api/v2/playback-runtime/snapshot",
-		`http://desk.local/api/v2/desks/${DESK_ID}/output-runtime/global-master`,
-		`http://desk.local/api/v2/desks/${DESK_ID}/output-runtime/global-master`,
+		"http://desk.local/api/v2/output-runtime/global-master",
+		"http://desk.local/api/v2/output-runtime/global-master",
 	]);
 	expect(
 		urls.some((url) =>

@@ -25,8 +25,6 @@ mod group;
 mod ports;
 #[path = "playback_service/projection.rs"]
 mod projection;
-#[path = "playback_service/response.rs"]
-mod response;
 #[path = "playback_service/semantics.rs"]
 mod semantics;
 #[path = "playback_service/support.rs"]
@@ -35,7 +33,6 @@ mod support;
 pub(super) use desk::ChangePage;
 use ports::ServerPlaybackPorts;
 pub(super) use projection::automatic_changes as automatic_projection_changes;
-pub(super) use response::websocket_payload;
 
 use conversion::{
     action_touched, activation_surface, legacy_action, parse_action, parse_pending, source_name,
@@ -80,27 +77,6 @@ pub(super) fn osc_action(
         || execute(state, Some(session), desk, playback_context, command),
     )?
     .output
-}
-
-pub(super) fn websocket_action(
-    state: &AppState,
-    session: &Session,
-    address: PlaybackAddress,
-    action: PlaybackAction,
-    request_id: &str,
-) -> Result<PlaybackResult, ApiError> {
-    let context = operator_context(
-        session,
-        session.desk.id,
-        ActionSource::UserInterface,
-        Some(request_id),
-    );
-    let command = PlaybackCommand {
-        address,
-        action,
-        surface: PlaybackSurface::Virtual,
-    };
-    execute(state, Some(session), Some(&session.desk), context, command)
 }
 
 pub(super) fn execute(

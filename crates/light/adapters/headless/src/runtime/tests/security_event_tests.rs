@@ -255,36 +255,17 @@ async fn authenticated_shutdown_requests_orderly_server_cancellation() {
 #[test]
 fn emitted_events_have_strictly_sequential_revisions() {
     let (state, data_dir) = test_state();
-    let receiver = subscribe_facade_events(&state);
-    let application_events = state.facade_events.subscribe(
-        light_application::EventFilter::default(),
-        light_application::SubscriptionOptions::default(),
-    );
+    let before_application_events = state.application_events.latest_sequence();
     emit(&state, "first", serde_json::Value::Null);
     emit(&state, "second", serde_json::Value::Null);
-    let first = next_facade_notification(&receiver).unwrap();
-    let second = next_facade_notification(&receiver).unwrap();
-    assert_eq!(first.revision + 1, second.revision);
     let audit = state.audit_events.lock();
     assert_eq!(audit.len(), 2);
     assert_eq!(audit[0].kind, "first");
-    assert_eq!(audit[1].revision, second.revision);
-    let Some(light_application::SubscriptionDelivery::Event(application_event)) =
-        application_events.try_next()
-    else {
-        panic!("expected the facade notification on the application event bus");
-    };
+    assert_eq!(audit[0].revision + 1, audit[1].revision);
     assert_eq!(
-        application_event.payload,
-        light_application::ApplicationEvent::System(
-            light_application::SystemEvent::FacadeNotification(
-                light_application::FacadeNotification {
-                    revision: first.revision,
-                    kind: "first".into(),
-                    payload: serde_json::Value::Null,
-                }
-            )
-        )
+        state.application_events.latest_sequence(),
+        before_application_events,
+        "audit-only rows must not enter the application event stream"
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }

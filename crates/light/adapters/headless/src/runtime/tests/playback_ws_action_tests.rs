@@ -17,27 +17,28 @@ async fn playback_action_ws_frame_uses_typed_service_and_ui_source_once() {
     let cursor = state.application_events.latest_sequence();
     let request_id = "ws-playback-action";
 
-    let response = dispatch_ws_command(
+    let response = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: request_id.into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "playback.action".into(),
-            payload: serde_json::json!({
-                "request_id": request_id,
-                "address": {
-                    "kind": "playback",
-                    "playback_number": 1,
-                    "future_address_hint": true
-                },
-                "action": {"type": "go", "pressed": true, "velocity": 3},
-                "surface": "virtual",
-                "future_transport_hint": "accepted"
-            }),
-        },
+        live_action_frame(
+            &session,
+            request_id,
+            serde_json::from_value(serde_json::json!({
+                "type": "playback",
+                "request": {
+                    "request_id": request_id,
+                    "address": {
+                        "kind": "playback",
+                        "playback_number": 1,
+                        "future_address_hint": true
+                    },
+                    "action": {"type": "go", "pressed": true, "velocity": 3},
+                    "surface": "virtual",
+                    "future_transport_hint": "accepted"
+                }
+            }))
+            .unwrap(),
+        ),
     );
 
     assert!(response.ok, "{:?}", response.error);
@@ -86,22 +87,23 @@ async fn playback_action_ws_frame_rejects_mismatched_request_identity_without_mu
     install_playback(&state);
     let cursor = state.application_events.latest_sequence();
 
-    let response = dispatch_ws_command(
+    let response = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "ws-envelope".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "playback.action".into(),
-            payload: serde_json::json!({
-                "request_id": "different-payload",
-                "address": {"kind": "playback", "playback_number": 1},
-                "action": {"type": "go", "pressed": true},
-                "surface": "virtual"
-            }),
-        },
+        live_action_frame(
+            &session,
+            "ws-envelope",
+            serde_json::from_value(serde_json::json!({
+                "type": "playback",
+                "request": {
+                    "request_id": "different-payload",
+                    "address": {"kind": "playback", "playback_number": 1},
+                    "action": {"type": "go", "pressed": true},
+                    "surface": "virtual"
+                }
+            }))
+            .unwrap(),
+        ),
     );
 
     assert!(!response.ok);
@@ -109,7 +111,7 @@ async fn playback_action_ws_frame_rejects_mismatched_request_identity_without_mu
         response
             .error
             .unwrap()
-            .contains("request_id must match the WebSocket request_id")
+            .contains("action payload request_id must match the frame request_id")
     );
     assert_eq!(state.application_events.latest_sequence(), cursor);
     assert!(state.engine.playback_runtime().is_empty());

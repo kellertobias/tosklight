@@ -12,6 +12,7 @@ use crate::{
     },
 };
 use light_core::ShowId;
+use light_programmer::HighlightState;
 
 use super::routing::{active_show_routes, selective_import_routes};
 
@@ -140,11 +141,26 @@ pub enum ProgrammingEvent {
 #[derive(Clone, Debug, PartialEq)]
 pub enum DeskEvent {
     PlaybackViewChanged(PlaybackDeskProjection),
+    ConfigurationChanged(NotificationRevision),
+    ScreensChanged(ScreenNotification),
+    HardwareConnectionChanged(HardwareConnectionNotification),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OutputEvent {
     RuntimeChanged(OutputRuntimeChange),
+    HighlightChanged(HighlightChange),
+    MediaChanged(MediaNotification),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct HighlightChange {
+    pub revision: u64,
+    pub desk_id: Uuid,
+    pub user_id: Uuid,
+    pub action: Option<String>,
+    pub source: Option<String>,
+    pub state: HighlightState,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -154,18 +170,188 @@ pub enum ShowEvent {
     ObjectsChanged(ActiveShowObjectsChange),
     SelectiveImportApplied(SelectiveShowImportChange),
     VirtualPlaybackExclusionZonesChanged(VirtualPlaybackExclusionZonesChange),
+    ShowLibraryChanged(ShowLibraryNotification),
+    FixtureLibraryChanged(FixtureLibraryNotification),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SystemEvent {
-    FacadeNotification(FacadeNotification),
+    Operator(OperatorNotification),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NotificationRevision {
+    pub revision: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HardwareConnectionNotification {
+    pub revision: u64,
+    pub connected: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ScreenNotificationKind {
+    Configuration,
+    ScreenPage,
+    PlaybackPage,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ScreenNotification {
+    pub revision: u64,
+    pub kind: ScreenNotificationKind,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ShowLibraryNotificationKind {
+    ShowOpened,
+    ShowRenamed,
+    ShowRolledBack,
+    ShowUploaded,
+    ShowDeleted,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ShowLibraryNotification {
+    pub revision: u64,
+    pub kind: ShowLibraryNotificationKind,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum FixtureLibraryNotificationKind {
+    Library,
+    Profile,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FixtureLibraryNotification {
+    pub revision: u64,
+    pub kind: FixtureLibraryNotificationKind,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum MediaNotificationKind {
+    ThumbnailsRefreshed,
+    PreviewRefreshed,
+    ServerOffline,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MediaNotification {
+    pub revision: u64,
+    pub kind: MediaNotificationKind,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+pub struct DeskActionNotification {
+    pub action: Option<String>,
+    pub control: Option<String>,
+    pub value: Option<String>,
+    pub session_id: Option<String>,
+    pub desk_id: Option<String>,
+    pub desk_alias: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+pub struct FileInputNotification {
+    pub action: String,
+    pub instance_id: String,
+    pub session_id: String,
+    pub source_session_id: Option<String>,
+    pub desk_id: Option<String>,
+    pub operation: Option<String>,
+    pub source: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+pub struct FileOperationItemNotification {
+    pub source_root_id: String,
+    pub source: String,
+    pub destination_root_id: Option<String>,
+    pub destination: Option<String>,
+    pub status: String,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+pub struct FileOperationNotification {
+    pub operation: String,
+    pub items: Vec<FileOperationItemNotification>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+pub struct GroupConfigurationNotification {
+    pub group_id: String,
+    pub desk_id: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateTargetFamilyNotification {
+    Cue,
+    Preset,
+    Group,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Deserialize)]
+pub struct UpdateTargetNotification {
+    pub family: UpdateTargetFamilyNotification,
+    pub object_id: String,
+    pub playback_number: Option<u16>,
+    pub cue_id: Option<String>,
+    pub cue_number: Option<f64>,
+    pub validate_active_context: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct FacadeNotification {
-    pub revision: u64,
-    pub kind: String,
-    pub payload: serde_json::Value,
+pub enum UpdateWorkflowNotification {
+    Armed {
+        desk_id: String,
+        armed: bool,
+    },
+    TargetRequested {
+        desk_id: String,
+        target: UpdateTargetNotification,
+    },
+    TargetRejected {
+        desk_id: String,
+        error: Option<String>,
+    },
+    TargetsRequested {
+        desk_id: String,
+    },
+    SettingsRequested {
+        desk_id: String,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum OperatorNotification {
+    DeskAction {
+        revision: u64,
+        notification: DeskActionNotification,
+    },
+    FileInput {
+        revision: u64,
+        notification: FileInputNotification,
+    },
+    FileOperation {
+        revision: u64,
+        notification: FileOperationNotification,
+    },
+    GroupConfiguration {
+        revision: u64,
+        notification: GroupConfigurationNotification,
+    },
+    UpdateWorkflow {
+        revision: u64,
+        notification: UpdateWorkflowNotification,
+    },
+    CommandHistoryChanged {
+        revision: u64,
+        desk_id: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -200,19 +386,89 @@ pub struct EventDraft {
 }
 
 impl EventDraft {
-    pub fn facade_notification(notification: FacadeNotification) -> Self {
+    pub fn system_event(event: SystemEvent) -> Self {
+        Self::runtime_projection(
+            EventCapability::System,
+            "operator",
+            ApplicationEvent::System(event),
+        )
+    }
+
+    pub fn configuration_changed(change: NotificationRevision) -> Self {
+        Self::runtime_projection(
+            EventCapability::Desk,
+            "configuration",
+            ApplicationEvent::Desk(DeskEvent::ConfigurationChanged(change)),
+        )
+    }
+
+    pub fn screens_changed(change: ScreenNotification) -> Self {
+        Self::runtime_projection(
+            EventCapability::Desk,
+            "screens",
+            ApplicationEvent::Desk(DeskEvent::ScreensChanged(change)),
+        )
+    }
+
+    pub fn hardware_connection_changed(change: HardwareConnectionNotification) -> Self {
+        Self::runtime_projection(
+            EventCapability::Desk,
+            "hardware-connections",
+            ApplicationEvent::Desk(DeskEvent::HardwareConnectionChanged(change)),
+        )
+    }
+
+    pub fn show_library_changed(change: ShowLibraryNotification) -> Self {
+        Self::runtime_projection(
+            EventCapability::Show,
+            "show-library",
+            ApplicationEvent::Show(ShowEvent::ShowLibraryChanged(change)),
+        )
+    }
+
+    pub fn fixture_library_changed(change: FixtureLibraryNotification) -> Self {
+        Self::runtime_projection(
+            EventCapability::Show,
+            "fixture-library",
+            ApplicationEvent::Show(ShowEvent::FixtureLibraryChanged(change)),
+        )
+    }
+
+    pub fn media_changed(change: MediaNotification) -> Self {
+        Self::runtime_projection(
+            EventCapability::Output,
+            "media",
+            ApplicationEvent::Output(OutputEvent::MediaChanged(change)),
+        )
+    }
+
+    fn runtime_projection(
+        capability: EventCapability,
+        object_id: &'static str,
+        payload: ApplicationEvent,
+    ) -> Self {
         Self {
             desk_id: None,
             class: EventClass::Projection,
-            object: Some(EventObject::new(
-                EventCapability::System,
-                format!("facade:{}", notification.kind),
-            )),
+            object: Some(EventObject::new(capability, object_id)),
             related_objects: Vec::new(),
             source: EventSource::Runtime,
             correlation_id: None,
             delivery: DeliveryPolicy::Lossless,
-            payload: ApplicationEvent::System(SystemEvent::FacadeNotification(notification)),
+            payload,
+        }
+    }
+
+    pub fn highlight_changed(context: &ActionContext, change: HighlightChange) -> Self {
+        Self {
+            desk_id: Some(change.desk_id),
+            class: EventClass::Projection,
+            object: Some(EventObject::new(EventCapability::Output, "highlight")),
+            related_objects: Vec::new(),
+            source: EventSource::Action(context.source),
+            correlation_id: Some(context.correlation_id),
+            delivery: DeliveryPolicy::Lossless,
+            payload: ApplicationEvent::Output(OutputEvent::HighlightChanged(change)),
         }
     }
 

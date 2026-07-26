@@ -1,442 +1,302 @@
-use super::ws_compatibility_events::publish_compatibility_events;
 use super::*;
+use light_wire::v2::{
+    live_action::{LiveAction, LiveActionFrame},
+    preload_lifecycle::ProgrammingPreloadLifecycleAction,
+};
 
-const LIVE_ABSOLUTE_COMMANDS: &[&str] = &[
-    "selection.set",
-    "selection.gesture",
-    "selection.macro",
-    "group.select",
-    "programmer.set",
-    "programmer.set_many",
-    "programmer.set_value",
-    "programmer.control_action",
-    "programmer.priority",
-    "programmer.priority.action",
-    "programmer.values.action",
-    "programmer.preload.lifecycle.action",
-    "programmer.preload.values.action",
-    "speed_group.action",
-    "output_runtime.action",
-    "dmx.override",
-    "highlight.action",
-    "patch_preview_highlight.action",
-    "programmer.command_line.replace",
-    "programmer.selection.action",
-    "programmer.release",
-    "programmer.group.set",
-    "programmer.group.release",
-    "programmer.align",
-    "programmer.command_line",
-    "programmer.command_target",
-    "programmer.execute",
-    "programmer.clear",
-    "programmer.undo",
-    "programmer.redo",
-    "programmer.mode",
-    "master.set",
-    "group.master.set",
-    "group.master.flash",
-    "preload.enter",
-    "preload.group.set",
-    "preload.go",
-    "preload.clear",
-    "preload.release",
-    "playback.go",
-    "playback.back",
-    "playback.pause",
-    "playback.release",
-    "playback.action",
-    "preset.apply",
-    "preset.recall.action",
-];
-
-const PROGRAMMING_INTERACTION_COMMANDS: &[&str] = &[
-    "selection.set",
-    "selection.gesture",
-    "selection.macro",
-    "group.select",
-    "programmer.set",
-    "programmer.set_many",
-    "programmer.set_value",
-    "programmer.control_action",
-    "programmer.priority",
-    "programmer.priority.action",
-    "programmer.values.action",
-    "programmer.preload.lifecycle.action",
-    "programmer.preload.values.action",
-    "highlight.action",
-    "programmer.command_line.replace",
-    "programmer.selection.action",
-    "programmer.release",
-    "programmer.group.set",
-    "programmer.group.release",
-    "programmer.align",
-    "programmer.command_line",
-    "programmer.command_target",
-    "programmer.execute",
-    "programmer.clear",
-    "programmer.undo",
-    "programmer.redo",
-    "programmer.mode",
-    "preload.enter",
-    "preload.group.set",
-    "preload.go",
-    "preload.clear",
-    "preload.release",
-    "playback.action",
-    "preset.apply",
-    "preset.recall.action",
-];
-
-fn dispatch_ws_payload(
+pub(super) fn dispatch_live_action(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
-    context: Option<&light_application::ActionContext>,
-) -> Result<serde_json::Value, String> {
-    match command.command.as_str() {
-        "speed_group.action" => Err("Speed Group action requires the typed action boundary".into()),
-        "output_runtime.action" => {
-            Err("Output runtime action requires the typed action boundary".into())
-        }
-        "dmx.override" => ws_dmx_override(state, session, command),
-        "highlight.action" => ws_highlight_action(state, session, command),
-        "patch_preview_highlight.action" => ws_patch_preview_highlight(state, session, command),
-        "selection.set" => ws_selection_set(state, session, command),
-        "selection.gesture" => ws_selection_gesture(state, session, command),
-        "group.select" => ws_group_select(state, session, command),
-        "selection.macro" => ws_selection_macro(state, session, command),
-        "programmer.align" => ws_programmer_align(state, session, command),
-        "programmer.group.set" => ws_programmer_group_set(state, session, command),
-        "programmer.group.release" => ws_programmer_group_release(state, session, command),
-        "programmer.priority" => {
-            Err("Programmer priority requires the typed action boundary".into())
-        }
-        "programmer.priority.action" => {
-            Err("Programmer priority action requires the typed action boundary".into())
-        }
-        "programmer.values.action" => {
-            Err("Programmer values require the typed action boundary".into())
-        }
-        "programmer.preload.lifecycle.action" => {
-            Err("Preload lifecycle requires the typed action boundary".into())
-        }
-        "programmer.preload.values.action" => {
-            Err("Preload values require the typed action boundary".into())
-        }
-        "programmer.command_line.replace" => {
-            Err("Command-line replacement requires the typed action boundary".into())
-        }
-        "programmer.selection.action" => {
-            Err("Programmer selection requires the typed action boundary".into())
-        }
-        "programmer.set" => ws_programmer_set(state, session, command),
-        "programmer.set_many" => ws_programmer_set_many(state, session, command),
-        "programmer.set_value" => ws_programmer_set_value(state, session, command),
-        "preset.generate_fixture_values" => {
-            ws_preset_generate_fixture_values(state, session, command)
-        }
-        "programmer.release" => ws_programmer_release(state, session, command),
-        "programmer.clear" => ws_programmer_clear(state, session, command),
-        "preload.enter" => Err("Preload enter requires the typed action boundary".into()),
-        "preload.group.set" => ws_preload_group_set(state, session, command),
-        "preload.go" => Err("Preload GO requires the typed action boundary".into()),
-        "preload.clear" => Err("Preload clear requires the typed action boundary".into()),
-        "preload.release" => Err("Preload release requires the typed action boundary".into()),
-        "programmer.undo" => Ok(serde_json::json!({"changed":state.programmers.undo(session.id)})),
-        "programmer.redo" => Ok(serde_json::json!({"changed":state.programmers.redo(session.id)})),
-        "programmer.command_line" => ws_programmer_command_line(state, session, command),
-        "programmer.command_target" => ws_programmer_command_target(state, session, command),
-        "programmer.execute" => ws_programmer_execute(state, session, command, context),
-        "preset.apply" => Err("Preset recall requires the typed action boundary".into()),
-        "preset.recall.action" => {
-            Err("Preset recall action requires the typed action boundary".into())
-        }
-        "programmer.mode" => ws_programmer_mode(state, session, command),
-        "master.set" => ws_master_set(state, session, command),
-        "group.master.set" => ws_group_master_set(state, session, command),
-        "group.master.flash" => ws_group_master_flash(state, session, command),
-        "playback.go" | "playback.back" | "playback.pause" | "playback.release" => {
-            ws_playback_go(state, session, command)
-        }
-        "playback.action" => ws_playback_action(state, session, command, context),
-        _ => Err("unknown command".into()),
-    }
-}
-
-pub(super) fn dispatch_ws_command(
-    state: &AppState,
-    session: &Session,
-    command: WsCommand,
+    frame: LiveActionFrame,
 ) -> WsResponse {
     let revision = state.engine.snapshot().revision;
-    let live_absolute = match validate_ws_command(state, session, &command, revision) {
-        Ok(live_absolute) => live_absolute,
-        Err(error) => return failed_ws_response(&command, revision, error),
-    };
-    let result = dispatch_validated_ws_command(state, session, &command, live_absolute);
+    if let Err(error) = validate_frame(state, session, &frame) {
+        return failed_response(frame.request_id, revision, error);
+    }
+    let request_id = frame.request_id;
+    let context = interaction_context(session, &request_id);
+    let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
+    let result = dispatch_action(state, session, frame.action, &context, &ports);
     match result.response {
-        Ok(payload) => successful_ws_response(
-            state,
-            session,
-            command,
-            payload,
-            result.changes,
-            result.replayed,
-        ),
-        Err(error) => failed_ws_response(&command, revision, error),
+        Ok(payload) => WsResponse {
+            protocol_version: 2,
+            request_id,
+            ok: true,
+            revision: state.engine.snapshot().revision,
+            payload: Some(payload),
+            error: None,
+        },
+        Err(error) => failed_response(request_id, revision, error),
     }
 }
 
-fn validate_ws_command(
+fn validate_frame(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
-    revision: u64,
-) -> Result<bool, String> {
-    validate_ws_identity(state, session, command)?;
-    let live_absolute = LIVE_ABSOLUTE_COMMANDS.contains(&command.command.as_str());
-    if !live_absolute
-        && command
-            .expected_revision
-            .is_some_and(|expected| expected != revision)
-    {
-        return Err(format!("revision conflict: current revision is {revision}"));
-    }
-    Ok(live_absolute)
-}
-
-fn validate_ws_identity(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
+    frame: &LiveActionFrame,
 ) -> Result<(), String> {
+    if frame.protocol_version != 2 {
+        return Err("unsupported protocol_version".into());
+    }
+    if frame.session_id != session.id.0 {
+        return Err("session_id does not own this connection".into());
+    }
+    if let Some(embedded) = frame.action.embedded_request_id()
+        && embedded != frame.request_id
+    {
+        return Err("action payload request_id must match the frame request_id".into());
+    }
     if !matches!(
-        command.command.as_str(),
-        "speed_group.action" | "output_runtime.action"
+        frame.action,
+        LiveAction::SpeedGroup(_) | LiveAction::OutputRuntime(_)
     ) && read_desk_lock(state, session.desk.id).locked
     {
         return Err("desk is locked".into());
     }
-    if command.protocol_version != 1 {
-        return Err("unsupported protocol_version".into());
-    }
-    if command.session_id != session.id {
-        return Err("session_id does not own this connection".into());
-    }
     Ok(())
 }
 
-fn dispatch_validated_ws_command(
+fn dispatch_action(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
-    live_absolute: bool,
-) -> WsProgrammingOutput {
-    if matches!(
-        command.command.as_str(),
-        "speed_group.action" | "output_runtime.action"
-    ) {
-        let result = match command.command.as_str() {
-            "speed_group.action" => ws_speed_group_action(state, session, command),
-            "output_runtime.action" => ws_output_runtime_action(state, session, command),
-            _ => unreachable!(),
-        };
-        return match result {
-            Ok(result) => WsProgrammingOutput {
-                response: Ok(result.payload),
-                changes: Vec::new(),
-                replayed: result.replayed,
-            },
-            Err(error) => WsProgrammingOutput::untracked(Err(error)),
-        };
-    }
-    if !live_absolute {
-        return WsProgrammingOutput::untracked(dispatch_ws_payload(state, session, command, None));
-    }
-    if !PROGRAMMING_INTERACTION_COMMANDS.contains(&command.command.as_str()) {
-        return WsProgrammingOutput::untracked(dispatch_ws_payload(state, session, command, None));
-    }
-    if command.command == "programmer.priority.action"
-        || (command.command == "programmer.preload.lifecycle.action"
-            && command
-                .payload
-                .pointer("/action/type")
-                .and_then(serde_json::Value::as_str)
-                != Some("go"))
-    {
-        let context = interaction_context(session, command);
-        let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
-        return dispatch_typed_programming_action(state, session, command, &context, &ports);
-    }
-    let _activation = match try_programming_activation(state) {
-        Ok(activation) => activation,
-        Err(error) => return WsProgrammingOutput::untracked(Err(error)),
-    };
-    let context = interaction_context(session, command);
-    let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
-    if matches!(
-        command.command.as_str(),
-        "programmer.priority"
-            | "programmer.values.action"
-            | "programmer.preload.lifecycle.action"
-            | "programmer.preload.values.action"
-            | "programmer.command_line.replace"
-            | "programmer.selection.action"
-            | "preset.apply"
-            | "preset.recall.action"
-            | "preload.enter"
-            | "preload.go"
-            | "preload.clear"
-            | "preload.release"
-    ) {
-        return dispatch_typed_programming_action(state, session, command, &context, &ports);
-    }
-    match state
-        .programming
-        .run_external_interaction(&context, &ports, || {
-            dispatch_live_interaction(state, session, command, &context)
-        }) {
-        Ok(completed) => completed.output.with_changes(
-            completed.event_sequence.is_some(),
-            completed.values_event_sequence.is_some(),
-            completed.preload_values_event_sequence.is_some(),
-            completed.preload_playback_queue_event_sequence.is_some(),
-        ),
-        Err(error) => WsProgrammingOutput::untracked(Err(error.message)),
-    }
-}
-
-fn dispatch_typed_programming_action(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
+    action: LiveAction,
     context: &light_application::ActionContext,
     ports: &command_http::ServerProgrammingPorts<'_>,
-) -> WsProgrammingOutput {
-    let result = match command.command.as_str() {
-        "programmer.priority" => ws_programmer_priority(state, session, command, context, ports),
-        "programmer.priority.action" => {
-            ws_programmer_priority_action(state, command, context, ports)
+) -> ActionOutput {
+    match action {
+        LiveAction::SpeedGroup(request) => runtime_output(ws_speed_group_action(
+            state,
+            session,
+            &action_request(request, context),
+        )),
+        LiveAction::OutputRuntime(request) => runtime_output(ws_output_runtime_action(
+            state,
+            session,
+            &action_request(request, context),
+        )),
+        LiveAction::DmxOverride(request) => ActionOutput::plain(ws_dmx_override(
+            state,
+            session,
+            &action_request(request, context),
+        )),
+        LiveAction::PatchPreviewHighlight(request) => ActionOutput::plain(
+            ws_patch_preview_highlight(state, session, &action_request(request, context)),
+        ),
+        LiveAction::ProgrammingSelection(request) => {
+            typed_programming(ws_programmer_selection_action(
+                state,
+                &action_request(request, context),
+                context,
+                ports,
+            ))
         }
-        "programmer.values.action" => ws_programmer_values_action(state, command, context, ports),
-        "programmer.preload.lifecycle.action" => {
-            ws_programmer_preload_lifecycle_action(state, command, context, ports)
+        LiveAction::ProgrammingValues(request) => typed_programming(ws_programmer_values_action(
+            state,
+            &action_request(request, context),
+            context,
+            ports,
+        )),
+        LiveAction::ProgrammerCaptureMode(request) => {
+            run_interaction(state, session, context, || {
+                let response =
+                    ws_programmer_capture_mode(state, session, request).and_then(|outcome| {
+                        serde_json::to_value(outcome).map_err(|error| error.to_string())
+                    });
+                ActionOutput::plain(response)
+            })
         }
-        "programmer.preload.values.action" => {
-            ws_programmer_preload_values_action(state, command, context, ports)
+        LiveAction::ProgrammerPriority(request) => typed_programming(
+            ws_programmer_priority_action(state, &action_request(request, context), context, ports),
+        ),
+        LiveAction::ProgrammerPreloadLifecycle(request) => {
+            let needs_activation =
+                matches!(request.action, ProgrammingPreloadLifecycleAction::Go { .. });
+            run_typed_with_optional_activation(state, needs_activation, || {
+                ws_programmer_preload_lifecycle_action(
+                    state,
+                    &action_request(request, context),
+                    context,
+                    ports,
+                )
+            })
         }
-        "programmer.command_line.replace" => {
-            ws_programmer_command_line_replace(state, command, context, ports)
+        LiveAction::ProgrammerPreloadValues(request) => run_typed_with_activation(state, || {
+            ws_programmer_preload_values_action(
+                state,
+                &action_request(request, context),
+                context,
+                ports,
+            )
+        }),
+        LiveAction::PresetRecall(request) => run_typed_with_activation(state, || {
+            ws_preset_recall_action(state, &action_request(request, context), context, ports)
+        }),
+        LiveAction::CommandLineReplace(request) => {
+            let request = WsActionRequest {
+                request_id: context.request_id.clone().unwrap_or_default(),
+                payload: serde_json::json!({
+                    "request_id":context.request_id,
+                    "expected_revision":request.expected_revision,
+                    "text":request.text,
+                }),
+            };
+            typed_programming(ws_programmer_command_line_replace(
+                state, &request, context, ports,
+            ))
         }
-        "programmer.selection.action" => {
-            ws_programmer_selection_action(state, command, context, ports)
+        LiveAction::Highlight(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(ws_highlight_action(
+                state,
+                session,
+                &action_request(request, context),
+            ))
+        }),
+        LiveAction::Playback(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(ws_playback_action(
+                state,
+                session,
+                &action_request(request, context),
+                Some(context),
+            ))
+        }),
+        LiveAction::CommandLineSet(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(ws_programmer_command_line(
+                state,
+                session,
+                &action_request(request, context),
+            ))
+        }),
+        LiveAction::CommandTarget(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(ws_programmer_command_target(
+                state,
+                session,
+                &action_request(request, context),
+            ))
+        }),
+        LiveAction::CommandLineExecute(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(ws_programmer_execute(
+                state,
+                session,
+                &action_request(request, context),
+                Some(context),
+            ))
+        }),
+        LiveAction::ProgrammerUndo => run_interaction(state, session, context, || {
+            let changed = state.programmers.undo(session.id);
+            let response = persist_programmer(state, session)
+                .map(|()| serde_json::json!({"changed":changed}))
+                .map_err(|error| error.message);
+            ActionOutput::plain(response)
+        }),
+        LiveAction::ProgrammingAlign(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(ws_programmer_align(
+                state,
+                session,
+                &action_request(request, context),
+            ))
+        }),
+        LiveAction::FixtureControl(request) => {
+            run_interaction(
+                state,
+                session,
+                context,
+                || match ws_programmer_control_action(
+                    state,
+                    session,
+                    &action_request(request, context),
+                ) {
+                    Ok(result) => ActionOutput {
+                        response: Ok(result.payload),
+                    },
+                    Err(error) => ActionOutput::plain(Err(error)),
+                },
+            )
         }
-        "preset.apply" => ws_preset_apply(state, session, command, context, ports),
-        "preset.recall.action" => ws_preset_recall_action(state, command, context, ports),
-        "preload.enter" => ws_preload_enter(state, session, command, context, ports),
-        "preload.go" => ws_preload_go(state, session, command, context, ports),
-        "preload.clear" => ws_preload_clear(state, session, command, context, ports),
-        "preload.release" => ws_preload_release(state, session, command, context, ports),
-        _ => unreachable!("only typed programming actions reach this boundary"),
-    };
+    }
+}
+
+fn action_request<T: serde::Serialize>(
+    value: T,
+    context: &light_application::ActionContext,
+) -> WsActionRequest {
+    WsActionRequest {
+        request_id: context.request_id.clone().unwrap_or_default(),
+        payload: serde_json::to_value(value).expect("typed live actions always serialize"),
+    }
+}
+
+fn runtime_output(result: Result<WsTypedRuntimeAction, String>) -> ActionOutput {
     match result {
-        Ok(result) => {
-            let changes = result.changes();
-            let replayed = result.replayed;
-            WsProgrammingOutput {
-                response: Ok(result.payload),
-                changes,
-                replayed,
-            }
-        }
-        Err(error) => WsProgrammingOutput::untracked(Err(error)),
+        Ok(result) => ActionOutput {
+            response: Ok(result.payload),
+        },
+        Err(error) => ActionOutput::plain(Err(error)),
     }
 }
 
-fn dispatch_live_interaction(
+fn typed_programming(result: Result<WsTypedProgrammingAction, String>) -> ActionOutput {
+    match result {
+        Ok(result) => ActionOutput {
+            response: Ok(result.payload),
+        },
+        Err(error) => ActionOutput::plain(Err(error)),
+    }
+}
+
+fn run_typed_with_activation(
+    state: &AppState,
+    action: impl FnOnce() -> Result<WsTypedProgrammingAction, String>,
+) -> ActionOutput {
+    let _activation = match try_programming_activation(state) {
+        Ok(activation) => activation,
+        Err(error) => return ActionOutput::plain(Err(error)),
+    };
+    typed_programming(action())
+}
+
+fn run_typed_with_optional_activation(
+    state: &AppState,
+    needs_activation: bool,
+    action: impl FnOnce() -> Result<WsTypedProgrammingAction, String>,
+) -> ActionOutput {
+    if needs_activation {
+        run_typed_with_activation(state, action)
+    } else {
+        typed_programming(action())
+    }
+}
+
+fn run_interaction(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
     context: &light_application::ActionContext,
-) -> WsProgrammingOutput {
+    action: impl FnOnce() -> ActionOutput,
+) -> ActionOutput {
+    let _activation = match try_programming_activation(state) {
+        Ok(activation) => activation,
+        Err(error) => return ActionOutput::plain(Err(error)),
+    };
     let before = tracked_state(state, session);
-    let (mut response, transient_changed) = dispatch_live_payload(state, session, command, context);
-    if let Err(error) = persist_undo_redo(state, session, command, &response) {
-        response = Err(error);
-    }
-    let mutated = tracked_state(state, session);
-    reconcile_interaction(state, session, command, &before, &mutated, response.is_ok());
-    WsProgrammingOutput {
-        response,
-        changes: transient_changed
-            .then_some("transient_control")
-            .into_iter()
-            .collect(),
-        replayed: false,
-    }
-}
-
-fn dispatch_live_payload(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-    context: &light_application::ActionContext,
-) -> (Result<serde_json::Value, String>, bool) {
-    if command.command != "programmer.control_action" {
-        return (
-            dispatch_ws_payload(state, session, command, Some(context)),
-            false,
-        );
-    }
-    match ws_programmer_control_action(state, session, command) {
-        Ok(result) => (Ok(result.payload), result.transient_changed),
-        Err(error) => (Err(error), false),
+    match state.programming.run_external_interaction(
+        context,
+        &command_http::ServerProgrammingPorts::new(state, session, "software", true),
+        action,
+    ) {
+        Ok(completed) => {
+            let output = completed.output;
+            if output.response.is_ok() {
+                reconcile_interaction(state, session, &before);
+            }
+            output
+        }
+        Err(error) => ActionOutput::plain(Err(error.message)),
     }
 }
 
-fn persist_undo_redo(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-    response: &Result<serde_json::Value, String>,
-) -> Result<(), String> {
-    if response.is_ok()
-        && matches!(
-            command.command.as_str(),
-            "programmer.undo" | "programmer.redo"
-        )
-    {
-        persist_programmer(state, session).map_err(|error| error.message)?;
-    }
-    Ok(())
-}
-
-fn successful_ws_response(
-    state: &AppState,
-    session: &Session,
-    command: WsCommand,
-    payload: serde_json::Value,
-    changes: Vec<&'static str>,
-    replayed: bool,
-) -> WsResponse {
-    if !replayed {
-        publish_compatibility_events(state, session, &command, &payload, &changes);
-    }
+fn failed_response(request_id: String, revision: u64, error: String) -> WsResponse {
     WsResponse {
-        protocol_version: 1,
-        request_id: command.request_id,
-        ok: true,
-        revision: state.engine.snapshot().revision,
-        payload: Some(payload),
-        error: None,
-    }
-}
-
-fn failed_ws_response(command: &WsCommand, revision: u64, error: String) -> WsResponse {
-    WsResponse {
-        protocol_version: 1,
-        request_id: command.request_id.clone(),
+        protocol_version: 2,
+        request_id,
         ok: false,
         revision,
         payload: None,
@@ -444,89 +304,18 @@ fn failed_ws_response(command: &WsCommand, revision: u64, error: String) -> WsRe
     }
 }
 
-struct WsProgrammingOutput {
+struct ActionOutput {
     response: Result<serde_json::Value, String>,
-    changes: Vec<&'static str>,
-    replayed: bool,
 }
 
-impl WsProgrammingOutput {
-    fn untracked(response: Result<serde_json::Value, String>) -> Self {
-        Self {
-            response,
-            changes: Vec::new(),
-            replayed: false,
-        }
-    }
-
-    fn with_changes(
-        mut self,
-        interaction: bool,
-        values: bool,
-        preload_values: bool,
-        preload_playback_queue: bool,
-    ) -> Self {
-        if interaction {
-            self.changes.push("interaction");
-        }
-        if values {
-            self.changes.push("values");
-        }
-        if preload_values {
-            self.changes.push("preload_values");
-        }
-        if preload_playback_queue {
-            self.changes.push("preload_playback_queue");
-        }
-        self
+impl ActionOutput {
+    fn plain(response: Result<serde_json::Value, String>) -> Self {
+        Self { response }
     }
 }
 
 pub(super) struct WsTypedProgrammingAction {
     pub(super) payload: serde_json::Value,
-    pub(super) interaction_changed: bool,
-    pub(super) values_changed: bool,
-    pub(super) preload_values_changed: bool,
-    pub(super) preload_queue_changed: bool,
-    pub(super) replayed: bool,
-}
-
-impl WsTypedProgrammingAction {
-    fn changes(&self) -> Vec<&'static str> {
-        [
-            (self.interaction_changed, "interaction"),
-            (self.values_changed, "values"),
-            (self.preload_values_changed, "preload_values"),
-            (self.preload_queue_changed, "preload_playback_queue"),
-        ]
-        .into_iter()
-        .filter_map(|(changed, name)| changed.then_some(name))
-        .collect()
-    }
-}
-
-fn reconcile_interaction(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-    before: &WsTrackedState,
-    mutated: &WsTrackedState,
-    response_succeeded: bool,
-) {
-    let capture_mode_changed = before.capture_mode() != mutated.capture_mode();
-    let explicit_highlight_succeeded = command.command == "programmer.mode"
-        && command
-            .payload
-            .get("highlight")
-            .is_some_and(|value| !value.is_null())
-        && response_succeeded;
-    if capture_mode_changed {
-        if !explicit_highlight_succeeded {
-            reconcile_highlight_capture_mode(state, session, "programmer_capture_mode");
-        }
-    } else if before.selection_revision() != mutated.selection_revision() {
-        reconcile_highlight_selection(state, session, "programmer_selection");
-    }
 }
 
 struct WsTrackedState {
@@ -551,12 +340,21 @@ fn tracked_state(state: &AppState, session: &Session) -> WsTrackedState {
     }
 }
 
-fn interaction_context(session: &Session, command: &WsCommand) -> light_application::ActionContext {
+fn reconcile_interaction(state: &AppState, session: &Session, before: &WsTrackedState) {
+    let after = tracked_state(state, session);
+    if before.capture_mode() != after.capture_mode() {
+        reconcile_highlight_capture_mode(state, session, "programmer_capture_mode");
+    } else if before.selection_revision() != after.selection_revision() {
+        reconcile_highlight_selection(state, session, "programmer_selection");
+    }
+}
+
+fn interaction_context(session: &Session, request_id: &str) -> light_application::ActionContext {
     light_application::ActionContext::operator(
         session.desk.id,
         session.user.id.0,
         session.id.0,
         light_application::ActionSource::UserInterface,
     )
-    .with_request_id(&command.request_id)
+    .with_request_id(request_id)
 }

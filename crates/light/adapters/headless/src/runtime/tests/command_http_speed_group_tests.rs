@@ -104,18 +104,19 @@ async fn speed_command_replay_does_not_repeat_side_effects_or_erase_new_input() 
 }
 
 #[tokio::test]
-async fn retained_v1_programmer_execute_keeps_speed_group_payload_shape() {
+async fn typed_programmer_execute_keeps_speed_group_audit_payload_shape() {
 	let scenario = CommandHttpScenario::new().await;
-	let command = WsCommand {
-		protocol_version: 1,
-		request_id: "speed-v1".into(),
-		session_id: scenario.session.id,
-		expected_revision: None,
-		command: "programmer.execute".into(),
-		payload: serde_json::json!({"value":"SPD GRP 2 AT 99,5"}),
-	};
+	let command = live_action_frame(
+		&scenario.session,
+		"speed-live-action",
+		light_wire::v2::live_action::LiveAction::CommandLineExecute(
+			light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+				value: "SPD GRP 2 AT 99,5".into(),
+			},
+		),
+	);
 	let cursor = scenario.state.application_events.latest_sequence();
-	let response = dispatch_ws_command(&scenario.state, &scenario.session, command);
+	let response = dispatch_live_action(&scenario.state, &scenario.session, command);
 	assert!(response.ok, "{:?}", response.error);
 	assert_eq!(scenario.state.speed_groups.lock()[1].manual_bpm(), 99.5);
 	assert_eq!(speed_command_events(&scenario, cursor), 1);

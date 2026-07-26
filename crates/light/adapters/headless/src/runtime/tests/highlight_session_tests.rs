@@ -22,20 +22,19 @@ async fn highlight_action_websocket_frame_is_correlated_and_authoritative() {
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let session = authenticate_token(&state, &token).unwrap();
-    let response = dispatch_ws_command(
+    let response = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "highlight-ws-1".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "highlight.action".into(),
-            payload: serde_json::json!({
-                "request_id":"highlight-ws-1",
-                "action":"on"
-            }),
-        },
+        live_action_frame(
+            &session,
+            "highlight-ws-1",
+            light_wire::v2::live_action::LiveAction::Highlight(
+                light_wire::v2::output_control::HighlightActionRequest {
+                    request_id: "highlight-ws-1".into(),
+                    action: light_wire::v2::output_control::HighlightAction::On,
+                },
+            ),
+        ),
     );
     assert!(response.ok, "{:?}", response.error);
     assert_eq!(response.payload.unwrap()["active"], true);
@@ -161,7 +160,31 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
     assert_eq!(high["active"], true);
     assert_eq!(high["mode"], "step");
     assert_eq!(state.engine.highlighted_fixtures(), fixture_ids[2..]);
-    assert_eq!(state.application_events.latest_sequence(), before_high);
+    let selection_filter = light_application::EventFilter::for_desk(session.desk.id).with_object(
+        light_application::EventObject::programming_selection(session.desk.id),
+    );
+    let light_application::EventReplay::Events(selection_events) =
+        state
+            .application_events
+            .replay(before_high, &selection_filter)
+    else {
+        panic!("the focused Programming selection history must remain replayable")
+    };
+    assert!(selection_events.is_empty());
+    let highlight_filter = light_application::EventFilter::default().with_object(
+        light_application::EventObject::new(
+            light_application::EventCapability::Output,
+            "highlight",
+        ),
+    );
+    let light_application::EventReplay::Events(highlight_events) =
+        state
+            .application_events
+            .replay(before_high, &highlight_filter)
+    else {
+        panic!("the focused Highlight history must remain replayable")
+    };
+    assert_eq!(highlight_events.len(), 1);
 
     // An external selection write resets the step basis without toggling HIGH, including when
     // the new source is live. Editing that Group before ALL is then re-resolved at action time.
@@ -223,7 +246,12 @@ async fn rest_prev_next_all_change_the_real_selection_while_high_remains_indepen
     let before_off = state.application_events.latest_sequence();
     let off = post_highlight_action(&app, &token, "off").await;
     assert_eq!(off["active"], false);
-    assert_eq!(state.application_events.latest_sequence(), before_off);
+    let light_application::EventReplay::Events(off_events) =
+        state.application_events.replay(before_off, &highlight_filter)
+    else {
+        panic!("the focused Highlight history must remain replayable")
+    };
+    assert_eq!(off_events.len(), 1);
 
     let _ = std::fs::remove_dir_all(data_dir);
 }

@@ -2,9 +2,7 @@
 
 mod adapter;
 
-use super::{
-    ApiError, AppState, Session, WsCommand, WsResponse, authenticate_token, dispatch_ws_command,
-};
+use super::{ApiError, AppState, Session, WsResponse, authenticate_token, dispatch_live_action};
 use axum::{
     Router,
     extract::{State, WebSocketUpgrade, ws::Message, ws::WebSocket},
@@ -14,6 +12,7 @@ use axum::{
 };
 use light_application as application;
 use light_wire::v2::events as wire;
+use light_wire::v2::live_action::LiveActionFrame;
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -62,11 +61,10 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
     };
     let request = match request {
         ClientMessage::Event(request) => Ok(request),
-        ClientMessage::Command(_) => Err("the first event message must subscribe".into()),
+        ClientMessage::Action(_) => Err("the first event message must subscribe".into()),
         ClientMessage::Invalid { error, .. } => Err(error),
     };
-    let event_bus = event_bus(&state, &request);
-    let mut stream = match EventStream::subscribe(event_bus, &session, request) {
+    let mut stream = match EventStream::subscribe(&state.application_events, &session, request) {
         Ok(stream) => stream,
         Err(error) => {
             send_wire(&mut socket, wire::EventServerMessage::Error { error }).await;
@@ -77,20 +75,6 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
         return;
     }
     event_loop(&mut socket, &mut stream, &state, &session).await;
-}
-
-fn event_bus<'a>(
-    state: &'a AppState,
-    request: &Result<wire::EventClientMessage, String>,
-) -> &'a application::EventBus {
-    let Ok(wire::EventClientMessage::Subscribe { filter, .. }) = request else {
-        return &state.application_events;
-    };
-    if filter.capabilities == [wire::EventCapability::System] {
-        &state.facade_events
-    } else {
-        &state.application_events
-    }
 }
 
 async fn event_loop(
@@ -146,8 +130,8 @@ pub(super) fn client_response(
                 error: "event subscription is already active".into(),
             })
         }
-        ClientMessage::Command(command) => {
-            ServerMessage::Command(dispatch_ws_command(state, session, command))
+        ClientMessage::Action(action) => {
+            ServerMessage::Command(dispatch_live_action(state, session, action))
         }
         ClientMessage::Invalid {
             request_id: Some(request_id),
@@ -177,7 +161,7 @@ async fn next_client_message(socket: &mut WebSocket) -> Option<ClientMessage> {
 
 pub(super) enum ClientMessage {
     Event(wire::EventClientMessage),
-    Command(WsCommand),
+    Action(LiveActionFrame),
     Invalid {
         request_id: Option<String>,
         error: String,
@@ -199,6 +183,23 @@ fn parse_client_message(text: &str) -> ClientMessage {
             };
         }
     };
+    if value.get("type").and_then(serde_json::Value::as_str) == Some("action") {
+        let request_id = value
+            .get("request_id")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned);
+        crate::tolerant_json::log_unknown_value_fields::<LiveActionFrame>(
+            "/api/v2/events action",
+            &value,
+        );
+        return match serde_json::from_value(value) {
+            Ok(action) => ClientMessage::Action(action),
+            Err(error) => ClientMessage::Invalid {
+                request_id,
+                error: format!("invalid action frame: {error}"),
+            },
+        };
+    }
     if value.get("type").is_some() {
         return match serde_json::from_value(value) {
             Ok(message) => ClientMessage::Event(message),
@@ -212,18 +213,15 @@ fn parse_client_message(text: &str) -> ClientMessage {
         .get("request_id")
         .and_then(serde_json::Value::as_str)
         .map(str::to_owned);
-    match serde_json::from_value(value) {
-        Ok(command) => ClientMessage::Command(command),
-        Err(error) => ClientMessage::Invalid {
-            request_id,
-            error: format!("invalid command envelope: {error}"),
-        },
+    ClientMessage::Invalid {
+        request_id,
+        error: "WebSocket actions require an explicit type: action frame".into(),
     }
 }
 
 fn command_error(state: &AppState, request_id: String, error: String) -> WsResponse {
     WsResponse {
-        protocol_version: 1,
+        protocol_version: 2,
         request_id,
         ok: false,
         revision: state.engine.snapshot().revision,

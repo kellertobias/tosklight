@@ -60,7 +60,7 @@ async fn supplied_command_executes_without_publishing_intermediate_command_text(
 #[tokio::test]
 async fn sensitive_command_text_is_returned_to_its_writer_but_redacted_from_global_events() {
     let scenario = CommandHttpScenario::new().await;
-    let events = subscribe_facade_events(&scenario.state);
+    let cursor = scenario.state.application_events.latest_sequence();
     let response = scenario
         .put("FIXTURE 1 TOKEN super-secret-value", 0)
         .await;
@@ -70,20 +70,41 @@ async fn sensitive_command_text_is_returned_to_its_writer_but_redacted_from_glob
         "FIXTURE 1 TOKEN super-secret-value"
     );
 
-    let event = next_facade_notification(&events).unwrap();
-    assert_eq!(event.kind, "command_line_changed");
-    assert_eq!(event.payload["text"], "[REDACTED SENSITIVE COMMAND]");
-    assert_eq!(event.payload["redacted"], true);
-    assert!(!event.payload.to_string().contains("super-secret-value"));
     let audit_event = scenario
         .state
         .audit_events
         .lock()
-        .back()
+        .iter()
+        .rev()
+        .find(|event| event.kind == "command_line_changed")
         .cloned()
         .unwrap();
-    assert_eq!(audit_event.revision, event.revision);
-    assert_eq!(audit_event.payload, event.payload);
+    assert_eq!(
+        audit_event.payload["text"],
+        "[REDACTED SENSITIVE COMMAND]"
+    );
+    assert_eq!(audit_event.payload["redacted"], true);
+    assert!(
+        !audit_event
+            .payload
+            .to_string()
+            .contains("super-secret-value")
+    );
+    let light_application::EventReplay::Events(events) = scenario.state.application_events.replay(
+        cursor,
+        &light_application::EventFilter::default()
+            .with_capability(light_application::EventCapability::System),
+    ) else {
+        panic!("command event cursor must remain replayable");
+    };
+    assert!(events.iter().all(|event| matches!(
+        event.payload,
+        light_application::ApplicationEvent::System(
+            light_application::SystemEvent::Operator(
+                light_application::OperatorNotification::CommandHistoryChanged { .. }
+            )
+        )
+    )));
     assert_eq!(
         json(scenario.get().await).await["text"],
         "FIXTURE 1 TOKEN super-secret-value"

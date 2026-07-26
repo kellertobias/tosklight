@@ -127,11 +127,12 @@ describe("HttpOutputRuntimeTransport", () => {
 		});
 		const [url, options] = fetch.mock.calls[0] ?? [];
 		expect(url).toBe(
-			`http://127.0.0.1:5000/api/v2/desks/${DESK_ID}/output-runtime/global-master`,
+			"http://127.0.0.1:5000/api/v2/output-runtime/global-master",
 		);
 		expect(String(url)).not.toMatch(/bootstrap|visualization|playbacks/u);
 		const headers = options?.headers as Headers;
 		expect(headers.get("authorization")).toBe("Bearer session-token");
+		expect(headers.get("x-tosk-desk")).toBe(DESK_ID);
 		expect(headers.get("x-light-desk-token")).toBe("desk-boundary");
 	});
 
@@ -158,7 +159,7 @@ describe("HttpOutputRuntimeTransport", () => {
 		});
 		const [url, options] = fetch.mock.calls[0] ?? [];
 		expect(url).toBe(
-			`http://127.0.0.1:5000/api/v2/desks/${DESK_ID}/output-runtime/global-master`,
+			"http://127.0.0.1:5000/api/v2/output-runtime/global-master",
 		);
 		expect(options?.method).toBe("POST");
 		expect(JSON.parse(String(options?.body))).toEqual({

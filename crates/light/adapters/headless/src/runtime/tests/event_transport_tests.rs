@@ -26,7 +26,7 @@ use super::super::{Engine, EngineSnapshot, ProgrammerRegistry, RenderOptions};
 use super::*;
 
 #[test]
-fn multiplexed_client_messages_keep_subscriptions_and_commands_distinct() {
+fn multiplexed_client_messages_keep_subscriptions_and_actions_distinct() {
     let subscribe =
         parse_client_message(r#"{"type":"subscribe","filter":{},"capacity":32,"rate_limits":[]}"#);
     assert!(matches!(
@@ -37,37 +37,41 @@ fn multiplexed_client_messages_keep_subscriptions_and_commands_distinct() {
         })
     ));
 
-    let command = parse_client_message(
+    let action = parse_client_message(
         r#"{
-            "protocol_version":1,
+            "type":"action",
+            "protocol_version":2,
             "request_id":"multiplex-command",
             "session_id":"00000000-0000-0000-0000-000000000011",
-            "command":"programmer.undo",
-            "payload":{}
+            "action":{"type":"programmer_undo"}
         }"#,
     );
-    let ClientMessage::Command(command) = command else {
-        panic!("typed command should remain distinct from event control messages");
+    let ClientMessage::Action(action) = action else {
+        panic!("typed action should remain distinct from event control messages");
     };
-    assert_eq!(command.request_id, "multiplex-command");
-    assert_eq!(command.command, "programmer.undo");
+    assert_eq!(action.request_id, "multiplex-command");
+    assert!(matches!(
+        action.action,
+        light_wire::v2::live_action::LiveAction::ProgrammerUndo
+    ));
 }
 
 #[test]
-fn malformed_correlated_command_retains_its_request_identity() {
+fn malformed_correlated_action_retains_its_request_identity() {
     let invalid = parse_client_message(
         r#"{
-            "protocol_version":1,
+            "type":"action",
+            "protocol_version":2,
             "request_id":"broken-command",
             "session_id":"not-a-uuid",
-            "command":"programmer.undo"
+            "action":{"type":"programmer_undo"}
         }"#,
     );
     let ClientMessage::Invalid { request_id, error } = invalid else {
-        panic!("malformed command should become a correlated failure");
+        panic!("malformed action should become a correlated failure");
     };
     assert_eq!(request_id.as_deref(), Some("broken-command"));
-    assert!(error.starts_with("invalid command envelope:"));
+    assert!(error.starts_with("invalid action frame:"));
 }
 
 #[tokio::test]

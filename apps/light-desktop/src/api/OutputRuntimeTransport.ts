@@ -114,7 +114,7 @@ export class HttpOutputRuntimeTransport implements OutputRuntimeTransport {
 	}
 
 	private outputPath(scope: OutputRuntimeScope) {
-		return `${this.baseUrl}/api/v2/desks/${encodeURIComponent(scope.deskId)}/output-runtime/global-master`;
+		return `${this.baseUrl}/api/v2/output-runtime/global-master`;
 	}
 
 	private eventUrl() {
@@ -138,6 +138,7 @@ export class HttpOutputRuntimeTransport implements OutputRuntimeTransport {
 	private headers() {
 		const headers = new Headers({
 			authorization: `Bearer ${this.options.sessionToken}`,
+			"x-tosk-desk": this.options.authenticatedDeskId,
 		});
 		if (this.options.deskBoundaryToken)
 			headers.set("x-light-desk-token", this.options.deskBoundaryToken);

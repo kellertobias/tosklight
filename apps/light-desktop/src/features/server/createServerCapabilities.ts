@@ -4,7 +4,6 @@ import { createCommandLineActions } from "./commandLine";
 import { createConfigurationActions } from "./configuration";
 import { createFixtureLibraryActions } from "./fixtureLibrary";
 import { createFixtureProgrammingActions } from "./fixtureProgramming";
-import { createGroupSelectionActions } from "./groupSelection";
 import { createHighlightActions } from "./highlight";
 import { createLayoutActions } from "./layouts";
 import { createMediaActions } from "./media";
@@ -13,6 +12,7 @@ import { createMvrActions } from "./mvr";
 import { createOutputActions } from "./output";
 import { createPatchActions } from "./patch";
 import { createPreloadActions } from "./preload";
+import { createProgrammerAlignmentActions } from "./programmerAlignment";
 import { createProgrammerSelectionActions } from "./programmerSelection";
 import { createSessionActions } from "./session";
 import { createShowLifecycleActions } from "./showLifecycle";
@@ -34,6 +34,7 @@ export function createServerCapabilities(model: ServerController) {
 		...createScreenActions(model),
 		...createHighlightActions(model),
 		...createCommandLineActions(model),
+		...createProgrammerAlignmentActions(model),
 		...createProgrammerSelectionActions(model),
 		...createFixtureProgrammingActions(model),
 		...createOutputActions(model),
@@ -42,7 +43,6 @@ export function createServerCapabilities(model: ServerController) {
 		...createMvrActions(model),
 		...createConfigurationActions(model),
 		...createLayoutActions(model),
-		...createGroupSelectionActions(model),
 		...createPreloadActions(model),
 		...createSystemActions(model),
 		...createMediaActions(model),

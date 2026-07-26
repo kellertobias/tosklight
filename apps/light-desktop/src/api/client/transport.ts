@@ -1,3 +1,5 @@
+import type { LiveAction } from "../generated/light-wire";
+
 export interface ClientTransport {
 	request<T>(
 		path: string,
@@ -10,17 +12,7 @@ export interface ClientTransport {
 
 export interface LiveClientTransport extends ClientTransport {
 	currentDeskId(): string | null;
-	command(
-		command: string,
-		payload: unknown,
-		expectedRevision?: number,
-	): Promise<unknown>;
-	commandWithRequestId(
-		command: string,
-		payload: unknown,
-		requestId: string,
-		expectedRevision?: number,
-	): Promise<unknown>;
+	sendAction(action: LiveAction, requestId?: string): Promise<unknown>;
 }
 
 export function jsonRequest(

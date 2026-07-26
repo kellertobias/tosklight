@@ -1,5 +1,8 @@
-import type { ServerEvent, SessionResponse } from "../../api/types";
-import { createShowObjectEventReconciler } from "./showObjectEventReconciliation";
+import type {
+	HighlightState,
+	RuntimeCapabilityEvent,
+	SessionResponse,
+} from "../../api/types";
 import type { ServerState } from "./useServerState";
 
 export type LoadShowObjects = (
@@ -7,23 +10,26 @@ export type LoadShowObjects = (
 	userId: string | null,
 ) => Promise<void>;
 
-function refreshHighlight(event: ServerEvent, state: ServerState) {
-	if (event.kind !== "highlight_changed") return;
-	const request = ++state.highlightEpoch.current;
-	void state.highlightWrite.current
-		.catch(() => undefined)
-		.then(() => state.api.mediaOutput.highlight())
-		.then((next) => {
-			if (request !== state.highlightEpoch.current) return;
-			state.setHighlight(next);
-			if (!state.highlightErrorSticky.current) state.setHighlightError(null);
-		})
-		.catch(() => undefined);
+function installHighlight(
+	event: RuntimeCapabilityEvent,
+	session: SessionResponse,
+	state: ServerState,
+) {
+	if (event.type !== "highlight_changed") return;
+	const { change } = event;
+	if (
+		change.desk_id !== session.desk.id ||
+		change.user_id !== session.user.id ||
+		!["selection", "step"].includes(change.state.mode)
+	)
+		return;
+	state.highlightEpoch.current += 1;
+	state.setHighlight(change.state as HighlightState);
+	if (!state.highlightErrorSticky.current) state.setHighlightError(null);
 }
 
-function refreshConfiguration(event: ServerEvent, state: ServerState) {
-	const kinds = ["server_configuration_changed"];
-	if (!kinds.includes(event.kind)) return;
+function refreshConfiguration(event: RuntimeCapabilityEvent, state: ServerState) {
+	if (event.type !== "server_configuration_changed") return;
 	void state.api.desk
 		.configuration()
 		.then((next) => {
@@ -33,14 +39,24 @@ function refreshConfiguration(event: ServerEvent, state: ServerState) {
 		.catch(() => undefined);
 }
 
-function refreshScreens(event: ServerEvent, state: ServerState) {
-	const kinds = [
-		"screen_configuration_changed",
-		"screen_page_changed",
-		"playback_page_changed",
-		"show_opened",
-	];
-	if (!kinds.includes(event.kind)) return;
+function installHardwareConnection(
+	event: RuntimeCapabilityEvent,
+	state: ServerState,
+) {
+	if (event.type !== "hardware_connection_changed") return;
+	state.setBootstrap((current) =>
+		current
+			? { ...current, hardware_connected: event.change.connected }
+			: current,
+	);
+}
+
+function refreshScreens(event: RuntimeCapabilityEvent, state: ServerState) {
+	if (
+		event.type !== "screens_changed" &&
+		!isShowLibraryEvent(event, ["show_opened"])
+	)
+		return;
 	void state.api.playback
 		.screens()
 		.then(state.setScreens)
@@ -48,18 +64,12 @@ function refreshScreens(event: ServerEvent, state: ServerState) {
 }
 
 function refreshBootstrap(
-	event: ServerEvent,
+	event: RuntimeCapabilityEvent,
 	session: SessionResponse,
 	getState: () => ServerState,
 	loadShowObjects: LoadShowObjects,
 ) {
-	const kinds = [
-		"show_opened",
-		"show_renamed",
-		"show_rolled_back",
-		"hardware_connection_changed",
-	];
-	if (!kinds.includes(event.kind)) return;
+	if (!isShowLibraryEvent(event, ["show_opened", "show_rolled_back"])) return;
 	const state = getState();
 	const previousShowId = state.bootstrap?.active_show?.id ?? null;
 	const requestedEpoch = state.commandLineEpoch.current;
@@ -70,8 +80,7 @@ function refreshBootstrap(
 			const current = getState();
 			const nextShowId = next.active_show?.id ?? null;
 			const showChanged =
-				event.kind === "show_opened" ||
-				event.kind === "show_rolled_back" ||
+				isShowLibraryEvent(event, ["show_opened", "show_rolled_back"]) ||
 				previousShowId !== nextShowId;
 			const loadingOperation = showChanged
 				? current.beginDeskLoading(
@@ -107,11 +116,8 @@ function refreshBootstrap(
 		.catch(() => undefined);
 }
 
-function refreshFixtureLibrary(event: ServerEvent, state: ServerState) {
-	if (
-		!["fixture_library_changed", "fixture_profile_changed"].includes(event.kind)
-	)
-		return;
+function refreshFixtureLibrary(event: RuntimeCapabilityEvent, state: ServerState) {
+	if (event.type !== "fixture_library_changed") return;
 	void state.api.fixtures
 		.fixtureLibrary()
 		.then(state.setFixtureLibrary)
@@ -126,29 +132,30 @@ function refreshFixtureLibrary(event: ServerEvent, state: ServerState) {
 		.catch(() => undefined);
 }
 
-function refreshShows(event: ServerEvent, state: ServerState) {
-	const kinds = [
-		"show_uploaded",
-		"show_deleted",
-		"show_opened",
-		"show_renamed",
-		"show_rolled_back",
-	];
-	if (!kinds.includes(event.kind)) return;
+function refreshShows(event: RuntimeCapabilityEvent, state: ServerState) {
+	if (event.type !== "show_library_changed") return;
 	void state.api.shows
 		.shows()
-		.then(state.setShows)
+		.then((shows) => {
+			state.setShows(shows);
+			if (event.change.kind !== "show_renamed") return;
+			state.setBootstrap((current) => {
+				if (!current?.active_show) return current;
+				const active = shows.find(
+					(show) => show.id === current.active_show?.id,
+				);
+				return active ? { ...current, active_show: active } : current;
+			});
+		})
 		.catch(() => undefined);
 }
 
-function refreshMedia(event: ServerEvent, state: ServerState) {
-	const kinds = [
-		"show_opened",
-		"media_thumbnails_refreshed",
-		"media_preview_refreshed",
-		"media_server_offline",
-	];
-	if (!kinds.includes(event.kind)) return;
+function refreshMedia(event: RuntimeCapabilityEvent, state: ServerState) {
+	if (
+		event.type !== "media_changed" &&
+		!isShowLibraryEvent(event, ["show_opened"])
+	)
+		return;
 	void state.api.mediaOutput
 		.mediaServers()
 		.then((next) => state.setMediaServers(next.fixtures))
@@ -156,11 +163,11 @@ function refreshMedia(event: ServerEvent, state: ServerState) {
 }
 
 function refreshSelection(
-	event: ServerEvent,
+	event: RuntimeCapabilityEvent,
 	session: SessionResponse,
 	state: ServerState,
 ) {
-	if (event.kind !== "show_opened") return;
+	if (!isShowLibraryEvent(event, ["show_opened"])) return;
 	void state.api.desk
 		.programmers()
 		.then((programmers) => {
@@ -177,20 +184,31 @@ export function createStateEventRouter(
 	session: SessionResponse,
 	loadShowObjects: LoadShowObjects,
 ) {
-	const reconcileShowObjectEvent = createShowObjectEventReconciler(
-		getState,
-		session,
-	);
-	return (event: ServerEvent) => {
+	return (event: RuntimeCapabilityEvent) => {
 		const state = getState();
-		refreshHighlight(event, state);
+		installHighlight(event, session, state);
 		refreshConfiguration(event, state);
+		installHardwareConnection(event, state);
 		refreshScreens(event, state);
 		refreshBootstrap(event, session, getState, loadShowObjects);
 		refreshFixtureLibrary(event, state);
 		refreshShows(event, state);
 		refreshMedia(event, state);
-		reconcileShowObjectEvent(event);
 		refreshSelection(event, session, state);
 	};
+}
+
+function isShowLibraryEvent(
+	event: RuntimeCapabilityEvent,
+	kinds: Array<
+		| "show_opened"
+		| "show_renamed"
+		| "show_rolled_back"
+		| "show_uploaded"
+		| "show_deleted"
+	>,
+) {
+	return (
+		event.type === "show_library_changed" && kinds.includes(event.change.kind)
+	);
 }

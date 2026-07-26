@@ -227,16 +227,51 @@ fn wire_payload(
         ) => wire::EventPayload::SpeedGroupsChanged {
             change: super::super::speed_group_v2::wire_change(change),
         },
-        application::ApplicationEvent::Desk(application::DeskEvent::PlaybackViewChanged(
-            projection,
-        )) => wire::EventPayload::PlaybackViewChanged {
-            projection: super::super::playback_v2::desk_projection(*projection),
-        },
-        application::ApplicationEvent::Output(application::OutputEvent::RuntimeChanged(change)) => {
-            wire::EventPayload::OutputRuntimeChanged {
-                change: super::super::output_runtime_v2::wire_change(*change),
+        application::ApplicationEvent::Desk(event) => match event {
+            application::DeskEvent::PlaybackViewChanged(projection) => {
+                wire::EventPayload::PlaybackViewChanged {
+                    projection: super::super::playback_v2::desk_projection(*projection),
+                }
             }
-        }
+            application::DeskEvent::ConfigurationChanged(change) => {
+                wire::EventPayload::ServerConfigurationChanged {
+                    change: wire_revision(*change),
+                }
+            }
+            application::DeskEvent::ScreensChanged(change) => wire::EventPayload::ScreensChanged {
+                change: wire_screen_notification(*change),
+            },
+            application::DeskEvent::HardwareConnectionChanged(change) => {
+                wire::EventPayload::HardwareConnectionChanged {
+                    change: wire::HardwareConnectionNotification {
+                        revision: change.revision,
+                        connected: change.connected,
+                    },
+                }
+            }
+        },
+        application::ApplicationEvent::Output(event) => match event {
+            application::OutputEvent::RuntimeChanged(change) => {
+                wire::EventPayload::OutputRuntimeChanged {
+                    change: super::super::output_runtime_v2::wire_change(*change),
+                }
+            }
+            application::OutputEvent::HighlightChanged(change) => {
+                wire::EventPayload::HighlightChanged {
+                    change: wire::HighlightChange {
+                        revision: change.revision,
+                        desk_id: change.desk_id,
+                        user_id: change.user_id,
+                        action: change.action.clone(),
+                        source: change.source.clone(),
+                        state: super::super::runtime_wire::highlight(change.state.clone()),
+                    },
+                }
+            }
+            application::OutputEvent::MediaChanged(change) => wire::EventPayload::MediaChanged {
+                change: wire_media_notification(*change),
+            },
+        },
         application::ApplicationEvent::Show(application::ShowEvent::PatchChanged(change)) => {
             wire::EventPayload::ShowPatchChanged {
                 delta: super::super::show_patch_wire::wire_delta(change, Some(sequence)),
@@ -266,16 +301,231 @@ fn wire_payload(
                 surface_id: change.surface_id.clone(),
             },
         },
-        application::ApplicationEvent::System(application::SystemEvent::FacadeNotification(
+        application::ApplicationEvent::Show(application::ShowEvent::ShowLibraryChanged(change)) => {
+            wire::EventPayload::ShowLibraryChanged {
+                change: wire_show_library_notification(*change),
+            }
+        }
+        application::ApplicationEvent::Show(application::ShowEvent::FixtureLibraryChanged(
+            change,
+        )) => wire::EventPayload::FixtureLibraryChanged {
+            change: wire_fixture_library_notification(*change),
+        },
+        application::ApplicationEvent::System(application::SystemEvent::Operator(notification)) => {
+            wire::EventPayload::OperatorNotification {
+                notification: wire_operator_notification(notification),
+            }
+        }
+    })
+}
+
+fn wire_screen_notification(change: application::ScreenNotification) -> wire::ScreenNotification {
+    wire::ScreenNotification {
+        revision: change.revision,
+        kind: match change.kind {
+            application::ScreenNotificationKind::Configuration => {
+                wire::ScreenNotificationKind::Configuration
+            }
+            application::ScreenNotificationKind::ScreenPage => {
+                wire::ScreenNotificationKind::ScreenPage
+            }
+            application::ScreenNotificationKind::PlaybackPage => {
+                wire::ScreenNotificationKind::PlaybackPage
+            }
+        },
+    }
+}
+
+fn wire_show_library_notification(
+    change: application::ShowLibraryNotification,
+) -> wire::ShowLibraryNotification {
+    wire::ShowLibraryNotification {
+        revision: change.revision,
+        kind: match change.kind {
+            application::ShowLibraryNotificationKind::ShowOpened => {
+                wire::ShowLibraryNotificationKind::ShowOpened
+            }
+            application::ShowLibraryNotificationKind::ShowRenamed => {
+                wire::ShowLibraryNotificationKind::ShowRenamed
+            }
+            application::ShowLibraryNotificationKind::ShowRolledBack => {
+                wire::ShowLibraryNotificationKind::ShowRolledBack
+            }
+            application::ShowLibraryNotificationKind::ShowUploaded => {
+                wire::ShowLibraryNotificationKind::ShowUploaded
+            }
+            application::ShowLibraryNotificationKind::ShowDeleted => {
+                wire::ShowLibraryNotificationKind::ShowDeleted
+            }
+        },
+    }
+}
+
+fn wire_fixture_library_notification(
+    change: application::FixtureLibraryNotification,
+) -> wire::FixtureLibraryNotification {
+    wire::FixtureLibraryNotification {
+        revision: change.revision,
+        kind: match change.kind {
+            application::FixtureLibraryNotificationKind::Library => {
+                wire::FixtureLibraryNotificationKind::Library
+            }
+            application::FixtureLibraryNotificationKind::Profile => {
+                wire::FixtureLibraryNotificationKind::Profile
+            }
+        },
+    }
+}
+
+fn wire_media_notification(change: application::MediaNotification) -> wire::MediaNotification {
+    wire::MediaNotification {
+        revision: change.revision,
+        kind: match change.kind {
+            application::MediaNotificationKind::ThumbnailsRefreshed => {
+                wire::MediaNotificationKind::ThumbnailsRefreshed
+            }
+            application::MediaNotificationKind::PreviewRefreshed => {
+                wire::MediaNotificationKind::PreviewRefreshed
+            }
+            application::MediaNotificationKind::ServerOffline => {
+                wire::MediaNotificationKind::ServerOffline
+            }
+        },
+    }
+}
+
+fn wire_revision(change: application::NotificationRevision) -> wire::NotificationRevision {
+    wire::NotificationRevision {
+        revision: change.revision,
+    }
+}
+
+fn wire_operator_notification(
+    notification: &application::OperatorNotification,
+) -> wire::OperatorNotification {
+    use application::OperatorNotification as App;
+    match notification {
+        App::DeskAction {
+            revision,
             notification,
-        )) => wire::EventPayload::FacadeNotification {
-            notification: wire::FacadeNotification {
-                revision: notification.revision,
-                kind: notification.kind.clone(),
-                payload: notification.payload.clone(),
+        } => wire::OperatorNotification::DeskAction {
+            revision: *revision,
+            notification: wire::DeskActionNotification {
+                action: notification.action.clone(),
+                control: notification.control.clone(),
+                value: notification.value.clone(),
+                session_id: notification.session_id.clone(),
+                desk_id: notification.desk_id.clone(),
+                desk_alias: notification.desk_alias.clone(),
             },
         },
-    })
+        App::FileInput {
+            revision,
+            notification,
+        } => wire::OperatorNotification::FileInput {
+            revision: *revision,
+            notification: wire::FileInputNotification {
+                action: notification.action.clone(),
+                instance_id: notification.instance_id.clone(),
+                session_id: notification.session_id.clone(),
+                source_session_id: notification.source_session_id.clone(),
+                desk_id: notification.desk_id.clone(),
+                operation: notification.operation.clone(),
+                source: notification.source.clone(),
+            },
+        },
+        App::FileOperation {
+            revision,
+            notification,
+        } => wire::OperatorNotification::FileOperation {
+            revision: *revision,
+            notification: wire::FileOperationNotification {
+                operation: notification.operation.clone(),
+                items: notification
+                    .items
+                    .iter()
+                    .map(|item| wire::FileOperationItemNotification {
+                        source_root_id: item.source_root_id.clone(),
+                        source: item.source.clone(),
+                        destination_root_id: item.destination_root_id.clone(),
+                        destination: item.destination.clone(),
+                        status: item.status.clone(),
+                        error: item.error.clone(),
+                    })
+                    .collect(),
+            },
+        },
+        App::GroupConfiguration {
+            revision,
+            notification,
+        } => wire::OperatorNotification::GroupConfiguration {
+            revision: *revision,
+            notification: wire::GroupConfigurationNotification {
+                group_id: notification.group_id.clone(),
+                desk_id: notification.desk_id.clone(),
+            },
+        },
+        App::UpdateWorkflow {
+            revision,
+            notification,
+        } => wire::OperatorNotification::UpdateWorkflow {
+            revision: *revision,
+            notification: wire_update_workflow(notification),
+        },
+        App::CommandHistoryChanged { revision, desk_id } => {
+            wire::OperatorNotification::CommandHistoryChanged {
+                revision: *revision,
+                desk_id: desk_id.clone(),
+            }
+        }
+    }
+}
+
+fn wire_update_workflow(
+    notification: &application::UpdateWorkflowNotification,
+) -> wire::UpdateWorkflowNotification {
+    use application::UpdateWorkflowNotification as App;
+    match notification {
+        App::Armed { desk_id, armed } => wire::UpdateWorkflowNotification::Armed {
+            desk_id: desk_id.clone(),
+            armed: *armed,
+        },
+        App::TargetRequested { desk_id, target } => {
+            wire::UpdateWorkflowNotification::TargetRequested {
+                desk_id: desk_id.clone(),
+                target: wire::UpdateTargetNotification {
+                    family: match target.family {
+                        application::UpdateTargetFamilyNotification::Cue => {
+                            wire::UpdateTargetFamilyNotification::Cue
+                        }
+                        application::UpdateTargetFamilyNotification::Preset => {
+                            wire::UpdateTargetFamilyNotification::Preset
+                        }
+                        application::UpdateTargetFamilyNotification::Group => {
+                            wire::UpdateTargetFamilyNotification::Group
+                        }
+                    },
+                    object_id: target.object_id.clone(),
+                    playback_number: target.playback_number,
+                    cue_id: target.cue_id.clone(),
+                    cue_number: target.cue_number,
+                    validate_active_context: target.validate_active_context,
+                },
+            }
+        }
+        App::TargetRejected { desk_id, error } => {
+            wire::UpdateWorkflowNotification::TargetRejected {
+                desk_id: desk_id.clone(),
+                error: error.clone(),
+            }
+        }
+        App::TargetsRequested { desk_id } => wire::UpdateWorkflowNotification::TargetsRequested {
+            desk_id: desk_id.clone(),
+        },
+        App::SettingsRequested { desk_id } => wire::UpdateWorkflowNotification::SettingsRequested {
+            desk_id: desk_id.clone(),
+        },
+    }
 }
 
 fn wire_show_objects_change(

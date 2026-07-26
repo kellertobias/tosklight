@@ -1,11 +1,12 @@
 use super::*;
 use light_application::{
     ActionContext, ActionSource, ActiveShowObjectChange, ActiveShowObjectKind,
-    ActiveShowObjectsChange, EventBus, EventDraft, OutputRuntimeChange, OutputRuntimeIdentity,
-    OutputRuntimeProjection, OutputRuntimeScope, PatchChange, ProgrammingCaptureModeChange,
-    ProgrammingCaptureModeProjection, ProgrammingInteractionChange, ProgrammingValuesChange,
-    ProgrammingValuesProjection, SelectiveShowImportChange, SelectiveShowObjectChange,
-    SpeedGroupChange, SpeedGroupId, SpeedGroupProjection,
+    ActiveShowObjectsChange, EventBus, EventDraft, HardwareConnectionNotification, HighlightChange,
+    OutputRuntimeChange, OutputRuntimeIdentity, OutputRuntimeProjection, OutputRuntimeScope,
+    PatchChange, ProgrammingCaptureModeChange, ProgrammingCaptureModeProjection,
+    ProgrammingInteractionChange, ProgrammingValuesChange, ProgrammingValuesProjection,
+    SelectiveShowImportChange, SelectiveShowObjectChange, SpeedGroupChange, SpeedGroupId,
+    SpeedGroupProjection,
 };
 use light_core::{AttributeKey, AttributeValue, ShowId, UserId};
 use light_show::PortableShowObjectKey;
@@ -41,20 +42,19 @@ fn patch_event_delta_uses_the_authoritative_envelope_sequence() {
 }
 
 #[test]
-fn facade_notification_keeps_legacy_revision_kind_and_payload() {
+fn fixture_library_notification_keeps_audit_revision_and_typed_kind() {
     let bus = EventBus::new(4);
-    let event = bus.publish(EventDraft::facade_notification(
-        application::FacadeNotification {
+    let event = bus.publish(EventDraft::fixture_library_changed(
+        application::FixtureLibraryNotification {
             revision: 17,
-            kind: "fixture_changed".into(),
-            payload: serde_json::json!({"fixture_id": 42}),
+            kind: application::FixtureLibraryNotificationKind::Profile,
         },
     ));
 
     let Some(wire::EventServerMessage::Event { event }) =
         wire_delivery(application::SubscriptionDelivery::Event(event))
     else {
-        panic!("expected a facade-notification delivery");
+        panic!("expected a fixture-library delivery");
     };
     assert_eq!(event.sequence, 1);
     assert_eq!(event.desk_id, None);
@@ -63,16 +63,99 @@ fn facade_notification_keeps_legacy_revision_kind_and_payload() {
     assert_eq!(
         event.object,
         Some(wire::EventObject {
-            capability: wire::EventCapability::System,
-            id: "facade:fixture_changed".into(),
+            capability: wire::EventCapability::Show,
+            id: "fixture-library".into(),
         })
     );
-    let wire::EventPayload::FacadeNotification { notification } = event.payload else {
-        panic!("expected a facade-notification payload");
+    let wire::EventPayload::FixtureLibraryChanged { change } = event.payload else {
+        panic!("expected a fixture-library payload");
     };
-    assert_eq!(notification.revision, 17);
-    assert_eq!(notification.kind, "fixture_changed");
-    assert_eq!(notification.payload, serde_json::json!({"fixture_id": 42}));
+    assert_eq!(change.revision, 17);
+    assert_eq!(change.kind, wire::FixtureLibraryNotificationKind::Profile);
+}
+
+#[test]
+fn hardware_connection_event_carries_authoritative_state_and_desk_route() {
+    let bus = EventBus::new(4);
+    let event = bus.publish(EventDraft::hardware_connection_changed(
+        HardwareConnectionNotification {
+            revision: 18,
+            connected: true,
+        },
+    ));
+
+    let Some(wire::EventServerMessage::Event { event }) =
+        wire_delivery(application::SubscriptionDelivery::Event(event))
+    else {
+        panic!("expected a hardware-connection delivery");
+    };
+    assert_eq!(
+        event.object,
+        Some(wire::EventObject {
+            capability: wire::EventCapability::Desk,
+            id: "hardware-connections".into(),
+        })
+    );
+    let wire::EventPayload::HardwareConnectionChanged { change } = event.payload else {
+        panic!("expected a hardware-connection payload");
+    };
+    assert_eq!(change.revision, 18);
+    assert!(change.connected);
+}
+
+#[test]
+fn highlight_event_carries_the_authoritative_state_and_output_route() {
+    let bus = EventBus::new(4);
+    let context = context(ActionSource::Osc);
+    let desk_id = Uuid::from_u128(8);
+    let user_id = Uuid::from_u128(9);
+    let event = bus.publish(EventDraft::highlight_changed(
+        &context,
+        HighlightChange {
+            revision: 19,
+            desk_id,
+            user_id,
+            action: Some("next".into()),
+            source: Some("osc".into()),
+            state: light_programmer::HighlightState {
+                active: true,
+                mode: light_programmer::HighlightMode::Step,
+                output_enabled: true,
+                capture_only: false,
+                remembered: Vec::new(),
+                active_index: None,
+                active_fixture: None,
+                can_previous: false,
+                can_next: true,
+                owner_user_id: Some(UserId(user_id)),
+                owner_user_name: Some("Operator".into()),
+                message: None,
+            },
+        },
+    ));
+
+    let Some(wire::EventServerMessage::Event { event }) =
+        wire_delivery(application::SubscriptionDelivery::Event(event))
+    else {
+        panic!("expected a highlight delivery");
+    };
+    assert_eq!(event.desk_id, Some(desk_id));
+    assert_eq!(
+        event.object,
+        Some(wire::EventObject {
+            capability: wire::EventCapability::Output,
+            id: "highlight".into(),
+        })
+    );
+    let wire::EventPayload::HighlightChanged { change } = event.payload else {
+        panic!("expected a highlight payload");
+    };
+    assert_eq!(change.revision, 19);
+    assert_eq!(change.user_id, user_id);
+    assert_eq!(change.action.as_deref(), Some("next"));
+    assert_eq!(change.source.as_deref(), Some("osc"));
+    assert!(change.state.active);
+    assert!(change.state.can_next);
 }
 
 #[test]

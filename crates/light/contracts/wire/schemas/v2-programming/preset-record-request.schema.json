@@ -26,7 +26,6 @@
       "minLength": 1
     }
   },
-  "additionalProperties": false,
   "required": [
     "request_id",
     "address",
@@ -47,7 +46,6 @@
           "minimum": 1
         }
       },
-      "additionalProperties": false,
       "required": [
         "family",
         "number"

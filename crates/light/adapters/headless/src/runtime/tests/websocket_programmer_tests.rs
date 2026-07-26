@@ -15,20 +15,28 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
     let (token, _) = login(&app, "Operator").await;
     let session = authenticate_token(&state, &token).unwrap();
 
-    let response = dispatch_ws_command(
+    let response = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "home".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "programmer.set_many".into(),
-            payload: serde_json::json!({"assignments":[
-                {"fixture_id":fixture_id,"attribute":"pan","value":0.25},
-                {"fixture_id":fixture_id,"attribute":"tilt","value":0.75}
-            ]}),
-        },
+        live_action_frame(
+            &session,
+            "home",
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_values",
+                "request":{
+                    "request_id":"home",
+                    "expected_revision":0,
+                    "expected_capture_mode_revision":0,
+                    "action":{"type":"batch","mutations":[
+                        {"type":"set_fixture","fixture_id":fixture_id,"attribute":"pan",
+                         "value":{"kind":"normalized","value":0.25},"timing":{"fade":true}},
+                        {"type":"set_fixture","fixture_id":fixture_id,"attribute":"tilt",
+                         "value":{"kind":"normalized","value":0.75},"timing":{"fade":true}}
+                    ]}
+                }
+            }))
+            .unwrap(),
+        ),
     );
     assert!(response.ok, "{:?}", response.error);
     let values = state.programmers.get(session.id).unwrap().values;
@@ -36,20 +44,28 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
     assert!(values.iter().all(|value| value.fade));
     assert_eq!(values[0].changed_at, values[1].changed_at);
 
-    let rejected = dispatch_ws_command(
+    let rejected = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "invalid-home".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "programmer.set_many".into(),
-            payload: serde_json::json!({"assignments":[
-                {"fixture_id":fixture_id,"attribute":"pan","value":0.5},
-                {"fixture_id":light_core::FixtureId::new(),"attribute":"tilt","value":0.5}
-            ]}),
-        },
+        live_action_frame(
+            &session,
+            "invalid-home",
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_values",
+                "request":{
+                    "request_id":"invalid-home",
+                    "expected_revision":1,
+                    "expected_capture_mode_revision":0,
+                    "action":{"type":"batch","mutations":[
+                        {"type":"set_fixture","fixture_id":fixture_id,"attribute":"pan",
+                         "value":{"kind":"normalized","value":0.5}},
+                        {"type":"set_fixture","fixture_id":light_core::FixtureId::new(),
+                         "attribute":"tilt","value":{"kind":"normalized","value":0.5}}
+                    ]}
+                }
+            }))
+            .unwrap(),
+        ),
     );
     assert!(!rejected.ok);
     assert_eq!(
@@ -62,26 +78,42 @@ async fn programmer_set_many_validates_then_applies_one_faded_undo_step() {
 }
 
 #[tokio::test]
-async fn websocket_commands_are_typed_owned_and_revision_checked() {
+async fn websocket_actions_are_typed_owned_and_revision_checked() {
     let (state, data_dir) = test_state();
+    let fixture = schema_v2_direct_fixture().0;
+    let fixture_id = fixture.fixture_id;
+    state
+        .engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
     let app = router(state.clone());
-    let (token, session_id) = login(&app, "Operator").await;
+    let (token, _) = login(&app, "Operator").await;
     let session = authenticate_token(&state, &token).unwrap();
-    let fixture = light_core::FixtureId::new();
-    let response = dispatch_ws_command(
+
+    let response = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "set-1".into(),
-            session_id: SessionId(Uuid::parse_str(&session_id).unwrap()),
-            expected_revision: Some(0),
-            command: "programmer.set".into(),
-            payload: serde_json::json!({"fixture_id":fixture,"attribute":"intensity","value":0.75}),
-        },
+        live_action_frame(
+            &session,
+            "set-1",
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_values",
+                "request":{
+                    "request_id":"set-1",
+                    "expected_revision":0,
+                    "expected_capture_mode_revision":0,
+                    "action":{"type":"set_fixture","fixture_id":fixture_id,
+                        "attribute":"intensity","value":{"kind":"normalized","value":0.75}}
+                }
+            }))
+            .unwrap(),
+        ),
     );
-    assert!(response.ok);
-    assert_eq!(state.programmers.get(session.id).unwrap().values.len(), 1);
+    assert!(response.ok, "{:?}", response.error);
+
     let same_user_session = Session {
         id: SessionId::new(),
         user: session.user.clone(),
@@ -92,22 +124,27 @@ async fn websocket_commands_are_typed_owned_and_revision_checked() {
     state
         .programmers
         .start(same_user_session.id, same_user_session.user.id);
-    let same_user_update = dispatch_ws_command(
+    let same_user_update = dispatch_live_action(
         &state,
         &same_user_session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "same-user".into(),
-            session_id: same_user_session.id,
-            expected_revision: Some(999),
-            command: "programmer.set".into(),
-            payload: serde_json::json!({"fixture_id":fixture,"attribute":"intensity","value":0.5}),
-        },
+        live_action_frame(
+            &same_user_session,
+            "same-user",
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_values",
+                "request":{
+                    "request_id":"same-user",
+                    "expected_revision":1,
+                    "expected_capture_mode_revision":0,
+                    "action":{"type":"set_fixture","fixture_id":fixture_id,
+                        "attribute":"intensity","value":{"kind":"normalized","value":0.5}}
+                }
+            }))
+            .unwrap(),
+        ),
     );
-    assert!(
-        same_user_update.ok,
-        "one user owns the lock across all of their sessions"
-    );
+    assert!(same_user_update.ok, "one user owns authority across their sessions");
+
     let other_user = state.desk.lock().add_user("Other operator").unwrap();
     let other_session = Session {
         id: SessionId::new(),
@@ -119,74 +156,72 @@ async fn websocket_commands_are_typed_owned_and_revision_checked() {
     state
         .programmers
         .start(other_session.id, other_session.user.id);
-    let competing_update = dispatch_ws_command(
+    let competing_update = dispatch_live_action(
         &state,
         &other_session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "other-user".into(),
-            session_id: other_session.id,
-            expected_revision: None,
-            command: "programmer.set".into(),
-            payload: serde_json::json!({"fixture_id":fixture,"attribute":"intensity","value":0.2}),
-        },
+        live_action_frame(
+            &other_session,
+            "other-user",
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_values",
+                "request":{
+                    "request_id":"other-user",
+                    "expected_revision":0,
+                    "expected_capture_mode_revision":0,
+                    "action":{"type":"set_fixture","fixture_id":fixture_id,
+                        "attribute":"intensity","value":{"kind":"normalized","value":0.2}}
+                }
+            }))
+            .unwrap(),
+        ),
     );
-    assert!(
-        competing_update.ok,
-        "different users own independent programmers that arbitrate in the engine"
+    assert!(competing_update.ok, "different users own independent programmers");
+    assert_ne!(
+        state.programmers.get(session.id).unwrap().id,
+        state.programmers.get(other_session.id).unwrap().id
     );
-    let primary_programmer = state.programmers.get(session.id).unwrap();
-    let competing_programmer = state.programmers.get(other_session.id).unwrap();
-    assert_ne!(primary_programmer.id, competing_programmer.id);
-    assert_eq!(primary_programmer.values.len(), 1);
-    assert_eq!(competing_programmer.values.len(), 1);
-    let foreign = dispatch_ws_command(
-        &state,
+
+    let mut foreign = live_action_frame(
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "foreign".into(),
-            session_id: SessionId::new(),
-            expected_revision: None,
-            command: "programmer.clear".into(),
-            payload: serde_json::Value::Null,
-        },
+        "foreign",
+        light_wire::v2::live_action::LiveAction::ProgrammerUndo,
     );
+    foreign.session_id = Uuid::new_v4();
+    let foreign = dispatch_live_action(&state, &session, foreign);
     assert!(!foreign.ok);
     assert!(foreign.error.unwrap().contains("does not own"));
-    let stale = dispatch_ws_command(
+
+    let clear = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "stale".into(),
-            session_id: session.id,
-            expected_revision: Some(99),
-            command: "programmer.clear".into(),
-            payload: serde_json::Value::Null,
-        },
+        live_action_frame(
+            &session,
+            "clear",
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_values",
+                "request":{
+                    "request_id":"clear",
+                    "expected_revision":2,
+                    "expected_capture_mode_revision":0,
+                    "action":{"type":"clear"}
+                }
+            }))
+            .unwrap(),
+        ),
     );
-    assert!(
-        stale.ok,
-        "live absolute commands ignore unrelated show revisions"
-    );
-    let revisioned = dispatch_ws_command(
-        &state,
+    assert!(clear.ok, "{:?}", clear.error);
+
+    let mut unsupported = live_action_frame(
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "revisioned".into(),
-            session_id: session.id,
-            expected_revision: Some(99),
-            command: "show.activate".into(),
-            payload: serde_json::Value::Null,
-        },
+        "unsupported",
+        light_wire::v2::live_action::LiveAction::ProgrammerUndo,
     );
-    assert!(!revisioned.ok);
-    assert!(revisioned.error.unwrap().contains("revision conflict"));
+    unsupported.protocol_version = 1;
+    let unsupported = dispatch_live_action(&state, &session, unsupported);
+    assert!(!unsupported.ok);
+    assert!(unsupported.error.unwrap().contains("unsupported protocol_version"));
     let _ = std::fs::remove_dir_all(data_dir);
 }
-
 #[tokio::test]
 async fn group_master_set_never_replaces_a_snapshot_during_show_activation() {
     let (state, data_dir) = test_state();
@@ -204,17 +239,24 @@ async fn group_master_set_never_replaces_a_snapshot_during_show_activation() {
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let session = authenticate_token(&state, &token).unwrap();
-    let command = || WsCommand {
-        protocol_version: 1,
-        request_id: "group-master".into(),
-        session_id: session.id,
-        expected_revision: None,
-        command: "group.master.set".into(),
-        payload: serde_json::json!({"group_id":"front","value":0.5}),
-    };
+    let action: light_wire::v2::live_action::LiveAction =
+        serde_json::from_value(serde_json::json!({
+            "type":"playback",
+            "request":{
+                "request_id":"group-master",
+                "address":{"kind":"group","group_id":"front"},
+                "action":{"type":"master","value":0.5},
+                "surface":"virtual"
+            }
+        }))
+        .unwrap();
 
     let activation = state.activation_lock.clone().lock_owned().await;
-    let rejected = dispatch_ws_command(&state, &session, command());
+    let rejected = dispatch_live_action(
+        &state,
+        &session,
+        live_action_frame(&session, "group-master", action.clone()),
+    );
     assert!(!rejected.ok);
     assert!(
         rejected
@@ -225,7 +267,11 @@ async fn group_master_set_never_replaces_a_snapshot_during_show_activation() {
     assert_eq!(state.engine.snapshot().groups[0].master, 1.0);
 
     drop(activation);
-    let applied = dispatch_ws_command(&state, &session, command());
+    let applied = dispatch_live_action(
+        &state,
+        &session,
+        live_action_frame(&session, "group-master", action),
+    );
     assert!(applied.ok, "{:?}", applied.error);
     assert_eq!(state.engine.snapshot().groups[0].master, 0.5);
     let _ = std::fs::remove_dir_all(data_dir);
@@ -237,19 +283,33 @@ async fn compatibility_selection_publishes_one_typed_interaction_event() {
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let session = authenticate_token(&state, &token).unwrap();
-    let fixture = light_core::FixtureId::new();
+    let fixture_definition = schema_v2_direct_fixture().0;
+    let fixture = fixture_definition.fixture_id;
+    state
+        .engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture_definition].into(),
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
 
-    let response = dispatch_ws_command(
+    let response = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "selection-event".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "selection.set".into(),
-            payload: serde_json::json!({"fixtures":[fixture]}),
-        },
+        live_action_frame(
+            &session,
+            "selection-event",
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_selection",
+                "request":{
+                    "request_id":"selection-event",
+                    "action":"replace",
+                    "fixtures":[fixture],
+                    "expected_revision":0
+                }
+            }))
+            .unwrap(),
+        ),
     );
     assert!(response.ok, "{:?}", response.error);
 
@@ -286,17 +346,18 @@ async fn compatibility_command_line_publishes_only_its_scoped_component() {
     let (token, _) = login(&app, "Operator").await;
     let session = authenticate_token(&state, &token).unwrap();
 
-    let response = dispatch_ws_command(
+    let response = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "command-event".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "programmer.command_line".into(),
-            payload: serde_json::json!({"value":"GROUP 2"}),
-        },
+        live_action_frame(
+            &session,
+            "command-event",
+            serde_json::from_value(serde_json::json!({
+                "type":"command_line_set",
+                "request":{"value":"GROUP 2"}
+            }))
+            .unwrap(),
+        ),
     );
     assert!(response.ok, "{:?}", response.error);
 
@@ -319,17 +380,22 @@ async fn compatibility_command_line_publishes_only_its_scoped_component() {
     assert!(change.selection().is_none());
 
     let sequence = state.application_events.latest_sequence();
-    let value_only = dispatch_ws_command(
+    let value_only = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "priority-only".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "programmer.priority".into(),
-            payload: serde_json::json!({"priority":7}),
-        },
+        live_action_frame(
+            &session,
+            "priority-only",
+            serde_json::from_value(serde_json::json!({
+                "type":"programmer_priority",
+                "request":{
+                    "request_id":"priority-only",
+                    "expected_revision":0,
+                    "priority":7
+                }
+            }))
+            .unwrap(),
+        ),
     );
     assert!(value_only.ok, "{:?}", value_only.error);
     assert_eq!(state.application_events.latest_sequence(), sequence + 1);
@@ -352,138 +418,215 @@ async fn compatibility_command_line_publishes_only_its_scoped_component() {
 }
 
 #[tokio::test]
-async fn compatibility_programmer_changed_reports_only_authoritative_changed_projections() {
+async fn live_actions_publish_only_authoritative_changed_projections() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let session = authenticate_token(&state, &token).unwrap();
-    let fixture = light_core::FixtureId::new();
-    let command = |request_id: &str, command: &str, payload: serde_json::Value| WsCommand {
-        protocol_version: 1,
-        request_id: request_id.into(),
-        session_id: session.id,
-        expected_revision: None,
-        command: command.into(),
-        payload,
+    let fixture_definition = schema_v2_direct_fixture().0;
+    let fixture = fixture_definition.fixture_id;
+    state
+        .engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture_definition].into(),
+            groups: vec![light_programmer::GroupDefinition {
+                id: "front".into(),
+                name: "Front".into(),
+                ..Default::default()
+            }]
+            .into(),
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    let frame = |request_id: &str, action: light_wire::v2::live_action::LiveAction| {
+        live_action_frame(&session, request_id, action)
     };
-    let changed_count = || {
-        state
-            .audit_events
-            .lock()
-            .iter()
-            .filter(|event| event.kind == "programmer_changed")
-            .count()
-    };
-
-    let before = changed_count();
-    let no_op = dispatch_ws_command(
+    let values_filter = light_application::EventFilter::default().with_object(
+        light_application::EventObject::programming_values(session.user.id.0),
+    );
+    let before = state.application_events.latest_sequence();
+    let no_op = dispatch_live_action(
         &state,
         &session,
-        command("no-op-undo", "programmer.undo", serde_json::Value::Null),
+        frame(
+            "no-op-undo",
+            light_wire::v2::live_action::LiveAction::ProgrammerUndo,
+        ),
     );
     assert!(no_op.ok, "{:?}", no_op.error);
-    assert_eq!(changed_count(), before);
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(before, &values_filter)
+    else {
+        panic!("the values event stream should remain replayable")
+    };
+    assert!(events.is_empty());
 
-    let selection = dispatch_ws_command(
+    let selection = dispatch_live_action(
         &state,
         &session,
-        command(
+        frame(
             "selection-change",
-            "selection.set",
-            serde_json::json!({"fixtures":[fixture]}),
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_selection",
+                "request":{
+                    "request_id":"selection-change",
+                    "action":"replace",
+                    "fixtures":[fixture],
+                    "expected_revision":0
+                }
+            }))
+            .unwrap(),
         ),
     );
     assert!(selection.ok, "{:?}", selection.error);
-    let selection_event = state
-        .audit_events
-        .lock()
-        .iter()
-        .rev()
-        .find(|event| event.kind == "programmer_changed")
-        .cloned()
-        .unwrap();
-    assert_eq!(selection_event.payload["changes"], serde_json::json!(["interaction"]));
+    let selection_filter = light_application::EventFilter::for_desk(session.desk.id).with_object(
+        light_application::EventObject::programming_selection(session.desk.id),
+    );
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(0, &selection_filter)
+    else {
+        panic!("the selection event should remain replayable")
+    };
+    assert_eq!(events.len(), 1);
+    assert!(matches!(
+        events[0].payload,
+        light_application::ApplicationEvent::Programming(
+            light_application::ProgrammingEvent::InteractionChanged(_)
+        )
+    ));
 
-    let values = dispatch_ws_command(
+    let values = dispatch_live_action(
         &state,
         &session,
-        command(
+        frame(
             "values-change",
-            "programmer.set",
-            serde_json::json!({
-                "fixture_id": fixture,
-                "attribute": "intensity",
-                "value": 0.75
-            }),
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_values",
+                "request":{
+                    "request_id":"values-change",
+                    "expected_revision":0,
+                    "expected_capture_mode_revision":0,
+                    "action":{
+                        "type":"set_fixture",
+                        "fixture_id":fixture,
+                        "attribute":"intensity",
+                        "value":{"kind":"normalized","value":0.75}
+                    }
+                }
+            }))
+            .unwrap(),
         ),
     );
     assert!(values.ok, "{:?}", values.error);
-    let values_event = state
-        .audit_events
-        .lock()
-        .iter()
-        .rev()
-        .find(|event| event.kind == "programmer_changed")
-        .cloned()
-        .unwrap();
-    assert_eq!(values_event.payload["changes"], serde_json::json!(["values"]));
-    assert_eq!(values_event.payload["user_id"], serde_json::json!(session.user.id));
-    assert_eq!(values_event.payload["desk_id"], serde_json::json!(session.desk.id));
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(0, &values_filter)
+    else {
+        panic!("the values event should remain replayable")
+    };
+    assert_eq!(events.len(), 1);
+    assert!(matches!(
+        events[0].payload,
+        light_application::ApplicationEvent::Programming(
+            light_application::ProgrammingEvent::ValuesChanged(_)
+        )
+    ));
 
-    let preload_enter = dispatch_ws_command(
+    let preload_enter = dispatch_live_action(
         &state,
         &session,
-        command("preload-enter", "preload.enter", serde_json::Value::Null),
+        frame(
+            "preload-enter",
+            serde_json::from_value(serde_json::json!({
+                "type":"programmer_preload_lifecycle",
+                "request":{
+                    "request_id":"preload-enter",
+                    "expected_capture_mode_revision":0,
+                    "expected_values_revision":0,
+                    "expected_queue_revision":0,
+                    "expected_selection_revision":1,
+                    "action":{"type":"enter"}
+                }
+            }))
+            .unwrap(),
+        ),
     );
     assert!(preload_enter.ok, "{:?}", preload_enter.error);
-    let preload_values = dispatch_ws_command(
+    let preload_values = dispatch_live_action(
         &state,
         &session,
-        command(
+        frame(
             "preload-values",
-            "preload.group.set",
-            serde_json::json!({
-                "group_id": "front",
-                "attribute": "intensity",
-                "value": 0.5
-            }),
+            serde_json::from_value(serde_json::json!({
+                "type":"programmer_preload_values",
+                "request":{
+                    "request_id":"preload-values",
+                    "expected_revision":0,
+                    "expected_capture_mode_revision":1,
+                    "action":{
+                        "type":"set_group",
+                        "group_id":"front",
+                        "attribute":"intensity",
+                        "value":{"kind":"normalized","value":0.5}
+                    }
+                }
+            }))
+            .unwrap(),
         ),
     );
     assert!(preload_values.ok, "{:?}", preload_values.error);
-    let preload_event = state
-        .audit_events
-        .lock()
-        .iter()
-        .rev()
-        .find(|event| event.kind == "programmer_changed")
-        .cloned()
-        .unwrap();
-    assert_eq!(
-        preload_event.payload["changes"],
-        serde_json::json!(["preload_values"])
+    let preload_filter = light_application::EventFilter::default().with_object(
+        light_application::EventObject::programming_preload_values(session.user.id.0),
     );
-    assert_eq!(
-        preload_event.payload["user_id"],
-        serde_json::json!(session.user.id)
-    );
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(0, &preload_filter)
+    else {
+        panic!("the preload values event should remain replayable")
+    };
+    assert_eq!(events.len(), 1);
+    assert!(matches!(
+        events[0].payload,
+        light_application::ApplicationEvent::Programming(
+            light_application::ProgrammingEvent::PreloadValuesChanged(_)
+        )
+    ));
 
-    let before_priority = changed_count();
-    let priority = dispatch_ws_command(
+    let priority = dispatch_live_action(
         &state,
         &session,
-        command(
+        frame(
             "priority-only",
-            "programmer.priority",
-            serde_json::json!({"priority":7}),
+            serde_json::from_value(serde_json::json!({
+                "type":"programmer_priority",
+                "request":{
+                    "request_id":"priority-only",
+                    "expected_revision":0,
+                    "priority":7
+                }
+            }))
+            .unwrap(),
         ),
     );
     assert!(priority.ok, "{:?}", priority.error);
-    assert_eq!(changed_count(), before_priority);
+    let priority_filter = light_application::EventFilter::default().with_object(
+        light_application::EventObject::programming_priority(session.user.id.0),
+    );
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(0, &priority_filter)
+    else {
+        panic!("the priority event should remain replayable")
+    };
+    assert_eq!(events.len(), 1);
+    assert!(matches!(
+        events[0].payload,
+        light_application::ApplicationEvent::Programming(
+            light_application::ProgrammingEvent::PriorityChanged(_)
+        )
+    ));
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[tokio::test]
-async fn transient_control_retriggers_emit_compatibility_only_and_repeated_release_is_quiet() {
+async fn transient_control_retriggers_remain_projection_quiet_and_repeated_release_is_quiet() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -497,64 +640,67 @@ async fn transient_control_retriggers_emit_compatibility_only_and_repeated_relea
             ..EngineSnapshot::default()
         })
         .unwrap();
-    let changed_count = || {
-        state
-            .audit_events
-            .lock()
-            .iter()
-            .filter(|event| event.kind == "programmer_changed")
-            .count()
-    };
-    let before_changed_count = changed_count();
     let before_application_sequence = state.application_events.latest_sequence();
-    let command = |request_id: &str, active: bool| WsCommand {
-        protocol_version: 1,
-        request_id: request_id.into(),
-        session_id: session.id,
-        expected_revision: None,
-        command: "programmer.control_action".into(),
-        payload: serde_json::json!({
-            "fixture_id": fixture_id,
-            "action_id": action_id,
-            "active": active,
-        }),
-    };
-
-    for (request_id, active, expected_changes) in [
-        ("momentary-on", true, 1),
-        ("momentary-retrigger", true, 2),
-        ("momentary-off", false, 3),
-        ("momentary-off-again", false, 3),
+    for (request_id, active, expect_transient_values) in [
+        ("momentary-on", true, true),
+        ("momentary-retrigger", true, true),
+        ("momentary-off", false, false),
+        ("momentary-off-again", false, false),
     ] {
-        let response = dispatch_ws_command(&state, &session, command(request_id, active));
+        let response = dispatch_live_action(
+            &state,
+            &session,
+            live_action_frame(
+                &session,
+                request_id,
+                serde_json::from_value(serde_json::json!({
+                    "type":"fixture_control",
+                    "request":{
+                        "request_id":request_id,
+                        "fixture_id":fixture_id,
+                        "action_id":action_id,
+                        "active":active
+                    }
+                }))
+                .unwrap(),
+            ),
+        );
         assert!(response.ok, "{:?}", response.error);
-        assert_eq!(changed_count(), before_changed_count + expected_changes);
+        assert_eq!(
+            state
+                .programmers
+                .get(session.id)
+                .unwrap()
+                .transient_values
+                .is_empty(),
+            !expect_transient_values
+        );
     }
-    assert_eq!(
-        state.application_events.latest_sequence(),
-        before_application_sequence
+    let values_filter = light_application::EventFilter::default().with_object(
+        light_application::EventObject::programming_values(session.user.id.0),
     );
-    let changes = state
-        .audit_events
-        .lock()
-        .iter()
-        .filter(|event| event.kind == "programmer_changed")
-        .skip(before_changed_count)
-        .map(|event| event.payload["changes"].clone())
-        .collect::<Vec<_>>();
-    assert_eq!(
-        changes,
-        vec![serde_json::json!(["transient_control"]); 3]
+    let light_application::EventReplay::Events(events) = state
+        .application_events
+        .replay(before_application_sequence, &values_filter)
+    else {
+        panic!("the values event stream should remain replayable")
+    };
+    assert!(
+        events.is_empty(),
+        "transient controls do not mutate the authoritative persisted values projection"
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
 #[tokio::test]
-async fn direct_programmer_writes_resolve_configured_fade_for_recording() {
+async fn direct_programmer_writes_preserve_resolved_fade_for_recording() {
     let (state, data_dir) = test_state();
+    let fixture_definition = schema_v2_direct_fixture().0;
+    let fixture = fixture_definition.fixture_id;
     state
         .engine
         .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture_definition].into(),
             groups: vec![light_programmer::GroupDefinition {
                 id: "1".into(),
                 name: "Front".into(),
@@ -564,43 +710,58 @@ async fn direct_programmer_writes_resolve_configured_fade_for_recording() {
         })
         .unwrap();
     let app = router(state.clone());
-    let (token, session_id) = login(&app, "Operator").await;
+    let (token, _) = login(&app, "Operator").await;
     let session = authenticate_token(&state, &token).unwrap();
-    let fixture = light_core::FixtureId::new();
 
-    let fixture_response = dispatch_ws_command(
+    let fixture_response = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "fixture-fade".into(),
-            session_id: SessionId(Uuid::parse_str(&session_id).unwrap()),
-            expected_revision: None,
-            command: "programmer.set".into(),
-            payload: serde_json::json!({
-                "fixture_id": fixture,
-                "attribute": "intensity",
-                "value": 0.75
-            }),
-        },
+        live_action_frame(
+            &session,
+            "fixture-fade",
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_values",
+                "request":{
+                    "request_id":"fixture-fade",
+                    "expected_revision":0,
+                    "expected_capture_mode_revision":0,
+                    "action":{
+                        "type":"set_fixture",
+                        "fixture_id":fixture,
+                        "attribute":"intensity",
+                        "value":{"kind":"normalized","value":0.75},
+                        "timing":{"fade":true,"fade_millis":3000}
+                    }
+                }
+            }))
+            .unwrap(),
+        ),
     );
     assert!(fixture_response.ok);
 
-    let group_response = dispatch_ws_command(
+    let group_response = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "group-fade".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "programmer.group.set".into(),
-            payload: serde_json::json!({
-                "group_id": "1",
-                "attribute": "intensity",
-                "value": 0.5
-            }),
-        },
+        live_action_frame(
+            &session,
+            "group-fade",
+            serde_json::from_value(serde_json::json!({
+                "type":"programming_values",
+                "request":{
+                    "request_id":"group-fade",
+                    "expected_revision":1,
+                    "expected_capture_mode_revision":0,
+                    "action":{
+                        "type":"set_group",
+                        "group_id":"1",
+                        "attribute":"intensity",
+                        "value":{"kind":"normalized","value":0.5},
+                        "timing":{"fade":true,"fade_millis":3000}
+                    }
+                }
+            }))
+            .unwrap(),
+        ),
     );
     assert!(group_response.ok);
 

@@ -12,12 +12,10 @@ async fn legacy_master_update_publishes_one_typed_change_and_v2_repairs_it() {
     let denied = app
         .clone()
         .oneshot(
-            Request::get(format!(
-                "/api/v2/desks/{}/output-runtime/global-master",
-                session.desk.id
-            ))
-            .body(Body::empty())
-            .unwrap(),
+            Request::get("/api/v2/output-runtime/global-master")
+                .header("x-tosk-desk", session.desk.id.to_string())
+                .body(Body::empty())
+                .unwrap(),
         )
         .await
         .unwrap();
@@ -79,13 +77,11 @@ async fn legacy_master_update_publishes_one_typed_change_and_v2_repairs_it() {
     let snapshot = app
         .clone()
         .oneshot(
-            Request::get(format!(
-                "/api/v2/desks/{}/output-runtime/global-master",
-                session.desk.id
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap(),
+            Request::get("/api/v2/output-runtime/global-master")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-desk", session.desk.id.to_string())
+                .body(Body::empty())
+                .unwrap(),
         )
         .await
         .unwrap();
@@ -106,21 +102,37 @@ async fn websocket_master_retry_is_idempotent_at_the_typed_boundary() {
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let session = authenticate_token(&state, &token).unwrap();
-    let command = || WsCommand {
-        protocol_version: 1,
-        request_id: "global-master-1".into(),
-        session_id: session.id,
-        expected_revision: None,
-        command: "master.set".into(),
-        payload: serde_json::json!({"grand_master":0.25}),
+    let show = create_show(&app, &token, "Typed master retry").await;
+    open_show_for_output_test(&app, &token, &show).await;
+    let initial = output_snapshot(&app, &token, session.desk.id).await;
+    let request: light_wire::v2::output_runtime::OutputRuntimeActionRequest =
+        serde_json::from_value(output_request(
+            "global-master-1",
+            &initial,
+            Some(0.25),
+            None,
+        ))
+        .unwrap();
+    let command = || {
+        live_action_frame(
+            &session,
+            "global-master-1",
+            light_wire::v2::live_action::LiveAction::OutputRuntime(request.clone()),
+        )
     };
 
     let cursor = state.application_events.latest_sequence();
-    let first = dispatch_ws_command(&state, &session, command());
-    let replay = dispatch_ws_command(&state, &session, command());
+    let first = dispatch_live_action(&state, &session, command());
+    let replay = dispatch_live_action(&state, &session, command());
     assert!(first.ok, "{:?}", first.error);
     assert!(replay.ok, "{:?}", replay.error);
-    assert_eq!(first.payload, replay.payload);
+    let mut first_payload = first.payload.unwrap();
+    let mut replay_payload = replay.payload.unwrap();
+    assert_eq!(first_payload["replayed"], false);
+    assert_eq!(replay_payload["replayed"], true);
+    first_payload["replayed"] = serde_json::Value::Null;
+    replay_payload["replayed"] = serde_json::Value::Null;
+    assert_eq!(first_payload, replay_payload);
     assert_eq!(state.output_control.lock().options.grand_master, 0.25);
     assert_eq!(state.application_events.latest_sequence(), cursor + 1);
     let _ = std::fs::remove_dir_all(data_dir);
@@ -132,27 +144,20 @@ async fn volatile_output_controls_use_correlated_websocket_frames() {
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     let session = authenticate_token(&state, &token).unwrap();
-    let command = |request_id: &str, command: &str, payload: serde_json::Value| WsCommand {
-        protocol_version: 1,
-        request_id: request_id.into(),
-        session_id: session.id,
-        expected_revision: None,
-        command: command.into(),
-        payload,
-    };
-
-    let dmx = dispatch_ws_command(
+    let dmx = dispatch_live_action(
         &state,
         &session,
-        command(
+        live_action_frame(
+            &session,
             "dmx-override-1",
-            "dmx.override",
-            serde_json::json!({
-                "request_id":"dmx-override-1",
-                "universe":1,
-                "address":7,
-                "value":201
-            }),
+            light_wire::v2::live_action::LiveAction::DmxOverride(
+                light_wire::v2::output_control::DmxOverrideRequest {
+                    request_id: "dmx-override-1".into(),
+                    universe: 1,
+                    address: 7,
+                    value: Some(201),
+                },
+            ),
         ),
     );
     assert!(dmx.ok, "{:?}", dmx.error);
@@ -161,18 +166,20 @@ async fn volatile_output_controls_use_correlated_websocket_frames() {
         Some(&201)
     );
 
-    let mismatched = dispatch_ws_command(
+    let mismatched = dispatch_live_action(
         &state,
         &session,
-        command(
+        live_action_frame(
+            &session,
             "dmx-envelope",
-            "dmx.override",
-            serde_json::json!({
-                "request_id":"dmx-payload",
-                "universe":1,
-                "address":7,
-                "value":null
-            }),
+            light_wire::v2::live_action::LiveAction::DmxOverride(
+                light_wire::v2::output_control::DmxOverrideRequest {
+                    request_id: "dmx-payload".into(),
+                    universe: 1,
+                    address: 7,
+                    value: None,
+                },
+            ),
         ),
     );
     assert!(!mismatched.ok);
@@ -181,17 +188,19 @@ async fn volatile_output_controls_use_correlated_websocket_frames() {
         Some(&201)
     );
 
-    let patch_preview = dispatch_ws_command(
+    let patch_preview = dispatch_live_action(
         &state,
         &session,
-        command(
+        live_action_frame(
+            &session,
             "patch-preview-1",
-            "patch_preview_highlight.action",
-            serde_json::json!({
-                "request_id":"patch-preview-1",
-                "active":false,
-                "fixture_ids":[]
-            }),
+            light_wire::v2::live_action::LiveAction::PatchPreviewHighlight(
+                light_wire::v2::output_control::PatchPreviewHighlightRequest {
+                    request_id: "patch-preview-1".into(),
+                    active: false,
+                    fixture_ids: Vec::new(),
+                },
+            ),
         ),
     );
     assert!(patch_preview.ok, "{:?}", patch_preview.error);
@@ -311,19 +320,20 @@ async fn typed_output_runtime_ws_action_is_atomic_replay_safe_and_lock_gated() {
     open_show_for_output_test(&app, &token, &show).await;
     let initial = output_snapshot(&app, &token, session.desk.id).await;
     let request = output_request("ws-output-combined", &initial, Some(0.35), Some(true));
-    let command = || WsCommand {
-        protocol_version: 1,
-        request_id: "ws-output-combined".into(),
-        session_id: session.id,
-        expected_revision: None,
-        command: "output_runtime.action".into(),
-        payload: request.clone(),
+    let command = || {
+        live_action_frame(
+            &session,
+            "ws-output-combined",
+            light_wire::v2::live_action::LiveAction::OutputRuntime(
+                serde_json::from_value(request.clone()).unwrap(),
+            ),
+        )
     };
     let cursor = state.application_events.latest_sequence();
     let attempts = output_persistence_attempts(&state);
 
     let activation = state.activation_lock.clone().lock_owned().await;
-    let unstable = dispatch_ws_command(&state, &session, command());
+    let unstable = dispatch_live_action(&state, &session, command());
     assert!(!unstable.ok);
     assert!(
         unstable
@@ -335,7 +345,7 @@ async fn typed_output_runtime_ws_action_is_atomic_replay_safe_and_lock_gated() {
     assert_eq!(output_persistence_attempts(&state), attempts);
     assert_eq!(output_events(&state, cursor).len(), 0);
 
-    let first = dispatch_ws_command(&state, &session, command());
+    let first = dispatch_live_action(&state, &session, command());
     assert!(first.ok, "{:?}", first.error);
     let payload = first.payload.unwrap();
     assert_eq!(payload["status"], "changed");
@@ -345,7 +355,7 @@ async fn typed_output_runtime_ws_action_is_atomic_replay_safe_and_lock_gated() {
     assert_eq!(output_persistence_attempts(&state), attempts + 1);
     assert_eq!(output_events(&state, cursor).len(), 1);
 
-    let replay = dispatch_ws_command(&state, &session, command());
+    let replay = dispatch_live_action(&state, &session, command());
     assert!(replay.ok, "{:?}", replay.error);
     assert_eq!(replay.payload.unwrap()["replayed"], true);
     assert_eq!(output_persistence_attempts(&state), attempts + 1);
@@ -361,17 +371,22 @@ async fn typed_output_runtime_ws_action_is_atomic_replay_safe_and_lock_gated() {
     )
     .unwrap();
     let current = output_snapshot(&app, &token, session.desk.id).await;
-    let locked = dispatch_ws_command(
+    let locked = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "ws-output-locked".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "output_runtime.action".into(),
-            payload: output_request("ws-output-locked", &current, Some(0.8), None),
-        },
+        live_action_frame(
+            &session,
+            "ws-output-locked",
+            light_wire::v2::live_action::LiveAction::OutputRuntime(
+                serde_json::from_value(output_request(
+                    "ws-output-locked",
+                    &current,
+                    Some(0.8),
+                    None,
+                ))
+                .unwrap(),
+            ),
+        ),
     );
     assert!(!locked.ok);
     assert_eq!(locked.error.as_deref(), Some("desk is locked"));
@@ -585,12 +600,11 @@ fn output_request(
 async fn get_output(app: &Router, token: &str, desk_id: Uuid) -> Response {
     app.clone()
         .oneshot(
-            Request::get(format!(
-                "/api/v2/desks/{desk_id}/output-runtime/global-master"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap(),
+            Request::get("/api/v2/output-runtime/global-master")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-desk", desk_id.to_string())
+                .body(Body::empty())
+                .unwrap(),
         )
         .await
         .unwrap()
@@ -610,13 +624,12 @@ async fn post_output(
 ) -> Response {
     app.clone()
         .oneshot(
-            Request::post(format!(
-                "/api/v2/desks/{desk_id}/output-runtime/global-master"
-            ))
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(payload.to_string()))
-            .unwrap(),
+            Request::post("/api/v2/output-runtime/global-master")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-desk", desk_id.to_string())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(payload.to_string()))
+                .unwrap(),
         )
         .await
         .unwrap()

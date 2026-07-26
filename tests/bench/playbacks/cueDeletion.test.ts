@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiDriver, commandLineOwnership } from "../core/api";
+import { ApiDriver } from "../core/api";
 import {
 	CueDeletionActionError,
 	deleteCue,
@@ -17,12 +17,6 @@ const CUE_TWO_ID = "88888888-8888-4888-8888-888888888888";
 const CUE_THREE_ID = "99999999-9999-4999-8999-999999999999";
 
 describe("Cue deletion acceptance intent", () => {
-	it("routes whole-Cue deletion through the v2 command-line boundary", () => {
-		expect(commandLineOwnership("DELETE SET 1 CUE 2")).toEqual({
-			via: "command-line-http",
-		});
-	});
-
 	it("resolves exact pool authority and sends one revisioned v2 action", async () => {
 		const fetchMock = cueDeletionFetch();
 		const outcome = await deleteCue(api(), poolIntent(), {

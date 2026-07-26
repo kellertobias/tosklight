@@ -16,9 +16,7 @@ mod response;
 #[path = "preload/transaction.rs"]
 mod transaction;
 
-pub(super) use programmer::{
-    control_action_programmer_values, profile_head_owner, validate_programmer_attribute_value,
-};
+pub(super) use programmer::{control_action_programmer_values, profile_head_owner};
 
 #[derive(Debug)]
 pub(super) struct StagedPreloadPlaybackAction {

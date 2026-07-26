@@ -44,39 +44,39 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
         })
         .unwrap();
 
-    let fan_response = dispatch_ws_command(
+    let fan_response = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "fan-max".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "programmer.control_action".into(),
-            payload: serde_json::json!({
-                "fixture_id":fixture_id,
-                "action_id":fan_action_id,
-                "active":true,
-            }),
-        },
+        live_action_frame(
+            &session,
+            "fan-max",
+            light_wire::v2::live_action::LiveAction::FixtureControl(
+                light_wire::v2::live_action::FixtureControlLiveActionRequest {
+                    request_id: "fan-max".into(),
+                    fixture_id: fixture_id.0,
+                    action_id: fan_action_id,
+                    active: true,
+                },
+            ),
+        ),
     );
     assert!(fan_response.ok, "{:?}", fan_response.error);
 
-    let response = dispatch_ws_command(
+    let response = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "timed-pulse".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "programmer.control_action".into(),
-            payload: serde_json::json!({
-                "fixture_id":fixture_id,
-                "action_id":action_id,
-                "active":true,
-            }),
-        },
+        live_action_frame(
+            &session,
+            "timed-pulse",
+            light_wire::v2::live_action::LiveAction::FixtureControl(
+                light_wire::v2::live_action::FixtureControlLiveActionRequest {
+                    request_id: "timed-pulse".into(),
+                    fixture_id: fixture_id.0,
+                    action_id,
+                    active: true,
+                },
+            ),
+        ),
     );
     assert!(response.ok, "{:?}", response.error);
     assert_eq!(
@@ -98,20 +98,22 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
         expected_fan_max
     );
     assert!(persisted_programmer(&state, session.id).transient_values.is_empty());
-    assert_eq!(
-        state
-            .audit_events
-            .lock()
-            .iter()
-            .map(|event| event.kind.as_str())
-            .collect::<Vec<_>>(),
-        vec![
-            "command_applied",
-            "programmer_changed",
-            "command_applied",
-            "programmer_changed"
-        ]
+    let values_filter = light_application::EventFilter::default().with_object(
+        light_application::EventObject::programming_values(user.id.0),
     );
+    let light_application::EventReplay::Events(values_events) =
+        state.application_events.replay(0, &values_filter)
+    else {
+        panic!("expected replayable typed Programmer values events");
+    };
+    assert_eq!(values_events.len(), 1);
+    assert!(values_events.iter().all(|event| matches!(
+        event.payload,
+        light_application::ApplicationEvent::Programming(
+            light_application::ProgrammingEvent::ValuesChanged(_)
+        )
+    )));
+    assert!(state.audit_events.lock().is_empty());
 
     tokio::task::yield_now().await;
     tokio::time::advance(Duration::from_millis(749)).await;
@@ -131,16 +133,16 @@ async fn timed_control_action_is_transient_and_reveals_latched_fan_value_at_dead
         expected_fan_max
     );
     let events = state.audit_events.lock();
-    assert_eq!(events.len(), 5);
-    assert_eq!(events[4].kind, "programmer_changed");
-    assert_eq!(events[4].payload["action_id"], action_id.to_string());
-    assert_eq!(events[4].payload["active"], false);
-    assert_eq!(events[4].payload["timed_pulse_complete"], true);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].kind, "programmer_changed");
+    assert_eq!(events[0].payload["action_id"], action_id.to_string());
+    assert_eq!(events[0].payload["active"], false);
+    assert_eq!(events[0].payload["timed_pulse_complete"], true);
     assert_eq!(
-        events[4].payload["changes"],
+        events[0].payload["changes"],
         serde_json::json!(["transient_control"])
     );
-    assert_eq!(events[4].payload["user_id"], serde_json::json!(user.id));
+    assert_eq!(events[0].payload["user_id"], serde_json::json!(user.id));
     drop(events);
 
     let _ = std::fs::remove_dir_all(data_dir);
@@ -191,11 +193,25 @@ fn explicit_profile_preset_generation_writes_portable_show_objects() {
         )
         .unwrap();
 
-    let response = generate_profile_presets(&state, vec![fixture_id]).unwrap();
+    let response = generate_profile_presets_action(
+        &state,
+        vec![fixture_id],
+        light_application::ActionContext::system(
+            Uuid::nil(),
+            light_application::ActionSource::Http,
+        )
+        .with_request_id("generate-profile-presets")
+        .with_expected_revision(0),
+        show_id,
+    )
+    .unwrap();
 
-    assert_eq!(response["created"][0]["name"], "Dots");
-    assert_eq!(response["created"][0]["address"]["family"], "Beam");
-    assert_eq!(response["created"][0]["address"]["number"], 1);
+    assert_eq!(response.created[0].name, "Dots");
+    assert_eq!(
+        response.created[0].address.family,
+        light_wire::v2::preset_recording::PresetRecordingFamily::Beam
+    );
+    assert_eq!(response.created[0].address.number, 1);
     let stored = ShowStore::open(&show_path)
         .unwrap()
         .objects("preset")
@@ -262,17 +278,21 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
     sync_highlight_output(&state);
     assert_eq!(state.engine.highlighted_fixtures(), vec![fixture_id]);
 
-    let blind = dispatch_ws_command(
+    let blind = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "blind".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "programmer.mode".into(),
-            payload: serde_json::json!({"blind":true}),
-        },
+        live_action_frame(
+            &session,
+            "blind",
+            light_wire::v2::live_action::LiveAction::ProgrammerCaptureMode(
+                light_wire::v2::live_action::ProgrammerCaptureModeLiveActionRequest {
+                    request_id: "blind".into(),
+                    blind: Some(true),
+                    preview: None,
+                    active_context: None,
+                },
+            ),
+        ),
     );
     assert!(blind.ok, "{:?}", blind.error);
     assert!(state.engine.highlighted_fixtures().is_empty());
@@ -296,17 +316,21 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
     sync_highlight_output(&state);
     assert_eq!(state.engine.highlighted_fixtures(), vec![fixture_id]);
 
-    let preview = dispatch_ws_command(
+    let preview = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "preview".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "programmer.mode".into(),
-            payload: serde_json::json!({"preview":true}),
-        },
+        live_action_frame(
+            &session,
+            "preview",
+            light_wire::v2::live_action::LiveAction::ProgrammerCaptureMode(
+                light_wire::v2::live_action::ProgrammerCaptureModeLiveActionRequest {
+                    request_id: "preview".into(),
+                    blind: None,
+                    preview: Some(true),
+                    active_context: None,
+                },
+            ),
+        ),
     );
     assert!(preview.ok, "{:?}", preview.error);
     assert!(state.engine.highlighted_fixtures().is_empty());
@@ -315,32 +339,50 @@ fn blind_and_preload_transitions_synchronously_suppress_live_highlight() {
     assert!(preview_state.state.capture_only);
     assert!(!preview_state.state.output_enabled);
 
-    let leave_preview = dispatch_ws_command(
+    let leave_preview = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "leave-preview".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "programmer.mode".into(),
-            payload: serde_json::json!({"preview":false}),
-        },
+        live_action_frame(
+            &session,
+            "leave-preview",
+            light_wire::v2::live_action::LiveAction::ProgrammerCaptureMode(
+                light_wire::v2::live_action::ProgrammerCaptureModeLiveActionRequest {
+                    request_id: "leave-preview".into(),
+                    blind: None,
+                    preview: Some(false),
+                    active_context: None,
+                },
+            ),
+        ),
     );
     assert!(leave_preview.ok, "{:?}", leave_preview.error);
     assert_eq!(state.engine.highlighted_fixtures(), vec![fixture_id]);
 
-    let preload = dispatch_ws_command(
+    let preload = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "preload".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "preload.enter".into(),
-            payload: serde_json::json!({}),
-        },
+        live_action_frame(
+            &session,
+            "preload",
+            light_wire::v2::live_action::LiveAction::ProgrammerPreloadLifecycle(
+                light_wire::v2::preload_lifecycle::ProgrammingPreloadLifecycleRequest {
+                    request_id: "preload".into(),
+                    expected_capture_mode_revision: state
+                        .programmers
+                        .capture_mode_revision(user.id),
+                    expected_values_revision: state.programmers.preload_values_revision(user.id),
+                    expected_queue_revision: state
+                        .programmers
+                        .preload_playback_queue_revision(user.id),
+                    expected_selection_revision: state
+                        .programmers
+                        .selection(session.id)
+                        .unwrap()
+                        .revision,
+                    action: light_wire::v2::preload_lifecycle::ProgrammingPreloadLifecycleAction::Enter {},
+                },
+            ),
+        ),
     );
     assert!(preload.ok, "{:?}", preload.error);
     assert!(state.engine.highlighted_fixtures().is_empty());

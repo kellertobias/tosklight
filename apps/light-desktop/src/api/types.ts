@@ -1,6 +1,11 @@
 import type { PresetFamily } from "../presetFamilies";
 import type { ShowEntry } from "./types/desk";
 
+export type {
+	EventPayload as RuntimeCapabilityEvent,
+	OperatorNotification,
+	UpdateWorkflowNotification,
+} from "./generated/light-wire";
 export type * from "./playbackRuntimeTypes";
 export * from "./types/desk";
 
@@ -321,12 +326,6 @@ export interface GeneratedFixturePresetResult {
 		name: string;
 		family: string;
 	}>;
-}
-
-export interface ServerEvent {
-	revision: number;
-	kind: string;
-	payload: Record<string, unknown>;
 }
 
 export interface CommandHistoryEntry {

@@ -17,7 +17,10 @@ async fn group_record_route_is_authoritative_replay_safe_and_sparse_on_no_change
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario.create_and_open_show("Group record route").await;
     let fixture = scenario.install_direct_fixture();
-    scenario.state.programmers.select(scenario.session.id, [fixture]);
+    scenario
+        .state
+        .programmers
+        .select(scenario.session.id, [fixture]);
     let baseline = scenario.state.application_events.latest_sequence();
     let request = group_record_request("group-route-record", "Front Wash", "overwrite", 0);
 
@@ -30,11 +33,8 @@ async fn group_record_route_is_authoritative_replay_safe_and_sparse_on_no_change
         serde_json::from_value(json(response).await).unwrap();
     assert_eq!(first.request_id(), "group-route-record");
     assert!(!first.replayed());
-    let light_wire::v2::group_recording::RecordedGroupProjection::Stored {
-        id,
-        revision,
-        body,
-    } = first.changed_group().unwrap()
+    let light_wire::v2::group_recording::RecordedGroupProjection::Stored { id, revision, body } =
+        first.changed_group().unwrap()
     else {
         panic!("overwrite must return the stored Group")
     };
@@ -42,8 +42,9 @@ async fn group_record_route_is_authoritative_replay_safe_and_sparse_on_no_change
     assert_eq!(*revision, 1);
     assert_eq!(body["fixtures"], serde_json::json!([fixture.0]));
     let event_sequence = first.event_sequence().unwrap();
-    assert_eq!(event_sequence, baseline + 1);
-    assert_eq!(scenario.state.application_events.latest_sequence(), baseline + 1);
+    let show_events = show_events_after(&scenario.state, baseline);
+    assert_eq!(show_events.len(), 1);
+    assert_eq!(event_sequence, show_events[0].sequence);
     assert_eq!(
         highlight_reconciliations(&scenario, "show_selection_refresh"),
         1,
@@ -57,7 +58,7 @@ async fn group_record_route_is_authoritative_replay_safe_and_sparse_on_no_change
         serde_json::from_value(json(replay).await).unwrap();
     assert!(replay.replayed());
     assert_eq!(replay.event_sequence(), Some(event_sequence));
-    assert_eq!(scenario.state.application_events.latest_sequence(), baseline + 1);
+    assert_eq!(show_events_after(&scenario.state, baseline).len(), 1);
 
     let no_change = scenario
         .group_recording_action(
@@ -74,13 +75,13 @@ async fn group_record_route_is_authoritative_replay_safe_and_sparse_on_no_change
     ));
     assert_eq!(no_change.event_sequence(), None);
     assert_eq!(no_change.group_revision(), 1);
-    assert_eq!(scenario.state.application_events.latest_sequence(), baseline + 1);
-    assert_eq!(highlight_reconciliations(&scenario, "show_selection_refresh"), 1);
+    assert_eq!(show_events_after(&scenario.state, baseline).len(), 1);
+    assert_eq!(
+        highlight_reconciliations(&scenario, "show_selection_refresh"),
+        1
+    );
 
-    scenario
-        .state
-        .programmers
-        .select(scenario.session.id, []);
+    scenario.state.programmers.select(scenario.session.id, []);
     let changed = scenario
         .group_recording_action(
             &show_id,
@@ -148,7 +149,9 @@ async fn group_record_route_is_authoritative_replay_safe_and_sparse_on_no_change
 #[tokio::test]
 async fn group_recording_finishes_gestures_before_show_events_even_without_topology_change() {
     let scenario = CommandHttpScenario::new().await;
-    let show_id = scenario.create_and_open_show("Group gesture ordering").await;
+    let show_id = scenario
+        .create_and_open_show("Group gesture ordering")
+        .await;
     let fixture = scenario.install_direct_fixture();
     open_fixture_gesture(&scenario, fixture);
     let baseline = scenario.state.application_events.latest_sequence();
@@ -237,11 +240,27 @@ fn application_events_after(
     state: &AppState,
     baseline: u64,
 ) -> Vec<std::sync::Arc<light_application::EventEnvelope>> {
-    let light_application::EventReplay::Events(events) = state
-        .application_events
-        .replay(baseline, &light_application::EventFilter::default())
+    let filter = light_application::EventFilter::default()
+        .with_capability(light_application::EventCapability::Desk)
+        .with_capability(light_application::EventCapability::Show);
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(baseline, &filter)
     else {
         panic!("Group recording events must remain replayable")
+    };
+    events
+}
+
+fn show_events_after(
+    state: &AppState,
+    baseline: u64,
+) -> Vec<std::sync::Arc<light_application::EventEnvelope>> {
+    let filter = light_application::EventFilter::default()
+        .with_capability(light_application::EventCapability::Show);
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(baseline, &filter)
+    else {
+        panic!("Group recording Show events must remain replayable")
     };
     events
 }
@@ -264,10 +283,15 @@ fn highlight_reconciliations(scenario: &CommandHttpScenario, source: &str) -> us
 #[tokio::test]
 async fn group_record_route_merges_subtracts_deletes_and_checks_revisions() {
     let scenario = CommandHttpScenario::new().await;
-    let show_id = scenario.create_and_open_show("Group record operations").await;
+    let show_id = scenario
+        .create_and_open_show("Group record operations")
+        .await;
     let first = scenario.install_direct_fixture();
     let second = light_core::FixtureId::new();
-    scenario.state.programmers.select(scenario.session.id, [first]);
+    scenario
+        .state
+        .programmers
+        .select(scenario.session.id, [first]);
     let baseline = scenario.state.application_events.latest_sequence();
 
     let overwrite = scenario
@@ -278,7 +302,10 @@ async fn group_record_route_merges_subtracts_deletes_and_checks_revisions() {
         )
         .await;
     assert_eq!(overwrite.status(), StatusCode::OK);
-    scenario.state.programmers.select(scenario.session.id, [second]);
+    scenario
+        .state
+        .programmers
+        .select(scenario.session.id, [second]);
     let merge = scenario
         .group_recording_action(
             &show_id,
@@ -327,11 +354,7 @@ async fn group_record_route_merges_subtracts_deletes_and_checks_revisions() {
     open_fixture_gesture(&scenario, second);
     let delete_request = group_record_request("group-delete", "7", "delete", 3);
     let delete = scenario
-        .group_recording_action(
-            &show_id,
-            Some(&scenario.token),
-            delete_request.clone(),
-        )
+        .group_recording_action(&show_id, Some(&scenario.token), delete_request.clone())
         .await;
     assert_eq!(delete.status(), StatusCode::OK);
     assert_eq!(delete.headers()[header::ETAG], "\"4\"");
@@ -353,7 +376,7 @@ async fn group_record_route_merges_subtracts_deletes_and_checks_revisions() {
             .gesture_open,
         "explicit DELETE GROUP must preserve the current selection gesture"
     );
-    assert_eq!(scenario.state.application_events.latest_sequence(), baseline + 4);
+    assert_eq!(show_events_after(&scenario.state, baseline).len(), 4);
 
     let replay = scenario
         .group_recording_action(&show_id, Some(&scenario.token), delete_request)
@@ -365,7 +388,7 @@ async fn group_record_route_merges_subtracts_deletes_and_checks_revisions() {
         replay.changed_group().unwrap(),
         light_wire::v2::group_recording::RecordedGroupProjection::Deleted { revision: 4, .. }
     ));
-    assert_eq!(scenario.state.application_events.latest_sequence(), baseline + 4);
+    assert_eq!(show_events_after(&scenario.state, baseline).len(), 4);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -374,7 +397,10 @@ async fn group_record_route_rejects_missing_auth_forged_state_and_wrong_show() {
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario.create_and_open_show("Group record security").await;
     let fixture = scenario.install_direct_fixture();
-    scenario.state.programmers.select(scenario.session.id, [fixture]);
+    scenario
+        .state
+        .programmers
+        .select(scenario.session.id, [fixture]);
     let request = group_record_request("group-secure", "7", "overwrite", 0);
 
     assert_eq!(
@@ -397,11 +423,7 @@ async fn group_record_route_rejects_missing_auth_forged_state_and_wrong_show() {
     }
     assert_eq!(
         scenario
-            .group_recording_action(
-                &Uuid::new_v4().to_string(),
-                Some(&scenario.token),
-                request,
-            )
+            .group_recording_action(&Uuid::new_v4().to_string(), Some(&scenario.token), request,)
             .await
             .status(),
         StatusCode::CONFLICT
@@ -412,12 +434,17 @@ async fn group_record_route_rejects_missing_auth_forged_state_and_wrong_show() {
 #[tokio::test]
 async fn group_recording_captures_each_desk_selection_and_keeps_other_users_isolated() {
     let scenario = CommandHttpScenario::new().await;
-    let show_id = scenario.create_and_open_show("Group recording identity scopes").await;
+    let show_id = scenario
+        .create_and_open_show("Group recording identity scopes")
+        .await;
     let first = scenario.install_direct_fixture();
     let second = light_core::FixtureId::new();
     let third = light_core::FixtureId::new();
     let (same_user, other_user) = group_recording_peer_sessions(&scenario);
-    scenario.state.programmers.select(scenario.session.id, [first]);
+    scenario
+        .state
+        .programmers
+        .select(scenario.session.id, [first]);
     scenario.state.programmers.select(same_user.id, [second]);
     scenario.state.programmers.select(other_user.id, [third]);
 
@@ -441,11 +468,21 @@ async fn group_recording_captures_each_desk_selection_and_keeps_other_users_isol
     assert_eq!(other_user_record.status(), StatusCode::OK);
     assert_stored_group_fixtures(other_user_record, &[third]).await;
     assert_eq!(
-        scenario.state.programmers.selection(scenario.session.id).unwrap().selected,
+        scenario
+            .state
+            .programmers
+            .selection(scenario.session.id)
+            .unwrap()
+            .selected,
         vec![first]
     );
     assert_eq!(
-        scenario.state.programmers.selection(same_user.id).unwrap().selected,
+        scenario
+            .state
+            .programmers
+            .selection(same_user.id)
+            .unwrap()
+            .selected,
         vec![second]
     );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
@@ -489,14 +526,14 @@ async fn group_recording_port_rejects_forged_user_session_and_desk_contexts() {
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
-fn group_recording_peer_sessions(
-    scenario: &CommandHttpScenario,
-) -> (Session, Session) {
+fn group_recording_peer_sessions(scenario: &CommandHttpScenario) -> (Session, Session) {
     let (same_desk, other_user, other_desk) = {
         let store = scenario.state.desk.lock();
         let same_desk = store.add_desk("Same user wing", "same-user-wing").unwrap();
         let other_user = store.add_user("Other Group operator").unwrap();
-        let other_desk = store.add_desk("Other user wing", "other-user-wing").unwrap();
+        let other_desk = store
+            .add_desk("Other user wing", "other-user-wing")
+            .unwrap();
         (same_desk, other_user, other_desk)
     };
     let same_user = Session {
@@ -514,7 +551,10 @@ fn group_recording_peer_sessions(
         desk: other_desk,
     };
     for session in [&same_user, &other_user] {
-        scenario.state.programmers.start(session.id, session.user.id);
+        scenario
+            .state
+            .programmers
+            .start(session.id, session.user.id);
         attach_session_command_context(&scenario.state, session);
         scenario
             .state
@@ -533,20 +573,24 @@ async fn assert_stored_group_fixtures(response: Response, expected: &[light_core
     else {
         panic!("recording must return a stored Group")
     };
-    assert_eq!(
-        body["fixtures"],
-        serde_json::to_value(expected).unwrap()
-    );
+    assert_eq!(body["fixtures"], serde_json::to_value(expected).unwrap());
 }
 
 #[tokio::test]
 async fn command_keyboard_osc_and_websocket_group_recording_converge_on_typed_capability() {
     let scenario = CommandHttpScenario::new().await;
-    let show_id = scenario.create_and_open_show("Group command convergence").await;
+    let show_id = scenario
+        .create_and_open_show("Group command convergence")
+        .await;
     let fixture = scenario.install_direct_fixture();
-    scenario.state.programmers.select(scenario.session.id, [fixture]);
+    scenario
+        .state
+        .programmers
+        .select(scenario.session.id, [fixture]);
 
-    let command = scenario.execute("group-command", Some("RECORD GROUP 11")).await;
+    let command = scenario
+        .execute("group-command", Some("RECORD GROUP 11"))
+        .await;
     assert_eq!(command.status(), StatusCode::OK);
     assert_eq!(json(command).await["outcome"], "accepted");
 
@@ -583,17 +627,18 @@ async fn command_keyboard_osc_and_websocket_group_recording_converge_on_typed_ca
         );
     }
 
-    let ws = dispatch_ws_command(
+    let ws = dispatch_live_action(
         &scenario.state,
         &scenario.session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "group-ws".into(),
-            session_id: scenario.session.id,
-            expected_revision: None,
-            command: "programmer.execute".into(),
-            payload: serde_json::json!({"value":"RECORD GROUP 14"}),
-        },
+        live_action_frame(
+            &scenario.session,
+            "group-ws",
+            light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    value: "RECORD GROUP 14".into(),
+                },
+            ),
+        ),
     );
     assert!(ws.ok, "{:?}", ws.error);
 
@@ -617,25 +662,36 @@ async fn command_keyboard_osc_and_websocket_group_recording_converge_on_typed_ca
 #[tokio::test]
 async fn websocket_group_request_replay_skips_history_persistence_and_events() {
     let scenario = CommandHttpScenario::new().await;
-    let _show_id = scenario.create_and_open_show("Group WebSocket replay").await;
+    let _show_id = scenario
+        .create_and_open_show("Group WebSocket replay")
+        .await;
     let fixture = scenario.install_direct_fixture();
-    scenario.state.programmers.select(scenario.session.id, [fixture]);
-    let command = || WsCommand {
-        protocol_version: 1,
-        request_id: "group-ws-replay".into(),
-        session_id: scenario.session.id,
-        expected_revision: None,
-        command: "programmer.execute".into(),
-        payload: serde_json::json!({"value":"RECORD GROUP 15"}),
+    scenario
+        .state
+        .programmers
+        .select(scenario.session.id, [fixture]);
+    let command = || {
+        live_action_frame(
+            &scenario.session,
+            "group-ws-replay",
+            light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    value: "RECORD GROUP 15".into(),
+                },
+            ),
+        )
     };
 
-    let first = dispatch_ws_command(&scenario.state, &scenario.session, command());
+    let first = dispatch_live_action(&scenario.state, &scenario.session, command());
     assert!(first.ok, "{:?}", first.error);
     let sequence = scenario.state.application_events.latest_sequence();
     let history = scenario.history_len();
-    let replay = dispatch_ws_command(&scenario.state, &scenario.session, command());
+    let replay = dispatch_live_action(&scenario.state, &scenario.session, command());
     assert!(replay.ok, "{:?}", replay.error);
-    assert_eq!(scenario.state.application_events.latest_sequence(), sequence);
+    assert_eq!(
+        scenario.state.application_events.latest_sequence(),
+        sequence
+    );
     assert_eq!(scenario.history_len(), history);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

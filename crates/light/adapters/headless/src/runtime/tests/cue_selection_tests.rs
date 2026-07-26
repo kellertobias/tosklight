@@ -373,17 +373,23 @@ fn authoritative_selection_surfaces_expand_a_multi_head_parent_to_child_rows() {
         })
         .unwrap();
 
-    let set = dispatch_ws_command(
+    let set = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "multi-head-set".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "selection.set".into(),
-            payload: serde_json::json!({"fixtures":[parent]}),
-        },
+        live_action_frame(
+            &session,
+            "multi-head-set",
+            light_wire::v2::live_action::LiveAction::ProgrammingSelection(
+                light_wire::v2::command_line::ProgrammingSelectionActionRequest {
+                    request_id: "multi-head-set".into(),
+                    action:
+                        light_wire::v2::command_line::ProgrammingSelectionAction::Replace {
+                            fixtures: vec![parent.0],
+                            expected_revision: 0,
+                        },
+                },
+            ),
+        ),
     );
     assert!(set.ok, "{:?}", set.error);
     assert_eq!(
@@ -392,19 +398,25 @@ fn authoritative_selection_surfaces_expand_a_multi_head_parent_to_child_rows() {
     );
 
     state.programmers.select(session.id, []);
-    let gesture = dispatch_ws_command(
+    let gesture = dispatch_live_action(
         &state,
         &session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "multi-head-gesture".into(),
-            session_id: session.id,
-            expected_revision: None,
-            command: "selection.gesture".into(),
-            payload: serde_json::json!({
-                "source":{"type":"fixture","fixture_id":parent}
-            }),
-        },
+        live_action_frame(
+            &session,
+            "multi-head-gesture",
+            light_wire::v2::live_action::LiveAction::ProgrammingSelection(
+                light_wire::v2::command_line::ProgrammingSelectionActionRequest {
+                    request_id: "multi-head-gesture".into(),
+                    action:
+                        light_wire::v2::command_line::ProgrammingSelectionAction::Gesture {
+                            source: light_wire::v2::command_line::ProgrammingSelectionGestureSource::Fixture {
+                                fixture_id: parent.0,
+                            },
+                            remove: false,
+                        },
+                },
+            ),
+        ),
     );
     assert!(gesture.ok, "{:?}", gesture.error);
     assert_eq!(

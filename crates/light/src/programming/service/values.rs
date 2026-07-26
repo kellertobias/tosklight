@@ -392,7 +392,7 @@ fn plan_value_intent(
                             "relative Programmer value requires a current normalized value",
                         )
                     })?;
-                AttributeValue::Normalized((current + delta).clamp(0.0, 1.0))
+                AttributeValue::Normalized(shift_normalized(current, *delta))
             }
         };
         push_intent_value(
@@ -458,12 +458,12 @@ fn group_current_value(
 fn shift_attribute_value(value: AttributeValue, delta: f32) -> Result<AttributeValue, ActionError> {
     match value {
         AttributeValue::Normalized(value) => {
-            Ok(AttributeValue::Normalized((value + delta).clamp(0.0, 1.0)))
+            Ok(AttributeValue::Normalized(shift_normalized(value, delta)))
         }
         AttributeValue::Spread(values) => Ok(AttributeValue::Spread(
             values
                 .into_iter()
-                .map(|value| (value + delta).clamp(0.0, 1.0))
+                .map(|value| shift_normalized(value, delta))
                 .collect(),
         )),
         AttributeValue::Discrete(_)
@@ -474,6 +474,11 @@ fn shift_attribute_value(value: AttributeValue, delta: f32) -> Result<AttributeV
             "relative Group value requires a current normalized value",
         )),
     }
+}
+
+fn shift_normalized(value: f32, delta: f32) -> f32 {
+    const PRECISION: f32 = 1_000_000.0;
+    (((value + delta) * PRECISION).round() / PRECISION).clamp(0.0, 1.0)
 }
 
 fn push_intent_value(
@@ -571,5 +576,16 @@ fn domain_timing(timing: ProgrammingValueTiming) -> NormalProgrammerValueTiming 
         fade: timing.fade,
         fade_millis: timing.fade_millis,
         delay_millis: timing.delay_millis,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::shift_normalized;
+
+    #[test]
+    fn repeated_operator_steps_do_not_drift_below_the_displayed_value() {
+        let value = (0..10).fold(0.0, |current, _| shift_normalized(current, 0.01));
+        assert_eq!(value, 0.1);
     }
 }

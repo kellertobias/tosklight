@@ -56,7 +56,10 @@ async fn priority_snapshot_and_action_are_exact_user_shared_sparse_and_replay_sa
         changed.outcome,
         light_wire::v2::programmer_priority::ProgrammerPriorityActionState::Changed { .. }
     ));
-    assert_eq!(compatibility_event_count(&scenario.state), compatibility_before);
+    assert_eq!(
+        compatibility_event_count(&scenario.state),
+        compatibility_before
+    );
 
     let peer = scenario
         .priority_snapshot_for(second_user, Some(&second_token))
@@ -74,7 +77,10 @@ async fn priority_snapshot_and_action_are_exact_user_shared_sparse_and_replay_sa
         serde_json::from_value(json(replay).await).unwrap();
     assert!(replay.replayed);
     assert_eq!(priority_event_count(&scenario.state, user_id), event_count);
-    assert_eq!(compatibility_event_count(&scenario.state), compatibility_before);
+    assert_eq!(
+        compatibility_event_count(&scenario.state),
+        compatibility_before
+    );
 
     let no_change = scenario
         .priority_action_for(
@@ -201,18 +207,15 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
                 id: "5".into(),
                 fixtures: vec![selected[1]],
                 ..Default::default()
-            }].into(),
+            }]
+            .into(),
             revision: engine_revision + 1,
             ..EngineSnapshot::default()
         })
         .unwrap();
 
-    let mut request = preset_recall_request(
-        "preset-recall-http",
-        show_revision,
-        selection_revision,
-        0,
-    );
+    let mut request =
+        preset_recall_request("preset-recall-http", show_revision, selection_revision, 0);
     assert_eq!(
         scenario
             .preset_recall_action(&show_id, None, request.clone())
@@ -273,8 +276,14 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
             .selected,
         vec![selected[0]]
     );
-    assert_eq!(values_event_count(&scenario.state, scenario.session.user.id.0), 0);
-    assert_eq!(compatibility_event_count(&scenario.state), compatibility_before);
+    assert_eq!(
+        values_event_count(&scenario.state, scenario.session.user.id.0),
+        0
+    );
+    assert_eq!(
+        compatibility_event_count(&scenario.state),
+        compatibility_before
+    );
 
     let recalled = scenario
         .preset_recall_action(
@@ -303,7 +312,10 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
     };
     assert_eq!(projection.fixture_values.len(), 1);
     assert_eq!(projection.fixture_values[0].fixture_id, selected[0].0);
-    assert_eq!(values_event_count(&scenario.state, scenario.session.user.id.0), 1);
+    assert_eq!(
+        values_event_count(&scenario.state, scenario.session.user.id.0),
+        1
+    );
 
     let no_change = scenario
         .preset_recall_action(
@@ -323,7 +335,10 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
         no_change.outcome,
         light_wire::v2::preset_recall::PresetRecallActionState::NoChange
     ));
-    assert_eq!(values_event_count(&scenario.state, scenario.session.user.id.0), 1);
+    assert_eq!(
+        values_event_count(&scenario.state, scenario.session.user.id.0),
+        1
+    );
 
     let conflict = scenario
         .preset_recall_action(
@@ -343,177 +358,27 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
 }
 
 #[tokio::test]
-async fn preset_v1_recall_is_rejected_before_show_reads_while_activation_is_locked() {
-    let scenario = CommandHttpScenario::new().await;
-    let command = WsCommand {
-        protocol_version: 1,
-        request_id: "preset-v1-show-changing".into(),
-        session_id: scenario.session.id,
-        expected_revision: None,
-        command: "preset.apply".into(),
-        payload: serde_json::json!({"family":"Intensity","number":1}),
-    };
-    let sequence_before = scenario.state.application_events.latest_sequence();
-    let generation_before = scenario
-        .state
-        .programmers
-        .normal_values_generation(scenario.session.id);
-    let activation = scenario.state.activation_lock.clone().lock_owned().await;
-
-    let rejected = dispatch_ws_command(&scenario.state, &scenario.session, command);
-
-    assert!(!rejected.ok);
-    assert_eq!(
-        rejected.error.as_deref(),
-        Some("the active show is changing; retry the Programmer action")
-    );
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        sequence_before
-    );
-    assert_eq!(
-        scenario
-            .state
-            .programmers
-            .normal_values_generation(scenario.session.id),
-        generation_before
-    );
-    drop(activation);
-    let _ = std::fs::remove_dir_all(scenario.data_dir);
-}
-
-#[tokio::test]
-async fn priority_replays_but_preset_v1_live_action_reexecutes_without_semantic_replay() {
-    let scenario = CommandHttpScenario::new().await;
-    let priority = || WsCommand {
-        protocol_version: 1,
-        request_id: "priority-v1-typed".into(),
-        session_id: scenario.session.id,
-        expected_revision: None,
-        command: "programmer.priority".into(),
-        payload: serde_json::json!({"priority":55}),
-    };
-    let commands_before = audit_kind_count(&scenario.state, "command_applied");
-    let changed_before = audit_kind_count(&scenario.state, "programmer_changed");
-    let first = dispatch_ws_command(&scenario.state, &scenario.session, priority());
-    assert!(first.ok, "{:?}", first.error);
-    let payload = first.payload.unwrap();
-    assert_eq!(payload.as_object().unwrap().keys().collect::<Vec<_>>(), vec!["programmer"]);
-    assert_eq!(payload["programmer"]["priority"], 55);
-    assert_eq!(audit_kind_count(&scenario.state, "command_applied"), commands_before + 1);
-    assert_eq!(audit_kind_count(&scenario.state, "programmer_changed"), changed_before);
-    assert_eq!(priority_event_count(&scenario.state, scenario.session.user.id.0), 1);
-
-    let replay = dispatch_ws_command(&scenario.state, &scenario.session, priority());
-    assert!(replay.ok, "{:?}", replay.error);
-    assert_eq!(audit_kind_count(&scenario.state, "command_applied"), commands_before + 1);
-    assert_eq!(audit_kind_count(&scenario.state, "programmer_changed"), changed_before);
-    assert_eq!(priority_event_count(&scenario.state, scenario.session.user.id.0), 1);
-
-    let show_id = scenario.create_and_open_show("Preset v1 typed service").await;
-    let fixture = light_core::FixtureId::new();
-    let selection_revision = scenario
-        .state
-        .programmers
-        .select(scenario.session.id, [fixture]);
-    assert!(selection_revision > 0);
-    let preset = light_programmer::Preset {
-        name: "V1 look".into(),
-        family: light_programmer::PresetFamily::Intensity,
-        number: 2,
-        values: HashMap::from([(
-            fixture,
-            HashMap::from([(
-                light_core::AttributeKey::intensity(),
-                light_core::AttributeValue::Normalized(0.7),
-            )]),
-        )]),
-        group_values: HashMap::new(),
-    };
-    assert_eq!(
-        scenario
-            .put_active_object(
-                &show_id,
-                "preset",
-                "1.2",
-                0,
-                serde_json::to_value(preset).unwrap(),
-            )
-            .await
-            .status(),
-        StatusCode::OK
-    );
-    let recall = || WsCommand {
-        protocol_version: 1,
-        request_id: "preset-v1-typed".into(),
-        session_id: scenario.session.id,
-        expected_revision: None,
-        command: "preset.apply".into(),
-        payload: serde_json::json!({"family":"Intensity","number":2}),
-    };
-    let commands_before = audit_kind_count(&scenario.state, "command_applied");
-    let changed_before = audit_kind_count(&scenario.state, "programmer_changed");
-    let values_before = values_event_count(&scenario.state, scenario.session.user.id.0);
-    let first = dispatch_ws_command(&scenario.state, &scenario.session, recall());
-    assert!(first.ok, "{:?}", first.error);
-    let payload = first.payload.unwrap();
-    assert_eq!(
-        payload.as_object().unwrap().keys().collect::<Vec<_>>(),
-        vec!["applied", "programmer", "selected"]
-    );
-    assert_eq!(payload["applied"], 1);
-    assert_eq!(payload["selected"], 0);
-    assert_eq!(payload["programmer"]["active_context"], "preset:1.2");
-    assert_eq!(audit_kind_count(&scenario.state, "command_applied"), commands_before + 1);
-    assert_eq!(audit_kind_count(&scenario.state, "programmer_changed"), changed_before + 1);
-    let last = scenario
-        .state
-        .audit_events
-        .lock()
-        .iter()
-        .rev()
-        .find(|event| event.kind == "programmer_changed")
-        .unwrap()
-        .payload["changes"]
-        .clone();
-    assert_eq!(last, serde_json::json!(["values"]));
-    assert_eq!(
-        values_event_count(&scenario.state, scenario.session.user.id.0),
-        values_before + 1
-    );
-
-    let repeated = dispatch_ws_command(&scenario.state, &scenario.session, recall());
-    assert!(repeated.ok, "{:?}", repeated.error);
-    assert_eq!(audit_kind_count(&scenario.state, "command_applied"), commands_before + 2);
-    assert_eq!(audit_kind_count(&scenario.state, "programmer_changed"), changed_before + 1);
-    assert_eq!(
-        values_event_count(&scenario.state, scenario.session.user.id.0),
-        values_before + 1
-    );
-    let _ = std::fs::remove_dir_all(scenario.data_dir);
-}
-
-#[tokio::test]
 async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_policy() {
     let scenario = CommandHttpScenario::new().await;
-    let priority = || WsCommand {
-        protocol_version: 1,
-        request_id: "priority-ws-exact".into(),
-        session_id: scenario.session.id,
-        expected_revision: None,
-        command: "programmer.priority.action".into(),
-        payload: serde_json::json!({
-            "request_id":"priority-ws-exact",
-            "expected_revision":0,
-            "priority":65,
-        }),
+    let priority = || {
+        live_action_frame(
+            &scenario.session,
+            "priority-ws-exact",
+            light_wire::v2::live_action::LiveAction::ProgrammerPriority(
+                light_wire::v2::programmer_priority::ProgrammerPriorityActionRequest {
+                    request_id: "priority-ws-exact".into(),
+                    expected_revision: 0,
+                    priority: 65,
+                },
+            ),
+        )
     };
     let activation = scenario.state.activation_lock.clone().lock_owned().await;
-    let first = dispatch_ws_command(&scenario.state, &scenario.session, priority());
+    let first = dispatch_live_action(&scenario.state, &scenario.session, priority());
     assert!(first.ok, "{:?}", first.error);
     assert_eq!(first.payload.unwrap()["projection"]["revision"], 1);
     drop(activation);
-    let replay = dispatch_ws_command(&scenario.state, &scenario.session, priority());
+    let replay = dispatch_live_action(&scenario.state, &scenario.session, priority());
     assert!(replay.ok, "{:?}", replay.error);
     assert_eq!(replay.payload.unwrap()["replayed"], true);
 
@@ -555,33 +420,37 @@ async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_poli
         .portable_revision()
         .unwrap()
         .value();
-    let recall = || WsCommand {
-        protocol_version: 1,
-        request_id: "preset-ws-exact".into(),
-        session_id: scenario.session.id,
-        expected_revision: None,
-        command: "preset.recall.action".into(),
-        payload: serde_json::json!({
-            "show_id":show_id,
-            "request":{
-                "address":{"family":"intensity","number":3},
-                "expected_preset_revision":1,
-                "expected_show_revision":show_revision,
-                "expected_programmer_revision":0,
-                "expected_capture_mode_revision":0,
-                "expected_selection_revision":selection_revision,
-                "future_field":true
-            },
-            "future_envelope":true
-        }),
+    let recall = || {
+        live_action_frame(
+            &scenario.session,
+            "preset-ws-exact",
+            light_wire::v2::live_action::LiveAction::PresetRecall(
+                light_wire::v2::live_action::PresetRecallLiveActionRequest {
+                    request_id: "preset-ws-exact".into(),
+                    show_id: Uuid::parse_str(&show_id).unwrap(),
+                    request: light_wire::v2::preset_recall::PresetRecallRequest {
+                        address: light_wire::v2::preset_recording::PresetRecordingAddress {
+                            family:
+                                light_wire::v2::preset_recording::PresetRecordingFamily::Intensity,
+                            number: 3,
+                        },
+                        expected_preset_revision: 1,
+                        expected_show_revision: show_revision,
+                        expected_programmer_revision: 0,
+                        expected_capture_mode_revision: 0,
+                        expected_selection_revision: selection_revision,
+                    },
+                },
+            ),
+        )
     };
-    let first = dispatch_ws_command(&scenario.state, &scenario.session, recall());
+    let first = dispatch_live_action(&scenario.state, &scenario.session, recall());
     assert!(first.ok, "{:?}", first.error);
     let payload = first.payload.unwrap();
     assert_eq!(payload["status"], "changed");
     assert_eq!(payload["disposition"], "recalled");
     assert_eq!(payload["preset"]["id"], "1.3");
-    let repeated = dispatch_ws_command(&scenario.state, &scenario.session, recall());
+    let repeated = dispatch_live_action(&scenario.state, &scenario.session, recall());
     assert!(!repeated.ok);
     assert!(
         repeated
@@ -609,8 +478,9 @@ fn preset_recall_request(
 }
 
 fn priority_event_count(state: &AppState, user_id: Uuid) -> usize {
-    let filter = light_application::EventFilter::default()
-        .with_object(light_application::EventObject::programming_priority(user_id));
+    let filter = light_application::EventFilter::default().with_object(
+        light_application::EventObject::programming_priority(user_id),
+    );
     let light_application::EventReplay::Events(events) =
         state.application_events.replay(0, &filter)
     else {
@@ -635,15 +505,11 @@ fn compatibility_event_count(state: &AppState) -> usize {
         .audit_events
         .lock()
         .iter()
-        .filter(|event| matches!(event.kind.as_str(), "command_applied" | "programmer_changed"))
-        .count()
-}
-
-fn audit_kind_count(state: &AppState, kind: &str) -> usize {
-    state
-        .audit_events
-        .lock()
-        .iter()
-        .filter(|event| event.kind == kind)
+        .filter(|event| {
+            matches!(
+                event.kind.as_str(),
+                "command_applied" | "programmer_changed"
+            )
+        })
         .count()
 }

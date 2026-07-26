@@ -163,14 +163,13 @@ describe("HttpSpeedGroupRuntimeTransport", () => {
 		});
 		const [getUrl, getOptions] = fetch.mock.calls[0] ?? [];
 		const [postUrl, postOptions] = fetch.mock.calls[1] ?? [];
-		expect(getUrl).toBe(
-			`http://127.0.0.1:5000/api/v2/desks/${DESK_ID}/speed-groups`,
-		);
+		expect(getUrl).toBe("http://127.0.0.1:5000/api/v2/speed-groups");
 		expect(postUrl).toBe(getUrl);
 		expect(String(getUrl)).not.toMatch(/bootstrap|playbacks|sound/u);
 		expect((getOptions?.headers as Headers).get("authorization")).toBe(
 			"Bearer session-token",
 		);
+		expect((getOptions?.headers as Headers).get("x-tosk-desk")).toBe(DESK_ID);
 		expect(postOptions?.method).toBe("POST");
 		expect(JSON.parse(String(postOptions?.body))).toEqual({
 			request_id: "speed-request",

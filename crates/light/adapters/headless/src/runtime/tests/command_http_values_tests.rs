@@ -69,7 +69,10 @@ async fn capture_mode_snapshot_is_user_owned_and_shared_between_the_users_desks(
     assert_eq!(response.headers()[header::ETAG], "\"1\"");
     let snapshot: light_wire::v2::programming::ProgrammingCaptureModeSnapshot =
         serde_json::from_value(json(response).await).unwrap();
-    assert_eq!(snapshot.cursor.sequence, 2);
+    assert_eq!(
+        snapshot.cursor.sequence,
+        scenario.state.application_events.latest_sequence()
+    );
     assert_eq!(snapshot.projection.user_id, scenario.session.user.id.0);
     assert_eq!(snapshot.projection.revision, 1);
     assert!(snapshot.projection.blind);
@@ -203,7 +206,15 @@ async fn active_preload_rejects_normal_values_without_mutation_or_values_event()
         .as_array()
         .unwrap()
         .is_empty());
-    assert_eq!(scenario.state.application_events.latest_sequence(), 2);
+    let values_filter = light_application::EventFilter::default().with_object(
+        light_application::EventObject::programming_values(scenario.session.user.id.0),
+    );
+    let light_application::EventReplay::Events(values_events) =
+        scenario.state.application_events.replay(0, &values_filter)
+    else {
+        panic!("the focused Programmer values history should remain replayable")
+    };
+    assert!(values_events.is_empty());
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

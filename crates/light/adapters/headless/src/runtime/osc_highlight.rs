@@ -221,11 +221,13 @@ fn apply_record_gesture(state: &AppState, session: &Session, gesture: OscRecordG
                 serde_json::json!({"session_id":session.id}),
             );
         }
-        OscRecordGesture::Targets => emit(
-            state,
-            "update_targets_requested",
-            serde_json::json!({"desk_id":session.desk.id,"session_id":session.id,"source":"osc"}),
-        ),
+        OscRecordGesture::Targets => {
+            emit(
+                state,
+                "update_targets_requested",
+                serde_json::json!({"desk_id":session.desk.id,"session_id":session.id,"source":"osc"}),
+            );
+        }
         OscRecordGesture::Settings => {
             state
                 .programmers

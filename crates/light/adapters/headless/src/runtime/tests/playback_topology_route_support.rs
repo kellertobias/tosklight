@@ -304,10 +304,12 @@ pub(super) fn show_events(
     state: &AppState,
     after: u64,
 ) -> Vec<Arc<light_application::EventEnvelope>> {
-    let light_application::EventReplay::Events(events) = state
-        .application_events
-        .replay(after, &light_application::EventFilter::default())
-    else {
+    let light_application::EventReplay::Events(events) = state.application_events.replay(
+        after,
+        &light_application::EventFilter::default()
+            .with_capability(light_application::EventCapability::Desk)
+            .with_capability(light_application::EventCapability::Show),
+    ) else {
         panic!("expected retained Playback topology events")
     };
     events

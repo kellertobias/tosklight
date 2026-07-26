@@ -424,32 +424,31 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       .toEqual(Array(12).fill(128));
   });
 
-  // The retained direct exercise of WebSocket command-line editing and target selection. CUE execution
-  // has one dedicated compatibility spec; every other scenario states execution intent through
-  // the v2 command-line HTTP contract or a categorized compatibility helper.
-  test("API-004 @api › multiplexed WebSocket command-edit envelope contract", async ({ api, bench }) => {
-    await loadCanonicalCopy(api, bench, "api-004-websocket-command-line-envelope");
+  test("API-004 @api › typed WebSocket command-line actions preserve desk state", async ({ api, bench }) => {
+    await loadCanonicalCopy(api, bench, "api-004-typed-websocket-command-line-actions");
 
-    const accepted = await api.command<unknown>("programmer.command_line", { value: "GROUP 1 +" });
-    expect(accepted).toMatchObject({ protocol_version: 1, ok: true });
+    const accepted = await api.liveAction<unknown>({
+      type: "command_line_set",
+      request: { value: "GROUP 1 +" },
+    });
+    expect(accepted).toMatchObject({ protocol_version: 2, ok: true });
     expect(accepted.request_id).toMatch(/^[0-9a-f-]{36}$/i);
     expect(Number.isSafeInteger(accepted.revision)).toBe(true);
     expect((await programmer(api)).command_line).toBe("GROUP 1 +");
 
-    // The command envelope still owns the FIXTURE/GROUP command target; no typed action replaces it.
-    const target = await api.command<unknown>("programmer.command_target", { value: "FIXTURE" });
-    expect(target).toMatchObject({ protocol_version: 1, ok: true });
+    const target = await api.liveAction<unknown>({
+      type: "command_target",
+      request: { value: "FIXTURE" },
+    });
+    expect(target).toMatchObject({ protocol_version: 2, ok: true });
     expect(target.revision).toBeGreaterThanOrEqual(accepted.revision);
-
-    // Unknown commands stay a transport-level error, which is what compatibility callers observe.
-    await expect(api.command("not.a.command", {})).rejects.toThrow("unknown command");
   });
 
   registerGroupOutputPair("CROSS-001", 50, 128, "equivalent group value agrees across command surfaces");
 
   pairedScenario<CrossMutationState>({
     id: "CROSS-002",
-    title: "browser live-reconciles the contract's external REST and command-WebSocket mutations",
+    title: "browser live-reconciles the contract's external REST and typed live-action mutations",
     surfaces: ["api"],
     arrange: async ({ api, bench }, surface) => {
       await loadCanonicalCopy(api, bench, `cross-002-${surface}`);
@@ -461,11 +460,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     },
     api: async ({ api }, state) => {
       state.mutationRevision = await appendFixtureFive(api);
-      await api.command("programmer.group.set", {
-        group_id: "3",
-        attribute: "intensity",
-        value: 0.5,
-      });
+      await api.executeCommandLine("GROUP 3 AT 50");
     },
     ui: async ({ api, bench, desk, page }, state) => {
       await desk.open(bench.baseUrl);
@@ -479,7 +474,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await expect(order).not.toContainText("Fixture 5");
 
       // CROSS-002 is intentionally the external-source exception for an @ui
-      // adapter: the Markdown contract makes REST and command WebSocket writes
+      // adapter: the Markdown contract makes REST and typed live-action writes
       // the stimulus, while the browser's live reaction is the system under test.
       await test.step("Apply the contract's external REST membership mutation", async () => {
         state.mutationRevision = await appendFixtureFive(api);
@@ -490,12 +485,8 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await page.locator(".group-context-menu").getByRole("button", { name: "Select live group", exact: true }).click();
       await expect(groupCard).toHaveClass(/selected/);
 
-      await test.step("Apply the contract's external authenticated command-WebSocket value", async () => {
-        await api.command("programmer.group.set", {
-          group_id: "3",
-          attribute: "intensity",
-          value: 0.5,
-        });
+      await test.step("Apply the contract's external authenticated live action", async () => {
+        await api.executeCommandLine("GROUP 3 AT 50");
       });
       const dimmerEncoder = page.locator(".touch-encoder").filter({ hasText: "Enc 1 · Dimmer" });
       await expect(dimmerEncoder).toContainText("50%");

@@ -237,7 +237,7 @@ function assertNarrowCalls(
 	expectedAction: Record<string, unknown>,
 ) {
 	const urls = fetchMock.mock.calls.map(([input]) => String(input));
-	const expected = `http://desk.local/api/v2/desks/${DESK_ID}/speed-groups`;
+	const expected = "http://desk.local/api/v2/speed-groups";
 	expect(urls).toEqual([expected, expected]);
 	expect(
 		urls.some((url) =>
@@ -248,6 +248,8 @@ function assertNarrowCalls(
 		expect((init?.headers as Headers).get("authorization")).toBe(
 			"Bearer token",
 		);
+	for (const [, init] of fetchMock.mock.calls)
+		expect((init?.headers as Headers).get("x-tosk-desk")).toBe(DESK_ID);
 	const [, action] = fetchMock.mock.calls;
 	expect(action?.[1]?.method).toBe("POST");
 	expect(JSON.parse(String(action?.[1]?.body))).toEqual({

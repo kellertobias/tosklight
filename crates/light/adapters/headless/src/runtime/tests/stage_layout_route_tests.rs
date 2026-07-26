@@ -116,7 +116,6 @@ async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order
         }),
     )
     .await;
-    let events = subscribe_facade_events(&state);
     let application_cursor = state.application_events.latest_sequence();
 
     let response = post_stage_layout_action(
@@ -159,17 +158,30 @@ async fn move_selection_applies_one_uniform_delta_server_side_in_selection_order
     assert_eq!(layout["body"]["future_layout_field"], true);
     assert_eq!(layout["body"]["camera3d"]["position"][2], 2.0);
 
-    let mut observed_change = false;
-    while let Some(event) = next_facade_notification(&events) {
-        if event.kind == "show_object_changed"
-            && event.payload["kind"] == "stage_layout"
-            && event.payload["id"] == "main"
-        {
-            assert_eq!(event.payload["revision"].as_u64(), Some(revision));
-            observed_change = true;
-        }
-    }
-    assert!(observed_change, "stage move must emit show_object_changed");
+    let light_application::EventReplay::Events(events) = state.application_events.replay(
+        application_cursor,
+        &light_application::EventFilter::default()
+            .with_capability(light_application::EventCapability::Show),
+    ) else {
+        panic!("stage event cursor must remain replayable");
+    };
+    let observed_change = events.iter().any(|event| {
+        let light_application::ApplicationEvent::Show(
+            light_application::ShowEvent::ObjectsChanged(change),
+        ) = &event.payload
+        else {
+            return false;
+        };
+        change.changes.iter().any(|object| {
+            object.kind == light_application::ActiveShowObjectKind::StageLayout
+                && object.object_id == "main"
+                && object.object_revision == revision
+        })
+    });
+    assert!(
+        observed_change,
+        "stage move must emit one typed Stage Layout object change"
+    );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

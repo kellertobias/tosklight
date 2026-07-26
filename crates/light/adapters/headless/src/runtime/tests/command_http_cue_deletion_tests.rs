@@ -1,7 +1,4 @@
-fn cue_deletion_authority(
-    scenario: &CommandHttpScenario,
-    cue_number: f64,
-) -> (u64, u64, Uuid) {
+fn cue_deletion_authority(scenario: &CommandHttpScenario, cue_number: f64) -> (u64, u64, Uuid) {
     let show_path = scenario
         .state
         .active_show
@@ -57,16 +54,13 @@ async fn delete_cue_action(
         .clone()
         .oneshot(
             Request::post("/api/v2/cues/delete")
-            .header(
-                header::AUTHORIZATION,
-                format!("Bearer {}", scenario.token),
-            )
-            .header("x-tosk-desk", desk_id.to_string())
-            .header("x-tosk-show", show_id)
-            .header(header::CONTENT_TYPE, "application/json")
-            .header(header::IF_MATCH, expected_revision.to_string())
-            .body(Body::from(request.to_string()))
-            .unwrap(),
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                .header("x-tosk-desk", desk_id.to_string())
+                .header("x-tosk-show", show_id)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::IF_MATCH, expected_revision.to_string())
+                .body(Body::from(request.to_string()))
+                .unwrap(),
         )
         .await
         .unwrap()
@@ -125,7 +119,10 @@ async fn atomic_command_deletes_once_preserves_runtime_hold_and_replays_without_
     assert_eq!(response["outcome"], "accepted");
     assert_eq!(response["command_line"]["text"], "FIXTURE");
     assert_eq!(cue_deletion_show_events(&scenario, baseline), 1);
-    assert_eq!(cue_delete_compatibility_events(&scenario).len(), compatibility);
+    assert_eq!(
+        cue_delete_compatibility_events(&scenario).len(),
+        compatibility
+    );
     let runtime = active_playback(&scenario, 1).unwrap();
     assert_eq!(runtime.current_cue_number, Some(2.0));
     assert_eq!(runtime.deleted_cue_hold.unwrap().deleted_number, 2.0);
@@ -145,7 +142,12 @@ async fn atomic_command_deletes_once_preserves_runtime_hold_and_replays_without_
     assert_eq!(missing.status(), StatusCode::OK);
     let missing = json(missing).await;
     assert_eq!(missing["outcome"], "rejected");
-    assert!(missing["error"].as_str().unwrap().contains("does not exist"));
+    assert!(
+        missing["error"]
+            .as_str()
+            .unwrap()
+            .contains("does not exist")
+    );
     assert_eq!(cue_deletion_show_events(&scenario, baseline), 1);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
@@ -184,13 +186,20 @@ async fn direct_current_page_action_returns_authority_and_replays_before_page_an
     assert_eq!(body["deleted_cue"]["id"], cue_id.to_string());
     assert_eq!(body["cue_list"]["object_revision"], object_revision + 1);
     assert_eq!(cue_deletion_show_events(&scenario, baseline), 1);
-    assert_eq!(cue_delete_compatibility_events(&scenario).len(), compatibility);
+    assert_eq!(
+        cue_delete_compatibility_events(&scenario).len(),
+        compatibility
+    );
 
     scenario
         .state
         .desk
         .lock()
-        .set_desk_page(scenario.session.desk.id, light_core::ShowId(Uuid::parse_str(&show_id).unwrap()), 2)
+        .set_desk_page(
+            scenario.session.desk.id,
+            light_core::ShowId(Uuid::parse_str(&show_id).unwrap()),
+            2,
+        )
         .unwrap();
     write_desk_lock(
         &scenario.state,
@@ -249,7 +258,10 @@ async fn direct_action_rejects_stale_authority_and_foreign_desk_atomically() {
     )
     .await;
     assert_eq!(stale.status(), StatusCode::CONFLICT);
-    assert_eq!(json(stale).await["current_related_revision"], object_revision);
+    assert_eq!(
+        json(stale).await["current_related_revision"],
+        object_revision
+    );
     assert_eq!(cue_deletion_show_events(&scenario, baseline), 0);
 
     let (_, current_object_revision, cue_id) = cue_deletion_authority(&scenario, 2.0);
@@ -261,14 +273,8 @@ async fn direct_action_rejects_stale_authority_and_foreign_desk_atomically() {
         cue_id,
         1,
     );
-    let foreign = delete_cue_action(
-        &scenario,
-        Uuid::new_v4(),
-        &show_id,
-        show_revision,
-        request,
-    )
-    .await;
+    let foreign =
+        delete_cue_action(&scenario, Uuid::new_v4(), &show_id, show_revision, request).await;
     assert_eq!(foreign.status(), StatusCode::NOT_FOUND);
     assert_eq!(cue_deletion_show_events(&scenario, baseline), 0);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
@@ -280,17 +286,18 @@ async fn multiplexed_websocket_uses_typed_delete_and_emits_one_exact_facade_noti
     let baseline = scenario.state.application_events.latest_sequence();
     let compatibility = cue_delete_compatibility_events(&scenario).len();
     let (_, object_revision, _) = cue_deletion_authority(&scenario, 2.0);
-    let response = dispatch_ws_command(
+    let response = dispatch_live_action(
         &scenario.state,
         &scenario.session,
-        WsCommand {
-            protocol_version: 1,
-            request_id: "compatibility-cue-delete".into(),
-            session_id: scenario.session.id,
-            expected_revision: None,
-            command: "programmer.execute".into(),
-            payload: serde_json::json!({"value":"DELETE SET 1 . 2 CUE 2"}),
-        },
+        live_action_frame(
+            &scenario.session,
+            "compatibility-cue-delete",
+            light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    value: "DELETE SET 1 . 2 CUE 2".into(),
+                },
+            ),
+        ),
     );
     assert!(response.ok, "{:?}", response.error);
     assert_eq!(cue_deletion_show_events(&scenario, baseline), 1);

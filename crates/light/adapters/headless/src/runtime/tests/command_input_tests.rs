@@ -514,7 +514,14 @@ fn synthetic_osc_resubscribe_reuses_an_orphan_session_without_transient_lifecycl
     let session_id = subscribe("main");
     let before = state.application_events.latest_sequence();
     assert_eq!(subscribe(&second.osc_alias), session_id);
-    assert_eq!(state.application_events.latest_sequence(), before);
+    let lifecycle_filter = light_application::EventFilter::default()
+        .with_object(light_application::EventObject::programming_lifecycle());
+    let light_application::EventReplay::Events(lifecycle_events) =
+        state.application_events.replay(before, &lifecycle_filter)
+    else {
+        panic!("the focused Programmer lifecycle history must remain replayable")
+    };
+    assert!(lifecycle_events.is_empty());
     assert_eq!(state.sessions.read().len(), 1);
     assert_eq!(state.programmers.active_for_sessions().len(), 1);
     let _ = std::fs::remove_dir_all(data_dir);

@@ -81,16 +81,6 @@ pub(super) enum Transition {
     SafeBlackout,
 }
 #[derive(Deserialize)]
-pub(super) struct ProgrammerSet {
-    pub(super) fixture_id: light_core::FixtureId,
-    pub(super) attribute: String,
-    pub(super) value: f32,
-}
-#[derive(Deserialize)]
-pub(super) struct ProgrammerSetMany {
-    pub(super) assignments: Vec<ProgrammerSet>,
-}
-#[derive(Deserialize)]
 pub(super) struct MasterInput {
     pub(super) grand_master: Option<f32>,
     pub(super) blackout: Option<bool>,
@@ -152,14 +142,8 @@ pub(super) struct UpdatePreviewResponse {
     pub(super) preview: update::UpdatePreview,
 }
 
-#[derive(Debug, Deserialize)]
-pub(super) struct WsCommand {
-    pub(super) protocol_version: u16,
+pub(super) struct WsActionRequest {
     pub(super) request_id: String,
-    pub(super) session_id: SessionId,
-    pub(super) expected_revision: Option<u64>,
-    pub(super) command: String,
-    #[serde(default)]
     pub(super) payload: serde_json::Value,
 }
 #[derive(Debug, Serialize)]

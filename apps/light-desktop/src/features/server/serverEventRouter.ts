@@ -1,4 +1,7 @@
-import type { ServerEvent, SessionResponse } from "../../api/types";
+import type {
+	RuntimeCapabilityEvent,
+	SessionResponse,
+} from "../../api/types";
 import { routeOperatorEvent } from "./operatorEventRouting";
 import {
 	createStateEventRouter,
@@ -16,7 +19,7 @@ export function createServerEventRouter(
 		session,
 		loadShowObjects,
 	);
-	return (event: ServerEvent) => {
+	return (event: RuntimeCapabilityEvent) => {
 		const state = getState();
 		routeOperatorEvent(event, session, state);
 		routeStateEvent(event);

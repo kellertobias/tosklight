@@ -150,10 +150,11 @@ fn is_output_runtime_action_route(method: &Method, path: &str) -> bool {
     let parts = path.trim_matches('/').split('/').collect::<Vec<_>>();
     matches!(
         (method, parts.as_slice()),
-        (
-            &Method::POST,
-            ["api", "v2", "desks", _, "output-runtime", _]
-        )
+        (&Method::POST, ["api", "v2", "output-runtime", _])
+            | (
+                &Method::POST,
+                ["api", "v2", "desks", _, "output-runtime", _]
+            )
     )
 }
 
@@ -161,7 +162,8 @@ fn is_speed_group_action_route(method: &Method, path: &str) -> bool {
     let parts = path.trim_matches('/').split('/').collect::<Vec<_>>();
     matches!(
         (method, parts.as_slice()),
-        (&Method::POST, ["api", "v2", "desks", _, "speed-groups"])
+        (&Method::POST, ["api", "v2", "speed-groups"])
+            | (&Method::POST, ["api", "v2", "desks", _, "speed-groups"])
     )
 }
 

@@ -265,7 +265,21 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
     assert_eq!(changed.status(), StatusCode::OK);
     let changed = json(changed).await;
     assert_eq!(changed["revision"], 2);
-    assert_eq!(changed["event_sequence"], before_put_sequence + 1);
+    let put_filter = light_application::EventFilter::default().with_object(
+        light_application::EventObject::show_storage_object(
+            light_core::ShowId(show_uuid),
+            "group",
+            "7",
+        ),
+    );
+    let light_application::EventReplay::Events(put_events) = state
+        .application_events
+        .replay(before_put_sequence, &put_filter)
+    else {
+        panic!("expected authoritative object PUT event");
+    };
+    assert_eq!(put_events.len(), 1);
+    assert_eq!(changed["event_sequence"], put_events[0].sequence);
 
     let before = ActiveUndoBoundary::capture(&state, &entry, &data_dir);
     let stale = undo_show_object(&state, &token, show_id, "group", "7", 1).await;
@@ -300,7 +314,21 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
     assert_eq!(response.status(), StatusCode::OK);
     let response = json(response).await;
     assert_eq!(response["revision"], 3);
-    assert_eq!(response["event_sequence"], before.event_sequence + 1);
+    let undo_filter = light_application::EventFilter::default().with_object(
+        light_application::EventObject::show_storage_object(
+            light_core::ShowId(show_uuid),
+            "group",
+            "7",
+        ),
+    );
+    let light_application::EventReplay::Events(undo_events) = state
+        .application_events
+        .replay(before.event_sequence, &undo_filter)
+    else {
+        panic!("expected authoritative object Undo event");
+    };
+    assert_eq!(undo_events.len(), 1);
+    assert_eq!(response["event_sequence"], undo_events[0].sequence);
 
     let document = ShowStore::open(&entry.path)
         .unwrap()
@@ -323,12 +351,7 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
         "Original"
     );
 
-    let light_application::EventReplay::Events(events) = state.application_events.replay(
-        before.event_sequence,
-        &light_application::EventFilter::default(),
-    ) else {
-        panic!("expected authoritative object Undo event");
-    };
+    let events = undo_events;
     assert_eq!(events.len(), 1);
     let event = &events[0];
     assert_eq!(
@@ -887,8 +910,20 @@ fn generated_presets_share_one_show_commit_backup_and_runtime_install() {
     });
 
     let before = scenario.boundary();
-    let response = generate_profile_presets(&scenario.state, vec![fixture_id]).unwrap();
-    assert_eq!(response["created"].as_array().unwrap().len(), 2);
+    let show_id = scenario.state.active_show.read().as_ref().unwrap().id;
+    let response = generate_profile_presets_action(
+        &scenario.state,
+        vec![fixture_id],
+        light_application::ActionContext::system(
+            Uuid::nil(),
+            light_application::ActionSource::Http,
+        )
+        .with_request_id("generated-presets-boundary")
+        .with_expected_revision(before.show_revision),
+        show_id,
+    )
+    .unwrap();
+    assert_eq!(response.created.len(), 2);
     scenario.assert_one_commit(&before);
     let presets = scenario.store().objects("preset").unwrap();
     assert_eq!(presets.len(), 2);

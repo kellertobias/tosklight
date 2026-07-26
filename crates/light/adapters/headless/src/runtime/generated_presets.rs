@@ -85,10 +85,12 @@ pub(super) fn generated_profile_presets(
     Ok(generated.into_values().collect())
 }
 
-pub(super) fn generate_profile_presets(
+pub(super) fn generate_profile_presets_action(
     state: &AppState,
     fixture_ids: Vec<light_core::FixtureId>,
-) -> Result<serde_json::Value, String> {
+    context: light_application::ActionContext,
+    show_id: light_core::ShowId,
+) -> Result<light_wire::v2::live_action::GenerateFixturePresetsOutcome, String> {
     if fixture_ids.is_empty() {
         return Err("select at least one fixture before generating presets".into());
     }
@@ -103,6 +105,9 @@ pub(super) fn generate_profile_presets(
         return Err("the selected fixtures have no fixed or indexed values".into());
     }
     let (entry, store) = active_show_store(state)?;
+    if entry.id != show_id {
+        return Err("the requested show is no longer active".into());
+    }
     let existing = store.objects("preset").map_err(|error| error.to_string())?;
     let mut used = HashMap::<light_programmer::PresetFamily, HashSet<u32>>::new();
     for object in &existing {
@@ -115,9 +120,14 @@ pub(super) fn generate_profile_presets(
     let mut bodies = Vec::with_capacity(generated.len());
     let mut created = Vec::with_capacity(generated.len());
     for preset in generated {
-        let family: light_programmer::PresetFamily =
-            serde_json::from_value(serde_json::Value::String(preset.family.clone()))
-                .map_err(|error| format!("invalid generated preset family: {error}"))?;
+        let family = match preset.family.to_ascii_lowercase().as_str() {
+            "mixed" => light_programmer::PresetFamily::Mixed,
+            "intensity" => light_programmer::PresetFamily::Intensity,
+            "color" => light_programmer::PresetFamily::Color,
+            "position" => light_programmer::PresetFamily::Position,
+            "beam" => light_programmer::PresetFamily::Beam,
+            other => return Err(format!("invalid generated preset family: {other}")),
+        };
         let family_used = used.entry(family).or_default();
         let mut number = 1_u32;
         while family_used.contains(&number) {
@@ -137,12 +147,33 @@ pub(super) fn generate_profile_presets(
         body["generated_from_fixture_profile"] = serde_json::json!({
             "semantic_id":preset.semantic_id,
         });
-        created.push(serde_json::json!({
-            "address":address,
-            "number":number,
-            "name":preset.name,
-            "family":preset.family,
-        }));
+        let wire_family = match family {
+            light_programmer::PresetFamily::Mixed => {
+                light_wire::v2::preset_recording::PresetRecordingFamily::Mixed
+            }
+            light_programmer::PresetFamily::Intensity => {
+                light_wire::v2::preset_recording::PresetRecordingFamily::Intensity
+            }
+            light_programmer::PresetFamily::Color => {
+                light_wire::v2::preset_recording::PresetRecordingFamily::Color
+            }
+            light_programmer::PresetFamily::Position => {
+                light_wire::v2::preset_recording::PresetRecordingFamily::Position
+            }
+            light_programmer::PresetFamily::Beam => {
+                light_wire::v2::preset_recording::PresetRecordingFamily::Beam
+            }
+        };
+        let wire_address = light_wire::v2::preset_recording::PresetRecordingAddress {
+            family: wire_family,
+            number,
+        };
+        created.push(light_wire::v2::live_action::GeneratedFixturePreset {
+            address: wire_address,
+            number,
+            name: preset.name,
+            family: preset.family,
+        });
         ids.push(storage_key);
         bodies.push(body);
     }
@@ -158,14 +189,11 @@ pub(super) fn generate_profile_presets(
             )
         })
         .collect::<Vec<_>>();
-    let action = active_show_object_action(
-        light_application::ActionContext::system(
-            Uuid::nil(),
-            light_application::ActionSource::System,
-        ),
-        entry.id,
-        mutations,
-    );
+    let request_id = context
+        .request_id
+        .clone()
+        .ok_or_else(|| "Preset generation requires a request_id".to_owned())?;
+    let action = active_show_object_action(context, entry.id, mutations);
     let result = run_active_show_object_action(state, action).map_err(|error| error.message)?;
     let revisions = result
         .changes
@@ -180,5 +208,12 @@ pub(super) fn generate_profile_presets(
             serde_json::json!({"show_id":entry.id,"preset":item,"revision":revision}),
         );
     }
-    Ok(serde_json::json!({"created":created}))
+    Ok(light_wire::v2::live_action::GenerateFixturePresetsOutcome {
+        request_id,
+        correlation_id: result.context.correlation_id,
+        replayed: false,
+        show_revision: result.show_revision.value(),
+        event_sequence: result.event_sequence,
+        created,
+    })
 }

@@ -358,6 +358,55 @@
         "move"
       ]
     },
+    "DeskActionNotification": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "control": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "desk_alias": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "desk_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "action",
+        "control",
+        "value",
+        "session_id",
+        "desk_id",
+        "desk_alias"
+      ]
+    },
     "EventActionSource": {
       "type": "string",
       "enum": [
@@ -764,12 +813,124 @@
         {
           "type": "object",
           "properties": {
-            "notification": {
-              "$ref": "#/$defs/FacadeNotification"
+            "change": {
+              "$ref": "#/$defs/HighlightChange"
             },
             "type": {
               "type": "string",
-              "const": "facade_notification"
+              "const": "highlight_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
+              "$ref": "#/$defs/NotificationRevision"
+            },
+            "type": {
+              "type": "string",
+              "const": "server_configuration_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
+              "$ref": "#/$defs/ScreenNotification"
+            },
+            "type": {
+              "type": "string",
+              "const": "screens_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
+              "$ref": "#/$defs/ShowLibraryNotification"
+            },
+            "type": {
+              "type": "string",
+              "const": "show_library_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
+              "$ref": "#/$defs/FixtureLibraryNotification"
+            },
+            "type": {
+              "type": "string",
+              "const": "fixture_library_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
+              "$ref": "#/$defs/MediaNotification"
+            },
+            "type": {
+              "type": "string",
+              "const": "media_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
+              "$ref": "#/$defs/HardwareConnectionNotification"
+            },
+            "type": {
+              "type": "string",
+              "const": "hardware_connection_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "notification": {
+              "$ref": "#/$defs/OperatorNotification"
+            },
+            "type": {
+              "type": "string",
+              "const": "operator_notification"
             }
           },
           "required": [
@@ -824,13 +985,117 @@
         }
       ]
     },
-    "FacadeNotification": {
+    "FileInputNotification": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "desk_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instance_id": {
+          "type": "string"
+        },
+        "operation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "action",
+        "instance_id",
+        "session_id",
+        "source_session_id",
+        "desk_id",
+        "operation",
+        "source"
+      ]
+    },
+    "FileOperationItemNotification": {
+      "type": "object",
+      "properties": {
+        "destination": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "destination_root_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "source_root_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_root_id",
+        "source",
+        "destination_root_id",
+        "destination",
+        "status",
+        "error"
+      ]
+    },
+    "FileOperationNotification": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FileOperationItemNotification"
+          }
+        },
+        "operation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation",
+        "items"
+      ]
+    },
+    "FixtureLibraryNotification": {
       "type": "object",
       "properties": {
         "kind": {
-          "type": "string"
+          "$ref": "#/$defs/FixtureLibraryNotificationKind"
         },
-        "payload": true,
         "revision": {
           "type": "integer",
           "format": "uint64",
@@ -839,8 +1104,14 @@
       },
       "required": [
         "revision",
-        "kind",
-        "payload"
+        "kind"
+      ]
+    },
+    "FixtureLibraryNotificationKind": {
+      "type": "string",
+      "enum": [
+        "library",
+        "profile"
       ]
     },
     "FixtureProfileIdentity": {
@@ -890,6 +1161,79 @@
         "dynamics_paused"
       ]
     },
+    "GroupConfigurationNotification": {
+      "type": "object",
+      "properties": {
+        "desk_id": {
+          "type": "string"
+        },
+        "group_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_id",
+        "desk_id"
+      ]
+    },
+    "HardwareConnectionNotification": {
+      "type": "object",
+      "properties": {
+        "connected": {
+          "type": "boolean"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "revision",
+        "connected"
+      ]
+    },
+    "HighlightChange": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "desk_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/RuntimeHighlightState"
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "revision",
+        "desk_id",
+        "user_id",
+        "action",
+        "source",
+        "state"
+      ]
+    },
     "ManagedAssetReference": {
       "type": "object",
       "properties": {
@@ -913,6 +1257,180 @@
       "enum": [
         "towards_high",
         "towards_low"
+      ]
+    },
+    "MediaNotification": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/MediaNotificationKind"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "revision",
+        "kind"
+      ]
+    },
+    "MediaNotificationKind": {
+      "type": "string",
+      "enum": [
+        "thumbnails_refreshed",
+        "preview_refreshed",
+        "server_offline"
+      ]
+    },
+    "NotificationRevision": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "revision"
+      ]
+    },
+    "OperatorNotification": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "notification": {
+              "$ref": "#/$defs/DeskActionNotification"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "desk_action"
+            }
+          },
+          "required": [
+            "type",
+            "revision",
+            "notification"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "notification": {
+              "$ref": "#/$defs/FileInputNotification"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "file_input"
+            }
+          },
+          "required": [
+            "type",
+            "revision",
+            "notification"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "notification": {
+              "$ref": "#/$defs/FileOperationNotification"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "file_operation"
+            }
+          },
+          "required": [
+            "type",
+            "revision",
+            "notification"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "notification": {
+              "$ref": "#/$defs/GroupConfigurationNotification"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "group_configuration"
+            }
+          },
+          "required": [
+            "type",
+            "revision",
+            "notification"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "notification": {
+              "$ref": "#/$defs/UpdateWorkflowNotification"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "update_workflow"
+            }
+          },
+          "required": [
+            "type",
+            "revision",
+            "notification"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "desk_id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "command_history_changed"
+            }
+          },
+          "required": [
+            "type",
+            "revision",
+            "desk_id"
+          ]
+        }
       ]
     },
     "OutputDeliveryMode": {
@@ -2808,7 +3326,6 @@
               "format": "float"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "value"
@@ -2829,7 +3346,6 @@
               }
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "value"
@@ -2846,7 +3362,6 @@
               "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "value"
@@ -2863,7 +3378,6 @@
               "$ref": "#/$defs/ProgrammingPreloadColorXyz"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "value"
@@ -2883,7 +3397,6 @@
               "minimum": 0
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "value"
@@ -2902,7 +3415,6 @@
               "minimum": 0
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "value"
@@ -3203,6 +3715,139 @@
         "group_values"
       ]
     },
+    "RuntimeHighlightFixture": {
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "fixture_id",
+        "name",
+        "number"
+      ]
+    },
+    "RuntimeHighlightState": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "active_fixture": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuntimeHighlightFixture"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "active_index": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "can_next": {
+          "type": "boolean"
+        },
+        "can_previous": {
+          "type": "boolean"
+        },
+        "capture_only": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "type": "string"
+        },
+        "output_enabled": {
+          "type": "boolean"
+        },
+        "owner_user_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "owner_user_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remembered": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RuntimeHighlightFixture"
+          }
+        }
+      },
+      "required": [
+        "active",
+        "mode",
+        "output_enabled",
+        "capture_only",
+        "remembered",
+        "active_index",
+        "active_fixture",
+        "can_previous",
+        "can_next",
+        "owner_user_id",
+        "owner_user_name",
+        "message"
+      ]
+    },
+    "ScreenNotification": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ScreenNotificationKind"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "revision",
+        "kind"
+      ]
+    },
+    "ScreenNotificationKind": {
+      "type": "string",
+      "enum": [
+        "configuration",
+        "screen_page",
+        "playback_page"
+      ]
+    },
     "SelectiveImportChange": {
       "type": "object",
       "properties": {
@@ -3288,6 +3933,33 @@
         "after_sequence",
         "oldest_available",
         "latest_sequence"
+      ]
+    },
+    "ShowLibraryNotification": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ShowLibraryNotificationKind"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "revision",
+        "kind"
+      ]
+    },
+    "ShowLibraryNotificationKind": {
+      "type": "string",
+      "enum": [
+        "show_opened",
+        "show_renamed",
+        "show_rolled_back",
+        "show_uploaded",
+        "show_deleted"
       ]
     },
     "ShowObjectChange": {
@@ -3622,6 +4294,160 @@
         "sound",
         "held_sound",
         "manual_fallback"
+      ]
+    },
+    "UpdateTargetFamilyNotification": {
+      "type": "string",
+      "enum": [
+        "cue",
+        "preset",
+        "group"
+      ]
+    },
+    "UpdateTargetNotification": {
+      "type": "object",
+      "properties": {
+        "cue_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cue_number": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "family": {
+          "$ref": "#/$defs/UpdateTargetFamilyNotification"
+        },
+        "object_id": {
+          "type": "string"
+        },
+        "playback_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "validate_active_context": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "family",
+        "object_id",
+        "playback_number",
+        "cue_id",
+        "cue_number",
+        "validate_active_context"
+      ]
+    },
+    "UpdateWorkflowNotification": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "armed": {
+              "type": "boolean"
+            },
+            "desk_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "armed"
+            }
+          },
+          "required": [
+            "type",
+            "desk_id",
+            "armed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "desk_id": {
+              "type": "string"
+            },
+            "target": {
+              "$ref": "#/$defs/UpdateTargetNotification"
+            },
+            "type": {
+              "type": "string",
+              "const": "target_requested"
+            }
+          },
+          "required": [
+            "type",
+            "desk_id",
+            "target"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "desk_id": {
+              "type": "string"
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "target_rejected"
+            }
+          },
+          "required": [
+            "type",
+            "desk_id",
+            "error"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "desk_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "targets_requested"
+            }
+          },
+          "required": [
+            "type",
+            "desk_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "desk_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "settings_requested"
+            }
+          },
+          "required": [
+            "type",
+            "desk_id"
+          ]
+        }
       ]
     },
     "VirtualPlaybackExclusionZonesChange": {

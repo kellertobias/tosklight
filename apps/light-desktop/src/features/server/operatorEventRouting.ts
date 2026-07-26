@@ -1,19 +1,24 @@
 import type {
-	ServerEvent,
+	OperatorNotification,
+	RuntimeCapabilityEvent,
+	UpdateWorkflowNotification,
 	SessionResponse,
 	UpdateTargetRequest,
 } from "../../api/types";
 import type { ServerState } from "./useServerState";
 
-function routeDeskAction(event: ServerEvent, session: SessionResponse) {
-	if (event.kind !== "desk_action") return;
-	const payload = event.payload as {
-		action?: string;
-		control?: string;
-		value?: string;
-		session_id?: string;
-		desk_id?: string;
-		desk_alias?: string;
+function routeDeskAction(
+	event: Extract<OperatorNotification, { type: "desk_action" }>,
+	session: SessionResponse,
+) {
+	const payload = event.notification;
+	const detail = {
+		...(payload.action == null ? {} : { action: payload.action }),
+		...(payload.control == null ? {} : { control: payload.control }),
+		...(payload.value == null ? {} : { value: payload.value }),
+		...(payload.session_id == null ? {} : { session_id: payload.session_id }),
+		...(payload.desk_id == null ? {} : { desk_id: payload.desk_id }),
+		...(payload.desk_alias == null ? {} : { desk_alias: payload.desk_alias }),
 	};
 	if (
 		payload.action &&
@@ -30,38 +35,36 @@ function routeDeskAction(event: ServerEvent, session: SessionResponse) {
 		payload.desk_alias === session.desk.osc_alias &&
 		(payload.control.startsWith("encode/") || payload.control === "nav")
 	) {
-		window.dispatchEvent(
-			new CustomEvent("light:encoder-action", { detail: payload }),
-		);
+		window.dispatchEvent(new CustomEvent("light:encoder-action", { detail }));
 	}
 }
 
-function routeFileEvent(event: ServerEvent, session: SessionResponse) {
-	if (event.kind === "file_input_action") {
-		const payload = event.payload as {
-			action?: string;
-			instance_id?: string;
-			session_id?: string;
-		};
-		if (
-			payload.action &&
-			payload.instance_id &&
-			payload.session_id === session.session_id
-		)
+function routeFileEvent(
+	event: Extract<
+		OperatorNotification,
+		{ type: "file_input" | "file_operation" }
+	>,
+	session: SessionResponse,
+) {
+	if (event.type === "file_input") {
+		const payload = event.notification;
+		if (payload.session_id === session.session_id)
 			window.dispatchEvent(
 				new CustomEvent("light:file-manager-input", { detail: payload }),
 			);
+		return;
 	}
-	if (event.kind === "file_operation_completed")
-		window.dispatchEvent(
-			new CustomEvent("light:file-operation", { detail: event.payload }),
-		);
+	window.dispatchEvent(
+		new CustomEvent("light:file-operation", { detail: event.notification }),
+	);
 }
 
-function routeGroupConfiguration(event: ServerEvent, session: SessionResponse) {
-	if (event.kind !== "group_configuration_requested") return;
-	const payload = event.payload as { group_id?: string; desk_id?: string };
-	if (payload.group_id && payload.desk_id === session.desk.id)
+function routeGroupConfiguration(
+	event: Extract<OperatorNotification, { type: "group_configuration" }>,
+	session: SessionResponse,
+) {
+	const payload = event.notification;
+	if (payload.desk_id === session.desk.id)
 		window.dispatchEvent(
 			new CustomEvent("light:group-configuration", {
 				detail: payload.group_id,
@@ -69,57 +72,63 @@ function routeGroupConfiguration(event: ServerEvent, session: SessionResponse) {
 		);
 }
 
-function routeUpdateWorkflow(event: ServerEvent, session: SessionResponse) {
-	const kinds = [
-		"update_armed",
-		"update_target_requested",
-		"update_target_rejected",
-		"update_targets_requested",
-		"update_settings_requested",
-	];
-	if (!kinds.includes(event.kind)) return;
-	const payload = event.payload as {
-		armed?: boolean;
-		desk_id?: string;
-		target?: UpdateTargetRequest;
-		error?: string;
-	};
-	if (payload.desk_id !== session.desk.id) return;
-	if (event.kind === "update_armed")
-		window.dispatchEvent(
-			new CustomEvent("light:update-armed", {
-				detail: payload.armed ?? true,
-			}),
-		);
-	if (event.kind === "update_target_requested" && payload.target)
-		window.dispatchEvent(
-			new CustomEvent("light:update-target", {
-				detail: payload.target,
-			}),
-		);
-	if (event.kind === "update_target_rejected")
-		window.dispatchEvent(
-			new CustomEvent("light:command-error", {
-				detail:
-					payload.error ?? "This playback is not a recordable Update target.",
-			}),
-		);
-	if (event.kind === "update_targets_requested")
-		window.dispatchEvent(new Event("light:update-target-menu"));
-	if (event.kind === "update_settings_requested")
-		window.dispatchEvent(new Event("light:update-settings"));
+function routeUpdateWorkflow(
+	event: UpdateWorkflowNotification,
+	session: SessionResponse,
+) {
+	if (event.desk_id !== session.desk.id) return;
+	switch (event.type) {
+		case "armed":
+			window.dispatchEvent(
+				new CustomEvent("light:update-armed", { detail: event.armed }),
+			);
+			return;
+		case "target_requested": {
+			const target: UpdateTargetRequest = {
+				family: { type: event.target.family },
+				object_id: event.target.object_id,
+				...(event.target.playback_number == null
+					? {}
+					: { playback_number: event.target.playback_number }),
+				...(event.target.cue_id == null ? {} : { cue_id: event.target.cue_id }),
+				...(event.target.cue_number == null
+					? {}
+					: { cue_number: event.target.cue_number }),
+				...(event.target.validate_active_context == null
+					? {}
+					: {
+							validate_active_context: event.target.validate_active_context,
+						}),
+			};
+			window.dispatchEvent(
+				new CustomEvent("light:update-target", {
+					detail: target,
+				}),
+			);
+			return;
+		}
+		case "target_rejected":
+			window.dispatchEvent(
+				new CustomEvent("light:command-error", {
+					detail:
+						event.error ?? "This playback is not a recordable Update target.",
+				}),
+			);
+			return;
+		case "targets_requested":
+			window.dispatchEvent(new Event("light:update-target-menu"));
+			return;
+		case "settings_requested":
+			window.dispatchEvent(new Event("light:update-settings"));
+	}
 }
 
 function refreshCommandHistory(
-	event: ServerEvent,
+	event: Extract<OperatorNotification, { type: "command_history_changed" }>,
 	session: SessionResponse,
 	state: ServerState,
 ) {
-	if (
-		event.kind !== "command_history" ||
-		(event.payload as { desk_id?: string }).desk_id !== session.desk.id
-	)
-		return;
+	if (event.desk_id !== session.desk.id) return;
 	void state.api.desk
 		.commandHistory()
 		.then(state.setCommandHistory)
@@ -127,13 +136,27 @@ function refreshCommandHistory(
 }
 
 export function routeOperatorEvent(
-	event: ServerEvent,
+	event: RuntimeCapabilityEvent,
 	session: SessionResponse,
 	state: ServerState,
 ) {
-	routeDeskAction(event, session);
-	routeFileEvent(event, session);
-	routeGroupConfiguration(event, session);
-	routeUpdateWorkflow(event, session);
-	refreshCommandHistory(event, session, state);
+	if (event.type !== "operator_notification") return;
+	const notification = event.notification;
+	switch (notification.type) {
+		case "desk_action":
+			routeDeskAction(notification, session);
+			return;
+		case "file_input":
+		case "file_operation":
+			routeFileEvent(notification, session);
+			return;
+		case "group_configuration":
+			routeGroupConfiguration(notification, session);
+			return;
+		case "update_workflow":
+			routeUpdateWorkflow(notification.notification, session);
+			return;
+		case "command_history_changed":
+			refreshCommandHistory(notification, session, state);
+	}
 }

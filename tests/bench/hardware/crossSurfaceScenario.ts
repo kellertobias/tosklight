@@ -135,6 +135,10 @@ export class BrowserCrossSurface {
 			).toBe(false);
 
 			await firstHardware.send("/light/unsubscribe", ["semantic-osc-003-a"]);
+			// OSC unsubscribe has no acknowledgement frame. Let the server process it and
+			// drain the subscriber's initial full feedback cycle before marking the
+			// isolation window for the other desk's next action.
+			await new Promise((resolve) => setTimeout(resolve, 75));
 			const disconnected = firstHardware.mark();
 			const secondAction = secondHardware.mark();
 			await secondHardware.send(
@@ -244,9 +248,7 @@ export class BrowserCrossSurface {
 			timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 		});
 		await expect(
-			this.page
-				.locator(".touch-encoder")
-				.filter({ hasText: "Enc 1 · Dimmer" }),
+			this.page.getByRole("group", { name: "Enc 1 · Dimmer", exact: true }),
 		).toContainText("50%");
 		await this.bench.tick(3_000);
 		for (const number of [1, 5]) {

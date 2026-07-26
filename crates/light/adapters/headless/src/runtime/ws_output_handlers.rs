@@ -2,13 +2,12 @@ use super::*;
 
 pub(super) struct WsTypedRuntimeAction {
     pub(super) payload: serde_json::Value,
-    pub(super) replayed: bool,
 }
 
 pub(super) fn ws_speed_group_action(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
+    command: &WsActionRequest,
 ) -> Result<WsTypedRuntimeAction, String> {
     let request: light_wire::v2::speed_group::SpeedGroupActionRequest =
         serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
@@ -42,16 +41,15 @@ pub(super) fn ws_speed_group_action(
     .with_request_id(&request.request_id);
     let result = speed_group_service::execute_http_action(state, session, context, exact)
         .map_err(|error| error.message)?;
-    let replayed = result.replayed;
     let payload = serde_json::to_value(speed_group_v2::wire_outcome(result))
         .map_err(|error| error.to_string())?;
-    Ok(WsTypedRuntimeAction { payload, replayed })
+    Ok(WsTypedRuntimeAction { payload })
 }
 
 pub(super) fn ws_output_runtime_action(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
+    command: &WsActionRequest,
 ) -> Result<WsTypedRuntimeAction, String> {
     let request: light_wire::v2::output_runtime::OutputRuntimeActionRequest =
         serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
@@ -88,16 +86,15 @@ pub(super) fn ws_output_runtime_action(
     .with_request_id(&request.request_id);
     let result = output_runtime_service::execute_action(state, Some(session), context, exact)
         .map_err(|error| error.message)?;
-    let replayed = result.replayed;
     let payload = serde_json::to_value(output_runtime_v2::wire_outcome(result))
         .map_err(|error| error.to_string())?;
-    Ok(WsTypedRuntimeAction { payload, replayed })
+    Ok(WsTypedRuntimeAction { payload })
 }
 
 pub(super) fn ws_dmx_override(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
+    command: &WsActionRequest,
 ) -> Result<serde_json::Value, String> {
     let input: light_wire::v2::output_control::DmxOverrideRequest =
         serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
@@ -116,7 +113,7 @@ pub(super) fn ws_dmx_override(
 pub(super) fn ws_highlight_action(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
+    command: &WsActionRequest,
 ) -> Result<serde_json::Value, String> {
     let input: light_wire::v2::output_control::HighlightActionRequest =
         serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
@@ -140,7 +137,7 @@ pub(super) fn ws_highlight_action(
 pub(super) fn ws_patch_preview_highlight(
     state: &AppState,
     session: &Session,
-    command: &WsCommand,
+    command: &WsActionRequest,
 ) -> Result<serde_json::Value, String> {
     let input: light_wire::v2::output_control::PatchPreviewHighlightRequest =
         serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
@@ -162,112 +159,4 @@ pub(super) fn ws_patch_preview_highlight(
         .try_lock_owned()
         .map_err(|_| "the active show is changing; retry Patch Preview Highlight")?;
     Ok(apply_patch_preview_highlight(state, session, input))
-}
-
-pub(super) fn ws_master_set(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    let input: MasterInput =
-        serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    lock_live_input(state, session, "desk:master".into())?;
-    let output = output_runtime_service::command(input.grand_master, input.blackout)
-        .map_err(|error| error.message)?;
-    let context = light_application::ActionContext::operator(
-        session.desk.id,
-        session.user.id.0,
-        session.id.0,
-        light_application::ActionSource::UserInterface,
-    )
-    .with_request_id(&command.request_id);
-    let outcome =
-        output_runtime_service::execute_while_show_stable(state, Some(session), context, output)
-            .map_err(|error| error.message)?;
-    Ok(serde_json::json!({
-        "grand_master":outcome.projection.grand_master,
-        "blackout":outcome.projection.blackout
-    }))
-}
-
-pub(super) fn ws_group_master_set(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    #[derive(Deserialize)]
-    struct Input {
-        group_id: String,
-        value: f32,
-    }
-    let input: Input =
-        serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
-    if !input.value.is_finite() || !(0.0..=1.0).contains(&input.value) {
-        return Err("group master must be within 0-1".into());
-    }
-    let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
-        .map_err(|_| "the active show is changing; retry the Group master action")?;
-    lock_live_input(state, session, format!("group-master:{}", input.group_id))?;
-    let changed = state
-        .engine
-        .set_group_master(&input.group_id, input.value)
-        .map_err(|error| error.to_string())?;
-    if changed {
-        persist_output_runtime(state).map_err(|error| error.message)?;
-    }
-    Ok(serde_json::json!({"group_id":input.group_id,"master":input.value}))
-}
-
-pub(super) fn ws_group_master_flash(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    #[derive(Deserialize)]
-    struct Input {
-        group_id: String,
-        value: f32,
-    }
-    let input: Input =
-        serde_json::from_value(command.payload.clone()).map_err(|error| error.to_string())?;
-    if !input.value.is_finite() || !(0.0..=1.0).contains(&input.value) {
-        return Err("group flash must be within 0-1".into());
-    }
-    if !state
-        .engine
-        .snapshot()
-        .groups
-        .iter()
-        .any(|group| group.id == input.group_id)
-    {
-        return Err("group does not exist".into());
-    }
-    lock_live_input(state, session, format!("group-flash:{}", input.group_id))?;
-    state
-        .engine
-        .set_group_master_flash(input.group_id.clone(), input.value);
-    Ok(serde_json::json!({"group_id":input.group_id,"flash":input.value}))
-}
-
-pub(super) fn ws_playback_go(
-    state: &AppState,
-    session: &Session,
-    command: &WsCommand,
-) -> Result<serde_json::Value, String> {
-    #[derive(Deserialize)]
-    struct Input {
-        cue_list_id: light_core::CueListId,
-    }
-    let input: Input =
-        serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
-    playback_service::websocket_payload(
-        state,
-        session,
-        &command.command,
-        input.cue_list_id,
-        &command.request_id,
-    )
 }

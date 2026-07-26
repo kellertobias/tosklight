@@ -144,23 +144,10 @@ impl OperationalScenario {
             .status(),
             StatusCode::OK
         );
-        let applied = dispatch_ws_command(
-            &self.state,
-            &session,
-            WsCommand {
-                protocol_version: 1,
-                request_id: "preset-test".into(),
-                session_id: session.id,
-                expected_revision: None,
-                command: "preset.apply".into(),
-                payload: serde_json::json!({"family":"Intensity","number":1}),
-            },
-        );
-        assert!(applied.ok);
+        apply_command_preset(&self.state, &session, "1.1", &[self.fixture_id]).unwrap();
         let programmer = self.state.programmers.get(session.id).unwrap();
         assert_eq!(programmer.values[0].fade_millis, Some(3_000));
         assert_eq!(programmer.values[0].value.normalized(), Some(0.75));
-        apply_command_preset(&self.state, &session, "1.1", &[self.fixture_id]).unwrap();
         assert_eq!(
             self.state.programmers.get(session.id).unwrap().values[0].fade_millis,
             Some(3_000)

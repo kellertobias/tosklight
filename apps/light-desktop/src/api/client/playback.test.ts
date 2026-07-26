@@ -64,18 +64,17 @@ function actionOutcome(requestId = REQUEST_ID) {
 
 function clientReturning(value: unknown) {
 	const request = vi.fn(async (_path: string, _init?: RequestInit) => value);
-	const commandWithRequestId = vi.fn(async () => value);
+	const sendAction = vi.fn(async () => value);
 	const transport = {
 		request,
 		blob: vi.fn(),
 		absoluteUrl: vi.fn(),
-		command: vi.fn(),
-		commandWithRequestId,
+		sendAction,
 	} as unknown as LiveClientTransport;
 	return {
 		client: new PlaybackApiClient(transport),
 		request,
-		commandWithRequestId,
+		sendAction,
 	};
 }
 
@@ -137,17 +136,14 @@ describe("PlaybackApiClient v2 action boundary", () => {
 	});
 
 	it("sends a live Playback action once over the established command socket", async () => {
-		const { client, commandWithRequestId, request } = clientReturning(
-			actionOutcome(),
-		);
+		const { client, sendAction, request } = clientReturning(actionOutcome());
 
 		await expect(
 			client.playbackRuntimeLiveAction(actionRequest),
 		).resolves.toMatchObject({ request_id: REQUEST_ID });
-		expect(commandWithRequestId).toHaveBeenCalledOnce();
-		expect(commandWithRequestId).toHaveBeenCalledWith(
-			"playback.action",
-			actionRequest,
+		expect(sendAction).toHaveBeenCalledOnce();
+		expect(sendAction).toHaveBeenCalledWith(
+			{ type: "playback", request: actionRequest },
 			REQUEST_ID,
 		);
 		expect(request).not.toHaveBeenCalled();
@@ -179,8 +175,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 			request,
 			blob: vi.fn(),
 			absoluteUrl: vi.fn(),
-			command: vi.fn(),
-			commandWithRequestId: vi.fn(),
+			sendAction: vi.fn(),
 		} as unknown as LiveClientTransport);
 
 		await expect(client.putScreen(screen)).resolves.toEqual(screen);
@@ -209,8 +204,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 			request,
 			blob: vi.fn(),
 			absoluteUrl: vi.fn(),
-			command: vi.fn(),
-			commandWithRequestId: vi.fn(),
+			sendAction: vi.fn(),
 		} as unknown as LiveClientTransport;
 		const client = new PlaybackApiClient(transport);
 		await client.screens();

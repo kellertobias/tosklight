@@ -226,7 +226,7 @@ export class BrowserEncoders {
 		await expect(control).toBeVisible();
 		const box = await control.boundingBox();
 		if (!box) throw new Error("Visible touch encoder has no pointer box");
-		const start = { x: box.x + box.width / 2, y: box.y + 14 };
+		const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 		const displacement = rate === "slow" ? 20 : 90;
 		await this.page.mouse.move(start.x, start.y);
 		await this.page.mouse.down();
@@ -384,7 +384,9 @@ export class BrowserEncoders {
 				`${family} ${label} is not present on the live software encoder page`,
 			);
 		await control
-			.getByRole("button", { name: "Set Value", exact: true })
+			.getByRole("button", {
+				name: new RegExp(`^Set Enc \\d+ · ${escapeRegex(label)} value$`),
+			})
 			.click();
 		const dialog = this.page.getByRole("dialog", {
 			name: new RegExp(`^Enc \\d+ · ${escapeRegex(label)} value$`),
@@ -406,15 +408,11 @@ export class BrowserEncoders {
 		await this.activateFamily(family);
 		const control = this.softwareControl(label);
 		await expect(control).toBeVisible();
-		const sign = operation === "add" ? "+" : "−";
-		for (let tens = Math.floor(steps / 10); tens > 0; tens -= 1)
-			await this.desk.click(
-				control.getByRole("button", { name: `${sign}10`, exact: true }),
-			);
-		for (let ones = steps % 10; ones > 0; ones -= 1)
-			await this.desk.click(
-				control.getByRole("button", { name: `${sign}1`, exact: true }),
-			);
+		for (let remaining = steps; remaining > 0; remaining -= 1)
+			await control.dispatchEvent("wheel", {
+				deltaY: operation === "add" ? -1 : 1,
+				shiftKey: true,
+			});
 	}
 
 	private async activateFamily(family: string): Promise<void> {
@@ -439,7 +437,7 @@ export class BrowserEncoders {
 	}
 
 	private softwareControl(label: string): Locator {
-		return this.page.getByRole("region", {
+		return this.page.getByRole("group", {
 			name: new RegExp(`^Enc \\d+ · ${escapeRegex(label)}$`),
 		});
 	}

@@ -80,9 +80,8 @@ export class PlaybackApiClient {
 	async playbackRuntimeLiveAction(
 		request: PlaybackActionRequest,
 	): Promise<PlaybackActionOutcome> {
-		const value = await this.transport.commandWithRequestId(
-			"playback.action",
-			request,
+		const value = await this.transport.sendAction(
+			{ type: "playback", request },
 			request.request_id,
 		);
 		const outcome = decodePlaybackOutcome(value);

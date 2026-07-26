@@ -6,6 +6,7 @@ import type {
   FixtureLibraryWarningsSnapshot,
   FixtureProfilesSnapshot,
   FixtureProfileRevisionsSnapshot,
+  LiveAction,
   PlaybackAction,
   PlaybackActionOutcome,
   PlaybackAddress,
@@ -59,73 +60,6 @@ export type CommandOperationResponse = CommandOperationBase & (
       error: string;
     }
 );
-
-/**
- * Command families whose complete mutation still belongs to the v1 compatibility grammar.
- *
- * Each variant names the production boundary that does not exist yet, so a scenario states which
- * ownership gap it is riding on rather than hiding behind an anonymous "legacy" call.
- */
-export type CompatibilityCommandFamily =
-  /** Preset deletion; Group and whole-Cue deletion have typed application actions. */
-  | "preset_delete"
-  /** Preset `MOVE`/`COPY`; only Cue transfer is intercepted by the typed Programming boundary. */
-  | "preset_transfer"
-  /** `UPDATE`; the command grammar is not yet routed through the typed Update workflow. */
-  | "update";
-
-export interface CompatibilityProgrammerCommand {
-  family: CompatibilityCommandFamily;
-  command: string;
-}
-
-export type CommandLineOwnership =
-  | { via: "command-line-http" }
-  | { via: "compatibility"; family: CompatibilityCommandFamily };
-
-const CUE_TRANSFER = /^(?:MOVE|MOV|COPY|CPY)\s+(?:(?:PLAIN|STATUS)\s+)?SET\b/i;
-const CUE_OR_GROUP_RECORD = /^(?:RECORD|REC)\s+(?:[+-]\s+)?(?:GROUP|CUE|SET)\b/i;
-const PRESET_RECORD = /^(?:RECORD|REC)\s+\S+(?:\s+\S+){0,2}$/i;
-const GROUP_DELETE = /^(?:DELETE|DEL)\s+GROUP\b/i;
-const CUE_DELETE = /^(?:DELETE|DEL)\s+SET\b/i;
-
-/**
- * Classifies one command against the grammars the server intercepts before its atomic-family check.
- *
- * `record_typed_command` routes Group recording, Preset recording, Cue recording, Cue transfer,
- * CUE navigation, whole-Cue deletion, and Speed Group commands through typed application
- * boundaries, so those reach public v2 HTTP contracts. CUE and SPD therefore have no
- * leading-token cases below.
- * Everything else in a legacy family is still compatibility-owned. This is a static ownership
- * decision on purpose: attempting v2 and falling back to v1 would hide an ownership regression.
- */
-export function commandLineOwnership(command: string): CommandLineOwnership {
-  const trimmed = command.trim();
-  if (
-    CUE_TRANSFER.test(trimmed) ||
-    CUE_OR_GROUP_RECORD.test(trimmed) ||
-    GROUP_DELETE.test(trimmed) ||
-    CUE_DELETE.test(trimmed) ||
-    PRESET_RECORD.test(trimmed)
-  ) {
-    return { via: "command-line-http" };
-  }
-  const family = trimmed.match(/^[A-Za-z]+/)?.[0]?.toUpperCase();
-  switch (family) {
-    case "DELETE":
-    case "DEL":
-      return { via: "compatibility", family: "preset_delete" };
-    case "MOVE":
-    case "MOV":
-    case "COPY":
-    case "CPY":
-      return { via: "compatibility", family: "preset_transfer" };
-    case "UPDATE":
-      return { via: "compatibility", family: "update" };
-    default:
-      return { via: "command-line-http" };
-  }
-}
 
 const WEB_SOCKET_TIMEOUT_MILLIS = 5_000;
 
@@ -615,11 +549,13 @@ export class ApiDriver {
   /**
    * Sets the FIXTURE/GROUP command target.
    *
-   * The command target has no typed v2 owner yet; the production frontend still issues this v1
-   * command from `api/client/programming.ts`, so acceptance coverage matches that surface.
+   * The command target is carried as an explicit v2 live action.
    */
-  async setCompatibilityCommandTarget(target: CommandTarget): Promise<CommandResponse> {
-    return this.command("programmer.command_target", { value: target });
+  async setCommandTarget(target: CommandTarget): Promise<CommandResponse> {
+    return this.liveAction({
+      type: "command_target",
+      request: { value: target },
+    });
   }
 
   async sendCommandKey(
@@ -642,36 +578,23 @@ export class ApiDriver {
     return response;
   }
 
-  /**
-   * Executes one command family that is still owned by the v1 compatibility grammar.
-   *
-   * The caller names the missing production boundary, so the remaining compatibility surface stays
-   * countable and reviewable instead of looking like an ordinary command-line action.
-   */
-  async executeCompatibilityProgrammerCommand(
-    request: CompatibilityProgrammerCommand,
-  ): Promise<CommandResponse> {
-    const ownership = commandLineOwnership(request.command);
-    if (ownership.via === "command-line-http") {
-      throw new Error(
-        `${request.command} is owned by the v2 command-line HTTP contract; use executeCommandLine`,
-      );
-    }
-    if (ownership.family !== request.family) {
-      throw new Error(
-        `${request.command} belongs to the ${ownership.family} compatibility family, not ${request.family}`,
-      );
-    }
-    return this.sendCompatibilityCommandLine(request.command);
-  }
-
   alignProgrammerSelection(
     attribute: "pan" | "tilt",
     mode: "left" | "right" | "center" | "out",
     from = 0,
     to = 1,
   ): Promise<CommandResponse> {
-    return this.command("programmer.align", { attribute, mode, from, to });
+    const requestId = crypto.randomUUID();
+    return this.liveAction({
+      type: "programming_align",
+      request: {
+        request_id: requestId,
+        attribute,
+        mode,
+        from,
+        to,
+      },
+    }, requestId);
   }
 
   controlFixtureAction(
@@ -679,16 +602,16 @@ export class ApiDriver {
     actionId: string,
     active: boolean,
   ): Promise<CommandResponse> {
-    return this.command("programmer.control_action", {
-      fixture_id: fixtureId,
-      action_id: actionId,
-      active,
-    });
-  }
-
-  /** Raw textual WebSocket command envelope. Private so new scenarios cannot reach it directly. */
-  private async sendCompatibilityCommandLine(command: string): Promise<CommandResponse> {
-    return this.command("programmer.execute", { value: command });
+    const requestId = crypto.randomUUID();
+    return this.liveAction({
+      type: "fixture_control",
+      request: {
+        request_id: requestId,
+        fixture_id: fixtureId,
+        action_id: actionId,
+        active,
+      },
+    }, requestId);
   }
 
   private async commandLineOperation(operation: "keys" | "execute", body: unknown): Promise<CommandOperationResponse> {
@@ -703,7 +626,7 @@ export class ApiDriver {
     return "/api/v2/command-line";
   }
 
-  async command<T>(command: string, payload: unknown, expectedRevision?: number): Promise<CommandResponse<T>> {
+  async liveAction<T>(action: LiveAction, requestId = crypto.randomUUID()): Promise<CommandResponse<T>> {
     if (!this.session) throw new Error("API session is not initialized");
     const socket = new WebSocket(this.baseUrl.replace(/^http/, "ws") + "/api/v2/events", ["light.events.v2", `light.token.${this.session.token}`]);
     try {
@@ -723,15 +646,15 @@ export class ApiDriver {
           if (error) reject(error);
           else resolve(response!);
         };
-        const onClose = () => finish(undefined, new Error(`API WebSocket closed before ${command} responded`));
+        const onClose = () => finish(undefined, new Error(`API WebSocket closed before ${action.type} responded`));
         const onMessage = (event: MessageEvent) => {
           const response = JSON.parse(String(event.data)) as CommandResponse<T>;
           if (response.request_id !== requestId) return;
           if (response.ok) finish(response);
-          else finish(undefined, new Error(`${command} failed: ${response.error ?? "unknown error"}`));
+          else finish(undefined, new Error(`${action.type} failed: ${response.error ?? "unknown error"}`));
         };
         const timer = setTimeout(
-          () => finish(undefined, new Error(`API command timed out: ${command}`)),
+          () => finish(undefined, new Error(`API action timed out: ${action.type}`)),
           WEB_SOCKET_TIMEOUT_MILLIS,
         );
         timer.unref();
@@ -739,12 +662,11 @@ export class ApiDriver {
         socket.addEventListener("close", onClose, { once: true });
         try {
           socket.send(JSON.stringify({
-            protocol_version: 1,
+            type: "action",
+            protocol_version: 2,
             request_id: requestId,
             session_id: this.session?.session_id,
-            expected_revision: expectedRevision,
-            command,
-            payload,
+            action,
           }));
         } catch (error) {
           finish(undefined, error instanceof Error ? error : new Error(String(error)));
@@ -755,7 +677,7 @@ export class ApiDriver {
       // the test server is still alive. Merely calling close() leaves an Undici socket
       // in CLOSING; killing the bench server immediately afterwards can strand that
       // handle in the Playwright worker indefinitely.
-      await closeWebSocket(socket, `API command ${command}`);
+      await closeWebSocket(socket, `API action ${action.type}`);
     }
   }
 }

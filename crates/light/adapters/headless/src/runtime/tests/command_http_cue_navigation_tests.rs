@@ -58,7 +58,12 @@ async fn install_cue_navigation_show(
             }),
         )
         .await;
-    assert_eq!(response.status(), StatusCode::OK, "{:?}", json(response).await);
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "{:?}",
+        json(response).await
+    );
     for (number, name) in [(1, "Twin A"), (2, "Twin B")] {
         let response = scenario
             .put_active_object(
@@ -171,7 +176,10 @@ async fn assert_command_line_reset(scenario: &CommandHttpScenario) {
 async fn command_line_text(scenario: &CommandHttpScenario) -> String {
     let response = scenario.get().await;
     assert_eq!(response.status(), StatusCode::OK);
-    json(response).await["text"].as_str().unwrap_or("").to_owned()
+    json(response).await["text"]
+        .as_str()
+        .unwrap_or("")
+        .to_owned()
 }
 
 fn history_len(scenario: &CommandHttpScenario) -> usize {
@@ -245,8 +253,13 @@ async fn rejected_navigation_retains_the_command_line_and_mutates_no_runtime() {
     let (scenario, _show_id) = cue_navigation_scenario().await;
 
     // A missing selection is rejected before any Playback is addressed.
-    let revision = json(scenario.get().await).await["revision"].as_u64().unwrap();
-    assert_eq!(scenario.put("CUE 2", revision).await.status(), StatusCode::OK);
+    let revision = json(scenario.get().await).await["revision"]
+        .as_u64()
+        .unwrap();
+    assert_eq!(
+        scenario.put("CUE 2", revision).await.status(),
+        StatusCode::OK
+    );
     let baseline = scenario.state.application_events.latest_sequence();
     let response = scenario.execute("missing-selection", None).await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -267,9 +280,17 @@ async fn rejected_navigation_retains_the_command_line_and_mutates_no_runtime() {
 
     // A missing Playback and a missing Cue are both rejected without mutating runtime.
     for (request_id, command, expected) in [
-        ("missing-playback", "CUE SET 99 CUE 1", "playback 99 does not exist"),
+        (
+            "missing-playback",
+            "CUE SET 99 CUE 1",
+            "playback 99 does not exist",
+        ),
         ("missing-cue", "CUE 99", "cue does not exist"),
-        ("unassigned-slot", "CUE SET 9 . 9 CUE 1", "page 9 slot 9 is not assigned"),
+        (
+            "unassigned-slot",
+            "CUE SET 9 . 9 CUE 1",
+            "page 9 slot 9 is not assigned",
+        ),
     ] {
         let baseline = scenario.state.application_events.latest_sequence();
         let response = scenario.execute(request_id, Some(command)).await;
@@ -341,8 +362,7 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
             Request::post("/api/v2/sessions")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
-                    serde_json::json!({"username":"Operator","desk_id":second_desk.id})
-                        .to_string(),
+                    serde_json::json!({"username":"Operator","desk_id":second_desk.id}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -362,13 +382,14 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
         .clone()
         .oneshot(
             Request::post("/api/v2/command-line/execute")
-            .header(header::AUTHORIZATION, format!("Bearer {second_token}"))
-            .header("x-tosk-desk", second_desk.id.to_string())
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(
-                serde_json::json!({"request_id":"desk-two-go-to","command":"CUE 2"}).to_string(),
-            ))
-            .unwrap(),
+                .header(header::AUTHORIZATION, format!("Bearer {second_token}"))
+                .header("x-tosk-desk", second_desk.id.to_string())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"request_id":"desk-two-go-to","command":"CUE 2"})
+                        .to_string(),
+                ))
+                .unwrap(),
         )
         .await
         .unwrap();
@@ -383,16 +404,13 @@ async fn selection_is_desk_local_and_foreign_or_locked_desks_are_rejected() {
         .clone()
         .oneshot(
             Request::post("/api/v2/command-line/execute")
-            .header(
-                header::AUTHORIZATION,
-                format!("Bearer {}", scenario.token),
-            )
-            .header("x-tosk-desk", second_desk.id.to_string())
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(
-                serde_json::json!({"request_id":"foreign-desk","command":"CUE 1"}).to_string(),
-            ))
-            .unwrap(),
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                .header("x-tosk-desk", second_desk.id.to_string())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"request_id":"foreign-desk","command":"CUE 1"}).to_string(),
+                ))
+                .unwrap(),
         )
         .await
         .unwrap();
@@ -438,16 +456,19 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     select_playback(&scenario, scenario.session.desk.id, Some(2));
 
     // The multiplexed WebSocket keeps its facade notification through the same typed action.
-    let ws_command = || WsCommand {
-        protocol_version: 1,
-        request_id: "cue-ws-go-to".into(),
-        session_id: scenario.session.id,
-        expected_revision: None,
-        command: "programmer.execute".into(),
-        payload: serde_json::json!({"value":"CUE 3"}),
+    let ws_command = || {
+        live_action_frame(
+            &scenario.session,
+            "cue-ws-go-to",
+            light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    value: "CUE 3".into(),
+                },
+            ),
+        )
     };
     let baseline = scenario.state.application_events.latest_sequence();
-    let ws = dispatch_ws_command(&scenario.state, &scenario.session, ws_command());
+    let ws = dispatch_live_action(&scenario.state, &scenario.session, ws_command());
     assert!(ws.ok, "{:?}", ws.error);
     assert_eq!(current_cue(&scenario, 2), Some(3.0));
     assert_eq!(playback_events(&scenario, baseline), 1);
@@ -465,7 +486,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
 
     // Replaying the compatibility request repeats neither interaction nor runtime side effects.
     let after = scenario.state.application_events.latest_sequence();
-    let replay = dispatch_ws_command(&scenario.state, &scenario.session, ws_command());
+    let replay = dispatch_live_action(&scenario.state, &scenario.session, ws_command());
     assert!(replay.ok, "{:?}", replay.error);
     assert_eq!(playback_events(&scenario, after), 0);
     assert_eq!(compatibility_notifications(&scenario), 1);

@@ -1,10 +1,7 @@
 import fs from "node:fs/promises";
 import type { Page } from "@playwright/test";
 import { expect } from "../bench/core/fixtures";
-import {
-  commandLineOwnership,
-  type ApiDriver,
-} from "../bench/core/api";
+import type { ApiDriver } from "../bench/core/api";
 import { executeProgrammerCommand } from "./operator";
 
 export interface VersionedObject<T = Record<string, any>> {
@@ -61,14 +58,6 @@ export async function loadCanonicalCopy(api: ApiDriver, bench: any, name: string
 }
 
 export async function command(api: ApiDriver, value: string): Promise<void> {
-  const ownership = commandLineOwnership(value);
-  if (ownership.via === "compatibility") {
-    await api.executeCompatibilityProgrammerCommand({
-      family: ownership.family,
-      command: value,
-    });
-    return;
-  }
   await api.executeCommandLine(value);
 }
 

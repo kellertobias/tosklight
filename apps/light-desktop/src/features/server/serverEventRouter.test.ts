@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
 	BootstrapSnapshot,
-	OutputRoute,
-	ServerEvent,
+	RuntimeCapabilityEvent,
 	SessionResponse,
 	VersionedObject,
 } from "../../api/types";
@@ -20,8 +19,98 @@ function event(
 	kind: string,
 	payload: Record<string, unknown>,
 	revision = 1,
-): ServerEvent {
-	return { revision, kind, payload };
+): RuntimeCapabilityEvent {
+	if (kind === "desk_action")
+		return {
+			type: "operator_notification",
+			notification: {
+				type: "desk_action",
+				revision,
+				notification: {
+					action: (payload.action as string | undefined) ?? null,
+					control: (payload.control as string | undefined) ?? null,
+					value: (payload.value as string | undefined) ?? null,
+					session_id: (payload.session_id as string | undefined) ?? null,
+					desk_id: (payload.desk_id as string | undefined) ?? null,
+					desk_alias: (payload.desk_alias as string | undefined) ?? null,
+				},
+			},
+		};
+	if (kind === "update_target_requested") {
+		const target = payload.target as {
+			family: { type: "cue" | "preset" | "group" };
+			object_id: string;
+		};
+		return {
+			type: "operator_notification",
+			notification: {
+				type: "update_workflow",
+				revision,
+				notification: {
+					type: "target_requested",
+					desk_id: payload.desk_id as string,
+					target: {
+						...target,
+						family: target.family.type,
+						playback_number: null,
+						cue_id: null,
+						cue_number: null,
+						validate_active_context: null,
+					},
+				},
+			},
+		};
+	}
+	if (kind === "show_opened")
+		return {
+			type: "show_library_changed",
+			change: { revision, kind: "show_opened" },
+		};
+	if (kind === "show_renamed")
+		return {
+			type: "show_library_changed",
+			change: { revision, kind: "show_renamed" },
+		};
+	if (kind === "playback_page_changed")
+		return {
+			type: "screens_changed",
+			change: { revision, kind: "playback_page" },
+		};
+	if (kind === "server_configuration_changed")
+		return {
+			type: "server_configuration_changed",
+			change: { revision },
+		};
+	if (kind === "hardware_connection_changed")
+		return {
+			type: "hardware_connection_changed",
+			change: { revision, connected: payload.connected === true },
+		};
+	if (kind === "highlight_changed")
+		return {
+			type: "highlight_changed",
+			change: {
+				revision,
+				desk_id: payload.desk_id as string,
+				user_id: payload.user_id as string,
+				action: null,
+				source: null,
+				state: payload.state as never,
+			},
+		};
+	if (kind === "programming_values_changed")
+		return {
+			type: "programming_values_changed",
+			change: {
+				projection: {
+					user_id: session.user.id,
+					revision,
+					fixture_values: [],
+					group_values: [],
+				},
+			},
+		};
+	throw new Error(`Unsupported typed test event: ${kind}`);
 }
 
 function bootstrap(showId = "show-a"): BootstrapSnapshot {
@@ -177,26 +266,6 @@ function createHarness(showId = "show-a") {
 	};
 }
 
-function showObjectEvent(
-	kind: string,
-	id: string,
-	objectRevision = 3,
-	eventRevision = 1,
-	extra: Record<string, unknown> = {},
-) {
-	return event(
-		"show_object_changed",
-		{
-			show_id: "show-a",
-			kind,
-			id,
-			revision: objectRevision,
-			...extra,
-		},
-		eventRevision,
-	);
-}
-
 afterEach(() => vi.restoreAllMocks());
 
 describe("server event routing", () => {
@@ -266,402 +335,18 @@ describe("server event routing", () => {
 		expect(received).toEqual([target]);
 	});
 
-	it("does not broad-reload Playback runtime for semantic playback events", async () => {
+	it("does not broad-reload Playback runtime for typed Programmer events", async () => {
 		const harness = createHarness();
-		harness.route(event("playback_changed", {}));
+		harness.route(event("programming_values_changed", {}));
 		await Promise.resolve();
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
-	});
-});
-
-describe("show object event reconciliation", () => {
-	const objectCases = [
-		["cue_list", "cue-list-1", "setCueObjects"],
-		["patch_layer", "layer-1", "setPatchLayers"],
-		["unresolved_mvr_fixture", "mvr-1", "setUnresolvedMvrFixtures"],
-		["user_layout", "user-1", "setDeskLayout"],
-		["stage_layout", "main", "setStageLayout"],
-	] as const;
-
-	it.each(
-		objectCases,
-	)("reads only the changed %s object", async (kind, id, setter) => {
-		const harness = createHarness();
-		harness.route(showObjectEvent(kind, id));
-		await vi.waitFor(() =>
-			expect(harness.api.showObjects.object).toHaveBeenCalledOnce(),
-		);
-		expect(harness.api.showObjects.object).toHaveBeenCalledWith(
-			"show-a",
-			kind,
-			id,
-		);
-		expect(harness.state[setter]).toHaveBeenCalledOnce();
-		expect(harness.api.fixtures.patch).not.toHaveBeenCalled();
-		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
-		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
-		expect(harness.loadShowObjects).not.toHaveBeenCalled();
-	});
-
-	it("reloads only the coupled route projection for a route object event", async () => {
-		const harness = createHarness();
-		const route = object<OutputRoute>("route", "route-1", 3, {
-			protocol: "art_net",
-			logical_universe: 1,
-			destination_universe: 1,
-			delivery_mode: "broadcast",
-			destination: null,
-			enabled: true,
-			minimum_slots: 0,
-		});
-		harness.api.showObjects.objects.mockResolvedValueOnce([route]);
-		harness.route(showObjectEvent("route", "route-1"));
-		await vi.waitFor(() =>
-			expect(harness.api.showObjects.objects).toHaveBeenCalledOnce(),
-		);
-		expect(harness.api.showObjects.objects).toHaveBeenCalledWith(
-			"show-a",
-			"route",
-		);
-		expect(harness.state.outputRoutes).toEqual([route]);
-		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
-		expect(harness.api.fixtures.patch).not.toHaveBeenCalled();
-		expect(harness.loadShowObjects).not.toHaveBeenCalled();
-	});
-
-	it("leaves patched Fixture events to the scoped Patch authority", async () => {
-		const harness = createHarness();
-		harness.route(showObjectEvent("patched_fixture", "fixture-1"));
-		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(harness.api.fixtures.patch).not.toHaveBeenCalled();
-		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
-		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
-		expect(harness.loadShowObjects).not.toHaveBeenCalled();
-	});
-
-	it.each([
-		"playback",
-		"playback_page",
-	])("leaves %s object events to scoped stores", async (kind) => {
-		const harness = createHarness();
-		harness.route(showObjectEvent(kind, "1"));
-		await Promise.resolve();
-		await Promise.resolve();
-		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
-		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
-		expect(harness.api.showObjects.objects).not.toHaveBeenCalled();
-		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
-		expect(harness.loadShowObjects).not.toHaveBeenCalled();
-	});
-
-	it("ignores malformed, unknown, other-show, and other-user object events", async () => {
-		const harness = createHarness();
-		harness.route(event("show_object_changed", { kind: "group" }, 1));
-		harness.route(showObjectEvent("future_kind", "future-1", 1, 2));
-		harness.route(
-			event(
-				"show_object_changed",
-				{ show_id: "show-b", kind: "group", id: "1", revision: 1 },
-				3,
-			),
-		);
-		harness.route(showObjectEvent("user_layout", "user-2", 1, 4));
-		await Promise.resolve();
-		await Promise.resolve();
-		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
-		expect(harness.api.fixtures.patch).not.toHaveBeenCalled();
-		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
-		expect(harness.loadShowObjects).not.toHaveBeenCalled();
-	});
-
-	it("leaves migrated Group/Preset events to the view-scoped v2 store", async () => {
-		const harness = createHarness();
-		harness.route(showObjectEvent("group", "3", 2, 1));
-		harness.route(showObjectEvent("preset", "2.1", 2, 2));
-		harness.route(
-			event(
-				"preset_stored",
-				{
-					show_id: "show-a",
-					revision: 2,
-					preset_address: { family: "Color", number: 1 },
-				},
-				3,
-			),
-		);
-		await Promise.resolve();
-		await Promise.resolve();
-		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
-		expect(harness.api.showObjects.objects).not.toHaveBeenCalled();
-		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
-		expect(harness.loadShowObjects).not.toHaveBeenCalled();
-	});
-
-	it("reconciles a route deletion from its small coupled projection", async () => {
-		const harness = createHarness();
-		const route = object<OutputRoute>("route", "route-1", 4, {
-			protocol: "art_net",
-			logical_universe: 1,
-			destination_universe: 1,
-			delivery_mode: "broadcast",
-			destination: null,
-			enabled: true,
-			minimum_slots: 0,
-		});
-		harness.state.outputRoutes = [route];
-		harness.route(
-			showObjectEvent("route", "route-1", 5, 10, { deleted: true }),
-		);
-		await vi.waitFor(() =>
-			expect(harness.state.setOutputRoutes).toHaveBeenCalledOnce(),
-		);
-		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
-		expect(harness.api.showObjects.objects).toHaveBeenCalledWith(
-			"show-a",
-			"route",
-		);
-		expect(harness.state.outputRoutes).toEqual([]);
-	});
-
-	it("applies an explicit generic-object deletion without a read", async () => {
-		const harness = createHarness();
-		harness.state.cueObjects = [object("cue_list", "cue-list-1", 4)] as never;
-		harness.route(
-			showObjectEvent("cue_list", "cue-list-1", 5, 10, { deleted: true }),
-		);
-		await vi.waitFor(() => expect(harness.state.cueObjects).toEqual([]));
-		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
-		expect(harness.api.showObjects.objects).not.toHaveBeenCalled();
-	});
-
-	it("does not install an object response older than the announced revision", async () => {
-		const harness = createHarness();
-		harness.api.showObjects.object.mockResolvedValueOnce(
-			object("cue_list", "cue-list-1", 4),
-		);
-		harness.route(showObjectEvent("cue_list", "cue-list-1", 5, 10));
-		await vi.waitFor(() =>
-			expect(harness.api.showObjects.object).toHaveBeenCalledOnce(),
-		);
-		await Promise.resolve();
-		expect(harness.state.cueObjects).toEqual([]);
-	});
-
-	it("coalesces a same-object burst to the newest revision", async () => {
-		const harness = createHarness();
-		harness.route(showObjectEvent("cue_list", "cue-list-1", 1, 1));
-		harness.route(showObjectEvent("cue_list", "cue-list-1", 2, 2));
-		harness.route(showObjectEvent("cue_list", "cue-list-1", 3, 3));
-		await vi.waitFor(() => expect(harness.state.cueObjects).toHaveLength(1));
-		expect(harness.api.showObjects.object).toHaveBeenCalledOnce();
-		expect(harness.state.cueObjects[0].revision).toBe(3);
-	});
-
-	it("does not install an older response after a newer event arrives", async () => {
-		const harness = createHarness();
-		let resolveFirst!: (
-			value: VersionedObject<Record<string, unknown>>,
-		) => void;
-		const first = new Promise<VersionedObject<Record<string, unknown>>>(
-			(resolve) => {
-				resolveFirst = resolve;
-			},
-		);
-		harness.api.showObjects.object
-			.mockImplementationOnce(() => first)
-			.mockResolvedValueOnce(
-				object("cue_list", "cue-list-1", 2, { name: "new" }),
-			);
-		harness.route(showObjectEvent("cue_list", "cue-list-1", 1, 1));
-		await vi.waitFor(() =>
-			expect(harness.api.showObjects.object).toHaveBeenCalledOnce(),
-		);
-		harness.route(showObjectEvent("cue_list", "cue-list-1", 2, 2));
-		resolveFirst(object("cue_list", "cue-list-1", 1, { name: "old" }));
-		await vi.waitFor(() =>
-			expect(harness.api.showObjects.object).toHaveBeenCalledTimes(2),
-		);
-		await vi.waitFor(() =>
-			expect(harness.state.cueObjects[0]?.revision).toBe(2),
-		);
-		expect((harness.state.cueObjects[0].body as { name: string }).name).toBe(
-			"new",
-		);
-	});
-
-	it("accepts a recreate whose object revision restarted after deletion", async () => {
-		const harness = createHarness();
-		harness.state.cueObjects = [
-			object("cue_list", "cue-list-1", 9, { name: "old" }),
-		] as never;
-		harness.api.showObjects.object.mockResolvedValueOnce(
-			object("cue_list", "cue-list-1", 1, { name: "new" }),
-		);
-		harness.route(
-			showObjectEvent("cue_list", "cue-list-1", 10, 10, { deleted: true }),
-		);
-		harness.route(showObjectEvent("cue_list", "cue-list-1", 1, 11));
-		await vi.waitFor(() =>
-			expect(harness.state.cueObjects[0]?.revision).toBe(1),
-		);
-		expect(harness.api.showObjects.object).toHaveBeenCalledOnce();
-	});
-
-	it("routes legacy stored Cue values to one affected resource", async () => {
-		const harness = createHarness();
-		harness.route(
-			event(
-				"preload_stored",
-				{ target: "cue", target_id: "cue-list-1", revision: 3 },
-				1,
-			),
-		);
-		await vi.waitFor(() =>
-			expect(harness.api.showObjects.object).toHaveBeenCalledOnce(),
-		);
-		expect(harness.api.showObjects.object).toHaveBeenCalledWith(
-			"show-a",
-			"cue_list",
-			"cue-list-1",
-		);
 	});
 });
 
 describe("broad state hydration boundaries", () => {
-	it.each([
-		["normal", ["values"]],
-		["Preload", ["preload_values"]],
-		["Preload playback queue", ["preload_playback_queue"]],
-		["combined", ["values", "preload_values"]],
-		[
-			"combined with playback queue",
-			["values", "preload_values", "preload_playback_queue"],
-		],
-	])("leaves own %s value changes to scoped stores", async (_label, changes) => {
+	it("does not broadly hydrate or reload show objects for typed Programmer values", async () => {
 		const harness = createHarness();
-		harness.route(
-			event("programmer_changed", { user_id: session.user.id, changes }),
-		);
-		await Promise.resolve();
-		await Promise.resolve();
-		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
-	});
-
-	it("does not hydrate serially unrepresentable transient controls", async () => {
-		const harness = createHarness();
-		harness.route(
-			event("programmer_changed", { changes: ["transient_control"] }),
-		);
-		await Promise.resolve();
-		await Promise.resolve();
-		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
-	});
-
-	it("leaves same-user peer-desk value changes to the shared scoped store", async () => {
-		const harness = createHarness();
-		harness.route(
-			event("programmer_changed", {
-				user_id: session.user.id,
-				session_id: "peer-session",
-				desk_id: "peer-desk",
-				changes: ["values"],
-			}),
-		);
-		await Promise.resolve();
-		await Promise.resolve();
-		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
-	});
-
-	it("leaves an own queue transition with interaction to both scoped stores", async () => {
-		const harness = createHarness();
-		harness.route(
-			event("programmer_changed", {
-				user_id: session.user.id,
-				command: "preload.go",
-				changes: ["interaction", "preload_playback_queue"],
-			}),
-		);
-		await Promise.resolve();
-		await Promise.resolve();
-		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
-	});
-
-	it("leaves categorized command-line edits to the scoped interaction store", async () => {
-		const harness = createHarness();
-		harness.route(
-			event(
-				"programmer_changed",
-				{
-					command: "programmer.command_line",
-					changes: ["interaction"],
-				},
-				1,
-			),
-		);
-		await Promise.resolve();
-		await Promise.resolve();
-		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
-		expect(harness.api.desk.programmers).not.toHaveBeenCalled();
-	});
-
-	it("leaves uncategorized Programmer changes to typed authorities", async () => {
-		const harness = createHarness();
-		harness.route(
-			event(
-				"programmer_changed",
-				{
-					command: "programmer.execute",
-					changes: ["interaction", "values", "runtime"],
-				},
-				1,
-			),
-		);
-		await Promise.resolve();
-		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
-	});
-
-	it.each([
-		["foreign", { user_id: "user-2", changes: ["values"] }],
-		[
-			"foreign playback queue",
-			{ user_id: "user-2", changes: ["preload_playback_queue"] },
-		],
-		["unowned", { changes: ["values"] }],
-		["mixed", { user_id: session.user.id, changes: ["values", "runtime"] }],
-		["duplicated", { user_id: session.user.id, changes: ["values", "values"] }],
-		["empty", { user_id: session.user.id, changes: [] }],
-	])("leaves %s value events to typed authorities", async (_label, payload) => {
-		const harness = createHarness();
-		harness.route(event("programmer_changed", payload));
-		await Promise.resolve();
-		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
-	});
-
-	it.each([
-		["missing", undefined],
-		["malformed", "interaction"],
-		["expanded", ["interaction", "values"]],
-		["duplicated", ["interaction", "interaction"]],
-	])("leaves %s change categories to typed authorities", async (_label, changes) => {
-		const harness = createHarness();
-		harness.route(
-			event(
-				"programmer_changed",
-				{ command: "programmer.command_line", changes },
-				1,
-			),
-		);
-
-		await Promise.resolve();
-		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
-	});
-
-	it.each([
-		"programmer_changed",
-		"programmer_cleared",
-	])("does not broadly hydrate or reload show objects for %s", async (kind) => {
-		const harness = createHarness();
-		harness.route(event(kind, {}, 1));
+		harness.route(event("programming_values_changed", {}, 1));
 		await Promise.resolve();
 		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
@@ -685,6 +370,23 @@ describe("broad state hydration boundaries", () => {
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
 	});
 
+	it("repairs a renamed Show without broad Bootstrap or catalog amplification", async () => {
+		const harness = createHarness("show-a");
+		harness.api.shows.shows.mockResolvedValueOnce([
+			{ id: "show-a", name: "Renamed" },
+		]);
+		harness.route(event("show_renamed", {}, 2));
+
+		await vi.waitFor(() =>
+			expect(harness.api.shows.shows).toHaveBeenCalledOnce(),
+		);
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
+		expect(harness.api.playback.screens).not.toHaveBeenCalled();
+		expect(harness.api.mediaOutput.mediaServers).not.toHaveBeenCalled();
+		expect(harness.api.fixtures.fixtureLibrary).not.toHaveBeenCalled();
+		expect(harness.loadShowObjects).not.toHaveBeenCalled();
+	});
+
 	it("refreshes only Screens for a Playback Page desk event", async () => {
 		const harness = createHarness();
 		harness.route(event("playback_page_changed", { page: 2 }, 1));
@@ -694,5 +396,61 @@ describe("broad state hydration boundaries", () => {
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
 		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
+	});
+
+	it("refreshes only Configuration for its typed system event", async () => {
+		const harness = createHarness();
+		harness.route(event("server_configuration_changed", {}, 4));
+		await vi.waitFor(() =>
+			expect(harness.api.desk.configuration).toHaveBeenCalledOnce(),
+		);
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
+		expect(harness.api.playback.screens).not.toHaveBeenCalled();
+		expect(harness.api.fixtures.fixtureLibrary).not.toHaveBeenCalled();
+		expect(harness.api.showObjects.objects).not.toHaveBeenCalled();
+		expect(harness.loadShowObjects).not.toHaveBeenCalled();
+	});
+
+	it("installs Hardware connection state without refreshing Bootstrap", () => {
+		const harness = createHarness();
+		harness.route(event("hardware_connection_changed", { connected: true }, 5));
+
+		expect(harness.state.bootstrap?.hardware_connected).toBe(true);
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
+		expect(harness.loadShowObjects).not.toHaveBeenCalled();
+	});
+
+	it("installs typed Highlight state without a follow-up read", async () => {
+		const harness = createHarness();
+		const state = {
+			active: true,
+			mode: "selection",
+			output_enabled: true,
+			capture_only: false,
+			remembered: [],
+			active_index: null,
+			active_fixture: null,
+			can_previous: false,
+			can_next: false,
+			owner_user_id: session.user.id,
+			owner_user_name: session.user.name,
+			message: null,
+		};
+		harness.route(
+			event(
+				"highlight_changed",
+				{
+					desk_id: session.desk.id,
+					user_id: session.user.id,
+					state,
+				},
+				8,
+			),
+		);
+
+		expect(harness.state.setHighlight).toHaveBeenCalledWith(state);
+		expect(harness.api.mediaOutput.highlight).not.toHaveBeenCalled();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
+		expect(harness.api.showObjects.objects).not.toHaveBeenCalled();
 	});
 });

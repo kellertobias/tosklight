@@ -1,6 +1,8 @@
 //! Authenticated revisioned actions and repair projection for global output runtime.
 
-use super::{AppState, Session, authenticate, output_runtime_service, read_desk_lock};
+use super::{
+    AppState, DeskContext, Session, output_runtime_service, read_desk_lock, session_for_desk,
+};
 use crate::tolerant_json::TolerantJson;
 use axum::{
     Json, Router,
@@ -15,23 +17,21 @@ use light_application::{
 };
 use light_wire::v2::events as wire;
 use light_wire::v2::output_runtime as action_wire;
-use uuid::Uuid;
-
 pub(super) fn router() -> Router<AppState> {
     Router::new().route(
-        "/api/v2/desks/{desk_id}/output-runtime/{identity}",
+        "/api/v2/output-runtime/{identity}",
         get(output_runtime_snapshot).post(output_runtime_action),
     )
 }
 
 async fn output_runtime_action(
     State(state): State<AppState>,
-    Path((desk_id, identity)): Path<(String, String)>,
+    Path(identity): Path<String>,
+    desk: DeskContext,
     headers: HeaderMap,
     request: Result<TolerantJson<action_wire::OutputRuntimeActionRequest>, JsonRejection>,
 ) -> Result<Response, OutputRuntimeHttpError> {
-    let session =
-        authenticated_desk(&state, &headers, &desk_id).map_err(OutputRuntimeHttpError::api)?;
+    let session = session_for_desk(&state, &headers, &desk).map_err(OutputRuntimeHttpError::api)?;
     parse_identity(&identity).map_err(OutputRuntimeHttpError::api)?;
     let TolerantJson(request) =
         request.map_err(|error| OutputRuntimeHttpError::invalid(error.body_text()))?;
@@ -60,31 +60,16 @@ async fn output_runtime_action(
 
 async fn output_runtime_snapshot(
     State(state): State<AppState>,
-    Path((desk_id, identity)): Path<(String, String)>,
+    Path(identity): Path<String>,
+    desk: DeskContext,
     headers: HeaderMap,
 ) -> Result<Json<wire::OutputRuntimeSnapshot>, super::ApiError> {
-    let session = authenticated_desk(&state, &headers, &desk_id)?;
+    let session = session_for_desk(&state, &headers, &desk)?;
     let identity = parse_identity(&identity)?;
     let _activation = state.activation_lock.clone().lock_owned().await;
     let snapshot =
         output_runtime_service::snapshot(&state, &session, http_context(&session), identity)?;
     Ok(Json(wire_snapshot(snapshot)))
-}
-
-fn authenticated_desk(
-    state: &AppState,
-    headers: &HeaderMap,
-    path_desk_id: &str,
-) -> Result<Session, super::ApiError> {
-    let session = authenticate(state, headers)?;
-    let desk_id = Uuid::parse_str(path_desk_id)
-        .map_err(|_| super::ApiError::bad_request("desk_id must be a UUID"))?;
-    if session.desk.id != desk_id {
-        return Err(super::ApiError::forbidden(
-            "session is not authorized for this desk",
-        ));
-    }
-    Ok(session)
 }
 
 fn parse_identity(value: &str) -> Result<OutputRuntimeIdentity, super::ApiError> {

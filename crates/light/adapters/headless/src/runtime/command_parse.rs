@@ -113,29 +113,6 @@ pub(super) fn selectable_fixture_ids(
     }
 }
 
-pub(super) fn expand_selectable_fixture_ids(
-    fixtures: &[light_fixture::PatchedFixture],
-    fixture_ids: impl IntoIterator<Item = light_core::FixtureId>,
-) -> Vec<light_core::FixtureId> {
-    let mut expanded = Vec::new();
-    for fixture_id in fixture_ids {
-        if let Some(fixture) = fixtures
-            .iter()
-            .find(|fixture| fixture.fixture_id == fixture_id)
-        {
-            for selectable in selectable_fixture_ids(fixture) {
-                push_unique(&mut expanded, selectable);
-            }
-        } else {
-            // A logical head is already an ordinary selectable identity. Preserve it (and retain
-            // the existing validation behavior for unknown IDs) rather than looking for another
-            // master expansion.
-            push_unique(&mut expanded, fixture_id);
-        }
-    }
-    expanded
-}
-
 pub(super) fn push_unique(
     selected: &mut Vec<light_core::FixtureId>,
     fixture_id: light_core::FixtureId,

@@ -61,20 +61,6 @@ pub(super) fn execute_action(
         .handle(ActionEnvelope { context, command }, &ports)
 }
 
-pub(super) fn execute_while_show_stable(
-    state: &AppState,
-    session: Option<&Session>,
-    context: ActionContext,
-    command: OutputRuntimeCommand,
-) -> Result<OutputRuntimeResult, ApiError> {
-    let _activation = state
-        .activation_lock
-        .clone()
-        .try_lock_owned()
-        .map_err(|_| ApiError::conflict("active show transition is in progress"))?;
-    execute(state, session, context, command)
-}
-
 pub(super) fn snapshot(
     state: &AppState,
     session: &Session,

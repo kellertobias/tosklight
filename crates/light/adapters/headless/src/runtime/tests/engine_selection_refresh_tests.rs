@@ -39,7 +39,11 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
     assert_eq!(changed.status(), StatusCode::OK);
     let changed = json(changed).await;
     assert_eq!(changed["revision"], 2);
-    assert_eq!(changed["event_sequence"], before_put + 5);
+    let put_events = selection_refresh_events(&scenario.state, before_put);
+    assert_eq!(
+        changed["event_sequence"],
+        put_events.last().unwrap().sequence
+    );
 
     let put_correlation = assert_selection_refresh(
         &scenario.state,
@@ -57,10 +61,7 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
         light_application::ActionSource::Http,
         Some(put_correlation),
     );
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        before_put + 5
-    );
+    assert_eq!(put_events.len(), 5);
     assert_selection_events_precede_show_event(&scenario.state, before_put);
     assert_group_membership(&scenario.state, &[scenario.first, scenario.second]);
 
@@ -81,7 +82,11 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
     assert_eq!(undone.status(), StatusCode::OK);
     let undone = json(undone).await;
     assert_eq!(undone["revision"], 3);
-    assert_eq!(undone["event_sequence"], before_undo + 5);
+    let undo_events = selection_refresh_events(&scenario.state, before_undo);
+    assert_eq!(
+        undone["event_sequence"],
+        undo_events.last().unwrap().sequence
+    );
 
     let undo_correlation = assert_selection_refresh(
         &scenario.state,
@@ -100,10 +105,7 @@ async fn active_group_put_and_undo_refresh_each_live_desk_once_without_deadlocki
         Some(undo_correlation),
     );
     assert_ne!(put_correlation, undo_correlation);
-    assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        before_undo + 5
-    );
+    assert_eq!(undo_events.len(), 5);
     assert_selection_events_precede_show_event(&scenario.state, before_undo);
     assert_group_membership(&scenario.state, &[scenario.first]);
 
@@ -200,17 +202,18 @@ async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the
     let response = tokio::time::timeout(
         Duration::from_secs(2),
         tokio::task::spawn_blocking(move || {
-            dispatch_ws_command(
+            dispatch_live_action(
                 &worker_state,
                 &worker_actor,
-                WsCommand {
-                    protocol_version: 1,
-                    request_id: "record-group-1".into(),
-                    session_id: worker_actor.id,
-                    expected_revision: None,
-                    command: "programmer.execute".into(),
-                    payload: serde_json::json!({"value":"RECORD GROUP 1"}),
-                },
+                live_action_frame(
+                    &worker_actor,
+                    "record-group-1",
+                    light_wire::v2::live_action::LiveAction::CommandLineExecute(
+                        light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                            value: "RECORD GROUP 1".into(),
+                        },
+                    ),
+                ),
             )
         }),
     )
@@ -237,8 +240,8 @@ async fn nested_record_group_refreshes_actor_and_peer_once_without_relocking_the
         Some(correlation),
     );
     assert_eq!(
-        scenario.state.application_events.latest_sequence(),
-        before_record + 5,
+        selection_refresh_events(&scenario.state, before_record).len(),
+        5,
         "the mutation must publish one Show event plus one selection and lifecycle event per changed desk"
     );
     assert_selection_events_precede_show_event(&scenario.state, before_record);
@@ -459,12 +462,7 @@ fn assert_group_membership(state: &AppState, expected: &[light_core::FixtureId])
 }
 
 fn assert_selection_events_precede_show_event(state: &AppState, after_sequence: u64) {
-    let light_application::EventReplay::Events(events) = state
-        .application_events
-        .replay(after_sequence, &light_application::EventFilter::default())
-    else {
-        panic!("the mutation events should remain replayable")
-    };
+    let events = selection_refresh_events(state, after_sequence);
     assert_eq!(events.len(), 5);
     assert!(events[..2].iter().all(|event| matches!(
         &event.payload,
@@ -482,6 +480,22 @@ fn assert_selection_events_precede_show_event(state: &AppState, after_sequence: 
         &events[4].payload,
         light_application::ApplicationEvent::Show(light_application::ShowEvent::ObjectsChanged(_))
     ));
+}
+
+fn selection_refresh_events(
+    state: &AppState,
+    after_sequence: u64,
+) -> Vec<std::sync::Arc<light_application::EventEnvelope>> {
+    let filter = light_application::EventFilter::default()
+        .with_capability(light_application::EventCapability::Desk)
+        .with_capability(light_application::EventCapability::Programmer)
+        .with_capability(light_application::EventCapability::Show);
+    let light_application::EventReplay::Events(events) =
+        state.application_events.replay(after_sequence, &filter)
+    else {
+        panic!("the scoped selection refresh events should remain replayable")
+    };
+    events
 }
 
 fn assert_selection_refresh(

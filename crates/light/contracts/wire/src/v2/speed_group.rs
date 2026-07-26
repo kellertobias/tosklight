@@ -47,7 +47,7 @@ pub struct SpeedGroupSnapshot {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum SpeedGroupAction {
     SetBpm {
         group: SpeedGroupId,
@@ -149,7 +149,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn request_accepts_unknown_fields_but_nested_action_remains_strict() {
+    fn request_and_nested_action_accept_unknown_fields() {
         assert!(
             serde_json::from_value::<SpeedGroupActionRequest>(serde_json::json!({
                 "request_id":"speed-1",
@@ -167,7 +167,7 @@ mod tests {
                 "expected_revision":2,
                 "action":{"type":"set_bpm","group":"A","bpm":120.5,"extra":true}
             }))
-            .is_err()
+            .is_ok()
         );
     }
 

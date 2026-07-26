@@ -1,10 +1,15 @@
 import { ApiRequestError } from "../ApiRequestError";
-import type { EventServerMessage } from "../generated/light-wire";
-import type { BootstrapSnapshot, ServerEvent, SessionResponse } from "../types";
+import type {
+	EventPayload,
+	EventServerMessage,
+	LiveAction,
+	LiveActionFrame,
+} from "../generated/light-wire";
+import type { BootstrapSnapshot, SessionResponse } from "../types";
 import { browserStorage, defaultServerUrl } from "./serverLocation";
 import type { LiveClientTransport } from "./transport";
 
-type EventListener = (event: ServerEvent) => void;
+type EventListener = (event: EventPayload) => void;
 
 interface CommandResponse {
 	protocol_version: number;
@@ -36,16 +41,8 @@ export class LightClientRuntime {
 				this.request<T>(path, init, authenticate),
 			blob: (path: string, init?: RequestInit) => this.requestBlob(path, init),
 			absoluteUrl: (path: string) => `${this.baseUrl}${path}`,
-			command: (command: string, payload: unknown, revision?: number) =>
-				revision === undefined
-					? this.command(command, payload)
-					: this.command(command, payload, revision),
-			commandWithRequestId: (
-				command: string,
-				payload: unknown,
-				requestId: string,
-				revision?: number,
-			) => this.sendCommand(command, payload, requestId, revision),
+			sendAction: (action: LiveAction, requestId?: string) =>
+				this.sendAction(action, requestId ?? crypto.randomUUID()),
 		};
 	}
 
@@ -115,7 +112,9 @@ export class LightClientRuntime {
 			socket.send(
 				JSON.stringify({
 					type: "subscribe",
-					filter: { capabilities: ["system"] },
+					filter: {
+						capabilities: ["system", "output", "desk", "show"],
+					},
 					capacity: 256,
 					rate_limits: [],
 				}),
@@ -135,43 +134,21 @@ export class LightClientRuntime {
 		this.socket = null;
 	}
 
-	command(
-		command: string,
-		payload: unknown,
-		expectedRevision?: number,
-	): Promise<unknown> {
-		return this.sendCommand(
-			command,
-			payload,
-			crypto.randomUUID(),
-			expectedRevision,
-		);
-	}
-
-	private sendCommand(
-		command: string,
-		payload: unknown,
-		requestId: string,
-		expectedRevision?: number,
-	): Promise<unknown> {
+	private sendAction(action: LiveAction, requestId: string): Promise<unknown> {
 		if (!this.session || !this.socket || !this.socketIsOpen()) {
 			return Promise.reject(new Error("Live server connection is not ready"));
 		}
 		return new Promise((resolve, reject) => {
-			const timer = window.setTimeout(() => {
+			const timer = globalThis.setTimeout(() => {
 				this.pending.delete(requestId);
-				reject(new Error(`Command timed out: ${command}`));
+				reject(new Error(`Action timed out: ${action.type}`));
 			}, 5_000);
 			this.pending.set(requestId, {
 				resolve,
 				reject,
 				timer,
 			});
-			this.socket?.send(
-				JSON.stringify(
-					this.commandEnvelope(command, payload, requestId, expectedRevision),
-				),
-			);
+			this.socket?.send(JSON.stringify(this.actionFrame(action, requestId)));
 		});
 	}
 
@@ -199,7 +176,10 @@ export class LightClientRuntime {
 		};
 	}
 
-	private installSession(session: SessionResponse, storage: Storage | null): void {
+	private installSession(
+		session: SessionResponse,
+		storage: Storage | null,
+	): void {
 		this.session = session;
 		storage?.setItem("light.primary-session", JSON.stringify(session));
 		if (session.desk) storage?.setItem("light.control-desk", session.desk.id);
@@ -250,13 +230,8 @@ export class LightClientRuntime {
 			this.resolveCommand(data);
 			return;
 		}
-		if (
-			data.type === "event" &&
-			"event" in data &&
-			data.event.payload.type === "facade_notification"
-		) {
-			for (const listener of this.listeners)
-				listener(data.event.payload.notification as ServerEvent);
+		if (data.type === "event" && "event" in data && "payload" in data.event) {
+			for (const listener of this.listeners) listener(data.event.payload);
 			return;
 		}
 		if (data.type === "gap" || data.type === "error") this.socket?.close();
@@ -265,7 +240,7 @@ export class LightClientRuntime {
 	private resolveCommand(response: CommandResponse): void {
 		const pending = this.pending.get(response.request_id);
 		if (!pending) return;
-		window.clearTimeout(pending.timer);
+		globalThis.clearTimeout(pending.timer);
 		this.pending.delete(response.request_id);
 		if (response.ok) pending.resolve(response.payload);
 		else pending.reject(new Error(response.error ?? "Command failed"));
@@ -275,19 +250,15 @@ export class LightClientRuntime {
 		return this.socket?.readyState === WebSocket.OPEN;
 	}
 
-	private commandEnvelope(
-		command: string,
-		payload: unknown,
-		requestId: string,
-		expectedRevision?: number,
-	) {
+	private actionFrame(action: LiveAction, requestId: string): LiveActionFrame {
+		if (!this.session)
+			throw new Error("A session is required before sending actions");
 		return {
-			protocol_version: 1,
+			type: "action",
+			protocol_version: 2,
 			request_id: requestId,
-			session_id: this.session?.session_id,
-			expected_revision: expectedRevision,
-			command,
-			payload,
+			session_id: this.session.session_id,
+			action,
 		};
 	}
 
@@ -303,7 +274,10 @@ export class LightClientRuntime {
 		if (!this.session) throw new Error("A server session is required");
 		const headers = this.boundaryHeaders(new Headers(init.headers));
 		headers.set("authorization", `Bearer ${this.session.token}`);
-		const response = await fetch(`${this.baseUrl}${path}`, { ...init, headers });
+		const response = await fetch(`${this.baseUrl}${path}`, {
+			...init,
+			headers,
+		});
 		if (!response.ok) throw new Error(await response.text());
 		return response.blob();
 	}
@@ -315,7 +289,10 @@ export class LightClientRuntime {
 	): Promise<T> {
 		const headers = this.boundaryHeaders(new Headers(init.headers));
 		if (authenticate) this.authenticate(headers);
-		const response = await fetch(`${this.baseUrl}${path}`, { ...init, headers });
+		const response = await fetch(`${this.baseUrl}${path}`, {
+			...init,
+			headers,
+		});
 		if (!response.ok) throw await apiError(response);
 		if (response.status === 204) return undefined as T;
 		return response.json() as Promise<T>;

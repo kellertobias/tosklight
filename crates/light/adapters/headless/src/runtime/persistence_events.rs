@@ -175,11 +175,12 @@ impl<'a> From<&'a light_playback::ActivePlayback> for PersistedActivePlayback<'a
         }
     }
 }
-pub(super) fn emit(state: &AppState, kind: &str, payload: serde_json::Value) {
+pub(super) fn emit(state: &AppState, kind: &str, payload: serde_json::Value) -> u64 {
+    let revision = state.event_revision.fetch_add(1, Ordering::Relaxed) + 1;
     let event = Event {
-        revision: state.event_revision.fetch_add(1, Ordering::Relaxed) + 1,
+        revision,
         kind: kind.into(),
-        payload,
+        payload: payload.clone(),
     };
     {
         let mut audit = state.audit_events.lock();
@@ -188,15 +189,270 @@ pub(super) fn emit(state: &AppState, kind: &str, payload: serde_json::Value) {
         }
         audit.push_back(event.clone());
     }
-    state
-        .facade_events
-        .publish(light_application::EventDraft::facade_notification(
-            light_application::FacadeNotification {
-                revision: event.revision,
-                kind: event.kind.clone(),
-                payload: event.payload.clone(),
-            },
-        ));
+    if let Some(event) = typed_capability_event(revision, kind, &payload) {
+        state.application_events.publish(event);
+    }
+    revision
+}
+
+fn typed_capability_event(
+    revision: u64,
+    kind: &str,
+    payload: &serde_json::Value,
+) -> Option<light_application::EventDraft> {
+    use light_application::{
+        EventDraft, FixtureLibraryNotification, FixtureLibraryNotificationKind,
+        HardwareConnectionNotification, MediaNotification, MediaNotificationKind,
+        NotificationRevision, ScreenNotification, ScreenNotificationKind,
+        ShowLibraryNotificationKind,
+    };
+    let signal = NotificationRevision { revision };
+    Some(match kind {
+        "server_configuration_changed" => EventDraft::configuration_changed(signal),
+        "screen_configuration_changed" => EventDraft::screens_changed(ScreenNotification {
+            revision,
+            kind: ScreenNotificationKind::Configuration,
+        }),
+        "screen_page_changed" => EventDraft::screens_changed(ScreenNotification {
+            revision,
+            kind: ScreenNotificationKind::ScreenPage,
+        }),
+        "playback_page_changed" => EventDraft::screens_changed(ScreenNotification {
+            revision,
+            kind: ScreenNotificationKind::PlaybackPage,
+        }),
+        "show_opened" => show_library_event(revision, ShowLibraryNotificationKind::ShowOpened),
+        "show_renamed" => show_library_event(revision, ShowLibraryNotificationKind::ShowRenamed),
+        "show_rolled_back" => {
+            show_library_event(revision, ShowLibraryNotificationKind::ShowRolledBack)
+        }
+        "show_uploaded" => show_library_event(revision, ShowLibraryNotificationKind::ShowUploaded),
+        "show_deleted" => show_library_event(revision, ShowLibraryNotificationKind::ShowDeleted),
+        "fixture_library_changed" => {
+            EventDraft::fixture_library_changed(FixtureLibraryNotification {
+                revision,
+                kind: FixtureLibraryNotificationKind::Library,
+            })
+        }
+        "fixture_profile_changed" => {
+            EventDraft::fixture_library_changed(FixtureLibraryNotification {
+                revision,
+                kind: FixtureLibraryNotificationKind::Profile,
+            })
+        }
+        "media_thumbnails_refreshed" => EventDraft::media_changed(MediaNotification {
+            revision,
+            kind: MediaNotificationKind::ThumbnailsRefreshed,
+        }),
+        "media_preview_refreshed" => EventDraft::media_changed(MediaNotification {
+            revision,
+            kind: MediaNotificationKind::PreviewRefreshed,
+        }),
+        "media_server_offline" => EventDraft::media_changed(MediaNotification {
+            revision,
+            kind: MediaNotificationKind::ServerOffline,
+        }),
+        "hardware_connection_changed" => {
+            #[derive(serde::Deserialize)]
+            struct HardwarePayload {
+                connected: bool,
+            }
+            let payload: HardwarePayload = decode(payload)?;
+            EventDraft::hardware_connection_changed(HardwareConnectionNotification {
+                revision,
+                connected: payload.connected,
+            })
+        }
+        "desk_action" => EventDraft::system_event(operator_desk_action(revision, payload)?),
+        "file_input_action" => EventDraft::system_event(operator_file_input(revision, payload)?),
+        "file_operation_completed" => {
+            EventDraft::system_event(operator_file_operation(revision, payload)?)
+        }
+        "group_configuration_requested" => {
+            EventDraft::system_event(operator_group_configuration(revision, payload)?)
+        }
+        "update_armed"
+        | "update_target_requested"
+        | "update_target_rejected"
+        | "update_targets_requested"
+        | "update_settings_requested" => {
+            EventDraft::system_event(operator_update(revision, kind, payload)?)
+        }
+        "command_history" => EventDraft::system_event(operator_command_history(revision, payload)?),
+        _ => return None,
+    })
+}
+
+fn show_library_event(
+    revision: u64,
+    kind: light_application::ShowLibraryNotificationKind,
+) -> light_application::EventDraft {
+    light_application::EventDraft::show_library_changed(
+        light_application::ShowLibraryNotification { revision, kind },
+    )
+}
+
+fn decode<T: serde::de::DeserializeOwned>(payload: &serde_json::Value) -> Option<T> {
+    match serde_json::from_value(payload.clone()) {
+        Ok(value) => Some(value),
+        Err(error) => {
+            tracing::warn!(%error, "audit notification payload did not match its typed event");
+            None
+        }
+    }
+}
+
+fn operator_desk_action(
+    revision: u64,
+    payload: &serde_json::Value,
+) -> Option<light_application::SystemEvent> {
+    Some(light_application::SystemEvent::Operator(
+        light_application::OperatorNotification::DeskAction {
+            revision,
+            notification: decode(payload)?,
+        },
+    ))
+}
+
+fn operator_file_input(
+    revision: u64,
+    payload: &serde_json::Value,
+) -> Option<light_application::SystemEvent> {
+    Some(light_application::SystemEvent::Operator(
+        light_application::OperatorNotification::FileInput {
+            revision,
+            notification: decode(payload)?,
+        },
+    ))
+}
+
+fn operator_file_operation(
+    revision: u64,
+    payload: &serde_json::Value,
+) -> Option<light_application::SystemEvent> {
+    Some(light_application::SystemEvent::Operator(
+        light_application::OperatorNotification::FileOperation {
+            revision,
+            notification: decode(payload)?,
+        },
+    ))
+}
+
+fn operator_group_configuration(
+    revision: u64,
+    payload: &serde_json::Value,
+) -> Option<light_application::SystemEvent> {
+    Some(light_application::SystemEvent::Operator(
+        light_application::OperatorNotification::GroupConfiguration {
+            revision,
+            notification: decode(payload)?,
+        },
+    ))
+}
+
+#[derive(serde::Deserialize)]
+struct UpdatePayload {
+    desk_id: String,
+    #[serde(default)]
+    armed: Option<bool>,
+    #[serde(default)]
+    target: Option<UpdateTargetPayload>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct UpdateTargetPayload {
+    family: UpdateTargetFamilyPayload,
+    object_id: String,
+    playback_number: Option<u16>,
+    cue_id: Option<String>,
+    cue_number: Option<f64>,
+    validate_active_context: Option<bool>,
+}
+
+#[derive(serde::Deserialize)]
+struct UpdateTargetFamilyPayload {
+    #[serde(rename = "type")]
+    kind: String,
+}
+
+impl UpdateTargetPayload {
+    fn into_notification(self) -> Option<light_application::UpdateTargetNotification> {
+        let family = match self.family.kind.as_str() {
+            "cue" => light_application::UpdateTargetFamilyNotification::Cue,
+            "preset" => light_application::UpdateTargetFamilyNotification::Preset,
+            "group" => light_application::UpdateTargetFamilyNotification::Group,
+            _ => return None,
+        };
+        Some(light_application::UpdateTargetNotification {
+            family,
+            object_id: self.object_id,
+            playback_number: self.playback_number,
+            cue_id: self.cue_id,
+            cue_number: self.cue_number,
+            validate_active_context: self.validate_active_context,
+        })
+    }
+}
+
+fn operator_update(
+    revision: u64,
+    kind: &str,
+    payload: &serde_json::Value,
+) -> Option<light_application::SystemEvent> {
+    let payload: UpdatePayload = decode(payload)?;
+    let notification = match kind {
+        "update_armed" => light_application::UpdateWorkflowNotification::Armed {
+            desk_id: payload.desk_id,
+            armed: payload.armed.unwrap_or(true),
+        },
+        "update_target_requested" => {
+            light_application::UpdateWorkflowNotification::TargetRequested {
+                desk_id: payload.desk_id,
+                target: payload.target?.into_notification()?,
+            }
+        }
+        "update_target_rejected" => light_application::UpdateWorkflowNotification::TargetRejected {
+            desk_id: payload.desk_id,
+            error: payload.error,
+        },
+        "update_targets_requested" => {
+            light_application::UpdateWorkflowNotification::TargetsRequested {
+                desk_id: payload.desk_id,
+            }
+        }
+        "update_settings_requested" => {
+            light_application::UpdateWorkflowNotification::SettingsRequested {
+                desk_id: payload.desk_id,
+            }
+        }
+        _ => return None,
+    };
+    Some(light_application::SystemEvent::Operator(
+        light_application::OperatorNotification::UpdateWorkflow {
+            revision,
+            notification,
+        },
+    ))
+}
+
+#[derive(serde::Deserialize)]
+struct DeskPayload {
+    desk_id: String,
+}
+
+fn operator_command_history(
+    revision: u64,
+    payload: &serde_json::Value,
+) -> Option<light_application::SystemEvent> {
+    let payload: DeskPayload = decode(payload)?;
+    Some(light_application::SystemEvent::Operator(
+        light_application::OperatorNotification::CommandHistoryChanged {
+            revision,
+            desk_id: payload.desk_id,
+        },
+    ))
 }
 
 pub(super) fn record_command_history(
@@ -339,4 +595,86 @@ pub(super) fn revision_copy_name(
     Err(ApiError::conflict(
         "no unused name is available for the revision copy",
     ))
+}
+
+#[cfg(test)]
+mod event_publication_tests {
+    use super::typed_capability_event;
+
+    #[test]
+    fn audit_only_kinds_do_not_create_application_events() {
+        for kind in [
+            "highlight_changed",
+            "programmer_changed",
+            "show_object_changed",
+            "preload_stored",
+        ] {
+            assert!(
+                typed_capability_event(1, kind, &serde_json::json!({})).is_none(),
+                "{kind} must remain audit-only at the generic emit boundary"
+            );
+        }
+    }
+
+    #[test]
+    fn hardware_state_is_a_typed_desk_event() {
+        let draft = typed_capability_event(
+            7,
+            "hardware_connection_changed",
+            &serde_json::json!({
+                "connected": true
+            }),
+        )
+        .expect("hardware state must publish");
+        assert_eq!(
+            draft.object,
+            Some(light_application::EventObject::new(
+                light_application::EventCapability::Desk,
+                "hardware-connections",
+            ))
+        );
+        let light_application::ApplicationEvent::Desk(
+            light_application::DeskEvent::HardwareConnectionChanged(change),
+        ) = draft.payload
+        else {
+            panic!("expected a typed Desk hardware event");
+        };
+        assert_eq!(change.revision, 7);
+        assert!(change.connected);
+    }
+
+    #[test]
+    fn decimal_update_target_is_preserved_in_the_typed_operator_event() {
+        let draft = typed_capability_event(
+            8,
+            "update_target_requested",
+            &serde_json::json!({
+                "desk_id": "desk",
+                "target": {
+                    "family": {"type": "cue"},
+                    "object_id": "cue-list",
+                    "playback_number": 1,
+                    "cue_id": "cue",
+                    "cue_number": 2.5,
+                    "validate_active_context": true
+                }
+            }),
+        )
+        .expect("valid Update target must publish");
+        let light_application::ApplicationEvent::System(light_application::SystemEvent::Operator(
+            light_application::OperatorNotification::UpdateWorkflow {
+                notification:
+                    light_application::UpdateWorkflowNotification::TargetRequested { target, .. },
+                ..
+            },
+        )) = draft.payload
+        else {
+            panic!("expected a typed operator Update event");
+        };
+        assert_eq!(
+            target.family,
+            light_application::UpdateTargetFamilyNotification::Cue
+        );
+        assert_eq!(target.cue_number, Some(2.5));
+    }
 }

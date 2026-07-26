@@ -22,7 +22,6 @@ async fn map_existing_is_a_page_only_action_with_replay_no_change_and_conflict()
     );
     let revision = scenario.show_revision();
     let cursor = scenario.state.application_events.latest_sequence();
-    let compatibility = subscribe_facade_events(&scenario.state);
     let request = map_existing_request(
         "map-existing",
         1,
@@ -38,8 +37,6 @@ async fn map_existing_is_a_page_only_action_with_replay_no_change_and_conflict()
     let changed = json(response).await;
     assert_changed_map(&changed);
     assert_one_topology_event(&scenario.state, cursor, 1);
-    let compatibility_events = drain_facade_notifications(&compatibility);
-    assert_eq!(compatibility_events.len(), 1);
     assert_source_unchanged(&scenario);
 
     assert_replay(&scenario, revision, cursor, request, &changed).await;

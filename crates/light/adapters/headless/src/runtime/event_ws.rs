@@ -125,21 +125,3 @@ pub(super) async fn update_master(
     }
     Ok(Json(result))
 }
-pub(super) fn lock_live_input(
-    state: &AppState,
-    session: &Session,
-    key: String,
-) -> Result<(), String> {
-    let now = Instant::now();
-    let mut locks = state.input_locks.lock();
-    locks.retain(|_, (_, expires)| *expires > now);
-    if let Some((owner, _)) = locks.get(&key)
-        && *owner != session.user.id
-    {
-        return Err(format!(
-            "input {key} is currently controlled by another user"
-        ));
-    }
-    locks.insert(key, (session.user.id, now + Duration::from_secs(1)));
-    Ok(())
-}
