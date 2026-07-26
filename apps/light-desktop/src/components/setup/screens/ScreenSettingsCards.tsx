@@ -39,13 +39,13 @@ function ScreenSettingsFields({
 	return <div className="screen-settings-columns">
 		<section><h3>Layout</h3><div className="screen-settings-fields">
 			<SelectField label="Desktop" value={draft.layout.activeDeskId} onChange={(activeDeskId) => update({ layout: { desks, activeDeskId } })} options={desks.map((desk) => ({ value: desk.id, label: desk.name }))}/>
-			<SwitchField label="Show Dock" checked={draft.show_dock} onChange={(event) => update({ show_dock: event.target.checked })}/>
-			<SwitchField label="Show Playbacks" checked={draft.show_playbacks} onChange={(event) => update({ show_playbacks: event.target.checked })}/>
-			<SwitchField label="Show Page Controls" checked={draft.show_page_controls} onChange={(event) => update({ show_page_controls: event.target.checked })}/>
+			<SwitchField label="Dock" offLabel="Hidden" onLabel="Visible" checked={draft.show_dock} onChange={(event) => update({ show_dock: event.target.checked })}/>
+			<SwitchField label="Playbacks" offLabel="Hidden" onLabel="Visible" checked={draft.show_playbacks} onChange={(event) => update({ show_playbacks: event.target.checked })}/>
+			<SwitchField label="Page controls" offLabel="Hidden" onLabel="Visible" checked={draft.show_page_controls} onChange={(event) => update({ show_page_controls: event.target.checked })}/>
 		</div></section>
 		<section><h3>Placement</h3><div className="screen-settings-fields">
 			<SelectField label="Physical Display" value={draft.display_id ?? ""} onChange={(value) => update({ display_id: value || null })} options={[{ value: "", label: "Choose when opened" }, ...displays.map((display) => ({ value: display.id, label: display.name }))]}/>
-			<SwitchField label="Fullscreen" checked={draft.fullscreen} onChange={(event) => update({ fullscreen: event.target.checked })}/>
+			<SwitchField label="Window mode" offLabel="Windowed" onLabel="Fullscreen" checked={draft.fullscreen} onChange={(event) => update({ fullscreen: event.target.checked })}/>
 			<FormLayout columns={2} minColumnWidth={90}>
 				<NumberField label="Window X" value={draft.bounds?.x ?? 0} onChange={(event) => update({ bounds: bounds({ x: Number(event.target.value) }) })}/>
 				<NumberField label="Window Y" value={draft.bounds?.y ?? 0} onChange={(event) => update({ bounds: bounds({ y: Number(event.target.value) }) })}/>
@@ -208,6 +208,8 @@ export function DefaultScreenSettings({
 				</div>
 				<SwitchField
 					label="Enable software keyboard shortcuts"
+					offLabel="Disabled"
+					onLabel="Enabled"
 					checked={keyboardShortcuts}
 					description="Keyboard shortcuts are always disabled while hardware controls are connected."
 					onChange={(event) => onKeyboardShortcuts(event.target.checked)}

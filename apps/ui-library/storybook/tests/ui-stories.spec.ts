@@ -1234,16 +1234,23 @@ test("configured search children share stack order, focus, form geometry, and di
 	const switchField = settings.locator(".ui-form-field").filter({
 		hasText: "Favorites only",
 	});
-	const [labelBox, switchBox, stateBox] = await Promise.all([
+	const [labelBox, switchBox, statesBox] = await Promise.all([
 		switchField.locator(":scope > label").boundingBox(),
 		switchField.locator(".ui-switch-track").boundingBox(),
-		switchField.getByText(/^(On|Off)$/u).boundingBox(),
+		switchField.locator(".ui-switch-states").boundingBox(),
 	]);
 	expect(labelBox).not.toBeNull();
 	expect(switchBox).not.toBeNull();
-	expect(stateBox).not.toBeNull();
+	expect(statesBox).not.toBeNull();
+	await expect(switchField.locator(".ui-switch-state")).toHaveCount(2);
+	await expect(switchField.locator(".ui-switch-state-off")).toHaveText(
+		"All fixtures",
+	);
+	await expect(switchField.locator(".ui-switch-state-on")).toHaveText(
+		"Favorites",
+	);
 	expect(Math.abs(labelBox!.y - switchBox!.y)).toBeLessThan(24);
-	expect(switchBox!.x + switchBox!.width).toBeLessThanOrEqual(stateBox!.x);
+	expect(switchBox!.x + switchBox!.width).toBeLessThanOrEqual(statesBox!.x);
 
 	const nestedKeyboardTrigger = settings.getByRole("button", {
 		name: "Open keyboard",

@@ -24,6 +24,8 @@ export type SearchSetting =
 			id: string;
 			label: string;
 			value: boolean;
+			offLabel: string;
+			onLabel: string;
 			description?: string;
 	  }
 	| {
@@ -102,6 +104,8 @@ export function SearchBar({
 							<SwitchField
 								key={setting.id}
 								label={setting.label}
+								offLabel={setting.offLabel}
+								onLabel={setting.onLabel}
 								description={setting.description}
 								checked={setting.value}
 								onChange={(event) =>

@@ -36,6 +36,7 @@
     "test": "bash tools/test.sh unit",
     "test:unit": "bash tools/test.sh unit",
     "test:architecture": "bash tools/test.sh architecture",
+    "lint:control-labels": "node tools/check-control-state-labels.mjs",
     "test:semantic-test-docs": "node --test tools/semantic-test-docs/*.test.mjs",
     "test:bench-unit": "vitest run tests/bench",
     "docs:semantic-tests:write": "node tools/semantic-test-docs/cli.mjs --write",
@@ -60,6 +61,7 @@
     "release:dry-run": "node tools/run-semantic-release.mjs --dry-run"
   },
   "devDependencies": {
+    "@babel/parser": "^7.29.7",
     "@playwright/test": "^1.61.1",
     "@semantic-release/commit-analyzer": "^13.0.0",
     "@semantic-release/github": "^11.0.0",

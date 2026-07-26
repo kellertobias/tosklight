@@ -92,6 +92,8 @@ function FixtureSheetViewSettings({
 				<h3>Filters</h3>
 				<SwitchField
 					label="Show active fixtures only"
+					offLabel="All fixtures"
+					onLabel="Active only"
 					checked={activeOnly}
 					onChange={(event) =>
 						dispatch({
@@ -143,6 +145,8 @@ function FixtureSheetColumnSettings() {
 						<SwitchField
 							key={column}
 							label={columnLabels[column]}
+							offLabel="Hidden"
+							onLabel="Visible"
 							checked={state.fixtureSheetColumns.includes(column)}
 							disabled={
 								state.fixtureSheetColumns.length === 1 &&
@@ -157,6 +161,8 @@ function FixtureSheetColumnSettings() {
 				<h3>Name details</h3>
 				<SwitchField
 					label="Show fixture type"
+					offLabel="Name only"
+					onLabel="Show type"
 					checked={state.fixtureSheetShowType}
 					disabled={!state.fixtureSheetColumns.includes("name")}
 					onChange={(event) =>
@@ -176,6 +182,8 @@ function FixtureSheetGroupSettings({ visible }: { visible: boolean }) {
 	return (
 		<SwitchField
 			label="Enable group shortcuts"
+			offLabel="Hidden"
+			onLabel="Visible"
 			checked={visible}
 			onChange={(event) =>
 				dispatch({

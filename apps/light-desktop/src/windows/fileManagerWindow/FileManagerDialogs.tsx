@@ -107,6 +107,7 @@ function OperationConfirmations({
 					{conflict.operation.sources.length > 1 && (
 						<CheckboxField
 							label="Apply to All"
+							stateLabel="Use for remaining conflicts"
 							checked={conflict.applyToAll}
 							onChange={(event) =>
 								state.setConflict({

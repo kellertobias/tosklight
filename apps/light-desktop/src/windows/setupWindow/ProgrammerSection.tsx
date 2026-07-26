@@ -23,6 +23,8 @@ function PatchHighlightSettings({
 			<FormLayout labelPlacement="side">
 				<SwitchField
 					label="Highlight patch selection via DMX"
+					offLabel="Stage only"
+					onLabel="Stage + DMX"
 					checked={draft.patch_preview_highlight_dmx ?? false}
 					onChange={(event) =>
 						controller.editDraft({
@@ -51,6 +53,8 @@ function PreloadSettings({
 			<FormLayout labelPlacement="side">
 				<SwitchField
 					label="Preload programmer changes"
+					offLabel="Ignore"
+					onLabel="Capture"
 					checked={draft.preload_programmer_changes}
 					onChange={(event) =>
 						controller.editDraft({
@@ -61,6 +65,8 @@ function PreloadSettings({
 				/>
 				<SwitchField
 					label="Preload physical playback actions"
+					offLabel="Ignore"
+					onLabel="Capture"
 					checked={draft.preload_physical_playback_actions}
 					onChange={(event) =>
 						controller.editDraft({
@@ -71,6 +77,8 @@ function PreloadSettings({
 				/>
 				<SwitchField
 					label="Preload virtual playback actions"
+					offLabel="Ignore"
+					onLabel="Capture"
 					checked={draft.preload_virtual_playback_actions}
 					onChange={(event) =>
 						controller.editDraft({
@@ -100,6 +108,8 @@ function CommandLineTimingSettings({
 			<FormLayout labelPlacement="side">
 				<SwitchField
 					label="AT uses Programmer Fade"
+					offLabel="Immediate"
+					onLabel="Programmer Fade"
 					checked={draft.command_line_at_uses_programmer_fade ?? true}
 					onChange={(event) =>
 						controller.editDraft({

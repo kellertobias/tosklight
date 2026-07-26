@@ -177,9 +177,9 @@ function PlaybackBehaviorTab({ draft, onDraftChange }: { draft: PlaybackDefiniti
   return <FormLayout labelPlacement="side">
     {cueList ? <>
       <MultiValueToggleField label="When Flash or Swap is released" description="Release all removes the temporary values and restores the prior state. Intensity only leaves this Cue List active at zero intensity, retaining values such as color and position." value={draft.flash_release ?? "release_all"} onChange={(flash_release) => onDraftChange({ ...draft, flash_release })} options={[{ value: "release_all", label: "Release all" }, { value: "release_intensity_only", label: "Intensity only" }]}/>
-      <SwitchField label="Turn off when other playbacks take full control" description="Automatically turns this Cue List off once other normal playbacks at full level control every value it was outputting. Partial takeovers, Flash, and Temp do not count." checked={draft.auto_off} onChange={(event) => onDraftChange({ ...draft, auto_off: event.target.checked })}/>
+      <SwitchField label="Turn off when other playbacks take full control" offLabel="Keep active" onLabel="Auto off" description="Automatically turns this Cue List off once other normal playbacks at full level control every value it was outputting. Partial takeovers, Flash, and Temp do not count." checked={draft.auto_off} onChange={(event) => onDraftChange({ ...draft, auto_off: event.target.checked })}/>
     </> : <p className="playback-topology-note">Flash/Swap release and automatic turn-off are available for Cue Lists only.</p>}
-    <SwitchField label="Protect from Swap" description="Keeps this playback at its current level while another playback’s Swap button is held." checked={Boolean(draft.protect_from_swap)} onChange={(event) => onDraftChange({ ...draft, protect_from_swap: event.target.checked })}/>
+    <SwitchField label="Protect from Swap" offLabel="Affected by Swap" onLabel="Protected" description="Keeps this playback at its current level while another playback’s Swap button is held." checked={Boolean(draft.protect_from_swap)} onChange={(event) => onDraftChange({ ...draft, protect_from_swap: event.target.checked })}/>
   </FormLayout>;
 }
 

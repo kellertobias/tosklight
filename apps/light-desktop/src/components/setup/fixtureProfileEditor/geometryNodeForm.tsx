@@ -134,6 +134,7 @@ export function GeometryNodeForm({
 			/>
 			<CheckboxField
 				label="Attribute-driven motion"
+				stateLabel="Animate from attribute"
 				checked={Boolean(node.motion)}
 				onChange={(event) =>
 					onChange({

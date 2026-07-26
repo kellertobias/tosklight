@@ -150,7 +150,7 @@ export function OutputRoutesSetup({ routes, onSave, onDelete, outputBindIp }: Ou
           {draft.body.delivery_mode === "unicast" && <TextField label="Destination" value={draft.body.destination ?? ""} description="Required IPv4 address and port, for example 10.0.0.20:6454." onChange={(event) => setDraft({ ...draft, body: { ...draft.body, destination: event.target.value } })}/>}
           {draft.body.delivery_mode === "broadcast" && <p className="field-description">Art-Net Broadcast uses the global destination 255.255.255.255:6454. The desk's output bind address selects the lighting-network interface.</p>}
           {draft.body.delivery_mode === "multicast" && <p className="field-description">sACN Multicast derives its 239.255.x.y:5568 destination from the destination universe.</p>}
-          <SwitchField label="Enabled" checked={draft.body.enabled} onChange={(event) => setDraft({ ...draft, body: { ...draft.body, enabled: event.target.checked } })}/>
+          <SwitchField label="Route state" offLabel="Disabled" onLabel="Enabled" checked={draft.body.enabled} onChange={(event) => setDraft({ ...draft, body: { ...draft.body, enabled: event.target.checked } })}/>
         </FormLayout>
         {error && <p className="ui-field-error" role="alert">{error}</p>}
         {confirmDelete ? <div className="delete-confirm">

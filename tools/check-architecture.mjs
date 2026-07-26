@@ -20,6 +20,9 @@ import {
 import {
   workspaceLintInheritanceFailures,
 } from "./cargo-workspace-lints.mjs";
+import {
+  controlStateLabelWarnings,
+} from "./check-control-state-labels.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const failures = [];
@@ -510,6 +513,10 @@ legacyPlaybackSnapshotBoundaries();
 testCommandBoundaries();
 privateTestBoundaries();
 semanticWorldBoundaries();
+
+for (const warning of controlStateLabelWarnings(repositoryRoot)) {
+  console.warn(`architecture warning: ${warning}`);
+}
 
 if (failures.length > 0) {
   for (const failure of failures) console.error(`architecture error: ${failure}`);

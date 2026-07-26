@@ -251,7 +251,9 @@ export function PresetSettings({
 								))}
 							</div>
 							<SwitchField
-								label="Enable pool colors"
+								label="Pool colors"
+								offLabel="Disabled"
+								onLabel="Enabled"
 								checked={colorsEnabled}
 								onChange={(event) => onColors(event.target.checked)}
 							/>

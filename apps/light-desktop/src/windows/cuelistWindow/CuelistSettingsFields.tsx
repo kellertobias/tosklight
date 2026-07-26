@@ -95,12 +95,16 @@ function TimingFields({
 			<FormLayout labelPlacement="top">
 				<SwitchField
 					label="Force Cue Timing"
+					offLabel="Stored timing"
+					onLabel="Cue timing"
 					description="Uses each Cue's Fade and Delay for every value, temporarily overriding stored per-value timing without deleting it."
 					checked={draft.force_cue_timing ?? false}
 					onChange={(event) => update("force_cue_timing", event.target.checked)}
 				/>
 				<SwitchField
 					label="Disable Cue Timing"
+					offLabel="Timed"
+					onLabel="Immediate"
 					description="Rehearsal bypass: makes Cue and per-value timing, TIME waits, and Chaser X-fade immediate without changing stored values. Chaser cadence continues; this overrides Force Cue Timing."
 					checked={draft.disable_cue_timing ?? false}
 					onChange={(event) =>

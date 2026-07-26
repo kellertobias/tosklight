@@ -161,6 +161,8 @@ function TitleBarExample({
               id: "favorites",
               label: "Favorites only",
               value: favorites,
+              offLabel: "All fixtures",
+              onLabel: "Favorites",
             },
             {
               kind: "text",

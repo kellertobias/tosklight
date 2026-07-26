@@ -49,8 +49,8 @@ function FormElements() {
       <MultiValueToggleField label="4 values" value={fourValues} onChange={setFourValues} options={[{ value: "north", label: "N" }, { value: "east", label: "E" }, { value: "south", label: "S" }, { value: "west", label: "W" }]}/>
       <MultiValueToggleField label="5 values" value={fiveValues} onChange={setFiveValues} options={["1", "2", "3", "4", "5"].map((value) => ({ value, label: value }))}/>
       <MultiValueToggleField label="6 values" value={sixValues} onChange={setSixValues} options={["a", "b", "c", "d", "e", "f"].map((value) => ({ value, label: value.toUpperCase() }))}/>
-      <SwitchField label="Toggle" checked={enabled} onChange={(event) => setEnabled(event.target.checked)}/>
-      <CheckboxField label="Checkbox" checked={checked} onChange={(event) => setChecked(event.target.checked)}/>
+      <SwitchField label="Toggle" offLabel="Manual" onLabel="Automatic" checked={enabled} onChange={(event) => setEnabled(event.target.checked)}/>
+      <CheckboxField label="Checkbox" stateLabel="Include option" checked={checked} onChange={(event) => setChecked(event.target.checked)}/>
       <IconPickerField label="Icon" value={icon} onChange={setIcon}/>
       <ColorPickerField label="Color" value={color} onChange={setColor}/>
       <HorizontalFaderField label="Horizontal fader" value={brightness} minimum={0} maximum={2} step={0.05} display={`${Math.round(brightness * 100)}%`} onChange={setBrightness}/>

@@ -278,10 +278,41 @@
   transform: translateX(20px);
 }
 
-.ui-check-state {
+.ui-check-state,
+.ui-switch-state {
   color: var(--text);
   font-size: 14px;
   font-weight: 600;
+}
+
+.ui-switch-states {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ui-switch-state {
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: 5px;
+  color: var(--muted);
+  transition: color 0.14s ease, background 0.14s ease;
+}
+
+.ui-switch-state-off {
+  color: var(--text);
+  background: #253039;
+}
+
+.ui-switch-control input:checked ~ .ui-switch-states .ui-switch-state-off {
+  color: var(--muted);
+  background: transparent;
+}
+
+.ui-switch-control input:checked ~ .ui-switch-states .ui-switch-state-on {
+  color: var(--cyan);
+  background: #153541;
 }
 
 .horizontal-touch-fader {

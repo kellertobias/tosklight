@@ -106,6 +106,8 @@ export function GeometryEmitterForm({
 			/>
 			<SwitchField
 				label="Projects a directional beam"
+				offLabel="Omnidirectional"
+				onLabel="Directional"
 				checked={emitter.directional ?? true}
 				onChange={(event) =>
 					onChange({ ...emitter, directional: event.target.checked })

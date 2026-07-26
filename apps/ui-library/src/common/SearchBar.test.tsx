@@ -27,6 +27,8 @@ describe("SearchBar", () => {
 			id: "favorites",
 			label: "Favorites only",
 			value: false,
+			offLabel: "All fixtures",
+			onLabel: "Favorites",
 		}]} />);
 		const controls = [...bar.querySelectorAll("input, button")];
 		expect(controls.map((control) => control.getAttribute("aria-label"))).toEqual([
@@ -66,6 +68,8 @@ describe("SearchBar", () => {
 							id: "favorites",
 							label: "Favorites only",
 							value: false,
+							offLabel: "All fixtures",
+							onLabel: "Favorites",
 						},
 					]}
 					onSettingChange={settingChange}

@@ -88,6 +88,7 @@ export function AdditiveColorEditor({
 					/>
 					<CheckboxField
 						label="Participates in visible color matching"
+						stateLabel="Include emitter"
 						checked={emitter.visible}
 						onChange={(event) =>
 							setEmitter(index, { visible: event.target.checked })
@@ -263,6 +264,7 @@ export function DiscreteColorEditor({
 					/>
 					<CheckboxField
 						label="Measured XYZ available"
+						stateLabel="Use measured color"
 						checked={Boolean(slot.measured_xyz)}
 						onChange={(event) =>
 							setSlot(index, {

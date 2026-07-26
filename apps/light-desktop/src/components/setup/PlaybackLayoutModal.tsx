@@ -109,6 +109,8 @@ function PlaybackRowConfiguration({
 			/>
 			<SwitchField
 				label="Fader"
+				offLabel="Buttons only"
+				onLabel="With fader"
 				checked={row.has_fader}
 				onChange={(event) => onUpdate({ has_fader: event.target.checked })}
 			/>

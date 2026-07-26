@@ -44,6 +44,8 @@ function StageSettings({
 							/>
 							<SwitchField
 								label="Groups shortcuts"
+								offLabel="Hidden"
+								onLabel="Visible"
 								checked={options.groupsVisible}
 								onChange={(event) =>
 									dispatch({
@@ -54,6 +56,8 @@ function StageSettings({
 							/>
 							<SwitchField
 								label="Show Selection"
+								offLabel="Hidden"
+								onLabel="Visible"
 								checked={state.stageShowSelection}
 								onChange={(event) =>
 									dispatch({
@@ -64,6 +68,8 @@ function StageSettings({
 							/>
 							<SwitchField
 								label="Floor grid"
+								offLabel="Hidden"
+								onLabel="Visible"
 								checked={state.stageShowFloorGrid}
 								onChange={(event) =>
 									dispatch({
@@ -74,6 +80,8 @@ function StageSettings({
 							/>
 							<SwitchField
 								label="Beam direction guides"
+								offLabel="Hidden"
+								onLabel="Visible"
 								checked={state.stageShowBeamGuides}
 								onChange={(event) =>
 									dispatch({

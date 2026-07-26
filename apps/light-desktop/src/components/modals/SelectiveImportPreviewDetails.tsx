@@ -29,6 +29,7 @@ export function CatalogSelection({ catalog, selected, disabled, onChange }: {
 					key={objectKeyId(object.key)}
 					label={<>{object.displayName}{" "}
 						<small>{humanize(object.key.kind)} · {object.key.id}</small></>}
+					stateLabel="Include in import"
 					aria-label={object.displayName}
 						disabled={disabled}
 						checked={selected.has(objectKeyId(object.key))}

@@ -163,26 +163,32 @@ describe("shared controls", () => {
 			within(dialog).queryByRole("button", { name: "Done · Confirm" }),
 		).not.toBeInTheDocument();
 	});
-	it("operates checkbox and switch controls with unified field labels", () => {
+	it("keeps checkbox text stable and presents both semantic switch states", () => {
 		const change = vi.fn();
 		const { container } = render(
 			<FormLayout labelPlacement="side">
 				<CheckboxField
 					label="Dock"
 					aria-label="Dock"
+					stateLabel="Show in every workspace"
 					checked
 					onChange={change}
 				/>
 				<SwitchField
 					label="Fullscreen"
 					aria-label="Fullscreen"
+					offLabel="Windowed"
+					onLabel="Fullscreen"
 					checked
 					onChange={change}
 				/>
 			</FormLayout>,
 		);
-		expect(screen.getByText("Checked")).toBeInTheDocument();
-		expect(screen.getByText("On")).toBeInTheDocument();
+		expect(screen.getByText("Show in every workspace")).toBeInTheDocument();
+		expect(screen.getByText("Windowed")).toBeInTheDocument();
+		expect(
+			container.querySelector(".ui-switch-state-on"),
+		).toHaveTextContent("Fullscreen");
 		fireEvent.click(screen.getByRole("checkbox", { name: "Dock" }));
 		fireEvent.click(screen.getByRole("switch", { name: "Fullscreen" }));
 		expect(change).toHaveBeenCalledTimes(2);
@@ -190,6 +196,17 @@ describe("shared controls", () => {
 			container.querySelectorAll(".ui-form-field.labels-side"),
 		).toHaveLength(2);
 		expect(container.querySelector(".ui-switch-control")).toBeInTheDocument();
+	});
+	it("retains compatible checkbox and switch state defaults", () => {
+		render(
+			<>
+				<CheckboxField label="Legacy checkbox" checked />
+				<SwitchField label="Legacy switch" checked />
+			</>,
+		);
+		expect(screen.getByText("Checked")).toBeInTheDocument();
+		expect(screen.getByText("Off")).toBeInTheDocument();
+		expect(screen.getByText("On")).toBeInTheDocument();
 	});
 	it("selects one value from a shared multi-value toggle", () => {
 		const change = vi.fn();

@@ -94,6 +94,8 @@ export function FileManagerRootsSetup({
     {validation && <p className="modal-error" role="alert">{validation}</p>}
     <SwitchField
       label="Allow Open system file picker fallback"
+      offLabel="ToskLight only"
+      onLabel="Allow system picker"
       checked={systemPickerFallback}
       description="Disabled by default. When enabled, forms still open the root-confined ToskLight picker first and offer the operating-system picker only as a secondary action."
       onChange={(event) => onSystemPickerFallbackChange(event.target.checked)}

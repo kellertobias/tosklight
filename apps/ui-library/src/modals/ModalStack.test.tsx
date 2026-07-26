@@ -190,6 +190,8 @@ describe("ModalProvider", () => {
               id: "favorites",
               label: "Favorites only",
               value: false,
+              offLabel: "All fixtures",
+              onLabel: "Favorites",
             }],
           }}
           onSearch={() => undefined}

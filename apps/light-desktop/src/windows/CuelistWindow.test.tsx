@@ -542,7 +542,7 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 		expect(
 			screen.getByRole("button", { name: "7 · Main" }),
 		).toBeInTheDocument();
-		fireEvent.click(screen.getByRole("switch", { name: "Show Cue sidebar" }));
+		fireEvent.click(screen.getByRole("switch", { name: "Cue sidebar" }));
 
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "SET_PANE_CUE_SIDEBAR",

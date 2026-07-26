@@ -165,6 +165,7 @@ function HeadRow({
 			/>
 			<CheckboxField
 				label="Master/shared head"
+				stateLabel="Use as shared head"
 				checked={head.master_shared}
 				onChange={(event) =>
 					onChange({

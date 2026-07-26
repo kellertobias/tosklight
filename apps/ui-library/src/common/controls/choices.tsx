@@ -244,45 +244,75 @@ type CheckProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "size"> &
   labelPlacement?: LabelPlacement;
 };
 
+export type CheckboxFieldProps = CheckProps & {
+  /**
+   * Describes the option controlled by the checkbox. This text remains stable
+   * when the checked state changes.
+   */
+  stateLabel?: ReactNode;
+};
+
+export type SwitchFieldProps = CheckProps & {
+  /** Describes the false state. Both state labels remain visible. */
+  offLabel?: ReactNode;
+  /** Describes the true state. Both state labels remain visible. */
+  onLabel?: ReactNode;
+};
+
 function useFieldId(id?: string) {
   const generated = useId();
   return id ?? generated;
 }
 
-function CheckState({ checked, kind }: { checked?: boolean; kind: "check" | "switch" }) {
-  if (kind === "switch") {
-    return <><span className="ui-switch-track" aria-hidden="true"><i/></span>
-      <span className="ui-check-state">{checked ? "On" : "Off"}</span></>;
-  }
-  return <><span className="ui-check-mark" aria-hidden="true">✓</span>
-    <span className="ui-check-state">{checked ? "Checked" : "Unchecked"}</span></>;
-}
-
-function renderCheckField(
-  kind: "check" | "switch",
-  { label, description, error, labelPlacement, className = "", id, "aria-label": ariaLabel, ...props }: CheckProps,
+function renderCheckboxField(
+  { label, description, error, labelPlacement, className = "", id, stateLabel,
+    "aria-label": ariaLabel, ...props }: CheckboxFieldProps,
   ref: ForwardedRef<HTMLInputElement>,
   fieldId: string,
 ) {
   return <FormField label={label} description={description} error={error}
     htmlFor={fieldId} labelPlacement={labelPlacement} className={className}>
-    <label className={kind === "switch" ? "ui-switch-control" : "ui-check-control"}>
+    <label className="ui-check-control">
       <input {...props} ref={ref} id={fieldId}
         aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)}
-        type="checkbox" role={kind === "switch" ? "switch" : undefined}/>
-      <CheckState checked={props.checked} kind={kind}/>
+        type="checkbox"/>
+      <span className="ui-check-mark" aria-hidden="true">✓</span>
+      <span className="ui-check-state">
+        {stateLabel ?? (props.checked ? "Checked" : "Unchecked")}
+      </span>
     </label>
   </FormField>;
 }
 
-export const CheckboxField = forwardRef<HTMLInputElement, CheckProps>(function CheckboxField(
+function renderSwitchField(
+  { label, description, error, labelPlacement, className = "", id,
+    offLabel = "Off", onLabel = "On", "aria-label": ariaLabel, ...props }: SwitchFieldProps,
+  ref: ForwardedRef<HTMLInputElement>,
+  fieldId: string,
+) {
+  return <FormField label={label} description={description} error={error}
+    htmlFor={fieldId} labelPlacement={labelPlacement} className={className}>
+    <label className="ui-switch-control">
+      <input {...props} ref={ref} id={fieldId}
+        aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)}
+        type="checkbox" role="switch"/>
+      <span className="ui-switch-track" aria-hidden="true"><i/></span>
+      <span className="ui-switch-states" aria-hidden="true">
+        <span className="ui-switch-state ui-switch-state-off">{offLabel}</span>
+        <span className="ui-switch-state ui-switch-state-on">{onLabel}</span>
+      </span>
+    </label>
+  </FormField>;
+}
+
+export const CheckboxField = forwardRef<HTMLInputElement, CheckboxFieldProps>(function CheckboxField(
   props, ref,
 ) {
-  return renderCheckField("check", props, ref, useFieldId(props.id));
+  return renderCheckboxField(props, ref, useFieldId(props.id));
 });
 
-export const SwitchField = forwardRef<HTMLInputElement, CheckProps>(function SwitchField(
+export const SwitchField = forwardRef<HTMLInputElement, SwitchFieldProps>(function SwitchField(
   props, ref,
 ) {
-  return renderCheckField("switch", props, ref, useFieldId(props.id));
+  return renderSwitchField(props, ref, useFieldId(props.id));
 });

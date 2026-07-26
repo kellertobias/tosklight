@@ -69,6 +69,8 @@ export function RecordDefaultsFields({
 			/>
 			<SwitchField
 				label="Cue only"
+				offLabel="Tracking"
+				onLabel="Cue only"
 				checked={settings.cueOnly}
 				onChange={(event) =>
 					onChange({ ...settings, cueOnly: event.target.checked })
@@ -77,6 +79,8 @@ export function RecordDefaultsFields({
 			/>
 			<SwitchField
 				label="Merge current values into the active Cue when recording to its playback"
+				offLabel="Keep cue"
+				onLabel="Merge values"
 				checked={settings.mergeActiveCue}
 				onChange={(event) =>
 					onChange({ ...settings, mergeActiveCue: event.target.checked })
@@ -123,6 +127,8 @@ export function UpdateDefaultsFields({
 			/>
 			<SwitchField
 				label="Show Update modal on touch"
+				offLabel="Use default"
+				onLabel="Show modal"
 				checked={settings.show_update_modal_on_touch}
 				onChange={(event) =>
 					onChange({

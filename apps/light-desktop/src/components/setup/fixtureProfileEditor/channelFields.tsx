@@ -181,6 +181,7 @@ export function ChannelFields({
 				<CheckboxField
 					key={key}
 					label={label}
+					stateLabel="Apply behavior"
 					checked={channel[key]}
 					onChange={(event) =>
 						onChange({ ...channel, [key]: event.target.checked })

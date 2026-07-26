@@ -136,8 +136,8 @@ function FormsExample() {
             { value: "2d", label: "2D" },
             { value: "3d", label: "3D" },
           ]} onChange={setStageView} />
-          <SwitchField label="Fullscreen" checked={fullscreen} onChange={(event) => setFullscreen(event.target.checked)} />
-          <CheckboxField label="Lock desktop" checked={locked} onChange={(event) => setLocked(event.target.checked)} />
+          <SwitchField label="Window mode" offLabel="Windowed" onLabel="Fullscreen" checked={fullscreen} onChange={(event) => setFullscreen(event.target.checked)} />
+          <CheckboxField label="Desktop lock" stateLabel="Prevent layout changes" checked={locked} onChange={(event) => setLocked(event.target.checked)} />
           <IconPickerField label="Icon" value={icon} defaultGroup="gobo" onChange={setIcon} />
           <ColorPickerField label="Color" value={color} onChange={setColor} />
           <TextAreaField label="Notes" defaultValue={notes} placeholder="Add operator notes" />
