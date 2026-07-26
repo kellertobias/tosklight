@@ -1,18 +1,18 @@
-# Typed Commands, Events, and Highlight Service
+# Typed Commands and Capability Events
 
 ## Goal
 
-Remove the remaining generic WebSocket command/facade event compatibility path and converge
-Highlight HTTP, OSC, WebSocket compatibility, persistence, output, and feedback behind one bounded
-application service.
+Remove the remaining generic WebSocket command/facade event compatibility path after the backend
+Highlight application service extracted as plan 07a is complete.
 
 Estimated effort: 1.3–2 Codex days.
 
 ## Queue dependency
 
 Pending, blocked until plan 02 stabilizes desktop provider/store consumers, generated-client
-contracts, architecture checks, and frontend verification. Required work 4–5 edits those exact
-surfaces, so this plan must not run concurrently with the active Storybook lane.
+contracts, architecture checks, and frontend verification, and until plan 07a completes the
+backend Highlight boundary. Required work 4–5 edits those exact frontend surfaces, so this plan
+must not run concurrently with the active Storybook lane.
 
 ## Required work
 
@@ -24,8 +24,8 @@ surfaces, so this plan must not run concurrently with the active Storybook lane.
 4. Migrate facade events capability by capability; translate typed events to compatibility output
    only while a deliberate external consumer remains.
 5. Replace broad frontend bootstrap/follow-up reads with typed store updates and scoped repair.
-6. Create one Highlight application service and use it from HTTP, OSC, any temporary compatibility
-   adapter, persistence/output synchronization, and feedback.
+6. Consume the plan 07a Highlight service from the final typed command/event boundary without
+   reintroducing transport-specific Highlight policy.
 7. Remove the second facade event bus, generic command dispatch, obsolete client methods, and
    compatibility tests after callers migrate.
 

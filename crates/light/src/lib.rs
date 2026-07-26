@@ -7,6 +7,7 @@ pub mod action;
 pub mod active_show;
 pub mod event;
 pub mod fixture_position;
+pub mod highlight;
 pub mod lossless_json;
 pub mod macro_runtime;
 pub mod managed_assets;
@@ -45,6 +46,10 @@ pub use event::{
 pub use fixture_position::{
     FixturePositionCommand, FixturePositionExecution, FixturePositionOutcome, FixturePositionPorts,
     FixturePositionService, FixtureProjection, StagePosition,
+};
+pub use highlight::{
+    HighlightActionPublication, HighlightCommand, HighlightEnvironment, HighlightPorts,
+    HighlightResult, HighlightService,
 };
 pub use macro_runtime::{
     CancellationSignal, GroupProjection, MacroAuditEntry, MacroAuditedAction, MacroCapability,

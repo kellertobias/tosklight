@@ -143,43 +143,19 @@ pub(super) fn ws_programmer_mode(
     persist_programmer(state, session).map_err(|e| e.message)?;
     let mut highlight_state = None;
     if let Some(enabled) = input.highlight {
-        let programmer = state
-            .programmers
-            .get(session.id)
-            .ok_or("programmer does not exist")?;
-        let selection = state
-            .programmers
-            .selection(session.id)
-            .ok_or("programmer selection does not exist")?;
-        let snapshot = state.engine.snapshot();
-        let fixtures = highlight_fixture_summaries(&snapshot.fixtures);
-        let groups = highlight_groups(&snapshot);
-        let transition = state
-            .highlight
-            .action_guarded(
-                session.desk.id,
-                session.user.id,
-                Some(&session.user.name),
-                if enabled {
-                    HighlightAction::On
-                } else {
-                    HighlightAction::Off
-                },
-                &selection,
-                &fixtures,
-                &groups,
-                programmer.blind || programmer.preview,
-            )
-            .map_err(|error| error.to_string())?;
-        apply_highlight_selection_write(state, session, transition.working_selection.as_ref())
-            .map_err(|error| error.message)?;
-        sync_highlight_output(state);
-        emit(
+        let highlight = execute_highlight(
             state,
-            "highlight_changed",
-            serde_json::json!({"desk_id":session.desk.id,"user_id":session.user.id,"state":&transition.state}),
-        );
-        highlight_state = Some(transition.state);
+            session,
+            light_application::HighlightCommand::compatibility_action(if enabled {
+                HighlightAction::On
+            } else {
+                HighlightAction::Off
+            }),
+            light_application::ActionSource::UserInterface,
+            false,
+        )
+        .map_err(|error| error.message)?;
+        highlight_state = Some(highlight);
     }
     Ok(serde_json::json!({"updated":true,"highlight":highlight_state}))
 }

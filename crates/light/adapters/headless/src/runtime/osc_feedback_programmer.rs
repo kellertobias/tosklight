@@ -85,7 +85,7 @@ fn highlight_arguments(highlight: &HighlightState) -> [(&'static str, Vec<OscArg
 fn send_highlight_feedback(
     state: &AppState,
     subscriber: &OscSubscriber,
-    desk: &ControlDesk,
+    _desk: &ControlDesk,
     programmer: Option<&light_programmer::ProgrammerState>,
     fixtures: &[HighlightFixture],
     groups: &HashMap<String, light_programmer::GroupDefinition>,
@@ -96,17 +96,24 @@ fn send_highlight_feedback(
     let Some(selection) = state.programmers.selection(subscriber.session_id) else {
         return;
     };
-    let highlight = state.highlight.status(
-        desk.id,
-        session.user.id,
-        Some(&session.user.name),
-        &selection,
-        fixtures,
-        groups,
-        programmer.is_some_and(|programmer| programmer.blind || programmer.preview),
+    let context = programming_context(&session, light_application::ActionSource::Osc, None);
+    let ports = highlight_service_adapter::HeadlessHighlightPorts::with_environment(
+        state,
+        &session,
+        light_application::HighlightEnvironment {
+            user_name: Some(session.user.name.clone()),
+            selection,
+            fixtures: fixtures.to_vec(),
+            groups: groups.clone(),
+            output_suppressed: programmer
+                .is_some_and(|programmer| programmer.blind || programmer.preview),
+        },
     );
+    let Ok(highlight) = state.highlight_service.snapshot(&context, &ports) else {
+        return;
+    };
     let prefix = format!("/light/{}/feedback/highlight", subscriber.desk_alias);
-    for (suffix, arguments) in highlight_arguments(&highlight.state) {
+    for (suffix, arguments) in highlight_arguments(&highlight) {
         send_osc(
             state,
             subscriber.target,
@@ -120,7 +127,6 @@ fn send_highlight_feedback(
         format!("{prefix}/fixture/name"),
         vec![OscArgument::String(
             highlight
-                .state
                 .active_fixture
                 .as_ref()
                 .and_then(|fixture| fixture.name.clone())

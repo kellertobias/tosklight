@@ -1,4 +1,5 @@
 use super::*;
+use light_application::{ActionEnvelope, ActionSource, HighlightCommand};
 
 pub(super) async fn highlight_status(
     State(state): State<AppState>,
@@ -22,17 +23,13 @@ fn reconcile_highlight_status(
     state: &AppState,
     session: &Session,
 ) -> Result<HighlightState, ApiError> {
-    let transition = current_highlight_transition(state, session)
-        .ok_or_else(|| ApiError::not_found("programmer"))?;
-    if apply_highlight_selection_write(state, session, transition.working_selection.as_ref())? {
-        emit(
-            state,
-            "programmer_changed",
-            serde_json::json!({"session_id":session.id,"source":"highlight_status_reconcile"}),
-        );
-    }
-    sync_highlight_output(state);
-    Ok(transition.state)
+    execute_highlight(
+        state,
+        session,
+        HighlightCommand::status(),
+        ActionSource::Http,
+        false,
+    )
 }
 
 pub(super) async fn highlight_action(
@@ -50,7 +47,7 @@ pub(super) async fn highlight_action(
         &state,
         &session,
         ProgrammingLockPolicy::RequireUnlocked,
-        move |state, session| apply_highlight_action(state, session, action),
+        move |state, session| apply_highlight_action(state, session, action, ActionSource::Http),
     )
     .await?;
     Ok(Json(highlight))
@@ -103,53 +100,35 @@ pub(super) fn apply_highlight_action(
     state: &AppState,
     session: &Session,
     action: HighlightAction,
+    source: ActionSource,
 ) -> Result<HighlightState, ApiError> {
-    let programmer = state
-        .programmers
-        .get(session.id)
-        .ok_or_else(|| ApiError::not_found("programmer"))?;
-    let selection = state
-        .programmers
-        .selection(session.id)
-        .ok_or_else(|| ApiError::not_found("programmer selection"))?;
-    let snapshot = state.engine.snapshot();
-    let fixtures = highlight_fixture_summaries(&snapshot.fixtures);
-    let groups = highlight_groups(&snapshot);
-    let transition = state
-        .highlight
-        .action_guarded(
-            session.desk.id,
-            session.user.id,
-            Some(&session.user.name),
-            action,
-            &selection,
-            &fixtures,
-            &groups,
-            programmer.blind || programmer.preview,
-        )
-        .map_err(|error| match error {
-            HighlightError::OwnedByAnotherUser(_) => ApiError::conflict(error.to_string()),
-        })?;
-    if apply_highlight_selection_write(state, session, transition.working_selection.as_ref())? {
-        emit(
-            state,
-            "programmer_changed",
-            serde_json::json!({"session_id":session.id,"source":"highlight","action":action}),
-        );
-    }
-    sync_highlight_output(state);
-    emit(
+    execute_highlight(
         state,
-        "highlight_changed",
-        serde_json::json!({
-            "desk_id": session.desk.id,
-            "user_id": session.user.id,
-            "action": action,
-            "state": &transition.state,
-        }),
-    );
-    send_osc_feedback(state, false);
-    Ok(transition.state)
+        session,
+        HighlightCommand::action(action),
+        source,
+        false,
+    )
+}
+
+pub(super) fn execute_highlight(
+    state: &AppState,
+    session: &Session,
+    command: HighlightCommand,
+    source: ActionSource,
+    preserve_osc_selection_write_failure: bool,
+) -> Result<HighlightState, ApiError> {
+    let context = programming_context(session, source, None);
+    let ports = if preserve_osc_selection_write_failure {
+        highlight_service_adapter::HeadlessHighlightPorts::for_osc(state, session)
+    } else {
+        highlight_service_adapter::HeadlessHighlightPorts::new(state, session)
+    };
+    state
+        .highlight_service
+        .handle(ActionEnvelope { context, command }, &ports)
+        .map(|result| result.state)
+        .map_err(highlight_service_adapter::api_error)
 }
 
 pub(super) fn highlight_fixture_summaries(
@@ -230,10 +209,11 @@ pub(super) fn apply_highlight_selection_write(
     Ok(true)
 }
 
+#[cfg(test)]
 pub(super) fn current_highlight_transition(
     state: &AppState,
     session: &Session,
-) -> Option<HighlightTransition> {
+) -> Option<light_programmer::HighlightTransition> {
     let programmer = state.programmers.get(session.id)?;
     let selection = state.programmers.selection(session.id)?;
     let snapshot = state.engine.snapshot();
@@ -255,13 +235,14 @@ pub(super) fn reconcile_highlight_selection(
     session: &Session,
     source: &str,
 ) -> Option<HighlightState> {
-    let transition = current_highlight_transition(state, session)?;
-    let selection_changed = match apply_highlight_selection_write(
+    match execute_highlight(
         state,
         session,
-        transition.working_selection.as_ref(),
+        HighlightCommand::reconcile(source),
+        ActionSource::System,
+        false,
     ) {
-        Ok(changed) => changed,
+        Ok(highlight) => Some(highlight),
         Err(error) => {
             emit(
                 state,
@@ -273,29 +254,9 @@ pub(super) fn reconcile_highlight_selection(
                     "error":error.message,
                 }),
             );
-            return None;
+            None
         }
-    };
-    if selection_changed {
-        emit(
-            state,
-            "programmer_changed",
-            serde_json::json!({"session_id":session.id,"source":source,"action":"highlight_selection_reconcile"}),
-        );
     }
-    sync_highlight_output(state);
-    emit(
-        state,
-        "highlight_changed",
-        serde_json::json!({
-            "desk_id":session.desk.id,
-            "user_id":session.user.id,
-            "source":source,
-            "state":&transition.state,
-        }),
-    );
-    send_osc_feedback(state, false);
-    Some(transition.state)
 }
 
 pub(super) fn sync_highlight_output(state: &AppState) {

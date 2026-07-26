@@ -14,6 +14,7 @@ pub(super) struct AppState {
     pub(super) speed_group_service: SpeedGroupService,
     pub(super) engine: Arc<Engine>,
     pub(super) highlight: Arc<HighlightRegistry>,
+    pub(super) highlight_service: light_application::HighlightService,
     pub(super) patch_preview_highlights:
         Arc<Mutex<HashMap<SessionId, HashSet<light_core::FixtureId>>>>,
     pub(super) output_health: Arc<std::sync::Mutex<OutputHealth>>,

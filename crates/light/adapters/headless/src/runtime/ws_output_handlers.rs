@@ -127,8 +127,13 @@ pub(super) fn ws_highlight_action(
         return Err("Highlight payload request_id must match the WebSocket request_id".into());
     }
     output_runtime_v2::validate_request_id(&input.request_id)?;
-    let state = apply_highlight_action(state, session, highlight_action_from_wire(input.action))
-        .map_err(|error| error.message)?;
+    let state = apply_highlight_action(
+        state,
+        session,
+        highlight_action_from_wire(input.action),
+        light_application::ActionSource::UserInterface,
+    )
+    .map_err(|error| error.message)?;
     serde_json::to_value(state).map_err(|error| error.to_string())
 }
 

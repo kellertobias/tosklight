@@ -65,9 +65,8 @@ use light_engine::{
 use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey};
 use light_output::{NetworkOutput, OutputHealth};
 use light_programmer::{
-    HighlightAction, HighlightError, HighlightFixture, HighlightMode, HighlightRegistry,
-    HighlightSelectionWrite, HighlightState, HighlightTransition, ProgrammerRegistry,
-    is_duplicate_osc_action,
+    HighlightAction, HighlightFixture, HighlightMode, HighlightRegistry, HighlightSelectionWrite,
+    HighlightState, ProgrammerRegistry, is_duplicate_osc_action,
 };
 use light_show::{
     AtomicObjectDelete, ControlDesk, DeskStore, DeskUser, PersistedSession, RevisionCopySource,
@@ -116,6 +115,7 @@ mod fixture_api_replay;
 mod generated_presets;
 mod group_selection;
 mod highlight_api;
+mod highlight_service_adapter;
 mod lifecycle;
 mod media_api;
 mod mvr_apply;

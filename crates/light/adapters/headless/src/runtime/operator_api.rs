@@ -160,20 +160,25 @@ fn bootstrap_snapshot(state: &AppState) -> wire::RuntimeBootstrapSnapshot {
         .filter_map(|session| {
             let programmer = state.programmers.get(session.id)?;
             let selection = state.programmers.selection(session.id)?;
-            let transition = state.highlight.status(
-                session.desk.id,
-                session.user.id,
-                Some(&session.user.name),
-                &selection,
-                &highlight_fixtures,
-                &highlight_groups,
-                programmer.blind || programmer.preview,
+            let context =
+                programming_context(session, light_application::ActionSource::System, None);
+            let ports = highlight_service_adapter::HeadlessHighlightPorts::with_environment(
+                state,
+                session,
+                light_application::HighlightEnvironment {
+                    user_name: Some(session.user.name.clone()),
+                    selection,
+                    fixtures: highlight_fixtures.clone(),
+                    groups: highlight_groups.clone(),
+                    output_suppressed: programmer.blind || programmer.preview,
+                },
             );
+            let highlight = state.highlight_service.snapshot(&context, &ports).ok()?;
             Some(wire::RuntimeBootstrapHighlightState {
                 session_id: session.id.0,
                 desk_id: session.desk.id,
                 user_id: session.user.id.0,
-                state: runtime_wire::highlight(transition.state),
+                state: runtime_wire::highlight(highlight),
             })
         })
         .collect();

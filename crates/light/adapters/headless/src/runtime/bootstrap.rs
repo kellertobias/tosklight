@@ -190,6 +190,7 @@ fn build_app_state(
     let application_events = resources.events.clone();
     let active_show_service = ActiveShowService::new(application_events.clone());
     let highlight = Arc::new(HighlightRegistry::default());
+    let highlight_service = light_application::HighlightService::new(Arc::clone(&highlight));
     let programming = ProgrammingService::new(
         startup.programmers.clone(),
         application_events.clone(),
@@ -208,6 +209,7 @@ fn build_app_state(
         speed_group_service: SpeedGroupService::new(application_events.clone()),
         engine: startup.engine,
         highlight,
+        highlight_service,
         patch_preview_highlights: Arc::default(),
         output_health: Arc::clone(&resources.output_health),
         output_rate: Arc::clone(&resources.output_rate),

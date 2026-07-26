@@ -70,66 +70,25 @@ pub(super) fn handle_highlight_osc(
         return;
     };
     let context = programming_context(&session, light_application::ActionSource::Osc, None);
-    if let Err(error) = run_programming_interaction(
+    let result = run_programming_interaction(
         state,
         &session,
         &context,
         "osc",
         ProgrammingLockPolicy::RequireUnlocked,
-        || apply_highlight_osc_action(state, &session, action),
-    ) {
-        emit_highlight_osc_rejection(state, &session, action, &error.message);
-    }
-}
-
-fn apply_highlight_osc_action(state: &AppState, session: &Session, action: HighlightAction) {
-    let Some(programmer) = state.programmers.get(session.id) else {
-        return;
-    };
-    let Some(selection) = state.programmers.selection(session.id) else {
-        return;
-    };
-    let snapshot = state.engine.snapshot();
-    let fixtures = highlight_fixture_summaries(&snapshot.fixtures);
-    let groups = highlight_groups(&snapshot);
-    match state.highlight.action_guarded(
-        session.desk.id,
-        session.user.id,
-        Some(&session.user.name),
-        action,
-        &selection,
-        &fixtures,
-        &groups,
-        programmer.blind || programmer.preview,
-    ) {
-        Ok(transition) => {
-            let selection_changed = apply_highlight_selection_write(
+        || {
+            execute_highlight(
                 state,
-                session,
-                transition.working_selection.as_ref(),
+                &session,
+                light_application::HighlightCommand::action(action),
+                light_application::ActionSource::Osc,
+                true,
             )
-            .unwrap_or(false);
-            if selection_changed {
-                emit(
-                    state,
-                    "programmer_changed",
-                    serde_json::json!({"session_id":session.id,"source":"osc_highlight","action":action}),
-                );
-            }
-            sync_highlight_output(state);
-            emit(
-                state,
-                "highlight_changed",
-                serde_json::json!({
-                    "desk_id":session.desk.id,
-                    "user_id":session.user.id,
-                    "action":action,
-                    "source":"osc",
-                    "state":transition.state,
-                }),
-            );
-        }
-        Err(error) => emit_highlight_osc_rejection(state, session, action, &error.to_string()),
+        },
+    )
+    .and_then(|completed| completed.output);
+    if let Err(error) = result {
+        emit_highlight_osc_rejection(state, &session, action, &error.message);
     }
 }
 

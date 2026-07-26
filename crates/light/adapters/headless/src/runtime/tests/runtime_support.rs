@@ -19,6 +19,7 @@ fn test_state_with_programmers(
     let application_events = EventBus::default();
     let active_show_service = ActiveShowService::new(application_events.clone());
     let highlight = Arc::new(HighlightRegistry::default());
+    let highlight_service = light_application::HighlightService::new(Arc::clone(&highlight));
     let programming = ProgrammingService::new(
         programmers.clone(),
         application_events.clone(),
@@ -39,6 +40,7 @@ fn test_state_with_programmers(
 			speed_group_service: SpeedGroupService::new(application_events.clone()),
             engine,
             highlight,
+            highlight_service,
             patch_preview_highlights: Arc::default(),
             output_health: Arc::new(std::sync::Mutex::new(OutputHealth::default())),
             output_rate: Arc::clone(&output_rate),
