@@ -1,3 +1,4 @@
+import { applyAuthoritativeChange } from "./changeApplication";
 import type {
 	ShowObject,
 	ShowObjectBodies,
@@ -5,25 +6,17 @@ import type {
 	ShowObjectKind,
 	ShowObjectsChange,
 } from "./contracts";
-import { objectKey, upsertCollection } from "./storeProjection";
 import { ShowObjectEventWatermarks } from "./eventWatermarks";
-import type {
-	CollectionUpdate,
-	ShowObjectAuthorityStamp,
-	ShowObjectInstall,
-	ShowObjectSettlement,
-	ShowObjectsSnapshot,
-} from "./storeTypes";
-import { ShowObjectPendingMutations } from "./pendingMutations";
-import { applyAuthoritativeChange } from "./changeApplication";
-import { installAuthoritativeObjects } from "./objectInstallation";
 import {
-	applyPendingSettlement,
 	applyOptimisticCommit,
+	applyPendingSettlement,
 	assertPendingSettlementIdentity,
 	captureObjectAuthority,
 	matchesObjectAuthority,
 } from "./objectAuthority";
+import { installAuthoritativeObjects } from "./objectInstallation";
+import { ShowObjectPendingMutations } from "./pendingMutations";
+import { objectKey, upsertCollection } from "./storeProjection";
 import {
 	ALL_COLLECTIONS,
 	createShowObjectsSnapshot,
@@ -32,6 +25,13 @@ import {
 	NO_COLLECTIONS,
 	projectedCollection,
 } from "./storeSnapshot";
+import type {
+	CollectionUpdate,
+	ShowObjectAuthorityStamp,
+	ShowObjectInstall,
+	ShowObjectSettlement,
+	ShowObjectsSnapshot,
+} from "./storeTypes";
 
 export type { ShowObjectInstall, ShowObjectsSnapshot } from "./storeTypes";
 
@@ -50,6 +50,11 @@ export class ShowObjectsStore {
 	};
 
 	readonly getSnapshot = () => this.snapshot;
+	matchesAuthority(showId: string, authorityKey: string) {
+		return (
+			this.snapshot.showId === showId && this.authorityKey === authorityKey
+		);
+	}
 	reset(showId: string | null, authorityKey?: string) {
 		const authorityChanged =
 			authorityKey !== undefined && authorityKey !== this.authorityKey;

@@ -1,11 +1,11 @@
-import type {
-	ProgrammerValuesProjection,
-	ProgrammerValuesSnapshot,
-} from "./contracts";
 import {
 	chooseProgrammerValuesAuthority,
 	chooseProgrammerValuesRevision,
 } from "./authority";
+import type {
+	ProgrammerValuesProjection,
+	ProgrammerValuesSnapshot,
+} from "./contracts";
 import { assertCursor, canonicalProjection } from "./projectionValue";
 import {
 	emptyProgrammerValuesState,
@@ -42,6 +42,14 @@ export class ProgrammerValuesStore {
 
 	readonly getSnapshot = () => this.state;
 
+	matchesAuthority(showId: string, userId: string, authorityKey: string) {
+		return (
+			this.state.showId === showId &&
+			this.state.userId === userId &&
+			this.authorityKey === authorityKey
+		);
+	}
+
 	reset(showId: string | null, userId: string | null, authorityKey = "") {
 		if (
 			showId === this.state.showId &&
@@ -73,7 +81,8 @@ export class ProgrammerValuesStore {
 		snapshot: ProgrammerValuesSnapshot,
 		expectedScope = this.scope,
 	) {
-		if (!this.canAccept(snapshot.projection.userId, expectedScope)) return false;
+		if (!this.canAccept(snapshot.projection.userId, expectedScope))
+			return false;
 		try {
 			assertCursor(snapshot.cursor);
 			if (
@@ -109,10 +118,16 @@ export class ProgrammerValuesStore {
 		reducer: ProgrammerValuesOptimisticReducer,
 		expectedScope = this.scope,
 	) {
-		if (!requestId || !this.isScopeCurrent(expectedScope) || !this.authoritative)
+		if (
+			!requestId ||
+			!this.isScopeCurrent(expectedScope) ||
+			!this.authoritative
+		)
 			return false;
 		if (this.operations.has(requestId))
-			throw new Error(`Programmer values request ${requestId} is already pending`);
+			throw new Error(
+				`Programmer values request ${requestId} is already pending`,
+			);
 		const apply = this.scopedReducer(reducer);
 		const current = this.renderProjection();
 		const rendered = apply(current);
@@ -191,11 +206,7 @@ export class ProgrammerValuesStore {
 		}
 	}
 
-	rollback(
-		requestId: string,
-		error: Error,
-		expectedScope = this.scope,
-	) {
+	rollback(requestId: string, error: Error, expectedScope = this.scope) {
 		if (!this.hasOperation(requestId, expectedScope) || !this.authoritative)
 			return false;
 		const rendered = this.renderWithout(requestId, this.authoritative);
@@ -335,9 +346,7 @@ export class ProgrammerValuesStore {
 	}
 
 	private hasOperation(requestId: string, expectedScope: number) {
-		return (
-			this.isScopeCurrent(expectedScope) && this.operations.has(requestId)
-		);
+		return this.isScopeCurrent(expectedScope) && this.operations.has(requestId);
 	}
 
 	private canAccept(userId: string, expectedScope: number) {

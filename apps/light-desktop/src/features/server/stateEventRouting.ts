@@ -22,11 +22,7 @@ function refreshHighlight(event: ServerEvent, state: ServerState) {
 }
 
 function refreshConfiguration(event: ServerEvent, state: ServerState) {
-	const kinds = [
-		"server_configuration_changed",
-		"speed_group_command",
-		"speed_group_action",
-	];
+	const kinds = ["server_configuration_changed"];
 	if (!kinds.includes(event.kind)) return;
 	void state.api.desk
 		.configuration()
@@ -61,16 +57,9 @@ function refreshBootstrap(
 		"show_opened",
 		"show_renamed",
 		"show_rolled_back",
-		"server_configuration_changed",
-		"session_started",
-		"session_disconnected",
-		"client_removed",
-		"programmer_changed",
-		"programmer_cleared",
 		"hardware_connection_changed",
 	];
 	if (!kinds.includes(event.kind)) return;
-	if (isHandledByScopedProgrammerState(event, session)) return;
 	const state = getState();
 	const previousShowId = state.bootstrap?.active_show?.id ?? null;
 	const requestedEpoch = state.commandLineEpoch.current;
@@ -108,8 +97,7 @@ function refreshBootstrap(
 					}
 					current.setSelectedFixtures(own.selected ?? []);
 				}
-				if (showChanged)
-					await loadShowObjects(nextShowId, session.user.id);
+				if (showChanged) await loadShowObjects(nextShowId, session.user.id);
 			} finally {
 				if (loadingOperation != null) {
 					getState().finishDeskLoading(loadingOperation);
@@ -117,87 +105,6 @@ function refreshBootstrap(
 			}
 		})
 		.catch(() => undefined);
-}
-
-function isHandledByScopedProgrammerState(
-	event: ServerEvent,
-	session: SessionResponse,
-) {
-	return (
-		isScopedCommandLineEdit(event) ||
-		isOwnScopedValuesOnly(event, session) ||
-		isOwnScopedQueueInteraction(event, session) ||
-		isTransientControlOnly(event)
-	);
-}
-
-function programmerChanges(event: ServerEvent) {
-	if (event.kind !== "programmer_changed") return null;
-	const changes = event.payload.changes;
-	if (
-		!Array.isArray(changes) ||
-		changes.some((change) => typeof change !== "string")
-	)
-		return null;
-	return changes as string[];
-}
-
-function hasExactUniqueChanges(
-	event: ServerEvent,
-	allowed: ReadonlySet<string>,
-) {
-	const changes = programmerChanges(event);
-	return (
-		changes !== null &&
-		changes.length > 0 &&
-		new Set(changes).size === changes.length &&
-		changes.every((change) => allowed.has(change))
-	);
-}
-
-const scopedProgrammerChanges = new Set([
-	"values",
-	"preload_values",
-	"preload_playback_queue",
-]);
-const transientControlChanges = new Set(["transient_control"]);
-const interactionChanges = new Set(["interaction"]);
-const queueInteractionChanges = new Set([
-	"interaction",
-	"preload_playback_queue",
-]);
-
-function isOwnScopedValuesOnly(event: ServerEvent, session: SessionResponse) {
-	return (
-		event.payload.user_id === session.user.id &&
-		hasExactUniqueChanges(event, scopedProgrammerChanges)
-	);
-}
-
-function isTransientControlOnly(event: ServerEvent) {
-	return hasExactUniqueChanges(event, transientControlChanges);
-}
-
-function isOwnScopedQueueInteraction(
-	event: ServerEvent,
-	session: SessionResponse,
-) {
-	const changes = programmerChanges(event);
-	return (
-		event.payload.user_id === session.user.id &&
-		changes?.length === queueInteractionChanges.size &&
-		new Set(changes).size === changes.length &&
-		changes.every((change) => queueInteractionChanges.has(change))
-	);
-}
-
-function isScopedCommandLineEdit(event: ServerEvent) {
-	if (
-		event.kind !== "programmer_changed" ||
-		event.payload.command !== "programmer.command_line"
-	)
-		return false;
-	return hasExactUniqueChanges(event, interactionChanges);
 }
 
 function refreshFixtureLibrary(event: ServerEvent, state: ServerState) {

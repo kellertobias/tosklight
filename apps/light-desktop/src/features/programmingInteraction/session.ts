@@ -51,6 +51,14 @@ export class ProgrammingInteractionSession {
 		this.transport = options.transport;
 		this.loadSnapshot = options.loadSnapshot;
 		this.onError = options.onError;
+		const state = this.store.getSnapshot();
+		if (
+			this.store.matchesAuthority(this.showId, this.deskId, this.authorityKey)
+		)
+			this.hydratedScope = {
+				commandLine: state.commandLine !== null,
+				selection: state.selection !== null,
+			};
 	}
 
 	activate(capability: ProgrammingCapability) {

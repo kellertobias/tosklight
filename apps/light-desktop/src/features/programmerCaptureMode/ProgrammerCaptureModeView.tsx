@@ -9,6 +9,7 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
+import { measureFrontendSnapshot } from "../frontendWarmup/diagnostics";
 import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 import {
 	capturesProgrammerWrites,
@@ -58,6 +59,10 @@ export function ProgrammerCaptureModeViewProvider({
 	loadSnapshot,
 	onSessionError,
 }: PropsWithChildren<ProgrammerCaptureModeViewProviderProps>) {
+	const measuredLoadSnapshot = useCallback(
+		() => measureFrontendSnapshot("programmer-capture-mode", loadSnapshot),
+		[loadSnapshot],
+	);
 	const session = useMemo(
 		() =>
 			showId && userId
@@ -67,13 +72,13 @@ export function ProgrammerCaptureModeViewProvider({
 						authorityKey,
 						store,
 						transport,
-						loadSnapshot,
+						loadSnapshot: measuredLoadSnapshot,
 						onError: onSessionError,
 					})
 				: null,
 		[
 			authorityKey,
-			loadSnapshot,
+			measuredLoadSnapshot,
 			onSessionError,
 			showId,
 			store,

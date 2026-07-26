@@ -25,7 +25,7 @@ function state(session = SESSION, connectionGeneration = 1) {
 }
 
 describe("useOutputRuntimeBoundaries", () => {
-	it("retains one dormant transport for a session and replaces its authority", () => {
+	it("replaces transport credentials without discarding the same data authority", () => {
 		const firstState = state();
 		const rendered = renderHook(
 			({ current }: { current: ServerState }) =>
@@ -33,14 +33,30 @@ describe("useOutputRuntimeBoundaries", () => {
 			{ initialProps: { current: firstState } },
 		);
 		const first = rendered.result.current.outputRuntimeTransport;
+		const firstAuthority = rendered.result.current.outputRuntimeAuthorityKey;
 		expect(first).not.toBeNull();
 
 		rendered.rerender({ current: state(SESSION, 2) });
 		expect(rendered.result.current.outputRuntimeTransport).toBe(first);
-		expect(rendered.result.current.outputRuntimeAuthorityKey).toContain("|2|");
+		expect(rendered.result.current.outputRuntimeAuthorityKey).toBe(
+			firstAuthority,
+		);
 
 		const replacement = { ...SESSION, token: "replacement-token" };
 		rendered.rerender({ current: state(replacement, 2) });
 		expect(rendered.result.current.outputRuntimeTransport).not.toBe(first);
+		expect(rendered.result.current.outputRuntimeAuthorityKey).toBe(
+			firstAuthority,
+		);
+
+		rendered.rerender({
+			current: state({
+				...replacement,
+				desk: { id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" },
+			}),
+		});
+		expect(rendered.result.current.outputRuntimeAuthorityKey).not.toBe(
+			firstAuthority,
+		);
 	});
 });

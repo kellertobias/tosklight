@@ -1,3 +1,4 @@
+import { measureFrontendSnapshot } from "../features/frontendWarmup/diagnostics";
 import type {
 	ProgrammerPriorityActionRequest,
 	ProgrammerPriorityScope,
@@ -51,13 +52,15 @@ export class HttpProgrammerPriorityTransport
 
 	async loadSnapshot(scope: ProgrammerPriorityScope) {
 		this.validateScope(scope);
-		const response = await this.fetchRequest(this.snapshotPath(scope), {
-			headers: this.headers(),
+		return measureFrontendSnapshot("programmer-priority", async () => {
+			const response = await this.fetchRequest(this.snapshotPath(scope), {
+				headers: this.headers(),
+			});
+			return decodeProgrammerPrioritySnapshot(
+				await responseValue(response),
+				scope.userId,
+			);
 		});
-		return decodeProgrammerPrioritySnapshot(
-			await responseValue(response),
-			scope.userId,
-		);
 	}
 
 	async applyAction(

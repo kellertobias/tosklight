@@ -9,6 +9,7 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
+import { measureFrontendSnapshot } from "../frontendWarmup/diagnostics";
 import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 import type { ProgrammerPreloadPlaybackQueueProjection } from "./contracts";
 import {
@@ -56,6 +57,14 @@ export function ProgrammerPreloadPlaybackQueueViewProvider({
 	loadSnapshot,
 	onSessionError,
 }: PropsWithChildren<ProgrammerPreloadPlaybackQueueViewProviderProps>) {
+	const measuredLoadSnapshot = useCallback(
+		() =>
+			measureFrontendSnapshot(
+				"programmer-preload-playback-queue",
+				loadSnapshot,
+			),
+		[loadSnapshot],
+	);
 	const session = useMemo(
 		() =>
 			showId && userId && authorityKey
@@ -65,13 +74,13 @@ export function ProgrammerPreloadPlaybackQueueViewProvider({
 						authorityKey,
 						store,
 						transport,
-						loadSnapshot,
+						loadSnapshot: measuredLoadSnapshot,
 						onError: onSessionError,
 					})
 				: null,
 		[
 			authorityKey,
-			loadSnapshot,
+			measuredLoadSnapshot,
 			onSessionError,
 			showId,
 			store,

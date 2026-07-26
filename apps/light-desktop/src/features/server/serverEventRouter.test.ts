@@ -291,7 +291,11 @@ describe("show object event reconciliation", () => {
 		await vi.waitFor(() =>
 			expect(harness.api.showObjects.object).toHaveBeenCalledOnce(),
 		);
-		expect(harness.api.showObjects.object).toHaveBeenCalledWith("show-a", kind, id);
+		expect(harness.api.showObjects.object).toHaveBeenCalledWith(
+			"show-a",
+			kind,
+			id,
+		);
 		expect(harness.state[setter]).toHaveBeenCalledOnce();
 		expect(harness.api.fixtures.patch).not.toHaveBeenCalled();
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
@@ -315,7 +319,10 @@ describe("show object event reconciliation", () => {
 		await vi.waitFor(() =>
 			expect(harness.api.showObjects.objects).toHaveBeenCalledOnce(),
 		);
-		expect(harness.api.showObjects.objects).toHaveBeenCalledWith("show-a", "route");
+		expect(harness.api.showObjects.objects).toHaveBeenCalledWith(
+			"show-a",
+			"route",
+		);
 		expect(harness.state.outputRoutes).toEqual([route]);
 		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
 		expect(harness.api.fixtures.patch).not.toHaveBeenCalled();
@@ -332,20 +339,20 @@ describe("show object event reconciliation", () => {
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
 
-	it.each(["playback", "playback_page"])(
-		"leaves %s object events to scoped stores",
-		async (kind) => {
-			const harness = createHarness();
-			harness.route(showObjectEvent(kind, "1"));
-			await Promise.resolve();
-			await Promise.resolve();
-			expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
-			expect(harness.api.showObjects.object).not.toHaveBeenCalled();
-			expect(harness.api.showObjects.objects).not.toHaveBeenCalled();
-			expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
-			expect(harness.loadShowObjects).not.toHaveBeenCalled();
-		},
-	);
+	it.each([
+		"playback",
+		"playback_page",
+	])("leaves %s object events to scoped stores", async (kind) => {
+		const harness = createHarness();
+		harness.route(showObjectEvent(kind, "1"));
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
+		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
+		expect(harness.api.showObjects.objects).not.toHaveBeenCalled();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
+		expect(harness.loadShowObjects).not.toHaveBeenCalled();
+	});
 
 	it("ignores malformed, unknown, other-show, and other-user object events", async () => {
 		const harness = createHarness();
@@ -409,7 +416,10 @@ describe("show object event reconciliation", () => {
 			expect(harness.state.setOutputRoutes).toHaveBeenCalledOnce(),
 		);
 		expect(harness.api.showObjects.object).not.toHaveBeenCalled();
-		expect(harness.api.showObjects.objects).toHaveBeenCalledWith("show-a", "route");
+		expect(harness.api.showObjects.objects).toHaveBeenCalledWith(
+			"show-a",
+			"route",
+		);
 		expect(harness.state.outputRoutes).toEqual([]);
 	});
 
@@ -594,7 +604,7 @@ describe("broad state hydration boundaries", () => {
 		expect(harness.api.desk.programmers).not.toHaveBeenCalled();
 	});
 
-	it("retains compatibility hydration for uncategorized Programmer changes", async () => {
+	it("leaves uncategorized Programmer changes to typed authorities", async () => {
 		const harness = createHarness();
 		harness.route(
 			event(
@@ -606,9 +616,8 @@ describe("broad state hydration boundaries", () => {
 				1,
 			),
 		);
-		await vi.waitFor(() =>
-			expect(harness.api.runtime.bootstrap).toHaveBeenCalledOnce(),
-		);
+		await Promise.resolve();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 	});
 
 	it.each([
@@ -621,12 +630,11 @@ describe("broad state hydration boundaries", () => {
 		["mixed", { user_id: session.user.id, changes: ["values", "runtime"] }],
 		["duplicated", { user_id: session.user.id, changes: ["values", "values"] }],
 		["empty", { user_id: session.user.id, changes: [] }],
-	])("retains compatibility hydration for %s value events", async (_label, payload) => {
+	])("leaves %s value events to typed authorities", async (_label, payload) => {
 		const harness = createHarness();
 		harness.route(event("programmer_changed", payload));
-		await vi.waitFor(() =>
-			expect(harness.api.runtime.bootstrap).toHaveBeenCalledOnce(),
-		);
+		await Promise.resolve();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 	});
 
 	it.each([
@@ -634,7 +642,7 @@ describe("broad state hydration boundaries", () => {
 		["malformed", "interaction"],
 		["expanded", ["interaction", "values"]],
 		["duplicated", ["interaction", "interaction"]],
-	])("retains compatibility hydration for %s change categories", async (_label, changes) => {
+	])("leaves %s change categories to typed authorities", async (_label, changes) => {
 		const harness = createHarness();
 		harness.route(
 			event(
@@ -644,20 +652,18 @@ describe("broad state hydration boundaries", () => {
 			),
 		);
 
-		await vi.waitFor(() =>
-			expect(harness.api.runtime.bootstrap).toHaveBeenCalledOnce(),
-		);
+		await Promise.resolve();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 	});
 
 	it.each([
 		"programmer_changed",
 		"programmer_cleared",
-	])("does not reload all show objects for %s", async (kind) => {
+	])("does not broadly hydrate or reload show objects for %s", async (kind) => {
 		const harness = createHarness();
 		harness.route(event(kind, {}, 1));
-		await vi.waitFor(() =>
-			expect(harness.api.runtime.bootstrap).toHaveBeenCalledOnce(),
-		);
+		await Promise.resolve();
+		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 		expect(harness.api.showObjects.objects).not.toHaveBeenCalled();
 	});
@@ -682,7 +688,9 @@ describe("broad state hydration boundaries", () => {
 	it("refreshes only Screens for a Playback Page desk event", async () => {
 		const harness = createHarness();
 		harness.route(event("playback_page_changed", { page: 2 }, 1));
-		await vi.waitFor(() => expect(harness.api.playback.screens).toHaveBeenCalledOnce());
+		await vi.waitFor(() =>
+			expect(harness.api.playback.screens).toHaveBeenCalledOnce(),
+		);
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
 		expect(harness.api.runtime.bootstrap).not.toHaveBeenCalled();
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();

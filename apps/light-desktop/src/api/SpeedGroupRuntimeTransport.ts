@@ -1,3 +1,4 @@
+import { measureFrontendSnapshot } from "../features/frontendWarmup/diagnostics";
 import type {
 	SpeedGroupActionRequest,
 	SpeedGroupRuntimeScope,
@@ -49,10 +50,12 @@ export class HttpSpeedGroupRuntimeTransport
 
 	async loadSnapshot(scope: SpeedGroupRuntimeScope) {
 		this.validateScope(scope);
-		const response = await this.fetchRequest(this.speedGroupPath(scope), {
-			headers: this.headers(),
+		return measureFrontendSnapshot("speed-group-runtime", async () => {
+			const response = await this.fetchRequest(this.speedGroupPath(scope), {
+				headers: this.headers(),
+			});
+			return decodeSnapshotResponse(await responseValue(response));
 		});
-		return decodeSnapshotResponse(await responseValue(response));
 	}
 
 	async applyAction(

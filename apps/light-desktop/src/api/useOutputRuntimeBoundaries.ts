@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { ServerState } from "../features/server/useServerState";
-import { createFeatureErrorGroup } from "./featureErrorReporting";
 import { configuredServerUrl } from "./client/serverLocation";
+import { createFeatureErrorGroup } from "./featureErrorReporting";
 import { HttpOutputRuntimeTransport } from "./OutputRuntimeTransport";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 
@@ -20,7 +20,10 @@ export function useOutputRuntimeBoundaries(state: ServerState) {
 						authenticatedDeskId: state.session.desk.id,
 						deskBoundaryToken: browserDeskBoundaryToken(),
 						applyAction: (scope, request) =>
-							state.api.mediaOutput.outputRuntimeLiveAction(scope.showId, request),
+							state.api.mediaOutput.outputRuntimeLiveAction(
+								scope.showId,
+								request,
+							),
 					})
 				: null,
 		[state.api, state.session],
@@ -29,10 +32,7 @@ export function useOutputRuntimeBoundaries(state: ServerState) {
 		outputRuntimeTransport: transport,
 		outputRuntimeAuthorityKey: [
 			configuredServerUrl(),
-			state.connectionGeneration,
-			state.session?.session_id ?? "",
-			state.session?.client_id ?? "",
-			state.session?.user.id ?? "",
+			state.bootstrap?.active_show?.id ?? "",
 			state.session?.desk.id ?? "",
 		].join("|"),
 		reportOutputRuntimeSessionError: errors.reportSession,

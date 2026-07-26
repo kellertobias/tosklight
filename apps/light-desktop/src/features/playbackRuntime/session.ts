@@ -40,6 +40,10 @@ export class PlaybackRuntimeSession {
 		null;
 	private repairRunning = false;
 	private repairPromise: Promise<void> | null = null;
+	private readonly hydratedIdentities = new Set<string>();
+	private deskHydrated = false;
+	private resumeFromSnapshot = false;
+	private repairOnRefresh = false;
 
 	constructor(options: PlaybackRuntimeSessionOptions) {
 		this.showId = options.showId;
@@ -52,27 +56,39 @@ export class PlaybackRuntimeSession {
 			this.store.reset(this.showId, this.deskId, options.authorityKey);
 		this.storeScope =
 			options.resetStore === false ? null : this.store.captureScope();
+		const state = this.store.getSnapshot();
+		if (
+			this.store.matchesAuthority(
+				this.showId,
+				this.deskId,
+				options.authorityKey,
+			)
+		) {
+			for (const key of state.projections.keys())
+				this.hydratedIdentities.add(key);
+			this.deskHydrated = state.desk !== null;
+		}
 	}
 
-	activate(identity: PlaybackIdentity) {
+	activate(identity: PlaybackIdentity, telemetry = true) {
 		this.captureStoreScope();
-		if (this.scope.activate(identity)) this.scheduleRefresh();
+		if (this.scope.activate(identity, telemetry)) this.scheduleRefresh();
 		let active = true;
 		return () => {
 			if (!active) return;
 			active = false;
-			if (this.scope.deactivate(identity)) this.scheduleRefresh();
+			if (this.scope.deactivate(identity, telemetry)) this.scheduleRefresh();
 		};
 	}
 
-	activateDesk() {
+	activateDesk(telemetry = true) {
 		this.captureStoreScope();
-		if (this.scope.activateDesk()) this.scheduleRefresh();
+		if (this.scope.activateDesk(telemetry)) this.scheduleRefresh();
 		let active = true;
 		return () => {
 			if (!active) return;
 			active = false;
-			if (this.scope.deactivateDesk()) this.scheduleRefresh();
+			if (this.scope.deactivateDesk(telemetry)) this.scheduleRefresh();
 		};
 	}
 
@@ -85,8 +101,10 @@ export class PlaybackRuntimeSession {
 			throw new Error("The Playback runtime authority is unavailable");
 		await this.repair(this.lifecycle);
 		if (this.store.getSnapshot().status === "error")
-			throw this.store.getSnapshot().error ??
-				new Error("Playback runtime refresh failed");
+			throw (
+				this.store.getSnapshot().error ??
+				new Error("Playback runtime refresh failed")
+			);
 	}
 
 	stop() {
@@ -133,18 +151,41 @@ export class PlaybackRuntimeSession {
 		}
 		const key = this.scope.key();
 		const identities = this.scope.values();
+		const requestedScope = this.scope.subscription();
+		const missingIdentities = this.repairOnRefresh
+			? identities
+			: identities.filter(
+					(identity) => !this.hydratedIdentities.has(identityKey(identity)),
+				);
+		const needsDeskHydration =
+			requestedScope.desk && (this.repairOnRefresh || !this.deskHydrated);
+		const resumeCursor = this.store.getSnapshot().eventSequence;
+		if (!missingIdentities.length && !needsDeskHydration) {
+			this.store.setReady();
+			this.onError?.(null);
+			if (this.transport) this.openStream(generation, key, resumeCursor);
+			return;
+		}
 		this.store.setLoading();
 		let cursor: number;
 		try {
-			const snapshots = await this.loadSnapshots(identities);
+			const snapshots = await this.loadSnapshots(missingIdentities);
 			if (!this.isCurrent(generation, key)) return;
 			for (const { snapshot, identities: batch } of snapshots) {
 				this.assertSnapshotScope(snapshot, batch);
 				this.store.installSnapshot(snapshot, batch);
+				for (const identity of batch)
+					this.hydratedIdentities.add(identityKey(identity));
+				this.deskHydrated = true;
 			}
-			cursor = Math.min(
-				...snapshots.map(({ snapshot }) => snapshot.cursor.sequence),
-			);
+			cursor =
+				this.resumeFromSnapshot || this.repairOnRefresh || resumeCursor == null
+					? Math.min(
+							...snapshots.map(({ snapshot }) => snapshot.cursor.sequence),
+						)
+					: resumeCursor;
+			this.resumeFromSnapshot = false;
+			this.repairOnRefresh = false;
 			this.onError?.(null);
 		} catch (reason) {
 			if (!this.isCurrent(generation, key)) return;
@@ -169,7 +210,11 @@ export class PlaybackRuntimeSession {
 					else this.fail(error);
 				},
 				closed: () => {
-					if (this.isCurrent(generation, key)) this.scheduleReconnect();
+					if (this.isCurrent(generation, key)) {
+						this.repairOnRefresh = true;
+						this.store.setLoading();
+						this.scheduleReconnect();
+					}
 				},
 			}) ?? null;
 	}
@@ -237,6 +282,9 @@ export class PlaybackRuntimeSession {
 			for (const { snapshot, identities: batch } of snapshots) {
 				this.assertSnapshotScope(snapshot, batch);
 				this.store.installSnapshot(snapshot, batch);
+				for (const identity of batch)
+					this.hydratedIdentities.add(identityKey(identity));
+				this.deskHydrated = true;
 			}
 			this.stream?.repair(
 				Math.min(...snapshots.map(({ snapshot }) => snapshot.cursor.sequence)),
@@ -283,6 +331,9 @@ export class PlaybackRuntimeSession {
 	}
 
 	private protocolReset(error: Error) {
+		this.hydratedIdentities.clear();
+		this.deskHydrated = false;
+		this.resumeFromSnapshot = true;
 		this.store.setError(error);
 		this.onError?.(error);
 		this.closeStream();
@@ -290,6 +341,7 @@ export class PlaybackRuntimeSession {
 	}
 
 	private fail(error: Error) {
+		this.repairOnRefresh = true;
 		this.store.setError(error);
 		this.onError?.(error);
 		this.closeStream();

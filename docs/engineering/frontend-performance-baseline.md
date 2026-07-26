@@ -117,3 +117,20 @@ The first event-routing migration kept facade compatibility while replacing broa
 Same-resource bursts coalesce to the latest event revision, and late responses cannot replace newer state. Route events intentionally read their small coupled collection because the current Patch projection omits route object identity; this keeps Output and Patch projections consistent without a broad refresh. Show open and rollback continue to perform full authoritative hydration.
 
 This historical checkpoint did not make facade notifications the final authority. The compatibility event socket has since been retired in favor of typed v2 subscriptions; the remaining polling and reconciliation targets are tracked by the active refactoring plan.
+
+## Warm-state checkpoint
+
+The 2026-07-26 Plan 05 checkpoint measures the release frontend in Google Chrome at 1280×720. Each profile opens a disabled-warm-up control, then the production warm path. The operator sequence switches 42 built-in windows and toggles the Programmer/Playback command section 40 times. Chrome DevTools Protocol captures network bytes and a compressed trace; test-visible User Timing captures first usable paint, queue lifetime, snapshot activity, event lag, retained model bytes, long tasks, and input-to-paint samples.
+
+The large generated show adds 200 Groups, 800 Presets, 100 Cuelists, 100 Playbacks, and 16 Playback Pages to `assets/demo.show`. The 4× cases apply Chrome CPU throttling. Their raw wall-clock values remain recorded; the acceptance comparison divides input-to-paint and long-task CPU time by four so the same 100 ms and 50 ms CPU-work budgets apply to both profiles.
+
+| Show / CPU | First usable control → warm | Warm-up | Retained model | Warm switch p50 / p95 | Disabled / warm switch snapshots | Warm event lag | Warm transferred |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Demo / 1× | 281.2 ms → 191.5 ms | 238.6 ms | 3.13 MB | 14.7 / 65.7 ms | 85 / 0 | 0 ms | 9.07 MB |
+| Demo / 4× | 948.1 ms → 590.0 ms | 570.9 ms | 3.13 MB | 30.3 / 302.4 ms raw; 75.6 ms normalized p95 | 85 / 0 | 2 ms | 9.59 MB |
+| Large / 1× | 272.1 ms → 184.1 ms | 271.8 ms | 3.57 MB | 14.8 / 76.3 ms | 85 / 0 | 0 ms | 10.20 MB |
+| Large / 4× | 914.1 ms → 588.7 ms | 700.0 ms | 3.57 MB | 30.4 / 335.8 ms raw; 84.0 ms normalized p95 | 85 / 0 | 3 ms | 10.73 MB |
+
+All warm runs completed with a two-request queue peak, no visible loading placeholder during switching, and a 64 MB retained-model budget. Native traces contain no long task over 50 ms overlapping background warm-up. The raw 4× traces record 67 ms and 78 ms maxima, both below 50 ms when normalized for the configured throttle.
+
+`performance.measureUserAgentSpecificMemory()` was unavailable in the test browser, so peak browser-process memory is `null`; the enforced fallback is serialized retained-model size. Quantitative evidence is browser evidence because the packaged Tauri WebView does not expose the repository’s Playwright control bridge. The real `npm run open` path separately built and launched both macOS bundles, returned ready from `/api/v2/readiness`, and rendered populated Fixtures, Presets, Cuelists, and Playback command surfaces through direct macOS accessibility interactions without an observed loading state.

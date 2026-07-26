@@ -37,7 +37,8 @@ export class ProgrammerValuesSession {
 	private repairGeneration: number | null = null;
 	private repairPromise: Promise<void> | null = null;
 	private refreshQueued = false;
-	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null =
+		null;
 
 	constructor(options: ProgrammerValuesSessionOptions) {
 		this.eventScope = { showId: options.showId, userId: options.userId };
@@ -46,6 +47,15 @@ export class ProgrammerValuesSession {
 		this.transport = options.transport;
 		this.loadSnapshot = options.loadSnapshot;
 		this.onError = options.onError;
+		const state = this.store.getSnapshot();
+		this.hydrated =
+			this.store.matchesAuthority(
+				options.showId,
+				options.userId,
+				this.authorityKey,
+			) &&
+			state.projection !== null &&
+			!state.repairRequired;
 	}
 
 	activate() {
@@ -128,10 +138,7 @@ export class ProgrammerValuesSession {
 			if (!this.isCurrent(generation)) return;
 			this.assertSnapshotUser(snapshot);
 			const installed = repair
-				? this.store.installRepairSnapshot(
-						snapshot,
-						this.expectedStoreScope(),
-					)
+				? this.store.installRepairSnapshot(snapshot, this.expectedStoreScope())
 				: this.store.installSnapshot(snapshot, {
 						expectedScope: this.expectedStoreScope(),
 					});
@@ -232,10 +239,7 @@ export class ProgrammerValuesSession {
 			if (!this.isCurrent(generation)) return;
 			this.assertSnapshotUser(snapshot);
 			if (
-				!this.store.installRepairSnapshot(
-					snapshot,
-					this.expectedStoreScope(),
-				)
+				!this.store.installRepairSnapshot(snapshot, this.expectedStoreScope())
 			)
 				throw this.scopeError("repair snapshot");
 			this.hydrated = true;

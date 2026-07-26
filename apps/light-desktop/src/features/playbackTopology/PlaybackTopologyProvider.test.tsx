@@ -259,15 +259,15 @@ describe("Playback topology scoped composition", () => {
 		expect(screen.getByTestId("pages")).toHaveTextContent("0");
 	});
 
-	it("marks dormant collections unready before a later remount", async () => {
+	it("retains hydrated collections after the authority view unmounts", async () => {
 		const { rendered, store, events } = harness(true);
 		await waitFor(() => expect(store.isCollectionReady("playback")).toBe(true));
 
 		rendered.unmount();
 
-		expect(store.isCollectionReady("cue_list")).toBe(false);
-		expect(store.isCollectionReady("playback")).toBe(false);
-		expect(store.isCollectionReady("playback_page")).toBe(false);
+		expect(store.isCollectionReady("cue_list")).toBe(true);
+		expect(store.isCollectionReady("playback")).toBe(true);
+		expect(store.isCollectionReady("playback_page")).toBe(true);
 		expect(events.subscriptions[0].close).toHaveBeenCalledOnce();
 	});
 

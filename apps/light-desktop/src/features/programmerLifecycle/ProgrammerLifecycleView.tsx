@@ -9,6 +9,7 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
+import { measureFrontendSnapshot } from "../frontendWarmup/diagnostics";
 import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 import type { ProgrammerLifecycleProjection } from "./contracts";
 import {
@@ -37,7 +38,9 @@ export interface ProgrammerLifecycleAuthority {
 
 const StoreContext = createContext<ProgrammerLifecycleStore | null>(null);
 const SessionContext = createContext<ProgrammerLifecycleSession | null>(null);
-const AuthorityContext = createContext<ProgrammerLifecycleAuthority | null>(null);
+const AuthorityContext = createContext<ProgrammerLifecycleAuthority | null>(
+	null,
+);
 const fallbackStore = new ProgrammerLifecycleStore();
 
 export function ProgrammerLifecycleViewProvider({
@@ -48,6 +51,10 @@ export function ProgrammerLifecycleViewProvider({
 	loadSnapshot,
 	onSessionError,
 }: PropsWithChildren<ProgrammerLifecycleViewProviderProps>) {
+	const measuredLoadSnapshot = useCallback(
+		() => measureFrontendSnapshot("programmer-lifecycle", loadSnapshot),
+		[loadSnapshot],
+	);
 	const session = useMemo(
 		() =>
 			authorityKey
@@ -55,11 +62,11 @@ export function ProgrammerLifecycleViewProvider({
 						authorityKey,
 						store,
 						transport,
-						loadSnapshot,
+						loadSnapshot: measuredLoadSnapshot,
 						onError: onSessionError,
 					})
 				: null,
-		[authorityKey, loadSnapshot, onSessionError, store, transport],
+		[authorityKey, measuredLoadSnapshot, onSessionError, store, transport],
 	);
 	const authority = useMemo<ProgrammerLifecycleAuthority | null>(
 		() =>

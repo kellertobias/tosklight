@@ -4,7 +4,10 @@ import type {
 	ScreenSnapshot,
 	SessionResponse,
 } from "../../api/types";
-import { bootstrapConnection } from "./connectionBootstrap";
+import {
+	bootstrapConnection,
+	deferredConnectionWarmupTasks,
+} from "./connectionBootstrap";
 import type { ServerState } from "./useServerState";
 
 const user = { id: "user-1", name: "Operator", enabled: true };
@@ -34,9 +37,7 @@ function createHarness() {
 		patch: vi.fn().mockResolvedValue({ revision: 1, fixtures: [], routes: [] }),
 		programmers: vi.fn().mockResolvedValue([]),
 		shows: vi.fn().mockResolvedValue([]),
-		configuration: vi
-			.fn()
-			.mockResolvedValue({ configuration: {}, matter: {} }),
+		configuration: vi.fn().mockResolvedValue({ configuration: {}, matter: {} }),
 		mediaServers: vi.fn().mockResolvedValue({ fixtures: [] }),
 		fixtureLibrary: vi.fn().mockResolvedValue([]),
 		fixtureProfiles: vi.fn().mockResolvedValue([]),
@@ -110,7 +111,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("connection bootstrap resources", () => {
-	it("loads retained resources without the broad Playback snapshot", async () => {
+	it("loads only interactive resources before making the desk available", async () => {
 		const harness = createHarness();
 		const loadShowObjects = vi.fn().mockResolvedValue(undefined);
 
@@ -124,8 +125,33 @@ describe("connection bootstrap resources", () => {
 		expect(harness.unexpectedLegacyPlaybackRead).not.toHaveBeenCalled();
 		expect(harness.clientMethods.patch).not.toHaveBeenCalled();
 		expect(harness.clientMethods.programmers).toHaveBeenCalledOnce();
+		expect(harness.clientMethods.commandHistory).toHaveBeenCalledOnce();
+		expect(harness.clientMethods.fixtureLibrary).toHaveBeenCalledOnce();
+		expect(harness.clientMethods.screens).not.toHaveBeenCalled();
+		expect(harness.clientMethods.mediaServers).not.toHaveBeenCalled();
+		expect(harness.clientMethods.fixtureProfiles).not.toHaveBeenCalled();
+		expect(loadShowObjects).toHaveBeenCalledWith("show-1", "user-1");
+	});
+
+	it("defers non-interactive resources into cancellable warm-up tasks", async () => {
+		const harness = createHarness();
+		const controller = new AbortController();
+		const tasks = deferredConnectionWarmupTasks(harness.state);
+
+		expect(tasks.map(({ key }) => key)).toEqual([
+			"legacy:shows",
+			"legacy:screens",
+			"legacy:media-servers",
+			"legacy:fixture-profiles",
+			"legacy:fixture-profile-warnings",
+		]);
+		for (const task of tasks) await task.run(controller.signal);
+
 		expect(harness.clientMethods.screens).toHaveBeenCalledOnce();
 		expect(harness.state.setScreens).toHaveBeenCalledWith(harness.screens);
-		expect(loadShowObjects).toHaveBeenCalledWith("show-1", "user-1");
+		expect(harness.clientMethods.mediaServers).toHaveBeenCalledOnce();
+		expect(harness.clientMethods.fixtureProfiles).toHaveBeenCalledOnce();
+		expect(harness.clientMethods.fixtureProfileWarnings).toHaveBeenCalledOnce();
+		expect(harness.clientMethods.shows).toHaveBeenCalledOnce();
 	});
 });

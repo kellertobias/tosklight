@@ -1,13 +1,11 @@
+import type { ShowObjectCollectionLoader, ShowObjectLoader } from "./hydration";
 import type { HydrationTarget } from "./scope";
-import type {
-	ShowObjectCollectionLoader,
-	ShowObjectLoader,
-} from "./hydration";
 import type { ShowObjectsStore } from "./store";
 import type { ShowObjectsEventTransport } from "./transport";
 
 export interface ShowObjectsSessionOptions {
 	showId: string;
+	authorityKey?: string;
 	store: ShowObjectsStore;
 	transport: ShowObjectsEventTransport | null;
 	loadCollection: ShowObjectCollectionLoader;

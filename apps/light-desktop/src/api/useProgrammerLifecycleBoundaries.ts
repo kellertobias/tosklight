@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import type { ServerState } from "../features/server/useServerState";
-import { createFeatureErrorGroup } from "./featureErrorReporting";
 import { configuredServerUrl } from "./client/serverLocation";
+import { createFeatureErrorGroup } from "./featureErrorReporting";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { HttpProgrammerLifecycleTransport } from "./ProgrammerLifecycleTransport";
 
@@ -21,9 +21,7 @@ export function useProgrammerLifecycleBoundaries(state: ServerState) {
 				: null,
 		[state.session],
 	);
-	const authorityKey = state.session
-		? `${configuredServerUrl()}|${state.connectionGeneration}|${state.session.session_id}|${state.session.client_id}`
-		: null;
+	const authorityKey = state.session ? configuredServerUrl() : null;
 	const loadSnapshot = useCallback(() => {
 		if (!transport)
 			throw new Error("Programmer lifecycle session is unavailable");

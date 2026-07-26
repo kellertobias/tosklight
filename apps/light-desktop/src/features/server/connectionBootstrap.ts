@@ -5,6 +5,12 @@ import type {
 	ProgrammerState,
 	SessionResponse,
 } from "../../api/types";
+import type { FrontendWarmupTask } from "../frontendWarmup/coordinator";
+import {
+	frontendPerformanceDiagnostics,
+	measureFrontendSnapshot,
+	serializedModelBytes,
+} from "../frontendWarmup/diagnostics";
 import {
 	mayCreateSession,
 	requirePrimarySession,
@@ -55,50 +61,86 @@ async function ensureActiveShow(
 	return next;
 }
 
-async function loadInitialResources(api: LightApi) {
-	const [
-		programmers,
-		shows,
-		configuration,
-		media,
-		fixtureLibrary,
-		fixtureProfiles,
-		fixtureProfileWarnings,
-		screens,
-	] = await Promise.all([
-		api.desk.programmers(),
-		api.shows.shows(),
-		api.desk.configuration(),
-		api.mediaOutput.mediaServers(),
-		api.fixtures.fixtureLibrary(),
-		api.fixtures.fixtureProfiles().catch(() => []),
-		api.fixtures.fixtureProfileWarnings().catch(() => []),
-		api.playback.screens(),
-	]);
+async function loadForegroundResources(api: LightApi) {
+	const [programmers, configuration, fixtureLibrary, commandHistory] =
+		await Promise.all([
+			api.desk.programmers(),
+			api.desk.configuration(),
+			api.fixtures.fixtureLibrary(),
+			api.desk.commandHistory(),
+		]);
 	return {
 		programmers,
-		shows,
 		configuration,
-		media,
 		fixtureLibrary,
-		fixtureProfiles,
-		fixtureProfileWarnings,
-		screens,
+		commandHistory,
 	};
 }
 
-function installInitialResources(
+function installForegroundResources(
 	state: ServerState,
-	resources: Awaited<ReturnType<typeof loadInitialResources>>,
+	resources: Awaited<ReturnType<typeof loadForegroundResources>>,
 ) {
-	state.setShows(resources.shows);
 	state.setConfiguration(resources.configuration.configuration);
 	state.setMatter(resources.configuration.matter);
-	state.setMediaServers(resources.media.fixtures);
 	state.setFixtureLibrary(resources.fixtureLibrary);
-	state.setFixtureProfiles(resources.fixtureProfiles);
-	state.setFixtureProfileWarnings(resources.fixtureProfileWarnings);
-	state.setScreens(resources.screens);
+	state.setCommandHistory(resources.commandHistory);
+}
+
+export function deferredConnectionWarmupTasks(
+	state: ServerState,
+): FrontendWarmupTask[] {
+	return [
+		deferredResourceTask(
+			"legacy:shows",
+			"near-future",
+			() => state.api.shows.shows(),
+			state.setShows,
+		),
+		deferredResourceTask(
+			"legacy:screens",
+			"near-future",
+			() => state.api.playback.screens(),
+			state.setScreens,
+		),
+		deferredResourceTask(
+			"legacy:media-servers",
+			"idle",
+			async () => (await state.api.mediaOutput.mediaServers()).fixtures,
+			state.setMediaServers,
+		),
+		deferredResourceTask(
+			"legacy:fixture-profiles",
+			"idle",
+			() => state.api.fixtures.fixtureProfiles().catch(() => []),
+			state.setFixtureProfiles,
+		),
+		deferredResourceTask(
+			"legacy:fixture-profile-warnings",
+			"idle",
+			() => state.api.fixtures.fixtureProfileWarnings().catch(() => []),
+			state.setFixtureProfileWarnings,
+		),
+	];
+}
+
+function deferredResourceTask<T>(
+	key: string,
+	priority: FrontendWarmupTask["priority"],
+	load: () => Promise<T>,
+	install: (value: T) => void,
+): FrontendWarmupTask {
+	return {
+		key,
+		priority,
+		run: async (signal) => {
+			if (signal.aborted) throw signal.reason;
+			const result = await measureFrontendSnapshot(key, load);
+			if (signal.aborted) throw signal.reason;
+			install(result);
+			return { retainedBytes: serializedModelBytes(result) };
+		},
+	};
 }
 
 function restoreProgrammerState(
@@ -130,25 +172,37 @@ export async function bootstrapConnection(
 	isCancelled: () => boolean,
 	role: SessionRole,
 ) {
+	const finishBootstrap = frontendPerformanceDiagnostics.beginPhase(
+		"connection-bootstrap",
+	);
 	const initial = await state.api.runtime.bootstrap();
-	if (isCancelled()) return null;
+	if (isCancelled()) {
+		finishBootstrap();
+		return null;
+	}
 	state.setBootstrap(initial);
 	const user = selectOperator(initial);
 	const session = await restoreOrLogin(state.api, user, role);
 	const deskLock = await state.api.desk.deskLock();
 	localStorage.setItem("light.operator", user.name);
 	const bootstrap = await ensureActiveShow(state, initial, deskLock.locked);
-	const resources = await loadInitialResources(state.api);
-	if (isCancelled()) return null;
+	const finishResources =
+		frontendPerformanceDiagnostics.beginPhase("initial-resources");
+	const resources = await loadForegroundResources(state.api);
+	finishResources();
+	if (isCancelled()) {
+		finishBootstrap();
+		return null;
+	}
 	state.setSession(session);
 	state.setConnectionGeneration((current) => current + 1);
-	state.setCommandHistory(await state.api.desk.commandHistory());
 	state.deskLockStore.install(deskLock);
-	installInitialResources(state, resources);
+	installForegroundResources(state, resources);
 	await loadShowObjects(
 		bootstrap.active_show_error ? null : (bootstrap.active_show?.id ?? null),
 		session.user.id,
 	);
 	restoreProgrammerState(state, session, resources.programmers);
+	finishBootstrap();
 	return session;
 }

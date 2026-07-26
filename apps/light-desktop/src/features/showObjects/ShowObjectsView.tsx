@@ -1,19 +1,21 @@
 import {
 	createContext,
 	type PropsWithChildren,
+	useCallback,
 	useContext,
 	useEffect,
 	useLayoutEffect,
 	useMemo,
 } from "react";
+import { frontendPerformanceDiagnostics } from "../frontendWarmup/diagnostics";
 import type { ShowObjectKind } from "./contracts";
+import { ShowObjectsStateProvider } from "./ShowObjectsState";
 import {
-	ShowObjectsSession,
 	type ShowObjectCollectionLoader,
 	type ShowObjectLoader,
+	ShowObjectsSession,
 } from "./session";
-import { ShowObjectsStateProvider } from "./ShowObjectsState";
-import { ShowObjectsStore } from "./store";
+import type { ShowObjectsStore } from "./store";
 import type { ShowObjectsEventTransport } from "./transport";
 
 interface ShowObjectsViewProviderProps {
@@ -28,6 +30,16 @@ interface ShowObjectsViewProviderProps {
 
 const ShowObjectsViewContext = createContext<ShowObjectsSession | null>(null);
 
+export interface ShowObjectsAuthority {
+	store: ShowObjectsStore;
+	activate(kind: ShowObjectKind, objectId?: string): () => void;
+	activateKinds(kinds: readonly ShowObjectKind[]): () => void;
+}
+
+const ShowObjectsAuthorityContext = createContext<ShowObjectsAuthority | null>(
+	null,
+);
+
 export function ShowObjectsViewProvider({
 	children,
 	showId,
@@ -41,22 +53,55 @@ export function ShowObjectsViewProvider({
 	useLayoutEffect(() => {
 		store.reset(showId, authorityKey);
 	}, [authorityKey, showId, store]);
+	const measuredLoadCollection = useCallback<ShowObjectCollectionLoader>(
+		async (requestedShowId, kind) => {
+			const finish = frontendPerformanceDiagnostics.beginSnapshotRequest(
+				`show-object:${kind}`,
+			);
+			try {
+				const result = await loadCollection(requestedShowId, kind);
+				finish(result);
+				return result;
+			} catch (error) {
+				finish(undefined, error);
+				throw error;
+			}
+		},
+		[loadCollection],
+	);
+	const measuredLoadObject = useCallback<ShowObjectLoader>(
+		async (requestedShowId, kind, objectId) => {
+			const finish = frontendPerformanceDiagnostics.beginSnapshotRequest(
+				`show-object:${kind}:${objectId}`,
+			);
+			try {
+				const result = await loadObject(requestedShowId, kind, objectId);
+				finish(result);
+				return result;
+			} catch (error) {
+				finish(undefined, error);
+				throw error;
+			}
+		},
+		[loadObject],
+	);
 	const session = useMemo(
 		() =>
 			showId
 				? new ShowObjectsSession({
 						showId,
+						authorityKey,
 						store,
 						transport,
-						loadCollection,
-						loadObject,
+						loadCollection: measuredLoadCollection,
+						loadObject: measuredLoadObject,
 						onError,
 					})
 				: null,
 		[
 			authorityKey,
-			loadCollection,
-			loadObject,
+			measuredLoadCollection,
+			measuredLoadObject,
 			onError,
 			showId,
 			store,
@@ -64,13 +109,30 @@ export function ShowObjectsViewProvider({
 		],
 	);
 	useLayoutEffect(() => () => session?.stop(), [session]);
+	const authority = useMemo<ShowObjectsAuthority | null>(
+		() =>
+			session
+				? {
+						store,
+						activate: (kind, objectId) => session.activate(kind, objectId),
+						activateKinds: (kinds) => session.activateKinds(kinds),
+					}
+				: null,
+		[session, store],
+	);
 	return (
 		<ShowObjectsStateProvider store={store}>
-			<ShowObjectsViewContext.Provider value={session}>
-				{children}
-			</ShowObjectsViewContext.Provider>
+			<ShowObjectsAuthorityContext.Provider value={authority}>
+				<ShowObjectsViewContext.Provider value={session}>
+					{children}
+				</ShowObjectsViewContext.Provider>
+			</ShowObjectsAuthorityContext.Provider>
 		</ShowObjectsStateProvider>
 	);
+}
+
+export function useShowObjectsAuthority() {
+	return useContext(ShowObjectsAuthorityContext);
 }
 
 /** Keeps the smallest show-object event subscription alive for this mounted view. */

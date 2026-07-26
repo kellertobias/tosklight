@@ -1,3 +1,4 @@
+import { frontendPerformanceDiagnostics } from "../features/frontendWarmup/diagnostics";
 import type {
 	ProgrammingEventObserver,
 	ProgrammingEventScope,
@@ -53,9 +54,16 @@ export class WebSocketProgrammingEventTransport
 					deskId,
 					subscribedScope,
 				);
-				if (message) observer.message(message);
+				if (message) {
+					frontendPerformanceDiagnostics.recordEventReceipt(
+						"programming",
+						value,
+					);
+					observer.message(message);
+				}
 			} catch (reason) {
-				const error = reason instanceof Error ? reason : new Error(String(reason));
+				const error =
+					reason instanceof Error ? reason : new Error(String(reason));
 				observer.error(
 					new ProgrammingProtocolError(
 						`Invalid Programming event: ${error.message}`,

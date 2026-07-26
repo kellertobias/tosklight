@@ -54,6 +54,14 @@ export class ProgrammingInteractionStore {
 
 	readonly getSnapshot = () => this.state;
 
+	matchesAuthority(showId: string, deskId: string, authorityKey: string) {
+		return (
+			this.state.showId === showId &&
+			this.state.deskId === deskId &&
+			this.authorityKey === authorityKey
+		);
+	}
+
 	reset(showId: string | null, deskId: string | null, authorityKey = "") {
 		if (
 			showId === this.state.showId &&

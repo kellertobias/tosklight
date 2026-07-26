@@ -1,11 +1,12 @@
-import type { EventClientMessage } from "./generated/light-wire";
-import { ShowObjectsProtocolError } from "../features/showObjects/transport";
+import { frontendPerformanceDiagnostics } from "../features/frontendWarmup/diagnostics";
 import type {
 	ShowObjectsEventObserver,
 	ShowObjectsEventScope,
 	ShowObjectsEventStream,
 	ShowObjectsEventTransport,
 } from "../features/showObjects/transport";
+import { ShowObjectsProtocolError } from "../features/showObjects/transport";
+import type { EventClientMessage } from "./generated/light-wire";
 import { decodeShowObjectsEventMessage } from "./showObjectsWire";
 
 export interface ShowObjectsEventTransportOptions {
@@ -64,7 +65,13 @@ export class WebSocketShowObjectsEventTransport
 			try {
 				value = JSON.parse(String(event.data));
 				const message = decodeShowObjectsEventMessage(value);
-				if (message) observer.message(message);
+				if (message) {
+					frontendPerformanceDiagnostics.recordEventReceipt(
+						"show-objects",
+						value,
+					);
+					observer.message(message);
+				}
 			} catch (reason) {
 				const error = asError(reason);
 				observer.error(

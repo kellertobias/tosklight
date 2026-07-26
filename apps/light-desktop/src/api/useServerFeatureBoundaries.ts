@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useRef } from "react";
 import type { ServerState } from "../features/server/useServerState";
 import type { ShowObjectKind } from "../features/showObjects/contracts";
-import { createFeatureErrorGroup } from "./featureErrorReporting";
 import { configuredServerUrl } from "./client/serverLocation";
+import { createFeatureErrorGroup } from "./featureErrorReporting";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { WebSocketPlaybackEventTransport } from "./PlaybackEventTransport";
 import { WebSocketProgrammingEventTransport } from "./ProgrammingEventTransport";
@@ -44,14 +44,18 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	const cueTransfer = useCueTransferBoundaries(state);
 	const playbackTopology = usePlaybackTopologyBoundaries(state);
 	const programmingUpdate = useProgrammingUpdateBoundaries(state);
-	const showObjectsAuthorityKey = [
+	// Data authority is deliberately separate from connection authority. A token
+	// or socket generation replacement for the same Show/desk may repair retained
+	// state from its cursor; a different Show/desk/user still resets atomically.
+	const showObjectsAuthorityKey = configuredServerUrl();
+	const playbackAuthorityKey = [
 		configuredServerUrl(),
-		state.connectionGeneration,
-		state.session?.session_id ?? "",
-		state.session?.client_id ?? "",
+		state.session?.desk.id ?? "",
+	].join("|");
+	const programmingAuthorityKey = [
+		playbackAuthorityKey,
 		state.session?.user.id ?? "",
 	].join("|");
-	const programmingAuthorityKey = showObjectsAuthorityKey;
 	const showObjectsTransport = useMemo(
 		() =>
 			state.session
@@ -109,7 +113,9 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	const loadProgrammingInteractionSnapshot = useCallback(() => {
 		if (!state.session)
 			throw new Error("Programming interaction session is unavailable");
-		return state.api.programming.programmingInteractionSnapshot(state.session.desk.id);
+		return state.api.programming.programmingInteractionSnapshot(
+			state.session.desk.id,
+		);
 	}, [state.api, state.session]);
 	const loadShowObjectCollection = useCallback(
 		(showId: string, kind: ShowObjectKind) => {
@@ -142,7 +148,7 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		showObjectsTransport,
 		showObjectsAuthorityKey,
 		playbackTransport,
-		playbackAuthorityKey: showObjectsAuthorityKey,
+		playbackAuthorityKey,
 		programmingTransport,
 		programmingAuthorityKey,
 		...programmerLifecycle,

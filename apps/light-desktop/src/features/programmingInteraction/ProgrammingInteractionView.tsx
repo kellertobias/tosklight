@@ -9,6 +9,7 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
+import { measureFrontendSnapshot } from "../frontendWarmup/diagnostics";
 import type { ExecuteCommandLine } from "./commandExecution";
 import {
 	type ProgrammingCommandLineActions,
@@ -100,6 +101,10 @@ export function ProgrammingInteractionViewProvider({
 	onSessionError,
 	onMutationError,
 }: PropsWithChildren<ProgrammingInteractionViewProviderProps>) {
+	const measuredLoadSnapshot = useCallback(
+		() => measureFrontendSnapshot("programming-interaction", loadSnapshot),
+		[loadSnapshot],
+	);
 	const session = useMemo(
 		() =>
 			showId && deskId
@@ -109,14 +114,14 @@ export function ProgrammingInteractionViewProvider({
 						authorityKey,
 						store,
 						transport,
-						loadSnapshot,
+						loadSnapshot: measuredLoadSnapshot,
 						onError: onSessionError,
 					})
 				: null,
 		[
 			authorityKey,
 			deskId,
-			loadSnapshot,
+			measuredLoadSnapshot,
 			onSessionError,
 			showId,
 			store,
@@ -131,14 +136,14 @@ export function ProgrammingInteractionViewProvider({
 						deskId,
 						store,
 						replace: replaceCommandLine,
-						loadSnapshot,
+						loadSnapshot: measuredLoadSnapshot,
 						onError: onMutationError,
 					})
 				: null,
 		[
 			authorityKey,
 			deskId,
-			loadSnapshot,
+			measuredLoadSnapshot,
 			onMutationError,
 			replaceCommandLine,
 			showId,
@@ -153,7 +158,7 @@ export function ProgrammingInteractionViewProvider({
 						deskId,
 						store,
 						apply: applySelection,
-						loadSnapshot,
+						loadSnapshot: measuredLoadSnapshot,
 						onError: onMutationError,
 					})
 				: null,
@@ -161,7 +166,7 @@ export function ProgrammingInteractionViewProvider({
 			authorityKey,
 			applySelection,
 			deskId,
-			loadSnapshot,
+			measuredLoadSnapshot,
 			onMutationError,
 			showId,
 			store,
@@ -236,8 +241,7 @@ export function useProgrammingDeleteCommandActive(enabled = true) {
 	return useProgrammingSelector(
 		useCallback(
 			(state: ProgrammingInteractionState) =>
-				enabled &&
-				state.commandLine?.text.trim().toUpperCase() === "DELETE",
+				enabled && state.commandLine?.text.trim().toUpperCase() === "DELETE",
 			[enabled],
 		),
 		Object.is,

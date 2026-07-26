@@ -39,9 +39,15 @@ export interface SpeedGroupRuntimeView {
 	ready: boolean;
 }
 
+export interface SpeedGroupRuntimeAuthority {
+	store: SpeedGroupRuntimeStore;
+	activate(): () => void;
+}
+
 const StoreContext = createContext<SpeedGroupRuntimeStore | null>(null);
 const SessionContext = createContext<SpeedGroupRuntimeSession | null>(null);
 const ActionsContext = createContext<SpeedGroupRuntimeActions | null>(null);
+const AuthorityContext = createContext<SpeedGroupRuntimeAuthority | null>(null);
 const fallbackStore = new SpeedGroupRuntimeStore();
 const NO_SUBSCRIPTION = () => () => undefined;
 const DISABLED_VIEW: SpeedGroupRuntimeView = {
@@ -92,6 +98,10 @@ export function SpeedGroupRuntimeProvider({
 				: null,
 		[onMutationError, scope, session, store, transport],
 	);
+	const authority = useMemo<SpeedGroupRuntimeAuthority | null>(
+		() => (session ? { store, activate: () => session.activate() } : null),
+		[session, store],
+	);
 	useLayoutEffect(() => {
 		store.reset(deskId, authorityKey);
 	}, [authorityKey, deskId, store]);
@@ -100,9 +110,11 @@ export function SpeedGroupRuntimeProvider({
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>
-				<ActionsContext.Provider value={writer}>
-					{children}
-				</ActionsContext.Provider>
+				<AuthorityContext.Provider value={authority}>
+					<ActionsContext.Provider value={writer}>
+						{children}
+					</ActionsContext.Provider>
+				</AuthorityContext.Provider>
 			</SessionContext.Provider>
 		</StoreContext.Provider>
 	);
@@ -131,6 +143,10 @@ export function useSpeedGroupRuntimeActions(enabled = true) {
 
 export function useSpeedGroupRuntimeStore() {
 	return useContext(StoreContext) ?? fallbackStore;
+}
+
+export function useSpeedGroupRuntimeAuthority() {
+	return useContext(AuthorityContext);
 }
 
 function useSpeedGroupActivation(enabled: boolean) {

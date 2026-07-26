@@ -98,6 +98,36 @@ describe("WebSocketPlaybackEventTransport", () => {
 		});
 	});
 
+	it("omits sampled telemetry for a warm-cache-only subscription", () => {
+		const { observer, transport } = createHarness();
+		transport.subscribe(
+			DESK_ID,
+			{
+				identities: [{ kind: "playback", playback_number: 2 }],
+				desk: true,
+				telemetry: false,
+			},
+			8,
+			observer,
+		);
+		const socket = FakeWebSocket.instances[0];
+		socket.emit("open");
+		expect(JSON.parse(socket.sent[0])).toEqual({
+			type: "subscribe",
+			filter: {
+				capabilities: ["playback", "desk"],
+				classes: ["transition", "projection"],
+				objects: [
+					{ capability: "playback", id: "playback:2" },
+					{ capability: "desk", id: `playback-view:${DESK_ID}` },
+				],
+			},
+			after_sequence: 8,
+			capacity: 128,
+			rate_limits: [],
+		});
+	});
+
 	it("decodes a validated Playback projection and ignores another capability", () => {
 		const { observer, transport } = createHarness();
 		transport.subscribe(

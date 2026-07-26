@@ -9,6 +9,7 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
+import { frontendPerformanceDiagnostics } from "../frontendWarmup/diagnostics";
 import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 import {
 	type PlaybackDeskPageApply,
@@ -52,6 +53,8 @@ export interface PlaybackRuntimeAuthority {
 	store: PlaybackRuntimeStore;
 	activate(identity: PlaybackIdentity): () => void;
 	activateDesk(): () => void;
+	activateWarm(identity: PlaybackIdentity): () => void;
+	activateDeskWarm(): () => void;
 	refreshAuthority(): Promise<void>;
 	repairAuthority(error: Error): Promise<void>;
 }
@@ -74,6 +77,23 @@ export function PlaybackRuntimeViewProvider({
 	applyDeskPage,
 	onError,
 }: PropsWithChildren<PlaybackRuntimeViewProviderProps>) {
+	const measuredLoadSnapshot = useCallback<
+		PlaybackRuntimeSessionOptions["loadSnapshot"]
+	>(
+		async (identities) => {
+			const finish =
+				frontendPerformanceDiagnostics.beginSnapshotRequest("playback-runtime");
+			try {
+				const result = await loadSnapshot(identities);
+				finish(result);
+				return result;
+			} catch (error) {
+				finish(undefined, error);
+				throw error;
+			}
+		},
+		[loadSnapshot],
+	);
 	const session = useMemo(
 		() =>
 			showId && deskId
@@ -83,12 +103,20 @@ export function PlaybackRuntimeViewProvider({
 						authorityKey,
 						store,
 						transport,
-						loadSnapshot,
+						loadSnapshot: measuredLoadSnapshot,
 						onError,
 						resetStore: false,
 					})
 				: null,
-		[authorityKey, deskId, loadSnapshot, onError, showId, store, transport],
+		[
+			authorityKey,
+			deskId,
+			measuredLoadSnapshot,
+			onError,
+			showId,
+			store,
+			transport,
+		],
 	);
 	const actions = useMemo(
 		() =>
@@ -123,6 +151,8 @@ export function PlaybackRuntimeViewProvider({
 						store,
 						activate: (identity) => session.activate(identity),
 						activateDesk: () => session.activateDesk(),
+						activateWarm: (identity) => session.activate(identity, false),
+						activateDeskWarm: () => session.activateDesk(false),
 						refreshAuthority: () => session.refreshAuthority(),
 						repairAuthority: (error) => session.repairAuthority(error),
 					}

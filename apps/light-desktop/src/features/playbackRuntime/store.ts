@@ -70,6 +70,14 @@ export class PlaybackRuntimeStore {
 		return scope === this.scope;
 	}
 
+	matchesAuthority(showId: string, deskId: string, authorityKey: string) {
+		return (
+			this.state.showId === showId &&
+			this.state.deskId === deskId &&
+			this.authorityKey === authorityKey
+		);
+	}
+
 	setLoading() {
 		if (this.state.status !== "loading") this.publish({ status: "loading" });
 	}

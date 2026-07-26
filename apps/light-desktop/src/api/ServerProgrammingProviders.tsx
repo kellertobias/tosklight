@@ -1,5 +1,7 @@
 import { type PropsWithChildren, useCallback } from "react";
 import { CueTransferProvider } from "../features/cueTransfer/CueTransferProvider";
+import { FrontendWarmupBoundary } from "../features/frontendWarmup/FrontendWarmupBoundary";
+import { GroupManagementProvider } from "../features/groupManagement/GroupManagementProvider";
 import { OutputRuntimeProvider } from "../features/outputRuntime/OutputRuntimeView";
 import { PlaybackRuntimeViewProvider } from "../features/playbackRuntime/PlaybackRuntimeView";
 import { PresetRecallProvider } from "../features/presetRecall/PresetRecallProvider";
@@ -12,7 +14,6 @@ import { ProgrammerPriorityProvider } from "../features/programmerPriority/Progr
 import { ProgrammerValuesViewProvider } from "../features/programmerValues/ProgrammerValuesView";
 import type { CommandExecutionRequest } from "../features/programmingInteraction/commandExecution";
 import { ProgrammingInteractionViewProvider } from "../features/programmingInteraction/ProgrammingInteractionView";
-import { GroupManagementProvider } from "../features/groupManagement/GroupManagementProvider";
 import { ProgrammingUpdateProvider } from "../features/programmingUpdate/ProgrammingUpdateProvider";
 import type { ServerCapabilities } from "../features/server/capabilityContracts";
 import { useSelectedGroupMembership } from "../features/server/useSelectedGroupMembership";
@@ -303,89 +304,98 @@ function ServerShowProgrammingProviders({
 	const showId = state.bootstrap?.active_show?.id ?? null;
 	const userId = state.session?.user.id ?? null;
 	return (
-		<GroupManagementBoundary showId={showId} state={state} boundaries={boundaries}>
-		<ProgrammingUpdateBoundary
+		<GroupManagementBoundary
 			showId={showId}
-			userId={userId}
 			state={state}
 			boundaries={boundaries}
 		>
-			<ProgrammerLifecycleViewProvider
-				authorityKey={boundaries.programmerLifecycleAuthorityKey}
-				store={state.programmerLifecycleStore}
-				transport={boundaries.programmerLifecycleTransport}
-				loadSnapshot={boundaries.loadProgrammerLifecycleSnapshot}
-				onSessionError={boundaries.reportProgrammerLifecycleSessionError}
+			<ProgrammingUpdateBoundary
+				showId={showId}
+				userId={userId}
+				state={state}
+				boundaries={boundaries}
 			>
-				<PlaybackRuntimeViewProvider
-					showId={showId}
-					deskId={state.session?.desk.id ?? null}
-					authorityKey={boundaries.playbackAuthorityKey}
-					store={state.playbackRuntimeStore}
-					transport={boundaries.playbackTransport}
-					loadSnapshot={boundaries.loadPlaybackSnapshot}
-					applyAction={boundaries.applyPlaybackRuntimeAction}
-					applyDeskPage={boundaries.applyPlaybackDeskPage}
-					onError={boundaries.reportPlaybackError}
+				<ProgrammerLifecycleViewProvider
+					authorityKey={boundaries.programmerLifecycleAuthorityKey}
+					store={state.programmerLifecycleStore}
+					transport={boundaries.programmerLifecycleTransport}
+					loadSnapshot={boundaries.loadProgrammerLifecycleSnapshot}
+					onSessionError={boundaries.reportProgrammerLifecycleSessionError}
 				>
-					<ProgrammerCaptureModeViewProvider
+					<PlaybackRuntimeViewProvider
 						showId={showId}
-						userId={userId}
-						authorityKey={boundaries.programmerCaptureModeAuthorityKey}
-						store={state.programmerCaptureModeStore}
-						transport={boundaries.programmerCaptureModeTransport}
-						loadSnapshot={boundaries.loadProgrammerCaptureModeSnapshot}
-						onSessionError={boundaries.reportProgrammerCaptureModeSessionError}
+						deskId={state.session?.desk.id ?? null}
+						authorityKey={boundaries.playbackAuthorityKey}
+						store={state.playbackRuntimeStore}
+						transport={boundaries.playbackTransport}
+						loadSnapshot={boundaries.loadPlaybackSnapshot}
+						applyAction={boundaries.applyPlaybackRuntimeAction}
+						applyDeskPage={boundaries.applyPlaybackDeskPage}
+						onError={boundaries.reportPlaybackError}
 					>
-						<CueTransferProvider
+						<ProgrammerCaptureModeViewProvider
 							showId={showId}
-							deskId={state.session?.desk.id ?? null}
 							userId={userId}
-							authorityKey={boundaries.cueTransferAuthorityKey}
-							showStore={state.showObjectsStore}
-							programmingStore={state.programmingInteractionStore}
-							transport={boundaries.cueTransferTransport}
-							repair={boundaries.cueTransferConflictRepair}
-							onError={boundaries.reportCueTransferError}
+							authorityKey={boundaries.programmerCaptureModeAuthorityKey}
+							store={state.programmerCaptureModeStore}
+							transport={boundaries.programmerCaptureModeTransport}
+							loadSnapshot={boundaries.loadProgrammerCaptureModeSnapshot}
+							onSessionError={
+								boundaries.reportProgrammerCaptureModeSessionError
+							}
 						>
-							<ProgrammerValuesViewProvider
+							<CueTransferProvider
 								showId={showId}
+								deskId={state.session?.desk.id ?? null}
 								userId={userId}
-								authorityKey={boundaries.programmerValuesAuthorityKey}
-								store={state.programmerValuesStore}
-								transport={boundaries.programmerValuesTransport}
-								loadSnapshot={boundaries.loadProgrammerValuesSnapshot}
-								applyAction={boundaries.applyProgrammerValuesAction}
-								onSessionError={boundaries.reportProgrammerValuesSessionError}
-								onMutationError={boundaries.reportProgrammerValuesMutationError}
+								authorityKey={boundaries.cueTransferAuthorityKey}
+								showStore={state.showObjectsStore}
+								programmingStore={state.programmingInteractionStore}
+								transport={boundaries.cueTransferTransport}
+								repair={boundaries.cueTransferConflictRepair}
+								onError={boundaries.reportCueTransferError}
 							>
-								<PreloadProgrammingProviders
+								<ProgrammerValuesViewProvider
 									showId={showId}
 									userId={userId}
-									state={state}
-									boundaries={boundaries}
-									value={value}
+									authorityKey={boundaries.programmerValuesAuthorityKey}
+									store={state.programmerValuesStore}
+									transport={boundaries.programmerValuesTransport}
+									loadSnapshot={boundaries.loadProgrammerValuesSnapshot}
+									applyAction={boundaries.applyProgrammerValuesAction}
+									onSessionError={boundaries.reportProgrammerValuesSessionError}
+									onMutationError={
+										boundaries.reportProgrammerValuesMutationError
+									}
 								>
-									<PresetRecallBoundary
+									<PreloadProgrammingProviders
 										showId={showId}
 										userId={userId}
 										state={state}
 										boundaries={boundaries}
+										value={value}
 									>
-										<SelectedGroupMembershipSync state={state} />
-										<ShowObjectDetailSubscription
-											kind="group"
-											objectId={value.selectedGroupId}
-										/>
-										{children}
-									</PresetRecallBoundary>
-								</PreloadProgrammingProviders>
-							</ProgrammerValuesViewProvider>
-						</CueTransferProvider>
-					</ProgrammerCaptureModeViewProvider>
-				</PlaybackRuntimeViewProvider>
-			</ProgrammerLifecycleViewProvider>
-		</ProgrammingUpdateBoundary>
+										<PresetRecallBoundary
+											showId={showId}
+											userId={userId}
+											state={state}
+											boundaries={boundaries}
+										>
+											<FrontendWarmupBoundary showId={showId} state={state} />
+											<SelectedGroupMembershipSync state={state} />
+											<ShowObjectDetailSubscription
+												kind="group"
+												objectId={value.selectedGroupId}
+											/>
+											{children}
+										</PresetRecallBoundary>
+									</PreloadProgrammingProviders>
+								</ProgrammerValuesViewProvider>
+							</CueTransferProvider>
+						</ProgrammerCaptureModeViewProvider>
+					</PlaybackRuntimeViewProvider>
+				</ProgrammerLifecycleViewProvider>
+			</ProgrammingUpdateBoundary>
 		</GroupManagementBoundary>
 	);
 }

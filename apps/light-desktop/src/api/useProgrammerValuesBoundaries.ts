@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import type { ServerState } from "../features/server/useServerState";
-import { createFeatureErrorGroup } from "./featureErrorReporting";
 import { configuredServerUrl } from "./client/serverLocation";
+import { createFeatureErrorGroup } from "./featureErrorReporting";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { HttpProgrammerCaptureModeTransport } from "./ProgrammerCaptureModeTransport";
 import { HttpProgrammerPreloadPlaybackQueueTransport } from "./ProgrammerPreloadPlaybackQueueTransport";
@@ -77,7 +77,7 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 		return showId && userId ? { showId, userId } : null;
 	}, [state.bootstrap?.active_show?.id, state.session?.user.id]);
 	const authorityKey = programmerScope
-		? `${configuredServerUrl()}|${state.connectionGeneration}|${state.session?.session_id ?? ""}|${state.session?.client_id ?? ""}`
+		? `${configuredServerUrl()}|${programmerScope.showId}|${programmerScope.userId}`
 		: "";
 	const loadProgrammerValuesSnapshot = useCallback(() => {
 		if (!programmerValuesTransport || !programmerScope)
@@ -108,7 +108,10 @@ export function useProgrammerValuesBoundaries(state: ServerState) {
 		) => {
 			if (!state.session)
 				throw new Error("Programmer values session is unavailable");
-			return state.api.programming.programmerValuesLiveAction(scope.userId, request);
+			return state.api.programming.programmerValuesLiveAction(
+				scope.userId,
+				request,
+			);
 		},
 		[state.api, state.session],
 	);

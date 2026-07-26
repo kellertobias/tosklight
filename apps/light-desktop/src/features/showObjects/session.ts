@@ -1,8 +1,5 @@
-import type {
-	ShowObjectsChange,
-	ShowObjectsEventMessage,
-} from "./contracts";
 import { ShowObjectsChangeQueue } from "./changeQueue";
+import type { ShowObjectsChange, ShowObjectsEventMessage } from "./contracts";
 import { ShowObjectsCursors } from "./cursors";
 import {
 	loadHydration,
@@ -10,8 +7,8 @@ import {
 	type ShowObjectLoader,
 } from "./hydration";
 import {
-	hydrationKey,
 	type HydrationTarget,
+	hydrationKey,
 	ShowObjectsViewScope,
 } from "./scope";
 import {
@@ -25,11 +22,11 @@ import type {
 	SnapshotBoundary,
 } from "./sessionTypes";
 import { asError, clearSessionTimers } from "./sessionUtils";
-import { ShowObjectsStore } from "./store";
+import type { ShowObjectsStore } from "./store";
 import {
-	ShowObjectsProtocolError,
 	type ShowObjectsEventStream,
 	type ShowObjectsEventTransport,
+	ShowObjectsProtocolError,
 } from "./transport";
 
 export type { ShowObjectCollectionLoader, ShowObjectLoader } from "./hydration";
@@ -54,13 +51,16 @@ export class ShowObjectsSession {
 	private readonly cursors = new ShowObjectsCursors();
 	private stream: ShowObjectsEventStream | null = null;
 	private streamScopeKey: string | null = null;
-	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
-	private hydrationRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null =
+		null;
+	private hydrationRetryTimer: ReturnType<typeof globalThis.setTimeout> | null =
+		null;
 	private streamRefreshScheduled = false;
 	private socketGeneration = 0;
 	private lifecycleGeneration = 0;
 	private pendingBoundary: SnapshotBoundary | null = null;
 	private subscribeFromLatest = false;
+	private stopped = false;
 
 	constructor(options: ShowObjectsSessionOptions) {
 		this.showId = options.showId;
@@ -69,6 +69,20 @@ export class ShowObjectsSession {
 		this.loadCollection = options.loadCollection;
 		this.loadObject = options.loadObject;
 		this.onError = options.onError;
+		const snapshot = this.store.getSnapshot();
+		if (
+			options.authorityKey !== undefined &&
+			this.store.matchesAuthority(this.showId, options.authorityKey)
+		) {
+			const floor = snapshot.eventSequence ?? 0;
+			for (const kind of snapshot.readyCollections) {
+				const key = hydrationKey({ kind });
+				this.hydrated.add(key);
+				this.hydrationCoverage.set(key, floor);
+			}
+			if (snapshot.eventSequence != null)
+				this.cursors.installEvent(snapshot.eventSequence);
+		}
 	}
 
 	activate(kind: HydrationTarget["kind"], objectId?: string) {
@@ -83,18 +97,20 @@ export class ShowObjectsSession {
 	// A mounted view adds its exact hydration and subscription requirements. Releasing the last
 	// target tears down hydration, timers, queued changes, and the socket.
 	private activateTargets(targets: readonly HydrationTarget[]) {
-		for (const target of targets) this.scope.activate(target.kind, target.objectId);
+		for (const target of targets)
+			this.scope.activate(target.kind, target.objectId);
 		this.ensureHydrations();
 		this.reconcileStream();
 		let active = true;
 		return () => {
-			if (!active) return;
+			if (!active || this.stopped) return;
 			active = false;
 			this.deactivateTargets(targets);
 		};
 	}
 
 	stop() {
+		this.stopped = true;
 		this.scope.clear();
 		this.lifecycleGeneration++;
 		this.clearHydrations();
@@ -141,12 +157,17 @@ export class ShowObjectsSession {
 		if (!force && isHydratedTarget(this.hydrated, target)) return;
 		if (this.runs.has(key)) {
 			if (force)
-				this.forcedFloors.set(key, Math.max(this.forcedFloors.get(key) ?? 0, floor));
+				this.forcedFloors.set(
+					key,
+					Math.max(this.forcedFloors.get(key) ?? 0, floor),
+				);
 			return;
 		}
 		const run = { token: Symbol(key), target, floor };
 		this.runs.set(key, run);
-		this.store.setLoading(target.objectId === undefined ? target.kind : undefined);
+		this.store.setLoading(
+			target.objectId === undefined ? target.kind : undefined,
+		);
 		void this.runHydration(run);
 	}
 
@@ -184,7 +205,10 @@ export class ShowObjectsSession {
 			this.hydrated.add(hydrationKey(run.target));
 			this.hydrationCoverage.set(
 				hydrationKey(run.target),
-				Math.max(this.hydrationCoverage.get(hydrationKey(run.target)) ?? 0, run.floor),
+				Math.max(
+					this.hydrationCoverage.get(hydrationKey(run.target)) ?? 0,
+					run.floor,
+				),
 			);
 			this.onError?.(null);
 			if (previousScope !== this.scope.key()) this.reconcileStream();
@@ -231,7 +255,8 @@ export class ShowObjectsSession {
 			},
 			error: (error) => {
 				if (generation !== this.socketGeneration) return;
-				if (error instanceof ShowObjectsProtocolError) this.protocolReset(error);
+				if (error instanceof ShowObjectsProtocolError)
+					this.protocolReset(error);
 				else this.failTransport(error);
 			},
 			closed: () => {
@@ -266,7 +291,9 @@ export class ShowObjectsSession {
 
 	private routeChange(change: ShowObjectsChange) {
 		if (this.rejectForeignShow(change)) return;
-		const relevant = change.changes.filter((item) => this.scope.includesChange(item));
+		const relevant = change.changes.filter((item) =>
+			this.scope.includesChange(item),
+		);
 		if (!relevant.length) return;
 		if (
 			this.queued.size ||
@@ -294,7 +321,9 @@ export class ShowObjectsSession {
 		this.store.applyChange({ ...change, changes: relevant });
 		this.cursors.installEvent(change.eventSequence);
 		const changedGroups = new Set(
-			relevant.filter((item) => item.kind === "group").map((item) => item.objectId),
+			relevant
+				.filter((item) => item.kind === "group")
+				.map((item) => item.objectId),
 		);
 		for (const targetId of this.scope.affectedExactGroups(changedGroups))
 			this.requestHydration(
@@ -325,7 +354,11 @@ export class ShowObjectsSession {
 	// @tour frontend-slice:40 Repair a sequence gap through a snapshot boundary
 	// A gap clears stale hydration and queued events, hydrates every active target at the new cursor,
 	// and resumes the stream only after all required coverage reaches that boundary.
-	private beginSnapshotBoundary(generation: number, cursor: number, repair: boolean) {
+	private beginSnapshotBoundary(
+		generation: number,
+		cursor: number,
+		repair: boolean,
+	) {
 		this.clearHydrations();
 		this.queued.clear();
 		this.store.beginEventResync();
@@ -386,7 +419,8 @@ export class ShowObjectsSession {
 		this.streamRefreshScheduled = true;
 		globalThis.queueMicrotask(() => {
 			this.streamRefreshScheduled = false;
-			if (!this.scope.hasViews() || this.streamScopeKey === this.scope.key()) return;
+			if (!this.scope.hasViews() || this.streamScopeKey === this.scope.key())
+				return;
 			this.closeSocket();
 			this.openStream();
 		});

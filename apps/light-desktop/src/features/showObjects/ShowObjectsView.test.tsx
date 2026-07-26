@@ -134,7 +134,9 @@ describe("ShowObjectsViewProvider", () => {
 		rendered.rerender(view("session-b"));
 		await waitFor(() => expect(loadCollection).toHaveBeenCalledTimes(2));
 		await waitFor(() => expect(transport.subscriptions).toHaveLength(2));
-		await waitFor(() => expect(store.getSnapshot().groups).toEqual([replacement]));
+		await waitFor(() =>
+			expect(store.getSnapshot().groups).toEqual([replacement]),
+		);
 		oldLoad.resolve(
 			collectionSnapshot(
 				[
@@ -168,6 +170,34 @@ describe("ShowObjectsViewProvider", () => {
 
 		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
 		expect(store.getSnapshot().groups).toEqual([replacement]);
+	});
+
+	it("retains a ready same-show collection when only the transport is replaced", async () => {
+		const store = new ShowObjectsStore();
+		const firstTransport = new FakeTransport();
+		const secondTransport = new FakeTransport();
+		const loadCollection = vi.fn().mockResolvedValue(collectionSnapshot([]));
+		const view = (transport: FakeTransport) => (
+			<ShowObjectsViewProvider
+				showId={SHOW_ID}
+				authorityKey="same-show"
+				store={store}
+				transport={transport}
+				loadCollection={loadCollection}
+				loadObject={vi.fn()}
+			>
+				<GroupConsumer active />
+			</ShowObjectsViewProvider>
+		);
+		const rendered = render(view(firstTransport));
+		await waitFor(() => expect(loadCollection).toHaveBeenCalledOnce());
+		await waitFor(() => expect(store.isCollectionReady("group")).toBe(true));
+
+		rendered.rerender(view(secondTransport));
+		await waitFor(() => expect(secondTransport.subscriptions).toHaveLength(1));
+		expect(firstTransport.subscriptions[0].close).toHaveBeenCalledOnce();
+		expect(loadCollection).toHaveBeenCalledOnce();
+		expect(store.isCollectionReady("group")).toBe(true);
 	});
 
 	it("hydrates an active view before a WebSocket transport is available", async () => {

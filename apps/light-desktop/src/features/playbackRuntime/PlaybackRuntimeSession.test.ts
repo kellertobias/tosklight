@@ -204,6 +204,89 @@ describe("PlaybackRuntimeSession", () => {
 		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
 	});
 
+	it("retains hydrated runtime identities across a dormant view lifetime", async () => {
+		const harness = createHarness();
+		const identity = playbackIdentity(1);
+		const releaseWarmLease = harness.session.activate(identity);
+		await settle();
+		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
+
+		const releaseView = harness.session.activate(identity);
+		await settle();
+		releaseView();
+		await settle();
+		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
+		expect(
+			(harness.transport as FakeTransport).subscriptions[0].close,
+		).not.toHaveBeenCalled();
+
+		const releaseRemountedView = harness.session.activate(identity);
+		await settle();
+		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
+		releaseRemountedView();
+		releaseWarmLease();
+		await settle();
+		expect(
+			(harness.transport as FakeTransport).subscriptions[0].close,
+		).toHaveBeenCalledOnce();
+	});
+
+	it("upgrades a warm lease to visible telemetry without reloading its snapshot", async () => {
+		const harness = createHarness();
+		const transport = harness.transport as FakeTransport;
+		const identity = playbackIdentity(1);
+		const releaseWarmLease = harness.session.activate(identity, false);
+		await settle();
+		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
+		expect(transport.subscriptions[0].scope).toEqual({
+			identities: [identity],
+			desk: false,
+			telemetry: false,
+		});
+
+		const releaseVisibleView = harness.session.activate(identity);
+		await settle();
+		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
+		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
+		expect(transport.subscriptions[1].scope).toEqual({
+			identities: [identity],
+			desk: false,
+		});
+
+		releaseVisibleView();
+		await settle();
+		expect(transport.subscriptions[2].scope).toEqual({
+			identities: [identity],
+			desk: false,
+			telemetry: false,
+		});
+		releaseWarmLease();
+	});
+
+	it("hydrates only a newly added identity and resumes events from the retained cursor", async () => {
+		const harness = createHarness();
+		harness.session.activate(playbackIdentity(1));
+		await settle();
+		harness.session.activate(playbackIdentity(2));
+		await settle();
+
+		expect(harness.loadSnapshot).toHaveBeenCalledTimes(2);
+		expect(harness.loadSnapshot).toHaveBeenNthCalledWith(1, [
+			playbackIdentity(1),
+		]);
+		expect(harness.loadSnapshot).toHaveBeenNthCalledWith(2, [
+			playbackIdentity(2),
+		]);
+		expect((harness.transport as FakeTransport).subscriptions[1]).toMatchObject(
+			{
+				after: 10,
+				scope: {
+					identities: [playbackIdentity(1), playbackIdentity(2)],
+				},
+			},
+		);
+	});
+
 	it("does not install or notify for an irrelevant delivered identity", async () => {
 		const harness = createHarness();
 		harness.session.activate(playbackIdentity(1));

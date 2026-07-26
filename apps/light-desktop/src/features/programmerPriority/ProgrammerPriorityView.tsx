@@ -38,9 +38,17 @@ export interface ProgrammerPriorityView {
 	ready: boolean;
 }
 
+export interface ProgrammerPriorityAuthority {
+	store: ProgrammerPriorityStore;
+	activate(): () => void;
+}
+
 const StoreContext = createContext<ProgrammerPriorityStore | null>(null);
 const SessionContext = createContext<ProgrammerPrioritySession | null>(null);
 const ActionsContext = createContext<ProgrammerPriorityActions | null>(null);
+const AuthorityContext = createContext<ProgrammerPriorityAuthority | null>(
+	null,
+);
 const fallbackStore = new ProgrammerPriorityStore();
 const NO_SUBSCRIPTION = () => () => undefined;
 const DISABLED_VIEW: ProgrammerPriorityView = {
@@ -91,6 +99,10 @@ export function ProgrammerPriorityProvider({
 				: null,
 		[onMutationError, scope, session, store, transport],
 	);
+	const authority = useMemo<ProgrammerPriorityAuthority | null>(
+		() => (session ? { store, activate: () => session.activate() } : null),
+		[session, store],
+	);
 	useLayoutEffect(() => {
 		store.reset(userId, authorityKey);
 	}, [authorityKey, store, userId]);
@@ -99,9 +111,11 @@ export function ProgrammerPriorityProvider({
 	return (
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>
-				<ActionsContext.Provider value={writer}>
-					{children}
-				</ActionsContext.Provider>
+				<AuthorityContext.Provider value={authority}>
+					<ActionsContext.Provider value={writer}>
+						{children}
+					</ActionsContext.Provider>
+				</AuthorityContext.Provider>
 			</SessionContext.Provider>
 		</StoreContext.Provider>
 	);
@@ -130,6 +144,10 @@ export function useProgrammerPriorityActions(enabled = true) {
 
 export function useProgrammerPriorityStore() {
 	return useContext(StoreContext) ?? fallbackStore;
+}
+
+export function useProgrammerPriorityAuthority() {
+	return useContext(AuthorityContext);
 }
 
 function usePriorityActivation(enabled: boolean) {

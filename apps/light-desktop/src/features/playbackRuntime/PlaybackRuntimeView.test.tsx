@@ -306,4 +306,33 @@ describe("PlaybackRuntimeViewProvider", () => {
 		expect(loadSnapshot).toHaveBeenCalledTimes(2);
 		expect(store.getSnapshot().status).toBe("ready");
 	});
+
+	it("retains a ready runtime when only the same-authority transport is replaced", async () => {
+		const store = new PlaybackRuntimeStore();
+		const firstTransport = new FakeTransport();
+		const secondTransport = new FakeTransport();
+		const loadSnapshot = vi.fn(async (identities) =>
+			playbackSnapshot(identities),
+		);
+		const view = (transport: FakeTransport) => (
+			<PlaybackRuntimeViewProvider
+				showId={SHOW_ID}
+				deskId={DESK_ID}
+				authorityKey="authority-a"
+				store={store}
+				transport={transport}
+				loadSnapshot={loadSnapshot}
+			>
+				<RuntimeProbe visible onRender={() => undefined} />
+			</PlaybackRuntimeViewProvider>
+		);
+		const rendered = render(view(firstTransport));
+		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledOnce());
+
+		rendered.rerender(view(secondTransport));
+		await waitFor(() => expect(secondTransport.subscriptions).toHaveLength(1));
+		expect(firstTransport.subscriptions[0].close).toHaveBeenCalledOnce();
+		expect(loadSnapshot).toHaveBeenCalledOnce();
+		expect(rendered.container).toHaveTextContent("Cue 1");
+	});
 });

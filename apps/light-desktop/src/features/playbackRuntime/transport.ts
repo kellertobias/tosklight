@@ -6,6 +6,11 @@ import type {
 export interface PlaybackEventScope {
 	identities: readonly PlaybackIdentity[];
 	desk: boolean;
+	/**
+	 * Warm cache leases explicitly disable sampled telemetry. Omitted preserves
+	 * the visible-view transport contract.
+	 */
+	telemetry?: false;
 }
 
 export interface PlaybackEventObserver {

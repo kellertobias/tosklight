@@ -44,11 +44,17 @@ function loadExactObject(
 	);
 }
 
-function collectionSnapshot<T extends ShowObject[]>(objects: T, showRevision = 1) {
+function collectionSnapshot<T extends ShowObject[]>(
+	objects: T,
+	showRevision = 1,
+) {
 	return { objects, showRevision };
 }
 
-function exactSnapshot<T extends ShowObject | null>(object: T, showRevision = 1) {
+function exactSnapshot<T extends ShowObject | null>(
+	object: T,
+	showRevision = 1,
+) {
 	return { object, showRevision };
 }
 
@@ -78,11 +84,21 @@ class FakeTransport implements ShowObjectsEventTransport {
 	) {
 		const close = vi.fn();
 		const repair = vi.fn();
-		this.subscriptions.push({ showId, scope, afterSequence, observer, close, repair });
+		this.subscriptions.push({
+			showId,
+			scope,
+			afterSequence,
+			observer,
+			close,
+			repair,
+		});
 		return { close, repair };
 	}
 
-	emit(message: ShowObjectsEventMessage, index = this.subscriptions.length - 1) {
+	emit(
+		message: ShowObjectsEventMessage,
+		index = this.subscriptions.length - 1,
+	) {
 		this.subscriptions[index].observer.message(message);
 	}
 }
@@ -213,7 +229,9 @@ describe("ShowObjectsSession", () => {
 	});
 
 	it("does not split a multi-kind transaction around a scoped hydration", async () => {
-		let resolveGroups!: (snapshot: ReturnType<typeof collectionSnapshot>) => void;
+		let resolveGroups!: (
+			snapshot: ReturnType<typeof collectionSnapshot>,
+		) => void;
 		const store = new ShowObjectsStore();
 		store.reset(SHOW_ID);
 		const transport = new FakeTransport();
@@ -450,6 +468,36 @@ describe("ShowObjectsSession", () => {
 		});
 		deactivatePreset();
 		expect(transport.subscriptions[1].close).toHaveBeenCalledOnce();
+	});
+
+	it("keeps a warmed collection current while visible views unmount and remount", async () => {
+		const store = new ShowObjectsStore();
+		store.reset(SHOW_ID);
+		const transport = new FakeTransport();
+		const loadCollection = vi
+			.fn()
+			.mockResolvedValue(collectionSnapshot([group(1, "Warm")]));
+		const session = new ShowObjectsSession({
+			showId: SHOW_ID,
+			store,
+			transport,
+			loadCollection,
+			loadObject: loadExactObject,
+		});
+
+		const releaseWarmLease = session.activate("group");
+		transport.emit({ type: "ready", cursor: 12 });
+		await vi.waitFor(() => expect(store.isCollectionReady("group")).toBe(true));
+		const releaseView = session.activate("group");
+		releaseView();
+		const releaseRemountedView = session.activate("group");
+		releaseRemountedView();
+
+		expect(loadCollection).toHaveBeenCalledOnce();
+		expect(store.isCollectionReady("group")).toBe(true);
+		expect(transport.subscriptions[0].close).not.toHaveBeenCalled();
+		releaseWarmLease();
+		expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
 	});
 
 	it("resubscribes to exact identities without reloading unchanged kind scopes", async () => {
@@ -778,7 +826,9 @@ describe("ShowObjectsSession", () => {
 					],
 				},
 			});
-			expect(onError).toHaveBeenLastCalledWith(expect.any(ShowObjectsProtocolError));
+			expect(onError).toHaveBeenLastCalledWith(
+				expect.any(ShowObjectsProtocolError),
+			);
 			expect(transport.subscriptions[0].close).toHaveBeenCalledOnce();
 			await vi.advanceTimersByTimeAsync(0);
 			expect(transport.subscriptions[1].afterSequence).toBeNull();
@@ -825,7 +875,9 @@ describe("ShowObjectsSession", () => {
 
 		groupLoads[1](collectionSnapshot([group(2, "Current hydration")], 2));
 		await vi.waitFor(() =>
-			expect(store.getSnapshot().groups[0]?.body.name).toBe("Current hydration"),
+			expect(store.getSnapshot().groups[0]?.body.name).toBe(
+				"Current hydration",
+			),
 		);
 	});
 
@@ -1002,10 +1054,10 @@ describe("ShowObjectsSession", () => {
 		session.activate("group", "2");
 		await vi.waitFor(() => expect(loadObject).toHaveBeenCalledTimes(2));
 		await vi.waitFor(() =>
-			expect(store.getSnapshot().groups.find((item) => item.id === "2")?.body.fixtures).toEqual([
-				"a",
-				"c",
-			]),
+			expect(
+				store.getSnapshot().groups.find((item) => item.id === "2")?.body
+					.fixtures,
+			).toEqual(["a", "c"]),
 		);
 		await Promise.resolve();
 		expect(transport.subscriptions.at(-1)?.scope).toEqual({
@@ -1036,10 +1088,10 @@ describe("ShowObjectsSession", () => {
 			},
 		});
 		await vi.waitFor(() =>
-			expect(store.getSnapshot().groups.find((item) => item.id === "2")?.body.fixtures).toEqual([
-				"b",
-				"d",
-			]),
+			expect(
+				store.getSnapshot().groups.find((item) => item.id === "2")?.body
+					.fixtures,
+			).toEqual(["b", "d"]),
 		);
 	});
 

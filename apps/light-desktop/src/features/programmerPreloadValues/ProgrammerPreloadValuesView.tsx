@@ -10,6 +10,7 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
+import { measureFrontendSnapshot } from "../frontendWarmup/diagnostics";
 import { capturesProgrammerWrites } from "../programmerCaptureMode/contracts";
 import {
 	useProgrammerCaptureModeAuthority,
@@ -101,6 +102,10 @@ export function ProgrammerPreloadValuesViewProvider({
 		captureState.status === "ready" &&
 		!captureState.repairRequired &&
 		capturesProgrammerWrites(captureState.projection);
+	const measuredLoadSnapshot = useCallback(
+		() => measureFrontendSnapshot("programmer-preload-values", loadSnapshot),
+		[loadSnapshot],
+	);
 	const session = useMemo(
 		() =>
 			showId && userId
@@ -110,13 +115,13 @@ export function ProgrammerPreloadValuesViewProvider({
 						authorityKey,
 						store,
 						transport,
-						loadSnapshot,
+						loadSnapshot: measuredLoadSnapshot,
 						onError: onSessionError,
 					})
 				: null,
 		[
 			authorityKey,
-			loadSnapshot,
+			measuredLoadSnapshot,
 			onSessionError,
 			showId,
 			store,

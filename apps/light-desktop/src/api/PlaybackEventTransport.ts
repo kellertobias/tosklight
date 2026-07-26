@@ -1,3 +1,4 @@
+import { frontendPerformanceDiagnostics } from "../features/frontendWarmup/diagnostics";
 import { identityKey } from "../features/playbackRuntime/contracts";
 import {
 	type PlaybackEventObserver,
@@ -44,7 +45,10 @@ export class WebSocketPlaybackEventTransport implements PlaybackEventTransport {
 			try {
 				value = JSON.parse(String(event.data));
 				const message = decodePlaybackEventMessage(value);
-				if (message) observer.message(message);
+				if (message) {
+					frontendPerformanceDiagnostics.recordEventReceipt("playback", value);
+					observer.message(message);
+				}
 			} catch (reason) {
 				const error =
 					reason instanceof Error ? reason : new Error(String(reason));
@@ -103,19 +107,26 @@ function subscription(
 	scope: PlaybackEventScope,
 	afterSequence: number | null,
 ): EventClientMessage {
+	const telemetry = scope.telemetry !== false;
 	return {
 		type: "subscribe",
 		filter: {
 			capabilities: scope.desk ? ["playback", "desk"] : ["playback"],
-			classes: ["transition", "projection", "telemetry"],
+			classes: telemetry
+				? ["transition", "projection", "telemetry"]
+				: ["transition", "projection"],
 			objects: [
 				...scope.identities.map((identity) => ({
 					capability: "playback" as const,
 					id: identityKey(identity),
 				})),
-				// The sampled-telemetry lane: volatile ~10 Hz delta ticks for every playback,
-				// retained desk-lifetime in the runtime store.
-				{ capability: "playback" as const, id: "telemetry" },
+				...(telemetry
+					? [
+							// The sampled-telemetry lane: volatile ~10 Hz delta ticks for
+							// every playback, retained desk-lifetime in the runtime store.
+							{ capability: "playback" as const, id: "telemetry" },
+						]
+					: []),
 				...(scope.desk
 					? [{ capability: "desk" as const, id: `playback-view:${deskId}` }]
 					: []),
