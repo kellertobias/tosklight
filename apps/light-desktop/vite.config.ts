@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { artifactPaths } from "../../tools/artifact-paths.mjs";
 
 export default defineConfig({
+  cacheDir: `${artifactPaths.viteCache}/light-desktop`,
   plugins: [react()],
   build: { outDir: artifactPaths.controlFrontend, emptyOutDir: true },
   resolve: { dedupe: ["react", "react-dom", "@tauri-apps/api"] },

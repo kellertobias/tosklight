@@ -5,4 +5,5 @@ entry point and the web interface that it serves. Media is a web application,
 not a Tauri application.
 
 Reusable Media behavior belongs in `crates/media`. Shared TypeScript components
-belong in `packages/ui`.
+belong in `apps/ui-library` and are consumed through the `@tosklight/ui` workspace
+package.
