@@ -202,9 +202,11 @@ function useRegisteredModal(
     if (!top || claimedInitialFocus.current) return;
     claimedInitialFocus.current = true;
     requestAnimationFrame(() => {
-      const first = layer.current?.querySelector<HTMLElement>(
-        "[autofocus], [data-modal-initial-focus], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
-      );
+      const first =
+        layer.current?.querySelector<HTMLElement>("[data-modal-initial-focus]") ??
+        layer.current?.querySelector<HTMLElement>(
+          "[autofocus], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
+        );
       (first ?? layer.current)?.focus();
     });
   }, [top]);

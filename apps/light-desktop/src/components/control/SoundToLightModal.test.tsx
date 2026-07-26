@@ -119,9 +119,13 @@ describe("SoundToLightModal", () => {
     />);
     expect(screen.queryByRole("button", { name: "Learn" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Half Speed Group speed" }));
+    const half = screen.getByRole("button", { name: "Half Speed Group speed" });
+    const double = screen.getByRole("button", { name: "Double Speed Group speed" });
+    expect(half).toHaveClass("sound-speed-scale-action");
+    expect(double).toHaveClass("sound-speed-scale-action");
+    fireEvent.click(half);
     await waitFor(() => expect(onAction).toHaveBeenCalledWith({ action: "half" }));
-    fireEvent.click(screen.getByRole("button", { name: "Double Speed Group speed" }));
+    fireEvent.click(double);
     await waitFor(() => expect(onAction).toHaveBeenCalledWith({ action: "double" }));
     fireEvent.click(screen.getByRole("button", { name: "Pause Speed Group" }));
     await waitFor(() => expect(onAction).toHaveBeenCalledWith({ action: "pause" }));

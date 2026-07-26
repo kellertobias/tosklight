@@ -84,6 +84,7 @@
   background: transparent;
   font-size: 17px;
   outline: 0 !important;
+  text-align: left;
 }
 
 .ui-text-control > .ui-button {
@@ -152,7 +153,7 @@
   border-radius: 0;
   background: transparent;
   font-size: 17px;
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 
@@ -279,13 +280,16 @@
   touch-action: pan-y;
 }
 
-.ui-picker-dialog {
-  width: min(760px, calc(100vw - 30px));
-}
-
-.ui-picker-trigger {
+.ui-form-control > .ui-picker-trigger {
   width: 100%;
+  min-height: 50px;
   justify-content: flex-start;
+  padding: 5px 10px;
+  overflow: hidden;
+  border-color: var(--line2);
+  background: #151d24;
+  color: var(--text);
+  text-align: left;
 }
 
 .ui-picker-preview {
@@ -308,26 +312,22 @@
 
 .ui-icon-group-control {
   min-width: 210px;
-  display: grid;
-  align-content: center;
   gap: 2px;
+  margin: 0;
   padding: 4px 10px;
   border-left: 1px solid var(--line2);
 }
 
-.ui-icon-group-control span {
+.ui-icon-group-control > label {
   color: var(--muted);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
-.ui-icon-group-control select {
+.ui-icon-group-control .ui-select-trigger {
   min-height: 30px;
-  border: 1px solid var(--line2);
-  border-radius: 5px;
   background: #0d1217;
-  color: var(--text);
 }
 
 .ui-icon-grid {
@@ -346,6 +346,7 @@
 }
 
 .ui-form-control > .ui-color-input-trigger {
+  width: 100%;
   min-height: 50px;
   justify-content: space-between;
   padding: 5px;
@@ -415,11 +416,25 @@
 }
 
 .ui-color-dropdown-custom {
-  display: grid;
-  grid-template-columns: minmax(150px, 1fr) 48px auto;
-  align-items: end;
-  gap: 8px;
   padding: 10px 8px 2px;
+}
+
+.ui-color-dropdown-custom-field {
+  margin: 0;
+}
+
+.ui-color-dropdown-custom-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto 48px;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.ui-color-dropdown-custom-controls > .ui-text-control,
+.ui-color-dropdown-custom-controls > .ui-button,
+.ui-color-dropdown-custom-controls > .ui-custom-color-preview {
+  height: 48px;
+  min-height: 48px;
 }
 
 .ui-custom-color-preview {
@@ -454,9 +469,9 @@
 
 .ui-grouped-selection-options .ui-button {
   min-height: 68px;
-  display: grid;
-  justify-items: start;
-  align-content: center;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
   text-align: left;
 }
 

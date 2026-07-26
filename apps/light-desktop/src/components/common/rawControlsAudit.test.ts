@@ -1,39 +1,39 @@
 import { describe, expect, it } from "vitest";
 
 const sources = import.meta.glob("/src/**/*.tsx", {
-  eager: true,
-  query: "?raw",
-  import: "default",
+	eager: true,
+	query: "?raw",
+	import: "default",
 }) as Record<string, string>;
 
-function ownsLegacyInputUsage(file: string) {
-  return file.endsWith("/components/control/commandLine/CommandInput.tsx");
-}
-
 function isTestSource(file: string) {
-  return file.endsWith(".test.tsx");
+	return file.endsWith(".test.tsx");
 }
 
 describe("shared-control enforcement", () => {
-  it("keeps raw controls inside the shared primitive implementation", () => {
-    const offenders = Object.entries(sources)
-      .filter(([file]) => !isTestSource(file))
-      .filter(([, source]) => /<(?:button|input|select|textarea)\b/.test(source))
-      .map(([file]) => file);
+	it("keeps raw controls inside the shared primitive implementation", () => {
+		const offenders = Object.entries(sources)
+			.filter(([file]) => !isTestSource(file))
+			.filter(([, source]) =>
+				/<(?:button|input|select|textarea)\b/.test(source),
+			)
+			.map(([file]) => file);
 
-    expect(offenders).toEqual([]);
-  });
+		expect(offenders).toEqual([]);
+	});
 });
 
 describe("unified form enforcement", () => {
-  it("keeps ordinary fields out of the legacy Input compatibility wrapper", () => {
-    const offenders = Object.entries(sources)
-      .filter(([file]) => !isTestSource(file))
-      .filter(([file]) => !ownsLegacyInputUsage(file))
-      .filter(([, source]) => [...source.matchAll(/<Input\b[^>]*>/g)]
-        .some(([tag]) => !/(?:type="(?:file|range|hidden)"|hidden)/.test(tag)))
-      .map(([file]) => file);
+	it("keeps ordinary fields out of the legacy Input compatibility wrapper", () => {
+		const offenders = Object.entries(sources)
+			.filter(([file]) => !isTestSource(file))
+			.filter(([, source]) =>
+				[...source.matchAll(/<Input\b[^>]*>/g)].some(
+					([tag]) => !/(?:type="(?:file|range|hidden)"|hidden)/.test(tag),
+				),
+			)
+			.map(([file]) => file);
 
-    expect(offenders).toEqual([]);
-  });
+		expect(offenders).toEqual([]);
+	});
 });

@@ -331,7 +331,7 @@ describe("ParameterControls projection lifecycle", () => {
 					action: "set_fixture",
 					fixtureId: "fixture-1",
 					attribute: "intensity",
-					value: { kind: "normalized", value: 0.26 },
+						value: { kind: "normalized", value: 0.251 },
 					timing: { fade: true, fadeMillis: 3_000, delayMillis: null },
 				},
 			],

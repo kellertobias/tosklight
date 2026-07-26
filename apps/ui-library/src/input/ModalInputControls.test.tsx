@@ -9,6 +9,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	fallbackKeyboardLayout,
+	ModalCaretValue,
 	ModalNumberInput,
 	ModalNumberValue,
 	ModalTextKeyboard,
@@ -19,9 +20,11 @@ afterEach(cleanup);
 function TextHarness({
 	enter,
 	escape,
+	multiline = false,
 }: {
 	enter: () => void;
 	escape: () => void;
+	multiline?: boolean;
 }) {
 	const [value, setValue] = useState("");
 	return (
@@ -32,6 +35,7 @@ function TextHarness({
 				onChange={setValue}
 				onEnter={enter}
 				onEscape={escape}
+				multiline={multiline}
 			/>
 		</div>
 	);
@@ -137,6 +141,38 @@ describe("modal input controls", () => {
 		).not.toBeInTheDocument();
 	});
 
+	it("keeps multiline Backspace above the remaining Enter action space", () => {
+		const { container } = render(
+			<TextHarness enter={vi.fn()} escape={vi.fn()} multiline />,
+		);
+		const backspace = screen.getByRole("button", { name: "Backspace" });
+		const enter = screen.getByRole("button", { name: "Enter · New line" });
+		const rail = container.querySelector(".modal-keyboard-actions.multiline");
+		expect([...rail!.children]).toEqual([backspace, enter]);
+		expect(backspace.querySelector("small")).toHaveTextContent("Backspace");
+		expect(enter).toHaveClass("newline");
+	});
+
+	it("renders an explicit multiline caret independently of the native textarea", () => {
+		const { container } = render(
+			<ModalCaretValue
+				value={"First line\nSecond line"}
+				caret={13}
+				multiline
+				ariaLabel="Notes value"
+				onCaretChange={() => undefined}
+			/>,
+		);
+		const layer = container.querySelector(".modal-multiline-caret-layer");
+		expect(layer).toHaveTextContent(/First line\s+Second line/u);
+		expect(
+			layer?.querySelector(".modal-multiline-caret-content > i"),
+		).toBeInTheDocument();
+		expect(screen.getByRole("textbox", { name: "Notes value" })).toHaveValue(
+			"First line\nSecond line",
+		);
+	});
+
 	it("supports one-shot Shift, cancellation, locking, and unlocking", () => {
 		vi.useFakeTimers();
 		try {
@@ -144,9 +180,13 @@ describe("modal input controls", () => {
 			const shift = screen.getByRole("button", { name: "Shift" });
 			fireEvent.click(shift);
 			expect(shift).toHaveAttribute("data-shift-state", "one-shot");
-			fireEvent.click(screen.getByRole("button", { name: "A" }));
+			const letterA = screen.getByRole("button", { name: "A" });
+			fireEvent.click(letterA);
 			expect(screen.getByLabelText("value")).toHaveTextContent("A");
 			expect(shift).toHaveAttribute("data-shift-state", "inactive");
+			expect(letterA).toHaveAttribute("data-keyboard-pressed", "true");
+			act(() => vi.advanceTimersByTime(140));
+			expect(letterA).not.toHaveAttribute("data-keyboard-pressed");
 
 			fireEvent.click(shift);
 			fireEvent.click(shift);

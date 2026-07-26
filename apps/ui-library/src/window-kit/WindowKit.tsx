@@ -741,15 +741,17 @@ export function FaderView({
 	rows,
 	children,
 	className = "",
+	style,
 }: {
 	rows: number;
 	children: ReactNode;
 	className?: string;
+	style?: CSSProperties;
 }) {
 	return (
 		<div
 			className={`ui-fader-view ${className}`}
-			style={{ "--fader-rows": rows } as CSSProperties}
+			style={{ "--fader-rows": rows, ...style } as CSSProperties}
 		>
 			{children}
 		</div>

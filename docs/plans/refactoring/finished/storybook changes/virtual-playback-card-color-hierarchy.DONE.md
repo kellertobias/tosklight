@@ -197,6 +197,12 @@ Focused verification passed:
 
 - `npx biome check apps/ui-library/src/pools/PoolCard.tsx apps/ui-library/src/playback/VirtualPlaybackGrid.tsx apps/ui-library/src/playback/VirtualPlaybackGrid.test.tsx apps/light-desktop/src/components/control/virtualPlayback/VirtualPlaybackGrid.stories.tsx`
 - `npm test --workspace @tosklight/ui -- --run src/playback/VirtualPlaybackGrid.test.tsx src/pools/PoolCard.test.tsx`
+
+The final screenshot review also caught two integration regressions: the generic pool fallback
+color took precedence over a playback's configured color, and a broad desktop
+`.playback-colored` selector tinted inactive Virtual Playback interiors. Configured playback color
+now has precedence, the legacy selector excludes Virtual Playback cards, and the reviewed help
+screenshot records the neutral inactive interiors with distinct configured-color outlines.
 - `npm test --workspace @tosklight/light-desktop -- --run src/windows/VirtualPlaybacksWindow.test.tsx`
 - both UI-library and desktop TypeScript checks
 - `npm run test:architecture`

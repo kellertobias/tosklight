@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Stamp the workspace version into the assembled landing page and build its screenshot
-// gallery from the help screenshots that `npm run test:help-screenshots` regenerates.
+// gallery from the reviewed Storybook marketing screenshots.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -8,22 +8,18 @@ import { fileURLToPath } from "node:url";
 import { artifactPaths } from "./artifact-paths.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const SCREENSHOTS = resolve(ROOT, "docs/help/assets/screenshots");
+const SCREENSHOTS = resolve(ROOT, "docs/marketing/assets/screenshots");
+const MARKETING_MANIFEST = resolve(ROOT, "docs/marketing/screenshot-manifest.json");
 const DEMO_DIRECTORY = resolve(artifactPaths.visual, "product-demo");
 const PERFORMANCE_STATUS_FILE = process.env.LIGHT_PERFORMANCE_STATUS_FILE;
 
-// Curated tour of the desk, in the order an operator meets these surfaces. Paths are
-// relative to docs/help/assets/screenshots and are always the current generated files.
-const GALLERY = [
-  { file: "default-desk-overview.png", title: "Desk overview", caption: "Fixture selection, group shortcuts, 3D stage preview, and the live programmer." },
-  { file: "fixture-sheet-programmer.png", title: "Fixture sheet", caption: "Per-fixture channel values with the programmer active above them." },
-  { file: "cuelist-playback.png", title: "Cue list and playback", caption: "Cue list detail with playback faders and group masters." },
-  { file: "software-keypad.png", title: "Software keypad", caption: "The command line and keypad, mirroring the attached hardware surface." },
-  { file: "panes/stage.png", title: "Stage view", caption: "3D stage geometry with live output rendered onto the rig." },
-  { file: "panes/groups.png", title: "Groups", caption: "Ordered group membership, preserved for value spreading." },
-  { file: "workflows/show-patch.png", title: "Patch", caption: "Patching fixtures into universes and addresses." },
-  { file: "panes/presets.png", title: "Presets", caption: "Stored looks recalled straight from the pool." },
-];
+// The manifest order is the reviewed marketing-gallery order. Its files are
+// deterministic Storybook captures, separate from the Help/manual screenshot set.
+const marketingManifest = JSON.parse(readFileSync(MARKETING_MANIFEST, "utf8"));
+if (marketingManifest.version !== 1 || !Array.isArray(marketingManifest.entries)) {
+  throw new Error(`Invalid marketing screenshot manifest: ${MARKETING_MANIFEST}`);
+}
+const GALLERY = marketingManifest.entries;
 
 const REPOSITORY = "kellertobias/tosklight";
 

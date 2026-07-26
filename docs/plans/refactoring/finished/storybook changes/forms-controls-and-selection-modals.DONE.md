@@ -315,3 +315,23 @@ Post-audit verification passed 108 UI-package tests, 1,993 desktop tests, both T
 the architecture/CSS-ownership ratchet, 219 Storybook behavior/catalog checks, the separately
 reviewed screenshot check, the 47-entry non-mutating screenshot manifest, the 27-image live-app
 capture, manual generation, and the packaged `npm run open` readiness path.
+
+The final forms refinement keeps the multiline caret fully opaque while cursor movement is active
+and scrolls the editor to keep line-navigation destinations visible. The up/down controls now use
+the same pressed feedback as keyboard keys; the wider title-bar Done action has dividers on both
+sides; text, password, multiline, and number values are left-aligned; and search action glyphs are
+centered without changing field width. The icon selector again opens its grouped icon grid, with
+only the group dropdown embedded in the modal title. Focused package tests passed 48 of 48, the UI
+typecheck and production Storybook build passed, browser review covered all corrected surfaces,
+and the complete contained Storybook gate passed 234 of 234 checks after the changed screenshot
+baselines were reviewed and accepted.
+
+The subsequent value-entry refinement adds package-owned fader and grouped-preset modes to the
+shared number editor. Forms now demonstrates both variants. Fader entry widens the modal and puts a
+two-key-wide vertical fader left of the value and keypad, with linear vertical interaction and
+enlarged top/bottom endpoint zones. Preset entry uses one stacked Value/Presets title button,
+grouped selectable options, and an optional title-bar Release action. The same reusable editor now
+backs number fields, vertical-fader direct entry, touch encoders, hardware encoders, and dual
+encoder entry. Verification passed 139 UI-package tests, 32 focused desktop-wrapper tests, the UI
+typecheck, the production Storybook build, a manual browser review of fader, preset, and encoder
+states, and the complete 234-check Storybook gate.

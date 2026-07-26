@@ -4,7 +4,7 @@ ToskLight renders logical universes and sends them through configured Art-Net or
 
 ## Configure the engine
 
-In **Desk Setup > Outputs**, choose a 40-44 Hz frame rate, the output bind address, backup retention, and the autosave interval. The autosave interval (5-3600 seconds, 30 by default) sets how often the desk writes an automatic recovery checkpoint of the active show while you program; backup retention limits how many checkpoints are kept. Bind to the interface used by the isolated lighting network. Save and restart when requested.
+In **Desk Setup > Outputs**, choose a 40-44 Hz frame rate, the output bind address, and backup retention. Backup retention limits how many automatic recovery checkpoints are kept; configure the checkpoint interval under **Shows & recovery**. Bind to the interface used by the isolated lighting network. Save and restart when requested.
 
 ![Output engine and universe-route configuration](../assets/screenshots/workflows/desk-setup-output-engine.png)
 

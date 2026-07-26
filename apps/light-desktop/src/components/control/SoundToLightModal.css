@@ -3,6 +3,13 @@
 	max-height: calc(100vh - 36px) !important;
 }
 
+.sound-to-light-modal
+	.ui-modal-title-actions
+	> .sound-speed-scale-action {
+	width: 88px;
+	flex: 0 0 88px;
+}
+
 .sound-status-grid {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));

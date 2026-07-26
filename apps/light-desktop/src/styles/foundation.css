@@ -74,24 +74,38 @@ button {
 	font-size: 20px;
 	font-weight: 900;
 }
-.dock-section-key {
+.dock-mode-toggle {
 	height: 42px;
 	flex: none;
+	flex-direction: column;
+	gap: 1px;
+	padding: 0 4px;
 	border: 1px solid var(--line);
 	border-radius: 7px;
 	background: var(--panel);
-	color: var(--muted);
 	font-size: 11px;
 	font-weight: 800;
+	line-height: 1.05;
 }
-.dock-section-key.active {
-	border-color: var(--cyan);
-	background: #0a2228;
+
+.dock-mode-option {
+	flex: none;
+	color: var(--muted);
+	white-space: nowrap;
+	transition:
+		color 0.18s ease,
+		text-shadow 0.18s ease;
+}
+
+.dock-mode-option.active {
 	color: var(--cyan);
+	text-shadow: 0 0 12px color-mix(in srgb, var(--cyan) 42%, transparent);
 }
-.dock-section-key.builtins-key {
-	margin-top: auto;
+
+.dock-mode-divider {
+	display: none;
 }
+
 .dock-list {
 	min-height: 0;
 	display: flex;
@@ -103,15 +117,31 @@ button {
 .dock-entry {
 	min-height: 49px;
 	flex: none;
+	flex-wrap: wrap;
+	align-content: center;
+	row-gap: 2px;
+	padding: 6px 8px;
 	border: 1px solid transparent;
 	border-radius: 7px;
 	background: transparent;
 	color: var(--muted);
 	font-size: 11px;
 }
-.dock-entry span {
-	display: block;
+.dock-entry-icon {
+	flex: none;
 	font-size: 16px;
+	line-height: 1;
+	text-align: center;
+}
+
+.dock-entry-label {
+	max-width: 100%;
+	flex: none;
+	overflow: hidden;
+	line-height: 1.12;
+	overflow-wrap: anywhere;
+	text-align: center;
+	text-overflow: ellipsis;
 }
 .dock-entry.active {
 	border-color: #14616c;
@@ -540,7 +570,7 @@ button {
 	gap: 5px;
 	overflow: auto;
 }
-.playback-fader-bank article {
+.playback-fader-bank article:not(.playback-card) {
 	min-width: 105px;
 	display: grid;
 	grid-template-rows: auto 1fr 40px;
@@ -550,17 +580,20 @@ button {
 	border-radius: 7px;
 	background: var(--panel2);
 }
-.playback-fader-bank article.running {
+.playback-fader-bank article:not(.playback-card).running {
 	border-color: var(--green);
 }
-.playback-fader-bank article > div {
+.playback-fader-bank article:not(.playback-card) > div {
 	position: relative;
 	overflow: hidden;
 	border: 1px solid var(--line);
 	border-radius: 5px;
 	background: #090c10;
 }
-.playback-fader-bank article > div:not(.vertical-touch-fader-stack) strong {
+.playback-fader-bank
+	article:not(.playback-card)
+	> div:not(.vertical-touch-fader-stack)
+	strong {
 	position: absolute;
 	z-index: 1;
 	top: 8px;
@@ -569,7 +602,7 @@ button {
 	text-align: center;
 }
 .playback-fader-bank
-	article
+	article:not(.playback-card)
 	> div:not(.vertical-touch-fader-stack):not(.hardware-playback-controls)
 	i {
 	position: absolute;
@@ -579,17 +612,17 @@ button {
 	border-radius: 4px;
 	background: linear-gradient(var(--green), #155725);
 }
-.playback-fader-bank footer {
+.playback-fader-bank article:not(.playback-card) footer {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
 	gap: 4px;
 }
-.playback-fader-bank footer button {
+.playback-fader-bank article:not(.playback-card) footer button {
 	border: 1px solid var(--line2);
 	border-radius: 5px;
 	background: var(--panel);
 }
-.playback-fader-bank footer button:first-child {
+.playback-fader-bank article:not(.playback-card) footer button:first-child {
 	border-color: var(--green);
 	color: var(--green);
 }
@@ -695,8 +728,8 @@ button {
 .card-pool {
 	min-height: 0;
 }
-.group-card,
-.preset-card {
+.group-card:not(.pool-card),
+.preset-card:not(.pool-card) {
 	position: relative;
 	padding: 8px;
 	border: 1px solid var(--line2);
@@ -704,16 +737,16 @@ button {
 	background: var(--panel2);
 	text-align: left;
 }
-.group-card.selected,
-.preset-card:hover {
+.group-card:not(.pool-card).selected,
+.preset-card:not(.pool-card):hover {
 	border-color: var(--cyan);
 }
-.group-card b {
+.group-card:not(.pool-card) b {
 	display: block;
 	margin-top: 28px;
 }
-.group-card small,
-.preset-card small {
+.group-card:not(.pool-card) small,
+.preset-card:not(.pool-card) small {
 	display: block;
 	color: var(--muted);
 }
@@ -737,16 +770,16 @@ button {
 	border-radius: 5px;
 	font-size: 20px;
 }
-.preset-card b {
+.preset-card:not(.pool-card) b {
 	display: block;
 	margin-top: 42px;
 }
-.preset-card.empty {
+.preset-card:not(.pool-card).empty {
 	border-style: dashed;
 	color: var(--muted);
 	background: #0b0e12;
 }
-.preset-card.empty b {
+.preset-card:not(.pool-card).empty b {
 	margin-top: 28px;
 }
 .stage-canvas {

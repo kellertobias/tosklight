@@ -63,10 +63,20 @@ describe("VerticalTouchFader", () => {
     const dialog = screen.getByRole("dialog", { name: "Prog. Fade value" });
     expect(dialog.querySelector('input[type="range"]')).toBeInTheDocument();
     expect(screen.getByLabelText("Number input keypad")).toBeInTheDocument();
-    const slider = screen.getByRole("slider", { name: "Prog. Fade" });
-    fireEvent.pointerDown(slider);
-    fireEvent.input(slider, { target: { value: "4.5" } });
-    fireEvent.pointerUp(slider);
-    expect(onChange).toHaveBeenCalledWith(4.5);
+    const slider = screen.getByRole("slider", { name: "Prog. Fade fader" });
+    vi.spyOn(slider, "getBoundingClientRect").mockReturnValue({
+      bottom: 500,
+      height: 400,
+      left: 0,
+      right: 100,
+      top: 100,
+      width: 100,
+      x: 0,
+      y: 100,
+      toJSON: () => undefined,
+    });
+    fireEvent.pointerDown(slider, { clientY: 300, pointerId: 1 });
+    fireEvent.pointerUp(slider, { clientY: 300, pointerId: 1 });
+    expect(onChange).toHaveBeenCalledWith(10);
   });
 });

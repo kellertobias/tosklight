@@ -35,14 +35,3 @@ scenario(
 		await t.operatorShell.expectOperatorFilePickerContracts();
 	},
 );
-
-scenario(
-	"MANUAL-019",
-	"Development stays out of operator panes and remains available through Desk Status",
-	async (t) => {
-		await t.show.use(Show.TwelveDimmers);
-		await t.app.open();
-		await t.app.expect.ready();
-		await t.operatorShell.expectDevelopmentDiagnosticsBoundary();
-	},
-);

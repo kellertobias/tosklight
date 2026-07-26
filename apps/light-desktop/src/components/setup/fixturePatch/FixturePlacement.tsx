@@ -1,5 +1,5 @@
-import { Fragment } from "react";
 import { Button, ModalRegistration, Select } from "@tosklight/ui";
+import { Fragment } from "react";
 import {
 	ConsoleNumberField,
 	ConsoleTextField,
@@ -34,15 +34,15 @@ export function FixturePlacement() {
 	return (
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer">
-			<section className="nested-modal fixture-placement-modal">
-				<PlacementHeader controller={controller} />
-				<div className="placement-grid">
-					<PlacementFields controller={controller} />
-					{isDmxPatchable(definition) && !controller.ui.placementEmpty && (
-						<PlacementUniverseMap controller={controller} />
-					)}
-				</div>
-			</section>
+				<section className="nested-modal fixture-placement-modal">
+					<PlacementHeader controller={controller} />
+					<div className="placement-grid">
+						<PlacementFields controller={controller} />
+						{isDmxPatchable(definition) && !controller.ui.placementEmpty && (
+							<PlacementUniverseMap controller={controller} />
+						)}
+					</div>
+				</section>
 			</div>
 		</ModalRegistration>
 	);
@@ -148,9 +148,8 @@ function PlacementPatchFields({ controller }: { controller: PatchController }) {
 	if (!isDmxPatchable(definition))
 		return <p>This Venue element is visual only and has no DMX patch.</p>;
 	const addressChoice = (
-		<div
+		<fieldset
 			className="placement-address-choice"
-			role="group"
 			aria-label="Fixture placement address"
 		>
 			<Button
@@ -165,7 +164,7 @@ function PlacementPatchFields({ controller }: { controller: PatchController }) {
 			>
 				Empty
 			</Button>
-		</div>
+		</fieldset>
 	);
 	if (ui.placementEmpty)
 		return (

@@ -1,13 +1,16 @@
 import type { CSSProperties, ReactNode } from "react";
+import type { ModalNumberPresetConfig } from "../input/ModalNumberEditor";
 import { HardwareEncoderDisplayView } from "./HardwareEncoderDisplay";
 import { TouchEncoder } from "./TouchEncoder";
 
 export type EncoderSectionSurface = "touch" | "hardware";
 
 export interface EncoderSectionTarget {
+	id?: string;
 	label: string;
 	display: string;
 	role?: string;
+	value?: number;
 }
 
 export interface EncoderSectionItem {
@@ -15,13 +18,20 @@ export interface EncoderSectionItem {
 	slot: number;
 	target?: EncoderSectionTarget;
 	secondary?: EncoderSectionTarget;
-	/** Normalized encoder value. Hardware absolute entry is converted to display points. */
+	/** Internal encoder value. Defaults preserve the normalized 0–1 domain. */
 	value: number;
+	minimum?: number;
+	maximum?: number;
+	inputScale?: number;
+	slowStep?: number;
+	fastStep?: number;
+	repeatSeconds?: number;
 	mode?: string;
 	accentColor?: string;
 	disabled?: boolean;
 	indexed?: boolean;
 	canRelease?: boolean;
+	presets?: ModalNumberPresetConfig;
 }
 
 export interface EncoderSectionModel {
@@ -32,11 +42,7 @@ export interface EncoderSectionModel {
 }
 
 export interface EncoderSectionCallbacks {
-	onRelativeChange?(
-		id: string,
-		delta: number,
-		undoGroup?: string | null,
-	): void;
+	onRelativeChange?(id: string, delta: number, undoGroup?: string | null): void;
 	onAbsoluteChange?(id: string, value: number): void;
 	onRangeChange?(id: string, points: number[]): void;
 	onRelease?(id: string): void;
@@ -49,8 +55,8 @@ export interface EncoderSectionProps {
 	className?: string;
 }
 
-function normalized(value: number) {
-	return Math.max(0, Math.min(1, value));
+function clamped(value: number, minimum = 0, maximum = 1) {
+	return Math.max(minimum, Math.min(maximum, value));
 }
 
 export function EncoderSection({
@@ -88,82 +94,152 @@ export function EncoderSection({
 					} as CSSProperties
 				}
 			>
-				{model.encoders.map((encoder) =>
-					surface === "touch" ? (
-						<TouchEncoder
-							key={encoder.id}
-							label={`Enc ${encoder.slot} · ${encoder.target?.label ?? "Unassigned"}`}
-							display={encoder.target?.display ?? "—"}
-							value={normalized(encoder.value)}
-							disabled={encoder.disabled || !encoder.target}
-							accentColor={encoder.accentColor}
-							mode={encoder.mode}
-							indexed={encoder.indexed}
-							canRelease={encoder.canRelease}
-							onStep={(delta, undoGroup) =>
-								callbacks.onRelativeChange?.(encoder.id, delta, undoGroup)
-							}
-							onSet={(value) =>
-								callbacks.onAbsoluteChange?.(encoder.id, value)
-							}
-							onSetRange={
-								callbacks.onRangeChange
-									? (points) => callbacks.onRangeChange?.(encoder.id, points)
-									: undefined
-							}
-							onRelease={
-								encoder.canRelease && callbacks.onRelease
-									? () => callbacks.onRelease?.(encoder.id)
-									: undefined
-							}
-						/>
-					) : (
-						<HardwareEncoderDisplayView
-							key={encoder.id}
-							slot={encoder.slot}
-							target={
-								encoder.target
-									? {
-											label: encoder.target.label,
-											value: encoder.target.display,
-											role: encoder.target.role,
-										}
-									: undefined
-							}
-							secondary={
-								encoder.secondary
-									? {
-											label: encoder.secondary.label,
-											value: encoder.secondary.display,
-											role: encoder.secondary.role,
-										}
-									: undefined
-							}
-							editValue={normalized(encoder.value) * 100}
-							canRelease={encoder.canRelease}
-							onEdit={
-								encoder.disabled || encoder.indexed || !encoder.target
-									? undefined
-									: (points) =>
-											callbacks.onAbsoluteChange?.(
-												encoder.id,
-												normalized(points / 100),
-											)
-							}
-							onEditRange={
-								callbacks.onRangeChange
-									? (points) => callbacks.onRangeChange?.(encoder.id, points)
-									: undefined
-							}
-							onRelease={
-								encoder.canRelease && callbacks.onRelease
-									? () => callbacks.onRelease?.(encoder.id)
-									: undefined
-							}
-						/>
-					),
-				)}
+				{model.encoders.map((encoder) => (
+					<EncoderItem
+						key={encoder.id}
+						callbacks={callbacks}
+						encoder={encoder}
+						surface={surface}
+					/>
+				))}
 			</div>
 		</section>
 	);
+}
+
+function EncoderItem({
+	encoder,
+	surface,
+	callbacks,
+}: {
+	encoder: EncoderSectionItem;
+	surface: EncoderSectionSurface;
+	callbacks: EncoderSectionCallbacks;
+}) {
+	if (surface === "touch")
+		return (
+			<TouchEncoder
+				label={`Enc ${encoder.slot} · ${encoder.target?.label ?? "Unassigned"}`}
+				slot={encoder.slot}
+				attributeLabel={encoder.target?.label ?? "Unassigned"}
+				display={encoder.target?.display ?? "—"}
+				value={encoder.value}
+				minimum={encoder.minimum}
+				maximum={encoder.maximum}
+				inputScale={encoder.inputScale}
+				slowStep={encoder.slowStep}
+				fastStep={encoder.fastStep}
+				repeatSeconds={encoder.repeatSeconds}
+				disabled={encoder.disabled || !encoder.target}
+				accentColor={encoder.accentColor}
+				mode={encoder.mode}
+				indexed={encoder.indexed}
+				canRelease={encoder.canRelease}
+				presets={encoder.presets}
+				onStep={(delta, undoGroup) =>
+					callbacks.onRelativeChange?.(encoder.id, delta, undoGroup)
+				}
+				onSet={(value) => callbacks.onAbsoluteChange?.(encoder.id, value)}
+				onSetRange={
+					callbacks.onRangeChange
+						? (points) => callbacks.onRangeChange?.(encoder.id, points)
+						: undefined
+				}
+				onRelease={
+					encoder.canRelease && callbacks.onRelease
+						? () => callbacks.onRelease?.(encoder.id)
+						: undefined
+				}
+			/>
+		);
+	return (
+		<HardwareEncoderDisplayView
+			slot={encoder.slot}
+			target={
+				encoder.target
+					? {
+							label: encoder.target.label,
+							value: encoder.target.display,
+							role: encoder.target.role,
+						}
+					: undefined
+			}
+			secondary={
+				encoder.secondary
+					? {
+							label: encoder.secondary.label,
+							value: encoder.secondary.display,
+							role: encoder.secondary.role,
+						}
+					: undefined
+			}
+			editValue={encoder.value * (encoder.inputScale ?? 100)}
+			secondaryEditValue={
+				encoder.secondary?.value !== undefined
+					? encoder.secondary.value * (encoder.inputScale ?? 100)
+					: undefined
+			}
+			canRelease={encoder.canRelease}
+			presets={encoder.presets}
+			onEdit={absoluteHandler(encoder, callbacks)}
+			onEditRange={
+				callbacks.onRangeChange
+					? (points) => callbacks.onRangeChange?.(encoder.id, points)
+					: undefined
+			}
+			onSecondaryEdit={secondaryAbsoluteHandler(encoder, callbacks)}
+			onSecondaryEditRange={
+				callbacks.onRangeChange && encoder.secondary
+					? (points) =>
+							callbacks.onRangeChange?.(
+								encoder.secondary?.id ?? encoder.id,
+								points,
+							)
+					: undefined
+			}
+			onRelease={
+				encoder.canRelease && callbacks.onRelease
+					? () => callbacks.onRelease?.(encoder.id)
+					: undefined
+			}
+		/>
+	);
+}
+
+function absoluteHandler(
+	encoder: EncoderSectionItem,
+	callbacks: EncoderSectionCallbacks,
+) {
+	if (encoder.disabled || encoder.indexed || !encoder.target) return undefined;
+	return (points: number) =>
+		callbacks.onAbsoluteChange?.(
+			encoder.id,
+			clamped(
+				points / (encoder.inputScale ?? 100),
+				encoder.minimum,
+				encoder.maximum,
+			),
+		);
+}
+
+function secondaryAbsoluteHandler(
+	encoder: EncoderSectionItem,
+	callbacks: EncoderSectionCallbacks,
+) {
+	if (
+		encoder.disabled ||
+		encoder.indexed ||
+		!encoder.secondary ||
+		encoder.secondary.value === undefined
+	)
+		return undefined;
+	return (points: number) =>
+		callbacks.onAbsoluteChange?.(
+			encoder.secondary?.id ?? encoder.id,
+			clamped(
+				points / (encoder.inputScale ?? 100),
+				encoder.minimum,
+				encoder.maximum,
+			),
+		);
 }

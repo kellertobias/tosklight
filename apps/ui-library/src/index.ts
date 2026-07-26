@@ -1,4 +1,5 @@
 export * from "./controls";
+export * from "./command";
 export * from "./encoders";
 export * from "./desktop";
 export * from "./playback";

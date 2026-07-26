@@ -1,9 +1,13 @@
-import { cleanup, fireEvent, render as rtlRender, screen } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render as rtlRender,
+	screen,
+} from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModalProvider } from "../modals/ModalStack";
 import {
-	TOUCH_ENCODER_COARSE_THRESHOLD_PX,
 	TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS,
 	TOUCH_ENCODER_DRAG_DEAD_ZONE_PX,
 	TouchEncoder,
@@ -24,6 +28,8 @@ function renderEncoder(
 	render(
 		<TouchEncoder
 			label="Enc 1 · Pan"
+			slot={1}
+			attributeLabel="Pan"
 			display="50%"
 			value={0.5}
 			onStep={onStep}
@@ -43,17 +49,26 @@ describe("TouchEncoder", () => {
 		expect(surface?.querySelector(".touch-encoder-legend")).toHaveTextContent(
 			"Increase•••Set•••Decrease",
 		);
-		expect(surface?.querySelector(".touch-encoder-value")).toHaveTextContent("50%");
-		expect(document.querySelector(".touch-encoder > header")).not.toBeInTheDocument();
-		expect(document.querySelector(".touch-encoder-set")).not.toBeInTheDocument();
+		expect(surface?.querySelector(".touch-encoder-value")).toHaveTextContent(
+			"50%",
+		);
+		expect(
+			document.querySelector(".touch-encoder-drag-feedback"),
+		).not.toBeInTheDocument();
+		expect(surface?.querySelector(".touch-encoder-labels")).toHaveTextContent(
+			"PanEnc 1",
+		);
+		expect(
+			document.querySelector(".touch-encoder-set"),
+		).not.toBeInTheDocument();
 		fireEvent.click(
 			surface?.querySelector(".touch-encoder-tap-positive") as Element,
 		);
 		fireEvent.click(
 			surface?.querySelector(".touch-encoder-tap-negative") as Element,
 		);
-		expect(onStep).toHaveBeenNthCalledWith(1, 0.01);
-		expect(onStep).toHaveBeenNthCalledWith(2, -0.01);
+		expect(onStep).toHaveBeenNthCalledWith(1, 0.001);
+		expect(onStep).toHaveBeenNthCalledWith(2, -0.001);
 		expect(screen.queryByRole("slider")).not.toBeInTheDocument();
 		for (const removedName of ["+10", "+1", "−1", "−10"])
 			expect(
@@ -69,7 +84,7 @@ describe("TouchEncoder", () => {
 		expect(onStep).toHaveBeenCalledTimes(2);
 	});
 
-	it("uses one undo group while transitioning fine, coarse, fine, and reverse", () => {
+	it("uses one undo group while scaling linearly with drag distance and reversing", () => {
 		vi.useFakeTimers();
 		const { onStep } = renderEncoder();
 		const encoder = screen.getByRole("group", { name: "Enc 1 · Pan" });
@@ -85,7 +100,7 @@ describe("TouchEncoder", () => {
 		vi.advanceTimersByTime(TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS);
 		fireEvent.pointerMove(encoder, {
 			pointerId: 7,
-			clientY: 120 - TOUCH_ENCODER_COARSE_THRESHOLD_PX,
+			clientY: 72,
 		});
 		vi.advanceTimersByTime(TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS);
 		fireEvent.pointerMove(encoder, {
@@ -100,12 +115,44 @@ describe("TouchEncoder", () => {
 		vi.advanceTimersByTime(TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS);
 		fireEvent.pointerUp(encoder, { pointerId: 7, clientY: 140 });
 
-		expect(onStep.mock.calls.map(([delta]) => delta)).toEqual([
-			0.01, 0.1, 0.01, -0.01,
-		]);
+		const deltas = onStep.mock.calls.map(([delta]) => delta as number);
+		expect(deltas).toHaveLength(4);
+		expect(deltas[0]).toBeGreaterThanOrEqual(0.001);
+		expect(deltas[1]).toBeGreaterThan(deltas[0] ?? Number.POSITIVE_INFINITY);
+		expect(deltas[2]).toBeCloseTo(deltas[0] ?? 0, 8);
+		expect(deltas[3]).toBeCloseTo(-(deltas[0] ?? 0), 8);
 		const groups = new Set(onStep.mock.calls.map((call) => call[1]));
 		expect(groups.size).toBe(1);
 		expect([...groups][0]).toEqual(expect.any(String));
+	});
+
+	it("keeps ridges moving up while downward return travel slows them", () => {
+		renderEncoder();
+		const encoder = screen.getByRole("group", { name: "Enc 1 · Pan" });
+		fireEvent.pointerDown(encoder, {
+			pointerId: 4,
+			button: 0,
+			clientY: 120,
+		});
+		fireEvent.pointerMove(encoder, { pointerId: 4, clientY: 110 });
+		expect(encoder).toHaveAttribute("data-motion", "up");
+		const slowSpeed = Number.parseFloat(
+			encoder.style.getPropertyValue("--encoder-motion-speed"),
+		);
+		fireEvent.pointerMove(encoder, { pointerId: 4, clientY: 70 });
+		const fastSpeed = Number.parseFloat(
+			encoder.style.getPropertyValue("--encoder-motion-speed"),
+		);
+		expect(fastSpeed).toBeGreaterThan(slowSpeed);
+		fireEvent.pointerMove(encoder, { pointerId: 4, clientY: 90 });
+		expect(encoder).toHaveAttribute("data-motion", "up");
+		const returningSpeed = Number.parseFloat(
+			encoder.style.getPropertyValue("--encoder-motion-speed"),
+		);
+		expect(returningSpeed).toBeLessThan(fastSpeed);
+		expect(returningSpeed).toBeGreaterThan(slowSpeed);
+		fireEvent.pointerUp(encoder, { pointerId: 4, clientY: 90 });
+		expect(encoder).not.toHaveAttribute("data-motion");
 	});
 
 	it("can drag from every semantic zone and cancel stops repetition without a trailing action", () => {
@@ -141,12 +188,12 @@ describe("TouchEncoder", () => {
 	});
 
 	it("maps wheel direction to fine steps and Shift to coarse steps", () => {
-		const { onStep } = renderEncoder();
+		const { onStep } = renderEncoder({ slowStep: 0.0001, fastStep: 0.025 });
 		const encoder = screen.getByRole("group", { name: "Enc 1 · Pan" });
 		fireEvent.wheel(encoder, { deltaY: -10 });
 		fireEvent.wheel(encoder, { deltaY: 10, shiftKey: true });
-		expect(onStep).toHaveBeenNthCalledWith(1, 0.01);
-		expect(onStep).toHaveBeenNthCalledWith(2, -0.1);
+		expect(onStep).toHaveBeenNthCalledWith(1, 0.0001);
+		expect(onStep).toHaveBeenNthCalledWith(2, -0.025);
 	});
 
 	it("supports fine keyboard steps and keyboard absolute entry", () => {
@@ -154,13 +201,71 @@ describe("TouchEncoder", () => {
 		const encoder = screen.getByRole("group", { name: "Enc 1 · Pan" });
 		fireEvent.keyDown(encoder, { key: "ArrowUp" });
 		fireEvent.keyDown(encoder, { key: "ArrowLeft" });
-		expect(onStep).toHaveBeenNthCalledWith(1, 0.01);
-		expect(onStep).toHaveBeenNthCalledWith(2, -0.01);
+		expect(onStep).toHaveBeenNthCalledWith(1, 0.001);
+		expect(onStep).toHaveBeenNthCalledWith(2, -0.001);
 		fireEvent.keyDown(encoder, { key: "Enter" });
 		expect(screen.getByRole("dialog")).toBeInTheDocument();
 		expect(encoder).toHaveAccessibleDescription(
-			/Upper and lower surface taps step the value/u,
+			/The upper third increases the value and the lower third decreases it/u,
 		);
+	});
+
+	it("keeps internal values separate from rendered and entered values", () => {
+		const { onSet } = renderEncoder({
+			value: 520,
+			display: undefined,
+			formatValue: (value) => `${value / 10}%`,
+			minimum: 0,
+			maximum: 1000,
+			inputScale: 0.1,
+		});
+		expect(screen.getByText("52%")).toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
+		);
+		expect(
+			screen.getByRole("textbox", { name: "Enc 1 · Pan value" }),
+		).toHaveTextContent("52");
+		fireEvent.click(screen.getByRole("button", { name: "7" }));
+		fireEvent.click(screen.getByRole("button", { name: "5" }));
+		fireEvent.click(screen.getByRole("button", { name: "ENTER" }));
+		expect(onSet).toHaveBeenCalledWith(750);
+	});
+
+	it("stacks range endpoints around a centered ellipsis", () => {
+		renderEncoder({ display: "0% ... 100%" });
+		const value = screen.getByRole("button", {
+			name: "Set Enc 1 · Pan value",
+		});
+		expect(value).toHaveClass("range-value");
+		expect(value.querySelectorAll("span")).toHaveLength(2);
+		expect(value.querySelectorAll("span")[0]).toHaveTextContent("0%");
+		expect(value.querySelector("i")).toHaveTextContent("...");
+		expect(value.querySelectorAll("span")[1]).toHaveTextContent("100%");
+	});
+
+	it("uses the shared preset mode for absolute encoder values", () => {
+		const { onSet } = renderEncoder({
+			presets: {
+				groups: [
+					{
+						label: "Position",
+						options: [
+							{ value: "25", label: "Quarter" },
+							{ value: "75", label: "Three quarters" },
+						],
+					},
+				],
+			},
+		});
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Show presets" }));
+		fireEvent.click(screen.getByRole("button", { name: /Three quarters/u }));
+
+		expect(onSet).toHaveBeenCalledWith(0.75);
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
 
 	it("shows indexed values as constrained instead of applying a normalized step", () => {

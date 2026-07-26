@@ -44,8 +44,10 @@ export function ModalTitleBar({
 	const hasTabs = Boolean(tabs?.length);
 	return (
 		<header className={`ui-modal-titlebar ${className}`.trim()}>
-			<h2 className="ui-modal-title-heading">{title}</h2>
-			{details && <div className="ui-modal-title-details">{details}</div>}
+			<div className="ui-modal-title-copy">
+				<h2 className="ui-modal-title-heading">{title}</h2>
+				{details && <div className="ui-modal-title-details">{details}</div>}
+			</div>
 			<span className="ui-modal-title-spacer" />
 			{hasTabs && (
 				<div className="ui-modal-title-tabs" role="tablist">

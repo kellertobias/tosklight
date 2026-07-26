@@ -8,14 +8,13 @@ import {
 	stageSelection,
 	stageVisualization,
 } from "../../ui-library/storybook/fixtures/application";
+import { CommandSectionFixture } from "../../ui-library/storybook/fixtures/controlSection";
 import {
 	dmxOutputHealth,
 	dmxPatchedFixtures,
 	dmxSnapshot,
 } from "../../ui-library/storybook/fixtures/dmx";
 import { ApplicationStateHarness } from "../../ui-library/storybook/providers/ApplicationStateHarness";
-import { ControlSectionView } from "./components/control/ControlSection";
-import { CommandInputView } from "./components/control/commandLine/CommandInput";
 import { NumericPad } from "./components/control/NumericPad";
 import { AppShellView } from "./components/shell/AppShell";
 import { LeftDock } from "./components/shell/LeftDock";
@@ -109,36 +108,7 @@ function MarketingShell() {
 					</PaneView>
 				</GridDesktop>
 			}
-			control={
-				<ControlSectionView
-					mode="programmer"
-					hardware
-					commandLine={
-						<CommandInputView
-							commandError={null}
-							commandLine="FIXTURE 1 THRU 5 AT 72"
-							commandTarget="FIXTURE"
-							completed={false}
-							hardware
-							onExecute={async () => undefined}
-							onOpenHistory={() => undefined}
-							onReplace={() => undefined}
-							onToggleMode={() => undefined}
-							playback={false}
-							preloadArmed={false}
-							status={null}
-						/>
-					}
-					left={<div className="control-left-pane" />}
-					right={
-						<aside className="control-right-pane hardware-right-pane">
-							<div className="control-right-main">
-								<NumericPad demo />
-							</div>
-						</aside>
-					}
-				/>
-			}
+			control={<CommandSectionFixture initialMode="programmer" hardware />}
 		/>
 	);
 }

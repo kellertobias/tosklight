@@ -1,11 +1,11 @@
 import {
+	type ReactNode,
+	type PointerEvent as ReactPointerEvent,
 	useEffect,
 	useId,
 	useLayoutEffect,
 	useRef,
 	useState,
-	type PointerEvent as ReactPointerEvent,
-	type ReactNode,
 } from "react";
 import { Button } from "../common/controls/foundation";
 
@@ -31,6 +31,8 @@ function useModalInput(onKey: (key: string) => void) {
 				key !== "Backspace" &&
 				key !== "ArrowLeft" &&
 				key !== "ArrowRight" &&
+				key !== "ArrowUp" &&
+				key !== "ArrowDown" &&
 				key.length !== 1
 			)
 				return;
@@ -85,15 +87,27 @@ function replaceAtCaret(
 	};
 }
 
-export function ModalCaretValue({
-	value,
-	caret,
-	placeholder,
-	multiline = false,
-	secure = false,
-	onCaretChange,
-	ariaLabel,
-}: {
+function moveCaretByLine(value: string, caret: number, direction: -1 | 1) {
+	const position = Math.max(0, Math.min(caret, value.length));
+	const lineStart =
+		position === 0 ? 0 : value.lastIndexOf("\n", position - 1) + 1;
+	const column = position - lineStart;
+	if (direction < 0) {
+		if (lineStart === 0) return position;
+		const previousEnd = lineStart - 1;
+		const previousStart =
+			previousEnd === 0 ? 0 : value.lastIndexOf("\n", previousEnd - 1) + 1;
+		return previousStart + Math.min(column, previousEnd - previousStart);
+	}
+	const lineEnd = value.indexOf("\n", lineStart);
+	if (lineEnd < 0) return position;
+	const nextStart = lineEnd + 1;
+	const nextEnd = value.indexOf("\n", nextStart);
+	const resolvedNextEnd = nextEnd < 0 ? value.length : nextEnd;
+	return nextStart + Math.min(column, resolvedNextEnd - nextStart);
+}
+
+interface ModalCaretValueProps {
 	value: string;
 	caret: number;
 	placeholder?: string;
@@ -101,43 +115,211 @@ export function ModalCaretValue({
 	secure?: boolean;
 	onCaretChange?: (position: number) => void;
 	ariaLabel?: string;
-}) {
+}
+
+function useMultilineCaretPresentation(
+	value: string,
+	position: number,
+	onCaretChange?: (position: number) => void,
+) {
+	const input = useRef<HTMLTextAreaElement>(null);
+	const marker = useRef<HTMLElement>(null);
+	const [scrollTop, setScrollTop] = useState(0);
+	const [caretMoving, setCaretMoving] = useState(false);
+	const previousCaret = useRef(position);
+	const caretMovementTimer = useRef<number | null>(null);
+	const [pressedLineDirection, setPressedLineDirection] = useState<
+		-1 | 1 | null
+	>(null);
+	const linePressTimer = useRef<number | null>(null);
+	useEffect(() => {
+		if (previousCaret.current === position) return;
+		previousCaret.current = position;
+		setCaretMoving(true);
+		if (caretMovementTimer.current !== null)
+			window.clearTimeout(caretMovementTimer.current);
+		caretMovementTimer.current = window.setTimeout(() => {
+			setCaretMoving(false);
+			caretMovementTimer.current = null;
+		}, 520);
+		return () => {
+			if (caretMovementTimer.current !== null)
+				window.clearTimeout(caretMovementTimer.current);
+		};
+	}, [position]);
+	useEffect(
+		() => () => {
+			if (caretMovementTimer.current !== null)
+				window.clearTimeout(caretMovementTimer.current);
+			if (linePressTimer.current !== null)
+				window.clearTimeout(linePressTimer.current);
+		},
+		[],
+	);
+	useLayoutEffect(() => {
+		const control = input.current;
+		if (!control) return;
+		control.focus({ preventScroll: true });
+		if (
+			control.selectionStart !== position ||
+			control.selectionEnd !== position
+		)
+			control.setSelectionRange(position, position);
+		const frame = window.requestAnimationFrame(() => {
+			const caretMarker = marker.current;
+			if (caretMarker) {
+				const caretTop = caretMarker.offsetTop;
+				const caretBottom = caretTop + caretMarker.offsetHeight;
+				const visibleTop = control.scrollTop;
+				const visibleBottom = visibleTop + control.clientHeight;
+				if (caretTop < visibleTop + 8) {
+					control.scrollTop = Math.max(0, caretTop - 8);
+				} else if (caretBottom > visibleBottom - 8) {
+					control.scrollTop = Math.max(
+						0,
+						caretBottom - control.clientHeight + 8,
+					);
+				}
+			}
+			setScrollTop(control.scrollTop);
+		});
+		return () => window.cancelAnimationFrame(frame);
+	}, [position]);
+	const sync = (control: HTMLTextAreaElement) => {
+		onCaretChange?.(control.selectionStart);
+		setScrollTop(control.scrollTop);
+	};
+	const moveLine = (direction: -1 | 1) => {
+		setPressedLineDirection(direction);
+		if (linePressTimer.current !== null)
+			window.clearTimeout(linePressTimer.current);
+		linePressTimer.current = window.setTimeout(() => {
+			setPressedLineDirection(null);
+			linePressTimer.current = null;
+		}, 140);
+		onCaretChange?.(moveCaretByLine(value, position, direction));
+	};
+	return {
+		caretMoving,
+		input,
+		marker,
+		moveLine,
+		pressedLineDirection,
+		scrollTop,
+		setScrollTop,
+		sync,
+	};
+}
+
+function MultilineCaretValue({
+	value,
+	caret,
+	placeholder,
+	secure = false,
+	onCaretChange,
+	ariaLabel,
+}: ModalCaretValueProps) {
 	const position = Math.max(0, Math.min(caret, value.length));
 	const display = secure ? "•".repeat(value.length) : value;
-	const multilineInput = useRef<HTMLTextAreaElement>(null);
-	useLayoutEffect(() => {
-		if (!multiline || !multilineInput.current) return;
-		if (
-			multilineInput.current.selectionStart === position &&
-			multilineInput.current.selectionEnd === position
-		)
-			return;
-		multilineInput.current.focus({ preventScroll: true });
-		multilineInput.current.setSelectionRange(position, position);
-	}, [multiline, position]);
-	if (multiline) {
-		const syncCaret = (control: HTMLTextAreaElement) => {
-			onCaretChange?.(control.selectionStart);
-		};
-		return (
-			<textarea
-				ref={multilineInput}
-				className={`modal-caret-value multiline ${!value ? "is-empty" : ""}`}
-				aria-label={
-					ariaLabel ?? `Input value ${value || placeholder || "empty"}`
-				}
-				aria-placeholder={placeholder}
-				value={display}
-				placeholder={placeholder}
-				readOnly
-				spellCheck={false}
-				onClick={(event) => syncCaret(event.currentTarget)}
-				onPointerUp={(event) => syncCaret(event.currentTarget)}
-				onKeyUp={(event) => syncCaret(event.currentTarget)}
-				onSelect={(event) => syncCaret(event.currentTarget)}
-			/>
-		);
-	}
+	const presentation = useMultilineCaretPresentation(
+		value,
+		position,
+		onCaretChange,
+	);
+	return (
+		<div className="modal-multiline-value">
+			<div className="modal-multiline-editor">
+				<div className="modal-multiline-caret-layer" aria-hidden="true">
+					<div
+						className="modal-multiline-caret-content"
+						style={{ transform: `translateY(${-presentation.scrollTop}px)` }}
+					>
+						{value ? (
+							<>
+								<span>{display.slice(0, position)}</span>
+								<i
+									ref={presentation.marker}
+									data-caret-moving={presentation.caretMoving || undefined}
+								/>
+								<span>{display.slice(position)}</span>
+							</>
+						) : (
+							<>
+								<i
+									ref={presentation.marker}
+									data-caret-moving={presentation.caretMoving || undefined}
+								/>
+								<span className="modal-value-placeholder">{placeholder}</span>
+							</>
+						)}
+					</div>
+				</div>
+				<textarea
+					ref={presentation.input}
+					data-modal-initial-focus
+					className={`modal-caret-value multiline ${!value ? "is-empty" : ""}`}
+					aria-label={
+						ariaLabel ?? `Input value ${value || placeholder || "empty"}`
+					}
+					aria-placeholder={placeholder}
+					value={display}
+					placeholder={placeholder}
+					inputMode="none"
+					spellCheck={false}
+					onBeforeInput={(event) => event.preventDefault()}
+					onChange={(event) => presentation.sync(event.currentTarget)}
+					onClick={(event) => presentation.sync(event.currentTarget)}
+					onPointerUp={(event) => presentation.sync(event.currentTarget)}
+					onKeyUp={(event) => presentation.sync(event.currentTarget)}
+					onPaste={(event) => event.preventDefault()}
+					onScroll={(event) =>
+						presentation.setScrollTop(event.currentTarget.scrollTop)
+					}
+					onSelect={(event) => presentation.sync(event.currentTarget)}
+				/>
+			</div>
+			<div className="modal-multiline-cursors" aria-label="Cursor line">
+				<Button
+					iconOnly
+					aria-label="Move cursor up one line"
+					data-keyboard-pressed={
+						presentation.pressedLineDirection === -1 || undefined
+					}
+					onPointerDown={(event) => event.preventDefault()}
+					onClick={() => presentation.moveLine(-1)}
+				>
+					<svg viewBox="0 0 24 24" aria-hidden="true">
+						<path d="m5 15 7-7 7 7" />
+					</svg>
+				</Button>
+				<Button
+					iconOnly
+					aria-label="Move cursor down one line"
+					data-keyboard-pressed={
+						presentation.pressedLineDirection === 1 || undefined
+					}
+					onPointerDown={(event) => event.preventDefault()}
+					onClick={() => presentation.moveLine(1)}
+				>
+					<svg viewBox="0 0 24 24" aria-hidden="true">
+						<path d="m5 9 7 7 7-7" />
+					</svg>
+				</Button>
+			</div>
+		</div>
+	);
+}
+
+function SingleLineCaretValue({
+	value,
+	caret,
+	placeholder,
+	secure = false,
+	onCaretChange,
+	ariaLabel,
+}: ModalCaretValueProps) {
+	const position = Math.max(0, Math.min(caret, value.length));
+	const display = secure ? "•".repeat(value.length) : value;
 	const placeCaret = (event: ReactPointerEvent<HTMLOutputElement>) => {
 		if (!onCaretChange) return;
 		const element = event.currentTarget;
@@ -162,11 +344,10 @@ export function ModalCaretValue({
 	};
 	return (
 		<output
-			className={`modal-caret-value ${multiline ? "multiline" : ""} ${!value ? "is-empty" : ""}`}
+			className={`modal-caret-value ${!value ? "is-empty" : ""}`}
 			role="textbox"
 			aria-label={ariaLabel ?? `Input value ${value || placeholder || "empty"}`}
 			aria-placeholder={placeholder}
-			aria-multiline={multiline || undefined}
 			tabIndex={0}
 			onPointerDown={placeCaret}
 		>
@@ -181,6 +362,14 @@ export function ModalCaretValue({
 	);
 }
 
+export function ModalCaretValue(props: ModalCaretValueProps) {
+	return props.multiline ? (
+		<MultilineCaretValue {...props} />
+	) : (
+		<SingleLineCaretValue {...props} />
+	);
+}
+
 export function ModalNumberValue({
 	value,
 	caret,
@@ -188,6 +377,7 @@ export function ModalNumberValue({
 	unit,
 	onCaretChange,
 	ariaLabel,
+	pressedKey,
 }: {
 	value: string;
 	caret: number;
@@ -195,6 +385,7 @@ export function ModalNumberValue({
 	unit?: ReactNode;
 	onCaretChange: (position: number) => void;
 	ariaLabel?: string;
+	pressedKey?: string | null;
 }) {
 	const moveCaret = (offset: number) => {
 		onCaretChange(Math.max(0, Math.min(value.length, caret + offset)));
@@ -213,6 +404,7 @@ export function ModalNumberValue({
 				<Button
 					className="action cursor-left"
 					aria-label="Move cursor left"
+					data-keyboard-pressed={pressedKey === "ArrowLeft" || undefined}
 					onClick={() => moveCaret(-1)}
 				>
 					←
@@ -220,6 +412,7 @@ export function ModalNumberValue({
 				<Button
 					className="action cursor-right"
 					aria-label="Move cursor right"
+					data-keyboard-pressed={pressedKey === "ArrowRight" || undefined}
 					onClick={() => moveCaret(1)}
 				>
 					→
@@ -241,12 +434,27 @@ function NumberPadView({
 	press,
 	allowDecimal,
 	allowThrough,
+	pressedKey,
 }: {
 	root: ReturnType<typeof useModalInput>;
 	press: (key: string) => void;
 	allowDecimal: boolean;
 	allowThrough: boolean;
+	pressedKey: string | null;
 }) {
+	const pressed = (key: string) => {
+		const physicalKey =
+			key === "ENTER"
+				? "Enter"
+				: key === "ESC"
+					? "Escape"
+					: key === "⌫"
+						? "Backspace"
+						: key === "−"
+							? "-"
+							: key;
+		return pressedKey?.toLocaleLowerCase() === physicalKey.toLocaleLowerCase();
+	};
 	return (
 		<div
 			ref={root}
@@ -266,6 +474,7 @@ function NumberPadView({
 					return (
 						<Button
 							data-keypad-key={key}
+							data-keyboard-pressed={pressed(key) || undefined}
 							key={key}
 							style={{
 								gridColumn: columnIndex + 1,
@@ -304,10 +513,12 @@ export function ModalNumberInput({
 	replaceOnFirstInput = false,
 	allowDecimal = true,
 	allowThrough = false,
+	onPressedKeyChange,
 }: ModalInputProps & {
 	replaceOnFirstInput?: boolean;
 	allowDecimal?: boolean;
 	allowThrough?: boolean;
+	onPressedKeyChange?: (key: string | null) => void;
 }) {
 	const replace = useRef(replaceOnFirstInput);
 	const previousControlledCaret = useRef(controlledCaret);
@@ -315,6 +526,26 @@ export function ModalNumberInput({
 		value,
 		onCaretChange,
 		controlledCaret,
+	);
+	const [pressedKey, setPressedKey] = useState<string | null>(null);
+	const pressedTimer = useRef<number | null>(null);
+	const showPressedKey = (key: string) => {
+		if (pressedTimer.current !== null)
+			window.clearTimeout(pressedTimer.current);
+		setPressedKey(key);
+		onPressedKeyChange?.(key);
+		pressedTimer.current = window.setTimeout(() => {
+			setPressedKey(null);
+			onPressedKeyChange?.(null);
+			pressedTimer.current = null;
+		}, 140);
+	};
+	useEffect(
+		() => () => {
+			if (pressedTimer.current !== null)
+				window.clearTimeout(pressedTimer.current);
+		},
+		[],
 	);
 	useEffect(() => {
 		if (
@@ -332,6 +563,7 @@ export function ModalNumberInput({
 		setCaret(next.caret, next.value.length);
 	};
 	const press = (key: string) => {
+		showPressedKey(key);
 		if (key === "Escape") return onEscape();
 		if (key === "Enter") return onEnter();
 		if (key === "ArrowLeft") {
@@ -405,6 +637,7 @@ export function ModalNumberInput({
 			press={press}
 			allowDecimal={allowDecimal}
 			allowThrough={allowThrough}
+			pressedKey={pressedKey}
 		/>
 	);
 }
@@ -669,6 +902,7 @@ function TextKeyboardView({
 	multiline,
 	actionLabel,
 	press,
+	pressedKey,
 	keyValue,
 	shiftControls,
 }: {
@@ -676,12 +910,16 @@ function TextKeyboardView({
 	multiline: boolean;
 	actionLabel: string;
 	press: (key: string) => void;
+	pressedKey: string | null;
 	keyValue: (code: string) => string;
 	shiftControls: ReturnType<typeof useKeyboardShift>;
 }) {
+	const pressed = (key: string) =>
+		pressedKey?.toLocaleLowerCase() === key.toLocaleLowerCase();
 	const key = (code: string) => (
 		<Button
 			data-keyboard-code={code}
+			data-keyboard-pressed={pressed(keyValue(code)) || undefined}
 			key={code}
 			onClick={() => press(keyValue(code))}
 		>
@@ -693,10 +931,17 @@ function TextKeyboardView({
 			ref={root}
 			className="modal-text-keyboard"
 			aria-label="Full text keyboard"
+			onPointerDown={(event) => {
+				if ((event.target as Element).closest("button")) event.preventDefault();
+			}}
 		>
 			<div className="modal-keyboard-main">
 				<div className="modal-keyboard-row row-1">
-					<Button className="escape" onClick={() => press("Escape")}>
+					<Button
+						className="escape"
+						data-keyboard-pressed={pressed("Escape") || undefined}
+						onClick={() => press("Escape")}
+					>
 						<b>ESC</b>
 						<small>Cancel</small>
 					</Button>
@@ -712,6 +957,7 @@ function TextKeyboardView({
 					<Button
 						className="action cursor-left"
 						aria-label="Move cursor left"
+						data-keyboard-pressed={pressed("ArrowLeft") || undefined}
 						onClick={() => press("ArrowLeft")}
 					>
 						←
@@ -719,12 +965,17 @@ function TextKeyboardView({
 					<Button
 						className="action cursor-right"
 						aria-label="Move cursor right"
+						data-keyboard-pressed={pressed("ArrowRight") || undefined}
 						onClick={() => press("ArrowRight")}
 					>
 						→
 					</Button>
 					<span className="modal-keyboard-gap" aria-hidden="true" />
-					<Button className="space" onClick={() => press("SPACE")}>
+					<Button
+						className="space"
+						data-keyboard-pressed={pressed("SPACE") || undefined}
+						onClick={() => press("SPACE")}
+					>
 						SPACE
 					</Button>
 				</div>
@@ -734,6 +985,8 @@ function TextKeyboardView({
 					<>
 						<Button
 							className="action backspace"
+							aria-label="Backspace"
+							data-keyboard-pressed={pressed("Backspace") || undefined}
 							onClick={() => press("Backspace")}
 						>
 							<b>⌫</b>
@@ -742,6 +995,7 @@ function TextKeyboardView({
 						<Button
 							className="action newline"
 							aria-label="Enter · New line"
+							data-keyboard-pressed={pressed("Enter") || undefined}
 							onClick={() => press("Enter")}
 						>
 							<b>ENTER</b>
@@ -753,6 +1007,7 @@ function TextKeyboardView({
 						<Button
 							className="action backspace"
 							aria-label="Backspace"
+							data-keyboard-pressed={pressed("Backspace") || undefined}
 							onClick={() => press("Backspace")}
 						>
 							<b>⌫</b>
@@ -761,6 +1016,7 @@ function TextKeyboardView({
 						<Button
 							className="enter"
 							aria-label={`Enter · ${actionLabel}`}
+							data-keyboard-pressed={pressed("Enter") || undefined}
 							onClick={() => press("Enter")}
 						>
 							<b>ENTER</b>
@@ -790,12 +1046,31 @@ export function ModalTextKeyboard({
 		controlledCaret,
 	);
 	const shiftControls = useKeyboardShift();
+	const [pressedKey, setPressedKey] = useState<string | null>(null);
+	const pressedTimer = useRef<number | null>(null);
+	const showPressedKey = (key: string) => {
+		if (pressedTimer.current !== null)
+			window.clearTimeout(pressedTimer.current);
+		setPressedKey(key);
+		pressedTimer.current = window.setTimeout(() => {
+			setPressedKey(null);
+			pressedTimer.current = null;
+		}, 140);
+	};
+	useEffect(
+		() => () => {
+			if (pressedTimer.current !== null)
+				window.clearTimeout(pressedTimer.current);
+		},
+		[],
+	);
 	const update = (next: { value: string; caret: number }) => {
 		onChange(next.value);
 		const position = Math.max(0, Math.min(next.caret, next.value.length));
 		setCaret(position, next.value.length);
 	};
 	const press = (key: string) => {
+		showPressedKey(key);
 		if (key === "Escape") return onEscape();
 		if (key === "Enter")
 			return multiline
@@ -804,6 +1079,8 @@ export function ModalTextKeyboard({
 		if (key === "Confirm") return onEnter();
 		if (key === "ArrowLeft") return setCaret(caret - 1);
 		if (key === "ArrowRight") return setCaret(caret + 1);
+		if (key === "ArrowUp") return setCaret(moveCaretByLine(value, caret, -1));
+		if (key === "ArrowDown") return setCaret(moveCaretByLine(value, caret, 1));
 		if (key === "Backspace" || key === "⌫") {
 			return update(replaceAtCaret(value, caret, caret > 0 ? 1 : 0, ""));
 		}
@@ -835,6 +1112,7 @@ export function ModalTextKeyboard({
 			multiline={multiline}
 			actionLabel={actionLabel}
 			press={press}
+			pressedKey={pressedKey}
 			keyValue={keyValue}
 			shiftControls={shiftControls}
 		/>

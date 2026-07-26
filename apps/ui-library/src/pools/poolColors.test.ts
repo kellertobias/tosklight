@@ -83,5 +83,6 @@ describe("resolvePoolPresentation", () => {
 		]);
 		expect(presentation.className).toContain("pool-type-cuelist");
 		expect(presentation.className).toContain("record-target");
+		expect(presentation.style).not.toHaveProperty("--pool-card-color");
 	});
 });

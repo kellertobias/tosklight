@@ -5,10 +5,7 @@ import { isDmxPatchable } from "../patchUtils";
 import { usePatchController } from "./controller";
 import { armEdit, selectSplitAddress } from "./editSession";
 import { selectPatchFixture } from "./fixtureActions";
-import {
-	FixtureTypeIcon,
-	MultiPatchBranch,
-} from "./fixtureDisplay";
+import { FixtureTypeIcon, MultiPatchBranch } from "./fixtureDisplay";
 import { fixtureDisplayId } from "./fixtureIds";
 import { beginMultipatchEdit } from "./multipatchActions";
 import {
@@ -308,6 +305,7 @@ function MultiPatchRow({
 			</td>
 			<td />
 			<td className="multipatch-name">
+				<strong>{instance.name || "Multi-patch"}</strong>
 				<span>multi-patch</span>
 			</td>
 			<td />
@@ -334,7 +332,13 @@ function MultiPatchRow({
 					<Button
 						className="patch-value"
 						onClick={() =>
-							beginMultipatchEdit(controller, fixture, instance, "location", axis)
+							beginMultipatchEdit(
+								controller,
+								fixture,
+								instance,
+								"location",
+								axis,
+							)
 						}
 					>
 						{(instance.location[axis] / 1000).toFixed(3)} m
@@ -346,7 +350,13 @@ function MultiPatchRow({
 					<Button
 						className="patch-value"
 						onClick={() =>
-							beginMultipatchEdit(controller, fixture, instance, "rotation", axis)
+							beginMultipatchEdit(
+								controller,
+								fixture,
+								instance,
+								"rotation",
+								axis,
+							)
 						}
 					>
 						{Number(instance.rotation[axis].toFixed(3))}°

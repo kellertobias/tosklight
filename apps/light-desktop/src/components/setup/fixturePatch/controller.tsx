@@ -67,6 +67,7 @@ function usePatchUiState() {
 	const [selectedFixture, setSelectedFixture] = useState<string | null>(null);
 	const [browserOpen, setBrowserOpen] = useState(false);
 	const [placementOpen, setPlacementOpen] = useState(false);
+	const [placementAddressOpen, setPlacementAddressOpen] = useState(false);
 	const [layerModal, setLayerModal] = useState<"add" | "select" | null>(null);
 	const [layerName, setLayerName] = useState("");
 	const [query, setQuery] = useState("");
@@ -123,6 +124,8 @@ function usePatchUiState() {
 		setBrowserOpen,
 		placementOpen,
 		setPlacementOpen,
+		placementAddressOpen,
+		setPlacementAddressOpen,
 		layerModal,
 		setLayerModal,
 		layerName,
@@ -205,7 +208,10 @@ function usePatchDerivedState(
 		.sort(compareFixtureIds);
 	const availableDefinitions = useMemo(
 		() =>
-			mergeFixtureDefinitions(server?.fixtureProfiles ?? [], server?.fixtureLibrary ?? []),
+			mergeFixtureDefinitions(
+				server?.fixtureProfiles ?? [],
+				server?.fixtureLibrary ?? [],
+			),
 		[server?.fixtureProfiles, server?.fixtureLibrary],
 	);
 	const selected =

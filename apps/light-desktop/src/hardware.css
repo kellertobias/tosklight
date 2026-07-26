@@ -174,7 +174,7 @@
 	grid-auto-rows: minmax(62px, 1fr);
 	gap: 4px;
 }
-.hardware-connected .playback-fader-bank article {
+.hardware-connected .playback-fader-bank article:not(.playback-card) {
 	min-width: 0;
 	display: grid;
 	grid-template-columns: minmax(100px, 1fr) minmax(130px, 2fr) 62px;
@@ -183,13 +183,16 @@
 	gap: 5px;
 	padding: 4px;
 }
-.hardware-connected .playback-fader-bank article > b {
+.hardware-connected .playback-fader-bank article:not(.playback-card) > b {
 	align-self: center;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.hardware-connected .playback-fader-bank article > .vertical-touch-fader {
+.hardware-connected
+	.playback-fader-bank
+	article:not(.playback-card)
+	> .vertical-touch-fader {
 	display: grid;
 	grid-template-columns: 1fr auto;
 	grid-template-rows: auto 8px;
@@ -198,7 +201,7 @@
 }
 .hardware-connected
 	.playback-fader-bank
-	article
+	article:not(.playback-card)
 	> .vertical-touch-fader:before {
 	inset: auto 5px 5px;
 	height: 6px;
@@ -207,21 +210,32 @@
 }
 .hardware-connected
 	.playback-fader-bank
-	article
+	article:not(.playback-card)
 	> .vertical-touch-fader
 	strong {
 	margin: 0;
 	font-size: 13px;
 }
-.hardware-connected .playback-fader-bank article > .vertical-touch-fader input {
+.hardware-connected
+	.playback-fader-bank
+	article:not(.playback-card)
+	> .vertical-touch-fader
+	input {
 	display: none;
 }
-.hardware-connected .playback-fader-bank footer {
+.hardware-connected
+	.playback-fader-bank
+	article:not(.playback-card)
+	footer {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
 }
-.hardware-connected .playback-fader-bank footer button {
+.hardware-connected
+	.playback-fader-bank
+	article:not(.playback-card)
+	footer
+	button {
 	min-height: 0;
 	flex: 1;
 	border-radius: 3px;

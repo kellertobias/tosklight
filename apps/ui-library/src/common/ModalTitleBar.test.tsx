@@ -43,7 +43,7 @@ describe("ModalTitleBar", () => {
 		expect(select).toHaveBeenCalledWith("output");
 		const titlebar = container.querySelector(".ui-modal-titlebar")!;
 		expect([...titlebar.children].map((child) => child.className)).toEqual([
-			"ui-modal-title-heading",
+			"ui-modal-title-copy",
 			"ui-modal-title-spacer",
 			"ui-modal-title-tabs",
 			"ui-titlebar-search-divider",

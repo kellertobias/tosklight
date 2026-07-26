@@ -18,6 +18,7 @@ import {
   SwitchField,
   TextAreaField,
   TextField,
+  type ButtonVariant,
 } from "../controls";
 import { HorizontalFaderField } from "./FaderControls";
 
@@ -40,6 +41,11 @@ const meta = {
     disabled: { control: "boolean" },
     fullWidth: { control: "boolean" },
     iconOnly: { control: "boolean" },
+    icon: { control: "text" },
+    contentAlign: {
+      control: "inline-radio",
+      options: ["center", "left"],
+    },
   },
 } satisfies Meta<typeof Button>;
 
@@ -56,6 +62,7 @@ export const ButtonPlayground: Story = {
     disabled: false,
     fullWidth: false,
     iconOnly: false,
+    contentAlign: "center",
   },
   render: (args) => <Button {...args} />,
 };
@@ -73,8 +80,45 @@ export const Buttons: Story = {
       <Button disabled>Disabled</Button>
       <Button loading>Save</Button>
       <Button size="compact">Compact</Button>
-      <Button iconOnly aria-label="Settings">⚙</Button>
+      <Button iconOnly icon="⚙" aria-label="Settings" />
       <Button fullWidth>Full width</Button>
+    </div>
+  ),
+};
+
+const buttonVariantExamples: Array<{
+  variant: ButtonVariant;
+  label: string;
+  icon: string;
+}> = [
+  { variant: "primary", label: "Primary", icon: "▶" },
+  { variant: "secondary", label: "Secondary", icon: "✎" },
+  { variant: "ghost", label: "Ghost", icon: "◇" },
+  { variant: "danger", label: "Danger", icon: "⌫" },
+  { variant: "success", label: "Success", icon: "✓" },
+  { variant: "warning", label: "Warning", icon: "⚠" },
+];
+
+export const ButtonsWithIcons: Story = {
+  render: () => (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+      {buttonVariantExamples.map(({ variant, label, icon }) => (
+        <Button key={variant} variant={variant} icon={icon}>
+          {label}
+        </Button>
+      ))}
+    </div>
+  ),
+};
+
+export const LeftAlignedButtons: Story = {
+  render: () => (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(220px, 1fr))", gap: 10 }}>
+      {buttonVariantExamples.map(({ variant, label }) => (
+        <Button key={variant} variant={variant} contentAlign="left" fullWidth>
+          {label}
+        </Button>
+      ))}
     </div>
   ),
 };
@@ -84,6 +128,8 @@ function FormsExample() {
   const [password, setPassword] = useState("operator");
   const [rows, setRows] = useState("4");
   const [scale, setScale] = useState("1.25");
+  const [faderValue, setFaderValue] = useState("42");
+  const [presetValue, setPresetValue] = useState("50");
   const [mode, setMode] = useState("software");
   const [stageView, setStageView] = useState("2d");
   const [level, setLevel] = useState(68);
@@ -117,6 +163,27 @@ function FormsExample() {
       { value: "flash", label: "FLASH", icon: "⚡", description: "Output while the button is held." },
     ] },
   ] as const;
+  const valuePresets = {
+    groups: [
+      {
+        label: "Intensity",
+        options: [
+          { value: "0", label: "Off", description: "Release output to zero." },
+          { value: "25", label: "Quarter", description: "Low working level." },
+          { value: "50", label: "Half", description: "Balanced working level." },
+          { value: "100", label: "Full", description: "Maximum output." },
+        ],
+      },
+      {
+        label: "Operator defaults",
+        options: [
+          { value: "42", label: "House preset", icon: "★", description: "Stored house intensity." },
+          { value: "68", label: "Show level", icon: "●", description: "Current show default." },
+        ],
+      },
+    ],
+    selectedValue: presetValue,
+  } as const;
   return (
     <div className="forms-story-canvas">
       <section>
@@ -126,6 +193,12 @@ function FormsExample() {
           <TextField label="Password" secure value={password} onChange={(event) => setPassword(event.target.value)} />
           <NumberField label="Rows" value={rows} min={1} max={18} onValueChange={setRows} />
           <NumberField label="Scale" value={scale} allowDecimal step={0.05} unit="×" onValueChange={setScale} />
+          <NumberField label="Value with fader" value={faderValue} allowDecimal min={0} max={100}
+            modalFader={{ maximum: 100, step: 0.1, accentColor: "#1bd6ec" }}
+            onValueChange={setFaderValue} />
+          <NumberField label="Value with presets" value={presetValue} allowDecimal min={0} max={100}
+            modalPresets={valuePresets} onValueChange={setPresetValue}
+            onModalRelease={() => setPresetValue("")} modalReleaseLabel="Release value" />
           <NumberField label="Fixed value" value="512" showStepButtons={false} disabled />
           <SelectField label="Mode" value={mode} options={[
             { value: "software", label: "Software" },

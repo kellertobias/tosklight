@@ -37,11 +37,13 @@ const models: PoolCardViewModel[] = [
 		kind: "group",
 		states: ["selected"],
 		icon: "◇",
+		iconColor: "#5ff2ff",
+		iconBackgroundColor: "#16383d",
 		color: "#1bd6ec",
 	},
 	{
 		number: 2,
-		primary: "Front Wash",
+		primary: "Front Wash With A Deliberately Long Operator Name",
 		secondary: "4 fixtures · ordered",
 		details: ["1 portable attribute"],
 		kind: "group",
@@ -54,6 +56,7 @@ const models: PoolCardViewModel[] = [
 		secondary: "Revision 8",
 		kind: "group",
 		frozen: true,
+		frozenLabel: "Frozen · rev 8",
 	},
 	{
 		number: 4,
@@ -69,6 +72,10 @@ const models: PoolCardViewModel[] = [
 		details: ["Playbacks on pages 1, 2"],
 		kind: "cuelist",
 		states: ["active"],
+		image: {
+			src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 100'%3E%3Crect width='160' height='100' fill='%23182229'/%3E%3Ccircle cx='46' cy='50' r='24' fill='%231bd6ec' fill-opacity='.65'/%3E%3Ccircle cx='114' cy='50' r='24' fill='%23f4b942' fill-opacity='.65'/%3E%3C/svg%3E",
+			alt: "Stage look thumbnail",
+		},
 	},
 	{
 		number: 6,
@@ -79,19 +86,12 @@ const models: PoolCardViewModel[] = [
 	},
 	{
 		number: 7,
-		primary: "Store here",
+		primary: "Record here",
 		kind: "preset",
-		states: ["empty", "store-target"],
+		states: ["empty", "record-target"],
 	},
 	{ number: 8, primary: "Update", kind: "cuelist", states: ["update-target"] },
 	{ number: 9, primary: "Set target", kind: "cuelist", states: ["set-target"] },
-	{
-		number: 10,
-		primary: "Disabled",
-		secondary: "Other family",
-		kind: "preset",
-		states: ["disabled"],
-	},
 ];
 
 function PoolGridExample({ width, minimum, holdDelay }: PoolStoryProps) {
@@ -103,7 +103,7 @@ function PoolGridExample({ width, minimum, holdDelay }: PoolStoryProps) {
 			<output aria-live="polite" style={{ display: "block", minHeight: 28 }}>
 				{event}
 			</output>
-			<ButtonGrid className="card-pool" minimum={minimum}>
+			<ButtonGrid className="card-pool pool-filled-tinted" minimum={minimum}>
 				{models.map((model) => (
 					<PoolCard
 						key={String(model.number)}
@@ -125,6 +125,36 @@ export const ScalingAndEveryState: Story = {
 export const NarrowScaling: Story = {
 	args: { width: 340, minimum: 88 },
 	render: (args) => <PoolGridExample {...args} />,
+};
+
+export const OutlineOnlyFilledCards: Story = {
+	args: { width: 720, minimum: 132 },
+	render: ({ width, minimum, holdDelay }) => (
+		<div style={{ width }}>
+			<ButtonGrid className="card-pool pool-filled-outline" minimum={minimum}>
+				{models.slice(0, 5).map((model) => (
+					<PoolCard
+						key={String(model.number)}
+						model={model}
+						holdDelay={holdDelay}
+					/>
+				))}
+			</ButtonGrid>
+		</div>
+	),
+};
+
+export const FilteredNumbersStayStable: Story = {
+	args: { width: 360, minimum: 132 },
+	render: ({ width, minimum }) => (
+		<div style={{ width }}>
+			<ButtonGrid className="card-pool pool-filled-tinted" minimum={minimum}>
+				{[models[0], models[3]].map((model) => (
+					<PoolCard key={String(model.number)} model={model} />
+				))}
+			</ButtonGrid>
+		</div>
+	),
 };
 
 const defaultColorCards: Array<{
@@ -190,8 +220,8 @@ export const ConsistentObjectTypeColors: Story = {
 						states: ["update-target"] as const,
 					},
 					{
-						label: "Disabled empty",
-						states: ["disabled", "empty"] as const,
+						label: "Empty",
+						states: ["empty"] as const,
 					},
 				].map(({ label, color, states }, index) => {
 					const presentation = resolvePoolPresentation({

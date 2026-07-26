@@ -1,6 +1,6 @@
 import { FormLayout, NumberField, TextField } from "@tosklight/ui";
-import { useDmxDiagnostics } from "../../features/dmxDiagnostics/DmxDiagnosticsContext";
 import { OutputRoutesSetup } from "../../components/setup/OutputRoutesSetup";
+import { useDmxDiagnostics } from "../../features/dmxDiagnostics/DmxDiagnosticsContext";
 import type { SetupWindowController } from "./controller";
 
 export function OutputsSection({
@@ -53,19 +53,6 @@ export function OutputsSection({
 							backup_retention: Number(event.target.value),
 						})
 					}
-				/>
-				<NumberField
-					label="Autosave interval"
-					min="5"
-					max="3600"
-					value={draft.autosave_interval_seconds}
-					onChange={(event) =>
-						controller.editDraft({
-							...draft,
-							autosave_interval_seconds: Number(event.target.value),
-						})
-					}
-					description="5–3600 s between recovery checkpoints"
 				/>
 			</FormLayout>
 			<OutputRoutesSetup

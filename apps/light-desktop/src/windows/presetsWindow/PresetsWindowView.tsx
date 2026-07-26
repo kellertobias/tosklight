@@ -8,6 +8,7 @@ import {
 } from "@tosklight/ui";
 import {
 	INDIVIDUAL_POOL_COLOR_FALLBACK,
+	PoolCard,
 	type PoolColorMode,
 	PoolGrid,
 	type PoolSlotViewModel,
@@ -33,6 +34,8 @@ import {
 	presetStorageKey,
 } from "../../presetFamilies";
 
+const PRESET_POOL_MINIMUM_CARD_WIDTH = 88;
+
 export type PresetCustomization = {
 	title?: string;
 	icon?: string;
@@ -41,6 +44,8 @@ export type PresetCustomization = {
 
 interface PresetWindowHeaderProps {
 	family: PresetFamily;
+	compact?: boolean;
+	showFamilyActions?: boolean;
 	onFamily(family: PresetFamily): void;
 	onOpenGroups(): void;
 	onSettings(anchor: DOMRect): void;
@@ -48,21 +53,25 @@ interface PresetWindowHeaderProps {
 
 export function PresetWindowHeader({
 	family,
+	compact = false,
+	showFamilyActions = true,
 	onFamily,
 	onOpenGroups,
 	onSettings,
 }: PresetWindowHeaderProps) {
 	return (
 		<WindowHeader
-			title="Preset Pools"
-			info={{ primary: `${family} presets` }}
+			title={compact ? `${family} Presets` : "Preset Pools"}
+			info={compact ? undefined : { primary: `${family} presets` }}
 			actions={[
-				PRESET_FAMILIES.map((name) => ({
-					id: name,
-					label: name,
-					active: family === name,
-					onClick: () => onFamily(name),
-				})),
+				showFamilyActions
+					? PRESET_FAMILIES.map((name) => ({
+							id: name,
+							label: name,
+							active: family === name,
+							onClick: () => onFamily(name),
+						}))
+					: [],
 				[{ id: "groups", label: "Groups", onClick: onOpenGroups }],
 			]}
 			settings
@@ -117,6 +126,7 @@ export function PresetCardGrid({
 	return (
 		<WindowScrollArea>
 			<PoolGrid
+				minimumCardWidth={PRESET_POOL_MINIMUM_CARD_WIDTH}
 				slots={slots}
 				slotCount={cards.length}
 				emptySlot={(index) => ({
@@ -156,77 +166,40 @@ export function PresetCardGrid({
 							],
 						},
 					);
+					const cardColor = customization?.color ?? preset?.body.color;
 					return (
-						<Button
+						<PoolCard
 							disabled={filtered}
-							className={`preset-card pool-cell preset-family-${preset ? storedFamily.toLowerCase() : family.toLowerCase()} ${presentation.className} ${filtered ? "filtered" : ""}`}
+							className={`preset-card preset-family-${preset ? storedFamily.toLowerCase() : family.toLowerCase()} ${presentation.className} ${filtered ? "filtered" : ""}`}
 							style={presentation.style}
 							onClick={() => onActivate(index)}
-						>
-							<span className="number">{index + 1}</span>
-							<PresetCardContent
-								preset={preset}
-								filtered={filtered}
-								storedFamily={storedFamily}
-								customization={customization}
-								selectionCount={selectionCount}
-								storeArmed={storeArmed}
-								updateArmed={updateArmed}
-							/>
-						</Button>
+							model={{
+								number: preset?.body.number ?? index + 1,
+								primary: filtered
+									? "Other family"
+									: (customization?.title ?? preset?.body.name ?? "Empty"),
+								secondary: preset
+									? filtered
+										? storedFamily
+										: `${storedFamily} · ${Object.keys(preset.body.values).length} fixtures`
+									: updateArmed
+										? "Touch to check Update eligibility"
+										: selectionCount
+											? storeArmed
+												? "Record here"
+												: "Tap to record programmer"
+											: "Select fixtures to record",
+								icon: customization?.icon ?? preset?.body.icon,
+								iconColor: cardColor,
+								color: cardColor,
+								kind: "preset",
+								states: presentation.states,
+							}}
+						/>
 					);
 				}}
 			/>
 		</WindowScrollArea>
-	);
-}
-
-function PresetCardContent({
-	preset,
-	filtered,
-	storedFamily,
-	customization,
-	selectionCount,
-	storeArmed,
-	updateArmed,
-}: {
-	preset: PresetCard | null;
-	filtered: boolean;
-	storedFamily: PresetFamily;
-	customization?: PresetCustomization;
-	selectionCount: number;
-	storeArmed: boolean;
-	updateArmed: boolean;
-}) {
-	if (preset && !filtered)
-		return (
-			<>
-				<span className="preset-art">
-					{customization?.icon ?? preset.body.icon ?? "◇"}
-				</span>
-				<b>{customization?.title ?? preset.body.name}</b>
-				<small>
-					{storedFamily} · {Object.keys(preset.body.values).length} fixtures
-				</small>
-			</>
-		);
-	if (filtered) return <small>Other family</small>;
-	return (
-		<>
-			{customization?.icon && (
-				<span className="preset-art">{customization.icon}</span>
-			)}
-			<b>{customization?.title ?? "Empty"}</b>
-			<small>
-				{updateArmed
-					? "Touch to check Update eligibility"
-					: selectionCount
-						? storeArmed
-							? "Record here"
-							: "Tap to record programmer"
-						: "Select fixtures to record"}
-			</small>
-		</>
 	);
 }
 

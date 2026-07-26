@@ -1,22 +1,24 @@
+import { CommandLine, type CommandStatus } from "@tosklight/ui";
 import {
 	type Dispatch,
-	type RefObject,
 	type SetStateAction,
 	useEffect,
 	useRef,
 	useState,
 } from "react";
-import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotState";
-import { useShellStatusActions } from "../../features/shellStatus/ShellStatusActionsProvider";
-import { useServerError } from "../../features/shellStatus/ShellStatusState";
-import { useApp } from "../../state/AppContext";
-import { CommandInput } from "./commandLine/CommandInput";
-import { CommandLineHistoryPanel } from "./commandLine/CommandLineHistoryPanel";
+import { useCommandHistory } from "../../features/commandHistory/CommandHistoryState";
 import {
-	CommandErrorBanner,
-	PersistentErrorPopover,
-} from "./commandLine/CommandLineStatus";
-import { CommandRecordPreload } from "./commandLine/CommandRecordPreload";
+	useActiveTimecode,
+	useFrameRateHz,
+	useHardwareConnected,
+} from "../../features/deskSnapshot/DeskSnapshotState";
+import { useOutputRuntimeBlackout } from "../../features/outputRuntime/OutputRuntimeView";
+import { useShellStatusActions } from "../../features/shellStatus/ShellStatusActionsProvider";
+import {
+	useConnectionStatus,
+	useServerError,
+} from "../../features/shellStatus/ShellStatusState";
+import { useApp } from "../../state/AppContext";
 import { useCommandLineShortcuts } from "./commandLine/useCommandLineShortcuts";
 import { useCommandLineSurface } from "./commandLine/useCommandLineSurface";
 import { useRecordGesture } from "./commandLine/useRecordGesture";
@@ -84,35 +86,14 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	};
 }
 
-function useHistoryDismissal(
-	open: boolean,
-	panel: RefObject<HTMLElement | null>,
-	setOpen: Dispatch<SetStateAction<boolean>>,
-) {
-	useEffect(() => {
-		if (!open) return;
-		const closeOnEscape = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return;
-			event.preventDefault();
-			setOpen(false);
-		};
-		const closeOutside = (event: PointerEvent) => {
-			if (panel.current?.contains(event.target as Node)) return;
-			if ((event.target as Element | null)?.closest(".command-input")) return;
-			setOpen(false);
-		};
-		window.addEventListener("keydown", closeOnEscape, true);
-		window.addEventListener("pointerdown", closeOutside, true);
-		return () => {
-			window.removeEventListener("keydown", closeOnEscape, true);
-			window.removeEventListener("pointerdown", closeOutside, true);
-		};
-	}, [open, panel, setOpen]);
-}
-
-export function CommandLineBar() {
+function useCommandLineBarModel() {
 	const { state, dispatch } = useApp();
 	const hardwareAttached = useHardwareConnected();
+	const history = useCommandHistory();
+	const connection = useConnectionStatus();
+	const frequency = useFrameRateHz();
+	const timecode = useActiveTimecode();
+	const blackout = useOutputRuntimeBlackout() === true;
 	const serverError = useServerError();
 	const command = useCommandLineSurface({ selection: true });
 	const programmerActivity = useProgrammerValuesActivity();
@@ -124,8 +105,6 @@ export function CommandLineBar() {
 	const editGeneration = useRef(0);
 	const errors = useCommandErrors(setCompleted);
 	const [historyOpen, setHistoryOpen] = useState(false);
-	const historyPanel = useRef<HTMLElement | null>(null);
-	useHistoryDismissal(historyOpen, historyPanel, setHistoryOpen);
 	const hasRecordableContent =
 		command.selected.length > 0 ||
 		(programmerActivity.ready && programmerActivity.valueCount > 0) ||
@@ -195,6 +174,13 @@ export function CommandLineBar() {
 		if (!preload.ready || !preload.actions) return;
 		await preload.actions.release();
 	};
+	const openSystemControls = () =>
+		dispatch({
+			type: "SET_MODAL",
+			modal: "systemControlsOpen",
+			value: true,
+		});
+	const toggleControlMode = () => dispatch({ type: "TOGGLE_CONTROL_MODE" });
 	useCommandLineShortcuts(hardware, {
 		completed,
 		commandLine: command.text,
@@ -211,57 +197,84 @@ export function CommandLineBar() {
 		clear: () => numericPad.press("CLR"),
 		undo: () => numericPad.press("UND"),
 	});
+	const status: CommandStatus = {
+		connection,
+		frequency: typeof frequency === "number" ? frequency : "—",
+		timecode,
+		blackout,
+	};
+	return {
+		state,
+		hardware,
+		command,
+		preload,
+		history,
+		status,
+		completed,
+		errors,
+		historyOpen,
+		setHistoryOpen,
+		hasRecordableContent,
+		pendingSummary,
+		replaceCommand,
+		execute,
+		record,
+		advancePreload,
+		releasePreload,
+		openSystemControls,
+		toggleControlMode,
+	};
+}
+
+export function CommandLineBar() {
+	const model = useCommandLineBarModel();
 	return (
-		<header
-			className={`command-line-bar command-line-left ${state.controlMode === "playbacks" ? "playback-mode" : ""} ${errors.commandError ? "has-command-error" : ""}`}
-			aria-busy={!command.ready}
-			data-command-authority={command.ready ? "ready" : "loading"}
-		>
-			<CommandErrorBanner
-				message={errors.commandError}
-				onAcknowledge={errors.acknowledgeCommand}
-			/>
-			<CommandInput
-				playback={state.controlMode === "playbacks"}
-				hardware={hardware}
-				completed={completed}
-				commandError={errors.commandError}
-				commandLine={command.text}
-				commandTarget={command.target}
-				preloadArmed={preload.armed}
-				onReplace={replaceCommand}
-				onExecute={execute}
-				onOpenHistory={() => setHistoryOpen(true)}
-			/>
-			<CommandLineHistoryPanel
-				open={historyOpen}
-				panel={historyPanel}
-				onClose={() => setHistoryOpen(false)}
-				onReuse={(command) => {
-					replaceCommand(command);
-					setHistoryOpen(false);
-				}}
-			/>
-			<PersistentErrorPopover
-				message={errors.persistentError}
-				open={errors.errorOpen}
-				onClose={() => errors.setErrorOpen(false)}
-				onAcknowledge={errors.acknowledgePersistent}
-			/>
-			<CommandRecordPreload
-				hasRecordableContent={hasRecordableContent}
-				pendingSummary={pendingSummary}
-				preloadLabel={preload.armed ? "PRELOAD GO" : "PRELOAD"}
-				preloadArmed={preload.armed}
-				preloadActive={preload.active}
-				preloadReady={preload.ready}
-				onRecordStart={record.begin}
-				onRecordEnd={record.end}
-				onRecordCancel={record.cancel}
-				onRecordComplete={record.complete}
-				onAdvancePreload={advancePreload}
-				onReleasePreload={releasePreload}
-			/>
-		</header>
+		<CommandLine
+			mode={model.state.controlMode}
+			hardware={model.hardware}
+			ready={model.command.ready}
+			completed={model.completed}
+			commandError={model.errors.commandError}
+			persistentError={model.errors.persistentError}
+			persistentErrorOpen={model.errors.errorOpen}
+			commandLine={model.command.text}
+			commandTarget={model.command.target}
+			preloadArmed={model.preload.armed}
+			preloadActive={model.preload.active}
+			preloadReady={model.preload.ready}
+			preloadLabel={model.preload.armed ? "PRELOAD GO" : "PRELOAD"}
+			pendingSummary={model.pendingSummary}
+			recordState={
+				model.state.updateArmed
+					? "update-armed"
+					: model.state.storeArmed
+						? "record-armed"
+						: model.hasRecordableContent
+							? "ready"
+							: "empty"
+			}
+			recordShiftArmed={model.state.shiftArmed}
+			history={model.history}
+			historyOpen={model.historyOpen}
+			status={model.status}
+			onReplace={model.replaceCommand}
+			onExecute={model.execute}
+			onToggleMode={model.toggleControlMode}
+			onHistoryOpenChange={model.setHistoryOpen}
+			onReuseHistory={(command) => {
+				model.replaceCommand(command);
+				model.setHistoryOpen(false);
+			}}
+			onOpenStatus={model.openSystemControls}
+			onAcknowledgeCommandError={model.errors.acknowledgeCommand}
+			onPersistentErrorOpenChange={model.errors.setErrorOpen}
+			onAcknowledgePersistentError={model.errors.acknowledgePersistent}
+			onRecordStart={model.record.begin}
+			onRecordEnd={model.record.end}
+			onRecordCancel={model.record.cancel}
+			onRecordComplete={model.record.complete}
+			onAdvancePreload={model.advancePreload}
+			onReleasePreload={model.releasePreload}
+		/>
 	);
 }

@@ -1,14 +1,16 @@
+import type { VerticalTouchFaderAction } from "@tosklight/ui/faders";
+import {
+	HardwarePlaybackCardView,
+	type PlaybackCardKind,
+	type PlaybackCardSummary,
+	type PlaybackCardViewModel,
+} from "@tosklight/ui/playback";
 import type {
 	CSSProperties,
 	MouseEvent as ReactMouseEvent,
 	PointerEvent as ReactPointerEvent,
 } from "react";
-import {
-	HardwarePlaybackFaderView,
-	PlaybackActionButtons,
-} from "@tosklight/ui/playback";
 import type { PlaybackRuntimeProjection } from "../../../api/types";
-import type { VerticalTouchFaderAction } from "@tosklight/ui/faders";
 import { activateHardwareCard } from "./actions";
 import type { PlaybackBankController } from "./controller";
 import { playbackFaderDisplay } from "./feedback";
@@ -17,7 +19,6 @@ import { playbackRowUnits } from "./projection";
 import {
 	PlaybackAssignmentTarget,
 	PlaybackConfigurationTarget,
-	PlaybackRuntimeStatus,
 } from "./SlotControls";
 import type { PlaybackSlotProjection, PlaybackSnapshotActive } from "./types";
 
@@ -27,6 +28,9 @@ type HardwarePlaybackCardProps = {
 	active: PlaybackSnapshotActive | undefined;
 	runtimeProjection: PlaybackRuntimeProjection | undefined;
 	selected: boolean;
+	kind: PlaybackCardKind;
+	summary?: PlaybackCardSummary;
+	color: string;
 	hasFader: boolean;
 	value: number;
 	actions: VerticalTouchFaderAction[];
@@ -42,6 +46,9 @@ export function HardwarePlaybackCard({
 	active,
 	runtimeProjection,
 	selected,
+	kind,
+	summary,
+	color,
 	hasFader,
 	value,
 	actions,
@@ -58,106 +65,87 @@ export function HardwarePlaybackCard({
 		value,
 		runtimeProjection,
 	);
+	const model: PlaybackCardViewModel = {
+		page: controller.activePageNumber ?? 1,
+		slot,
+		row: rowIndex,
+		rowUnits: row ? playbackRowUnits(row, controller.hardware) : 1,
+		name: playback?.name ?? "Empty",
+		assigned: Boolean(playback),
+		kind,
+		selected,
+		selectionPending: controller.selectionPending,
+		className,
+		style: cardStyle,
+		color,
+		hasFader,
+		faderValue: value,
+		faderLabel: playback?.name ?? `Playback ${slot}`,
+		faderDisplay: display,
+		summary,
+		disabled: !playback || !controller.runtimeActions,
+		hardwarePickup:
+			active?.fader_pickup_required && active.fader_pickup_target != null
+				? {
+						physicalPosition: active.fader_position ?? 0,
+						pickupTarget: active.fader_pickup_target,
+					}
+				: undefined,
+		actions,
+	};
 	return (
-		// biome-ignore lint/a11y/useKeyWithClickEvents: The hardware card is a pointer selection surface whose actionable child controls retain their own keyboard semantics.
-		<article
-			data-page={controller.activePageNumber}
-			data-playback-slot={slot}
-			data-playback-row={rowIndex}
-			data-row-units={row ? playbackRowUnits(row, controller.hardware) : 1}
-			data-selected-playback={selected || undefined}
-			data-selection-pending={controller.selectionPending || undefined}
-			className={`hardware-playback-card ${className}`}
-			style={cardStyle}
-			onPointerDownCapture={interceptPointer}
-			onClickCapture={interceptClick}
-			onClick={(event) =>
-				void activateHardwareCard(controller, event, playback, slot)
-			}
-		>
-			<PlaybackAssignmentTarget controller={controller} slot={slot} />
-			<PlaybackConfigurationTarget
-				controller={controller}
-				playback={playback}
-				slot={slot}
-			/>
-			<header>
-				<div
-					className="playback-software-representation"
-					style={{
-						minWidth: 0,
-						width: "100%",
-						overflow: "hidden",
-						padding: 0,
-						textAlign: "left",
-						textOverflow: "ellipsis",
-						whiteSpace: "nowrap",
-						userSelect: "none",
-						cursor: "default",
-					}}
-				>
-					<b>
-						{slot} · {playback?.name ?? "Empty"}
-					</b>
-				</div>
-				<strong>
-					{controller.activePageNumber}.{slot}
-				</strong>
-			</header>
-			<PlaybackRuntimeStatus active={active} />
-			{cue ? (
-				<HardwareCueRows
-					cues={cue.cues}
-					cueIndex={cueIndex}
-					activatedAt={active?.activated_at}
-					compact={controller.rowCount === 2}
-					effectiveNextCueNumber={active?.effective_next_cue_number}
-					effectiveNextIsLoaded={active?.effective_next_is_loaded}
-				/>
-			) : group ? (
-				<div className="hardware-cue-list single">
-					<div className="hardware-cue-row current">
-						<span>GRP</span>
-						<b>{group.body.name ?? `Group ${group.id}`}</b>
-						<small>{value}% master</small>
-					</div>
-				</div>
-			) : (
-				<div className="hardware-cue-list single" />
-			)}
-			<div className="hardware-playback-controls">
-				<footer>
-					<PlaybackActionButtons actions={actions} />
-				</footer>
-				{hasFader && (
-					<HardwarePlaybackFaderView
-						ariaLabel={`Page ${controller.activePageNumber} playback ${slot} fader`}
-						disabled={!playback || !controller.runtimeActions}
-						display={display}
-						value={value}
-						pickup={
-							active?.fader_pickup_required &&
-							active.fader_pickup_target != null
-								? {
-										physicalPosition: active.fader_position ?? 0,
-										pickupTarget: active.fader_pickup_target,
-									}
-								: undefined
-						}
-						onChange={(next) =>
-							playback &&
-							void controller.runtimeActions?.poolPlaybackAction(
-								playback.number,
-								"master",
-								{
-									value: next / 100,
-									surface: "physical",
-								},
-							)
-						}
+		<HardwarePlaybackCardView
+			model={model}
+			slots={{
+				overlays: (
+					<>
+						<PlaybackAssignmentTarget controller={controller} slot={slot} />
+						<PlaybackConfigurationTarget
+							controller={controller}
+							playback={playback}
+							slot={slot}
+						/>
+					</>
+				),
+			}}
+			cueRows={
+				cue ? (
+					<HardwareCueRows
+						cues={cue.cues}
+						cueIndex={cueIndex}
+						activatedAt={active?.activated_at}
+						compact={controller.rowCount === 2}
+						effectiveNextCueNumber={active?.effective_next_cue_number}
+						effectiveNextIsLoaded={active?.effective_next_is_loaded}
 					/>
-				)}
-			</div>
-		</article>
+				) : group ? (
+					<div className="hardware-cue-list single">
+						<div className="hardware-cue-row current">
+							<span>GRP</span>
+							<b>{group.body.name ?? `Group ${group.id}`}</b>
+							<small>{value}% master</small>
+						</div>
+					</div>
+				) : (
+					<div className="hardware-cue-list single" />
+				)
+			}
+			callbacks={{
+				onPointerDownCapture: interceptPointer,
+				onClickCapture: interceptClick,
+				onActivate: (event) =>
+					void activateHardwareCard(controller, event, playback, slot),
+				onFaderChange: (next) =>
+					playback &&
+					void controller.runtimeActions?.poolPlaybackAction(
+						playback.number,
+						"master",
+						{
+							value: next / 100,
+							surface: "physical",
+						},
+					),
+			}}
+		/>
 	);
 }

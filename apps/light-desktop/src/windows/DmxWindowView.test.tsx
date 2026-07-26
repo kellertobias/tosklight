@@ -35,8 +35,8 @@ function renderView(overrides: Partial<Parameters<typeof DmxWindowView>[0]> = {}
 describe("DMX application view", () => {
   it("renders all 512 selectable addresses for every visible universe and the output summary", () => {
     const { container } = renderView();
-    expect(container.querySelectorAll(".dmx-universe")).toHaveLength(2);
-    expect(container.querySelectorAll(".dmx-universe button")).toHaveLength(1_024);
+    expect(container.querySelectorAll(".dmx-universe")).toHaveLength(4);
+    expect(container.querySelectorAll(".dmx-universe button")).toHaveLength(2_048);
     expect(screen.getByText("44.0 Hz")).toBeInTheDocument();
     expect(screen.getByText("170824")).toBeInTheDocument();
     expect(container.querySelector(".ui-data-table")).not.toBeInTheDocument();
@@ -61,7 +61,7 @@ describe("DMX application view", () => {
     expect(fixture).toHaveTextContent("Fixture patch");
     expect(fixture).toHaveTextContent("1.13–14");
     expect(fixture).toHaveTextContent("1 of 2");
-    expect(fixture).toHaveTextContent("fog");
+    expect(fixture).toHaveTextContent("intensity");
     expect(screen.getByRole("button", { name: /Raw value/u })).toBeInTheDocument();
 
     const changed = {

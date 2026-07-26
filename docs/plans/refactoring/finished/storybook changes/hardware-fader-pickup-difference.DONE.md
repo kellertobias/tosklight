@@ -130,20 +130,20 @@ directions without swapping the meanings of the two positions.
 
 ## Storybook states
 
-Add hardware-only deterministic stories for:
+The later playback-bank consolidation intentionally keeps only three playback stories. Pickup
+coverage therefore lives in:
 
-- physical 50%, target 75% — raise;
-- physical 75%, target 50% — lower;
-- physical 50%, target 50% — pickup satisfied/no red segment;
-- physical 75%, target 0% — current lower-to-zero behavior;
-- minimum and maximum boundary targets;
-- gradually approaching the target from both directions;
-- pickup release;
-- hardware disconnected/replaced; and
-- multiple hardware faders where only one requires pickup.
+- **Configurable Playback**, whose controls expose hardware/touch mode, fader presence,
+  `physicalPosition`, and `pickupTarget`, including equal, boundary, lower-to-zero, and released
+  configurations without adding one story per permutation;
+- **Eight By Two Hardware Bank**, which includes physical 50% / target 75% and physical 75% /
+  target 50% examples in the same representative bank; and
+- **Eight By Two Touch Bank**, which proves that the corresponding software surface renders no
+  pickup visualization.
 
-The corresponding touch-bank stories must explicitly prove that no pickup outline, label, or red
-difference segment is rendered from the same playback/output state.
+Authority replacement, hardware disconnect/reconnect, gradual approach, threshold release, and
+one-of-many ownership remain runtime/package interaction tests rather than separate catalog
+stories.
 
 ## Verification
 
@@ -203,9 +203,9 @@ Implemented the hardware-only pickup presentation end to end:
   `Pickup: lower to zero` feedback;
 - touch and faderless cards ignore pickup presentation even if the same model/runtime data is
   present;
-- added deterministic Storybook states for both directions, equal/released, lower-to-zero,
-  boundaries, approach/release, authority replacement, multiple faders, touch, and faderless
-  modes; and
+- added configurable Storybook coverage for equal/released, lower-to-zero, boundaries, and
+  faderless/touch exclusion, plus exact 50→75 and 75→50 examples in the representative hardware
+  bank; authority replacement and release remain covered at the runtime adapter boundary; and
 - added domain, wire decoder, runtime-store authority, desktop adapter, package geometry,
   accessibility, cross-mode, and focused Storybook browser coverage.
 

@@ -21,6 +21,7 @@ the steps in the right order. Run `npm run` to list every script.
 npm run dev                        # Light headless + Tauri app with UI hot reload
 npm run storybook                  # shared operator components, no Light server
 npm run storybook:build            # deterministic static Storybook artifact
+npm run screenshots:marketing      # recreate the reviewed marketing screenshot gallery
 npm run open                 # debug builds, stop old instances, open the app
 npm run manual               # PDF and HTML manuals from docs/help
 npm run bundle [install]    # release artifacts for macOS, Windows, Linux
@@ -61,6 +62,7 @@ Open `http://127.0.0.1:5000`. A new desk contains one enabled `Operator` user.
 | `npm run open` | The authoritative desktop path. Checks runtime migration, stops running instances (launchd + `light-headless`/`ToskLight`/vite), writes Tauri configs, runs the root workspace install, builds the control UI, builds `light-headless`, builds both Tauri debug bundles, copies the headless binary into `ToskLight.app/Contents/MacOS/light-headless`, submits it as launchd job `de.tokenet.tosklight.dev-server`, waits for readiness, **verifies the launchd PID owns that readiness**, and opens the app. |
 | `npm run storybook` | Serves the tracked `@tosklight/ui` package and its deterministic mock stories at `http://127.0.0.1:6006`, without a Light server or mutable show. |
 | `npm run storybook:build` | Builds the static review artifact under `.artifacts/build/storybook/ui`. |
+| `npm run screenshots:marketing` | Builds static Storybook and recreates every manifest-owned marketing PNG under `docs/marketing/assets/screenshots`; CI publishes this directory as the `marketing-screenshots` artifact consumed by the Pages build. |
 | `npm run manual` | Auto-provisions a pinned Python venv at `.artifacts/cache/manual-venv`, then builds and verifies the PDF and the HTML manual. See the [manual authoring guide](../help/99-Development/04-manual-and-help-screenshots.md). |
 | `npm run bundle` | Cross-platform release. macOS universal binary via `lipo`, plus Windows `x86_64-pc-windows-gnu` and Linux `x86_64`/`aarch64-unknown-linux-musl` via `cargo zigbuild`. Release Tauri bundles for both apps; each server zipped with `assets/fixture-library`. Requires `cargo, npm, ditto, zip, lipo, rustup, cargo-zigbuild, zig`. |
 | `npm run bundle:install` | The above, then install into `~/Applications` and open. |

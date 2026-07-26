@@ -195,6 +195,10 @@ Focused verification passed:
 - 22 focused UI-library and desktop unit tests;
 - the production Storybook build;
 - three focused Storybook geometry/scroll/resize browser scenarios; and
+- the live application `POOL-SQUARE @ui` scenario in
+  `tests/19-manual-review-software-corrections.spec.ts`, which opens a real Group Pool pane,
+  measures its cards, resizes the pane, maximizes it, restores it, and rechecks square geometry
+  and usable vertical scrolling at every stage; and
 - repository architecture and diff checks.
 
 The narrow/short and wide/tall production Group stories were also reviewed visually. The root

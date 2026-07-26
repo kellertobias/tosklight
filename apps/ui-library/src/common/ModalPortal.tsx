@@ -35,6 +35,6 @@ export function ModalPortal({
 
 /** Keeps an explicitly non-modal popover inside the active modal stacking context. */
 export function activeModalPortalRoot(): Element {
-  return document.querySelector('.ui-modal-stack-layer[data-modal-top="true"]')
+  return document.querySelector('[data-modal-id][data-modal-top="true"]')
     ?? document.body;
 }

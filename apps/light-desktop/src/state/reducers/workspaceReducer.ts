@@ -113,9 +113,7 @@ export function reduceWorkspace(
 				title:
 					kind === "help"
 						? "Help"
-						: kind === "development"
-							? "Development"
-							: kind === "virtual_playbacks"
+						: kind === "virtual_playbacks"
 								? "Virtual Playbacks"
 								: kind === "file_manager"
 									? "File Manager"

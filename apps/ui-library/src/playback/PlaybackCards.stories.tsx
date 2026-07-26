@@ -1,342 +1,511 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
 	HardwareCueRowsView,
 	PlaybackBankView,
+	type PlaybackCardKind,
+	type PlaybackCardSummary,
 	type PlaybackCardViewModel,
 } from "../playback";
 
-interface PlaybackStoryProps {
+interface ConfigurablePlaybackStoryProps {
 	mode: "touch" | "hardware";
-	columns: number;
-	selectedSlot: number;
-	showEmpty: boolean;
-	state:
-		| "normal"
-		| "running"
-		| "loaded"
-		| "pickup"
-		| "bump"
-		| "held-flash"
-		| "held-swap"
-		| "levels"
-		| "long";
+	playbacksWide: number;
+	playbacksHigh: number;
+	availableWidth: number;
+	kind: PlaybackCardKind;
+	name: string;
+	page: number;
+	slot: number;
+	summaryLabel: string;
+	summaryDetail: string;
+	progress: number;
+	buttonCount: 1 | 2 | 3;
+	topButton: string;
+	middleButton: string;
+	bottomButton: string;
+	activeButton: "none" | "top" | "middle" | "bottom";
+	hasFader: boolean;
+	faderValue: number;
+	empty: boolean;
+	selected: boolean;
+	pickupRequired: boolean;
+	physicalPosition: number;
+	pickupTarget: number;
 }
 
-const meta: Meta<PlaybackStoryProps> = {
+const meta: Meta<ConfigurablePlaybackStoryProps> = {
 	title: "Playbacks/Playback bank",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	argTypes: {
 		mode: { control: "inline-radio", options: ["touch", "hardware"] },
-		columns: { control: { type: "range", min: 1, max: 4, step: 1 } },
-		selectedSlot: { control: { type: "range", min: 1, max: 4, step: 1 } },
-		showEmpty: { control: "boolean" },
+		playbacksWide: {
+			control: { type: "range", min: 1, max: 12, step: 1 },
+		},
+		playbacksHigh: {
+			control: { type: "range", min: 1, max: 6, step: 1 },
+		},
+		availableWidth: {
+			control: { type: "range", min: 640, max: 1600, step: 10 },
+		},
+		kind: {
+			control: "select",
+			options: [
+				"cue-list",
+				"group-master",
+				"speed-group",
+				"special-master",
+				"empty",
+			],
+		},
+		name: { control: "text" },
+		page: { control: { type: "number", min: 1, step: 1 } },
+		slot: { control: { type: "number", min: 1, step: 1 } },
+		summaryLabel: { control: "text" },
+		summaryDetail: { control: "text" },
+		progress: { control: { type: "range", min: 0, max: 1, step: 0.01 } },
+		buttonCount: { control: "inline-radio", options: [1, 2, 3] },
+		topButton: { control: "text" },
+		middleButton: { control: "text" },
+		bottomButton: { control: "text" },
+		activeButton: {
+			control: "inline-radio",
+			options: ["none", "top", "middle", "bottom"],
+		},
+		hasFader: { control: "boolean" },
+		faderValue: { control: { type: "range", min: 0, max: 100, step: 1 } },
+		empty: { control: "boolean" },
+		selected: { control: "boolean" },
+		pickupRequired: { control: "boolean" },
+		physicalPosition: {
+			control: { type: "range", min: 0, max: 1, step: 0.01 },
+			if: { arg: "pickupRequired", truthy: true },
+		},
+		pickupTarget: {
+			control: { type: "range", min: 0, max: 1, step: 0.01 },
+			if: { arg: "pickupRequired", truthy: true },
+		},
 	},
 	args: {
 		mode: "touch",
-		columns: 4,
-		selectedSlot: 1,
-		showEmpty: true,
-		state: "normal",
+		playbacksWide: 8,
+		playbacksHigh: 2,
+		availableWidth: 960,
+		kind: "cue-list",
+		name: "Main Cuelist",
+		page: 2,
+		slot: 1,
+		summaryLabel: "4 · Mephisto Stage Center",
+		summaryDetail: "3.2s",
+		progress: 0.62,
+		buttonCount: 3,
+		topButton: "GO −",
+		middleButton: "GO +",
+		bottomButton: "FLASH",
+		activeButton: "none",
+		hasFader: true,
+		faderValue: 62,
+		empty: false,
+		selected: false,
+		pickupRequired: false,
+		physicalPosition: 0.25,
+		pickupTarget: 0.75,
 	},
 };
 
 export default meta;
-type Story = StoryObj<PlaybackStoryProps>;
+type Story = StoryObj<ConfigurablePlaybackStoryProps>;
 
-function model(
-	slot: number,
-	value: number,
-	selectedSlot: number,
-	assigned = true,
-	state: PlaybackStoryProps["state"] = "normal",
-): PlaybackCardViewModel {
-	const isBump = state === "bump" && slot === 3;
-	const hasFader = !isBump;
-	const exceptional = slot === 1;
-	const status = exceptional
-		? state === "loaded"
-			? { kind: "loaded" as const, label: "LOADED" }
-			: state === "held-flash"
-					? { kind: "flash" as const, label: "FLASH HELD" }
-					: state === "held-swap"
-						? { kind: "swap" as const, label: "SWAP HELD" }
-						: undefined
-		: undefined;
+const bankExamples: Array<{
+	kind: PlaybackCardKind;
+	name: string;
+	summary: PlaybackCardSummary | undefined;
+}> = [
+	{
+		kind: "cue-list",
+		name: "Main Cuelist",
+		summary: {
+			label: "4 · Mephisto Stage Center",
+			detail: "3.2s",
+			progress: 0.62,
+		},
+	},
+	{
+		kind: "group-master",
+		name: "Profile Group",
+		summary: { label: "12 Fixtures", detail: "62%" },
+	},
+	{
+		kind: "cue-list",
+		name: "House Sequence",
+		summary: {
+			label: "120 BPM",
+			detail: "running",
+			beat: { count: 4, active: 2 },
+		},
+	},
+	{
+		kind: "speed-group",
+		name: "Speed Master",
+		summary: {
+			label: "128 BPM",
+			detail: "manual",
+			beat: { count: 4, active: 0 },
+		},
+	},
+	{
+		kind: "special-master",
+		name: "Playback Fade Time",
+		summary: { label: "Playback fade", detail: "2.5s" },
+	},
+	{
+		kind: "special-master",
+		name: "Grand Master",
+		summary: { label: "Grand master", detail: "100%" },
+	},
+	{
+		kind: "special-master",
+		name: "Programmer Fade",
+		summary: { label: "Programmer fade", detail: "1.0s" },
+	},
+	{ kind: "empty", name: "Empty", summary: undefined },
+];
+
+function actionModels(
+	count: 1 | 2 | 3,
+	labels: readonly string[],
+	activeButton: ConfigurablePlaybackStoryProps["activeButton"] = "none",
+) {
+	const activeIndex = {
+		none: -1,
+		top: 0,
+		middle: 1,
+		bottom: 2,
+	}[activeButton];
+	return Array.from({ length: count }, (_, index) => ({
+		id: `action-${index}`,
+		label: labels[index] || `BUTTON ${index + 1}`,
+		className: index === activeIndex ? "playback-button-active" : undefined,
+	}));
+}
+
+function ConfigurablePlaybackExample(args: ConfigurablePlaybackStoryProps) {
+	const [value, setValue] = useState(args.faderValue);
+	useEffect(() => setValue(args.faderValue), [args.faderValue]);
+	const assigned = !args.empty && args.kind !== "empty";
+	const model: PlaybackCardViewModel = {
+		page: args.page,
+		slot: args.slot,
+		row: 0,
+		rowUnits: args.hasFader ? 4 : 2,
+		name: assigned ? args.name : "Empty",
+		assigned,
+		kind: assigned ? args.kind : "empty",
+		selected: args.selected,
+		hasFader: assigned && args.hasFader,
+		faderValue: value,
+		faderLabel: "Master",
+		faderDisplay: `${Math.round(value)}%`,
+		summary: assigned
+			? {
+					label: args.summaryLabel,
+					detail: args.summaryDetail,
+					progress: args.progress,
+				}
+			: undefined,
+		hardwarePickup:
+			assigned &&
+			args.mode === "hardware" &&
+			args.hasFader &&
+			args.pickupRequired
+				? {
+						physicalPosition: args.physicalPosition,
+						pickupTarget: args.pickupTarget,
+					}
+				: undefined,
+		actions: assigned
+			? actionModels(
+					args.buttonCount,
+					[args.topButton, args.middleButton, args.bottomButton],
+					args.activeButton,
+				)
+			: [],
+	};
+	return (
+		<div
+			style={{
+				width: args.mode === "touch" ? 330 : 300,
+				height: args.mode === "touch" ? 560 : 300,
+			}}
+		>
+			<PlaybackBankView
+				mode={args.mode}
+				columns={1}
+				items={[
+					{
+						model,
+						callbacks: { onFaderChange: setValue },
+						cueRows:
+							args.mode === "hardware" && args.kind === "cue-list" ? (
+								<HardwareCueRowsView
+									previous={{ number: 3, name: "Previous" }}
+									current={{
+										number: 4,
+										name: args.summaryLabel,
+										fadeMillis: 3200,
+									}}
+									next={{ number: 5, name: "Next" }}
+									progress={args.progress}
+								/>
+							) : undefined,
+					},
+				]}
+			/>
+		</div>
+	);
+}
+
+function bankModel({
+	exampleIndex,
+	itemIndex,
+	mode,
+	row,
+	rows,
+	value,
+}: {
+	exampleIndex: number;
+	itemIndex: number;
+	mode: "touch" | "hardware";
+	row: number;
+	rows: number;
+	value: number;
+}): PlaybackCardViewModel {
+	const example = bankExamples[exampleIndex] ?? bankExamples[0];
+	const assigned = example.kind !== "empty";
+	const faderRow = rows <= 2 && row === rows - 1;
+	const labelOnly = mode === "hardware" && rows >= 5;
+	const buttonCount: 1 | 2 | 3 =
+		rows === 1 || faderRow
+			? 3
+			: mode === "hardware" && (rows === 3 || rows === 4)
+				? 1
+				: rows === 2
+					? 1
+					: itemIndex % 2 === 0
+						? 1
+						: 2;
+	const loaded = exampleIndex === 0 && faderRow;
+	const activeButton =
+		assigned && exampleIndex === 2 && faderRow
+			? buttonCount === 1
+				? "top"
+				: buttonCount === 2
+					? "middle"
+					: "bottom"
+			: "none";
+	const faderValue =
+		exampleIndex === 5
+			? 100
+			: exampleIndex === 4
+				? 35
+				: exampleIndex === 6
+					? 48
+					: value;
 	return {
 		page: 2,
-		slot,
-		row: 0,
-		rowUnits: slot === 1 ? 4 : 2,
-		name: assigned
-			? state === "long" && slot === 1
-				? "A Deliberately Long Production Playback Title"
-				: ["Main Cuelist", "Front Wash", "Bump", "Page Chase"][slot - 1]
-			: "Empty",
+		slot: itemIndex + 1,
+		row,
+		rowUnits: faderRow ? (mode === "touch" ? 4 : 2) : 1,
+		name: example.name,
 		assigned,
-		selected: slot === selectedSlot,
-		className: assigned
-			? `playback-colored ${exceptional && state === "running" ? "running" : ""} ${exceptional && state === "loaded" ? "loaded" : ""} ${exceptional && state === "held-swap" ? "swap-active" : ""} ${slot === selectedSlot ? "selected" : ""}`
-			: "empty",
-		color: assigned
-			? ["#176777", "#925ad1", "#d98236", "#2874bd"][slot - 1]
+		kind: example.kind,
+		selected: exampleIndex === 1 && row === rows - 1,
+		className: faderRow ? undefined : "playback-row-compact",
+		hasFader: assigned && faderRow,
+		faderValue,
+		faderLabel: "Master",
+		faderDisplay: `${Math.round(faderValue)}%`,
+		status: loaded ? { kind: "loaded", label: "LOADED" } : undefined,
+		hardwareButtonLabel: labelOnly
+			? assigned
+				? exampleIndex === 2
+					? "PAUSE"
+					: "GO −"
+				: ""
 			: undefined,
-		hasFader,
-		faderValue: value,
-		faderLabel: `Playback ${slot}`,
-		faderDisplay: `${Math.round(value)}%`,
-		faderMode:
-			slot === 1
-				? state === "long"
-					? "Cue 104 · A deliberately long production cue name"
-					: "Cue 4 · Solo"
+		summary:
+			assigned && example.summary
+				? {
+						...example.summary,
+					}
 				: undefined,
 		hardwarePickup:
-			exceptional && state === "pickup"
-				? { physicalPosition: value / 100, pickupTarget: 0 }
-				: undefined,
-		status,
-		actions: assigned
-			? isBump
-				? [{ id: "flash", label: "FLASH" }]
-				: [
-						{ id: "go", label: state === "long" ? "SELECT CONTENTS" : "GO +" },
-						{ id: "off", label: "OFF" },
-						{ id: "flash", label: state === "held-swap" ? "SWAP" : "FLASH" },
-					]
+			mode === "hardware" && faderRow && exampleIndex === 1
+				? { physicalPosition: 0.75, pickupTarget: 0.5 }
+				: mode === "hardware" && faderRow && exampleIndex === 2
+					? { physicalPosition: 0.5, pickupTarget: 0.75 }
+					: undefined,
+		actions: assigned && !labelOnly
+			? actionModels(
+					buttonCount,
+					[
+						exampleIndex === 2 ? "PAUSE" : "GO −",
+						exampleIndex === 2 ? "TAP" : "GO +",
+						"FLASH",
+					],
+					activeButton,
+				)
 			: [],
 	};
 }
 
-function BankExample({
+function PlaybackGroupExample({
 	mode,
-	columns,
-	selectedSlot,
-	showEmpty,
-	state,
-}: PlaybackStoryProps) {
-	const [values, setValues] = useState<Record<number, number>>({
-		1: state === "levels" ? 0 : 62,
-		2: state === "levels" ? 50 : 85,
-		3: state === "levels" ? 100 : 0,
-		4: 0,
-	});
-	const assignedCount = showEmpty ? Math.min(columns, 3) : columns;
-	const items = Array.from({ length: columns }, (_, index) => {
-		const slot = index + 1;
-		const assigned = slot <= assignedCount;
+	playbacksWide,
+	playbacksHigh,
+	availableWidth,
+}: {
+	mode: "touch" | "hardware";
+	playbacksWide: number;
+	playbacksHigh: number;
+	availableWidth: number;
+}) {
+	const columns = Math.max(1, Math.min(12, Math.round(playbacksWide)));
+	const rows = Math.max(1, Math.min(6, Math.round(playbacksHigh)));
+	const requestedWidth = Math.max(
+		640,
+		Math.min(1600, Math.round(availableWidth)),
+	);
+	const [width, setWidth] = useState(requestedWidth);
+	const [values, setValues] = useState<Record<number, number>>({});
+	useEffect(() => setWidth(requestedWidth), [requestedWidth]);
+	const items = Array.from({ length: columns * rows }, (_, itemIndex) => {
+		const row = Math.floor(itemIndex / columns);
+		const exampleIndex = itemIndex % bankExamples.length;
+		const model = bankModel({
+			exampleIndex,
+			itemIndex,
+			mode,
+			row,
+			rows,
+			value: values[itemIndex] ?? 62,
+		});
+		const loaded = exampleIndex === 0 && row === rows - 1;
 		return {
-			model: model(slot, values[slot] ?? 0, selectedSlot, assigned, state),
+			model,
 			callbacks: {
-				onFaderChange: (value: number) =>
-					setValues((current) => ({ ...current, [slot]: value })),
+				onFaderChange: (next: number) =>
+					setValues((current) => ({
+						...current,
+						[itemIndex]: Math.round(next),
+					})),
 			},
 			cueRows:
-				slot === 1 ? (
+				mode === "hardware" && model.kind === "cue-list" ? (
 					<HardwareCueRowsView
-						previous={{ number: 3, name: "Look" }}
-						current={{ number: 4, name: "Solo", fadeMillis: 2500 }}
-						next={{
-							number: 5,
-							name:
-								state === "long"
-									? "Blackout with a deliberately long cue name"
-									: "Blackout",
+						previous={{ number: 3, name: "House Open" }}
+						current={{
+							number: 4,
+							name: "Mephisto Stage Center",
+							fadeMillis: 2500,
 						}}
-						nextLoaded={state === "loaded"}
-						progress={0.42}
+						next={{ number: 5, name: "Stage Blackout" }}
+						nextLoaded={loaded}
+						progress={0.46}
 					/>
 				) : undefined,
-			group:
-				slot === 2
-					? { name: "Front Wash", master: `${values[slot]}%` }
-					: undefined,
 		};
 	});
 	return (
-		<div
-			style={{
-				width: Math.max(420, columns * 180),
-				height: mode === "touch" ? 560 : 290,
-			}}
-		>
-			<PlaybackBankView mode={mode} items={items} />
-		</div>
+		<section style={{ width: "fit-content" }}>
+			<label
+				style={{
+					width,
+					height: 24,
+					display: "grid",
+					gridTemplateColumns: "auto minmax(180px, 1fr) auto",
+					alignItems: "center",
+					gap: 8,
+					color: "#a5afb6",
+					fontSize: 11,
+				}}
+			>
+				<span>Available width</span>
+				<input
+					aria-label={`${mode} playback group available width`}
+					type="range"
+					min="640"
+					max="1600"
+					step="10"
+					value={width}
+					onChange={(event) => setWidth(Number(event.currentTarget.value))}
+				/>
+				<output>{width}px</output>
+			</label>
+			<div
+				data-playback-group-frame={mode}
+				style={{
+					width,
+					height: mode === "touch" ? 280 : 140,
+				}}
+			>
+				<PlaybackBankView
+					mode={mode}
+					columns={columns}
+					items={items}
+					rowWeights={
+						rows === 2
+							? mode === "touch"
+								? [1, 4]
+								: [1, 2]
+							: Array.from({ length: rows }, () => 1)
+					}
+				/>
+			</div>
+		</section>
 	);
 }
 
-export const DeterministicBank: Story = {
-	render: (args) => <BankExample {...args} />,
-};
-
-export const TouchBank: Story = {
-	args: { mode: "touch", columns: 3 },
-	render: (args) => <BankExample {...args} />,
-};
-
-export const HardwareBank: Story = {
-	args: { mode: "hardware", columns: 3 },
-	render: (args) => <BankExample {...args} />,
-};
-
-export const RunningWithGradient: Story = {
-	args: { state: "running", columns: 1, showEmpty: false },
-	render: (args) => <BankExample {...args} />,
-};
-
-export const LoadedNext: Story = {
-	args: { state: "loaded", columns: 1, showEmpty: false },
-	render: (args) => <BankExample {...args} />,
-};
-
-export const PickupRequired: Story = {
-	args: {
-		mode: "hardware",
-		state: "pickup",
-		columns: 1,
-		showEmpty: false,
+export const ConfigurablePlayback: Story = {
+	parameters: {
+		controls: {
+			exclude: ["playbacksWide", "playbacksHigh", "availableWidth"],
+		},
 	},
-	render: (args) => <BankExample {...args} />,
+	render: (args) => <ConfigurablePlaybackExample {...args} />,
 };
 
-function PickupExample({
-	initialPhysical,
-	target,
-	mode = "hardware",
-	faderless = false,
-	multiple = false,
-}: {
-	initialPhysical: number;
-	target: number;
-	mode?: "touch" | "hardware";
-	faderless?: boolean;
-	multiple?: boolean;
-}) {
-	const [physical, setPhysical] = useState(initialPhysical);
-	const [authority, setAuthority] = useState<
-		"hardware" | "replacement" | "disconnected"
-	>(
-		"hardware",
-	);
-	const direction = target - initialPhysical;
-	const satisfied =
-		authority !== "hardware" ||
-		(direction >= 0 ? physical >= target : physical <= target);
-	const slots = multiple ? [1, 2, 3] : [1];
-	const items = slots.map((slot) => {
-		const pickup = slot === 2 || !multiple;
-		const itemModel: PlaybackCardViewModel = {
-			...model(slot, slot === 1 ? physical * 100 : 50, 1),
-			hasFader: !faderless,
-			hardwarePickup:
-				pickup && !satisfied
-					? { physicalPosition: physical, pickupTarget: target }
-					: undefined,
-		};
-		return {
-			model: itemModel,
-			callbacks: {
-				onFaderChange: (value: number) => setPhysical(value / 100),
-			},
-		};
-	});
-	return (
-		<div style={{ width: multiple ? 560 : 220, minHeight: 300 }}>
-			<button type="button" onClick={() => setAuthority("replacement")}>
-				Replace hardware authority
-			</button>
-			<button type="button" onClick={() => setAuthority("disconnected")}>
-				Disconnect hardware
-			</button>
-			<button type="button" onClick={() => setAuthority("hardware")}>
-				Reconnect hardware
-			</button>
-			<PlaybackBankView mode={mode} items={items} />
-		</div>
-	);
-}
-
-export const PickupRaise: Story = {
-	render: () => <PickupExample initialPhysical={0.5} target={0.75} />,
-};
-
-export const PickupLower: Story = {
-	render: () => <PickupExample initialPhysical={0.75} target={0.5} />,
-};
-
-export const PickupLowerToZero: Story = {
-	render: () => <PickupExample initialPhysical={0.75} target={0} />,
-};
-
-export const PickupSatisfied: Story = {
-	render: () => <PickupExample initialPhysical={0.5} target={0.5} />,
-};
-
-export const PickupBoundaries: Story = {
-	render: () => <PickupExample initialPhysical={0} target={1} />,
-};
-
-export const PickupApproachAndReleaseFromBelow: Story = {
-	render: () => <PickupExample initialPhysical={0.15} target={0.7} />,
-};
-
-export const PickupApproachAndReleaseFromAbove: Story = {
-	render: () => <PickupExample initialPhysical={0.9} target={0.25} />,
-};
-
-export const PickupAuthorityReplacement: Story = {
-	render: () => <PickupExample initialPhysical={0.8} target={0} />,
-};
-
-export const PickupHardwareDisconnectedAndReconnected: Story = {
-	render: () => <PickupExample initialPhysical={0.5} target={0.75} />,
-};
-
-export const OnlyOneOfMultipleFadersRequiresPickup: Story = {
-	render: () => (
-		<PickupExample initialPhysical={0.8} target={0} multiple={true} />
+export const EightByTwoTouchBank: Story = {
+	name: "Configurable touch group",
+	parameters: {
+		controls: {
+			include: ["playbacksWide", "playbacksHigh", "availableWidth"],
+		},
+	},
+	render: (args) => (
+		<PlaybackGroupExample
+			mode="touch"
+			playbacksWide={args.playbacksWide}
+			playbacksHigh={args.playbacksHigh}
+			availableWidth={args.availableWidth}
+		/>
 	),
 };
 
-export const TouchNeverShowsPickup: Story = {
-	render: () => (
-		<PickupExample initialPhysical={0.8} target={0} mode="touch" />
+export const EightByTwoHardwareBank: Story = {
+	name: "Configurable hardware group",
+	parameters: {
+		controls: {
+			include: ["playbacksWide", "playbacksHigh", "availableWidth"],
+		},
+	},
+	render: (args) => (
+		<PlaybackGroupExample
+			mode="hardware"
+			playbacksWide={args.playbacksWide}
+			playbacksHigh={args.playbacksHigh}
+			availableWidth={args.availableWidth}
+		/>
 	),
-};
-
-export const FaderlessNeverShowsPickup: Story = {
-	render: () => (
-		<PickupExample initialPhysical={0.8} target={0} faderless={true} />
-	),
-};
-
-export const FaderlessBump: Story = {
-	args: { state: "bump", columns: 3, showEmpty: false },
-	render: (args) => <BankExample {...args} />,
-};
-
-export const HeldFlash: Story = {
-	args: { state: "held-flash", columns: 1, showEmpty: false },
-	render: (args) => <BankExample {...args} />,
-};
-
-export const HeldSwap: Story = {
-	args: { mode: "hardware", state: "held-swap", columns: 1, showEmpty: false },
-	render: (args) => <BankExample {...args} />,
-};
-
-export const ZeroMidFullLevels: Story = {
-	args: { state: "levels", columns: 3, showEmpty: false },
-	render: (args) => <BankExample {...args} />,
-};
-
-export const LongLabels: Story = {
-	args: { mode: "hardware", state: "long", columns: 1, showEmpty: false },
-	render: (args) => <BankExample {...args} />,
-};
-
-export const EmptyPlayback: Story = {
-	args: { columns: 4, showEmpty: true },
-	render: (args) => <BankExample {...args} />,
 };

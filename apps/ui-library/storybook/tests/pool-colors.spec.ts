@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 
 const STORY =
 	"/iframe.html?id=pools-production-pool-cards--consistent-object-type-colors&viewMode=story";
+const EVERY_STATE_STORY =
+	"/iframe.html?id=pools-production-pool-cards--scaling-and-every-state&viewMode=story";
 
 test("pool colors preserve defaults, modes, contrast, and non-color states", async ({
 	page,
@@ -27,8 +29,8 @@ test("pool colors preserve defaults, modes, contrast, and non-color states", asy
 	await expect(cards.nth(10)).toHaveClass(/focused/u);
 	await expect(cards.nth(12)).toHaveClass(/record-target/u);
 	await expect(cards.nth(13)).toHaveClass(/update-target/u);
-	await expect(cards.nth(14)).toHaveClass(/disabled/u);
 	await expect(cards.nth(14)).toHaveClass(/empty/u);
+	await expect(cards.nth(14)).not.toHaveClass(/disabled/u);
 
 	await cards.nth(11).focus();
 	await expect(cards.nth(11)).toHaveCSS("outline-style", "solid");
@@ -66,4 +68,50 @@ test("pool colors preserve defaults, modes, contrast, and non-color states", asy
 		});
 	});
 	for (const ratio of contrastRatios) expect(ratio).toBeGreaterThanOrEqual(4.5);
+});
+
+test("gray pool cards keep active, resting, and empty states visually distinct", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 1200, height: 850 });
+	await page.goto(EVERY_STATE_STORY);
+	await page.evaluate(() => document.fonts.ready);
+
+	const active = page.getByRole("button", {
+		name: /Front Wash With A Deliberately Long Operator Name/u,
+	});
+	const resting = page.getByRole("button", { name: /Frozen Revision 8/u });
+	const empty = page.getByRole("button", {
+		name: /Empty Press Record to use this slot/u,
+	});
+	const recordTarget = page.getByRole("button", {
+		name: /Record here Record/u,
+	});
+
+	const [activeBackground, restingBackground, emptyBackground] =
+		await Promise.all(
+			[active, resting, empty].map((card) =>
+				card.evaluate((element) => getComputedStyle(element).backgroundColor),
+			),
+		);
+	const lightness = (value: string) => {
+		const channels = value
+			.match(/\d+(?:\.\d+)?/gu)
+			?.slice(0, 3)
+			.map(Number);
+		if (!channels || channels.length !== 3)
+			throw new Error(`Expected a computed RGB color, received ${value}`);
+		const scale = value.startsWith("color(srgb") ? 1 : 255;
+		return channels.reduce((sum, channel) => sum + channel / scale, 0) / 3;
+	};
+
+	expect(lightness(activeBackground)).toBeGreaterThan(
+		lightness(restingBackground) * 3,
+	);
+	expect(lightness(emptyBackground)).toBeLessThan(lightness(restingBackground));
+	await expect(empty.locator(".pool-card-name")).toHaveCSS("opacity", "0.45");
+	await expect(recordTarget.locator(".pool-card-name")).toHaveCSS(
+		"opacity",
+		"1",
+	);
 });

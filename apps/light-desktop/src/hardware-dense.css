@@ -17,14 +17,16 @@
 .hardware-connected .playback-fader-bank {
 	gap: 2px;
 }
-.hardware-connected .playback-fader-bank article.hardware-playback-card {
+.hardware-connected
+	.playback-fader-bank
+	article.hardware-playback-card:not(.playback-card) {
 	display: grid;
 	grid-template-columns: 1fr;
 	grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
 	gap: 1px;
 	padding: 2px;
 }
-.hardware-playback-card > header {
+.hardware-playback-card:not(.playback-card) > header {
 	min-width: 0;
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
@@ -32,7 +34,7 @@
 	gap: 4px;
 	overflow: hidden;
 }
-.hardware-playback-card > header > b {
+.hardware-playback-card:not(.playback-card) > header > b {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -58,21 +60,26 @@
 	color: var(--cyan);
 	font-size: 8px;
 }
-.hardware-playback-controls {
+.hardware-playback-card:not(.playback-card) .hardware-playback-controls {
 	min-height: 0;
 	display: grid;
 	grid-template-columns: minmax(0, 1fr);
 	grid-template-rows: minmax(0, 1fr) 20px;
 	gap: 0;
 }
-.hardware-playback-card .hardware-playback-controls > footer {
+.hardware-playback-card:not(.playback-card)
+	.hardware-playback-controls
+	> footer {
 	min-height: 0;
 	display: grid;
 	grid-template-rows: 1fr 1fr;
 	gap: 0;
 	padding: 0 2px;
 }
-.hardware-playback-card .hardware-playback-controls > footer .ui-button {
+.hardware-playback-card:not(.playback-card)
+	.hardware-playback-controls
+	> footer
+	.ui-button {
 	min-height: 0;
 	padding: 0;
 	border: 0;
@@ -84,13 +91,13 @@
 	text-align: left;
 	justify-content: flex-start;
 }
-.hardware-playback-card
+.hardware-playback-card:not(.playback-card)
 	.hardware-playback-controls
 	> footer
 	.ui-button:not(:disabled) {
 	color: var(--text);
 }
-.hardware-playback-card .hardware-fader.ui-button {
+.hardware-playback-card:not(.playback-card) .hardware-fader.ui-button {
 	position: relative;
 	min-width: 0;
 	min-height: 0;
@@ -100,7 +107,7 @@
 	border-radius: 4px;
 	background: #090d10;
 }
-.hardware-playback-card .hardware-fader i {
+.hardware-playback-card:not(.playback-card) .hardware-fader i {
 	position: absolute;
 	left: 0;
 	right: 0;
@@ -108,7 +115,7 @@
 	height: var(--hardware-fader-level);
 	background: linear-gradient(0deg, #176777, #103039);
 }
-.hardware-playback-card .hardware-fader b {
+.hardware-playback-card:not(.playback-card) .hardware-fader b {
 	position: relative;
 	z-index: 1;
 	font-size: 9px;
@@ -127,7 +134,7 @@
 	border-color: var(--cyan) !important;
 	background: #0a252b !important;
 }
-.hardware-playback-card .hardware-fader {
+.hardware-playback-card:not(.playback-card) .hardware-fader {
 	position: relative;
 	min-width: 0;
 	min-height: 0;
@@ -139,25 +146,27 @@
 	border-radius: 4px;
 	background: #090d10;
 }
-.hardware-connected .playback-fader-bank article.hardware-playback-card {
+.hardware-connected
+	.playback-fader-bank
+	article.hardware-playback-card:not(.playback-card) {
 	grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.85fr);
 	gap: 0;
 	padding: 0;
 	overflow: hidden;
 }
-.hardware-playback-card > header {
+.hardware-playback-card:not(.playback-card) > header {
 	grid-template-columns: minmax(0, 1fr) auto;
 	min-height: 18px;
 	padding: 1px 3px;
 }
-.hardware-playback-card > header > b,
-.hardware-playback-card > header > strong {
+.hardware-playback-card:not(.playback-card) > header > b,
+.hardware-playback-card:not(.playback-card) > header > strong {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-size: 9px;
 }
-.hardware-playback-card > header > strong {
+.hardware-playback-card:not(.playback-card) > header > strong {
 	color: var(--muted);
 }
 .hardware-cue-list {
@@ -167,19 +176,20 @@
 	overflow: hidden;
 	border-top: 1px solid var(--line);
 }
-.hardware-cue-list.single {
-	grid-template-rows: minmax(0, 1fr);
-}
 .hardware-cue-row {
 	--cue-fade-progress: 0;
 	position: relative;
 	min-width: 0;
 	display: grid;
-	grid-template-columns: 22px minmax(0, 1fr) auto;
+	grid-template-columns: max-content minmax(0, 1fr) max-content;
 	align-items: center;
 	gap: 2px;
 	padding: 0 3px;
 	overflow: hidden;
+}
+.hardware-cue-row > span {
+	width: fit-content;
+	justify-self: start;
 }
 .hardware-cue-row > i {
 	position: absolute;
@@ -187,17 +197,6 @@
 	right: auto;
 	width: calc(var(--cue-fade-progress) * 100%);
 	background: #17677766;
-}
-.hardware-cue-row > span,
-.hardware-cue-row > b,
-.hardware-cue-row > small {
-	position: relative;
-	z-index: 1;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-size: 7px;
 }
 .hardware-cue-row > b {
 	font-weight: 600;
@@ -209,18 +208,23 @@
 .hardware-cue-row.current {
 	color: var(--cyan);
 }
-.hardware-playback-controls {
+.hardware-playback-card:not(.playback-card) .hardware-playback-controls {
 	gap: 0;
 	border-top: 1px solid var(--line);
 }
-.hardware-playback-card .hardware-playback-controls > footer {
+.hardware-playback-card:not(.playback-card)
+	.hardware-playback-controls
+	> footer {
 	grid-template-rows: repeat(3, minmax(0, 1fr));
 	padding: 0;
 }
-.hardware-playback-card .hardware-playback-controls > footer .ui-button {
+.hardware-playback-card:not(.playback-card)
+	.hardware-playback-controls
+	> footer
+	.ui-button {
 	padding: 0 3px;
 }
-.hardware-playback-card .hardware-fader {
+.hardware-playback-card:not(.playback-card) .hardware-fader {
 	border: 0;
 	border-top: 1px solid var(--line);
 	border-radius: 0;
@@ -230,29 +234,36 @@
 	padding: 0;
 	border: 0;
 }
-.hardware-connected .playback-fader-bank article.hardware-playback-card {
+.hardware-connected
+	.playback-fader-bank
+	article.hardware-playback-card:not(.playback-card) {
 	border: 1px solid #39434b;
 	border-radius: 2px;
 }
-.hardware-playback-card > header {
+.hardware-playback-card:not(.playback-card) > header {
 	padding: 0 2px;
 }
 .hardware-cue-row {
 	padding: 0 2px;
 }
-.hardware-playback-card .hardware-playback-controls {
+.hardware-playback-card:not(.playback-card) .hardware-playback-controls {
 	width: 100%;
 	margin: 0;
 	padding: 0;
 	background: #11181d;
 }
-.hardware-playback-card .hardware-playback-controls > footer {
+.hardware-playback-card:not(.playback-card)
+	.hardware-playback-controls
+	> footer {
 	display: flex;
 	flex-direction: column;
 	gap: 0;
 	padding: 2px;
 }
-.hardware-playback-card .hardware-playback-controls > footer .ui-button {
+.hardware-playback-card:not(.playback-card)
+	.hardware-playback-controls
+	> footer
+	.ui-button {
 	width: 100%;
 	flex: 1;
 	display: flex;
@@ -262,7 +273,7 @@
 	border-radius: 0;
 	background: transparent;
 }
-.hardware-playback-card .hardware-fader {
+.hardware-playback-card:not(.playback-card) .hardware-fader {
 	margin: 0;
 	padding: 0;
 	background: #11181d;
@@ -273,7 +284,8 @@
 	border: 0;
 	grid-auto-rows: unset;
 }
-.playback-fader-bank.hardware-layout article.hardware-playback-card {
+.playback-fader-bank.hardware-layout
+	article.hardware-playback-card:not(.playback-card) {
 	min-width: 0;
 	display: grid;
 	grid-template-columns: 1fr;

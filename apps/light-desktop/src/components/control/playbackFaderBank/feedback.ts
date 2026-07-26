@@ -2,6 +2,7 @@ import type {
 	PlaybackDefinition,
 	PlaybackRuntimeProjection,
 } from "../../../api/types";
+import { formatSpeedGroupBpm } from "../speedGroupFormatting";
 import type { PlaybackSnapshotActive } from "./types";
 
 export function emptyConfiguration(
@@ -153,7 +154,7 @@ export function playbackFaderDisplay(
 	if (playback.target.type === "speed_group") {
 		if (projection?.target !== "speed_group") return "Unavailable";
 		const runtime = projection.runtime;
-		return `${Math.round(runtime.effective_bpm)} BPM · ${runtime.paused ? "PAUSED" : runtime.source.replaceAll("_", " ").toUpperCase()}`;
+		return `${formatSpeedGroupBpm(runtime.effective_bpm)} BPM · ${runtime.paused ? "PAUSED" : runtime.source.replaceAll("_", " ").toUpperCase()}`;
 	}
 	if (playback.target.type === "programmer_fade")
 		return projection?.target === "programmer_fade"

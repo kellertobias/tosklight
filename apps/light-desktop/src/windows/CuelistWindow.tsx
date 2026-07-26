@@ -24,7 +24,8 @@ export function CuelistWindow({
 	cueListSource = "fixed",
 	fixedCueListNumber,
 	paneId,
-}: WindowProps) {
+	thumbnails,
+}: WindowProps & { thumbnails?: Record<number, string> }) {
 	const saveCueList = useCueListTopologyWriter();
 	const { state, dispatch } = useApp();
 	const pool = useCuelistPool();
@@ -116,6 +117,7 @@ export function CuelistWindow({
 			settings={settings}
 			onOpenPool={openPool}
 			onOpenSettings={() => openSettings(selectedCuelist)}
+			thumbnails={thumbnails}
 		/>
 	);
 }

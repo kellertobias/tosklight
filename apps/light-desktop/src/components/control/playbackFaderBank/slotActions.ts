@@ -29,6 +29,7 @@ export function buildPlaybackActions({
 	slot,
 	currentCue,
 	buttonCount,
+	color,
 }: {
 	controller: PlaybackBankController;
 	playback: PlaybackDefinition | null;
@@ -37,6 +38,7 @@ export function buildPlaybackActions({
 	slot: number;
 	currentCue: Cue | null | undefined;
 	buttonCount: number;
+	color?: string;
 }) {
 	const actions = (playback?.buttons ?? ["none", "none", "none"]).slice(
 		0,
@@ -65,7 +67,7 @@ export function buildPlaybackActions({
 				),
 				style: playback
 					? ({
-							"--playback-color": playback.color ?? "#20c997",
+							"--playback-color": color ?? playback.color ?? "#20c997",
 						} as CSSProperties)
 					: undefined,
 				"data-playback-button-index": button + 1,

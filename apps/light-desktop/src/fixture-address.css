@@ -111,6 +111,65 @@
 .fixture-address-entry [role="alert"] {
 	color: var(--red);
 }
+.dmx-address-field {
+	display: grid;
+	gap: 5px;
+	color: var(--muted);
+}
+.dmx-address-field-button.ui-button {
+	position: relative;
+	width: 100%;
+	min-height: 54px;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-rows: auto auto;
+	align-items: center;
+	gap: 2px 12px;
+	padding: 8px 14px;
+	border: 1px solid var(--line2);
+	border-radius: 6px;
+	background: var(--panel2);
+	text-align: left;
+}
+.dmx-address-field-button strong {
+	color: var(--text);
+	font-size: 18px;
+}
+.dmx-address-field-button small {
+	color: var(--muted);
+}
+.dmx-address-field-button > span {
+	grid-column: 2;
+	grid-row: 1 / span 2;
+	color: var(--cyan);
+	font-size: 26px;
+}
+.dmx-address-field-button:hover,
+.dmx-address-field-button:focus-visible {
+	border-color: var(--cyan);
+	background: #0b252c;
+}
+.batch-address-screen {
+	grid-template-rows: auto auto minmax(0, 1fr);
+}
+.batch-address-list {
+	min-width: 0;
+	display: grid;
+	align-content: start;
+	gap: 8px;
+	overflow: auto;
+}
+.batch-address-list > p {
+	margin: 0 0 4px;
+	color: var(--muted);
+	line-height: 1.35;
+}
+.batch-address-list .dmx-address-field > span {
+	font-size: 12px;
+}
+.batch-address-list .dmx-address-field-button.ui-button {
+	min-height: 48px;
+}
 .fixture-address-screen > .fixture-address-content > .universe-visual {
 	min-height: 0;
 }

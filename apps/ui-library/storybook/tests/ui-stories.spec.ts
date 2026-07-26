@@ -28,6 +28,12 @@ const packageBackground = readFileSync(
 ).match(/--bg:\s*(#[0-9a-f]{6})/iu)?.[1];
 const publicComponentStoryCoverage: Record<string, string> = {
 	Button: "controls-production-controls--button-playground",
+	CommandLine: "application-command-line--interactive",
+	CommandSection: "application-command-section--configurable",
+	ProgrammerKeypadView: "application-command-section--programmer-software",
+	PlaybackToolsView: "application-command-section--playbacks-software",
+	HardwareControlSummaryView:
+		"application-command-section--playbacks-hardware-connected",
 	FormLayout: "controls-production-controls--forms",
 	FormField: "controls-production-controls--forms",
 	Field: "controls-production-controls--forms",
@@ -88,11 +94,13 @@ const publicComponentStoryCoverage: Record<string, string> = {
 	EncoderSection: "encoders-production-encoder-surfaces--configurable-family",
 	GridDesktop: "desktop-24-×-18-grid-manager--constrained-placement",
 	PaneView: "desktop-24-×-18-grid-manager--drag-and-resize",
-	TouchPlaybackCardView: "playbacks-playback-bank--touch-bank",
-	HardwarePlaybackCardView: "playbacks-playback-bank--hardware-bank",
-	HardwareCueRowsView: "playbacks-playback-bank--hardware-bank",
-	HardwarePlaybackFaderView: "playbacks-playback-bank--hardware-bank",
-	PlaybackBankView: "playbacks-playback-bank--deterministic-bank",
+	TouchPlaybackCardView: "playbacks-playback-bank--configurable-playback",
+	HardwarePlaybackCardView:
+		"playbacks-playback-bank--eight-by-two-hardware-bank",
+	HardwareCueRowsView: "playbacks-playback-bank--eight-by-two-hardware-bank",
+	HardwarePlaybackFaderView:
+		"playbacks-playback-bank--eight-by-two-hardware-bank",
+	PlaybackBankView: "playbacks-playback-bank--eight-by-two-touch-bank",
 	VirtualPlaybackGridView: "playbacks-virtual-playback-grid--sparse-grid",
 	PoolCard: "pools-production-pool-cards--scaling-and-every-state",
 	PoolGrid: "pools-generic-pool-window--sparse",
@@ -203,6 +211,71 @@ test("Storybook uses the exact application background token", () => {
 	expect(packageBackground).toBe(applicationBackground);
 });
 
+test("configured search keeps the standard magnifier size and adds width only for its caret", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=controls-production-controls--search-and-touch-select&viewMode=story",
+	);
+	const plainIcon = page.locator(
+		".console-search:not(.has-options) .console-search-icon > svg",
+	);
+	const optionsTrigger = page.getByRole("button", { name: "Search settings" });
+	const optionsIcon = optionsTrigger.locator(
+		":scope > svg:not(.console-search-chevron)",
+	);
+	const caret = optionsTrigger.locator(".console-search-chevron");
+	const [plainIconBox, optionsTriggerBox, optionsIconBox, caretBox] =
+		await Promise.all([
+			plainIcon.boundingBox(),
+			optionsTrigger.boundingBox(),
+			optionsIcon.boundingBox(),
+			caret.boundingBox(),
+		]);
+	expect(plainIconBox).not.toBeNull();
+	expect(optionsTriggerBox).not.toBeNull();
+	expect(optionsIconBox).not.toBeNull();
+	expect(caretBox).not.toBeNull();
+	expect(optionsIconBox?.width).toBeCloseTo(plainIconBox?.width ?? 18, 0);
+	expect(optionsIconBox?.height).toBeCloseTo(plainIconBox?.height ?? 18, 0);
+	expect(optionsTriggerBox?.width).toBeGreaterThan(optionsIconBox?.width ?? 18);
+	expect(caretBox?.x).toBeGreaterThan(
+		(optionsIconBox?.x ?? 0) + (optionsIconBox?.width ?? 0),
+	);
+	expect(
+		(caretBox?.x ?? 0) -
+			((optionsIconBox?.x ?? 0) + (optionsIconBox?.width ?? 0)),
+	).toBeLessThanOrEqual(3);
+	const combinedCenter =
+		((optionsIconBox?.x ?? 0) + (caretBox?.x ?? 0) + (caretBox?.width ?? 0)) /
+		2;
+	expect(combinedCenter).toBeCloseTo(
+		(optionsTriggerBox?.x ?? 0) + (optionsTriggerBox?.width ?? 0) / 2,
+		0,
+	);
+	const plainSearch = page.locator(".console-search:not(.has-options)");
+	for (const [buttonName, iconSelector] of [
+		["Clear search", ".ui-input-clear-icon"],
+		["Open keyboard", ".ui-keyboard-icon"],
+	] as const) {
+		const button = plainSearch.getByRole("button", { name: buttonName });
+		const icon = button.locator(iconSelector);
+		const [buttonBox, iconBox] = await Promise.all([
+			button.boundingBox(),
+			icon.boundingBox(),
+		]);
+		expect(buttonBox).not.toBeNull();
+		expect(iconBox).not.toBeNull();
+		expect(
+			Math.abs(
+				(iconBox?.x ?? 0) +
+					(iconBox?.width ?? 0) / 2 -
+					((buttonBox?.x ?? 0) + (buttonBox?.width ?? 0) / 2),
+			),
+		).toBeLessThanOrEqual(0.5);
+	}
+});
+
 test("DMX application stories render the production matrix, inspector, and source mutations", async ({
 	page,
 }) => {
@@ -290,11 +363,37 @@ test("Help application stories render real navigation, Markdown, search, and sta
 	await page.goto(
 		"/iframe.html?id=application-windows-help--loading&viewMode=story",
 	);
-	await expect(page.getByText("Loading help…")).toBeVisible();
+	const loadingPane = page.locator(".help-topic-pane");
+	const loadingState = loadingPane.locator(".ui-window-empty-state");
+	await expect(
+		loadingState.getByText("Loading help", { exact: true }),
+	).toBeVisible();
+	const loadingIcon = loadingState.locator(".help-state-icon");
+	await expect(loadingIcon).toBeVisible();
+	await expect(loadingState.locator(".icon")).toHaveCSS(
+		"color",
+		"rgb(132, 145, 155)",
+	);
+	await expect(loadingState).toHaveCSS("color", "rgb(132, 145, 155)");
+	const loadingPaneBox = await loadingPane.boundingBox();
+	const loadingStateBox = await loadingState.boundingBox();
+	expect(
+		(loadingStateBox?.x ?? 0) + (loadingStateBox?.width ?? 0) / 2,
+	).toBeCloseTo((loadingPaneBox?.x ?? 0) + (loadingPaneBox?.width ?? 0) / 2, 0);
+	expect(
+		(loadingStateBox?.y ?? 0) + (loadingStateBox?.height ?? 0) / 2,
+	).toBeCloseTo(
+		(loadingPaneBox?.y ?? 0) + (loadingPaneBox?.height ?? 0) / 2,
+		0,
+	);
 	await page.goto(
 		"/iframe.html?id=application-windows-help--empty-catalog&viewMode=story",
 	);
-	await expect(page.getByText("No help topics found.")).toBeVisible();
+	const emptyState = page.locator(".help-topic-pane .ui-window-empty-state");
+	await expect(
+		emptyState.getByText("No help topics found", { exact: true }),
+	).toBeVisible();
+	await expect(emptyState.locator(".help-state-icon")).toBeVisible();
 	await page.goto(
 		"/iframe.html?id=application-windows-help--catalog-error&viewMode=story",
 	);
@@ -307,6 +406,31 @@ test("Help application stories render real navigation, Markdown, search, and sta
 	await expect(
 		page.getByText("One optional help topic could not be indexed."),
 	).toBeVisible();
+	const warning = page.locator(".help-catalog-warning");
+	await expect(warning.locator("svg")).toBeVisible();
+	await expect(warning).toHaveCSS("border-top-color", "rgb(217, 133, 37)");
+
+	await page.goto(
+		"/iframe.html?id=application-windows-help--search-results&viewMode=story",
+	);
+	await expect(page.getByRole("textbox", { name: "Search Help" })).toHaveValue(
+		"Command Line",
+	);
+	await expect(page.getByRole("button", { name: "Quick Start" })).toHaveCount(
+		0,
+	);
+	await expect(
+		page.getByRole("button", { name: "Command Line" }),
+	).toBeVisible();
+	await expect(page.locator(".help-content h1")).toHaveText("Command Line");
+
+	await page.goto(
+		"/iframe.html?id=application-windows-help--search-no-results&viewMode=story",
+	);
+	await expect(page.getByRole("textbox", { name: "Search Help" })).toHaveValue(
+		"No such topic",
+	);
+	await expect(page.getByText("No matching help topics.")).toBeVisible();
 });
 
 test("application shell stories preserve Dock and software or hardware control modes", async ({
@@ -317,10 +441,58 @@ test("application shell stories preserve Dock and software or hardware control m
 		"/iframe.html?id=application-shell-and-control--dock-desktops&viewMode=story",
 	);
 	await expect(page.locator(".left-dock")).toBeVisible();
-	await expect(page.getByRole("button", { name: "DESKTOPS" })).toBeVisible();
+	const dockModeToggle = page.getByRole("button", {
+		name: "Desktops / Built-ins",
+	});
+	await expect(dockModeToggle).toHaveAttribute("data-dock-mode", "desks");
+	const desktopModeLabel = dockModeToggle.getByText("Desktops", {
+		exact: true,
+	});
+	const builtInModeLabel = dockModeToggle.getByText("Built-ins", {
+		exact: true,
+	});
+	await expect(desktopModeLabel).toHaveClass(/active/u);
+	await expect(builtInModeLabel).not.toHaveClass(/active/u);
+	expect(
+		await desktopModeLabel.evaluate(
+			(element) => getComputedStyle(element).color,
+		),
+	).not.toBe(
+		await builtInModeLabel.evaluate(
+			(element) => getComputedStyle(element).color,
+		),
+	);
 	await expect(
 		page.getByRole("button", { name: /New desktop/u }),
 	).toBeVisible();
+	const newDesktopIcon = page
+		.getByRole("button", { name: "New desktop" })
+		.locator(".dock-entry-icon");
+	const newDesktopLabel = page
+		.getByRole("button", { name: "New desktop" })
+		.locator(".dock-entry-label");
+	const [newDesktopIconBounds, newDesktopLabelBounds] = await Promise.all([
+		newDesktopIcon.boundingBox(),
+		newDesktopLabel.boundingBox(),
+	]);
+	expect(newDesktopIconBounds).not.toBeNull();
+	expect(newDesktopLabelBounds).not.toBeNull();
+	expect(newDesktopLabelBounds?.y ?? 0).toBeGreaterThanOrEqual(
+		(newDesktopIconBounds?.y ?? 0) + (newDesktopIconBounds?.height ?? 0),
+	);
+
+	await dockModeToggle.click();
+	await expect(dockModeToggle).toHaveAttribute("data-dock-mode", "builtins");
+	await expect(page.getByRole("button", { name: "Stage" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "New desktop" })).toHaveCount(
+		0,
+	);
+	await expect(page.locator(".dock-list-swap-builtins")).toBeVisible();
+	expect(
+		await page
+			.locator(".dock-list-swap-builtins")
+			.evaluate((element) => getComputedStyle(element).animationName),
+	).toContain("dock-list-swap-builtins");
 
 	await page.goto(
 		"/iframe.html?id=application-shell-and-control--dock-built-ins&viewMode=story",
@@ -335,10 +507,19 @@ test("application shell stories preserve Dock and software or hardware control m
 		page.locator(".control-section.programmer.touch-connected"),
 	).toBeVisible();
 	await expect(page.getByRole("textbox", { name: "Command line" })).toHaveValue(
-		"FIXTURE 1 AT 68",
+		"FIXTURE 1 THRU 12 AT 68",
 	);
 	await expect(page.locator(".touch-encoder")).toHaveCount(4);
 	await expect(page.locator(".numeric-pad")).toBeVisible();
+
+	await page.goto(
+		"/iframe.html?id=application-shell-and-control--playbacks-software&viewMode=story",
+	);
+	await expect(page.locator(".playback-tools")).toBeVisible();
+	await expect(page.locator(".numeric-pad")).toHaveCount(0);
+	await expect(page.locator(".speed-group-stack button")).toHaveCount(5);
+	await expect(page.locator('[data-playback-bank-mode="touch"]')).toBeVisible();
+	await expect(page.locator(".playback-card")).toHaveCount(16);
 
 	await page.goto(
 		"/iframe.html?id=application-shell-and-control--playbacks-hardware-connected&viewMode=story",
@@ -349,7 +530,9 @@ test("application shell stories preserve Dock and software or hardware control m
 	await expect(
 		page.locator('[data-playback-bank-mode="hardware"]'),
 	).toBeVisible();
-	await expect(page.locator(".hardware-encoder-display")).toHaveCount(6);
+	await expect(page.locator(".hardware-encoder-display")).toHaveCount(0);
+	await expect(page.locator(".hardware-control-summary")).toBeVisible();
+	await expect(page.locator(".hardware-speed-groups button")).toHaveCount(5);
 });
 
 test("application control stories cover parameter families, playback banks, and keypad actions", async ({
@@ -380,7 +563,18 @@ test("application control stories cover parameter families, playback banks, and 
 	);
 	await expect(page.locator('[data-playback-bank-mode="touch"]')).toBeVisible();
 	await expect(
-		page.locator('[data-playback-bank-mode="touch"] > article'),
+		page.locator(
+			'[data-playback-bank-mode="touch"] > [data-ui-component="touch-playback-card"]',
+		),
+	).toHaveCount(4);
+
+	await page.goto(
+		"/iframe.html?id=application-shell-and-control--playback-bank-hardware&viewMode=story",
+	);
+	await expect(
+		page.locator(
+			'[data-playback-bank-mode="hardware"] > [data-ui-component="hardware-playback-card"]',
+		),
 	).toHaveCount(4);
 
 	await page.goto(
@@ -393,6 +587,195 @@ test("application control stories cover parameter families, playback banks, and 
 	await expect(page.getByRole("button", { name: "NEXT" })).toBeVisible();
 });
 
+test("the serverless command line is interactive and used as the Storybook command surface", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=application-command-line--interactive&viewMode=story",
+	);
+	const command = page.getByRole("textbox", { name: "Command line" });
+	await expect(command).toHaveValue("FIXTURE 1 AT 68");
+	await command.click();
+	const history = page.getByRole("dialog", { name: "Command line history" });
+	await expect(history).toBeVisible();
+	await history
+		.getByRole("article")
+		.filter({ hasText: "GROUP 99 AT FULL" })
+		.getByRole("button", { name: "Reuse" })
+		.click();
+	await expect(command).toHaveValue("GROUP 99 AT FULL");
+	await expect(history).toHaveCount(0);
+
+	await command.fill("FIXTURE 2 AT 50");
+	await command.press("Enter");
+	await expect(
+		page.getByRole("img", { name: "Command applied" }),
+	).toBeVisible();
+	await expect(page.getByLabel("Command line event")).toContainText(
+		"Executed FIXTURE 2 AT 50",
+	);
+
+	const mode = page.getByRole("button", { name: /PROG/u });
+	await mode.click();
+	await expect(page.locator(".command-line-bar")).toHaveClass(/playback-mode/u);
+	const record = page.getByRole("button", { name: "REC" });
+	await record.click();
+	await expect(page.getByRole("button", { name: "REC ARMED" })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
+	await page.getByRole("button", { name: "PRELOAD" }).click();
+	await expect(page.getByRole("button", { name: "PRELOAD GO" })).toHaveText(
+		"PRELOAD GO",
+	);
+	await page
+		.getByRole("button", { name: /Open running and output controls/u })
+		.click();
+	await expect(page.getByLabel("Command line event")).toHaveText(
+		"Opened running and output controls",
+	);
+});
+
+test("Command Section follows the global hardware context and production control geometry", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 1496, height: 761 });
+	await page.goto(
+		"/iframe.html?id=application-command-section--programmer-software&viewMode=story&globals=mode:software",
+	);
+	await expect(
+		page.locator(".control-section.programmer.touch-connected"),
+	).toBeVisible();
+	await expect(page.getByText("Intensity encoders")).toHaveCount(0);
+	await expect(page.locator(".encoder-section-header")).toHaveCount(0);
+	await expect(page.locator(".touch-encoder")).toHaveCount(4);
+	const highlightKeys = await page
+		.locator(".highlight-controls [data-keypad-key]")
+		.evaluateAll((buttons) =>
+			buttons.map((button) => button.getAttribute("data-keypad-key")),
+		);
+	expect(highlightKeys).toEqual(["HIGH", "PREV", "NEXT", "ALL"]);
+	for (const key of [
+		"DEL",
+		"MOV",
+		"CPY",
+		"SET",
+		"GRP",
+		"CUE",
+		"TIME",
+		"DIV",
+		"-",
+		"+",
+		"TRU",
+		"AT",
+	])
+		await expect(
+			page.locator(`[data-keypad-key="${key}"]`).first(),
+		).toHaveClass(/action/u);
+	await expect(page.locator('[data-keypad-key="DEL"]').first()).toHaveCSS(
+		"color",
+		"rgb(255, 179, 15)",
+	);
+	await expect(page.locator('[data-keypad-key="ENT"]').first()).toHaveClass(
+		/enter/u,
+	);
+	await expect(page.locator('[data-keypad-key="ENT"]').first()).toHaveCSS(
+		"color",
+		"rgb(27, 214, 236)",
+	);
+	await expect(page.locator(".mode-toggle")).toHaveCSS("margin-left", "0px");
+	await expect(page.locator(".mode-toggle")).toHaveCSS("width", "116px");
+
+	for (const key of ["SET", "SHIFT"]) {
+		const button = page.locator(`[data-keypad-key="${key}"]`).first();
+		await button.click();
+		await expect(button).toHaveClass(/active/u);
+		await expect(button).toHaveAttribute("aria-pressed", "true");
+		await button.click();
+		await expect(button).not.toHaveClass(/active/u);
+	}
+
+	await page.goto(
+		"/iframe.html?id=application-command-section--configurable&viewMode=story&globals=mode:software&args=clearState:selection;previousEnabled:false;nextEnabled:false;preloadArmed:true",
+	);
+	await expect(page.locator('[data-keypad-key="CLR"]').first()).toHaveClass(
+		/clear-active/u,
+	);
+	await expect(page.locator('[data-keypad-key="CLR"]').first()).toHaveCSS(
+		"background-color",
+		"rgb(214, 166, 0)",
+	);
+	await expect(page.locator('[data-keypad-key="CLR"]').first()).toHaveCSS(
+		"color",
+		"rgb(48, 56, 61)",
+	);
+	await expect(page.locator('[data-keypad-key="PREV"]')).toBeDisabled();
+	await expect(page.locator('[data-keypad-key="NEXT"]')).toBeDisabled();
+	await expect(page.getByRole("button", { name: /PRELOAD GO/u })).toBeVisible();
+	await expect(page.getByRole("textbox", { name: "Command line" })).toHaveClass(
+		/blind/u,
+	);
+	await expect(page.getByRole("textbox", { name: "Command line" })).toHaveCSS(
+		"color",
+		"rgb(255, 179, 15)",
+	);
+
+	await page.goto(
+		"/iframe.html?id=application-command-section--configurable&viewMode=story&globals=mode:software&args=clearState:active-values",
+	);
+	await expect(page.locator('[data-keypad-key="CLR"]').first()).toHaveClass(
+		/clear-warning/u,
+	);
+	await expect(page.locator('[data-keypad-key="CLR"]').first()).toHaveCSS(
+		"animation-name",
+		"clear-blink",
+	);
+
+	await page.goto(
+		"/iframe.html?id=application-command-section--playbacks-software&viewMode=story&globals=mode:software",
+	);
+	const playbackCards = page.locator(".playback-card");
+	await expect(playbackCards).toHaveCount(16);
+	await expect(
+		page.locator(
+			".playback-card.loaded, .playback-card.selected, .playback-card.running",
+		),
+	).toHaveCount(0);
+	await expect(playbackCards.first()).toHaveCSS("outline-style", "none");
+	const playbackRows = await playbackCards.evaluateAll((cards) =>
+		[...new Set(cards.map((card) => card.getBoundingClientRect().y))].sort(
+			(left, right) => left - right,
+		),
+	);
+	expect(playbackRows).toHaveLength(2);
+	for (const name of ["Previous playback page", "Next playback page"]) {
+		const button = page.getByRole("button", { name });
+		await expect(button.locator("svg")).toBeVisible();
+		const bounds = await button.boundingBox();
+		expect(bounds?.height).toBeGreaterThanOrEqual(60);
+	}
+
+	await page.goto(
+		"/iframe.html?id=application-command-section--configurable&viewMode=story&globals=mode:hardware",
+	);
+	await expect(
+		page.locator(".control-section.programmer.hardware-connected"),
+	).toBeVisible();
+	await expect(page.locator(".touch-encoder")).toHaveCount(0);
+	await expect(page.locator(".hardware-encoder-display")).toHaveCount(4);
+	await expect(
+		page.locator(".hardware-encoder-target.hardware-encoder-primary").first(),
+	).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+	await expect(page.locator(".encoder-section")).toHaveCount(0);
+	await expect(page.locator(".hardware-control-summary")).toBeVisible();
+
+	await page.goto(
+		"/iframe.html?id=application-command-line--interactive&viewMode=story&globals=mode:hardware",
+	);
+	await expect(page.locator(".command-line-bar.hardware-mode")).toBeVisible();
+	await expect(page.getByRole("button", { name: "ESC" })).toHaveCount(0);
+});
+
 test("touch and hardware encoder stories exercise continuous input, modal entry, and release", async ({
 	page,
 }) => {
@@ -401,17 +784,23 @@ test("touch and hardware encoder stories exercise continuous input, modal entry,
 	);
 	const encoder = page.getByRole("group", { name: "Enc 1 · Dimmer" });
 	const value = encoder.locator(".touch-encoder-value");
-	await expect(encoder.locator(":scope > header")).toHaveCount(0);
+	await expect(encoder.locator(".touch-encoder-labels b")).toHaveText("Dimmer");
+	await expect(encoder.locator(".touch-encoder-labels small")).toHaveText(
+		"Enc 1",
+	);
 	await expect(encoder.locator(".touch-encoder-set")).toHaveCount(0);
 	await expect(encoder.locator(".touch-encoder-legend")).toHaveText(
 		"Increase•••Set•••Decrease",
 	);
-	const [encoderGeometry, valueGeometry, legendGeometry] = await Promise.all([
-		encoder.boundingBox(),
-		value.boundingBox(),
-		encoder.locator(".touch-encoder-legend").boundingBox(),
-	]);
+	const [encoderGeometry, surfaceGeometry, valueGeometry, legendGeometry] =
+		await Promise.all([
+			encoder.boundingBox(),
+			encoder.locator(".touch-encoder-surface").boundingBox(),
+			value.boundingBox(),
+			encoder.locator(".touch-encoder-legend").boundingBox(),
+		]);
 	expect(encoderGeometry).not.toBeNull();
+	expect(surfaceGeometry).not.toBeNull();
 	expect(valueGeometry).not.toBeNull();
 	expect(legendGeometry).not.toBeNull();
 	expect(
@@ -424,43 +813,117 @@ test("touch and hardware encoder stories exercise continuous input, modal entry,
 			(valueGeometry?.height ?? 0) / 2 -
 			((encoderGeometry?.y ?? 0) + (encoderGeometry?.height ?? 0) / 2),
 	).toBeCloseTo(0, 5);
+	expect(valueGeometry?.width).toBeCloseTo(surfaceGeometry?.width ?? 0, 0);
+	await expect(value).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+	await expect(value).toHaveCSS("border-top-width", "0px");
 	expect(legendGeometry?.x).toBeGreaterThan(valueGeometry?.x ?? 0);
-	await expect(value).toHaveText("52%");
+	expect(legendGeometry?.height).toBeCloseTo(
+		(surfaceGeometry?.height ?? 0) * 0.44,
+		0,
+	);
+	expect(legendGeometry?.width).toBeCloseTo(18, 0);
+	expect(
+		(surfaceGeometry?.x ?? 0) +
+			(surfaceGeometry?.width ?? 0) -
+			((legendGeometry?.x ?? 0) + (legendGeometry?.width ?? 0)),
+	).toBeCloseTo(1, 0);
+	expect(
+		(legendGeometry?.y ?? 0) +
+			(legendGeometry?.height ?? 0) / 2 -
+			((surfaceGeometry?.y ?? 0) + (surfaceGeometry?.height ?? 0) / 2),
+	).toBeCloseTo(0, 0);
+	const ridgesGeometry = await encoder
+		.locator(".touch-encoder-ridges")
+		.boundingBox();
+	expect(ridgesGeometry?.width).toBeCloseTo(
+		(surfaceGeometry?.width ?? 0) - 32,
+		0,
+	);
+	for (const zone of [
+		encoder.locator(".touch-encoder-tap-positive"),
+		value,
+		encoder.locator(".touch-encoder-tap-negative"),
+	]) {
+		const zoneGeometry = await zone.boundingBox();
+		expect(zoneGeometry?.width).toBeCloseTo(surfaceGeometry?.width ?? 0, 0);
+		expect(zoneGeometry?.height).toBeCloseTo(
+			(surfaceGeometry?.height ?? 0) / 3,
+			0,
+		);
+	}
+	await expect(value).toHaveText("52.0%");
 	await encoder.locator(".touch-encoder-tap-positive").click();
-	await expect(value).toHaveText("53%");
+	await expect(value).toHaveText("52.1%");
 	await encoder.locator(".touch-encoder-tap-negative").click();
-	await expect(value).toHaveText("52%");
+	await expect(value).toHaveText("52.0%");
 	await encoder.hover();
 	await page.mouse.wheel(0, -100);
-	await expect(value).toHaveText("53%");
+	await expect(value).toHaveText("52.1%");
 	await page.keyboard.down("Shift");
 	await page.mouse.wheel(0, 100);
 	await page.keyboard.up("Shift");
-	await expect(value).toHaveText("43%");
+	await expect(value).toHaveText("51.1%");
 
 	const box = await encoder.boundingBox();
 	expect(box).not.toBeNull();
 	await page.mouse.move((box?.x ?? 0) + 30, (box?.y ?? 0) + 180);
 	await page.mouse.down();
+	await page.waitForTimeout(120);
 	await page.mouse.move((box?.x ?? 0) + 30, (box?.y ?? 0) + 160);
-	await expect(encoder.getByText("Up · Fine")).toBeVisible();
-	await page.waitForTimeout(90);
+	await expect(encoder.locator(".touch-encoder-drag-feedback")).toHaveCount(0);
+	await expect(encoder).toHaveAttribute("data-motion", "up");
+	const slowMotionSpeed = Number.parseFloat(
+		await encoder.evaluate((node) =>
+			node.style.getPropertyValue("--encoder-motion-speed"),
+		),
+	);
+	await page.waitForTimeout(10);
 	await page.mouse.move((box?.x ?? 0) + 30, (box?.y ?? 0) + 110);
-	await expect(encoder.getByText("Up · Coarse")).toBeVisible();
+	const fastMotionSpeed = Number.parseFloat(
+		await encoder.evaluate((node) =>
+			node.style.getPropertyValue("--encoder-motion-speed"),
+		),
+	);
+	expect(fastMotionSpeed).toBeGreaterThan(slowMotionSpeed);
+	await page.waitForTimeout(50);
+	const offsetBeforeReturn = Number.parseFloat(
+		await encoder.evaluate((node) =>
+			node.style.getPropertyValue("--encoder-ridge-offset"),
+		),
+	);
+	await page.mouse.move((box?.x ?? 0) + 30, (box?.y ?? 0) + 140);
+	await expect(encoder).toHaveAttribute("data-motion", "up");
+	const returningMotionSpeed = Number.parseFloat(
+		await encoder.evaluate((node) =>
+			node.style.getPropertyValue("--encoder-motion-speed"),
+		),
+	);
+	expect(returningMotionSpeed).toBeLessThan(fastMotionSpeed);
+	expect(returningMotionSpeed).toBeGreaterThan(slowMotionSpeed);
+	await page.waitForTimeout(50);
+	const offsetAfterReturn = Number.parseFloat(
+		await encoder.evaluate((node) =>
+			node.style.getPropertyValue("--encoder-ridge-offset"),
+		),
+	);
+	expect(offsetAfterReturn).toBeLessThan(offsetBeforeReturn);
 	await page.waitForTimeout(90);
 	await page.mouse.up();
-	await expect(value).not.toHaveText("43%");
+	await expect(value).not.toHaveText("51.1%");
 
-	await encoder
-		.getByRole("button", { name: "Set Enc 1 · Dimmer value" })
-		.click();
+	await encoder.click({
+		position: {
+			x: (box?.width ?? 0) / 2,
+			y: (box?.height ?? 0) / 2,
+		},
+	});
 	const touchEditor = page.getByRole("dialog", {
 		name: "Enc 1 · Dimmer value",
 	});
 	await touchEditor.getByRole("button", { name: "7" }).click();
 	await touchEditor.getByRole("button", { name: "5" }).click();
 	await touchEditor.getByRole("button", { name: "ENTER" }).click();
-	await expect(value).toHaveText("75%");
+	await expect(value).toHaveText("75.0%");
 	await encoder
 		.getByRole("button", { name: "Set Enc 1 · Dimmer value" })
 		.click();
@@ -486,304 +949,725 @@ test("touch and hardware encoder stories exercise continuous input, modal entry,
 	await page.goto(
 		"/iframe.html?id=encoders-production-encoder-surfaces--individual-hardware&viewMode=story",
 	);
-	await page
-		.getByRole("button", { name: "Encoder 1: Pan, 20°" })
-		.click();
+	const hardwareEncoder = page.getByRole("button", {
+		name: "Encoder 1: Pan, 80° ... 100°",
+	});
+	const primaryName = hardwareEncoder.locator(
+		".hardware-encoder-primary-labels b",
+	);
+	const encoderNumber = hardwareEncoder.locator(
+		".hardware-encoder-primary-labels small",
+	);
+	const primaryValue = hardwareEncoder.locator(
+		".hardware-encoder-target.hardware-encoder-primary strong",
+	);
+	const secondaryName = hardwareEncoder.locator(
+		".hardware-encoder-secondary-labels b",
+	);
+	const pushTurn = hardwareEncoder.locator(
+		".hardware-encoder-secondary-labels small",
+	);
+	const secondaryValue = hardwareEncoder.locator(
+		".hardware-encoder-target.hardware-encoder-secondary strong",
+	);
+	await expect(primaryName).toHaveText("Pan");
+	await expect(encoderNumber).toHaveText("Enc 1");
+	await expect(primaryValue).toHaveText("80° ... 100°");
+	await expect(secondaryName).toHaveText("Tilt");
+	await expect(pushTurn).toHaveText("Push-turn");
+	await expect(secondaryValue).toHaveText("30°");
+	await expect(primaryName).toHaveCSS("word-break", "break-all");
+	const [
+		hardwareGeometry,
+		primaryNameGeometry,
+		encoderNumberGeometry,
+		primaryValueGeometry,
+		dividerGeometry,
+		secondaryNameGeometry,
+		pushTurnGeometry,
+		secondaryValueGeometry,
+	] = await Promise.all([
+		hardwareEncoder.boundingBox(),
+		primaryName.boundingBox(),
+		encoderNumber.boundingBox(),
+		primaryValue.boundingBox(),
+		hardwareEncoder.locator(".hardware-encoder-divider").boundingBox(),
+		secondaryName.boundingBox(),
+		pushTurn.boundingBox(),
+		secondaryValue.boundingBox(),
+	]);
+	expect(primaryNameGeometry?.x).toBeCloseTo((hardwareGeometry?.x ?? 0) + 6, 0);
+	expect(
+		(primaryNameGeometry?.x ?? 0) + (primaryNameGeometry?.width ?? 0),
+	).toBeLessThanOrEqual(encoderNumberGeometry?.x ?? 0);
+	expect(
+		(encoderNumberGeometry?.x ?? 0) + (encoderNumberGeometry?.width ?? 0),
+	).toBeCloseTo(
+		(hardwareGeometry?.x ?? 0) + (hardwareGeometry?.width ?? 0) - 6,
+		0,
+	);
+	expect(
+		(primaryValueGeometry?.x ?? 0) + (primaryValueGeometry?.width ?? 0) / 2,
+	).toBeCloseTo(
+		(hardwareGeometry?.x ?? 0) + (hardwareGeometry?.width ?? 0) / 2,
+		0,
+	);
+	expect(
+		Math.abs(
+			(primaryValueGeometry?.y ?? 0) +
+				(primaryValueGeometry?.height ?? 0) / 2 -
+				((hardwareGeometry?.y ?? 0) + (hardwareGeometry?.height ?? 0) * 0.25),
+		),
+	).toBeLessThanOrEqual(1);
+	expect(dividerGeometry?.y).toBeCloseTo(
+		(hardwareGeometry?.y ?? 0) + (hardwareGeometry?.height ?? 0) / 2,
+		0,
+	);
+	expect(secondaryNameGeometry?.x).toBeCloseTo(
+		(hardwareGeometry?.x ?? 0) + 6,
+		0,
+	);
+	expect(
+		(pushTurnGeometry?.x ?? 0) + (pushTurnGeometry?.width ?? 0),
+	).toBeCloseTo(
+		(hardwareGeometry?.x ?? 0) + (hardwareGeometry?.width ?? 0) - 6,
+		0,
+	);
+	expect(
+		(secondaryValueGeometry?.x ?? 0) + (secondaryValueGeometry?.width ?? 0) / 2,
+	).toBeCloseTo(
+		(hardwareGeometry?.x ?? 0) + (hardwareGeometry?.width ?? 0) / 2,
+		0,
+	);
+	expect(
+		Math.abs(
+			(secondaryValueGeometry?.y ?? 0) +
+				(secondaryValueGeometry?.height ?? 0) / 2 -
+				((hardwareGeometry?.y ?? 0) + (hardwareGeometry?.height ?? 0) * 0.75),
+		),
+	).toBeLessThanOrEqual(1);
+	await hardwareEncoder.focus();
+	await page.keyboard.press("Enter");
 	const hardwareEditor = page.getByRole("dialog", {
 		name: "Encoder 1 value",
 	});
+	await expect(
+		hardwareEditor.locator(".hardware-encoder-target-selector"),
+	).toContainText("PanTilt");
+	await expect(
+		hardwareEditor.getByRole("button", { name: "Pan", exact: true }),
+	).toHaveAttribute("aria-pressed", "true");
+	await hardwareEditor
+		.getByRole("button", { name: "Tilt", exact: true })
+		.click();
+	await expect(
+		hardwareEditor.getByRole("button", { name: "Tilt", exact: true }),
+	).toHaveAttribute("aria-pressed", "true");
+	await hardwareEditor
+		.getByRole("button", { name: "Close Encoder 1 value" })
+		.click();
+
+	await hardwareEncoder.click({
+		position: {
+			x: (hardwareGeometry?.width ?? 0) / 2,
+			y: (hardwareGeometry?.height ?? 0) * 0.75,
+		},
+	});
+	await expect(
+		hardwareEditor.locator(".hardware-encoder-target-selector"),
+	).toHaveCount(0);
+	await expect(hardwareEditor).toContainText("Tilt");
+	await hardwareEditor.getByRole("button", { name: "4" }).click();
+	await hardwareEditor.getByRole("button", { name: "ENTER" }).click();
+	await expect(secondaryValue).toHaveText("4°");
+
+	await hardwareEncoder.click({
+		position: {
+			x: (hardwareGeometry?.width ?? 0) / 2,
+			y: (hardwareGeometry?.height ?? 0) * 0.25,
+		},
+	});
+	await expect(hardwareEditor).toContainText("Pan");
 	await hardwareEditor.getByRole("button", { name: "Release Pan" }).click();
 	await expect(
 		page.getByRole("button", { name: "Encoder 1: Pan, Released" }),
 	).toBeVisible();
+
+	await page.goto(
+		"/iframe.html?id=encoders-production-encoder-surfaces--configurable-family&viewMode=story",
+	);
+	await expect(page.getByText("RGBW · AUV", { exact: true })).toBeVisible();
+	await expect(page.locator(".touch-encoder")).toHaveCount(6);
+	for (const [slot, attribute, color] of [
+		[1, "Red", "#ff4d57"],
+		[2, "Green", "#43d66f"],
+		[3, "Blue", "#4f8cff"],
+		[4, "White", "#edf4f6"],
+		[5, "Amber", "#ffb52e"],
+		[6, "UV", "#a56cff"],
+	] as const) {
+		const configurableEncoder = page.getByRole("group", {
+			name: `Enc ${slot} · ${attribute}`,
+		});
+		await expect(
+			configurableEncoder.locator(".touch-encoder-labels b"),
+		).toHaveText(attribute);
+		await expect(
+			configurableEncoder.locator(".touch-encoder-labels small"),
+		).toHaveText(`Enc ${slot}`);
+		await expect(configurableEncoder).toHaveCSS("--encoder-color", color);
+		if (attribute === "White")
+			await expect(
+				configurableEncoder.locator(".touch-encoder-value.range-value span"),
+			).toHaveText(["0%", "100%"]);
+		if (attribute === "White")
+			await expect(
+				configurableEncoder.locator(".touch-encoder-value.range-value i"),
+			).toHaveText("...");
+		const [configurableGeometry, legendGeometry] = await Promise.all([
+			configurableEncoder.boundingBox(),
+			configurableEncoder.locator(".touch-encoder-legend").boundingBox(),
+		]);
+		expect(
+			(legendGeometry?.y ?? 0) +
+				(legendGeometry?.height ?? 0) / 2 -
+				((configurableGeometry?.y ?? 0) +
+					(configurableGeometry?.height ?? 0) / 2),
+		).toBeCloseTo(0, 0);
+	}
+	await page
+		.getByRole("group", { name: "Enc 1 · Red" })
+		.getByRole("button", { name: "Set Enc 1 · Red value" })
+		.click();
+	const configurableEditor = page.getByRole("dialog", {
+		name: "Enc 1 · Red value",
+	});
+	await expect(
+		configurableEditor.getByRole("button", { name: "THRU" }),
+	).toBeVisible();
+	await configurableEditor
+		.getByRole("button", { name: "Show presets" })
+		.click();
+	for (const preset of [
+		"Off",
+		"Quarter",
+		"Half",
+		"Full",
+		"House preset",
+		"Show level",
+	])
+		await expect(
+			configurableEditor.getByRole("button", { name: new RegExp(preset) }),
+		).toBeVisible();
+	await configurableEditor
+		.getByRole("button", { name: "Close Enc 1 · Red value" })
+		.click();
 });
 
-test("playback bank states are explicit, valid, and preserve readable geometry", async ({
+test("the consolidated playback stories cover controls, touch, hardware, loaded, held, and pickup states", async ({
 	page,
 }) => {
-	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--faderless-bump&viewMode=story",
+	const storyIndex = await page.request.get("/index.json");
+	expect(storyIndex.ok()).toBe(true);
+	const entries = Object.values(
+		(
+			(await storyIndex.json()) as {
+				entries: Record<string, { title: string; type: string }>;
+			}
+		).entries,
+	).filter(
+		(entry) =>
+			entry.type === "story" && entry.title === "Playbacks/Playback bank",
 	);
-	const bump = page.locator('[data-playback-slot="3"]');
-	await expect(bump.getByText("3 · Bump", { exact: true })).toBeVisible();
-	await expect(bump.getByRole("button", { name: "FLASH" })).toBeVisible();
-	await expect(bump.getByText("PICKUP", { exact: true })).toHaveCount(0);
+	expect(entries).toHaveLength(3);
 
-	for (const [story, label] of [
-		["loaded-next", "LOADED"],
-		["held-flash", "FLASH HELD"],
-		["held-swap", "SWAP HELD"],
-	] as const) {
+	await page.goto(
+		"/iframe.html?id=playbacks-playback-bank--configurable-playback&viewMode=story",
+	);
+	const configurable = page.locator(".playback-card");
+	await expect(configurable).toHaveCount(1);
+	await expect(configurable).toHaveAttribute("data-playback-kind", "cue-list");
+	await expect(configurable).toHaveAttribute("data-button-count", "3");
+	await expect(configurable).toHaveAttribute("data-has-fader", "true");
+
+	for (const mode of ["touch", "hardware"] as const) {
 		await page.goto(
-			`/iframe.html?id=playbacks-playback-bank--${story}&viewMode=story`,
+			`/iframe.html?id=playbacks-playback-bank--eight-by-two-${mode}-bank&viewMode=story`,
 		);
-		await expect(page.getByRole("status")).toHaveText(label);
+		const bank = page.locator(".playback-fader-bank");
+		const cards = bank.locator(".playback-card");
+		await expect(cards).toHaveCount(16);
+		const contract = await cards.evaluateAll((elements) =>
+			elements.map((card) => ({
+				buttons: card.getAttribute("data-button-count"),
+				fader: card.getAttribute("data-has-fader"),
+				kind: card.getAttribute("data-playback-kind"),
+			})),
+		);
+		expect(contract.slice(0, 7).every((card) => card.buttons === "1")).toBe(
+			true,
+		);
+		expect(contract.slice(0, 8).every((card) => card.fader === "false")).toBe(
+			true,
+		);
+		expect(contract.slice(8, 15).every((card) => card.buttons === "3")).toBe(
+			true,
+		);
+		expect(contract.slice(8, 15).every((card) => card.fader === "true")).toBe(
+			true,
+		);
+		expect(contract[7]).toMatchObject({
+			buttons: "0",
+			fader: "false",
+			kind: "empty",
+		});
+		expect(contract[15]).toMatchObject({
+			buttons: "0",
+			fader: "false",
+			kind: "empty",
+		});
+		await expect(page.locator(".playback-button-active")).toHaveCount(1);
 	}
 
 	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--pickup-required&viewMode=story",
+		"/iframe.html?id=playbacks-playback-bank--eight-by-two-touch-bank&viewMode=story",
 	);
-	await expect(page.getByRole("status")).toHaveCount(0);
-	await expect(page.getByText("Physical 62% · Target 0%")).toBeVisible();
-	await expect(page.getByText("Lower to 0%")).toBeVisible();
-	await expect(page.locator(".hardware-fader-pickup-difference")).toBeVisible();
-	await expect(page.locator("article.pickup-required")).toHaveCount(0);
-
-	for (const story of [
-		"touch-never-shows-pickup",
-		"faderless-never-shows-pickup",
-	]) {
-		await page.goto(
-			`/iframe.html?id=playbacks-playback-bank--${story}&viewMode=story`,
-		);
-		await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(
-			0,
-		);
-		await expect(page.getByText(/Physical \d+%/)).toHaveCount(0);
-	}
-
-	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--only-one-of-multiple-faders-requires-pickup&viewMode=story",
-	);
-	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(
-		1,
-	);
-
-	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--pickup-approach-and-release-from-below&viewMode=story",
-	);
-	const pickupSlider = page.getByRole("slider").first();
-	await pickupSlider.fill("70");
+	const loadedStatus = page.locator(".playback-summary-loaded");
+	await expect(loadedStatus).toHaveCount(1);
+	await expect(loadedStatus).toHaveText("LOADED");
+	await expect(loadedStatus).toHaveCSS("border-top-color", "rgb(255, 179, 15)");
+	await expect(
+		loadedStatus.locator("xpath=..").getByText("3.2s", { exact: true }),
+	).toHaveCount(0);
+	const [loadedWidgetBox, loadedBadgeBox] = await Promise.all([
+		loadedStatus.locator("xpath=..").boundingBox(),
+		loadedStatus.boundingBox(),
+	]);
+	expect(
+		(loadedWidgetBox?.x ?? 0) +
+			(loadedWidgetBox?.width ?? 0) -
+			((loadedBadgeBox?.x ?? 0) + (loadedBadgeBox?.width ?? 0)),
+	).toBeCloseTo(0, 0);
 	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(
 		0,
 	);
-
-	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--pickup-authority-replacement&viewMode=story",
+	await expect(page.getByText("FLASH HELD", { exact: true })).toHaveCount(0);
+	const touchCard = page
+		.locator(".touch-playback-card[data-playback-row='1']")
+		.first();
+	const touchStack = page
+		.locator(".touch-playback-card[data-playback-row='1']")
+		.first()
+		.locator(".vertical-touch-fader-stack");
+	const [
+		stackBox,
+		faderBox,
+		actionsBox,
+		lastButtonBox,
+		identityBox,
+		summaryBox,
+	] = await Promise.all([
+		touchStack.boundingBox(),
+		touchStack.locator(".vertical-touch-fader").boundingBox(),
+		touchStack.locator(".vertical-touch-fader-actions").boundingBox(),
+		touchStack
+			.locator(".vertical-touch-fader-actions .ui-button")
+			.last()
+			.boundingBox(),
+		touchCard.locator(".playback-identity").boundingBox(),
+		touchCard.locator(".playback-top-widget").boundingBox(),
+	]);
+	const faderValueBox = await touchStack
+		.locator(".vertical-touch-fader strong")
+		.boundingBox();
+	const faderFillStyle = await touchStack
+		.locator(".vertical-touch-fader")
+		.evaluate((element) => {
+			const fill = getComputedStyle(element, "::before");
+			return {
+				borderRadius: fill.borderRadius,
+				left: fill.left,
+				right: fill.right,
+			};
+		});
+	expect(stackBox).not.toBeNull();
+	expect(faderBox).not.toBeNull();
+	expect(actionsBox).not.toBeNull();
+	expect(lastButtonBox).not.toBeNull();
+	await expect(touchStack.locator(".vertical-touch-fader > span")).toHaveText(
+		"Master",
 	);
-	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(
-		1,
-	);
-	await page
-		.getByRole("button", { name: "Replace hardware authority" })
-		.click();
-	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(
+	expect(faderFillStyle).toEqual({
+		borderRadius: "2px",
+		left: "1px",
+		right: "1px",
+	});
+	expect(faderValueBox?.x).toBeCloseTo(faderBox?.x ?? 0, 0);
+	expect((faderValueBox?.y ?? 0) + (faderValueBox?.height ?? 0)).toBeCloseTo(
+		(faderBox?.y ?? 0) + (faderBox?.height ?? 0),
 		0,
 	);
+	expect(identityBox?.height).toBeCloseTo(20, 0);
+	expect(summaryBox?.height).toBeCloseTo(16, 0);
+	expect(faderBox!.height).toBeGreaterThan(actionsBox!.height);
+	expect(actionsBox!.height).toBeCloseTo(44, 0);
+	expect(Math.abs(faderBox!.y - stackBox!.y)).toBeLessThanOrEqual(1);
+	expect(
+		Math.abs(actionsBox!.y - (faderBox!.y + faderBox!.height + 2)),
+	).toBeLessThanOrEqual(1);
+	expect(
+		Math.abs(
+			actionsBox!.y + actionsBox!.height - (stackBox!.y + stackBox!.height),
+		),
+	).toBeLessThanOrEqual(1);
+	expect(
+		Math.abs(
+			actionsBox!.y + actionsBox!.height - (stackBox!.y + stackBox!.height),
+		),
+	).toBeLessThanOrEqual(2);
+	expect(
+		Math.abs(
+			lastButtonBox!.y +
+				lastButtonBox!.height -
+				(stackBox!.y + stackBox!.height),
+		),
+	).toBeLessThanOrEqual(2);
 
-	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--zero-mid-full-levels&viewMode=story",
+	const beatCard = page.locator(
+		".touch-playback-card[data-playback-row='1'][data-playback-kind='speed-group']",
 	);
-	const faders = page.locator(".vertical-touch-fader");
-	await expect(faders).toHaveCount(3);
-	const fills = await faders.evaluateAll((elements) =>
-		elements.map((element) => ({
-			background: getComputedStyle(element, "::before").backgroundImage,
-			transform: getComputedStyle(element, "::before").transform,
-		})),
+	const [beatWidgetBox, beatTrackBox, bpmBox] = await Promise.all([
+		beatCard.locator(".playback-top-widget").boundingBox(),
+		beatCard.locator(".playback-beat-track").boundingBox(),
+		beatCard.getByText("128 BPM", { exact: true }).boundingBox(),
+	]);
+	expect(beatTrackBox?.height).toBeCloseTo(beatWidgetBox?.height ?? 0, 0);
+	expect(beatTrackBox?.x).toBeCloseTo(beatWidgetBox?.x ?? 0, 0);
+	expect(beatTrackBox?.x).toBeLessThan(bpmBox?.x ?? 0);
+
+	const emptyCard = page
+		.locator(".touch-playback-card[data-playback-row='1'].empty")
+		.first();
+	await expect(emptyCard).toHaveCSS("border-top-style", "dashed");
+	await expect(emptyCard.locator(".playback-empty-body")).toHaveCSS(
+		"border-top-style",
+		"none",
 	);
 	expect(
-		fills.every(({ background }) => background.includes("linear-gradient")),
+		await emptyCard
+			.locator(".playback-identity > b")
+			.evaluate((element) => getComputedStyle(element).color),
+	).toMatch(/0\.6\)?$/u);
+	const selectionOverlay = await page
+		.locator(".touch-playback-card.selected")
+		.evaluate((card) => {
+			const overlay = getComputedStyle(card, "::after");
+			return {
+				borderWidth: overlay.borderTopWidth,
+				pointerEvents: overlay.pointerEvents,
+				position: overlay.position,
+				zIndex: overlay.zIndex,
+			};
+		});
+	expect(selectionOverlay).toEqual({
+		borderWidth: "2px",
+		pointerEvents: "none",
+		position: "absolute",
+		zIndex: "20",
+	});
+
+	await page.goto(
+		"/iframe.html?id=playbacks-playback-bank--eight-by-two-hardware-bank&viewMode=story",
+	);
+	const compactCuelist = page.locator(
+		".hardware-playback-card[data-playback-row='0'][data-playback-kind='cue-list']",
+	);
+	const fullCuelist = page.locator(
+		".hardware-playback-card[data-playback-row='1'][data-playback-kind='cue-list']",
+	);
+	await expect(compactCuelist.locator(".hardware-cue-row:visible")).toHaveCount(
+		1,
+	);
+	await expect(fullCuelist.locator(".hardware-cue-row:visible")).toHaveCount(3);
+	await expect(fullCuelist).toContainText("House Open");
+	await expect(fullCuelist).toContainText("Mephisto Stage Center");
+	await expect(fullCuelist).toContainText("Stage Blackout");
+	const cueColumnGeometry = await fullCuelist
+		.locator(".hardware-cue-row:visible")
+		.evaluateAll((rows) =>
+			rows.map((row) => {
+				const number = row.querySelector<HTMLElement>("span");
+				const detail = row.querySelector<HTMLElement>("small");
+				const name = row.querySelector<HTMLElement>("b");
+				return {
+					numberWidth: number?.getBoundingClientRect().width ?? 0,
+					numberTextWidth: number?.scrollWidth ?? 0,
+					numberFontFamily: number ? getComputedStyle(number).fontFamily : "",
+					numberFontSize: number ? getComputedStyle(number).fontSize : "",
+					numberFits: (number?.scrollWidth ?? 0) <= (number?.clientWidth ?? 0),
+					detailFits: (detail?.scrollWidth ?? 0) <= (detail?.clientWidth ?? 0),
+					nameFontSize: name ? getComputedStyle(name).fontSize : "",
+					nameFontFamily: name ? getComputedStyle(name).fontFamily : "",
+					nameWidth: name?.getBoundingClientRect().width ?? 0,
+				};
+			}),
+		);
+	expect(cueColumnGeometry.every(({ numberFits }) => numberFits)).toBe(true);
+	expect(cueColumnGeometry.every(({ detailFits }) => detailFits)).toBe(true);
+	expect(cueColumnGeometry.every(({ numberWidth }) => numberWidth < 22)).toBe(
+		true,
+	);
+	expect(
+		cueColumnGeometry.every(
+			({ numberTextWidth, numberWidth }) =>
+				Math.abs(numberWidth - numberTextWidth) <= 1,
+		),
 	).toBe(true);
-	expect(new Set(fills.map(({ transform }) => transform)).size).toBe(3);
+	expect(
+		cueColumnGeometry.every(
+			({ nameFontFamily, nameFontSize, numberFontFamily, numberFontSize }) =>
+				nameFontSize === "8px" &&
+				numberFontSize === "8px" &&
+				nameFontFamily.includes("-apple-system") &&
+				numberFontFamily.includes("SFMono-Regular"),
+		),
+	).toBe(true);
+	expect(cueColumnGeometry.every(({ nameWidth }) => nameWidth > 0)).toBe(true);
 
-	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--running-with-gradient&viewMode=story",
+	const compactGroup = page.locator(
+		".hardware-playback-card[data-playback-row='0'][data-playback-kind='group-master']",
 	);
-	const modeBounds = await page
-		.getByText("Cue 4 · Solo", { exact: true })
-		.boundingBox();
-	const valueBounds = await page
-		.getByText("62%", { exact: true })
-		.boundingBox();
-	expect(modeBounds).not.toBeNull();
-	expect(valueBounds).not.toBeNull();
-	expect(modeBounds!.y + modeBounds!.height).toBeLessThanOrEqual(
-		valueBounds!.y,
-	);
-
-	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--hardware-bank&viewMode=story",
-	);
-	const hardwareCard = page.locator(".hardware-playback-card").first();
-	const [cardBox, headerGeometry, controlsBox, faderBox, faderFillBox] =
+	const [compactInfoBox, compactSummaryBox, compactButtonBox] =
 		await Promise.all([
-			hardwareCard.boundingBox(),
-			hardwareCard.locator(":scope > header").boundingBox(),
-			hardwareCard.locator(".hardware-playback-controls").boundingBox(),
-			hardwareCard.locator(".hardware-fader").boundingBox(),
-			hardwareCard.locator(".hardware-fader-fill").boundingBox(),
+			compactGroup.locator(".hardware-cue-list").boundingBox(),
+			compactGroup.locator(".playback-top-widget").boundingBox(),
+			compactGroup
+				.locator(".hardware-playback-controls .ui-button")
+				.boundingBox(),
 		]);
-	expect(cardBox).not.toBeNull();
-	expect(headerGeometry).not.toBeNull();
-	expect(controlsBox).not.toBeNull();
-	expect(faderBox).not.toBeNull();
-	expect(faderFillBox).not.toBeNull();
-	expect(headerGeometry!.height).toBeLessThanOrEqual(32);
-	expect(controlsBox!.height).toBeGreaterThanOrEqual(77);
-	expect(faderBox!.width).toBeCloseTo(controlsBox!.width, 5);
-	expect(faderBox!.x).toBeCloseTo(controlsBox!.x, 5);
-	expect(faderBox!.y + faderBox!.height).toBeCloseTo(
-		controlsBox!.y + controlsBox!.height,
-		5,
+	expect(compactInfoBox?.height).toBeGreaterThan(0);
+	expect(compactSummaryBox?.y).toBeGreaterThanOrEqual(compactInfoBox?.y ?? 0);
+	expect(
+		(compactSummaryBox?.y ?? 0) + (compactSummaryBox?.height ?? 0),
+	).toBeLessThanOrEqual(
+		(compactInfoBox?.y ?? 0) + (compactInfoBox?.height ?? 0),
 	);
-	expect(faderFillBox!.width).toBeCloseTo(faderBox!.width, 5);
-	expect(faderFillBox!.y + faderFillBox!.height).toBeCloseTo(
-		faderBox!.y + faderBox!.height,
-		5,
-	);
+	expect(compactButtonBox?.height).toBeLessThanOrEqual(15);
 
-	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--long-labels&viewMode=story",
+	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(
+		2,
 	);
-	const header = page.locator(".hardware-playback-card > header");
-	const title = header.locator(".playback-software-representation");
-	const address = header.locator("strong");
-	const [headerBox, titleBox, addressBox] = await Promise.all([
-		header.boundingBox(),
-		title.boundingBox(),
-		address.boundingBox(),
-	]);
-	expect(titleBox!.width).toBeGreaterThan(addressBox!.width);
-	expect(addressBox!.x + addressBox!.width).toBeLessThanOrEqual(
-		headerBox!.x + headerBox!.width,
+	await expect(
+		page.locator(".hardware-fader[data-pickup-direction='lower']"),
+	).toHaveCount(1);
+	await expect(
+		page.locator(".hardware-fader[data-pickup-direction='raise']"),
+	).toHaveCount(1);
+	await expect(page.locator(".hardware-fader-target-marker")).toHaveCount(0);
+	await expect(page.getByText(/Physical \d/u)).toHaveCount(0);
+	await expect(page.getByText(/Target \d/u)).toHaveCount(0);
+	expect(
+		await page.locator(".hardware-fader.pickup-required > b").allTextContents(),
+	).toEqual(["62%", "62%"]);
+	const pickupGeometry = await page
+		.locator(".hardware-fader.pickup-required")
+		.evaluateAll((faders) =>
+			faders.map((fader) => {
+				const track = fader.querySelector<HTMLElement>(".hardware-fader-track");
+				const fill = fader.querySelector<HTMLElement>(".hardware-fader-fill");
+				const difference = fader.querySelector<HTMLElement>(
+					".hardware-fader-pickup-difference",
+				);
+				const physical = fader.querySelector<HTMLElement>(
+					".hardware-fader-physical-marker",
+				);
+				const value = fader.querySelector<HTMLElement>(":scope > b");
+				const trackBox = track?.getBoundingClientRect();
+				const valueBox = value?.getBoundingClientRect();
+				const center = (element: HTMLElement | null) => {
+					const box = element?.getBoundingClientRect();
+					return box ? box.y + box.height / 2 : 0;
+				};
+				return {
+					direction: fader.getAttribute("data-pickup-direction"),
+					trackBottom: (trackBox?.y ?? 0) + (trackBox?.height ?? 0),
+					trackHeight: trackBox?.height ?? 0,
+					trackWidth: trackBox?.width ?? 0,
+					fillTop: fill?.getBoundingClientRect().y ?? 0,
+					differenceHeight: difference?.getBoundingClientRect().height ?? 0,
+					physicalCenter: center(physical),
+					physicalWidth: physical?.getBoundingClientRect().width ?? 0,
+					physicalHeight: physical?.getBoundingClientRect().height ?? 0,
+					valueRight: (valueBox?.x ?? 0) + (valueBox?.width ?? 0),
+					valueBottom: (valueBox?.y ?? 0) + (valueBox?.height ?? 0),
+					trackRight: (trackBox?.x ?? 0) + (trackBox?.width ?? 0),
+					valueFontSize: value ? getComputedStyle(value).fontSize : "",
+				};
+			}),
+		);
+	const boundary = (
+		geometry: (typeof pickupGeometry)[number],
+		fraction: number,
+	) => geometry.trackBottom - geometry.trackHeight * fraction;
+	const lower = pickupGeometry.find(({ direction }) => direction === "lower")!;
+	const raise = pickupGeometry.find(({ direction }) => direction === "raise")!;
+	expect(Math.abs(lower.fillTop - boundary(lower, 0.75))).toBeLessThanOrEqual(
+		1,
 	);
-	await expect(page.locator(".hardware-cue-row > i")).toHaveCount(0);
-	for (const button of await page
-		.locator(".hardware-playback-controls footer button")
-		.all()) {
-		expect(
-			await button.evaluate(
-				(element) => element.scrollWidth <= element.clientWidth,
-			),
-		).toBe(true);
+	expect(
+		Math.abs(lower.physicalCenter - boundary(lower, 0.75)),
+	).toBeLessThanOrEqual(1);
+	expect(lower.differenceHeight).toBeCloseTo(lower.trackHeight * 0.25, 0);
+	expect(Math.abs(raise.fillTop - boundary(raise, 0.5))).toBeLessThanOrEqual(1);
+	expect(
+		Math.abs(raise.physicalCenter - boundary(raise, 0.5)),
+	).toBeLessThanOrEqual(1);
+	expect(raise.differenceHeight).toBeCloseTo(raise.trackHeight * 0.25, 0);
+	for (const geometry of pickupGeometry) {
+		expect(geometry.physicalWidth).toBeGreaterThanOrEqual(geometry.trackWidth);
+		expect(geometry.physicalHeight).toBeCloseTo(1, 0);
+		expect(geometry.trackRight - geometry.valueRight).toBeLessThanOrEqual(3);
+		expect(geometry.trackBottom - geometry.valueBottom).toBeLessThanOrEqual(2);
+		expect(geometry.valueFontSize).toBe("9px");
 	}
+	await expect(page.getByText("LOADED NEXT", { exact: true })).toHaveCount(1);
 });
 
-test("hardware pickup uses explicit physical and target positions and clears safely", async ({
+test("playback group controls enforce row action rules and touch or hardware height envelopes", async ({
 	page,
 }) => {
-	const expectPickupGeometry = async ({
-		physical,
-		story,
-		target,
-	}: {
-		physical: number;
-		story: string;
-		target: number;
-	}) => {
+	for (const mode of ["touch", "hardware"] as const) {
+		const story = `playbacks-playback-bank--eight-by-two-${mode}-bank`;
+		const expectedHeight = mode === "touch" ? 280 : 140;
 		await page.goto(
-			`/iframe.html?id=playbacks-playback-bank--${story}&viewMode=story`,
+			`/iframe.html?id=${story}&viewMode=story&args=playbacksWide:8;playbacksHigh:2;availableWidth:640`,
 		);
-		const track = page.locator(".hardware-fader-track");
-		const fill = track.locator(".hardware-fader-fill");
-		const difference = track.locator(".hardware-fader-pickup-difference");
-		const physicalMarker = track.locator(".hardware-fader-physical-marker");
-		const targetMarker = track.locator(".hardware-fader-target-marker");
-		const [trackBox, fillBox, differenceBox, physicalBox, targetBox] =
-			await Promise.all([
-				track.boundingBox(),
-				fill.boundingBox(),
-				difference.boundingBox(),
-				physicalMarker.boundingBox(),
-				targetMarker.boundingBox(),
-			]);
-		const trackBottom = (trackBox?.y ?? 0) + (trackBox?.height ?? 0);
-		const boundary = (percent: number) =>
-			trackBottom - (trackBox?.height ?? 0) * percent;
-		expect(Math.abs((fillBox?.y ?? 0) - boundary(physical))).toBeLessThan(1);
-		expect(
-			Math.abs(
-				(differenceBox?.height ?? 0) -
-					(trackBox?.height ?? 0) * Math.abs(target - physical),
-			),
-		).toBeLessThan(1);
-		expect(
-			Math.abs(
-				(physicalBox?.y ?? 0) +
-					(physicalBox?.height ?? 0) / 2 -
-					boundary(physical),
-			),
-		).toBeLessThan(1);
-		expect(
-			Math.abs(
-				(targetBox?.y ?? 0) +
-					(targetBox?.height ?? 0) / 2 -
-					boundary(target),
-			),
-		).toBeLessThan(1);
-	};
-	await expectPickupGeometry({
-		story: "pickup-raise",
-		physical: 0.5,
-		target: 0.75,
-	});
-	await expectPickupGeometry({
-		story: "pickup-lower",
-		physical: 0.75,
-		target: 0.5,
-	});
+		const widthSlider = page.getByRole("slider", {
+			name: `${mode} playback group available width`,
+		});
+		const resizableFrame = page.locator(
+			`[data-playback-group-frame="${mode}"]`,
+		);
+		await expect(resizableFrame).toHaveCSS("width", "640px");
+		await widthSlider.fill("880");
+		await expect(resizableFrame).toHaveCSS("width", "880px");
 
-	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--pickup-required&viewMode=story",
-	);
-	await expect(page.getByRole("status")).toHaveCount(0);
-	await expect(page.getByText("Physical 62% · Target 0%")).toBeVisible();
-	await expect(page.getByText("Lower to 0%")).toBeVisible();
-	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(
-		1,
-	);
-	await expect(page.locator("article.pickup-required")).toHaveCount(0);
-
-	for (const story of [
-		"touch-never-shows-pickup",
-		"faderless-never-shows-pickup",
-	]) {
-		await page.goto(
-			`/iframe.html?id=playbacks-playback-bank--${story}&viewMode=story`,
-		);
-		await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(
-			0,
-		);
-		await expect(page.getByText(/Physical \d+%/)).toHaveCount(0);
+		for (const rows of [1, 2, 3, 4, 5, 6]) {
+			await page.goto(
+				`/iframe.html?id=${story}&viewMode=story&args=playbacksWide:4;playbacksHigh:${rows};availableWidth:640`,
+			);
+			const frame = page.locator(`[data-playback-group-frame="${mode}"]`);
+			const bank = frame.locator(".playback-fader-bank");
+			await expect(bank).toHaveAttribute("data-playback-rows", String(rows));
+			await expect(bank).toHaveCSS("column-gap", "3px");
+			await expect(bank).toHaveCSS("row-gap", "3px");
+			await expect(bank.locator(".playback-card")).toHaveCount(4 * rows);
+			const frameBox = await frame.boundingBox();
+			expect(frameBox?.width).toBe(640);
+			expect(frameBox?.height).toBe(expectedHeight);
+			const cards = await bank
+				.locator(".playback-card")
+				.evaluateAll((elements) =>
+					elements.map((card) => ({
+						buttons: Number(card.getAttribute("data-button-count")),
+						fader: card.getAttribute("data-has-fader") === "true",
+						kind: card.getAttribute("data-playback-kind"),
+						row: Number(card.getAttribute("data-playback-row")),
+					})),
+				);
+			const assigned = cards.filter((card) => card.kind !== "empty");
+			if (rows === 1) {
+				expect(assigned.every((card) => card.fader && card.buttons === 3)).toBe(
+					true,
+				);
+			} else if (rows === 2) {
+				expect(
+					assigned
+						.filter((card) => card.row === 0)
+						.every((card) => !card.fader && card.buttons === 1),
+				).toBe(true);
+				expect(
+					assigned
+						.filter((card) => card.row === 1)
+						.every((card) => card.fader && card.buttons === 3),
+				).toBe(true);
+			} else if (mode === "touch") {
+				expect(
+					assigned.every(
+						(card) => !card.fader && (card.buttons === 1 || card.buttons === 2),
+					),
+				).toBe(true);
+			} else if (rows === 3 || rows === 4) {
+				expect(
+					assigned.every((card) => !card.fader && card.buttons === 1),
+				).toBe(true);
+				if (rows === 3) {
+					expect(
+						await bank
+							.locator(".playback-card:not(.empty) .hardware-cue-list")
+							.evaluateAll((lists) =>
+								lists.every((list) => list.getBoundingClientRect().height > 0),
+							),
+					).toBe(true);
+				} else {
+					await expect(
+						bank.locator(
+							".playback-card:not(.empty) .hardware-cue-list:visible",
+						),
+					).toHaveCount(0);
+				}
+			} else {
+				expect(
+					assigned.every((card) => !card.fader && card.buttons === 0),
+				).toBe(true);
+				await expect(bank.locator(".hardware-playback-controls")).toHaveCount(
+					0,
+				);
+				await expect(bank.locator("button")).toHaveCount(0);
+				await expect(
+					bank.locator(
+						".playback-card:not(.empty) .hardware-playback-button-label",
+					),
+				).toHaveCount(assigned.length);
+				const labelsFitBottomRight = await bank
+					.locator(".playback-card:not(.empty)")
+					.evaluateAll((cards) =>
+						cards.every((card) => {
+							const cardBox = card.getBoundingClientRect();
+							const labelBox = card
+								.querySelector<HTMLElement>(".hardware-playback-button-label")
+								?.getBoundingClientRect();
+							return (
+								Boolean(labelBox) &&
+								cardBox.right - (labelBox?.right ?? 0) <= 3 &&
+								cardBox.bottom - (labelBox?.bottom ?? 0) <= 2
+							);
+						}),
+					);
+				expect(labelsFitBottomRight).toBe(true);
+			}
+			if (rows >= 3) {
+				await expect(bank).toHaveClass(/compact-rows/u);
+				const controlsFit = await bank
+					.locator(".playback-card")
+					.evaluateAll((elements) =>
+						elements.every((card) => {
+							const bounds = card.getBoundingClientRect();
+							return [...card.querySelectorAll<HTMLElement>("button")].every(
+								(button) => {
+									const buttonBounds = button.getBoundingClientRect();
+									return (
+										buttonBounds.right <= bounds.right + 1 &&
+										buttonBounds.bottom <= bounds.bottom + 1
+									);
+								},
+							);
+						}),
+					);
+				expect(controlsFit).toBe(true);
+			}
+		}
 	}
-
-	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--only-one-of-multiple-faders-requires-pickup&viewMode=story",
-	);
-	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(
-		1,
-	);
-
-	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--pickup-approach-and-release-from-below&viewMode=story",
-	);
-	await page.getByRole("slider").first().fill("70");
-	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(
-		0,
-	);
-
-	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--pickup-authority-replacement&viewMode=story",
-	);
-	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(
-		1,
-	);
-	await page
-		.getByRole("button", { name: "Replace hardware authority" })
-		.click();
-	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(
-		0,
-	);
-
-	await page.goto(
-		"/iframe.html?id=playbacks-playback-bank--pickup-hardware-disconnected-and-reconnected&viewMode=story",
-	);
-	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(1);
-	await page.getByRole("button", { name: "Disconnect hardware" }).click();
-	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(0);
-	await page.getByRole("button", { name: "Reconnect hardware" }).click();
-	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(1);
 });
 
 test("application Stage stories render deterministic 2D fixtures and the real 3D canvas", async ({
@@ -853,6 +1737,12 @@ test("generic and application-owned pool stories preserve their slot contracts",
 	);
 	await page.getByRole("textbox", { name: "Search Cuelists" }).fill("Main");
 	await expect(page.locator(".cuelist-card")).toHaveCount(1);
+	await page.getByRole("textbox", { name: "Search Cuelists" }).fill("Side");
+	const filteredCuelist = page.locator(".cuelist-card").first();
+	await expect(page.locator(".cuelist-card")).toHaveCount(1);
+	await expect(filteredCuelist.locator(".number")).toHaveText("4");
+	await expect(filteredCuelist).toHaveAttribute("data-pool-slot-id", "4");
+	await expect(filteredCuelist).toHaveAttribute("data-pool-position", "0");
 	await page.getByRole("textbox", { name: "Search Cuelists" }).fill("");
 	await expect(page.locator(".cuelist-card")).toHaveCount(1000);
 
@@ -960,6 +1850,52 @@ test("pool cards stay square across width, height, resize, overflow, and applica
 	}
 });
 
+test("the Cuelist pool uses its target minimum and fills the available width", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 1280, height: 760 });
+	await page.goto(
+		"/iframe.html?id=application-windows-cuelists-and-cues--pool-wide-tall&viewMode=story",
+	);
+	const grid = page.locator(".cuelist-pool-grid");
+	const firstCard = page.locator(".cuelist-card").first();
+	await expect(grid).toHaveCSS("--grid-cell-min", "150px");
+	await expect(firstCard).toBeVisible();
+	const geometry = await grid.evaluate((node) => {
+		const style = getComputedStyle(node);
+		const first = node.firstElementChild?.getBoundingClientRect();
+		const contentWidth =
+			node.clientWidth -
+			Number.parseFloat(style.paddingLeft) -
+			Number.parseFloat(style.paddingRight);
+		const gap = Number.parseFloat(style.columnGap);
+		const minimum = Number.parseFloat(
+			style.getPropertyValue("--grid-cell-min"),
+		);
+		const columns = first
+			? Array.from(node.children).filter(
+					(child) =>
+						Math.abs(child.getBoundingClientRect().top - first.top) < 1,
+				).length
+			: 0;
+		return {
+			cardWidth: first?.width ?? 0,
+			columns,
+			contentWidth,
+			gap,
+			minimum,
+		};
+	});
+	expect(geometry.cardWidth).toBeGreaterThanOrEqual(geometry.minimum - 1);
+	expect(
+		geometry.columns * geometry.cardWidth +
+			(geometry.columns - 1) * geometry.gap,
+	).toBeCloseTo(geometry.contentWidth, 0);
+	expect(
+		(geometry.columns + 1) * geometry.minimum + geometry.columns * geometry.gap,
+	).toBeGreaterThan(geometry.contentWidth);
+});
+
 test("configured colors and derived or frozen states use complete outlines and readable markers", async ({
 	page,
 }) => {
@@ -1002,6 +1938,77 @@ test("configured colors and derived or frozen states use complete outlines and r
 	);
 	await expect(page.getByLabel(/Derived state/u)).toBeVisible();
 	await expect(page.getByLabel(/Frozen state/u)).toBeVisible();
+});
+
+test("production pool cards use dashed empty cards and semantic workflow colors", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=pools-production-pool-cards--scaling-and-every-state&viewMode=story",
+	);
+	const empty = page.getByRole("button", { name: /Empty/u });
+	const recordTarget = page.getByRole("button", { name: /Record here/u });
+	const updateTarget = page.locator(".pool-card.update-target").first();
+	const setTarget = page.locator(".pool-card.set-target").first();
+	await expect(empty).toBeEnabled();
+	await expect(recordTarget).toBeEnabled();
+	await expect(empty).toHaveCSS("border-top-style", "dashed");
+	await expect(empty).toHaveCSS("opacity", "1");
+	await expect(recordTarget.locator(".pool-card-workflow")).toHaveText(
+		"Record",
+	);
+	await expect(updateTarget.locator(".pool-card-workflow")).toHaveText(
+		"Update",
+	);
+	await expect(setTarget.locator(".pool-card-workflow")).toHaveText("Set");
+	const [recordColor, updateColor, setColor] = await Promise.all(
+		[recordTarget, updateTarget, setTarget].map((card) =>
+			card.evaluate((element) => getComputedStyle(element).borderTopColor),
+		),
+	);
+	expect(new Set([recordColor, updateColor, setColor]).size).toBe(3);
+	await expect(page.getByRole("button", { name: /Disabled/u })).toHaveCount(0);
+});
+
+test("pool names wrap inside the top-left region and both filled treatments are available", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=pools-production-pool-cards--scaling-and-every-state&viewMode=story",
+	);
+	const longName = page.getByText(
+		"Front Wash With A Deliberately Long Operator Name",
+	);
+	await expect(longName).toBeVisible();
+	const wrapping = await longName.evaluate((element) => {
+		const style = getComputedStyle(element);
+		const card = element.closest(".pool-card")?.getBoundingClientRect();
+		const name = element.getBoundingClientRect();
+		return {
+			hyphens: style.hyphens,
+			overflowWrap: style.overflowWrap,
+			inside:
+				Boolean(card) &&
+				name.left >= (card?.left ?? 0) &&
+				name.right <= (card?.right ?? 0),
+		};
+	});
+	expect(wrapping.hyphens).toBe("auto");
+	expect(wrapping.overflowWrap).toBe("break-word");
+	expect(wrapping.inside).toBe(true);
+
+	const tintedBackground = await page
+		.getByText("Blue", { exact: true })
+		.locator("xpath=ancestor::button[contains(@class, 'pool-card')]")
+		.evaluate((element) => getComputedStyle(element).backgroundColor);
+	await page.goto(
+		"/iframe.html?id=pools-production-pool-cards--outline-only-filled-cards&viewMode=story",
+	);
+	const outlineBackground = await page
+		.getByText("Blue", { exact: true })
+		.locator("xpath=ancestor::button[contains(@class, 'pool-card')]")
+		.evaluate((element) => getComputedStyle(element).backgroundColor);
+	expect(outlineBackground).not.toBe(tintedBackground);
 });
 
 test("legacy application CSS cannot impose rectangular full-pool dimensions", () => {
@@ -1107,8 +2114,34 @@ test("the application Virtual Playbacks stories cover adapter-owned targeting an
 		"/iframe.html?id=application-virtual-playbacks--unavailable-slots&viewMode=story",
 	);
 	await expect(
-		page.getByRole("button", { name: /cell 128 unavailable/u }),
+		page.getByRole("button", { name: /cell 128 empty/u }),
 	).toBeDisabled();
+
+	await page.goto(
+		"/iframe.html?id=playbacks-virtual-playback-grid--every-state&viewMode=story",
+	);
+	const empty = page.locator('[data-grid-position="1"]');
+	const unavailable = page.locator('[data-grid-position="2"]');
+	await expect(empty).toHaveAttribute("data-availability", "empty");
+	await expect(unavailable).toHaveAttribute("data-availability", "unavailable");
+	await expect(empty).toBeEnabled();
+	await expect(unavailable).toBeDisabled();
+	const vacantAppearance = async (
+		element: import("@playwright/test").Locator,
+	) =>
+		element.evaluate((node) => {
+			const style = getComputedStyle(node);
+			return {
+				background: style.backgroundColor,
+				borderStyle: style.borderStyle,
+				color: style.color,
+				filter: style.filter,
+				opacity: style.opacity,
+			};
+		});
+	expect(await vacantAppearance(unavailable)).toEqual(
+		await vacantAppearance(empty),
+	);
 });
 
 test("Virtual Playback cards use outline, full-fill, edge-status, and artwork hierarchy", async ({
@@ -1130,6 +2163,11 @@ test("Virtual Playback cards use outline, full-fill, edge-status, and artwork hi
 	await page.getByRole("button", { name: "Toggle running" }).click();
 	await expect(card).toHaveClass(/running/u);
 	await expect(card.locator(".pool-card-status")).toHaveText("Running");
+	await expect
+		.poll(() =>
+			card.evaluate((element) => getComputedStyle(element).backgroundColor),
+		)
+		.not.toBe(inactive.background);
 	const running = await card.evaluate((element) => {
 		const style = getComputedStyle(element);
 		return {
@@ -1137,13 +2175,12 @@ test("Virtual Playback cards use outline, full-fill, edge-status, and artwork hi
 			border: style.borderTopColor,
 		};
 	});
-	expect(running.background).toBe(running.border);
-	expect(running.background).not.toBe(inactive.background);
+	expect(running.border).toBe(inactive.top);
 	await page.getByRole("button", { name: "Toggle running" }).click();
 	await expect(card).not.toHaveClass(/running/u);
 	expect(
 		await card.evaluate((element) => getComputedStyle(element).backgroundColor),
-	).toBe(inactive.background);
+	).not.toBe(running.background);
 
 	await page.goto(
 		"/iframe.html?id=application-virtual-playbacks--icon-and-image-artwork&viewMode=story",
@@ -1350,10 +2387,12 @@ test("configured search children share stack order, focus, form geometry, and di
 				lineColor: line.backgroundColor,
 			};
 		});
-		expect(geometry.width).toBe(8);
+		expect(geometry.width).toBe(6);
 		expect(geometry.background).not.toBe("rgba(0, 0, 0, 0)");
-		expect(geometry.lineWidth).toBeGreaterThan(0);
-		expect(geometry.lineColor).toContain("196");
+		expect(geometry.lineWidth).toBe(2);
+		expect(geometry.lineColor).toContain("27");
+		expect(geometry.lineColor).toContain("214");
+		expect(geometry.lineColor).toContain("236");
 	}
 
 	await page.goto(
@@ -1378,7 +2417,7 @@ test("configured search children share stack order, focus, form geometry, and di
 	expect(searchBox!.y).toBeGreaterThanOrEqual(actionBox!.y + actionBox!.height);
 });
 
-test("title-bar search dividers remain one device pixel at DPR 1 and 2", async ({
+test("title-bar search dividers remain prominently two CSS pixels at DPR 1 and 2", async ({
 	browser,
 }) => {
 	for (const deviceScaleFactor of [1, 2]) {
@@ -1395,28 +2434,104 @@ test("title-bar search dividers remain one device pixel at DPR 1 and 2", async (
 		const cssWidth = await divider.evaluate((element) =>
 			Number.parseFloat(getComputedStyle(element, "::after").width),
 		);
-		expect(cssWidth * deviceScaleFactor).toBeCloseTo(1, 5);
+		expect(cssWidth).toBeCloseTo(2, 5);
 		await context.close();
 	}
 });
 
-test("window and modal chrome use the same standard search geometry", async ({
+test("generic and Fixture Sheet tables retain a single row-separator owner at DPR 1 and 2", async ({
+	browser,
+}) => {
+	for (const deviceScaleFactor of [1, 2]) {
+		const context = await browser.newContext({
+			deviceScaleFactor,
+			viewport: { width: 1280, height: 800 },
+		});
+		const dprPage = await context.newPage();
+		for (const story of [
+			"tables-generic-table--interactive",
+			"tables-fixture-sheet--step-selection",
+		]) {
+			await dprPage.goto(`/iframe.html?id=${story}&viewMode=story`);
+			const table = dprPage.locator(".ui-data-table").first();
+			await expect(table).toBeVisible();
+			const geometry = await table.evaluate((element) => {
+				const tableStyle = getComputedStyle(element);
+				const rows = [
+					...element.querySelectorAll<HTMLElement>(".ui-data-table-row"),
+				].slice(0, 8);
+				return {
+					devicePixelRatio: window.devicePixelRatio,
+					tableBackgroundImage: tableStyle.backgroundImage,
+					tableBorderTop: tableStyle.borderTopWidth,
+					tableBorderBottom: tableStyle.borderBottomWidth,
+					rows: rows.map((row, index) => {
+						const rowStyle = getComputedStyle(row);
+						const cells = [
+							...row.querySelectorAll<HTMLElement>(":scope > span"),
+						];
+						const bounds = row.getBoundingClientRect();
+						const nextBounds = rows[index + 1]?.getBoundingClientRect();
+						return {
+							borderTop: rowStyle.borderTopWidth,
+							borderBottom: rowStyle.borderBottomWidth,
+							bottom: bounds.bottom,
+							nextTop: nextBounds?.top,
+							cellBorders: cells.map((cell) => {
+								const cellStyle = getComputedStyle(cell);
+								return [cellStyle.borderTopWidth, cellStyle.borderBottomWidth];
+							}),
+						};
+					}),
+				};
+			});
+			expect(geometry.devicePixelRatio).toBe(deviceScaleFactor);
+			expect(geometry.tableBackgroundImage).toBe("none");
+			expect(geometry.tableBorderTop).toBe("0px");
+			expect(geometry.tableBorderBottom).toBe("0px");
+			for (const [index, row] of geometry.rows.entries()) {
+				expect(row.borderTop).toBe("0px");
+				expect(row.borderBottom).toBe("1px");
+				expect(
+					row.cellBorders.every(
+						([top, bottom]) => top === "0px" && bottom === "0px",
+					),
+				).toBe(true);
+				if (index < geometry.rows.length - 1)
+					expect(row.bottom).toBeCloseTo(row.nextTop ?? Number.NaN, 5);
+			}
+			expect((await table.screenshot()).byteLength).toBeGreaterThan(2_000);
+		}
+		await context.close();
+	}
+});
+
+test("window and modal chrome embed borderless searches at their title-bar heights", async ({
 	page,
 }) => {
 	const measure = async () =>
 		page.locator(".console-search").evaluate((element) => {
 			const control = element.querySelector(".ui-text-control");
+			const controlStyle = control ? getComputedStyle(control) : null;
 			const clear = element.querySelector(
 				".ui-input-clear",
 			) as HTMLElement | null;
 			return {
 				controlWidth: Math.round(control?.getBoundingClientRect().width ?? 0),
+				controlHeight: Math.round(control?.getBoundingClientRect().height ?? 0),
+				borderWidths: controlStyle
+					? [
+							controlStyle.borderTopWidth,
+							controlStyle.borderRightWidth,
+							controlStyle.borderBottomWidth,
+							controlStyle.borderLeftWidth,
+						]
+					: [],
+				borderRadius: controlStyle?.borderRadius,
 				inputHeight: Math.round(
 					element.querySelector("input")?.getBoundingClientRect().height ?? 0,
 				),
-				clearHeight: Math.round(
-					clear?.getBoundingClientRect().height ?? 0,
-				),
+				clearHeight: Math.round(clear?.getBoundingClientRect().height ?? 0),
 				clearCenterOffset: clear
 					? Math.round(
 							clear.getBoundingClientRect().top +
@@ -1436,21 +2551,31 @@ test("window and modal chrome use the same standard search geometry", async ({
 		"/iframe.html?id=modals-production-modal-stack--title-bar-configuration&viewMode=story",
 	);
 	const modalSearch = await measure();
-	const { controlWidth: windowControlWidth, ...windowGeometry } = windowSearch;
-	const { controlWidth: modalControlWidth, ...modalGeometry } = modalSearch;
-	expect(modalGeometry).toEqual(windowGeometry);
-	expect(modalSearch.inputHeight).toBeGreaterThanOrEqual(44);
+	expect(windowSearch.borderWidths).toEqual(["0px", "0px", "0px", "0px"]);
+	expect(modalSearch.borderWidths).toEqual(["0px", "0px", "0px", "0px"]);
+	expect(windowSearch.borderRadius).toBe("0px");
+	expect(modalSearch.borderRadius).toBe("0px");
+	expect(windowSearch.inputHeight).toBe(windowSearch.controlHeight);
+	expect(windowSearch.clearHeight).toBe(windowSearch.controlHeight);
+	expect(modalSearch.inputHeight).toBe(modalSearch.controlHeight);
+	expect(modalSearch.clearHeight).toBe(modalSearch.controlHeight);
+	expect(modalSearch.controlHeight).toBeGreaterThan(windowSearch.controlHeight);
+	expect(windowSearch.clearCenterOffset).toBe(0);
 	expect(modalSearch.clearCenterOffset).toBe(0);
-	expect(windowControlWidth).toBeGreaterThan(0);
-	expect(modalControlWidth).toBeGreaterThan(0);
+	expect(windowSearch.controlWidth).toBeGreaterThan(0);
+	expect(modalSearch.controlWidth).toBeGreaterThan(0);
 	const search = page.getByRole("textbox", { name: "Search Patch fixtures" });
 	await search.fill("");
 	const emptyWidth = (await measure()).controlWidth;
 	await search.fill("spot");
 	expect((await measure()).controlWidth).toBe(emptyWidth);
 	await page.getByRole("button", { name: "Open keyboard" }).click();
-	const inputDialog = page.getByRole("dialog", { name: "Search Patch fixtures" });
-	await expect(inputDialog.locator(".modal-value-leading-icon svg")).toBeVisible();
+	const inputDialog = page.getByRole("dialog", {
+		name: "Search Patch fixtures",
+	});
+	await expect(
+		inputDialog.locator(".modal-value-leading-icon svg"),
+	).toBeVisible();
 	const [iconBox, valueBox] = await Promise.all([
 		inputDialog.locator(".modal-value-leading-icon").boundingBox(),
 		inputDialog.locator(".modal-caret-value").boundingBox(),
@@ -1458,6 +2583,36 @@ test("window and modal chrome use the same standard search geometry", async ({
 	expect(iconBox).not.toBeNull();
 	expect(valueBox).not.toBeNull();
 	expect(iconBox?.x).toBeLessThan(valueBox?.x ?? 0);
+});
+
+test("modal title details stay grouped and vertically centered with their heading", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=modals-production-modal-stack--close-policies&viewMode=story",
+	);
+	const titleCopy = page.locator(".ui-modal-title-copy");
+	await expect(titleCopy).toHaveCSS("justify-content", "center");
+	const [copyBox, headingBox, detailsBox] = await Promise.all([
+		titleCopy.boundingBox(),
+		titleCopy.locator(".ui-modal-title-heading").boundingBox(),
+		titleCopy.locator(".ui-modal-title-details").boundingBox(),
+	]);
+	expect(copyBox).not.toBeNull();
+	expect(headingBox).not.toBeNull();
+	expect(detailsBox).not.toBeNull();
+	expect(detailsBox?.y).toBeGreaterThan(
+		(headingBox?.y ?? 0) + (headingBox?.height ?? 0),
+	);
+	const contentTop = headingBox?.y ?? 0;
+	const contentBottom = (detailsBox?.y ?? 0) + (detailsBox?.height ?? 0);
+	expect(
+		Math.abs(
+			contentTop -
+				(copyBox?.y ?? 0) -
+				((copyBox?.height ?? 0) - (contentBottom - contentTop)) / 2,
+		),
+	).toBeLessThanOrEqual(1);
 });
 
 test("desktop story uses the real 24 × 18 non-overlapping geometry", async ({
@@ -1561,6 +2716,150 @@ test("desktop panes drag, resize, maximize, and request an empty-grid placement"
 	);
 });
 
+test("button variants expose animated loading, larger icon-only controls, icons, and left alignment", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=controls-production-controls--buttons&viewMode=story",
+	);
+	const loading = page.getByRole("button", { name: "Loading" });
+	await expect(loading).toHaveAttribute("aria-busy", "true");
+	await expect(loading.locator(".ui-spinner")).toHaveCSS(
+		"animation-name",
+		"ui-spin",
+	);
+	const iconOnly = page.getByRole("button", { name: "Settings" });
+	const iconOnlySize = await iconOnly.evaluate((button) =>
+		Number.parseFloat(getComputedStyle(button).fontSize),
+	);
+	const regularSize = await page
+		.getByRole("button", { name: "Secondary" })
+		.evaluate((button) => Number.parseFloat(getComputedStyle(button).fontSize));
+	expect(iconOnlySize).toBeGreaterThan(regularSize);
+
+	await page.goto(
+		"/iframe.html?id=controls-production-controls--buttons-with-icons&viewMode=story",
+	);
+	await expect(page.locator(".ui-button")).toHaveCount(6);
+	await expect(page.locator(".ui-button-icon")).toHaveCount(6);
+	for (const variant of [
+		"primary",
+		"secondary",
+		"ghost",
+		"danger",
+		"success",
+		"warning",
+	]) {
+		await expect(page.locator(`.ui-button.ui-${variant}`)).toHaveCount(1);
+	}
+
+	await page.goto(
+		"/iframe.html?id=controls-production-controls--left-aligned-buttons&viewMode=story",
+	);
+	await expect(page.locator(".ui-button.is-left-aligned")).toHaveCount(6);
+	for (const button of await page.locator(".ui-button").all()) {
+		await expect(button).toHaveCSS("justify-content", "flex-start");
+	}
+});
+
+test("direct value opens a modal with the touch fader left of the number pad", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=faders-vertical-touch-fader--direct-value-button&viewMode=story",
+	);
+	const trigger = page.locator(".touch-value-button > .ui-button");
+	await expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+	await expect(trigger).toHaveAttribute("aria-expanded", "false");
+	await expect(page.getByRole("dialog")).toHaveCount(0);
+	await trigger.click();
+	await expect(trigger).toHaveAttribute("aria-expanded", "true");
+	const dialog = page.getByRole("dialog", { name: "Grand Master value" });
+	await expect(dialog).toBeVisible();
+	await expect(dialog.locator("..")).toHaveCSS("position", "fixed");
+	const fader = dialog.locator(".modal-number-editor-fader");
+	await expect(fader.locator(".vertical-touch-fader")).toHaveCount(1);
+	await expect(fader.locator(".vertical-touch-fader-actions")).toHaveCount(0);
+	const valueRow = dialog.locator(".modal-number-value");
+	const keypad = dialog.getByLabel("Number input keypad");
+	const firstKey = keypad.locator(".ui-button").first();
+	const faderBox = await fader.boundingBox();
+	const valueBox = await valueRow.boundingBox();
+	const keypadBox = await keypad.boundingBox();
+	const firstKeyBox = await firstKey.boundingBox();
+	expect(faderBox).not.toBeNull();
+	expect(valueBox).not.toBeNull();
+	expect(keypadBox).not.toBeNull();
+	expect(
+		(faderBox?.x ?? Number.POSITIVE_INFINITY) + (faderBox?.width ?? 0),
+	).toBeLessThan(keypadBox?.x ?? Number.NEGATIVE_INFINITY);
+	expect(faderBox?.y).toBeCloseTo(valueBox?.y ?? Number.NaN, 0);
+	expect((faderBox?.y ?? 0) + (faderBox?.height ?? 0)).toBeCloseTo(
+		(keypadBox?.y ?? 0) + (keypadBox?.height ?? 0),
+		0,
+	);
+	expect(faderBox?.width).toBeCloseTo((firstKeyBox?.width ?? 64) * 2 + 8, 0);
+	expect(valueBox?.width).toBeCloseTo(keypadBox?.width ?? Number.NaN, 0);
+	const backspaceBox = await keypad
+		.getByRole("button", { name: "⌫" })
+		.boundingBox();
+	const enterBox = await keypad
+		.getByRole("button", { name: "ENTER" })
+		.boundingBox();
+	expect(backspaceBox?.width).toBeGreaterThan(firstKeyBox?.width ?? Infinity);
+	expect(enterBox?.width).toBeGreaterThan(firstKeyBox?.width ?? Infinity);
+	await page.keyboard.press("7");
+	await expect(keypad.getByRole("button", { name: "7" })).toHaveAttribute(
+		"data-keyboard-pressed",
+		"true",
+	);
+	const slider = dialog.getByRole("slider", { name: "Grand Master fader" });
+	const sliderBox = await slider.boundingBox();
+	expect(sliderBox).not.toBeNull();
+	if (!sliderBox) return;
+
+	await page.mouse.click(sliderBox.x + sliderBox.width / 2, sliderBox.y + 6);
+	await expect(slider).toHaveValue("100");
+	await page.mouse.click(
+		sliderBox.x + sliderBox.width / 2,
+		sliderBox.y + sliderBox.height / 2,
+	);
+	await expect(slider).toHaveValue("50");
+
+	await page.mouse.move(sliderBox.x + 6, sliderBox.y + sliderBox.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(
+		sliderBox.x + sliderBox.width - 6,
+		sliderBox.y + sliderBox.height / 2,
+	);
+	await page.mouse.up();
+	await expect(slider).toHaveValue("50");
+
+	await page.mouse.click(
+		sliderBox.x + sliderBox.width / 2,
+		sliderBox.y + sliderBox.height - 6,
+	);
+	await expect(slider).toHaveValue("0");
+	await dialog
+		.getByRole("button", { name: "Close Grand Master value" })
+		.click();
+	let unsaved = page.getByRole("dialog", {
+		name: "Unsaved Grand Master value changes",
+	});
+	await expect(unsaved).toBeVisible();
+	await unsaved.getByText("Stay in modal", { exact: true }).click();
+	await expect(unsaved).toHaveCount(0);
+	await expect(dialog).toBeVisible();
+	await page.keyboard.press("Escape");
+	unsaved = page.getByRole("dialog", {
+		name: "Unsaved Grand Master value changes",
+	});
+	await expect(unsaved).toBeVisible();
+	await unsaved.getByRole("button", { name: "Discard changes" }).click();
+	await expect(dialog).toHaveCount(0);
+	await expect(trigger).toContainText("42.0%");
+});
+
 for (const storyId of [
 	"controls-production-controls--button-playground",
 	"input-keyboard-and-numpad--number-pad",
@@ -1581,7 +2880,7 @@ for (const storyId of [
 	});
 }
 
-test("named application windows use production Fixture, Cuelist, Patch, Setup, and Development views", async ({
+test("named application windows use production Fixture, Cuelist, Patch, and Setup views", async ({
 	page,
 }) => {
 	await page.goto(
@@ -1590,9 +2889,38 @@ test("named application windows use production Fixture, Cuelist, Patch, Setup, a
 	await expect(page.getByText("Fixture Sheet", { exact: true })).toBeVisible();
 	await expect(page.locator(".ui-data-table-row:not(.empty)")).toHaveCount(5);
 	await expect(
-		page.getByText("Stage Left Mover", { exact: true }),
+		page.getByText("Stage Left Mover · Master", { exact: true }),
 	).toBeVisible();
 	await expect(page.locator(".ui-data-table-row.selected")).toHaveCount(2);
+	await expect(page.locator(".fixture-sheet-icon img")).toHaveCount(4);
+	const fixtureSheetIconSources = await page
+		.locator(".fixture-sheet-icon img")
+		.evaluateAll((icons) =>
+			icons.map((icon) => decodeURIComponent((icon as HTMLImageElement).src)),
+		);
+	expect(
+		fixtureSheetIconSources.some((source) =>
+			source.includes("fixture type profile dimmer lamp"),
+		),
+	).toBe(true);
+	expect(
+		fixtureSheetIconSources.some((source) =>
+			source.includes("fixture type led wash moving light lenses"),
+		),
+	).toBe(true);
+	await expect(page.locator(".vertical-meter")).toHaveCount(4);
+	await expect(page.locator(".color-dot")).toHaveCount(5);
+	await expect(page.locator(".position-glyph")).toHaveCount(4);
+	expect(await page.getByRole("columnheader").allTextContents()).toEqual([
+		"ID",
+		"Icon",
+		"Name / type",
+		"Dimmer",
+		"Color",
+		"Position",
+		"Beam",
+		"Focus",
+	]);
 
 	await page.goto(
 		"/iframe.html?id=application-windows-cuelists-and-cues--pool&viewMode=story",
@@ -1623,6 +2951,50 @@ test("named application windows use production Fixture, Cuelist, Patch, Setup, a
 	await expect(
 		page.getByText("No fixtures in this layer.", { exact: true }),
 	).toBeVisible();
+	await page.goto(
+		"/iframe.html?id=application-windows-patch--filled-patch&viewMode=story",
+	);
+	await expect(
+		page.getByText("10 fixtures · 3 layers", { exact: true }),
+	).toBeVisible();
+	await expect(
+		page.getByText("Front Fresnel 1", { exact: true }),
+	).toBeVisible();
+	await expect(page.getByText("Front Wash 4", { exact: true })).toBeVisible();
+	await expect(
+		page.getByText("Front Blinder 1", { exact: true }),
+	).toBeVisible();
+	await expect(
+		page.getByText("Front Blinder 4", { exact: true }),
+	).toBeVisible();
+	await expect(page.getByText("Stage ACL 1", { exact: true })).toBeVisible();
+	await expect(page.getByText("Stage ACL 8", { exact: true })).toBeVisible();
+	await expect(page.locator(".multipatch-row")).toHaveCount(10);
+	await expect(
+		page.locator(".multipatch-row").getByText("Unpatched", { exact: true }),
+	).toHaveCount(7);
+	await expect(page.locator(".fixture-type-icon img")).toHaveCount(10);
+	const patchIconSources = await page
+		.locator(".fixture-type-icon img")
+		.evaluateAll((icons) =>
+			icons.map((icon) => decodeURIComponent((icon as HTMLImageElement).src)),
+		);
+	expect(
+		patchIconSources.some((source) =>
+			source.includes("fixture type fresnel barn doors"),
+		),
+	).toBe(true);
+	expect(
+		patchIconSources.some((source) =>
+			source.includes("fixture type led wash moving light lenses"),
+		),
+	).toBe(true);
+	expect(
+		patchIconSources.some((source) => source.includes("fixture type blinder")),
+	).toBe(true);
+	expect(
+		patchIconSources.some((source) => source.includes("fixture type acl set")),
+	).toBe(true);
 
 	await page.goto(
 		"/iframe.html?id=application-windows-setup--timecode&viewMode=story",
@@ -1633,18 +3005,6 @@ test("named application windows use production Fixture, Cuelist, Patch, Setup, a
 	await expect(
 		page.getByText("Fallback allowed", { exact: true }),
 	).toBeVisible();
-
-	for (const [story, heading] of [
-		["forms", "Side labels"],
-		["faders", "Vertical faders and optional actions"],
-		["buttons", "Buttons"],
-	] as const) {
-		await page.goto(
-			`/iframe.html?id=application-windows-development--${story}&viewMode=story`,
-		);
-		await expect(page.getByText("Development", { exact: true })).toBeVisible();
-		await expect(page.getByRole("heading", { name: heading })).toBeVisible();
-	}
 });
 
 test("Forms story keeps state, scrolling, fader, pickers, grouped selections, and file drop interactive", async ({
@@ -1675,6 +3035,56 @@ test("Forms story keeps state, scrolling, fader, pickers, grouped selections, an
 		"aria-checked",
 		"true",
 	);
+
+	const valueWithFader = page.getByRole("textbox", {
+		name: "Value with fader",
+	});
+	await valueWithFader
+		.locator("..")
+		.getByRole("button", { name: "Open number pad" })
+		.click();
+	const faderDialog = page.getByRole("dialog", { name: "Value with fader" });
+	await expect(
+		faderDialog.getByRole("slider", { name: "Value with fader fader" }),
+	).toHaveCount(1);
+	await expect(faderDialog).toHaveClass(/with-value-fader/u);
+	await faderDialog
+		.getByRole("button", { name: "Close Value with fader" })
+		.click();
+
+	const valueWithPresets = page.getByRole("textbox", {
+		name: "Value with presets",
+	});
+	await valueWithPresets
+		.locator("..")
+		.getByRole("button", { name: "Open number pad" })
+		.click();
+	let presetDialog = page.getByRole("dialog", { name: "Value with presets" });
+	const modeToggle = presetDialog.getByRole("button", {
+		name: "Show presets",
+	});
+	await expect(modeToggle.locator('[data-active="true"]')).toHaveText("Value");
+	await expect(
+		presetDialog.getByRole("button", { name: "Release value" }),
+	).toBeVisible();
+	await modeToggle.click();
+	await expect(
+		presetDialog.getByText("Intensity", { exact: true }),
+	).toBeVisible();
+	await expect(
+		presetDialog.getByText("Operator defaults", { exact: true }),
+	).toBeVisible();
+	await presetDialog.getByRole("button", { name: /Full/ }).click();
+	await expect(valueWithPresets).toHaveValue("100");
+	await expect(presetDialog).toHaveCount(0);
+
+	await valueWithPresets
+		.locator("..")
+		.getByRole("button", { name: "Open number pad" })
+		.click();
+	presetDialog = page.getByRole("dialog", { name: "Value with presets" });
+	await presetDialog.getByRole("button", { name: "Release value" }).click();
+	await expect(valueWithPresets).toHaveValue("");
 
 	const notes = page.getByRole("textbox", { name: "Notes" });
 	const noteValue = await notes.inputValue();
@@ -1707,11 +3117,14 @@ test("Forms story keeps state, scrolling, fader, pickers, grouped selections, an
 
 	const color = page.getByRole("button", { name: "#1BD6EC" });
 	const triggerBox = await color.boundingBox();
+	const colorControlBox = await color.locator("..").boundingBox();
 	const swatchBox = await color
 		.locator(".ui-color-trigger-swatch")
 		.boundingBox();
 	expect(triggerBox).not.toBeNull();
+	expect(colorControlBox).not.toBeNull();
 	expect(swatchBox).not.toBeNull();
+	expect(triggerBox!.width).toBeCloseTo(colorControlBox!.width, 0);
 	expect(swatchBox!.x).toBeGreaterThan(triggerBox!.x);
 	expect(swatchBox!.width).toBeLessThan(triggerBox!.width);
 	await color.click();
@@ -1721,21 +3134,44 @@ test("Forms story keeps state, scrolling, fader, pickers, grouped selections, an
 		const box = await choice.boundingBox();
 		expect(Math.abs((box?.width ?? 0) - (box?.height ?? 0))).toBeLessThan(2);
 	}
+	const customHex = page.getByRole("textbox", { name: "Custom hex" });
+	const customAction = page.getByRole("button", { name: "Use custom color" });
+	const customPreview = page.getByLabel("Color preview");
+	const customBoxes = await Promise.all([
+		customHex.locator("..").boundingBox(),
+		customAction.boundingBox(),
+		customPreview.boundingBox(),
+	]);
+	for (const box of customBoxes) {
+		expect(box).not.toBeNull();
+		expect(box?.height).toBeCloseTo(48, 0);
+		expect(box?.y).toBeCloseTo(customBoxes[0]?.y ?? 0, 0);
+	}
 	await page.keyboard.press("Escape");
 
 	await page.getByRole("button", { name: "Choose icon" }).click();
-	await expect(page.getByRole("combobox", { name: "Icon group" })).toHaveValue(
-		"gobo",
-	);
-	await page
-		.getByRole("combobox", { name: "Icon group" })
-		.selectOption("fixture-type");
-	await expect(page.locator('[data-icon-group="fixture-type"]')).toBeVisible();
+	const iconDialog = page.getByRole("dialog", { name: "Choose icon" });
+	await expect(iconDialog).toBeVisible();
+	const iconGroup = iconDialog.getByRole("button", { name: "Icon group" });
+	await expect(iconGroup).toContainText("Gobo");
+	await expect(iconGroup.locator(".ui-select-chevron svg")).toBeVisible();
+	await expect(iconGroup).toHaveAttribute("aria-expanded", "false");
+	await expect(iconDialog.locator('[data-icon-group="gobo"]')).toBeVisible();
+	await iconGroup.click();
+	await expect(iconGroup).toHaveAttribute("aria-expanded", "true");
+	await page.getByRole("option", { name: "Fixture type" }).click();
+	await expect(
+		iconDialog.locator('[data-icon-group="fixture-type"]'),
+	).toBeVisible();
 	await expect(page.getByLabel("Custom")).toHaveCount(0);
 	await expect(
 		page.getByRole("button", { name: "Use custom icon" }),
 	).toHaveCount(0);
-	await page.locator('[data-icon-group="fixture-type"] button').first().click();
+	const fixtureTypeIcons = iconDialog.locator(
+		'[data-icon-group="fixture-type"] .ui-button',
+	);
+	expect(await fixtureTypeIcons.count()).toBeGreaterThan(0);
+	await fixtureTypeIcons.first().click();
 
 	const modeSelect = page.getByRole("button", { name: /^Software$/u });
 	await expect(modeSelect.locator(".ui-select-chevron svg")).toBeVisible();
@@ -1765,6 +3201,16 @@ test("Forms story keeps state, scrolling, fader, pickers, grouped selections, an
 	await groupedTrigger.click();
 	const grouped = page.getByRole("dialog", { name: "Choose Top button" });
 	await expect(grouped.getByText("Advance to the next cue.")).toBeVisible();
+	for (const option of await grouped
+		.locator(".ui-grouped-selection-options .ui-button")
+		.all()) {
+		await expect(option).toHaveCSS("justify-content", "flex-start");
+		const optionBox = await option.boundingBox();
+		const contentBox = await option
+			.locator(".ui-grouped-selection-option")
+			.boundingBox();
+		expect((contentBox?.x ?? 0) - (optionBox?.x ?? 0)).toBeLessThanOrEqual(17);
+	}
 	await expect(
 		grouped.getByRole("button", { name: "Empty Button" }),
 	).toBeVisible();
@@ -1802,7 +3248,10 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 		"/iframe.html?id=input-keyboard-and-numpad--input-modal-configurations&viewMode=story",
 	);
 	const numberModal = page.getByRole("dialog", { name: "Fade time" });
-	await expect(numberModal.locator(".modal-caret-value > i")).toBeVisible();
+	await expect(numberModal.locator(".modal-caret-value > i")).toHaveCSS(
+		"outline-style",
+		"solid",
+	);
 	const numberColor = await numberModal
 		.locator(".modal-caret-value")
 		.evaluate((element) => getComputedStyle(element).color);
@@ -1813,6 +3262,8 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 	const numberPreview = numberModal.getByRole("textbox", {
 		name: "Fade time value",
 	});
+	await expect(numberPreview).toHaveCSS("justify-content", "flex-start");
+	await expect(numberPreview).toHaveCSS("text-align", "left");
 	const previewBox = await numberPreview.boundingBox();
 	const cursorLeft = numberModal.getByRole("button", {
 		name: "Move cursor left",
@@ -1849,7 +3300,7 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 	});
 	await expect(preview).toHaveAccessibleName("Fixture name value");
 	await expect(preview).toContainText("Enter fixture name");
-	await expect(preview.locator("> i")).toBeVisible();
+	await expect(preview.locator("> i")).toHaveCSS("outline-style", "solid");
 	const rail = textModal.locator(".modal-keyboard-actions");
 	const textBackspace = textModal.getByRole("button", { name: "Backspace" });
 	const textEnter = textModal.getByRole("button", { name: "Enter · Confirm" });
@@ -1872,9 +3323,9 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 	expect(
 		(spaceBox?.x ?? 0) - ((rightBox?.x ?? 0) + (rightBox?.width ?? 0)),
 	).toBeGreaterThanOrEqual(52);
-	const escape = textModal.getByRole("button", { name: /ESC/u });
+	const escapeButton = textModal.getByRole("button", { name: /ESC/u });
 	expect(
-		await escape.evaluate(
+		await escapeButton.evaluate(
 			(element) => getComputedStyle(element).backgroundColor,
 		),
 	).not.toBe("rgba(0, 0, 0, 0)");
@@ -1913,13 +3364,43 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 	const multilineEditor = multiline.getByRole("textbox", {
 		name: "Fixture name value",
 	});
-	await expect(multilineEditor).toHaveAttribute("readonly", "");
+	await expect(multilineEditor).not.toHaveAttribute("readonly");
 	await expect(multilineEditor).toHaveCSS("overflow-y", "scroll");
+	await expect(multilineEditor).toHaveCSS("outline-style", "none");
+	await expect(multilineEditor).toHaveCSS("color", "rgb(255, 255, 255)");
+	const multilineCaret = multiline.locator(
+		".modal-multiline-caret-content > i",
+	);
+	await expect(multilineCaret).toHaveCSS("outline-style", "solid");
+	await expect(multiline.locator(".modal-multiline-caret-layer")).toHaveCSS(
+		"color",
+		"rgb(255, 255, 255)",
+	);
 	expect(
 		await multilineEditor.evaluate(
 			(editor) => editor.scrollHeight > editor.clientHeight,
 		),
 	).toBe(true);
+	const cursorUp = multiline.getByRole("button", {
+		name: "Move cursor up one line",
+	});
+	const cursorDown = multiline.getByRole("button", {
+		name: "Move cursor down one line",
+	});
+	const editorBox = await multilineEditor.boundingBox();
+	const cursorUpBox = await cursorUp.boundingBox();
+	const cursorDownBox = await cursorDown.boundingBox();
+	expect(cursorUpBox?.x).toBeGreaterThan(
+		(editorBox?.x ?? 0) + (editorBox?.width ?? 0),
+	);
+	expect(cursorDownBox?.x).toBe(cursorUpBox?.x);
+	expect(cursorDownBox?.y).toBeGreaterThan(
+		(cursorUpBox?.y ?? 0) + (cursorUpBox?.height ?? 0),
+	);
+	await multilineEditor.evaluate((editor) => {
+		editor.scrollTop = 0;
+		editor.dispatchEvent(new Event("scroll"));
+	});
 	await multilineEditor.click({ position: { x: 14, y: 45 } });
 	await expect
 		.poll(() =>
@@ -1928,7 +3409,63 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 			),
 		)
 		.toBe(11);
-	await multiline.getByRole("button", { name: "X", exact: true }).click();
+	const clickedCaretBox = await multilineCaret.boundingBox();
+	await cursorDown.click();
+	await expect(cursorDown).toHaveAttribute("data-keyboard-pressed", "true");
+	await expect(multilineCaret).toHaveAttribute("data-caret-moving", "true");
+	await expect(multilineCaret).toHaveCSS("animation-name", "none");
+	await expect
+		.poll(() =>
+			multilineEditor.evaluate(
+				(editor: HTMLTextAreaElement) => editor.selectionStart,
+			),
+		)
+		.toBe(23);
+	const downCaretBox = await multilineCaret.boundingBox();
+	expect(downCaretBox?.y).toBeGreaterThan(
+		(clickedCaretBox?.y ?? Number.POSITIVE_INFINITY) + 10,
+	);
+	await cursorUp.click();
+	await expect
+		.poll(() =>
+			multilineEditor.evaluate(
+				(editor: HTMLTextAreaElement) => editor.selectionStart,
+			),
+		)
+		.toBe(11);
+	const cursorRightMultiline = multiline.getByRole("button", {
+		name: "Move cursor right",
+	});
+	const beforeRightCaretBox = await multilineCaret.boundingBox();
+	await cursorRightMultiline.click();
+	await expect
+		.poll(() =>
+			multilineEditor.evaluate(
+				(editor: HTMLTextAreaElement) => editor.selectionStart,
+			),
+		)
+		.toBe(12);
+	const afterRightCaretBox = await multilineCaret.boundingBox();
+	expect(afterRightCaretBox?.x).toBeGreaterThan(
+		beforeRightCaretBox?.x ?? Number.POSITIVE_INFINITY,
+	);
+	await multiline.getByRole("button", { name: "Move cursor left" }).click();
+	await expect
+		.poll(() =>
+			multilineEditor.evaluate(
+				(editor: HTMLTextAreaElement) => editor.selectionStart,
+			),
+		)
+		.toBe(11);
+	expect(
+		await multilineEditor.evaluate(
+			(editor) => document.activeElement === editor,
+		),
+	).toBe(true);
+	const xKey = multiline.getByRole("button", { name: "X", exact: true });
+	await xKey.click();
+	await expect(xKey).toHaveAttribute("data-keyboard-pressed", "true");
+	await expect(xKey).toHaveCSS("background-color", "rgb(8, 122, 140)");
 	await expect(multilineEditor).toHaveValue(
 		"First line\nxSecond line\nThird line\nFourth line\nFifth line\nSixth line\nSeventh line\nEighth line",
 	);
@@ -1939,10 +3476,80 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 			),
 		)
 		.toBe(12);
+	const scrollBeforeCursorTravel = await multilineEditor.evaluate(
+		(editor) => editor.scrollTop,
+	);
+	for (let line = 0; line < 6; line += 1) {
+		await cursorDown.click();
+	}
+	await expect
+		.poll(() => multilineEditor.evaluate((editor) => editor.scrollTop))
+		.toBeGreaterThan(scrollBeforeCursorTravel);
+	const [scrolledEditorBox, scrolledCaretBox] = await Promise.all([
+		multilineEditor.boundingBox(),
+		multilineCaret.boundingBox(),
+	]);
+	expect(scrolledCaretBox?.y).toBeGreaterThanOrEqual(scrolledEditorBox?.y ?? 0);
+	expect(
+		(scrolledCaretBox?.y ?? 0) + (scrolledCaretBox?.height ?? 0),
+	).toBeLessThanOrEqual(
+		(scrolledEditorBox?.y ?? 0) + (scrolledEditorBox?.height ?? 0),
+	);
 	await expect(
 		multiline.getByRole("button", { name: "Enter · New line" }),
 	).toBeVisible();
-	await expect(multiline.getByRole("button", { name: "Done" })).toBeVisible();
+	const multilineRail = multiline.locator(".modal-keyboard-actions.multiline");
+	const multilineBackspace = multiline.getByRole("button", {
+		name: "Backspace",
+	});
+	const multilineEnter = multiline.getByRole("button", {
+		name: "Enter · New line",
+	});
+	const firstLetterKey = multiline.locator('[data-keyboard-code="Digit1"]');
+	const multilineRailBox = await multilineRail.boundingBox();
+	const multilineBackspaceBox = await multilineBackspace.boundingBox();
+	const multilineEnterBox = await multilineEnter.boundingBox();
+	const firstLetterKeyBox = await firstLetterKey.boundingBox();
+	expect(
+		Math.abs(
+			(multilineBackspaceBox?.height ?? 0) - (firstLetterKeyBox?.height ?? 0),
+		),
+	).toBeLessThanOrEqual(1);
+	expect(multilineEnterBox?.height).toBeGreaterThan(
+		(multilineBackspaceBox?.height ?? Number.POSITIVE_INFINITY) * 2,
+	);
+	expect(
+		(multilineEnterBox?.y ?? 0) + (multilineEnterBox?.height ?? 0),
+	).toBeCloseTo(
+		(multilineRailBox?.y ?? 0) + (multilineRailBox?.height ?? 0),
+		0,
+	);
+	const backspaceIconBox = await multilineBackspace.locator("b").boundingBox();
+	const backspaceLabelBox = await multilineBackspace
+		.locator("small")
+		.boundingBox();
+	expect(backspaceLabelBox?.y).toBeGreaterThan(
+		(backspaceIconBox?.y ?? 0) + (backspaceIconBox?.height ?? 0),
+	);
+	const done = multiline.getByRole("button", { name: "Done" });
+	await expect(done).toBeVisible();
+	await expect(done).toHaveCSS("cursor", "pointer");
+	const doneBox = await done.boundingBox();
+	expect(doneBox?.width).toBeGreaterThanOrEqual(95);
+	const doneBorders = await done.evaluate((element) => {
+		const styles = getComputedStyle(element);
+		return [styles.borderLeftColor, styles.borderRightColor];
+	});
+	expect(doneBorders).not.toContain("rgba(0, 0, 0, 0)");
+	const doneBackground = await done.evaluate(
+		(element) => getComputedStyle(element).backgroundColor,
+	);
+	await done.hover();
+	await expect
+		.poll(() =>
+			done.evaluate((element) => getComputedStyle(element).backgroundColor),
+		)
+		.not.toBe(doneBackground);
 	const multilineShift = multiline.getByRole("button", { name: "Shift" });
 	const physicalZ = multiline.locator('[data-keyboard-code="KeyZ"]');
 	expect(
@@ -1957,6 +3564,30 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 		zBox?.width ?? Number.POSITIVE_INFINITY,
 	);
 	await expect(multilineShift.locator(".modal-shift-icon")).toBeVisible();
+	await multiline.getByRole("button", { name: "Close input" }).click();
+	let unsaved = page.getByRole("dialog", {
+		name: "Unsaved multiline text changes",
+	});
+	await expect(unsaved).toBeVisible();
+	await expect(
+		unsaved.getByRole("button", { name: "Discard changes" }),
+	).toBeVisible();
+	await expect(
+		unsaved.getByRole("button", { name: "Save changes" }),
+	).toBeVisible();
+	await unsaved.getByText("Stay in modal", { exact: true }).click();
+	await expect(unsaved).toHaveCount(0);
+	await expect(multiline).toBeVisible();
+	await page.keyboard.press("Escape");
+	unsaved = page.getByRole("dialog", {
+		name: "Unsaved multiline text changes",
+	});
+	await expect(unsaved).toBeVisible();
+	await unsaved.getByRole("button", { name: "Save changes" }).click();
+	await expect(multiline).toHaveCount(0);
+	await expect(page.getByLabel("Committed input modal value")).toContainText(
+		"xSecond line",
+	);
 });
 
 test("production marketing and application modal stories preserve their real compositions and workflows", async ({
@@ -2004,4 +3635,79 @@ test("production marketing and application modal stories preserve their real com
 	).toBeVisible();
 	await page.getByRole("button", { name: "Merge", exact: true }).click();
 	await expect(page.getByLabel("Record mode choice")).toHaveText("merge");
+});
+
+test("marketing pools use catalog assets and keep vacant slots uncolored", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=application-marketing--groups-window&viewMode=story",
+	);
+	const populatedGroups = page.locator(".group-card:not(.empty)");
+	await expect(populatedGroups).toHaveCount(5);
+	await expect(populatedGroups.locator(".pool-card-icon-image")).toHaveCount(5);
+	const groupIconSources = await populatedGroups
+		.locator(".pool-card-icon-image")
+		.evaluateAll((icons) =>
+			icons.map((icon) => decodeURIComponent((icon as HTMLImageElement).src)),
+		);
+	expect(
+		groupIconSources.some((source) =>
+			source.includes("fixture type profile dimmer lamp"),
+		),
+	).toBe(true);
+	expect(
+		groupIconSources.some((source) =>
+			source.includes("fixture type led wash moving light lenses"),
+		),
+	).toBe(true);
+	expect(
+		groupIconSources.some((source) => source.includes("fixture type blinder")),
+	).toBe(true);
+	const emptyGroup = page.locator(".group-card.empty").first();
+	await expect(emptyGroup).toHaveCSS("--pool-card-color", "");
+	await expect(emptyGroup).toHaveCSS("--pool-card-resolved-color", "#65717b");
+	const emptyGroupStyle = await emptyGroup.evaluate((element) => {
+		const style = getComputedStyle(element);
+		return {
+			background: style.backgroundColor,
+			border: style.borderTopColor,
+			borderStyle: style.borderTopStyle,
+		};
+	});
+
+	await page.goto(
+		"/iframe.html?id=application-marketing--position-presets-window&viewMode=story",
+	);
+	const populatedPositions = page.locator(".preset-card:not(.empty)");
+	await expect(populatedPositions).toHaveCount(6);
+	await expect(populatedPositions.locator(".pool-card-icon-image")).toHaveCount(
+		6,
+	);
+	const positionIconSources = await populatedPositions
+		.locator(".pool-card-icon-image")
+		.evaluateAll((icons) =>
+			icons.map((icon) => decodeURIComponent((icon as HTMLImageElement).src)),
+		);
+	expect(
+		positionIconSources.every((source) => source.includes("position")),
+	).toBe(true);
+	const emptyPosition = page.locator(".preset-card.empty").first();
+	await expect(emptyPosition).toHaveCSS("--pool-card-color", "");
+	await expect(emptyPosition).toHaveCSS(
+		"--pool-card-resolved-color",
+		"#65717b",
+	);
+	await expect
+		.poll(() =>
+			emptyPosition.evaluate((element) => {
+				const style = getComputedStyle(element);
+				return {
+					background: style.backgroundColor,
+					border: style.borderTopColor,
+					borderStyle: style.borderTopStyle,
+				};
+			}),
+		)
+		.toEqual(emptyGroupStyle);
 });

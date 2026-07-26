@@ -24,7 +24,6 @@ export type BuiltInWindow =
 	| "patch"
 	| "setup"
 	| "help"
-	| "development"
 	| "virtual_playbacks"
 	| "file_manager"
 	| "text_editor";
@@ -35,7 +34,6 @@ export type ValueSource = "programmer" | "playback" | "default";
 export type StageMode = "select" | "navigate";
 export type StageView = "2d" | "3d";
 export type DmxDotSize = "small" | "large";
-export type DevelopmentView = "forms" | "faders" | "buttons";
 export type TextEditorMode = "plain" | "markdown" | "split";
 
 export interface GridRect {
@@ -65,7 +63,6 @@ export interface PaneModel extends GridRect {
 	showBeamGuides?: boolean;
 	presetFamily?: AppState["presetFamily"];
 	presetPoolColors?: boolean;
-	developmentView?: DevelopmentView;
 	virtualPlaybackRows?: number;
 	virtualPlaybackColumns?: number;
 	virtualPlaybackCells?: Array<{

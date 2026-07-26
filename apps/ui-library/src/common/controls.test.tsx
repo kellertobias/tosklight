@@ -5,9 +5,9 @@ import {
 	screen,
 	within,
 } from "@testing-library/react";
-import { useState, type ReactElement } from "react";
+import { type ReactElement, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ModalProvider } from "../modals/ModalStack";
+import { ModalProvider, ModalRegistration } from "../modals/ModalStack";
 import {
 	Button,
 	CheckboxField,
@@ -28,6 +28,7 @@ import {
 	validateDroppedFiles,
 } from "./controls";
 import { HorizontalFaderField } from "./FaderControls";
+
 afterEach(cleanup);
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: ModalProvider });
 
@@ -43,6 +44,23 @@ describe("shared controls", () => {
 		expect(button).toBeDisabled();
 		expect(button).toHaveClass("ui-danger");
 		expect(button).toHaveAttribute("aria-busy", "true");
+		expect(button.querySelector(".ui-spinner")).toBeInTheDocument();
+	});
+	it("supports shared icons, larger icon-only controls, and left-aligned content", () => {
+		render(
+			<>
+				<Button icon="★" contentAlign="left">
+					Run
+				</Button>
+				<Button icon="⚙" iconOnly aria-label="Settings" />
+			</>,
+		);
+		const run = screen.getByRole("button", { name: "Run" });
+		expect(run).toHaveClass("is-left-aligned");
+		expect(run.querySelector(".ui-button-icon")).toHaveTextContent("★");
+		const settings = screen.getByRole("button", { name: "Settings" });
+		expect(settings).toHaveClass("is-icon-only");
+		expect(settings.querySelector(".ui-button-icon")).toHaveTextContent("⚙");
 	});
 	it("associates field labels and errors", () => {
 		render(<TextField label="Name" error="Required" required />);
@@ -141,6 +159,9 @@ describe("shared controls", () => {
 	});
 	it("opens the multiline keyboard with a native caret textbox and title-bar Done action", () => {
 		render(<TextAreaField label="Notes" defaultValue={"Line one\nLine two"} />);
+		const source = screen.getByLabelText("Notes") as HTMLTextAreaElement;
+		source.setSelectionRange(5, 5);
+		fireEvent.select(source);
 		fireEvent.click(screen.getByRole("button", { name: "Open keyboard" }));
 		const dialog = screen.getByRole("dialog", { name: "Notes" });
 		const editor = within(dialog).getByRole("textbox", {
@@ -148,8 +169,40 @@ describe("shared controls", () => {
 		}) as HTMLTextAreaElement;
 		expect(editor.tagName).toBe("TEXTAREA");
 		expect(editor).toHaveValue("Line one\nLine two");
-		editor.setSelectionRange(5, 5);
+		expect(editor).not.toHaveAttribute("readonly");
+		expect(editor.selectionStart).toBe(5);
 		fireEvent.keyUp(editor, { key: "ArrowLeft" });
+		const down = within(dialog).getByRole("button", {
+			name: "Move cursor down one line",
+		});
+		fireEvent.pointerDown(down);
+		fireEvent.click(down);
+		expect(editor.selectionStart).toBe(14);
+		expect(down).toHaveAttribute("data-keyboard-pressed", "true");
+		expect(
+			dialog.querySelector(
+				'.modal-multiline-caret-content > i[data-caret-moving="true"]',
+			),
+		).toBeInTheDocument();
+		const up = within(dialog).getByRole("button", {
+			name: "Move cursor up one line",
+		});
+		fireEvent.pointerDown(up);
+		fireEvent.click(up);
+		expect(editor.selectionStart).toBe(5);
+		const left = within(dialog).getByRole("button", {
+			name: "Move cursor left",
+		});
+		fireEvent.pointerDown(left);
+		fireEvent.click(left);
+		expect(editor.selectionStart).toBe(4);
+		const right = within(dialog).getByRole("button", {
+			name: "Move cursor right",
+		});
+		fireEvent.pointerDown(right);
+		fireEvent.click(right);
+		expect(editor.selectionStart).toBe(5);
+		expect(editor).toHaveFocus();
 		fireEvent.click(within(dialog).getByRole("button", { name: "X" }));
 		expect(editor).toHaveValue("Line xone\nLine two");
 		expect(editor.selectionStart).toBe(6);
@@ -161,6 +214,73 @@ describe("shared controls", () => {
 		).toBeInTheDocument();
 		expect(
 			within(dialog).queryByRole("button", { name: "Done · Confirm" }),
+		).not.toBeInTheDocument();
+	});
+	it("confirms dirty multiline closes and supports staying, saving, or discarding", () => {
+		render(<TextAreaField label="Notes" defaultValue="Draft" />);
+		const notes = screen.getByLabelText("Notes") as HTMLTextAreaElement;
+		fireEvent.click(screen.getByRole("button", { name: "Open keyboard" }));
+		let editor = within(
+			screen.getByRole("dialog", { name: "Notes" }),
+		).getByRole("textbox", { name: "Notes value" });
+		fireEvent.click(
+			within(screen.getByRole("dialog", { name: "Notes" })).getByRole(
+				"button",
+				{ name: "X" },
+			),
+		);
+		expect(editor).toHaveValue("xDraft");
+		fireEvent.click(screen.getByRole("button", { name: "Close input" }));
+		let confirmation = screen.getByRole("dialog", {
+			name: "Unsaved multiline text changes",
+		});
+		expect(
+			within(confirmation).getByRole("button", { name: "Discard changes" }),
+		).toBeInTheDocument();
+		expect(
+			within(confirmation).getByRole("button", { name: "Save changes" }),
+		).toBeInTheDocument();
+		fireEvent.click(
+			within(confirmation).getByText("Stay in modal", { exact: true }),
+		);
+		expect(
+			screen.queryByRole("dialog", {
+				name: "Unsaved multiline text changes",
+			}),
+		).not.toBeInTheDocument();
+		expect(screen.getByRole("dialog", { name: "Notes" })).toBeInTheDocument();
+
+		fireEvent.keyDown(window, { key: "Escape" });
+		confirmation = screen.getByRole("dialog", {
+			name: "Unsaved multiline text changes",
+		});
+		fireEvent.click(
+			within(confirmation).getByRole("button", { name: "Save changes" }),
+		);
+		expect(notes).toHaveValue("xDraft");
+		expect(
+			screen.queryByRole("dialog", { name: "Notes" }),
+		).not.toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("button", { name: "Open keyboard" }));
+		const reopened = screen.getByRole("dialog", { name: "Notes" });
+		editor = within(reopened).getByRole("textbox", { name: "Notes value" });
+		fireEvent.click(within(reopened).getByRole("button", { name: "X" }));
+		expect(editor).toHaveValue("xxDraft");
+		fireEvent.click(
+			within(reopened).getByRole("button", { name: "Close input" }),
+		);
+		confirmation = screen.getByRole("dialog", {
+			name: "Unsaved multiline text changes",
+		});
+		fireEvent.click(
+			within(confirmation).getByRole("button", {
+				name: "Discard changes",
+			}),
+		);
+		expect(notes).toHaveValue("xDraft");
+		expect(
+			screen.queryByRole("dialog", { name: "Notes" }),
 		).not.toBeInTheDocument();
 	});
 	it("keeps checkbox text stable and presents both semantic switch states", () => {
@@ -186,9 +306,9 @@ describe("shared controls", () => {
 		);
 		expect(screen.getByText("Show in every workspace")).toBeInTheDocument();
 		expect(screen.getByText("Windowed")).toBeInTheDocument();
-		expect(
-			container.querySelector(".ui-switch-state-on"),
-		).toHaveTextContent("Fullscreen");
+		expect(container.querySelector(".ui-switch-state-on")).toHaveTextContent(
+			"Fullscreen",
+		);
 		fireEvent.click(screen.getByRole("checkbox", { name: "Dock" }));
 		fireEvent.click(screen.getByRole("switch", { name: "Fullscreen" }));
 		expect(change).toHaveBeenCalledTimes(2);
@@ -331,6 +451,29 @@ describe("shared controls", () => {
 		expect(change).toHaveBeenCalledWith("own");
 		expect(trigger).toHaveFocus();
 	});
+	it("keeps a picker above an application-owned registered modal", () => {
+		render(
+			<ModalRegistration onClose={() => undefined}>
+				<div className="stacked-modal-layer">
+					<SelectField
+						label="Universe"
+						ariaLabel="Universe"
+						value="1"
+						options={[
+							{ value: "1", label: "1" },
+							{ value: "2", label: "2" },
+						]}
+						onChange={() => undefined}
+					/>
+				</div>
+			</ModalRegistration>,
+		);
+		const modal = document.querySelector(
+			'.stacked-modal-layer[data-modal-top="true"]',
+		);
+		fireEvent.click(screen.getByRole("button", { name: /Universe/ }));
+		expect(screen.getByRole("listbox").closest("[data-modal-id]")).toBe(modal);
+	});
 	it("dismisses the touch picker with escape", () => {
 		render(
 			<SelectField
@@ -372,6 +515,9 @@ describe("shared controls", () => {
 			</>,
 		);
 		fireEvent.click(screen.getByRole("button", { name: /Choose icon/ }));
+		expect(
+			screen.getByRole("dialog", { name: "Choose icon" }),
+		).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Use ★" }));
 		expect(icon).toHaveBeenCalledWith("★");
 		fireEvent.click(screen.getByRole("button", { name: /#F97316/ }));
@@ -413,16 +559,39 @@ describe("shared controls", () => {
 			/>,
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Choose icon" }));
-		expect(screen.getByRole("combobox", { name: "Icon group" })).toHaveValue(
-			"gobo",
-		);
+		expect(screen.getByRole("dialog", { name: "Choose icon" })).toBeVisible();
+		const groupTrigger = screen.getByRole("button", { name: "Icon group" });
+		expect(groupTrigger).toHaveTextContent("Gobo");
+		expect(groupTrigger).toHaveAttribute("aria-expanded", "false");
+		fireEvent.click(groupTrigger);
+		expect(groupTrigger).toHaveAttribute("aria-expanded", "true");
+		fireEvent.click(screen.getByRole("option", { name: "Fixture type" }));
 		expect(
-			document.querySelector('[data-icon-group="gobo"]'),
+			document.querySelector('[data-icon-group="fixture-type"]'),
 		).toBeInTheDocument();
 		expect(screen.queryByLabelText("Custom")).not.toBeInTheDocument();
 		expect(
 			screen.queryByRole("button", { name: "Use custom icon" }),
 		).not.toBeInTheDocument();
+	});
+
+	it("renders the icon and color pickers as full-width form controls", () => {
+		const { container } = render(
+			<>
+				<IconPickerField label="Icon" value="◇" onChange={() => undefined} />
+				<ColorPickerField
+					label="Color"
+					value="#f97316"
+					onChange={() => undefined}
+				/>
+			</>,
+		);
+		expect(
+			container.querySelector(".ui-form-control > .ui-picker-trigger"),
+		).toBe(screen.getByRole("button", { name: "Choose icon" }));
+		expect(container.querySelector(".ui-color-input-trigger")).toBe(
+			screen.getByRole("button", { name: "#F97316" }),
+		);
 	});
 
 	it("renders an inset color swatch and square palette choices", () => {
@@ -456,7 +625,12 @@ describe("shared controls", () => {
 							{
 								label: "Step Control",
 								options: [
-									{ value: "go", label: "GO", icon: "▶", description: "Advance." },
+									{
+										value: "go",
+										label: "GO",
+										icon: "▶",
+										description: "Advance.",
+									},
 									{ value: "back", label: "GO MINUS", description: "Return." },
 								],
 							},
@@ -480,14 +654,27 @@ describe("shared controls", () => {
 		}
 		render(<Harness />);
 		const iconTrigger = screen.getByRole("button", { name: /GO/ });
-		expect(iconTrigger.querySelector(".ui-grouped-selection-icon")).toHaveTextContent("▶");
-		expect(iconTrigger.querySelector(".ui-grouped-selection-value")).toHaveClass("has-icon");
+		expect(
+			iconTrigger.querySelector(".ui-grouped-selection-icon"),
+		).toHaveTextContent("▶");
+		expect(
+			iconTrigger.querySelector(".ui-grouped-selection-value"),
+		).toHaveClass("has-icon");
 		const plainTrigger = screen.getByRole("button", { name: /Master/ });
-		expect(plainTrigger.querySelector(".ui-grouped-selection-icon")).not.toBeInTheDocument();
-		expect(plainTrigger.querySelector(".ui-grouped-selection-value")).toHaveClass("has-no-icon");
+		expect(
+			plainTrigger.querySelector(".ui-grouped-selection-icon"),
+		).not.toBeInTheDocument();
+		expect(
+			plainTrigger.querySelector(".ui-grouped-selection-value"),
+		).toHaveClass("has-no-icon");
 		fireEvent.click(iconTrigger);
 		const dialog = screen.getByRole("dialog", { name: "Choose Top button" });
 		expect(within(dialog).getByText("Advance.")).toBeVisible();
+		for (const option of dialog.querySelectorAll(
+			".ui-grouped-selection-options .ui-button",
+		)) {
+			expect(option).toHaveClass("is-left-aligned");
+		}
 		fireEvent.click(within(dialog).getByRole("button", { name: /GO MINUS/ }));
 		expect(screen.getByRole("button", { name: /GO MINUS/ })).toBeVisible();
 		fireEvent.click(screen.getByRole("button", { name: /GO MINUS/ }));

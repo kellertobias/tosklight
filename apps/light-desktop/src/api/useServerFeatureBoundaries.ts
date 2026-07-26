@@ -44,6 +44,41 @@ export function useServerFeatureBoundaries(state: ServerState) {
 	const cueTransfer = useCueTransferBoundaries(state);
 	const playbackTopology = usePlaybackTopologyBoundaries(state);
 	const programmingUpdate = useProgrammingUpdateBoundaries(state);
+	const transports = useServerFeatureTransports(state);
+	const loaders = useServerFeatureLoaders(
+		state,
+		transports.showObjectSnapshotTransport,
+	);
+	const errorReporters = useServerFeatureErrorReporters(state);
+	return {
+		showObjectsTransport: transports.showObjectsTransport,
+		showObjectsAuthorityKey: transports.showObjectsAuthorityKey,
+		playbackTransport: transports.playbackTransport,
+		playbackAuthorityKey: transports.playbackAuthorityKey,
+		programmingTransport: transports.programmingTransport,
+		programmingAuthorityKey: transports.programmingAuthorityKey,
+		...programmerLifecycle,
+		...programmerPreloadLifecycle,
+		...programmerPriority,
+		...outputRuntime,
+		...speedGroupRuntime,
+		...programmerValues,
+		...presetRecording,
+		...presetRecall,
+		...groupManagement,
+		...groupRecording,
+		...cueRecording,
+		...cueTransfer,
+		...playbackTopology,
+		...programmingUpdate,
+		...loaders,
+		...errorReporters,
+		reportProgrammingSessionError: programmingErrors.reportSession,
+		reportProgrammingMutationError: programmingErrors.reportMutation,
+	};
+}
+
+function useServerFeatureTransports(state: ServerState) {
 	// Data authority is deliberately separate from connection authority. A token
 	// or socket generation replacement for the same Show/desk may repair retained
 	// state from its cursor; a different Show/desk/user still resets atomically.
@@ -100,6 +135,21 @@ export function useServerFeatureBoundaries(state: ServerState) {
 				: null,
 		[state.session],
 	);
+	return {
+		showObjectsAuthorityKey,
+		playbackAuthorityKey,
+		programmingAuthorityKey,
+		showObjectsTransport,
+		showObjectSnapshotTransport,
+		playbackTransport,
+		programmingTransport,
+	};
+}
+
+function useServerFeatureLoaders(
+	state: ServerState,
+	showObjectSnapshotTransport: HttpShowObjectSnapshotTransport | null,
+) {
 	const loadPlaybackSnapshot = useCallback(
 		(identities: PlaybackRuntimeIdentity[]) => {
 			if (!state.session) throw new Error("Playback session is unavailable");
@@ -141,40 +191,23 @@ export function useServerFeatureBoundaries(state: ServerState) {
 		) => (await loadShowObjectSnapshot(showId, kind, objectId)).object,
 		[loadShowObjectSnapshot],
 	);
-	const reportShowObjectError = useFeatureErrorReporter(state.setError);
-	const reportPlaybackError = useFeatureErrorReporter(state.setError);
-	const reportPlaybackTopologyError = useFeatureErrorReporter(state.setError);
 	return {
-		showObjectsTransport,
-		showObjectsAuthorityKey,
-		playbackTransport,
-		playbackAuthorityKey,
-		programmingTransport,
-		programmingAuthorityKey,
-		...programmerLifecycle,
-		...programmerPreloadLifecycle,
-		...programmerPriority,
-		...outputRuntime,
-		...speedGroupRuntime,
-		...programmerValues,
-		...presetRecording,
-		...presetRecall,
-		...groupManagement,
-		...groupRecording,
-		...cueRecording,
-		...cueTransfer,
-		...playbackTopology,
-		...programmingUpdate,
 		loadPlaybackSnapshot,
 		loadProgrammingInteractionSnapshot,
 		loadShowObjectCollection,
 		loadShowObjectSnapshot,
 		loadShowObject,
+	};
+}
+
+function useServerFeatureErrorReporters(state: ServerState) {
+	const reportShowObjectError = useFeatureErrorReporter(state.setError);
+	const reportPlaybackError = useFeatureErrorReporter(state.setError);
+	const reportPlaybackTopologyError = useFeatureErrorReporter(state.setError);
+	return {
 		reportShowObjectError,
 		reportPlaybackError,
 		reportPlaybackTopologyError,
-		reportProgrammingSessionError: programmingErrors.reportSession,
-		reportProgrammingMutationError: programmingErrors.reportMutation,
 	};
 }
 

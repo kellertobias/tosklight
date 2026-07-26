@@ -1,31 +1,7 @@
-import type { PlaybackDefinition } from "../../../api/types";
 import { Button } from "@tosklight/ui";
+import type { PlaybackDefinition } from "../../../api/types";
 import { assignPlayback, isPlaybackSetClickArmed } from "./actions";
 import type { PlaybackBankController } from "./controller";
-import type { PlaybackSnapshotActive } from "./types";
-
-export function PlaybackRuntimeStatus({
-	active,
-}: {
-	active: PlaybackSnapshotActive | undefined;
-}) {
-	const status = active?.flash
-		? ["flash", "FLASH HELD"]
-		: active?.swap_active
-			? ["swap", "SWAP HELD"]
-			: active?.loaded_cue_number != null
-				? ["loaded", "LOADED"]
-				: null;
-	if (!status) return null;
-	return (
-		<span
-			className={`playback-status playback-status-${status[0]}`}
-			role="status"
-		>
-			{status[1]}
-		</span>
-	);
-}
 
 export function PlaybackAssignmentTarget({
 	controller,
@@ -70,26 +46,5 @@ export function PlaybackConfigurationTarget({
 				{controller.activePageNumber}.{slot} · {playback?.name ?? "Empty"}
 			</small>
 		</div>
-	);
-}
-
-export function PlaybackRepresentation({
-	controller,
-	playback,
-	slot,
-}: {
-	controller: PlaybackBankController;
-	playback: PlaybackDefinition | null;
-	slot: number;
-}) {
-	return (
-		<Button
-			className="playback-software-representation"
-			aria-label={`Playback representation page ${controller.activePageNumber} playback ${slot}`}
-		>
-			<b>
-				{slot} · {playback?.name ?? "Empty"}
-			</b>
-		</Button>
 	);
 }

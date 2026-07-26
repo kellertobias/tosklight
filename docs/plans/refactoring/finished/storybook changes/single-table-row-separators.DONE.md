@@ -70,3 +70,8 @@ Verification completed:
 - The rebuilt Fixture Sheet step-selection story was inspected at device scale factor 2. Normal,
   selected, active, nested-head, and step rows each retained one one-pixel bottom border without a
   table separator gradient or adjacent two-pixel band.
+- The integrated Storybook browser suite now repeats the Generic Table and Fixture Sheet checks
+  at device scale factors 1 and 2. It verifies the rendered table owns no gradient or outer
+  horizontal border, every row owns exactly one one-CSS-pixel bottom border, cells own no
+  horizontal border, adjacent row bounds meet without a gap or overlap, and both rendered table
+  captures are nonblank.

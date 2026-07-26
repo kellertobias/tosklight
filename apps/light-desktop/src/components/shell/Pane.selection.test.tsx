@@ -99,6 +99,9 @@ describe("Pane selection scope", () => {
 		const rendered = render(
 			<Pane pane={pane("stage")} active maximized={false} editing={false} />,
 		);
+		expect(
+			rendered.container.querySelector('[data-ui-component="pane-view"]'),
+		).toBeInTheDocument();
 		expect(selectionView).toHaveBeenLastCalledWith(true);
 		expect(screen.getByText("2 selected")).toBeInTheDocument();
 

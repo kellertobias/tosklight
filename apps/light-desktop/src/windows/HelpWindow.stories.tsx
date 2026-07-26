@@ -98,6 +98,19 @@ export const CatalogWarning: Story = {
   render: () => <HelpStoryHarness catalog={helpCatalogWarning} />,
 };
 
+export const SearchResults: Story = {
+  render: () => <HelpStoryHarness
+    defaultExpanded={["30-Programmer/index.md"]}
+    initialSelected={helpNestedTopicId}
+    initialTopic={helpNestedTopic}
+    query="Command Line"
+  />,
+};
+
+export const SearchNoResults: Story = {
+  render: () => <HelpStoryHarness query="No such topic" />,
+};
+
 export const Compact: Story = {
   render: () => <HelpStoryHarness compact defaultExpanded={["30-Programmer/index.md"]} />,
 };

@@ -1,7 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { CSSProperties } from "react";
 import { useState } from "react";
-import { type PoolSlotViewModel, PoolWindow } from "./PoolWindow";
+import {
+	type PoolGridAppearance,
+	type PoolSlotViewModel,
+	PoolWindow,
+} from "./PoolWindow";
 
 interface GenericPoolArgs {
 	width: number;
@@ -94,7 +98,11 @@ function PoolExample({
 	slotCount,
 	minimumCardWidth,
 	slots = sparseSlots,
-}: GenericPoolArgs & { slots?: PoolSlotViewModel<string>[] }) {
+	appearance,
+}: GenericPoolArgs & {
+	slots?: PoolSlotViewModel<string>[];
+	appearance?: Partial<PoolGridAppearance>;
+}) {
 	return (
 		<div style={host(width, height)}>
 			<PoolWindow
@@ -117,6 +125,7 @@ function PoolExample({
 				slotCount={slotCount}
 				emptySlot={emptySlot}
 				minimumCardWidth={minimumCardWidth}
+				appearance={appearance}
 			/>
 		</div>
 	);
@@ -147,17 +156,17 @@ export const EveryCardState: Story = {
 					card: { number: 3, primary: "Active", states: ["active"] },
 				},
 				{
-					id: "disabled",
+					id: "empty",
 					position: 3,
-					card: { number: 4, primary: "Disabled", states: ["disabled"] },
+					card: { number: 4, primary: "Empty", states: ["empty"] },
 				},
 				{
-					id: "store",
+					id: "record",
 					position: 4,
 					card: {
 						number: 5,
-						primary: "Store target",
-						states: ["empty", "store-target"],
+						primary: "Record target",
+						states: ["empty", "record-target"],
 					},
 				},
 				{
@@ -200,6 +209,17 @@ export const EveryCardState: Story = {
 					},
 				},
 			]}
+		/>
+	),
+};
+
+export const OutlineOnlyFilledStyle: Story = {
+	render: (args) => (
+		<PoolExample
+			{...args}
+			appearance={{
+				filledStyle: "outline",
+			}}
 		/>
 	),
 };

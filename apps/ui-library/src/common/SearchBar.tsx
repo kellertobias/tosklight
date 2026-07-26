@@ -120,9 +120,7 @@ export function SearchBar({
 								value={setting.value}
 								placeholder={setting.placeholder}
 								openKeyboardInitially={setting.keyboardInitiallyOpen}
-								onValueChange={(next) =>
-									onSettingChange?.(setting.id, next)
-								}
+								onValueChange={(next) => onSettingChange?.(setting.id, next)}
 							/>
 						),
 					)}
@@ -130,11 +128,7 @@ export function SearchBar({
 			</div>
 			{onClearSettings && (
 				<footer className="search-settings-actions">
-					<Button
-						onClick={onClearSettings}
-					>
-						Clear settings
-					</Button>
+					<Button onClick={onClearSettings}>Clear settings</Button>
 				</footer>
 			)}
 		</ModalLayer>
@@ -153,9 +147,13 @@ export function SearchBar({
 						onClick={() => setOpen(true)}
 					>
 						<SearchIcon />
-						<span className="console-search-chevron" aria-hidden="true">
-							⌄
-						</span>
+						<svg
+							className="console-search-chevron"
+							viewBox="0 0 24 24"
+							aria-hidden="true"
+						>
+							<path d="m7 10 5 5 5-5" />
+						</svg>
 					</Button>
 				) : (
 					<span className="console-search-icon" aria-hidden="true">

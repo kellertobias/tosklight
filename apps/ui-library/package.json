@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./controls": "./src/controls.ts",
+    "./command": "./src/command.ts",
     "./forms": "./src/forms.ts",
     "./input": "./src/input.ts",
     "./modals": "./src/modals.ts",
@@ -30,6 +31,8 @@
     "storybook": "storybook dev -c storybook/config -p 6006",
     "storybook:build": "node storybook/build.mjs",
     "test:storybook": "npm run storybook:build && playwright test --config storybook/playwright.config.ts",
+    "test:marketing-screenshots": "npm run storybook:build && playwright test --config storybook/playwright.config.ts storybook/tests/marketing-screenshots.spec.ts",
+    "test:marketing-screenshots:update": "UPDATE_MARKETING_SCREENSHOTS=1 npm run test:marketing-screenshots",
     "test:help-screenshots": "npm run storybook:build && playwright test --config storybook/playwright.config.ts storybook/tests/help-screenshots.spec.ts"
   },
   "peerDependencies": {

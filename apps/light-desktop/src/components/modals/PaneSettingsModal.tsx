@@ -13,7 +13,6 @@ import { GRID_COLUMNS, GRID_ROWS, type PaneModel } from "../../types";
 import { TouchSelect } from "@tosklight/ui";
 import { Button, FormLayout, MultiValueToggleField, NumberField, SelectField, SwitchField, TextField } from "@tosklight/ui";
 import { WindowSettings, type WindowSettingsTab } from "@tosklight/ui/window-kit";
-import { DEVELOPMENT_VIEW_OPTIONS } from "../../windows/DevelopmentWindow";
 import { requestPaneRemoval } from "../shell/paneRemovalGuard";
 import { PRESET_FAMILIES } from "../../presetFamilies";
 import { useCuePaneCuelistPlaybacks, type CuePaneCuelistPlayback } from "./cuePaneCuelistAuthority";
@@ -86,7 +85,6 @@ function PaneSettingsDialog({ pane }: { pane: PaneModel }) {
   if (["cuelists", "cuelist_pool", "qlists", "qlist_pool"].includes(pane.kind)) tabs.push({ id: "pool", label: "Pool", content: <PoolColorSettings objectType="cuelist" paneId={pane.id}/> });
   if (pane.kind === "dynamics") tabs.push({ id: "pool", label: "Pool", content: <PoolColorSettings objectType="dynamic" paneId={pane.id}/> });
   if (pane.kind === "stage") tabs.push({ id: "stage", label: "Stage", content: <FormLayout labelPlacement="side"><MultiValueToggleField label="Stage view" value={pane.stageView ?? "2d"} onChange={(value) => dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option: "stageView", value })} options={[{ value: "2d", label: "2D" }, { value: "3d", label: "3D" }]}/><SwitchField label="Preload source" offLabel="Manual" onLabel="Follow preload" checked={Boolean(pane.followPreload)} onChange={(event) => dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option: "followPreload", value: event.target.checked })}/><SwitchField label="Beam direction guides" offLabel="Hidden" onLabel="Visible" checked={pane.showBeamGuides ?? true} onChange={(event) => dispatch({ type: "SET_PANE_STAGE_OPTION", id: pane.id, option: "showBeamGuides", value: event.target.checked })}/></FormLayout> });
-  if (pane.kind === "development") tabs.push({ id: "development", label: "Development", content: <FormLayout labelPlacement="side"><SelectField label="Shown example" value={pane.developmentView ?? "forms"} onChange={(value) => dispatch({ type: "SET_PANE_DEVELOPMENT_VIEW", id: pane.id, value })} options={DEVELOPMENT_VIEW_OPTIONS}/></FormLayout> });
   if (pane.kind === "virtual_playbacks") {
     const rows = pane.virtualPlaybackRows ?? 2;
     const columns = pane.virtualPlaybackColumns ?? 2;

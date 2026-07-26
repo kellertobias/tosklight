@@ -7,24 +7,37 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { ModalNumberEditor } from "../input/ModalNumberEditor";
+import {
+	ModalNumberEditor,
+	type ModalNumberPresetConfig,
+} from "../input/ModalNumberEditor";
 import { submitNumericExpression } from "../input/numericExpression";
 
 export const TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS = 80;
 export const TOUCH_ENCODER_DRAG_DEAD_ZONE_PX = 8;
-export const TOUCH_ENCODER_COARSE_THRESHOLD_PX = 48;
-export const TOUCH_ENCODER_FINE_STEP = 0.01;
-export const TOUCH_ENCODER_COARSE_STEP = 0.1;
+export const TOUCH_ENCODER_FINE_STEP = 0.001;
+export const TOUCH_ENCODER_COARSE_STEP = 0.01;
 
 export interface TouchEncoderProps {
 	label: string;
-	display: string;
+	slot?: number;
+	attributeLabel?: string;
+	display?: string;
 	value: number;
+	formatValue?(value: number): string;
+	minimum?: number;
+	maximum?: number;
+	/** Converts the internal value to the number shown in the absolute-entry modal. */
+	inputScale?: number;
+	slowStep?: number;
+	fastStep?: number;
+	repeatSeconds?: number;
 	disabled?: boolean;
 	accentColor?: string;
 	mode?: string;
 	indexed?: boolean;
 	canRelease?: boolean;
+	presets?: ModalNumberPresetConfig;
 	onStep(delta: number, undoGroup?: string | null): void;
 	onSet(value: number): void;
 	onSetRange?(points: number[]): void;
@@ -34,47 +47,121 @@ export interface TouchEncoderProps {
 interface DragState {
 	pointerId: number;
 	startY: number;
+	maximumDisplacement: number;
 	delta: number;
 	undoGroup: string;
 	moved: boolean;
 }
 
+interface EncoderMotion {
+	direction: "up" | "down";
+	ridgeCyclesPerSecond: number;
+}
+
+const TOUCH_ENCODER_RIDGE_CYCLE_PX = 23;
+
+function useContinuousRidgeMotion(motion: EncoderMotion | null) {
+	const encoder = useRef<HTMLElement | null>(null);
+	const animationFrame = useRef<number | null>(null);
+	const lastFrameTime = useRef<number | null>(null);
+	const motionState = useRef(motion);
+	const ridgeOffset = useRef(0);
+	motionState.current = motion;
+	const moving = motion !== null;
+
+	useEffect(() => {
+		if (!moving) {
+			lastFrameTime.current = null;
+			return;
+		}
+		const animate = (time: number) => {
+			const previousTime = lastFrameTime.current;
+			lastFrameTime.current = time;
+			const currentMotion = motionState.current;
+			if (previousTime !== null && currentMotion) {
+				const direction = currentMotion.direction === "up" ? -1 : 1;
+				const elapsedSeconds = Math.min(0.1, (time - previousTime) / 1000);
+				ridgeOffset.current +=
+					direction *
+					currentMotion.ridgeCyclesPerSecond *
+					TOUCH_ENCODER_RIDGE_CYCLE_PX *
+					elapsedSeconds;
+				encoder.current?.style.setProperty(
+					"--encoder-ridge-offset",
+					`${ridgeOffset.current}px`,
+				);
+			}
+			animationFrame.current = window.requestAnimationFrame(animate);
+		};
+		animationFrame.current = window.requestAnimationFrame(animate);
+		return () => {
+			if (animationFrame.current !== null)
+				window.cancelAnimationFrame(animationFrame.current);
+			animationFrame.current = null;
+			lastFrameTime.current = null;
+		};
+	}, [moving]);
+
+	return encoder;
+}
+
 function TouchEncoderSurface({
+	attributeLabel,
 	disabled,
 	display,
 	indexed,
 	label,
 	onStep,
 	onSet,
+	slot,
+	slowStep,
 }: {
+	attributeLabel?: string;
 	disabled: boolean;
 	display: string;
 	indexed: boolean;
 	label: string;
 	onStep(delta: number): void;
 	onSet(): void;
+	slot?: number;
+	slowStep: number;
 }) {
+	const range = display.match(/^(.*?)\s*(?:\.\.\.|…)\s*(.*?)$/u);
 	return (
 		<div className="touch-encoder-surface">
+			{(attributeLabel || slot !== undefined) && (
+				<header className="touch-encoder-labels">
+					<b title={attributeLabel}>{attributeLabel}</b>
+					{slot !== undefined && <small>Enc {slot}</small>}
+				</header>
+			)}
 			<span className="touch-encoder-ridges" aria-hidden="true" />
 			<div
 				className="touch-encoder-tap-zone touch-encoder-tap-positive"
 				aria-hidden="true"
-				onClick={() => onStep(TOUCH_ENCODER_FINE_STEP)}
+				onClick={() => onStep(slowStep)}
 			/>
 			<button
 				type="button"
-				className="touch-encoder-value"
+				className={`touch-encoder-value ${range ? "range-value" : ""}`.trim()}
 				aria-label={`Set ${label} value`}
 				disabled={disabled || indexed}
 				onClick={onSet}
 			>
-				{display}
+				{range ? (
+					<>
+						<span>{range[1]}</span>
+						<i aria-hidden="true">...</i>
+						<span>{range[2]}</span>
+					</>
+				) : (
+					display
+				)}
 			</button>
 			<div
 				className="touch-encoder-tap-zone touch-encoder-tap-negative"
 				aria-hidden="true"
-				onClick={() => onStep(-TOUCH_ENCODER_FINE_STEP)}
+				onClick={() => onStep(-slowStep)}
 			/>
 			<div className="touch-encoder-legend" aria-hidden="true">
 				<span>Increase</span>
@@ -92,6 +179,7 @@ function TouchEncoderEditor({
 	inputValue,
 	allowThrough,
 	canRelease,
+	presets,
 	onInput,
 	onSubmit,
 	onClose,
@@ -101,8 +189,9 @@ function TouchEncoderEditor({
 	inputValue: string;
 	allowThrough: boolean;
 	canRelease: boolean;
+	presets?: ModalNumberPresetConfig;
 	onInput(value: string): void;
-	onSubmit(): void;
+	onSubmit(value?: string): void;
 	onClose(): void;
 	onRelease?(): void;
 }) {
@@ -116,6 +205,7 @@ function TouchEncoderEditor({
 			onSubmit={onSubmit}
 			onClose={onClose}
 			allowThrough={allowThrough}
+			presets={presets}
 			onRelease={canRelease ? onRelease : undefined}
 		/>
 	);
@@ -123,10 +213,17 @@ function TouchEncoderEditor({
 
 function useTouchEncoderInteraction({
 	disabled,
+	fastStep,
 	indexed,
 	onStep,
-}: Pick<TouchEncoderProps, "disabled" | "indexed" | "onStep">) {
-	const [dragFeedback, setDragFeedback] = useState<string | null>(null);
+	repeatSeconds,
+	slowStep,
+}: Pick<TouchEncoderProps, "disabled" | "indexed" | "onStep"> & {
+	fastStep: number;
+	repeatSeconds: number;
+	slowStep: number;
+}) {
+	const [motion, setMotion] = useState<EncoderMotion | null>(null);
 	const drag = useRef<DragState | null>(null);
 	const interval = useRef<number | null>(null);
 	const suppressClick = useRef(false);
@@ -142,16 +239,23 @@ function useTouchEncoderInteraction({
 	);
 	const beginContinuous = () => {
 		if (interval.current !== null || !drag.current?.delta) return;
-		interval.current = window.setInterval(() => {
-			const current = drag.current;
-			if (current?.delta) onStep(current.delta, current.undoGroup);
-		}, TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS);
+		interval.current = window.setInterval(
+			() => {
+				const current = drag.current;
+				if (current?.delta) onStep(current.delta, current.undoGroup);
+			},
+			Math.max(1, repeatSeconds * 1000),
+		);
 	};
 	const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
 		if (disabled || indexed || event.button !== 0) return;
 		drag.current = {
 			pointerId: event.pointerId,
 			startY: event.clientY,
+			maximumDisplacement: Math.max(
+				TOUCH_ENCODER_DRAG_DEAD_ZONE_PX + 1,
+				(event.currentTarget.getBoundingClientRect().height || 320) / 2,
+			),
 			delta: 0,
 			undoGroup: crypto.randomUUID(),
 			moved: false,
@@ -163,18 +267,31 @@ function useTouchEncoderInteraction({
 		const displacement = current.startY - event.clientY;
 		if (Math.abs(displacement) < TOUCH_ENCODER_DRAG_DEAD_ZONE_PX) {
 			current.delta = 0;
-			setDragFeedback(null);
+			setMotion(null);
 			return;
 		}
 		current.moved = true;
 		event.currentTarget.setPointerCapture?.(event.pointerId);
-		const coarse = Math.abs(displacement) >= TOUCH_ENCODER_COARSE_THRESHOLD_PX;
-		current.delta =
-			Math.sign(displacement) *
-			(coarse ? TOUCH_ENCODER_COARSE_STEP : TOUCH_ENCODER_FINE_STEP);
-		setDragFeedback(
-			`${displacement > 0 ? "Up" : "Down"} · ${coarse ? "Coarse" : "Fine"}`,
+		const travelRange = Math.max(
+			1,
+			current.maximumDisplacement - TOUCH_ENCODER_DRAG_DEAD_ZONE_PX,
 		);
+		const intensity = Math.max(
+			0,
+			Math.min(
+				1,
+				(Math.abs(displacement) - TOUCH_ENCODER_DRAG_DEAD_ZONE_PX) /
+					travelRange,
+			),
+		);
+		const stepMagnitude = slowStep + (fastStep - slowStep) * intensity;
+		current.delta = Math.sign(displacement) * stepMagnitude;
+		const direction = displacement > 0 ? "up" : "down";
+		const ridgeCyclesPerSecond = 0.75 + intensity * 5.25;
+		setMotion({
+			direction,
+			ridgeCyclesPerSecond,
+		});
 		beginContinuous();
 		event.preventDefault();
 	};
@@ -184,7 +301,7 @@ function useTouchEncoderInteraction({
 		suppressClick.current = current.moved;
 		drag.current = null;
 		stopContinuous();
-		setDragFeedback(null);
+		setMotion(null);
 		if (suppressClick.current)
 			window.setTimeout(() => {
 				suppressClick.current = false;
@@ -196,8 +313,8 @@ function useTouchEncoderInteraction({
 	const canActivate = () => !disabled && !indexed && !suppressClick.current;
 	return {
 		canActivate,
-		dragFeedback,
 		finishPointer,
+		motion,
 		onPointerDown,
 		onPointerMove,
 		step,
@@ -206,12 +323,22 @@ function useTouchEncoderInteraction({
 
 export function TouchEncoder({
 	label,
+	slot,
+	attributeLabel,
 	display,
 	value,
+	formatValue,
+	minimum = 0,
+	maximum = 1,
+	inputScale = 100,
+	slowStep = TOUCH_ENCODER_FINE_STEP,
+	fastStep = TOUCH_ENCODER_COARSE_STEP,
+	repeatSeconds = TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS / 1000,
 	disabled = false,
 	accentColor,
 	indexed = false,
 	canRelease = false,
+	presets,
 	onStep,
 	onSet,
 	onSetRange,
@@ -219,17 +346,29 @@ export function TouchEncoder({
 }: TouchEncoderProps) {
 	const [editing, setEditing] = useState(false);
 	const [inputValue, setInputValue] = useState("");
-	const interaction = useTouchEncoderInteraction({ disabled, indexed, onStep });
+	const interaction = useTouchEncoderInteraction({
+		disabled,
+		fastStep,
+		indexed,
+		onStep,
+		repeatSeconds,
+		slowStep,
+	});
+	const encoderRef = useContinuousRidgeMotion(interaction.motion);
+	const resolvedInputScale =
+		Number.isFinite(inputScale) && inputScale !== 0 ? inputScale : 1;
+	const renderedValue = display ?? formatValue?.(value) ?? String(value);
+	const clamp = (next: number) => Math.max(minimum, Math.min(maximum, next));
 	const openEditor = () => {
 		if (!interaction.canActivate()) return;
-		setInputValue(String(Number((value * 100).toFixed(1))));
+		setInputValue(String(Number((value * resolvedInputScale).toFixed(4))));
 		setEditing(true);
 	};
-	const submit = () => {
+	const submit = (candidate = inputValue) => {
 		if (
 			submitNumericExpression(
-				inputValue,
-				(next) => onSet(Math.max(0, Math.min(100, next)) / 100),
+				candidate,
+				(next) => onSet(clamp(next / resolvedInputScale)),
 				onSetRange,
 			)
 		)
@@ -238,16 +377,16 @@ export function TouchEncoder({
 	const onWheel = (event: ReactWheelEvent<HTMLElement>) => {
 		if (disabled || indexed || !event.deltaY) return;
 		event.preventDefault();
-		onStep(Math.sign(-event.deltaY) * (event.shiftKey ? 0.1 : 0.01));
+		onStep(Math.sign(-event.deltaY) * (event.shiftKey ? fastStep : slowStep));
 	};
 	const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
 		if (disabled || indexed) return;
 		if (event.key === "ArrowUp" || event.key === "ArrowRight") {
 			event.preventDefault();
-			onStep(TOUCH_ENCODER_FINE_STEP);
+			onStep(slowStep);
 		} else if (event.key === "ArrowDown" || event.key === "ArrowLeft") {
 			event.preventDefault();
-			onStep(-TOUCH_ENCODER_FINE_STEP);
+			onStep(-slowStep);
 		} else if (event.key === "Enter" || event.key === " ") {
 			event.preventDefault();
 			openEditor();
@@ -258,10 +397,19 @@ export function TouchEncoder({
 		<>
 			{/* biome-ignore lint/a11y/useSemanticElements: This is one focusable relative encoder, not a form fieldset. */}
 			<section
+				ref={encoderRef}
 				role="group"
 				tabIndex={disabled || indexed ? -1 : 0}
 				className={`touch-encoder ${disabled ? "disabled" : ""} ${indexed ? "indexed" : ""}`}
-				style={{ "--encoder-color": accentColor ?? "#176777" } as CSSProperties}
+				data-motion={interaction.motion?.direction}
+				style={
+					{
+						"--encoder-color": accentColor ?? "#176777",
+						"--encoder-motion-speed": interaction.motion
+							? interaction.motion.ridgeCyclesPerSecond
+							: undefined,
+					} as CSSProperties
+				}
 				aria-label={label}
 				aria-describedby={instructionsId}
 				aria-disabled={disabled || indexed}
@@ -273,22 +421,21 @@ export function TouchEncoder({
 				onKeyDown={onKeyDown}
 			>
 				<TouchEncoderSurface
+					attributeLabel={attributeLabel}
 					disabled={disabled}
-					display={display}
+					display={renderedValue}
 					indexed={indexed}
 					label={label}
 					onStep={interaction.step}
 					onSet={openEditor}
+					slot={slot}
+					slowStep={slowStep}
 				/>
 				<span id={instructionsId} className="visually-hidden">
-					Upper and lower surface taps step the value. Drag vertically to
-					accelerate. Press the centered value or Enter for absolute entry.
+					The upper third increases the value and the lower third decreases it.
+					Drag vertically to accelerate linearly. Tap the full-width center
+					third or press Enter for absolute entry.
 				</span>
-				{interaction.dragFeedback && (
-					<output className="touch-encoder-drag-feedback" aria-live="polite">
-						{interaction.dragFeedback}
-					</output>
-				)}
 			</section>
 			{editing && (
 				<TouchEncoderEditor
@@ -296,6 +443,7 @@ export function TouchEncoder({
 					inputValue={inputValue}
 					allowThrough={Boolean(onSetRange)}
 					canRelease={canRelease}
+					presets={presets}
 					onInput={setInputValue}
 					onSubmit={submit}
 					onClose={() => setEditing(false)}

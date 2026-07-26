@@ -6,7 +6,7 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MultiPatchInstance, PatchedFixture } from "../../api/types";
 import {
@@ -15,6 +15,7 @@ import {
 	parseVirtualFixtureNumber,
 	UniverseMap,
 } from "./FixturePatchSetup";
+import { dmxGridColumnCount } from "./fixturePatch/UniverseMap";
 import { blankFixtureProfile } from "./fixtureProfileModel";
 
 const state = { patchSetArmed: false };
@@ -552,6 +553,22 @@ describe("fixture batch IDs and title actions", () => {
 });
 
 describe("fixture batch DMX placement", () => {
+	it("opens the Universe menu above the placement modal and switches universes", () => {
+		const placement = openDimmerPlacement();
+		const modal = placement.closest(
+			'.stacked-modal-layer[data-modal-top="true"]',
+		);
+		fireEvent.click(
+			within(placement).getByRole("button", { name: "Universe" }),
+		);
+		const listbox = screen.getByRole("listbox");
+		expect(listbox.closest("[data-modal-id]")).toBe(modal);
+		fireEvent.click(within(listbox).getByRole("option", { name: "2" }));
+		expect(
+			within(placement).getByRole("grid", { name: "DMX universe 2" }),
+		).toBeInTheDocument();
+	});
+
 	it("releases concrete preview reservations for Empty and reacquires them for Address", () => {
 		const placement = openDimmerPlacement();
 		const choice = within(placement).getByRole("group", {
@@ -572,9 +589,7 @@ describe("fixture batch DMX placement", () => {
 
 		fireEvent.click(within(choice).getByRole("button", { name: "Empty" }));
 
-		expect(
-			within(placement).getByText("Placement: Empty"),
-		).toBeInTheDocument();
+		expect(within(placement).getByText("Placement: Empty")).toBeInTheDocument();
 		expect(within(placement).queryByRole("grid")).not.toBeInTheDocument();
 		expect(
 			within(placement).queryByRole("textbox", {
@@ -598,12 +613,13 @@ describe("fixture batch DMX placement", () => {
 
 	it("adds every requested fixture unpatched without address progression", async () => {
 		const placement = openDimmerPlacement();
-		fireEvent.change(within(placement).getByRole("textbox", { name: "Count" }), {
-			target: { value: "3" },
-		});
-		fireEvent.click(
-			within(placement).getByRole("button", { name: "Empty" }),
+		fireEvent.change(
+			within(placement).getByRole("textbox", { name: "Count" }),
+			{
+				target: { value: "3" },
+			},
 		);
+		fireEvent.click(within(placement).getByRole("button", { name: "Empty" }));
 		fireEvent.click(
 			within(placement).getByRole("button", { name: "Add 3 fixtures" }),
 		);
@@ -646,9 +662,7 @@ describe("fixture batch DMX placement", () => {
 
 	it("adds one deliberately Empty fixture with its normal identity and profile", async () => {
 		const placement = openDimmerPlacement();
-		fireEvent.click(
-			within(placement).getByRole("button", { name: "Empty" }),
-		);
+		fireEvent.click(within(placement).getByRole("button", { name: "Empty" }));
 		fireEvent.click(
 			within(placement).getByRole("button", { name: "Add 1 fixtures" }),
 		);
@@ -689,7 +703,7 @@ describe("fixture batch DMX placement", () => {
 			within(placement).getByRole("textbox", {
 				name: "Address (universe.address)",
 			}),
-		).toHaveValue("1.1");
+		).toHaveValue("1.101");
 		expect(grid.querySelector('[data-dmx-address="101"]')).toHaveClass(
 			"proposed",
 			"conflict",
@@ -920,8 +934,14 @@ describe("visual-only Venue placement", () => {
 });
 
 describe("DMX address grid dragging", () => {
-	it("moves the proposed footprint with mouse or touch pointer events while preserving the grabbed offset", () => {
-		const onAddress = vi.fn();
+	it("fits whole touch cells into the available width", () => {
+		expect(dmxGridColumnCount(360)).toBe(7);
+		expect(dmxGridColumnCount(826)).toBe(16);
+		expect(dmxGridColumnCount(1200)).toBe(24);
+	});
+
+	it("switches universes from the visible universe control", () => {
+		const onUniverse = vi.fn();
 		render(
 			<UniverseMap
 				fixtures={[]}
@@ -929,13 +949,38 @@ describe("DMX address grid dragging", () => {
 				proposed={10}
 				footprint={4}
 				proposedLabel="Fixture 10 · Test"
-				onAddress={onAddress}
-				onUniverse={vi.fn()}
+				onAddress={vi.fn()}
+				onUniverse={onUniverse}
 			/>,
 		);
+		fireEvent.click(screen.getByRole("button", { name: "Universe" }));
+		fireEvent.click(screen.getByRole("option", { name: "2" }));
+		expect(onUniverse).toHaveBeenCalledWith(2);
+	});
+
+	it("moves the proposed footprint with mouse or touch pointer events while preserving the grabbed offset", () => {
+		const onAddress = vi.fn();
+		function ControlledMap() {
+			const [proposed, setProposed] = useState(10);
+			return (
+				<UniverseMap
+					fixtures={[]}
+					universe={1}
+					proposed={proposed}
+					footprint={4}
+					proposedLabel="Fixture 10 · Test"
+					onAddress={(address) => {
+						onAddress(address);
+						setProposed(address);
+					}}
+					onUniverse={vi.fn()}
+				/>
+			);
+		}
+		render(<ControlledMap />);
 		const grid = screen.getByRole("grid", { name: "DMX universe 1" });
 		const grabbed = grid.querySelector(
-			'[data-dmx-address="11"]',
+			'[data-dmx-address="10"]',
 		) as HTMLElement;
 		const destination = grid.querySelector(
 			'[data-dmx-address="50"]',
@@ -952,8 +997,13 @@ describe("DMX address grid dragging", () => {
 				clientY: 10,
 			});
 			fireEvent.pointerMove(grid, { pointerId: 7, clientX: 100, clientY: 100 });
-			expect(onAddress).toHaveBeenLastCalledWith(49);
+			expect(onAddress).toHaveBeenLastCalledWith(50);
 			fireEvent.pointerUp(grid, { pointerId: 7 });
+			fireEvent.click(grabbed);
+			expect(onAddress).toHaveBeenCalledOnce();
+			expect(
+				grid.querySelector('[data-dmx-address="50"]'),
+			).toHaveAccessibleName(/proposed patch for Fixture 10/);
 		} finally {
 			Object.defineProperty(document, "elementFromPoint", {
 				configurable: true,

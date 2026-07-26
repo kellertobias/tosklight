@@ -265,38 +265,6 @@ export class BrowserOperatorShell {
 		}
 	}
 
-	async expectDevelopmentDiagnosticsBoundary(): Promise<void> {
-		await this.page
-			.getByRole("button", { name: "DESKTOPS", exact: true })
-			.click();
-		await this.page.getByRole("button", { name: /New desktop/ }).click();
-		await this.page.locator(".empty-desk").click({ position: { x: 10, y: 10 } });
-		const picker = this.page
-			.getByRole("heading", { name: "Open Window" })
-			.locator("xpath=..");
-		await expect(
-			picker.getByRole("button", { name: "Development", exact: true }),
-		).toHaveCount(0);
-		await picker.getByRole("button", { name: "Cancel", exact: true }).click();
-		await this.page.getByRole("button", { name: "SHIFT", exact: true }).click();
-		await this.page.getByRole("button", { name: "0", exact: true }).click();
-		await expect(this.page.locator(".development-window")).toHaveCount(0);
-		await this.desk.click(this.page.locator(".dock-identity"));
-		await this.page
-			.locator(".show-modal")
-			.getByRole("button", { name: "Desk Status", exact: true })
-			.click();
-		const status = this.page.getByRole("dialog", { name: "Desk Status" });
-		await status.getByRole("button", { name: /Debug/ }).click();
-		await status
-			.getByRole("menuitem", { name: "Open Development", exact: true })
-			.click();
-		await expect(this.page.locator(".development-window")).toBeVisible();
-		await expect(this.page.locator(".ui-window-title")).toHaveText(
-			"Development",
-		);
-	}
-
 	private dockEntry(name: string): Locator {
 		return this.page.locator(".dock-entry").filter({ hasText: name }).first();
 	}

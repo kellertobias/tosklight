@@ -345,8 +345,11 @@ describe("Shift+Record Update gestures", () => {
 		const { rerender } = render(<CommandLineBar />);
 
 		expect(
-			screen.getByText("PROG 2 · GO 4 · GO MINUS 7 · TEMP ON 8 · TEMP OFF 9"),
-		).toBeInTheDocument();
+			screen.getByRole("button", { name: "PRELOAD GO" }),
+		).toHaveAttribute(
+			"title",
+			"Pending Preload: PROG 2 · GO 4 · GO MINUS 7 · TEMP ON 8 · TEMP OFF 9",
+		);
 		expect(screen.queryByText(/PROG 6/)).not.toBeInTheDocument();
 
 		preloadLifecycle.armed = false;

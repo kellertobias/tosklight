@@ -10,6 +10,29 @@ import { Button } from "@tosklight/ui";
 
 export type HelpUrlTransform = (url: string, kind: "link" | "image") => string | undefined;
 
+function HelpLoadingIcon() {
+  return <svg className="help-state-icon" viewBox="0 0 48 48" aria-hidden="true">
+    <circle cx="24" cy="24" r="17"/>
+    <path d="M24 14v11l7 5"/>
+    <path d="M17 6h14M17 42h14"/>
+  </svg>;
+}
+
+function HelpEmptyIcon() {
+  return <svg className="help-state-icon" viewBox="0 0 48 48" aria-hidden="true">
+    <path d="M7 10.5c6.5-2 12.2-.7 17 3.8v26c-4.8-4.5-10.5-5.8-17-3.8z"/>
+    <path d="M41 10.5c-6.5-2-12.2-.7-17 3.8v26c4.8-4.5 10.5-5.8 17-3.8z"/>
+    <path d="M14 18h4M30 18h4"/>
+  </svg>;
+}
+
+function HelpWarningIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 3 2.8 20h18.4z"/>
+    <path d="M12 9v5M12 17.5v.1"/>
+  </svg>;
+}
+
 export function HelpMarkdown({
   markdown,
   urlTransform = safeHelpUrl,
@@ -184,6 +207,11 @@ export function HelpWindowView({
     () => filterHelpEntries(catalog?.topics ?? [], query),
     [catalog?.topics, query],
   );
+  const emptyState = loading && !error
+    ? { icon: <HelpLoadingIcon/>, title: "Loading help" }
+    : catalog && catalog.topics.length === 0 && !error
+      ? { icon: <HelpEmptyIcon/>, title: "No help topics found" }
+      : null;
 
   return <div className={`help-window ${compact ? "compact" : ""}`}>
     {!compact && <WindowHeader
@@ -195,13 +223,14 @@ export function HelpWindowView({
     <div className="help-layout">
       <nav aria-label="Help topics">
         {catalog && <HelpNavigation entries={visibleTopics} expanded={expanded} selected={selected} onSelect={onSelect} onToggle={toggleFolder}/>}
-        {catalog && catalog.topics.length === 0 && <p>No help topics found.</p>}
         {catalog && catalog.topics.length > 0 && visibleTopics.length === 0 && <p>No matching help topics.</p>}
       </nav>
-      <WindowScrollArea><main className="help-content">
+      <WindowScrollArea className="help-topic-pane" emptyState={emptyState}><main className="help-content">
         {error && <p className="modal-error">Unable to load help: {error}</p>}
-        {catalog?.errors.map((message) => <p className="modal-warning" key={message}>{message}</p>)}
-        {loading && !error && <p>Loading help…</p>}
+        {catalog?.errors.map((message) => <div className="help-catalog-warning" role="status" key={message}>
+          <HelpWarningIcon/>
+          <span><strong>Help catalog warning</strong><small>{message}</small></span>
+        </div>)}
         {topic && <HelpMarkdown markdown={topic.markdown} urlTransform={urlTransform}/>}
       </main></WindowScrollArea>
     </div>

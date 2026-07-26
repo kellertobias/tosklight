@@ -1,0 +1,150 @@
+{
+	"version": 1,
+	"entries": [
+		{
+			"file": "application-overview.png",
+			"title": "Application overview",
+			"caption": "Fixture Sheet, 3D Stage, Groups, Color Presets, and populated touch playbacks in one operator desktop.",
+			"storyId": "application-marketing--full-application",
+			"viewport": { "width": 1600, "height": 920 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "command-section-touch.png",
+			"title": "Touch programmer",
+			"caption": "The complete programmer command section configured for a software-only touch desk.",
+			"storyId": "application-command-section--programmer-software",
+			"viewport": { "width": 1920, "height": 761 },
+			"captureSelector": ".control-section",
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "groups.png",
+			"title": "Groups",
+			"caption": "Populated and intentionally empty ordered fixture groups in the production pool window.",
+			"storyId": "application-marketing--groups-window",
+			"viewport": { "width": 960, "height": 560 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "color-presets.png",
+			"title": "Color presets",
+			"caption": "A complete working palette from warm whites through saturated show colors.",
+			"storyId": "application-marketing--color-presets-window",
+			"viewport": { "width": 840, "height": 440 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "position-presets.png",
+			"title": "Position presets",
+			"caption": "Reusable down, cross, audience, blind, and center positions in the preset window.",
+			"storyId": "application-marketing--position-presets-window",
+			"viewport": { "width": 480, "height": 336 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "cues.png",
+			"title": "Cues",
+			"caption": "A populated cue list with timing and playback information ready for a show.",
+			"storyId": "application-marketing--cues-window",
+			"viewport": { "width": 960, "height": 560 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "command-section-hardware.png",
+			"title": "Hardware-connected programmer",
+			"caption": "The complete command section adapted to an attached hardware control surface.",
+			"storyId": "application-command-section--programmer-hardware-connected",
+			"viewport": { "width": 1920, "height": 761 },
+			"captureSelector": ".control-section",
+			"theme": "dark",
+			"mode": "hardware",
+			"interactions": []
+		},
+		{
+			"file": "stage-3d.png",
+			"title": "3D Stage",
+			"caption": "Patched fixtures visualized in the production 3D Stage window.",
+			"storyId": "application-marketing--stage-3-d-window",
+			"viewport": { "width": 1200, "height": 700 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "fixture-library.png",
+			"title": "Fixture library",
+			"caption": "Searchable manufacturer, fixture, and detailed fixture-profile columns.",
+			"storyId": "application-marketing--fixture-library-window",
+			"viewport": { "width": 1200, "height": 640 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [
+				{
+					"action": "fill",
+					"selector": "input[aria-label='Search fixture library']",
+					"value": "Robe"
+				},
+				{
+					"action": "expect-visible",
+					"selector": "button:has-text('ESPRITE')"
+				},
+				{
+					"action": "expect-hidden",
+					"selector": "button:has-text('Titan Tube')"
+				},
+				{
+					"action": "fill",
+					"selector": "input[aria-label='Search fixture library']",
+					"value": ""
+				},
+				{
+					"action": "expect-visible",
+					"selector": "button:has-text('Titan Tube')"
+				}
+			]
+		},
+		{
+			"file": "desk-setup-outputs.png",
+			"title": "Output routes",
+			"caption": "Desk output configuration with working Art-Net and sACN universe routes.",
+			"storyId": "application-marketing--desk-setup-outputs-window",
+			"viewport": { "width": 960, "height": 560 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "channels.png",
+			"title": "Channels",
+			"caption": "Live channel values arranged in the production Channels window.",
+			"storyId": "application-marketing--channels-window",
+			"viewport": { "width": 960, "height": 560 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
+			"file": "dmx.png",
+			"title": "DMX",
+			"caption": "Universe output with the selected fixture, channel, and address detail visible.",
+			"storyId": "application-marketing--dmx-window",
+			"viewport": { "width": 960, "height": 560 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		}
+	]
+}

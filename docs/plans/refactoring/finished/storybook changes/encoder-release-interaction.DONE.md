@@ -71,4 +71,8 @@ Done.
 - Documented modal Release and `[DEL]` plus encoder-push Release in the command-line reference.
 - Verified with package encoder tests (11 passing), the focused desktop Parameter Controls tests
   (19 passing), package and desktop typechecks, and the complete Storybook gate (71 passing).
+- The current Storybook browser interaction opens the owned touch encoder's Set Value modal,
+  performs absolute entry, invokes Release, observes the released/unowned value, confirms
+  disabled/indexed encoders cannot open the editor, and repeats Release through the hardware
+  encoder editor. The ordinary encoder face remains free of a Release action.
 - Included in the completed shared frontend and Storybook lane commit recorded by plan 02.

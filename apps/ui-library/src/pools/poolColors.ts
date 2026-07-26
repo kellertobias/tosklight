@@ -89,6 +89,7 @@ export function resolvePoolPresentation({
 				? palette.preset[presetFamily]
 				: palette[objectType];
 	const normalizedStates = [...new Set(states)];
+	const empty = normalizedStates.includes("empty");
 	return {
 		color,
 		states: normalizedStates,
@@ -98,7 +99,7 @@ export function resolvePoolPresentation({
 			`pool-color-mode-${mode}`,
 			...normalizedStates,
 		].join(" "),
-		style: { "--pool-card-color": color } as CSSProperties,
+		style: (empty ? {} : { "--pool-card-color": color }) as CSSProperties,
 	};
 }
 

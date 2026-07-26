@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePatchedFixturesView } from "../features/patch/PatchState";
 import type { PatchedFixture, VisualizationSnapshot } from "../api/types";
 import { Button, ModalRegistration } from "@tosklight/ui";
 import { VerticalTouchFader } from "../components/control/VerticalTouchFader";
-import { FaderView, WindowHeader } from "@tosklight/ui/window-kit";
+import {
+	FaderView,
+	WindowHeader,
+	WindowSettings,
+} from "@tosklight/ui/window-kit";
 import {
 	useProgrammingSelectionActions,
 	useProgrammingSelectionView,
@@ -18,7 +22,9 @@ import { useVisualizationRuntimeSnapshot } from "../features/visualizationRuntim
 import { fixtureValue } from "./fixtureVisualization";
 import type { WindowProps } from "./windowTypes";
 
-const PAGE_SIZE = 20;
+const DEFAULT_COLUMNS = 10;
+const ROWS = 2;
+const DEFAULT_PAGE_SIZE = DEFAULT_COLUMNS * ROWS;
 
 export interface Channel {
 	number: number;
@@ -33,6 +39,7 @@ export function ChannelsWindow({ active = true, compact }: WindowProps) {
 	const values = useProgrammerValuesMutationQueue(active);
 	const [page, setPage] = useState(0);
 	const [pagePickerOpen, setPagePickerOpen] = useState(false);
+	const [columns, setColumns] = useState(DEFAULT_COLUMNS);
 	const visualization = useChannelVisualization(active);
 	const selectedFixtureIds = useMemo(
 		() => new Set(selection?.selected ?? []),
@@ -40,7 +47,7 @@ export function ChannelsWindow({ active = true, compact }: WindowProps) {
 	);
 	const fixtures = usePatchedFixturesView(active);
 	const channels = channelProjection(fixtures, visualization);
-	const pages = Math.max(8, Math.ceil(channels.length / PAGE_SIZE));
+	const pages = Math.max(8, Math.ceil(channels.length / DEFAULT_PAGE_SIZE));
 	const setIntensity = (fixtureId: string, level: number) => {
 		const mutations = normalizedFixtureMutations(
 			[{ fixtureId, attribute: "intensity", value: level }],
@@ -63,6 +70,11 @@ export function ChannelsWindow({ active = true, compact }: WindowProps) {
 			valuesReady={values.canWrite}
 			onPage={setPage}
 			onPagePickerOpen={setPagePickerOpen}
+			columns={columns}
+			onColumnsChange={(next) => {
+				setColumns(next);
+				setPage(0);
+			}}
 			onSelect={(fixtureId) =>
 				void selectionActions?.replace({ resolvedFixtures: [fixtureId] })
 			}
@@ -83,6 +95,8 @@ export function ChannelsWindowView({
 	onPagePickerOpen,
 	onSelect,
 	onSetIntensity,
+	columns = DEFAULT_COLUMNS,
+	onColumnsChange,
 }: {
 	channels: readonly Channel[];
 	compact?: boolean;
@@ -95,20 +109,59 @@ export function ChannelsWindowView({
 	onPagePickerOpen(open: boolean): void;
 	onSelect(fixtureId: string): void;
 	onSetIntensity(fixtureId: string, level: number): void;
+	columns?: number;
+	onColumnsChange?(columns: number): void;
 }) {
 	usePagePickerDismissal(pagePickerOpen, onPagePickerOpen);
+	const pageSize = columns * ROWS;
+	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	return (
 		<div className="channels-window">
 			{!compact && (
 				<ChannelHeader
+					columns={columns}
 					page={page}
 					pages={pages}
 					onPage={onPage}
 					onOpenPicker={() => onPagePickerOpen(true)}
+					onSettings={
+						onColumnsChange ? (anchor) => setSettingsAnchor(anchor) : undefined
+					}
+				/>
+			)}
+			{settingsAnchor && onColumnsChange && (
+				<WindowSettings
+					modal={false}
+					anchor={settingsAnchor}
+					title="Channel Settings"
+					onClose={() => setSettingsAnchor(null)}
+					tabs={[
+						{
+							id: "layout",
+							label: "Layout",
+							content: (
+								<>
+									<h3>Channels per row</h3>
+									<div className="button-group">
+										{[6, 8, 10].map((count) => (
+											<Button
+												className={columns === count ? "active" : ""}
+												key={count}
+												onClick={() => onColumnsChange(count)}
+											>
+												{count}
+											</Button>
+										))}
+									</div>
+								</>
+							),
+						},
+					]}
 				/>
 			)}
 			<ChannelFaderBank
-				channels={channels.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)}
+				channels={channels.slice(page * pageSize, (page + 1) * pageSize)}
+				columns={columns}
 				page={page}
 				selectedFixtureIds={selectedFixtureIds}
 				valuesReady={valuesReady}
@@ -117,6 +170,7 @@ export function ChannelsWindowView({
 			/>
 			{pagePickerOpen && (
 				<ChannelPagePicker
+					columns={columns}
 					page={page}
 					pages={pages}
 					onPage={onPage}
@@ -147,15 +201,19 @@ function channelProjection(
 }
 
 function ChannelHeader({
+	columns,
 	page,
 	pages,
 	onPage,
 	onOpenPicker,
+	onSettings,
 }: {
+	columns: number;
 	page: number;
 	pages: number;
 	onPage(page: number): void;
 	onOpenPicker(): void;
+	onSettings?(anchor: DOMRect): void;
 }) {
 	return (
 		<WindowHeader
@@ -172,7 +230,7 @@ function ChannelHeader({
 					},
 					{
 						id: "page",
-						label: pageLabel(page),
+						label: pageLabel(page, columns),
 						onClick: onOpenPicker,
 					},
 					{
@@ -184,12 +242,15 @@ function ChannelHeader({
 					},
 				],
 			]}
+			settings={Boolean(onSettings)}
+			onSettings={(button) => onSettings?.(button.getBoundingClientRect())}
 		/>
 	);
 }
 
 function ChannelFaderBank({
 	channels,
+	columns,
 	page,
 	selectedFixtureIds,
 	valuesReady,
@@ -197,6 +258,7 @@ function ChannelFaderBank({
 	onSetIntensity,
 }: {
 	channels: readonly Channel[];
+	columns: number;
 	page: number;
 	selectedFixtureIds: ReadonlySet<string>;
 	valuesReady: boolean;
@@ -204,13 +266,17 @@ function ChannelFaderBank({
 	onSetIntensity(fixtureId: string, level: number): void;
 }) {
 	const visible = Array.from(
-		{ length: PAGE_SIZE },
+		{ length: columns * ROWS },
 		(_, index) => channels[index] ?? null,
 	);
 	return (
-		<FaderView rows={2} className="channel-fader-bank">
+		<FaderView
+			rows={ROWS}
+			className="channel-fader-bank"
+			style={{ "--channel-columns": columns } as CSSProperties}
+		>
 			{visible.map((channel, index) => {
-				const number = page * PAGE_SIZE + index + 1;
+				const number = page * columns * ROWS + index + 1;
 				return (
 					<article
 						className={`channel-fader ${channel ? "" : "empty"} ${channel && selectedFixtureIds.has(channel.fixture.fixture_id) ? "selected" : ""}`}
@@ -236,11 +302,13 @@ function ChannelFaderBank({
 }
 
 function ChannelPagePicker({
+	columns,
 	page,
 	pages,
 	onPage,
 	onClose,
 }: {
+	columns: number;
 	page: number;
 	pages: number;
 	onPage(page: number): void;
@@ -254,31 +322,31 @@ function ChannelPagePicker({
 					event.target === event.currentTarget && onClose()
 				}
 			>
-			<div
-				className="nested-modal channel-page-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Channel pages"
-			>
-				<Button className="modal-close" onClick={onClose}>
-					×
-				</Button>
-				<h3>Channel pages</h3>
-				<div>
-					{Array.from({ length: pages }, (_, nextPage) => (
-						<Button
-							className={nextPage === page ? "active" : ""}
-							key={nextPage}
-							onClick={() => {
-								onPage(nextPage);
-								onClose();
-							}}
-						>
-							{pageLabel(nextPage)}
-						</Button>
-					))}
+				<div
+					className="nested-modal channel-page-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Channel pages"
+				>
+					<Button className="modal-close" onClick={onClose}>
+						×
+					</Button>
+					<h3>Channel pages</h3>
+					<div>
+						{Array.from({ length: pages }, (_, nextPage) => (
+							<Button
+								className={nextPage === page ? "active" : ""}
+								key={nextPage}
+								onClick={() => {
+									onPage(nextPage);
+									onClose();
+								}}
+							>
+								{pageLabel(nextPage, columns)}
+							</Button>
+						))}
+					</div>
 				</div>
-			</div>
 			</div>
 		</ModalRegistration>,
 		document.body,
@@ -301,6 +369,7 @@ function usePagePickerDismissal(
 	}, [open, setOpen]);
 }
 
-function pageLabel(page: number) {
-	return `${page * PAGE_SIZE + 1}–${(page + 1) * PAGE_SIZE}`;
+function pageLabel(page: number, columns: number) {
+	const pageSize = columns * ROWS;
+	return `${page * pageSize + 1}–${(page + 1) * pageSize}`;
 }

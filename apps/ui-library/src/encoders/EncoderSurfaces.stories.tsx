@@ -15,6 +15,9 @@ interface EncoderStoryProps {
 	disabled: boolean;
 	indexed: boolean;
 	showSecondary: boolean;
+	slowStep: number;
+	fastStep: number;
+	repeatSeconds: number;
 }
 
 const meta: Meta<EncoderStoryProps> = {
@@ -28,6 +31,9 @@ const meta: Meta<EncoderStoryProps> = {
 		disabled: { control: "boolean" },
 		indexed: { control: "boolean" },
 		showSecondary: { control: "boolean" },
+		slowStep: { control: { type: "number", min: 0.0001, step: 0.0001 } },
+		fastStep: { control: { type: "number", min: 0.001, step: 0.001 } },
+		repeatSeconds: { control: { type: "number", min: 0.02, step: 0.01 } },
 	},
 	args: {
 		surface: "touch",
@@ -36,6 +42,9 @@ const meta: Meta<EncoderStoryProps> = {
 		disabled: false,
 		indexed: false,
 		showSecondary: true,
+		slowStep: 0.001,
+		fastStep: 0.01,
+		repeatSeconds: 0.08,
 	},
 };
 
@@ -43,17 +52,26 @@ export default meta;
 type Story = StoryObj<EncoderStoryProps>;
 
 export const IndividualTouch: Story = {
-	render: ({ accentColor, disabled, indexed }) => {
+	render: ({
+		accentColor,
+		disabled,
+		fastStep,
+		indexed,
+		repeatSeconds,
+		slowStep,
+	}) => {
 		const [state, setState] = useState({ value: 0.52, owned: true });
 		return (
 			<div style={{ width: 180, height: 420 }}>
 				<TouchEncoder
 					label="Enc 1 · Dimmer"
+					slot={1}
+					attributeLabel="Dimmer"
 					display={
 						state.owned
 							? indexed
 								? "Gobo 3"
-								: `${Math.round(state.value * 100)}%`
+								: `${(state.value * 100).toFixed(1)}%`
 							: "Released"
 					}
 					value={state.value}
@@ -61,6 +79,9 @@ export const IndividualTouch: Story = {
 					accentColor={accentColor}
 					disabled={disabled}
 					indexed={indexed}
+					slowStep={slowStep}
+					fastStep={fastStep}
+					repeatSeconds={repeatSeconds}
 					canRelease={state.owned}
 					onStep={(delta) =>
 						setState((current) => ({
@@ -83,6 +104,8 @@ export const IndividualTouchReleased: Story = {
 		<div style={{ width: 180, height: 420 }}>
 			<TouchEncoder
 				label="Enc 1 · Dimmer"
+				slot={1}
+				attributeLabel="Dimmer"
 				display="Released"
 				value={0.52}
 				mode="No programmer ownership"
@@ -105,9 +128,38 @@ export const IndividualTouchIndexed: Story = {
 	args: { indexed: true },
 };
 
+export const ScaledInternalValue: Story = {
+	render: ({ accentColor, disabled }) => {
+		const [value, setValue] = useState(520);
+		return (
+			<div style={{ width: 180, height: 420 }}>
+				<TouchEncoder
+					label="Enc 1 · Scaled dimmer"
+					slot={1}
+					attributeLabel="Scaled dimmer"
+					value={value}
+					formatValue={(internal) => `${(internal / 10).toFixed(1)}%`}
+					minimum={0}
+					maximum={1000}
+					inputScale={0.1}
+					slowStep={1}
+					fastStep={10}
+					accentColor={accentColor}
+					disabled={disabled}
+					onStep={(delta) =>
+						setValue((current) => Math.max(0, Math.min(1000, current + delta)))
+					}
+					onSet={setValue}
+				/>
+			</div>
+		);
+	},
+};
+
 export const IndividualHardware: Story = {
 	render: ({ disabled, showSecondary }) => {
-		const [value, setValue] = useState(20);
+		const [value, setValue] = useState(90);
+		const [secondaryValue, setSecondaryValue] = useState(30);
 		const [owned, setOwned] = useState(true);
 		return (
 			<div className="hardware-connected" style={{ width: 140, height: 170 }}>
@@ -115,15 +167,20 @@ export const IndividualHardware: Story = {
 					slot={1}
 					target={{
 						label: "Pan",
-						value: owned ? `${value}°` : "Released",
+						value: owned ? "80° ... 100°" : "Released",
 						role: "Turn",
 					}}
 					secondary={
 						showSecondary
-							? { label: "Tilt", value: "30°", role: "Press-turn" }
+							? {
+									label: "Tilt",
+									value: `${secondaryValue}°`,
+									role: "Push-turn",
+								}
 							: undefined
 					}
 					editValue={value}
+					secondaryEditValue={secondaryValue}
 					canRelease={owned}
 					onEdit={
 						disabled
@@ -133,6 +190,7 @@ export const IndividualHardware: Story = {
 									setOwned(true);
 								}
 					}
+					onSecondaryEdit={showSecondary ? setSecondaryValue : undefined}
 					onRelease={() => setOwned(false)}
 				/>
 			</div>
@@ -141,60 +199,91 @@ export const IndividualHardware: Story = {
 };
 
 function FamilyExample(props: EncoderStoryProps) {
-	const [values, setValues] = useState({ pan: 0.4, tilt: 0.6, zoom: 0.25 });
-	const [owned, setOwned] = useState(() => new Set(["pan"]));
+	const [values, setValues] = useState({
+		red: 0.8,
+		green: 0.45,
+		blue: 0.25,
+		white: 0.6,
+		amber: 0.35,
+		uv: 0.15,
+	});
+	const [owned, setOwned] = useState(() => new Set(["red", "green", "blue"]));
+	const encoderTargets = [
+		{ id: "red", label: "Red", slot: 1, color: "#ff4d57" },
+		{ id: "green", label: "Green", slot: 2, color: "#43d66f" },
+		{ id: "blue", label: "Blue", slot: 3, color: "#4f8cff" },
+		{ id: "white", label: "White", slot: 4, color: "#edf4f6" },
+		{ id: "amber", label: "Amber", slot: 5, color: "#ffb52e" },
+		{ id: "uv", label: "UV", slot: 6, color: "#a56cff" },
+	] as const;
+	const valuePresets = {
+		groups: [
+			{
+				label: "Intensity",
+				options: [
+					{ value: "0", label: "Off", description: "Release output to zero." },
+					{
+						value: "25",
+						label: "Quarter",
+						description: "Low working level.",
+					},
+					{
+						value: "50",
+						label: "Half",
+						description: "Balanced working level.",
+					},
+					{
+						value: "100",
+						label: "Full",
+						description: "Maximum output.",
+					},
+				],
+			},
+			{
+				label: "Operator defaults",
+				options: [
+					{
+						value: "42",
+						label: "House preset",
+						icon: "★",
+						description: "Stored house intensity.",
+					},
+					{
+						value: "68",
+						label: "Show level",
+						icon: "●",
+						description: "Current show default.",
+					},
+				],
+			},
+		],
+	} as const;
 	const model: EncoderSectionModel = {
 		id: props.family.toLowerCase().replace(/\s+/g, "-"),
 		label: props.family,
-		description: "Configured entirely by the supplied family model",
-		encoders: [
-			{
-				id: "pan",
-				slot: 1,
-				target: {
-					label: "Pan",
-					display: owned.has("pan")
-						? `${Math.round(values.pan * 100)}%`
-						: "Released",
-					role: "Turn",
-				},
-				secondary: props.showSecondary
-					? {
-							label: "Tilt",
-							display: `${Math.round(values.tilt * 100)}%`,
-							role: "Press-turn",
-						}
-					: undefined,
-				value: values.pan,
-				accentColor: props.accentColor,
-				disabled: props.disabled,
-				indexed: props.indexed,
-				canRelease: owned.has("pan"),
+		description: "RGBW · AUV",
+		encoders: encoderTargets.map(({ id, label, slot, color }) => ({
+			id,
+			slot,
+			target: {
+				label,
+				display:
+					id === "white"
+						? "0% ... 100%"
+						: owned.has(id)
+							? `${Math.round(values[id] * 100)}%`
+							: "Released",
 			},
-			{
-				id: "tilt",
-				slot: 2,
-				target: {
-					label: "Tilt",
-					display: props.indexed
-						? "Indexed"
-						: `${Math.round(values.tilt * 100)}%`,
-				},
-				value: values.tilt,
-				accentColor: props.accentColor,
-				disabled: props.disabled,
-				indexed: props.indexed,
+			value: values[id],
+			accentColor: color,
+			disabled: props.disabled,
+			indexed: props.indexed,
+			canRelease: owned.has(id),
+			presets: {
+				...valuePresets,
+				selectedValue: String(Math.round(values[id] * 100)),
 			},
-			{
-				id: "zoom",
-				slot: 3,
-				target: { label: "Zoom", display: `${Math.round(values.zoom * 100)}%` },
-				value: values.zoom,
-				accentColor: props.accentColor,
-				disabled: props.disabled,
-			},
-			{ id: "empty", slot: 4, value: 0 },
-		],
+		})),
 	};
 	return (
 		<div
@@ -219,6 +308,15 @@ function FamilyExample(props: EncoderStoryProps) {
 						setValues((current) => ({ ...current, [id]: value }));
 						setOwned((current) => new Set(current).add(id));
 					},
+					onRangeChange: (id, points) => {
+						const first = points[0];
+						if (first === undefined) return;
+						setValues((current) => ({
+							...current,
+							[id]: Math.max(0, Math.min(1, first / 100)),
+						}));
+						setOwned((current) => new Set(current).add(id));
+					},
 					onRelease: (id) => {
 						setOwned((current) => {
 							const next = new Set(current);
@@ -234,4 +332,8 @@ function FamilyExample(props: EncoderStoryProps) {
 
 export const ConfigurableFamily: Story = {
 	render: (args) => <FamilyExample {...args} />,
+	args: {
+		family: "Color",
+		showSecondary: false,
+	},
 };

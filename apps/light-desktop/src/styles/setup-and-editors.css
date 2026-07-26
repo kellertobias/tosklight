@@ -546,7 +546,7 @@
 	> .ui-text-control
 	> .ui-input-keyboard
 	.ui-keyboard-icon {
-	transform: translateY(-4px) scale(1.18);
+	transform: none;
 }
 .ui-window-header-search
 	.console-search-input
@@ -711,6 +711,8 @@
 	max-width: 32px;
 	max-height: 32px;
 	object-fit: contain;
+	filter: invert(72%) sepia(8%) saturate(435%) hue-rotate(161deg)
+		brightness(91%);
 }
 .fixture-sheet-patch {
 	font-family: ui-monospace, monospace;

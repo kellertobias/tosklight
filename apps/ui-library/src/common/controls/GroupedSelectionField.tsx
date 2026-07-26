@@ -97,6 +97,7 @@ export function GroupedSelectionField<T extends string>({
                 active={option.value === value}
                 aria-pressed={option.value === value}
                 disabled={option.disabled}
+                contentAlign="left"
                 onClick={() => choose(option.value)}
               >
                 <span className={`ui-grouped-selection-option ${option.icon ? "has-icon" : "has-no-icon"}`}>

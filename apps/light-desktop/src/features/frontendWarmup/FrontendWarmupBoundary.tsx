@@ -20,6 +20,7 @@ import { useShowObjectsAuthority } from "../showObjects/ShowObjectsView";
 import { useSpeedGroupRuntimeAuthority } from "../speedGroupRuntime/SpeedGroupRuntimeView";
 import {
 	FrontendWarmupCoordinator,
+	type FrontendWarmupPriority,
 	type FrontendWarmupTaskResult,
 } from "./coordinator";
 import {
@@ -70,188 +71,20 @@ export function FrontendWarmupBoundary({
 	const speedGroupRuntime = useSpeedGroupRuntimeAuthority();
 
 	useEffect(() => {
-		if (
-			!showId ||
-			!showObjects ||
-			!playback ||
-			!programmingSelection ||
-			!programmerValues ||
-			!captureMode ||
-			!programmerLifecycle ||
-			!preloadValues ||
-			!preloadPlaybackQueue ||
-			!programmerPriority ||
-			!speedGroupRuntime
-		)
-			return;
-		if (
-			typeof window !== "undefined" &&
-			new URLSearchParams(window.location.search).has(
-				"frontend-warmup-disabled",
-			)
-		) {
-			let cancelled = false;
-			void afterUsablePaint().then(() => {
-				if (!cancelled) frontendPerformanceDiagnostics.markFirstUsablePaint();
-			});
-			return () => {
-				cancelled = true;
-			};
-		}
-		const coordinator = new FrontendWarmupCoordinator({
-			concurrency: 2,
-			onDiagnostics: (diagnostics) =>
-				frontendPerformanceDiagnostics.setWarmup(diagnostics),
+		const authorities = completeWarmupAuthorities({
+			showObjects,
+			playback,
+			programmingSelection,
+			programmerValues,
+			captureMode,
+			programmerLifecycle,
+			preloadValues,
+			preloadPlaybackQueue,
+			programmerPriority,
+			speedGroupRuntime,
 		});
-		for (const task of deferredConnectionWarmupTasks(stateRef.current))
-			coordinator.enqueue(task);
-		coordinator.enqueue({
-			key: "programming:selection",
-			priority: "foreground",
-			run: (signal) =>
-				acquireStoreLease(
-					programmingSelection.activate,
-					programmingSelection.store,
-					signal,
-				),
-		});
-		coordinator.enqueue({
-			key: "programmer:capture-mode",
-			priority: "foreground",
-			run: (signal) =>
-				acquireStoreLease(captureMode.activate, captureMode.store, signal),
-		});
-		coordinator.enqueue({
-			key: "programmer:values",
-			priority: "near-future",
-			run: (signal) =>
-				acquireStoreLease(
-					programmerValues.activate,
-					programmerValues.store,
-					signal,
-				),
-		});
-		coordinator.enqueue({
-			key: "programmer:lifecycle",
-			priority: "idle",
-			run: (signal) =>
-				acquireStoreLease(
-					programmerLifecycle.activate,
-					programmerLifecycle.store,
-					signal,
-				),
-		});
-		coordinator.enqueue({
-			key: "programmer:priority",
-			priority: "idle",
-			run: (signal) =>
-				acquireStoreLease(
-					programmerPriority.activate,
-					programmerPriority.store,
-					signal,
-				),
-		});
-		coordinator.enqueue({
-			key: "speed-group:runtime",
-			priority: "idle",
-			run: (signal) =>
-				acquireStoreLease(
-					speedGroupRuntime.activate,
-					speedGroupRuntime.store,
-					signal,
-				),
-		});
-		coordinator.enqueue({
-			key: "programmer:preload-values",
-			priority: "idle",
-			run: (signal) =>
-				acquireStoreLease(preloadValues.activate, preloadValues.store, signal),
-		});
-		coordinator.enqueue({
-			key: "programmer:preload-playback-queue",
-			priority: "idle",
-			run: (signal) =>
-				acquireStoreLease(
-					preloadPlaybackQueue.activate,
-					preloadPlaybackQueue.store,
-					signal,
-				),
-		});
-		for (const { kind, priority } of SHOW_OBJECT_PRIORITIES)
-			coordinator.enqueue({
-				key: `show-object:${kind}`,
-				priority,
-				run: (signal) => acquireShowObjectLease(showObjects, kind, signal),
-			});
-		coordinator.enqueue({
-			key: "playback:built-in-registry",
-			priority: "idle",
-			run: async (signal) => {
-				await waitForStore(
-					showObjects.store,
-					(snapshot) =>
-						PLAYBACK_DEPENDENCIES.every((kind) =>
-							snapshot.readyCollections.has(kind),
-						),
-					signal,
-				);
-				const releases = new Map<string, () => void>();
-				const synchronizeIdentities = () => {
-					const identities = playbackIdentities(
-						showObjects.store.getSnapshot(),
-					);
-					const nextKeys = new Set(identities.map(identityKey));
-					for (const identity of identities) {
-						const key = identityKey(identity);
-						if (!releases.has(key))
-							releases.set(key, playback.activateWarm(identity));
-					}
-					for (const [key, release] of releases) {
-						if (nextKeys.has(key)) continue;
-						release();
-						releases.delete(key);
-					}
-					return identities;
-				};
-				const unsubscribe = showObjects.store.subscribe(synchronizeIdentities);
-				const identities = synchronizeIdentities();
-				const releaseDesk = playback.activateDeskWarm();
-				try {
-					await waitForStore(
-						playback.store,
-						(state) =>
-							state.status === "ready" &&
-							identities.every((identity) =>
-								state.projections.has(identityKey(identity)),
-							),
-						signal,
-					);
-				} catch (reason) {
-					unsubscribe();
-					for (const release of [...releases.values()].reverse()) release();
-					releaseDesk();
-					throw reason;
-				}
-				return {
-					release: () => {
-						unsubscribe();
-						for (const release of [...releases.values()].reverse()) release();
-						releaseDesk();
-					},
-					retainedBytes: serializedModelBytes(playback.store.getSnapshot()),
-				};
-			},
-		});
-		let cancelled = false;
-		void afterUsablePaint().then(() => {
-			if (cancelled) return;
-			frontendPerformanceDiagnostics.markFirstUsablePaint();
-			coordinator.start();
-		});
-		return () => {
-			cancelled = true;
-			coordinator.cancel();
-		};
+		if (!showId || !authorities) return;
+		return startFrontendWarmup(stateRef.current, authorities);
 	}, [
 		captureMode,
 		playback,
@@ -266,6 +99,242 @@ export function FrontendWarmupBoundary({
 		speedGroupRuntime,
 	]);
 	return null;
+}
+
+type WarmupAuthorities = {
+	showObjects: NonNullable<ReturnType<typeof useShowObjectsAuthority>>;
+	playback: NonNullable<ReturnType<typeof usePlaybackRuntimeAuthority>>;
+	programmingSelection: NonNullable<
+		ReturnType<typeof useProgrammingSelectionAuthority>
+	>;
+	programmerValues: NonNullable<
+		ReturnType<typeof useProgrammerValuesAuthority>
+	>;
+	captureMode: NonNullable<ReturnType<typeof useProgrammerCaptureModeAuthority>>;
+	programmerLifecycle: NonNullable<
+		ReturnType<typeof useProgrammerLifecycleAuthority>
+	>;
+	preloadValues: NonNullable<
+		ReturnType<typeof useProgrammerPreloadValuesAuthority>
+	>;
+	preloadPlaybackQueue: NonNullable<
+		ReturnType<typeof useProgrammerPreloadPlaybackQueueAuthority>
+	>;
+	programmerPriority: NonNullable<
+		ReturnType<typeof useProgrammerPriorityAuthority>
+	>;
+	speedGroupRuntime: NonNullable<
+		ReturnType<typeof useSpeedGroupRuntimeAuthority>
+	>;
+};
+
+type OptionalWarmupAuthorities = {
+	[K in keyof WarmupAuthorities]: WarmupAuthorities[K] | null;
+};
+
+function completeWarmupAuthorities(
+	authorities: OptionalWarmupAuthorities,
+): WarmupAuthorities | null {
+	return Object.values(authorities).every(Boolean)
+		? (authorities as WarmupAuthorities)
+		: null;
+}
+
+function startFrontendWarmup(
+	state: ServerState,
+	authorities: WarmupAuthorities,
+) {
+	if (frontendWarmupDisabled()) return markUsablePaintOnly();
+	const coordinator = new FrontendWarmupCoordinator({
+		concurrency: 2,
+		onDiagnostics: (diagnostics) =>
+			frontendPerformanceDiagnostics.setWarmup(diagnostics),
+	});
+	enqueueWarmupTasks(coordinator, state, authorities);
+	let cancelled = false;
+	void afterUsablePaint().then(() => {
+		if (cancelled) return;
+		frontendPerformanceDiagnostics.markFirstUsablePaint();
+		coordinator.start();
+	});
+	return () => {
+		cancelled = true;
+		coordinator.cancel();
+	};
+}
+
+function frontendWarmupDisabled() {
+	return (
+		typeof window !== "undefined" &&
+		new URLSearchParams(window.location.search).has("frontend-warmup-disabled")
+	);
+}
+
+function markUsablePaintOnly() {
+	let cancelled = false;
+	void afterUsablePaint().then(() => {
+		if (!cancelled) frontendPerformanceDiagnostics.markFirstUsablePaint();
+	});
+	return () => {
+		cancelled = true;
+	};
+}
+
+function enqueueWarmupTasks(
+	coordinator: FrontendWarmupCoordinator,
+	state: ServerState,
+	authorities: WarmupAuthorities,
+) {
+	for (const task of deferredConnectionWarmupTasks(state))
+		coordinator.enqueue(task);
+	enqueueStoreLease(
+		coordinator,
+		"programming:selection",
+		"foreground",
+		authorities.programmingSelection,
+	);
+	enqueueStoreLease(
+		coordinator,
+		"programmer:capture-mode",
+		"foreground",
+		authorities.captureMode,
+	);
+	enqueueStoreLease(
+		coordinator,
+		"programmer:values",
+		"near-future",
+		authorities.programmerValues,
+	);
+	enqueueStoreLease(
+		coordinator,
+		"programmer:lifecycle",
+		"idle",
+		authorities.programmerLifecycle,
+	);
+	enqueueStoreLease(
+		coordinator,
+		"programmer:priority",
+		"idle",
+		authorities.programmerPriority,
+	);
+	enqueueStoreLease(
+		coordinator,
+		"speed-group:runtime",
+		"idle",
+		authorities.speedGroupRuntime,
+	);
+	enqueueStoreLease(
+		coordinator,
+		"programmer:preload-values",
+		"idle",
+		authorities.preloadValues,
+	);
+	enqueueStoreLease(
+		coordinator,
+		"programmer:preload-playback-queue",
+		"idle",
+		authorities.preloadPlaybackQueue,
+	);
+	for (const { kind, priority } of SHOW_OBJECT_PRIORITIES)
+		coordinator.enqueue({
+			key: `show-object:${kind}`,
+			priority,
+			run: (signal) =>
+				acquireShowObjectLease(authorities.showObjects, kind, signal),
+		});
+	coordinator.enqueue({
+		key: "playback:built-in-registry",
+		priority: "idle",
+		run: (signal) => acquirePlaybackRegistryLease(authorities, signal),
+	});
+}
+
+function enqueueStoreLease<
+	T extends {
+		subscribe(listener: () => void): () => void;
+		getSnapshot(): { status: string; error: Error | null };
+	},
+>(
+	coordinator: FrontendWarmupCoordinator,
+	key: string,
+	priority: FrontendWarmupPriority,
+	authority: { activate: () => () => void; store: T },
+) {
+	coordinator.enqueue({
+		key,
+		priority,
+		run: (signal) =>
+			acquireStoreLease(authority.activate, authority.store, signal),
+	});
+}
+
+async function acquirePlaybackRegistryLease(
+	{ showObjects, playback }: WarmupAuthorities,
+	signal: AbortSignal,
+): Promise<FrontendWarmupTaskResult> {
+	await waitForStore(
+		showObjects.store,
+		(snapshot) =>
+			PLAYBACK_DEPENDENCIES.every((kind) =>
+				snapshot.readyCollections.has(kind),
+			),
+		signal,
+	);
+	const releases = new Map<string, () => void>();
+	const synchronizeIdentities = () =>
+		synchronizePlaybackIdentities(showObjects, playback, releases);
+	const unsubscribe = showObjects.store.subscribe(synchronizeIdentities);
+	const identities = synchronizeIdentities();
+	const releaseDesk = playback.activateDeskWarm();
+	try {
+		await waitForStore(
+			playback.store,
+			(state) =>
+				state.status === "ready" &&
+				identities.every((identity) =>
+					state.projections.has(identityKey(identity)),
+				),
+			signal,
+		);
+	} catch (reason) {
+		releasePlaybackRegistry(unsubscribe, releases, releaseDesk);
+		throw reason;
+	}
+	return {
+		release: () =>
+			releasePlaybackRegistry(unsubscribe, releases, releaseDesk),
+		retainedBytes: serializedModelBytes(playback.store.getSnapshot()),
+	};
+}
+
+function synchronizePlaybackIdentities(
+	showObjects: WarmupAuthorities["showObjects"],
+	playback: WarmupAuthorities["playback"],
+	releases: Map<string, () => void>,
+) {
+	const identities = playbackIdentities(showObjects.store.getSnapshot());
+	const nextKeys = new Set(identities.map(identityKey));
+	for (const identity of identities) {
+		const key = identityKey(identity);
+		if (!releases.has(key))
+			releases.set(key, playback.activateWarm(identity));
+	}
+	for (const [key, release] of releases) {
+		if (nextKeys.has(key)) continue;
+		release();
+		releases.delete(key);
+	}
+	return identities;
+}
+
+function releasePlaybackRegistry(
+	unsubscribe: () => void,
+	releases: Map<string, () => void>,
+	releaseDesk: () => void,
+) {
+	unsubscribe();
+	for (const release of [...releases.values()].reverse()) release();
+	releaseDesk();
 }
 
 function playbackIdentities(

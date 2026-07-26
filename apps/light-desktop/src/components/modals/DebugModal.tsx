@@ -43,12 +43,6 @@ export function DebugModal() {
         dispatch({ type: "SET_MODAL", modal: "setupOpen", value: false });
         closeDebugMenu();
       }}><span aria-hidden="true">{state.showSectionNames ? "✓" : ""}</span>Show section names</Button>
-      <Button role="menuitem" onClick={() => {
-        dispatch({ type: "OPEN_BUILTIN", kind: "development" });
-        dispatch({ type: "SET_MODAL", modal: "debugOpen", value: false });
-        dispatch({ type: "SET_MODAL", modal: "setupOpen", value: false });
-        closeDebugMenu();
-      }}><span aria-hidden="true">⚒</span>Open Development</Button>
       <Button role="menuitem" className={state.midiProfile ? "active" : ""} onClick={() => { dispatch({ type: "TOGGLE_MIDI_PROFILE" }); closeDebugMenu(); }}><span aria-hidden="true">{state.midiProfile ? "✓" : ""}</span>Simulate Hardware</Button>
       <Button role="menuitem" className={state.touchScrollbars ? "active" : ""} onClick={() => { dispatch({ type: "TOGGLE_TOUCH_SCROLLBARS" }); closeDebugMenu(); }}><span aria-hidden="true">{state.touchScrollbars ? "✓" : ""}</span>Simulate Touch Scroll Bars</Button>
       <Button role="menuitem" onClick={() => { shellStatus?.simulateError("Simulated DMX output failure"); closeDebugMenu(); }}>Simulate DMX Error</Button>

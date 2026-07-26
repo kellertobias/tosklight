@@ -1,4 +1,5 @@
 import {
+	type CSSProperties,
 	cloneElement,
 	Fragment,
 	isValidElement,
@@ -25,12 +26,30 @@ export interface PoolGridProps<SlotId extends string | number> {
 	slots: readonly PoolSlotViewModel<SlotId>[];
 	slotCount?: number;
 	emptySlot(index: number): PoolSlotViewModel<SlotId>;
+	fillEmptySlots?: boolean;
 	className?: string;
 	minimumCardWidth?: number;
+	appearance?: Partial<PoolGridAppearance>;
 	onSlotClick?(id: SlotId, index: number): void;
 	onSlotPressHold?(id: SlotId, index: number): void;
 	renderSlot?(slot: PoolSlotViewModel<SlotId>, index: number): ReactNode;
 }
+
+export interface PoolGridAppearance {
+	filledStyle: "tinted" | "outline";
+	uncoloredColor: string;
+	recordColor: string;
+	updateColor: string;
+	setColor: string;
+}
+
+export const DEFAULT_POOL_GRID_APPEARANCE: Readonly<PoolGridAppearance> = {
+	filledStyle: "tinted",
+	uncoloredColor: "#65717b",
+	recordColor: "#ff4e55",
+	updateColor: "#f4b942",
+	setColor: "#1bd6ec",
+};
 
 export interface PoolWindowProps<SlotId extends string | number>
 	extends PoolGridProps<SlotId> {
@@ -44,25 +63,34 @@ export function PoolGrid<SlotId extends string | number>({
 	slots,
 	slotCount,
 	emptySlot,
+	fillEmptySlots = true,
 	className = "",
 	minimumCardWidth = 88,
+	appearance,
 	onSlotClick,
 	onSlotPressHold,
 	renderSlot,
 }: PoolGridProps<SlotId>) {
-	const count = Math.max(200, slotCount ?? 200);
-	const storedByPosition = new Map(
-		slots.map((slot) => [slot.position, slot] as const),
-	);
-	const resolved = Array.from(
-		{ length: count },
-		(_, index) => storedByPosition.get(index) ?? emptySlot(index),
-	);
+	const resolvedAppearance = {
+		...DEFAULT_POOL_GRID_APPEARANCE,
+		...appearance,
+	};
+	const resolved = fillEmptySlots
+		? resolveFixedSlots(slots, slotCount, emptySlot)
+		: [...slots];
 
 	return (
 		<ButtonGrid
-			className={`card-pool pool-window-grid ${className}`.trim()}
+			className={`card-pool pool-window-grid pool-filled-${resolvedAppearance.filledStyle} ${className}`.trim()}
 			minimum={minimumCardWidth}
+			style={
+				{
+					"--pool-card-uncolored-color": resolvedAppearance.uncoloredColor,
+					"--pool-record-color": resolvedAppearance.recordColor,
+					"--pool-update-color": resolvedAppearance.updateColor,
+					"--pool-set-color": resolvedAppearance.setColor,
+				} as CSSProperties
+			}
 		>
 			{resolved.map((slot, index) => (
 				<Fragment key={String(slot.id)}>
@@ -86,6 +114,21 @@ export function PoolGrid<SlotId extends string | number>({
 				</Fragment>
 			))}
 		</ButtonGrid>
+	);
+}
+
+function resolveFixedSlots<SlotId extends string | number>(
+	slots: readonly PoolSlotViewModel<SlotId>[],
+	slotCount: number | undefined,
+	emptySlot: (index: number) => PoolSlotViewModel<SlotId>,
+) {
+	const count = Math.max(200, slotCount ?? 200);
+	const storedByPosition = new Map(
+		slots.map((slot) => [slot.position, slot] as const),
+	);
+	return Array.from(
+		{ length: count },
+		(_, index) => storedByPosition.get(index) ?? emptySlot(index),
 	);
 }
 

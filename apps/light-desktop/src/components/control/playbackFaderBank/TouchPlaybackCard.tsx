@@ -1,14 +1,16 @@
+import type { VerticalTouchFaderAction } from "@tosklight/ui/faders";
+import {
+	type PlaybackCardKind,
+	type PlaybackCardSummary,
+	type PlaybackCardViewModel,
+	TouchPlaybackCardView,
+} from "@tosklight/ui/playback";
 import type {
 	CSSProperties,
 	MouseEvent as ReactMouseEvent,
 	PointerEvent as ReactPointerEvent,
 } from "react";
 import type { PlaybackRuntimeProjection } from "../../../api/types";
-import {
-	type VerticalTouchFaderAction,
-	VerticalTouchFaderSurface,
-} from "@tosklight/ui/faders";
-import { PlaybackActionButtons } from "@tosklight/ui/playback";
 import type { PlaybackBankController } from "./controller";
 import {
 	playbackFaderDisplay,
@@ -19,8 +21,6 @@ import { playbackRowUnits } from "./projection";
 import {
 	PlaybackAssignmentTarget,
 	PlaybackConfigurationTarget,
-	PlaybackRepresentation,
-	PlaybackRuntimeStatus,
 } from "./SlotControls";
 import type { PlaybackSlotProjection, PlaybackSnapshotActive } from "./types";
 
@@ -30,6 +30,9 @@ type TouchPlaybackCardProps = {
 	active: PlaybackSnapshotActive | undefined;
 	runtimeProjection: PlaybackRuntimeProjection | undefined;
 	selected: boolean;
+	kind: PlaybackCardKind;
+	summary?: PlaybackCardSummary;
+	color: string;
 	hasFader: boolean;
 	value: number;
 	touchActions: VerticalTouchFaderAction[];
@@ -45,6 +48,9 @@ export function TouchPlaybackCard({
 	active,
 	runtimeProjection,
 	selected,
+	kind,
+	summary,
+	color,
 	hasFader,
 	value,
 	touchActions,
@@ -60,68 +66,55 @@ export function TouchPlaybackCard({
 		value,
 		runtimeProjection,
 	);
+	const model: PlaybackCardViewModel = {
+		page: controller.activePageNumber ?? 1,
+		slot,
+		row: rowIndex,
+		rowUnits: row ? playbackRowUnits(row, controller.hardware) : 1,
+		name: playback?.name ?? "Empty",
+		assigned: Boolean(playback),
+		kind,
+		selected,
+		selectionPending: controller.selectionPending,
+		className,
+		style: cardStyle,
+		color,
+		hasFader,
+		faderValue: value,
+		faderLabel: playbackFaderLabel(playback),
+		faderDisplay: display,
+		faderMode: playbackFaderModeFeedback(playback, active),
+		summary,
+		disabled:
+			controller.assignmentPending || !playback || !controller.runtimeActions,
+		actions: touchActions,
+	};
 	return (
-		// biome-ignore lint/a11y/useKeyWithClickEvents: The touch card delegates keyboard semantics to its real child controls.
-		<article
-			data-page={controller.activePageNumber}
-			data-playback-slot={slot}
-			data-playback-row={rowIndex}
-			data-row-units={row ? playbackRowUnits(row, controller.hardware) : 1}
-			data-selected-playback={selected || undefined}
-			data-selection-pending={controller.selectionPending || undefined}
-			className={className}
-			style={cardStyle}
-			onPointerDownCapture={interceptPointer}
-			onClickCapture={interceptClick}
-		>
-			<PlaybackAssignmentTarget controller={controller} slot={slot} />
-			<PlaybackConfigurationTarget
-				controller={controller}
-				playback={playback}
-				slot={slot}
-			/>
-			<PlaybackRepresentation
-				controller={controller}
-				playback={playback}
-				slot={slot}
-			/>
-			<PlaybackRuntimeStatus active={active} />
-			{hasFader && (
-				<VerticalTouchFaderSurface
-					hardware={controller.hardware}
-					disabled={
-						controller.assignmentPending ||
-						!playback ||
-						!controller.runtimeActions
-					}
-					label={playbackFaderLabel(playback)}
-					value={value}
-					accentColor={playback?.color}
-					mode={playbackFaderModeFeedback(playback, active)}
-					display={display}
-					actions={touchActions}
-					onChange={(next) =>
-						playback &&
-						void controller.runtimeActions?.poolPlaybackAction(
-							playback.number,
-							"master",
-							{ value: next / 100, surface: "physical" },
-						)
-					}
-				/>
-			)}
-			{!hasFader && touchActions.length > 0 && (
-				<footer
-					className={`faderless-playback-actions action-count-${touchActions.length}`}
-					style={
-						{
-							"--playback-action-count": touchActions.length,
-						} as CSSProperties
-					}
-				>
-					<PlaybackActionButtons actions={touchActions} />
-				</footer>
-			)}
-		</article>
+		<TouchPlaybackCardView
+			model={model}
+			slots={{
+				overlays: (
+					<>
+						<PlaybackAssignmentTarget controller={controller} slot={slot} />
+						<PlaybackConfigurationTarget
+							controller={controller}
+							playback={playback}
+							slot={slot}
+						/>
+					</>
+				),
+			}}
+			callbacks={{
+				onPointerDownCapture: interceptPointer,
+				onClickCapture: interceptClick,
+				onFaderChange: (next) =>
+					playback &&
+					void controller.runtimeActions?.poolPlaybackAction(
+						playback.number,
+						"master",
+						{ value: next / 100, surface: "physical" },
+					),
+			}}
+		/>
 	);
 }

@@ -1,11 +1,13 @@
-import { cleanup, fireEvent, render as rtlRender, screen } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render as rtlRender,
+	screen,
+} from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModalProvider } from "../modals/ModalStack";
-import {
-	EncoderSection,
-	type EncoderSectionModel,
-} from "./EncoderSection";
+import { EncoderSection, type EncoderSectionModel } from "./EncoderSection";
 
 const model: EncoderSectionModel = {
 	id: "position",
@@ -16,7 +18,7 @@ const model: EncoderSectionModel = {
 			id: "pan",
 			slot: 1,
 			target: { label: "Pan", display: "20°", role: "Turn" },
-			secondary: { label: "Tilt", display: "30°", role: "Press-turn" },
+			secondary: { label: "Tilt", display: "30°", role: "Push-turn" },
 			value: 0.4,
 			canRelease: true,
 		},
@@ -54,8 +56,48 @@ describe("EncoderSection", () => {
 			screen.getByRole("group", { name: "Enc 2 · Tilt" }),
 		).toBeInTheDocument();
 		fireEvent.click(container.querySelector(".touch-encoder-tap-positive")!);
-		expect(relative).toHaveBeenCalledWith("pan", 0.01, undefined);
+		expect(relative).toHaveBeenCalledWith("pan", 0.001, undefined);
 		expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+	});
+
+	it("passes internal-domain scaling and custom increments through the family model", () => {
+		const relative = vi.fn();
+		const absolute = vi.fn();
+		render(
+			<EncoderSection
+				model={{
+					id: "scaled",
+					label: "Scaled",
+					encoders: [
+						{
+							id: "dimmer",
+							slot: 1,
+							target: { label: "Dimmer", display: "52.0%" },
+							value: 520,
+							minimum: 0,
+							maximum: 1000,
+							inputScale: 0.1,
+							slowStep: 1,
+							fastStep: 10,
+						},
+					],
+				}}
+				surface="touch"
+				callbacks={{
+					onRelativeChange: relative,
+					onAbsoluteChange: absolute,
+				}}
+			/>,
+		);
+		fireEvent.click(document.querySelector(".touch-encoder-tap-positive")!);
+		expect(relative).toHaveBeenCalledWith("dimmer", 1, undefined);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Dimmer value" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "7" }));
+		fireEvent.click(screen.getByRole("button", { name: "5" }));
+		fireEvent.click(screen.getByRole("button", { name: "ENTER" }));
+		expect(absolute).toHaveBeenCalledWith("dimmer", 750);
 	});
 
 	it("renders the same family as reduced hardware targets", () => {

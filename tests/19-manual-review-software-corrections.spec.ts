@@ -325,29 +325,6 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await expect(stage.getByRole("button", { name: "Add element", exact: true })).toHaveCount(0);
   });
 
-  test("MANUAL-019 @supplemental-ui › Development stays out of operator panes and remains available through Desk Status", async ({ api, desk, page }) => {
-    await desk.open(api.baseUrl);
-    await desk.recordStep("OPERATOR PANE CATALOG", "Development is not an operator pane choice on a new Desktop.");
-    await page.getByRole("button", { name: "DESKTOPS", exact: true }).click();
-    await page.getByRole("button", { name: /New desktop/ }).click();
-    await page.locator(".empty-desk").click({ position: { x: 10, y: 10 } });
-    const picker = page.getByRole("heading", { name: "Open Window" }).locator("xpath=..");
-    await expect(picker.getByRole("button", { name: "Development", exact: true })).toHaveCount(0);
-    await picker.getByRole("button", { name: "Cancel", exact: true }).click();
-    await page.getByRole("button", { name: "SHIFT", exact: true }).click();
-    await page.getByRole("button", { name: "0", exact: true }).click();
-    await expect(page.locator(".development-window")).toHaveCount(0);
-
-    await desk.recordStep("DEVELOPER TOOLING", "Desk Status deliberately retains the Development component catalog for diagnostics and help maintenance.");
-    await page.locator(".dock-identity").click();
-    await page.locator(".show-modal").getByRole("button", { name: "Desk Status", exact: true }).click();
-    const status = page.getByRole("dialog", { name: "Desk Status" });
-    await status.getByRole("button", { name: /Debug/ }).click();
-    await status.getByRole("menuitem", { name: "Open Development", exact: true }).click();
-    await expect(page.locator(".development-window")).toBeVisible();
-    await expect(page.locator(".ui-window-title")).toHaveText("Development");
-  });
-
   // SKIP (pre-existing, predates the refactoring): the "Show file manager" recovery browser
   // — a root-confined .show selection under Shows & recovery that rejects non-show files and
   // opens the chosen indexed show through a safe blackout — is not implemented yet. Unskip

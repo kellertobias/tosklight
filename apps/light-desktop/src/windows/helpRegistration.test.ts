@@ -11,14 +11,6 @@ describe("Help window registration", () => {
   });
 });
 
-describe("Development window registration", () => {
-  it("remains routable through developer tooling but is not an operator pane or Built-in choice", () => {
-    expect(windowRegistry.development).toBeDefined();
-    expect(windowChoices.some(([kind]) => kind === "development")).toBe(false);
-    expect(builtIns.some(([kind]) => kind === "development")).toBe(false);
-  });
-});
-
 describe("DMX window registration", () => {
   it("remains routable but is omitted from the Built-ins dock", () => {
     expect(windowRegistry.dmx).toBeDefined();

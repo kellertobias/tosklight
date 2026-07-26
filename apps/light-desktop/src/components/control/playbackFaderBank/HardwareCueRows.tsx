@@ -1,4 +1,5 @@
-import { type CSSProperties, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { HardwareCueRowsView } from "@tosklight/ui/playback";
 import type { Cue } from "../../../api/types";
 
 type HardwareCueRowsProps = {
@@ -39,38 +40,24 @@ export function HardwareCueRows({
 			: cues.findIndex((cue) => cue.number === effectiveNextCueNumber);
 	const effectiveNext =
 		effectiveNextIndex < 0 ? undefined : cues[effectiveNextIndex];
-	const rows = compact
-		? effectiveNextIsLoaded
-			? ([[effectiveNext, effectiveNextIndex, "next"]] as const)
-			: ([[current, cueIndex, "current"]] as const)
-		: ([
-				[cues[cueIndex - 1], cueIndex - 1, "previous"],
-				[current, cueIndex, "current"],
-				[effectiveNext, effectiveNextIndex, "next"],
-			] as const);
 	return (
-		<div className={`hardware-cue-list ${compact ? "single" : "triple"}`}>
-			{rows.map(([cue, index, kind]) => (
-				<div
-					className={`hardware-cue-row ${kind} ${kind === "next" && effectiveNextIsLoaded ? "loaded-next" : ""}`}
-					style={
-						kind === "current"
-							? ({ "--cue-fade-progress": progress } as CSSProperties)
-							: undefined
-					}
-					key={`${kind}-${index}`}
-				>
-					<span>{cue?.number ?? "—"}</span>
-					<b>{cue?.name || (cue ? `Cue ${cue.number}` : "—")}</b>
-					{(kind === "next" && effectiveNextIsLoaded) || cue?.fade_millis ? (
-						<small>
-							{kind === "next" && effectiveNextIsLoaded
-								? "LOADED NEXT"
-								: `${((cue?.fade_millis ?? 0) / 1000).toFixed(1)}s`}
-						</small>
-					) : null}
-				</div>
-			))}
-		</div>
+		<HardwareCueRowsView
+			previous={cueView(cues[cueIndex - 1])}
+			current={cueView(current)}
+			next={cueView(effectiveNext)}
+			compact={compact}
+			nextLoaded={effectiveNextIsLoaded}
+			progress={progress}
+		/>
 	);
+}
+
+function cueView(cue: Cue | undefined) {
+	return cue
+		? {
+				number: cue.number,
+				name: cue.name,
+				fadeMillis: cue.fade_millis,
+			}
+		: undefined;
 }

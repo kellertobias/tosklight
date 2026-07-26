@@ -43,6 +43,7 @@ export function GridDesktop({
       } as React.CSSProperties}
       data-desktop-id={id}
       data-desktop-name={name}
+      data-ui-component="grid-desktop"
       aria-label={`${name} Desktop grid`}
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) openAtPointer(event);

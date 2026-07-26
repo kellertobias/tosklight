@@ -1,38 +1,43 @@
-import { CommandLineBar } from "./CommandLineBar";
-import { ControlLeftPane } from "./ControlLeftPane";
-import { ControlRightPane } from "./ControlRightPane";
+import { CommandSection } from "@tosklight/ui/command";
+import {
+	useHardwareConnected,
+	useSessionSnapshot,
+} from "../../features/deskSnapshot/DeskSnapshotState";
 import { useApp } from "../../state/AppContext";
-import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotState";
-
-export function ControlSectionView({
-  mode,
-  hardware,
-  commandLine,
-  left,
-  right,
-}: {
-  mode: "programmer" | "playbacks";
-  hardware: boolean;
-  commandLine: React.ReactNode;
-  left: React.ReactNode;
-  right: React.ReactNode;
-}) {
-  return <section className={`control-section ${mode} ${hardware ? "hardware-connected" : "touch-connected"}`}>
-    {commandLine}
-    {left}
-    {right}
-  </section>;
-}
+import { CommandLineBar } from "./CommandLineBar";
+import { HardwareControlSummary } from "./HardwareControlSummary";
+import { NumericPad } from "./NumericPad";
+import { ParameterControls } from "./ParameterControls";
+import { PatchParameterControls } from "./PatchParameterControls";
+import { PlaybackFaderBank } from "./PlaybackFaderBank";
+import { PlaybackTools } from "./PlaybackTools";
 
 export function ControlSection() {
-  const { state } = useApp();
-  const hardwareConnected = useHardwareConnected();
-  const hardware = Boolean(hardwareConnected || state.midiProfile);
-  return <ControlSectionView
-    commandLine={<CommandLineBar />}
-    hardware={hardware}
-    left={<ControlLeftPane />}
-    mode={state.controlMode}
-    right={<ControlRightPane />}
-  />;
+	const { state } = useApp();
+	const hardwareConnected = useHardwareConnected();
+	const session = useSessionSnapshot();
+	const hardware = Boolean(hardwareConnected || state.midiProfile);
+	return (
+		<CommandSection
+			mode={state.controlMode}
+			hardware={hardware}
+			commandLine={<CommandLineBar />}
+			programmer={
+				state.builtIn === "patch" ? (
+					<PatchParameterControls />
+				) : (
+					<ParameterControls />
+				)
+			}
+			playbacks={
+				<PlaybackFaderBank
+					playbackLayout={session?.desk.playback_layout}
+					hardwareConnected={hardwareConnected}
+				/>
+			}
+			programmerTools={<NumericPad />}
+			playbackTools={<PlaybackTools />}
+			hardwareTools={<HardwareControlSummary />}
+		/>
+	);
 }

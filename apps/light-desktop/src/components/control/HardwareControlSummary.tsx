@@ -1,6 +1,6 @@
-import { Button } from "@tosklight/ui";
+import { HardwareControlSummaryView } from "@tosklight/ui/command";
 import { ModalNumberEditor } from "@tosklight/ui/input";
-import { type CSSProperties, useRef, useState } from "react";
+import { useState } from "react";
 import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
 import {
 	useProgrammerFadeMillis,
@@ -25,6 +25,8 @@ import {
 	PlaybackPageMenu,
 	PlaybackPageRenameDialog,
 } from "./PlaybackPageDialogs";
+import { formatSpeedGroupBpm } from "./speedGroupFormatting";
+import { useSpeedGroupInteraction } from "./useSpeedGroupInteraction";
 
 function HardwareTimeInputModal({
 	kind,
@@ -61,7 +63,7 @@ export function HardwareControlSummary() {
 		useState<ShowObject<"playback_page"> | null>(null);
 	const [timeInput, setTimeInput] = useState<"prog" | "cue" | null>(null);
 	const [inputValue, setInputValue] = useState("");
-	const taps = useRef<Record<string, number[]>>({});
+	const speedGroupInteraction = useSpeedGroupInteraction();
 	const playbackDesk = usePlaybackDeskView();
 	const runtimeActions = usePlaybackRuntimeActions();
 	const runtimeStatus = usePlaybackRuntimeStatus();
@@ -104,73 +106,74 @@ export function HardwareControlSummary() {
 			);
 		setTimeInput(null);
 	};
-	const tap = (group: string, index: number) => {
-		const now = performance.now();
-		const recent = [...(taps.current[group] ?? []), now]
-			.filter((time) => now - time < 3000)
-			.slice(-6);
-		taps.current[group] = recent;
-		if (recent.length < 2) return;
-		const intervals = recent
-			.slice(1)
-			.map((time, offset) => time - recent[offset]);
-		const values = [...bpms] as [number, number, number, number, number];
-		values[index] = Math.round(
-			60000 /
-				(intervals.reduce((sum, value) => sum + value, 0) / intervals.length),
-		);
-		void configurationActions?.setControlTiming({ speed_groups_bpm: values });
-	};
 	return (
-		<div className="hardware-control-summary">
-			<div className="hardware-values">
-				<Button onClick={() => openTime("prog", prog)}>
-					<small>Prog Fade</small>
-					<b>{prog.toFixed(1)}s</b>
-				</Button>
-				<Button onClick={() => openTime("cue", cue)}>
-					<small>Cue Fade</small>
-					<b>{cue.toFixed(1)}s</b>
-				</Button>
-				<Button
-					aria-label={pageReady ? `Page ${page}` : "Playback page loading"}
-					disabled={!pageReady}
-					onClick={openPagesOrRename}
-				>
-					<small>Page</small>
-					<b>{page ?? "—"}</b>
-				</Button>
-			</div>
-			<div className="hardware-speed-groups">
-				{(["A", "B", "C", "D", "E"] as const).map((group, index) => (
-					<Button
-						style={{ "--bpm": bpms[index] } as CSSProperties}
-						key={group}
-						onClick={() => tap(group, index)}
-					>
-						<b>{group}</b>
-						<span>{bpms[index]} BPM</span>
-					</Button>
-				))}
-			</div>
-			<HighlightErrorAlert
-				message={highlightError}
-				onDismiss={() => highlightActions?.dismissHighlightError()}
-			/>
-			{timeInput && (
-				<HardwareTimeInputModal
-					kind={timeInput}
-					value={inputValue}
-					onChange={setInputValue}
-					onSubmit={submitTime}
-					onClose={() => setTimeInput(null)}
-				/>
-			)}
-			<PlaybackPageMenu open={pagesOpen} onClose={() => setPagesOpen(false)} />
-			<PlaybackPageRenameDialog
-				page={renamePage}
-				onClose={() => setRenamePage(null)}
-			/>
-		</div>
+		<HardwareControlSummaryView
+			values={[
+				{
+					id: "programmer-fade",
+					label: "Prog Fade",
+					display: `${prog.toFixed(1)}s`,
+				},
+				{
+					id: "cue-fade",
+					label: "Cue Fade",
+					display: `${cue.toFixed(1)}s`,
+				},
+				{
+					id: "page",
+					label: "Page",
+					display: String(page ?? "—"),
+					disabled: !pageReady,
+					ariaLabel: pageReady ? `Page ${page}` : "Playback page loading",
+				},
+			]}
+			speedGroups={(["A", "B", "C", "D", "E"] as const).map((group, index) => ({
+				id: group,
+				bpm: bpms[index],
+				display: formatSpeedGroupBpm(bpms[index]),
+			}))}
+			onValue={(id) => {
+				if (id === "programmer-fade") openTime("prog", prog);
+				else if (id === "cue-fade") openTime("cue", cue);
+				else openPagesOrRename();
+			}}
+			onSpeedPointerDown={(group, event) =>
+				speedGroupInteraction.beginHold(
+					group,
+					event.shiftKey || state.shiftArmed,
+				)
+			}
+			onSpeedPointerEnd={speedGroupInteraction.endHold}
+			onSpeedActivate={(group, event) =>
+				speedGroupInteraction.activate(group, event.shiftKey)
+			}
+			onSpeedSettings={speedGroupInteraction.openSettings}
+			overlays={
+				<>
+					<HighlightErrorAlert
+						message={highlightError}
+						onDismiss={() => highlightActions?.dismissHighlightError()}
+					/>
+					{timeInput && (
+						<HardwareTimeInputModal
+							kind={timeInput}
+							value={inputValue}
+							onChange={setInputValue}
+							onSubmit={submitTime}
+							onClose={() => setTimeInput(null)}
+						/>
+					)}
+					<PlaybackPageMenu
+						open={pagesOpen}
+						onClose={() => setPagesOpen(false)}
+					/>
+					<PlaybackPageRenameDialog
+						page={renamePage}
+						onClose={() => setRenamePage(null)}
+					/>
+					{speedGroupInteraction.settings}
+				</>
+			}
+		/>
 	);
 }

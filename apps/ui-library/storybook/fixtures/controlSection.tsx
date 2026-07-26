@@ -1,0 +1,449 @@
+import { useState } from "react";
+import type { ParameterFamily } from "../../../light-desktop/src/components/control/parameterControls/model";
+import { ParameterControlView } from "../../../light-desktop/src/components/control/parameterControls/ParameterControlView";
+import type { ParameterController } from "../../../light-desktop/src/components/control/parameterControls/useParameterController";
+import { useApp } from "../../../light-desktop/src/state/AppContext";
+import { Button } from "../../src";
+import {
+	type CommandLineMode,
+	CommandSection,
+	HardwareControlSummaryView,
+	PlaybackToolsView,
+	type ProgrammerClearState,
+	ProgrammerKeypadView,
+	type SpeedGroupViewModel,
+} from "../../src/command";
+import { TouchValueButton, VerticalTouchFaderSurface } from "../../src/faders";
+import {
+	HardwareCueRowsView,
+	PlaybackBankView,
+	type PlaybackCardViewModel,
+} from "../../src/playback";
+import type { SoftwareKey } from "../../src/programmerKeypad";
+import { ApplicationStateHarness } from "../providers/ApplicationStateHarness";
+import { StaticCommandLine } from "./command";
+
+const speedGroups: readonly SpeedGroupViewModel[] = [120, 96, 72, 48, 24].map(
+	(bpm, index) => ({
+		id: (["A", "B", "C", "D", "E"] as const)[index],
+		bpm,
+		display: String(bpm),
+		active: true,
+	}),
+);
+
+function ProgrammerSurface({ hardware }: { hardware: boolean }) {
+	const { state, dispatch } = useApp();
+	const [family, setFamily] = useState<ParameterFamily>("Intensity");
+	const [normalized, setNormalized] = useState(
+		() =>
+			new Map<string, number>([
+				["intensity", 0.68],
+				["shutter", 0.82],
+				["strobe", 0],
+				["master", 1],
+				["color.red", 0.92],
+				["color.green", 0.35],
+				["color.blue", 0.64],
+				["pan", 0.42],
+				["tilt", 0.58],
+				["zoom", 0.7],
+			]),
+	);
+	const attributes: Record<ParameterFamily, Array<string | null>> = {
+		Intensity: ["intensity", "shutter", "strobe", "master"],
+		Color: [
+			"color.red",
+			"color.green",
+			"color.blue",
+			"color.white",
+			"color.amber",
+			"color.uv",
+		],
+		Position: ["pan", "tilt"],
+		Beam: ["gobo", "gobo.2", "gobo.rotation", "prism", "prism.2", "iris"],
+		Shapers: [
+			"shaper.blade.1",
+			"shaper.blade.2",
+			"shaper.blade.3",
+			"shaper.blade.4",
+			"shaper.rotation",
+		],
+		Focus: ["focus", "zoom", "frost", "edge"],
+		Control: ["control.reset", "control.lamp", "control.fan", "control.mode"],
+		Media: ["media.layer", "media.clip", "media.opacity", "media.speed"],
+	};
+	const update = (attribute: string, value: number) =>
+		setNormalized((current) => new Map(current).set(attribute, value));
+	const controller = {
+		state,
+		dispatch,
+		family,
+		setFamily,
+		alignMode: null,
+		setAlignMode: () => undefined,
+		dynamicsMode: false,
+		setDynamicsMode: () => undefined,
+		hardwareConnected: hardware,
+		selectedFixtureIds: ["front-left", "front-right"],
+		selectedGroupId: null,
+		encoderSlots: attributes[family],
+		normalized,
+		programmerTarget: (attribute: string) => normalized.get(attribute),
+		encoderNormalizedDisplay: (attribute: string) =>
+			normalized.has(attribute)
+				? `${Math.round((normalized.get(attribute) ?? 0) * 100)}%`
+				: undefined,
+		encoderDiscreteDisplay: () => undefined,
+		hasProgrammerValue: (attribute: string) => normalized.has(attribute),
+		canWriteValues: true,
+		applyParameter: async (attribute: string, value: number) =>
+			update(attribute, value),
+		applyParameterRange: async (attribute: string, values: number[]) =>
+			update(attribute, values.at(-1) ?? 0),
+		releaseParameter: async (attribute: string) =>
+			setNormalized((current) => {
+				const next = new Map(current);
+				next.delete(attribute);
+				return next;
+			}),
+		stepParameter: async (attribute: string, delta: number) =>
+			update(
+				attribute,
+				Math.max(0, Math.min(1, (normalized.get(attribute) ?? 0) + delta)),
+			),
+		programmerActions: null,
+	} as unknown as ParameterController;
+	return <ParameterControlView controller={controller} />;
+}
+
+const playbackKinds = [
+	"cue-list",
+	"group-master",
+	"speed-group",
+	"cue-list",
+	"special-master",
+	"special-master",
+	"cue-list",
+	"empty",
+] as const;
+const playbackNames = [
+	"Opening Sequence",
+	"Front Wash",
+	"Speed Group A",
+	"Matinee Sequence",
+	"Playback Fade Time",
+	"Grand Master",
+	"House Presets",
+	"Empty",
+] as const;
+function playbackModel(
+	itemIndex: number,
+	row: number,
+	hardware: boolean,
+	values: readonly number[],
+): PlaybackCardViewModel {
+	const exampleIndex = itemIndex % playbackKinds.length;
+	const assigned = playbackKinds[exampleIndex] !== "empty";
+	const value = values[itemIndex];
+	const faderRow = row === 1;
+	return {
+		page: 1,
+		slot: itemIndex + 1,
+		row,
+		rowUnits: faderRow ? (hardware ? 2 : 4) : 1,
+		name: playbackNames[exampleIndex],
+		assigned,
+		kind: playbackKinds[exampleIndex],
+		className: faderRow ? undefined : "playback-row-compact",
+		hasFader: assigned && faderRow,
+		faderValue: value,
+		faderLabel: `Playback ${itemIndex + 1}`,
+		faderDisplay: `${value}%`,
+		faderMode: exampleIndex === 0 ? "Cue 4 · Solo" : undefined,
+		summary: assigned
+			? {
+					label:
+						exampleIndex === 0
+							? "4 · Solo"
+							: exampleIndex === 1
+								? "12 Fixtures"
+								: playbackNames[exampleIndex],
+					detail: exampleIndex === 0 ? "2.5s" : `${value}%`,
+					progress: exampleIndex === 0 ? 0.42 : undefined,
+				}
+			: undefined,
+		actions: assigned
+			? faderRow
+				? [
+						{ id: "go-minus", label: "GO −" },
+						{ id: "go", label: "GO +" },
+						{ id: "flash", label: "FLASH" },
+					]
+				: [{ id: "go", label: "GO +" }]
+			: [],
+	};
+}
+
+function PlaybackSurface({ hardware }: { hardware: boolean }) {
+	const [values, setValues] = useState([
+		72, 48, 100, 62, 35, 100, 24, 0, 72, 48, 100, 62, 35, 100, 24, 0,
+	]);
+	return (
+		<PlaybackBankView
+			mode={hardware ? "hardware" : "touch"}
+			columns={8}
+			rowWeights={hardware ? [1, 2] : [1, 4]}
+			items={values.map((_, index) => ({
+				model: playbackModel(index, Math.floor(index / 8), hardware, values),
+				cueRows:
+					hardware && index % 8 === 0 ? (
+						<HardwareCueRowsView
+							previous={{ number: 3, name: "Build" }}
+							current={{ number: 4, name: "Solo", fadeMillis: 2500 }}
+							next={{ number: 5, name: "Blackout" }}
+							progress={0.42}
+						/>
+					) : undefined,
+				callbacks: {
+					onFaderChange: (value: number) =>
+						setValues((current) =>
+							current.map((entry, valueIndex) =>
+								valueIndex === index ? value : entry,
+							),
+						),
+				},
+			}))}
+		/>
+	);
+}
+
+function ProgrammerToolsFixture({
+	clearState,
+	previousEnabled,
+	nextEnabled,
+}: {
+	clearState: ProgrammerClearState;
+	previousEnabled: boolean;
+	nextEnabled: boolean;
+}) {
+	const [lastKey, setLastKey] = useState("Ready");
+	const [activeKeys, setActiveKeys] = useState<SoftwareKey[]>([]);
+	const [highlight, setHighlight] = useState(true);
+	const press = (key: SoftwareKey) => {
+		setLastKey(key);
+		if (key !== "SET" && key !== "SHIFT") return;
+		setActiveKeys((current) =>
+			current.includes(key)
+				? current.filter((item) => item !== key)
+				: [...current, key],
+		);
+	};
+	return (
+		<>
+			<ProgrammerKeypadView
+				programmerFade={
+					<div className="programmer-fade-fader compact">
+						<TouchValueButton
+							label="Prog. Fade"
+							value={3}
+							maximum={20}
+							display="3.0 s"
+						/>
+					</div>
+				}
+				highlightControls={
+					<section
+						aria-label="Highlight and selection stepping"
+						className={`highlight-controls ${highlight ? "active" : ""}`}
+					>
+						<Button
+							active={highlight}
+							aria-pressed={highlight}
+							className={`highlight-toggle ${highlight ? "highlight-armed" : "highlight-off"}`}
+							data-keypad-key="HIGH"
+							onClick={() => setHighlight((current) => !current)}
+						>
+							HIGH
+						</Button>
+						<Button
+							className="highlight-previous"
+							data-keypad-key="PREV"
+							disabled={!previousEnabled}
+						>
+							PREV
+						</Button>
+						<Button
+							className="highlight-next"
+							data-keypad-key="NEXT"
+							disabled={!nextEnabled}
+						>
+							NEXT
+						</Button>
+						<Button className="highlight-all" data-keypad-key="ALL">
+							ALL
+						</Button>
+					</section>
+				}
+				clearState={clearState}
+				activeKeys={activeKeys}
+				onPress={press}
+			/>
+			<output className="visually-hidden" aria-label="Last programmer key">
+				{lastKey}
+			</output>
+		</>
+	);
+}
+
+function PageControlsFixture() {
+	const [page, setPage] = useState(1);
+	return (
+		<div className="playback-page-controls">
+			<Button
+				aria-label="Previous playback page"
+				className="playback-page-chevron"
+				onClick={() => setPage((current) => Math.max(1, current - 1))}
+			>
+				<svg viewBox="0 0 24 24" aria-hidden="true">
+					<path d="m5 15 7-7 7 7" />
+				</svg>
+			</Button>
+			<Button className="playback-page-current">
+				<span>Page</span>
+				<strong>{page}</strong>
+				<small>Main</small>
+			</Button>
+			<Button
+				aria-label="Next playback page"
+				className="playback-page-chevron"
+				onClick={() => setPage((current) => current + 1)}
+			>
+				<svg viewBox="0 0 24 24" aria-hidden="true">
+					<path d="m5 9 7 7 7-7" />
+				</svg>
+			</Button>
+		</div>
+	);
+}
+
+function FullFader({
+	label,
+	value,
+	maximum,
+}: {
+	label: string;
+	value: number;
+	maximum: number;
+}) {
+	const [current, setCurrent] = useState(value);
+	return (
+		<div className="programmer-fade-fader full">
+			<VerticalTouchFaderSurface
+				label={label}
+				value={current}
+				maximum={maximum}
+				display={`${current.toFixed(1)} s`}
+				directInput
+				hardware={false}
+				onChange={setCurrent}
+			/>
+		</div>
+	);
+}
+
+function PlaybackToolsFixture() {
+	const [setArmed, setSetArmed] = useState(false);
+	const [shiftArmed, setShiftArmed] = useState(false);
+	return (
+		<PlaybackToolsView
+			pageControls={<PageControlsFixture />}
+			programmerFade={<FullFader label="Prog. Fade" value={3} maximum={20} />}
+			cueFade={<FullFader label="Cue Fade" value={2.5} maximum={60} />}
+			speedGroups={speedGroups}
+			setArmed={setArmed}
+			shiftArmed={shiftArmed}
+			onCommandKey={(key) => {
+				if (key === "SET") setSetArmed((current) => !current);
+				if (key === "SHIFT") setShiftArmed((current) => !current);
+			}}
+		/>
+	);
+}
+
+function HardwareToolsFixture() {
+	const [page, setPage] = useState(1);
+	return (
+		<HardwareControlSummaryView
+			values={[
+				{ id: "programmer-fade", label: "Prog Fade", display: "3.0s" },
+				{ id: "cue-fade", label: "Cue Fade", display: "2.5s" },
+				{ id: "page", label: "Page", display: String(page) },
+			]}
+			speedGroups={speedGroups}
+			onValue={(id) => {
+				if (id === "page") setPage((current) => current + 1);
+			}}
+		/>
+	);
+}
+
+export interface CommandSectionFixtureProps {
+	initialMode?: CommandLineMode;
+	hardware?: boolean;
+	clearState?: ProgrammerClearState;
+	previousEnabled?: boolean;
+	nextEnabled?: boolean;
+	preloadArmed?: boolean;
+}
+
+function CommandSectionFixtureContent({
+	initialMode = "programmer",
+	hardware = false,
+	clearState = "idle",
+	previousEnabled = true,
+	nextEnabled = true,
+	preloadArmed = false,
+}: CommandSectionFixtureProps) {
+	const [mode, setMode] = useState(initialMode);
+	return (
+		<CommandSection
+			mode={mode}
+			hardware={hardware}
+			commandLine={
+				<StaticCommandLine
+					commandLine={
+						mode === "programmer" ? "FIXTURE 1 THRU 12 AT 68" : "GO 1"
+					}
+					hardware={hardware}
+					mode={mode}
+					preloadArmed={preloadArmed}
+					onToggleMode={() =>
+						setMode((current) =>
+							current === "programmer" ? "playbacks" : "programmer",
+						)
+					}
+				/>
+			}
+			programmer={<ProgrammerSurface hardware={hardware} />}
+			playbacks={<PlaybackSurface hardware={hardware} />}
+			programmerTools={
+				<ProgrammerToolsFixture
+					clearState={clearState}
+					previousEnabled={previousEnabled}
+					nextEnabled={nextEnabled}
+				/>
+			}
+			playbackTools={<PlaybackToolsFixture />}
+			hardwareTools={<HardwareToolsFixture />}
+		/>
+	);
+}
+
+export function CommandSectionFixture(props: CommandSectionFixtureProps) {
+	return (
+		<ApplicationStateHarness>
+			<CommandSectionFixtureContent {...props} />
+		</ApplicationStateHarness>
+	);
+}

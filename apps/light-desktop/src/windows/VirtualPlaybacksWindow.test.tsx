@@ -741,10 +741,11 @@ describe("VirtualPlaybacksWindow", () => {
 		mocks.state.playbackSetArmed = true;
 		render(<VirtualPlaybacksWindow paneId="virtual-1" />);
 		const cell = screen.getByRole("button", {
-			name: "Virtual playback page 1 cell 128 unavailable",
+			name: "Virtual playback page 1 cell 128 empty",
 		});
 		expect(cell).toBeDisabled();
-		expect(cell).toHaveTextContent("Unavailable");
+		expect(cell).toHaveAttribute("data-availability", "unavailable");
+		expect(cell).toHaveTextContent("Empty");
 		fireEvent.click(cell);
 		expect(mocks.configureSlot).not.toHaveBeenCalled();
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();

@@ -1,7 +1,6 @@
 import type {
 	AppState,
 	BuiltInWindow,
-	DevelopmentView,
 	FixtureSheetColumn,
 	GridRect,
 	TextEditorMode,
@@ -37,7 +36,6 @@ export type Action =
 			family: AppState["presetFamily"];
 	  }
 	| { type: "SET_PANE_PRESET_COLORS"; id: string; value: boolean }
-	| { type: "SET_PANE_DEVELOPMENT_VIEW"; id: string; value: DevelopmentView }
 	| {
 			type: "SET_VIRTUAL_PLAYBACK_GRID";
 			id: string;

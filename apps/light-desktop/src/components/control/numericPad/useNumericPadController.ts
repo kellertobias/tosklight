@@ -56,11 +56,11 @@ export function useNumericPadController() {
 	return {
 		state,
 		preload,
-		clearClass: hasSelection
-			? "clear-active"
+		clearState: hasSelection
+			? ("selection" as const)
 			: hasProgrammerValues
-				? "clear-warning"
-				: "clear-idle",
+				? ("active-values" as const)
+				: ("idle" as const),
 		toggleRecord: () => toggleRecord(context),
 		advancePreload: () => advancePreload(context),
 		escape: () => void command.reset(),

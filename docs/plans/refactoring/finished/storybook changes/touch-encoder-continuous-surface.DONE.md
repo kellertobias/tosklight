@@ -218,3 +218,9 @@ Focused verification completed:
 
 The complete UI and desktop unit suites, both TypeScript gates, production Storybook build, and
 all 209 integrated Storybook Playwright checks subsequently passed.
+
+The current integrated Storybook interaction test exercises the real **Individual Touch** story:
+upper/lower taps, fine and Shift-wheel coarse input, slow-to-fast continuous drag and return
+travel, animated ridge direction/speed, Set Value entry, modal Release, disabled and indexed
+exclusion, plus the hardware Set Value/Release path. The global deterministic-story request guard
+continues to reject REST or WebSocket traffic.

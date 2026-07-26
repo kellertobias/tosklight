@@ -59,22 +59,6 @@ export function reducePaneOptions(
 							},
 				),
 			};
-		case "SET_PANE_DEVELOPMENT_VIEW":
-			return {
-				...state,
-				desks: state.desks.map((desk) =>
-					desk.id !== state.activeDeskId
-						? desk
-						: {
-								...desk,
-								panes: desk.panes.map((pane) =>
-									pane.id === action.id
-										? { ...pane, developmentView: action.value }
-										: pane,
-								),
-							},
-				),
-			};
 		case "SET_VIRTUAL_PLAYBACK_GRID":
 			return {
 				...state,

@@ -101,19 +101,25 @@ vi.mock("../../state/AppContext", () => ({
 	}),
 }));
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
-vi.mock("../../features/soundToLight/SoundToLightContext", async (importOriginal) => ({
-	...(await importOriginal<object>()),
-	useSoundToLightActions: () => ({
-		speedGroup: server.speedGroup,
-		updateSpeedGroup: server.updateSpeedGroup,
-		observeSpeedGroup: server.observeSpeedGroup,
-		speedGroupAction: server.speedGroupAction,
+vi.mock(
+	"../../features/soundToLight/SoundToLightContext",
+	async (importOriginal) => ({
+		...(await importOriginal<object>()),
+		useSoundToLightActions: () => ({
+			speedGroup: server.speedGroup,
+			updateSpeedGroup: server.updateSpeedGroup,
+			observeSpeedGroup: server.observeSpeedGroup,
+			speedGroupAction: server.speedGroupAction,
+		}),
 	}),
-}));
-vi.mock("../../features/deskSnapshot/DeskSnapshotState", async (importOriginal) => ({
-	...(await importOriginal<object>()),
-	useSessionSnapshot: () => server.session,
-}));
+);
+vi.mock(
+	"../../features/deskSnapshot/DeskSnapshotState",
+	async (importOriginal) => ({
+		...(await importOriginal<object>()),
+		useSessionSnapshot: () => server.session,
+	}),
+);
 vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => ({
 	usePlaybackDeskView: () => playbackDesk,
 	usePlaybackRuntimeActions: () => runtimeActions,
@@ -280,7 +286,7 @@ describe("PlaybackTools", () => {
 			container.querySelector<HTMLElement>(".speed-group-stack");
 		if (!speedGroups) throw new Error("Speed Groups were not rendered");
 		const speedGroupA = within(speedGroups).getByRole("button", {
-			name: "Speed group A, 120 BPM",
+			name: "Speed group A, 120.0 BPM",
 		});
 		expect([...speedGroupA.children].map((child) => child.className)).toEqual([
 			"speed-group-label",
@@ -698,7 +704,7 @@ describe("PlaybackTools", () => {
 		render(<PlaybackTools />);
 		await waitFor(() => expect(server.speedGroup).toHaveBeenCalledTimes(5));
 		fireEvent.click(
-			screen.getByRole("button", { name: "Speed group A, 120 BPM" }),
+			screen.getByRole("button", { name: "Speed group A, 120.0 BPM" }),
 		);
 		await waitFor(() =>
 			expect(server.speedGroupAction).toHaveBeenCalledWith(
@@ -709,9 +715,11 @@ describe("PlaybackTools", () => {
 				}),
 			),
 		);
-		expect(screen.queryByRole("dialog", { name: "Speed Group A Sound to Light" })).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("dialog", { name: "Speed Group A Sound to Light" }),
+		).not.toBeInTheDocument();
 		fireEvent.click(
-			screen.getByRole("button", { name: "Speed group A, 120 BPM" }),
+			screen.getByRole("button", { name: "Speed group A, 120.0 BPM" }),
 			{ shiftKey: true },
 		);
 		expect(
@@ -731,7 +739,7 @@ describe("PlaybackTools", () => {
 		await waitFor(() => expect(server.speedGroup).toHaveBeenCalledTimes(5));
 		vi.useFakeTimers();
 		const speedGroup = screen.getByRole("button", {
-			name: "Speed group A, 120 BPM",
+			name: "Speed group A, 120.0 BPM",
 		});
 		fireEvent.pointerDown(speedGroup);
 		act(() => vi.advanceTimersByTime(650));
@@ -745,12 +753,32 @@ describe("PlaybackTools", () => {
 		expect(server.speedGroupAction).not.toHaveBeenCalled();
 	});
 
+	it("opens Speed Group settings on right-click without tapping tempo", async () => {
+		server.session = { session_id: "session-a", desk: { id: "desk-a" } };
+		server.speedGroup.mockImplementation(async (group: SpeedGroupId) =>
+			soundState(group),
+		);
+		render(<PlaybackTools />);
+		await waitFor(() => expect(server.speedGroup).toHaveBeenCalledTimes(5));
+
+		fireEvent.contextMenu(
+			screen.getByRole("button", { name: "Speed group A, 120.0 BPM" }),
+		);
+
+		expect(
+			screen.getByRole("dialog", {
+				name: "Speed Group A Sound to Light",
+			}),
+		).toBeInTheDocument();
+		expect(server.speedGroupAction).not.toHaveBeenCalled();
+	});
+
 	it("uses only scoped manual BPM authority and exposes loading safely", () => {
 		server.configuration.speed_groups_bpm = [1, 2, 3, 4, 5];
-		speedRuntimeBpms = [128.5, 64, 32, 16, 8];
+		speedRuntimeBpms = [128.56, 64, 32, 16, 8];
 		const view = render(<PlaybackTools />);
 		expect(
-			screen.getByRole("button", { name: "Speed group A, 128.5 BPM" }),
+			screen.getByRole("button", { name: "Speed group A, 128.6 BPM" }),
 		).toBeInTheDocument();
 
 		speedRuntimeReady = false;

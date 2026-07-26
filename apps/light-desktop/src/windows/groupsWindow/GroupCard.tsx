@@ -1,7 +1,7 @@
-import { Button } from "@tosklight/ui";
-import type { Group } from "./model";
+import { PoolCard } from "@tosklight/ui/pools";
 import type { PoolPresentationConfiguration } from "../../api/types";
 import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
+import type { Group } from "./model";
 
 function missingFixtureCount(
 	group: Group | null,
@@ -90,13 +90,45 @@ export function GroupCard({
 			...(updateArmed ? (["update-target"] as const) : []),
 		],
 	});
+	const attributesLabel =
+		attributes.length > 0 ? `${attributes.length} portable attributes` : null;
+	const details = [
+		missing > 0 ? `⚠ ${missing} missing` : null,
+		attributesLabel,
+		unsupported > 0 ? `⚠ ${unsupported} unsupported values` : null,
+	].filter((detail): detail is string => Boolean(detail));
 	return (
-		<Button
+		<PoolCard
 			data-pool-slot-id={poolSlotId}
 			data-pool-position={index}
-			className={`group-card pool-cell ${presentation.className} ${group?.body.derived_from ? "derived" : ""} ${group?.body.frozen_from ? "frozen" : ""}`}
+			className={`group-card ${presentation.className}`}
 			style={presentation.style}
 			aria-pressed={selected}
+			model={{
+				number: index + 1,
+				primary: group?.body.name ?? (group ? `Group ${index + 1}` : "Empty"),
+				secondary: group
+					? updateArmed
+						? "Touch to choose Update mode"
+						: group.body.fixtures.length
+							? `${group.body.fixtures.length} fixtures · ordered`
+							: "Group is empty"
+					: emptyGroupHint(storeArmed, updateArmed),
+				details,
+				icon: group?.body.icon,
+				iconColor: group?.body.color,
+				color: group?.body.color,
+				kind: "group",
+				states: presentation.states,
+				derived: Boolean(group?.body.derived_from),
+				derivedLabel: group?.body.derived_from
+					? `Derived · ${group.body.derived_from.rule.type}`
+					: undefined,
+				frozen: Boolean(group?.body.frozen_from),
+				frozenLabel: group?.body.frozen_from
+					? `Frozen · rev ${group.body.frozen_from.source_revision}`
+					: undefined,
+			}}
 			onPointerDown={beginHold}
 			onPointerUp={cancelHold}
 			onPointerCancel={cancelHold}
@@ -106,87 +138,6 @@ export function GroupCard({
 			}}
 			onDoubleClick={dereference}
 			onClick={select}
-		>
-			<span className="number">{index + 1}</span>
-			{group ? (
-				<GroupCardContent
-					group={group}
-					index={index}
-					attributes={attributes}
-					missing={missing}
-					unsupported={unsupported}
-					updateArmed={updateArmed}
-				/>
-			) : (
-				<>
-					<b>Empty</b>
-					<small>{emptyGroupHint(storeArmed, updateArmed)}</small>
-				</>
-			)}
-		</Button>
-	);
-}
-
-function GroupCardContent({
-	group,
-	index,
-	attributes,
-	missing,
-	unsupported,
-	updateArmed,
-}: {
-	group: Group;
-	index: number;
-	attributes: string[];
-	missing: number;
-	unsupported: number;
-	updateArmed: boolean;
-}) {
-	return (
-		<>
-			<b>{group.body.name ?? `Group ${index + 1}`}</b>
-			<small>
-				{updateArmed
-					? "Touch to choose Update mode"
-					: group.body.fixtures.length
-						? `${group.body.fixtures.length} fixtures · ordered`
-						: "⚠ Group is empty"}
-			</small>
-			{missing > 0 && <em>⚠ {missing} missing</em>}
-			{attributes.length > 0 && (
-				<em>{attributes.length} portable attributes</em>
-			)}
-			{unsupported > 0 && <em>⚠ {unsupported} unsupported values</em>}
-			{group.body.derived_from && (
-				<em
-					className="pool-card-state-marker derived"
-					role="img"
-					aria-label={`Derived state, ${group.body.derived_from.rule.type} rule`}
-				>
-					Derived · {group.body.derived_from.rule.type}
-				</em>
-			)}
-			{group.body.frozen_from && (
-				<em
-					className="pool-card-state-marker frozen"
-					role="img"
-					aria-label={`Frozen state, revision ${group.body.frozen_from.source_revision}`}
-				>
-					Frozen · rev {group.body.frozen_from.source_revision}
-				</em>
-			)}
-			{group.body.color && (
-				<span
-					className="group-color"
-					title={`Color ${group.body.color}`}
-					style={{ background: group.body.color }}
-				/>
-			)}
-			{group.body.icon && (
-				<span className="group-icon" title={`Icon ${group.body.icon}`}>
-					{group.body.icon}
-				</span>
-			)}
-		</>
+		/>
 	);
 }

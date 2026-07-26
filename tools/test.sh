@@ -10,7 +10,7 @@ HARDWARE_UI="$ROOT/apps/light-hardware-controls"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 
 # Backs the root package.json test scripts; invoke via `npm run test:<name>`.
-usage(){ echo "Usage: npm run test:{unit|architecture|ui-package|storybook|e2e|e2e-api|e2e-ui|app-icons|artifact-paths|help-screenshots|help-screenshots-live|record|demo|all}"; }
+usage(){ echo "Usage: npm run test:{unit|architecture|ui-package|storybook|e2e|e2e-api|e2e-ui|app-icons|artifact-paths|marketing-screenshots|help-screenshots|help-screenshots-live|record|demo|all}"; }
 build_e2e(){ (cd "$UI" && npm run build); cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features; }
 architecture(){
   "$ROOT/tools/test-artifact-paths.sh"
@@ -47,6 +47,10 @@ help_screenshots(){
   (cd "$ROOT" && npm run storybook:build)
   (cd "$ROOT" && npx playwright test --config apps/ui-library/storybook/playwright.config.ts apps/ui-library/storybook/tests/help-screenshots.spec.ts "$@")
 }
+marketing_screenshots(){
+  (cd "$ROOT" && npm run storybook:build)
+  (cd "$ROOT" && npx playwright test --config apps/ui-library/storybook/playwright.config.ts apps/ui-library/storybook/tests/marketing-screenshots.spec.ts "$@")
+}
 help_screenshots_live(){ build_e2e; (cd "$UI" && LIGHT_HELP_SCREENSHOTS=1 LIGHT_HELP_SCREENSHOTS_LIVE=1 npm run test:e2e -- 02-help-screenshots.spec.ts --workers=1 "$@"); }
 ui_package(){ npm run test:ui-package --prefix "$ROOT"; }
 storybook(){ npm run test:storybook --prefix "$ROOT"; }
@@ -59,6 +63,7 @@ case "$command" in
   e2e) e2e "$@" ;;
   e2e-api) e2e_api "$@" ;;
   e2e-ui) e2e_ui "$@" ;;
+  marketing-screenshots) marketing_screenshots "$@" ;;
   help-screenshots) help_screenshots "$@" ;;
   help-screenshots-live) help_screenshots_live "$@" ;;
   ui-package) ui_package "$@" ;;

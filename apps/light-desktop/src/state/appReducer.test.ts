@@ -278,7 +278,7 @@ describe("appReducer Stage and Development pane settings", () => {
 		expect(updated.stageShowBeamGuides).toBe(true);
 	});
 
-	it("persists the selected Development catalog on its pane", () => {
+	it("drops retired Development panes from persisted layouts", () => {
 		const desks = [
 			{
 				id: "test",
@@ -286,7 +286,7 @@ describe("appReducer Stage and Development pane settings", () => {
 				panes: [
 					{
 						id: "development",
-						kind: "development" as const,
+						kind: "development",
 						title: "Development",
 						x: 1,
 						y: 1,
@@ -298,15 +298,16 @@ describe("appReducer Stage and Development pane settings", () => {
 		];
 		const hydrated = appReducer(initialState, {
 			type: "HYDRATE_LAYOUT",
-			desks,
+			desks: desks as unknown as typeof initialState.desks,
 			activeDeskId: "test",
+			windowSettings: {
+				builtIn: "development",
+				lastBuiltIn: "development",
+			} as never,
 		});
-		const updated = appReducer(hydrated, {
-			type: "SET_PANE_DEVELOPMENT_VIEW",
-			id: "development",
-			value: "faders",
-		});
-		expect(updated.desks[0].panes[0].developmentView).toBe("faders");
+		expect(hydrated.desks[0].panes).toEqual([]);
+		expect(hydrated.builtIn).toBeNull();
+		expect(hydrated.lastBuiltIn).toBe(initialState.lastBuiltIn);
 	});
 });
 

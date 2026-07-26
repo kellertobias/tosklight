@@ -102,6 +102,9 @@
 .show-status-disconnected {
 	color: var(--red);
 }
+.show-status-warning {
+	color: var(--amber);
+}
 .dock-operator {
 	display: block;
 	overflow: hidden;
@@ -325,7 +328,7 @@
 	border-radius: 5px;
 	background: var(--panel2);
 }
-.preset-card.store-target {
+.preset-card.store-target:not(.pool-card) {
 	border-color: var(--amber);
 	box-shadow: inset 0 0 0 1px #8c6514;
 }
@@ -549,11 +552,11 @@
 	writing-mode: vertical-lr;
 	direction: rtl;
 }
-.playback-fader-bank article.empty {
+.playback-fader-bank article:not(.playback-card).empty {
 	filter: grayscale(1);
 	opacity: 0.48;
 }
-.playback-fader-bank article > .vertical-touch-fader {
+.playback-fader-bank article:not(.playback-card) > .vertical-touch-fader {
 	border-color: var(--line);
 }
 .playback-tools {
@@ -1046,13 +1049,13 @@ button:not(:disabled):active {
 	.app-mark {
 		height: 46px;
 	}
-	.dock-section-key {
+	.dock-mode-toggle {
 		height: 36px;
 	}
 	.dock-entry {
 		min-height: 42px;
 	}
-	.dock-entry span {
+	.dock-entry-icon {
 		font-size: 14px;
 	}
 	.dock-show {
@@ -1091,7 +1094,7 @@ button:not(:disabled):active {
 	border: 0;
 	background: transparent;
 }
-.group-card em:not(.pool-card-state-marker) {
+.group-card:not(.pool-card) em:not(.pool-card-state-marker) {
 	display: block;
 	margin-top: 3px;
 	color: var(--blue);
@@ -1201,17 +1204,48 @@ button:not(:disabled):active {
 	height: auto;
 	background: #29c3dc1c;
 }
-.dock-list-enter {
-	animation: dock-list-enter 0.16s ease-out both;
+.dock-list-swap {
+	will-change: opacity, transform, filter;
 }
-@keyframes dock-list-enter {
+
+.dock-list-swap-desktops {
+	animation: dock-list-swap-desktops 0.22s cubic-bezier(0.2, 0.75, 0.3, 1) both;
+}
+
+.dock-list-swap-builtins {
+	animation: dock-list-swap-builtins 0.22s cubic-bezier(0.2, 0.75, 0.3, 1) both;
+}
+
+@keyframes dock-list-swap-desktops {
 	from {
 		opacity: 0;
-		transform: translateY(5px);
+		filter: blur(2px);
+		transform: translateX(-10px) scale(0.985);
 	}
 	to {
 		opacity: 1;
+		filter: none;
 		transform: none;
+	}
+}
+
+@keyframes dock-list-swap-builtins {
+	from {
+		opacity: 0;
+		filter: blur(2px);
+		transform: translateX(10px) scale(0.985);
+	}
+	to {
+		opacity: 1;
+		filter: none;
+		transform: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dock-list-swap-desktops,
+	.dock-list-swap-builtins {
+		animation-duration: 0.01ms;
 	}
 }
 .group-strip > div {
@@ -1344,12 +1378,12 @@ button:not(:disabled):active {
 .command-line-bar.command-line-left {
 	display: flex;
 }
-.group-card.empty {
+.group-card.empty:not(.pool-card) {
 	border-style: dashed;
 	color: var(--muted);
 	background: #0b0e12;
 }
-.group-card.empty b {
+.group-card.empty:not(.pool-card) b {
 	margin-top: 28px;
 }
 .command-line-left {
@@ -1939,6 +1973,7 @@ button:not(:disabled):active {
 }
 .family-tabs .dynamics-family {
 	margin-left: 0;
+	color: var(--cyan);
 }
 .command-field {
 	position: relative;
@@ -2527,9 +2562,6 @@ button:not(:disabled):active {
 	background: #0a252b;
 	color: #fff;
 	box-shadow: inset 0 0 0 1px #1bd6ec44;
-}
-.direct-value-modal {
-	width: min(500px, 100%) !important;
 }
 .playback-tools {
 	grid-template-columns: 86px minmax(70px, 1fr) minmax(70px, 1fr);

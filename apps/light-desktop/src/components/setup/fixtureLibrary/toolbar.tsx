@@ -5,8 +5,10 @@ import { SearchBar } from "@tosklight/ui";
 import type { FixtureImportModal } from "./transfers";
 
 interface FixtureLibraryToolbarProps {
+	actionsTarget?: HTMLElement | null;
 	fixtureTypes: string[];
 	query: string;
+	showSearch?: boolean;
 	typeFilter: string;
 	onCreate: () => void;
 	setImportModal: (modal: FixtureImportModal) => void;
@@ -15,8 +17,10 @@ interface FixtureLibraryToolbarProps {
 }
 
 export function FixtureLibraryToolbar({
+	actionsTarget: providedActionsTarget,
 	fixtureTypes,
 	query,
+	showSearch = true,
 	typeFilter,
 	onCreate,
 	setImportModal,
@@ -26,30 +30,36 @@ export function FixtureLibraryToolbar({
 	const [searchTarget, setSearchTarget] = useState<HTMLElement | null>(null);
 	const [actionsTarget, setActionsTarget] = useState<HTMLElement | null>(null);
 	useEffect(() => {
-		// The Fixture Library title bar exposes one actions surface that carries both the shared
-		// search and the neighbouring Import/Create actions (MANUAL-019), so the search portals into
-		// the actions target rather than a separate search slot.
-		setSearchTarget(document.getElementById("setup-section-actions"));
-		setActionsTarget(document.getElementById("setup-section-actions"));
-	}, []);
+		setSearchTarget(
+			showSearch ? document.getElementById("setup-section-actions") : null,
+		);
+		setActionsTarget(
+			providedActionsTarget === undefined
+				? document.getElementById("setup-section-actions")
+				: providedActionsTarget,
+		);
+	}, [providedActionsTarget, showSearch]);
 
 	return (
 		<>
 			{searchTarget &&
 				createPortal(
 					<SearchBar
+						ariaLabel="Search fixture library"
 						value={query}
 						onChange={setQuery}
-						settings={[{
-							kind: "select",
-							id: "type",
-							label: "Fixture type",
-							value: typeFilter,
-							options: [
-								{ value: "", label: "All" },
-								...fixtureTypes.map((type) => ({ value: type, label: type })),
-							],
-						}]}
+						settings={[
+							{
+								kind: "select",
+								id: "type",
+								label: "Fixture type",
+								value: typeFilter,
+								options: [
+									{ value: "", label: "All" },
+									...fixtureTypes.map((type) => ({ value: type, label: type })),
+								],
+							},
+						]}
 						onSettingChange={(_, value) => setTypeFilter(String(value))}
 						onClearSettings={() => setTypeFilter("")}
 						placeholder="Search manufacturer, fixture, mode, or type"

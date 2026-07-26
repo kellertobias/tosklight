@@ -21,7 +21,7 @@ describe("DebugModal", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Debug/ }));
     expect(screen.getByRole("menu", { name: "Debug" })).toBeInTheDocument();
-    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Show section names", "⚒Open Development", "Simulate Hardware", "Simulate Touch Scroll Bars", "Simulate DMX Error", "Clear Simulated Errors"]);
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Show section names", "Simulate Hardware", "Simulate Touch Scroll Bars", "Simulate DMX Error", "Clear Simulated Errors"]);
     fireEvent.click(screen.getByRole("menuitem", { name: "Simulate Hardware" }));
     expect(dispatch).toHaveBeenCalledWith({ type: "TOGGLE_MIDI_PROFILE" });
   });
@@ -31,15 +31,6 @@ describe("DebugModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /Debug/ }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Show section names" }));
     expect(dispatch).toHaveBeenNthCalledWith(1, { type: "TOGGLE_SECTION_NAMES" });
-    expect(dispatch).toHaveBeenNthCalledWith(2, { type: "SET_MODAL", modal: "debugOpen", value: false });
-    expect(dispatch).toHaveBeenNthCalledWith(3, { type: "SET_MODAL", modal: "setupOpen", value: false });
-  });
-
-  it("opens Development and closes the status stack", () => {
-    render(<DebugModal/>);
-    fireEvent.click(screen.getByRole("button", { name: /Debug/ }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Open Development" }));
-    expect(dispatch).toHaveBeenNthCalledWith(1, { type: "OPEN_BUILTIN", kind: "development" });
     expect(dispatch).toHaveBeenNthCalledWith(2, { type: "SET_MODAL", modal: "debugOpen", value: false });
     expect(dispatch).toHaveBeenNthCalledWith(3, { type: "SET_MODAL", modal: "setupOpen", value: false });
   });

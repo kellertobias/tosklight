@@ -202,6 +202,31 @@ export function updateBatchPatch(
 		current.map((patch, candidate) => (candidate === index ? value : patch)),
 	);
 	ui.setPlacementOverrides((current) => ({ ...current, [index]: value }));
+	if (index === 0) {
+		ui.setDraft((current) => ({ ...current, patch: value }));
+		const firstSplit = definitionSplits(controller.data.definition)[0]?.number;
+		if (firstSplit != null)
+			ui.setSplitDrafts((current) => ({ ...current, [firstSplit]: value }));
+	}
+}
+
+export function reattachPlacementBlock(controller: PatchController) {
+	const { definition } = controller.data;
+	const { ui } = controller;
+	if (!definition) return;
+	const anchor = parsePatchAddress(ui.batchPatches[0] ?? ui.draft.patch);
+	if (!anchor) return;
+	const footprint =
+		definitionSplits(definition)[0]?.footprint ?? definition.footprint;
+	const patches = contiguousBatchPatches(
+		anchor.universe,
+		anchor.address,
+		placementBatchCount(ui.draft.count),
+		footprint,
+	);
+	ui.setBatchPatches(patches);
+	ui.setPlacementOverrides({});
+	ui.setDraft((current) => ({ ...current, patch: patches[0] }));
 }
 
 export function changePlacementUniverse(
@@ -228,10 +253,7 @@ export function changePlacementUniverse(
 	ui.setPlacementEmpty(false);
 }
 
-export function setPlacementEmpty(
-	controller: PatchController,
-	empty: boolean,
-) {
+export function setPlacementEmpty(controller: PatchController, empty: boolean) {
 	const { definition, all } = controller.data;
 	const { ui } = controller;
 	if (!definition || !isDmxPatchable(definition)) return;
@@ -307,8 +329,7 @@ export function placementIsDirty(controller: PatchController) {
 		splitDrafts,
 		placementOverrides,
 		placementEmpty,
-	} =
-		controller.ui;
+	} = controller.ui;
 	const { definition } = controller.data;
 	return Boolean(
 		placementBaseline &&
@@ -324,6 +345,7 @@ export function placementIsDirty(controller: PatchController) {
 
 export function closePlacement(controller: PatchController) {
 	controller.ui.setPlacementOpen(false);
+	controller.ui.setPlacementAddressOpen(false);
 	controller.ui.setPlacementCloseConfirm(false);
 	controller.ui.setPlacementBaseline(null);
 	controller.ui.setStatus("");

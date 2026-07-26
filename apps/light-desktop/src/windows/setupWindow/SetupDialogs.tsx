@@ -1,9 +1,34 @@
 import { ModalRegistration, ModalTitleBar } from "@tosklight/ui";
+import { useMemo, useState } from "react";
 import { DeskLockSettingsModal } from "../../components/setup/DeskLockSettingsModal";
 import { FixtureLibrarySetup } from "../../components/setup/FixtureLibrarySetup";
+import {
+	fixtureDefinitionsFromProfiles,
+	mergeFixtureDefinitions,
+} from "../../components/setup/fixtureProfileModel";
+import { useFixtureLibrary } from "../../features/fixtureLibrary/FixtureLibraryContext";
 import type { SetupWindowController } from "./controller";
 
 function FixtureLibraryDialog({ onClose }: { onClose: () => void }) {
+	const library = useFixtureLibrary();
+	const [query, setQuery] = useState("");
+	const [typeFilter, setTypeFilter] = useState("");
+	const [actionsTarget, setActionsTarget] = useState<HTMLDivElement | null>(
+		null,
+	);
+	const fixtureTypes = useMemo(
+		() =>
+			[
+				...new Set(
+					mergeFixtureDefinitions(
+						library?.fixtureProfiles ?? [],
+						library?.fixtureLibrary ??
+							fixtureDefinitionsFromProfiles(library?.fixtureProfiles ?? []),
+					).map((item) => item.device_type || "other"),
+				),
+			].sort(),
+		[library?.fixtureLibrary, library?.fixtureProfiles],
+	);
 	return (
 		<ModalRegistration onClose={onClose}>
 			<div
@@ -12,24 +37,54 @@ function FixtureLibraryDialog({ onClose }: { onClose: () => void }) {
 					event.target === event.currentTarget && onClose()
 				}
 			>
-			<section
-				className="fixture-library-modal"
-				role="dialog"
-				aria-modal="true"
-				aria-label="Fixture Library"
-			>
-				<ModalTitleBar
-					title="Fixture Library"
-					actions={
-						<div id="setup-section-actions" className="setup-section-actions" />
-					}
-					closeLabel="Close Fixture Library"
-					onClose={onClose}
-				/>
-				<div className="fixture-library-modal-body">
-					<FixtureLibrarySetup />
-				</div>
-			</section>
+				<section
+					className="fixture-library-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Fixture Library"
+				>
+					<ModalTitleBar
+						title="Fixture Library"
+						search={{
+							value: query,
+							ariaLabel: "Search fixture library",
+							placeholder: "Search manufacturer, fixture, mode, or type",
+							settings: [
+								{
+									kind: "select",
+									id: "type",
+									label: "Fixture type",
+									value: typeFilter,
+									options: [
+										{ value: "", label: "All" },
+										...fixtureTypes.map((type) => ({
+											value: type,
+											label: type,
+										})),
+									],
+								},
+							],
+							onSettingChange: (_, value) => setTypeFilter(String(value)),
+							onClearSettings: () => setTypeFilter(""),
+						}}
+						onSearch={setQuery}
+						actions={
+							<div ref={setActionsTarget} className="setup-section-actions" />
+						}
+						closeLabel="Close Fixture Library"
+						onClose={onClose}
+					/>
+					<div className="fixture-library-modal-body">
+						<FixtureLibrarySetup
+							query={query}
+							typeFilter={typeFilter}
+							onQueryChange={setQuery}
+							onTypeFilterChange={setTypeFilter}
+							showToolbarSearch={false}
+							toolbarActionsTarget={actionsTarget}
+						/>
+					</div>
+				</section>
 			</div>
 		</ModalRegistration>
 	);

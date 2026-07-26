@@ -1,9 +1,32 @@
-import { useEffect, useRef, useState } from "react";
+import { Button, SelectField } from "@tosklight/ui";
+import { WindowScrollArea } from "@tosklight/ui/window-kit";
+import {
+	type CSSProperties,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import type { PatchedFixture } from "../../../api/types";
-import { Button, Select } from "@tosklight/ui";
 import { conflicts, fixtureRanges } from "../patchUtils";
 
 const DMX_GRID_COLUMNS = 16;
+const DMX_GRID_MIN_CELL = 46;
+const DMX_GRID_GAP = 2;
+const DMX_GRID_HORIZONTAL_PADDING = 16;
+
+export function dmxGridColumnCount(
+	width: number,
+	minimumCell = DMX_GRID_MIN_CELL,
+	gap = DMX_GRID_GAP,
+	horizontalPadding = DMX_GRID_HORIZONTAL_PADDING,
+) {
+	const available = Math.max(0, width - horizontalPadding);
+	return Math.max(
+		1,
+		Math.min(512, Math.floor((available + gap) / (minimumCell + gap))),
+	);
+}
 
 export function dmxGridSegments(
 	start: number,
@@ -47,6 +70,8 @@ type UniverseMapProps = {
 	footprint: number;
 	proposedLabel: string;
 	proposals?: UniverseMapProposal[];
+	selectedProposal?: string;
+	onSelectedProposal?: (key: string) => void;
 	onAddress: (address: number) => void;
 	onProposalAddress?: (key: string, address: number) => void;
 	onUniverse: (universe: number) => void;
@@ -66,9 +91,9 @@ export function UniverseMap(props: UniverseMapProps) {
 				universe={props.universe}
 				onUniverse={props.onUniverse}
 			/>
-			<div className="dmx-address-grid-scroll">
+			<WindowScrollArea className="dmx-address-grid-scroll">
 				<UniverseGrid {...props} {...model} />
-			</div>
+			</WindowScrollArea>
 		</section>
 	);
 }
@@ -86,10 +111,18 @@ function useUniverseMapModel(props: UniverseMapProps) {
 					},
 				]
 			: [];
-	const [selectedProposal, setSelectedProposal] = useState(
+	const [internalSelectedProposal, setInternalSelectedProposal] = useState(
 		displayedProposals[0]?.key ?? "primary",
 	);
-	const drag = useRef<{ key: string; offset: number } | null>(null);
+	const selectedProposal = props.selectedProposal ?? internalSelectedProposal;
+	const setSelectedProposal = (key: string) => {
+		setInternalSelectedProposal(key);
+		props.onSelectedProposal?.(key);
+	};
+	const drag = useRef<{ key: string; offset: number; moved: boolean } | null>(
+		null,
+	);
+	const suppressNextClick = useRef(false);
 	useEffect(() => {
 		if (
 			displayedProposals.length &&
@@ -105,6 +138,7 @@ function useUniverseMapModel(props: UniverseMapProps) {
 		selectedProposal,
 		setSelectedProposal,
 		drag,
+		suppressNextClick,
 		ranges,
 		ownersByAddress: ownersByAddress(ranges),
 		proposalConflicts: proposalConflicts(
@@ -127,14 +161,15 @@ function UniverseMapHeader({
 					Tap an address or drag each blue fixture patch individually.
 				</small>
 			</div>
-			<Select
-				value={universe}
-				onChange={(event) => onUniverse(Number(event.target.value))}
-			>
-				{Array.from({ length: 32 }, (_, index) => (
-					<option key={index + 1}>{index + 1}</option>
-				))}
-			</Select>
+			<SelectField
+				ariaLabel="Universe"
+				value={String(universe)}
+				options={Array.from({ length: 32 }, (_, index) => ({
+					value: String(index + 1),
+					label: String(index + 1),
+				}))}
+				onChange={(value) => onUniverse(Number(value))}
+			/>
 		</header>
 	);
 }
@@ -143,6 +178,21 @@ type UniverseGridProps = UniverseMapProps &
 	ReturnType<typeof useUniverseMapModel>;
 
 function UniverseGrid(props: UniverseGridProps) {
+	const grid = useRef<HTMLDivElement>(null);
+	const [columns, setColumns] = useState(DMX_GRID_COLUMNS);
+	useLayoutEffect(() => {
+		const node = grid.current;
+		if (!node) return;
+		const measure = () => {
+			if (node.clientWidth > 0)
+				setColumns(dmxGridColumnCount(node.clientWidth));
+		};
+		measure();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(measure);
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, []);
 	const addressAtPointer = (event: React.PointerEvent) => {
 		const target = document.elementFromPoint(
 			event.clientX,
@@ -161,9 +211,22 @@ function UniverseGrid(props: UniverseGridProps) {
 	return (
 		// biome-ignore lint/a11y/useSemanticElements: The interactive 512-slot control uses ARIA grid navigation semantics, not tabular data markup.
 		<div
+			ref={grid}
 			className="dmx-address-grid"
 			role="grid"
 			aria-label={`DMX universe ${props.universe}`}
+			data-dmx-columns={columns}
+			style={
+				{
+					"--dmx-grid-columns": columns,
+				} as CSSProperties
+			}
+			onClickCapture={(event) => {
+				if (!props.suppressNextClick.current) return;
+				props.suppressNextClick.current = false;
+				event.preventDefault();
+				event.stopPropagation();
+			}}
 			onPointerMove={(event) => {
 				if (!props.drag.current) return;
 				const address = addressAtPointer(event);
@@ -176,26 +239,38 @@ function UniverseGrid(props: UniverseGridProps) {
 					props.drag.current.offset,
 					candidate.footprint,
 				);
+				if (next !== candidate.start) props.drag.current.moved = true;
 				if (props.onProposalAddress)
 					props.onProposalAddress(candidate.key, next);
 				else props.onAddress(next);
 			}}
 			onPointerUp={() => {
+				if (props.drag.current?.moved) {
+					props.suppressNextClick.current = true;
+					window.setTimeout(() => {
+						props.suppressNextClick.current = false;
+					}, 0);
+				}
 				props.drag.current = null;
 			}}
 			onPointerCancel={() => {
 				props.drag.current = null;
 			}}
 		>
-			<DmxAddressCells {...props} moveProposal={moveProposal} />
-			<DmxRangeOverlays ranges={props.ranges} />
-			<DmxProposalOverlays {...props} />
+			<DmxAddressCells
+				{...props}
+				columns={columns}
+				moveProposal={moveProposal}
+			/>
+			<DmxRangeOverlays ranges={props.ranges} columns={columns} />
+			<DmxProposalOverlays {...props} columns={columns} />
 		</div>
 	);
 }
 
 function DmxAddressCells(
 	props: UniverseGridProps & {
+		columns: number;
 		moveProposal: (key: string, address: number) => void;
 	},
 ) {
@@ -216,8 +291,8 @@ function DmxAddressCells(
 				key={address}
 				className={`dmx-address-cell${owners.length ? " used" : ""}${proposedHere.length ? (hasConflict ? " proposed conflict" : " proposed") : ""}`}
 				style={{
-					gridRow: Math.floor(index / DMX_GRID_COLUMNS) + 1,
-					gridColumn: (index % DMX_GRID_COLUMNS) + 1,
+					gridRow: Math.floor(index / props.columns) + 1,
+					gridColumn: (index % props.columns) + 1,
 				}}
 				data-dmx-address={address}
 				aria-label={`DMX address ${address}${stateText ? `, ${stateText}` : ""}`}
@@ -233,6 +308,7 @@ function DmxAddressCells(
 					props.drag.current = {
 						key: candidate.key,
 						offset: address - candidate.start,
+						moved: false,
 					};
 					event.currentTarget.setPointerCapture?.(event.pointerId);
 					event.preventDefault();
@@ -244,33 +320,46 @@ function DmxAddressCells(
 	});
 }
 
-function DmxRangeOverlays({ ranges }: { ranges: UniverseRange[] }) {
+function DmxRangeOverlays({
+	ranges,
+	columns,
+}: {
+	ranges: UniverseRange[];
+	columns: number;
+}) {
 	return ranges.flatMap(({ fixture, range, index }) =>
-		dmxGridSegments(range.start, range.end).map((segment, segmentIndex) => (
-			<div
-				className="dmx-range-overlay used"
-				key={`${fixture.fixture_id}-${index}-${segmentIndex}`}
-				style={{
-					gridRow: segment.row,
-					gridColumn: `${segment.column} / span ${segment.length}`,
-				}}
-			>
-				{segmentIndex === 0 && (
-					<span>
-						Fixture {fixture.fixture_number ?? "—"} ·{" "}
-						{fixture.name || fixture.definition.name}
-					</span>
-				)}
-			</div>
-		)),
+		dmxGridSegments(range.start, range.end, columns).map(
+			(segment, segmentIndex) => (
+				<div
+					className="dmx-range-overlay used"
+					key={`${fixture.fixture_id}-${index}-${segmentIndex}`}
+					style={{
+						gridRow: segment.row,
+						gridColumn: `${segment.column} / span ${segment.length}`,
+					}}
+				>
+					{segmentIndex === 0 && (
+						<span>
+							Fixture {fixture.fixture_number ?? "—"} ·{" "}
+							{fixture.name || fixture.definition.name}
+						</span>
+					)}
+				</div>
+			),
+		),
 	);
 }
 
-function DmxProposalOverlays(props: UniverseGridProps) {
+function DmxProposalOverlays(
+	props: UniverseGridProps & {
+		columns: number;
+	},
+) {
 	return props.displayedProposals.flatMap((candidate) =>
 		dmxGridSegments(
 			candidate.start,
 			Math.min(512, candidate.start + candidate.footprint - 1),
+			props.columns,
 		).map((segment, segmentIndex) => (
 			<div
 				className={`dmx-range-overlay proposed${props.proposalConflicts.get(candidate.key) ? " conflict" : ""}${props.selectedProposal === candidate.key ? " selected" : ""}`}

@@ -14,6 +14,10 @@ export function nextDesktopId(desks: readonly { id: string }[]): string {
 	return `desk-${suffix}`;
 }
 
+function isRetiredDevelopmentWindow(kind: unknown): boolean {
+	return kind === "development";
+}
+
 export function reduceHydration(
 	state: AppState,
 	action: Action,
@@ -47,13 +51,21 @@ export function reduceHydration(
 				builtIn:
 					action.windowSettings?.builtIn == null
 						? (action.windowSettings?.builtIn ?? state.builtIn)
-						: cueListWindowKind(action.windowSettings.builtIn),
-				lastBuiltIn: cueListWindowKind(
-					action.windowSettings?.lastBuiltIn ?? state.lastBuiltIn,
-				),
+						: isRetiredDevelopmentWindow(action.windowSettings.builtIn)
+							? null
+							: cueListWindowKind(action.windowSettings.builtIn),
+				lastBuiltIn: isRetiredDevelopmentWindow(
+					action.windowSettings?.lastBuiltIn,
+				)
+					? state.lastBuiltIn
+					: cueListWindowKind(
+							action.windowSettings?.lastBuiltIn ?? state.lastBuiltIn,
+						),
 				desks: action.desks.map((desk) => ({
 					...desk,
-					panes: desk.panes.map((pane) => {
+					panes: desk.panes
+						.filter((pane) => !isRetiredDevelopmentWindow(pane.kind))
+						.map((pane) => {
 						const kind = cueListWindowKind(pane.kind);
 						const migrated = {
 							...pane,
@@ -78,7 +90,7 @@ export function reduceHydration(
 										),
 									),
 						};
-					}),
+						}),
 				})),
 				activeDeskId: action.desks.some(
 					(desk) => desk.id === action.activeDeskId,

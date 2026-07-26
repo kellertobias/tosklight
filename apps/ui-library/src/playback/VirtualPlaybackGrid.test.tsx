@@ -46,7 +46,7 @@ function renderGrid(
 }
 
 describe("VirtualPlaybackGridView", () => {
-	it("renders assigned, empty, and unavailable pool boxes without faders", () => {
+	it("uses one vacant design for empty and unavailable boxes without faders", () => {
 		renderGrid();
 		const grid = document.querySelector(".virtual-playback-grid");
 		expect(grid).toHaveClass("compact-grid");
@@ -61,11 +61,25 @@ describe("VirtualPlaybackGridView", () => {
 			"running",
 		);
 		expect(document.querySelector('[data-grid-position="1"]')).toHaveClass(
-			"empty",
+			"vacant",
 		);
 		expect(document.querySelector('[data-grid-position="2"]')).toHaveClass(
+			"vacant",
+		);
+		expect(document.querySelector('[data-grid-position="1"]')).toHaveAttribute(
+			"data-availability",
+			"empty",
+		);
+		expect(document.querySelector('[data-grid-position="2"]')).toHaveAttribute(
+			"data-availability",
 			"unavailable",
 		);
+		expect(
+			screen.getByRole("button", { name: /cell 2 empty/u }),
+		).toBeEnabled();
+		expect(
+			screen.getByRole("button", { name: /cell 3 empty/u }),
+		).toBeDisabled();
 		expect(screen.queryByRole("slider")).not.toBeInTheDocument();
 		expect(document.querySelector(".pool-card-status")).toHaveTextContent(
 			"Running",

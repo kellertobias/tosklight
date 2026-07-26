@@ -11,6 +11,7 @@ import type {
 } from "../../api/types";
 import { Button, FormField, FormLayout, Input, ModalRegistration, ModalTitleBar, NumberField, SelectField } from "@tosklight/ui";
 import { type SoundCaptureStatus } from "./soundToLightAnalyzer";
+import { formatSpeedGroupBpm } from "./speedGroupFormatting";
 import "./SoundToLightModal.css";
 
 const frequencyOptions: Array<{ value: FrequencyPreset | "custom"; label: string }> = [
@@ -45,7 +46,7 @@ function sourceLabel(state: SpeedGroupSoundState) {
   if (state.source?.type === "speed_group") return `Speed Group ${state.source.group}`;
   const status = state.snapshot.sound_status;
   if (status.state === "disabled") return "Manual";
-  if (status.state === "active") return `Sound · ${status.detected_bpm.toFixed(1)} BPM`;
+  if (status.state === "active") return `Sound · ${formatSpeedGroupBpm(status.detected_bpm)} BPM`;
   if (status.state === "holding") return `Holding sound · ${Math.ceil(status.remaining_millis / 100) / 10}s`;
   return `Manual fallback · ${reasonLabel(status.reason)}`;
 }
@@ -154,9 +155,9 @@ function SoundToLightFields({
         </div>
       </div>
       <dl>
-        <div><dt>Detected tempo</dt><dd>{detectedBpm == null ? "—" : `${detectedBpm.toFixed(1)} BPM`}</dd></div>
+        <div><dt>Detected tempo</dt><dd>{detectedBpm == null ? "—" : `${formatSpeedGroupBpm(detectedBpm)} BPM`}</dd></div>
         <div><dt>Confidence</dt><dd>{Math.round(confidence * 100)}%</dd></div>
-        <div><dt>Effective speed</dt><dd>{state.snapshot.effective_bpm.toFixed(1)} BPM</dd></div>
+        <div><dt>Effective speed</dt><dd>{formatSpeedGroupBpm(state.snapshot.effective_bpm)} BPM</dd></div>
         <div><dt>Authoritative source</dt><dd>{sourceLabel(state)}</dd></div>
       </dl>
     </section>
@@ -317,8 +318,8 @@ export function SoundToLightModal({
       <ModalTitleBar
         title={`Speed Group ${group}`}
         actions={<>
-          <Button aria-label="Half Speed Group speed" disabled={busy} onClick={() => void action({ action: "half" })}>÷2</Button>
-          <Button aria-label="Double Speed Group speed" disabled={busy} onClick={() => void action({ action: "double" })}>×2</Button>
+          <Button className="sound-speed-scale-action" aria-label="Half Speed Group speed" disabled={busy} onClick={() => void action({ action: "half" })}>÷2</Button>
+          <Button className="sound-speed-scale-action" aria-label="Double Speed Group speed" disabled={busy} onClick={() => void action({ action: "double" })}>×2</Button>
           <Button aria-label={state.snapshot.paused ? "Resume Speed Group" : "Pause Speed Group"} active={state.snapshot.paused} disabled={busy} onClick={() => void action({ action: "pause" })}>{state.snapshot.paused ? "Resume" : "Pause"}</Button>
           <Button variant="primary" loading={busy} disabled={Boolean(invalid) || !dirty} onClick={() => void apply()}>Apply</Button>
         </>}

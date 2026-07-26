@@ -1,5 +1,6 @@
 import type { StorybookConfig } from "@storybook/react-vite";
 import { fileURLToPath } from "node:url";
+import { artifactPaths } from "../../../../tools/artifact-paths.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 
@@ -21,6 +22,7 @@ const config: StorybookConfig = {
   core: { disableTelemetry: true },
   viteFinal: async (viteConfig) => ({
     ...viteConfig,
+    cacheDir: `${artifactPaths.viteCache}/ui-library-storybook`,
     resolve: {
       ...viteConfig.resolve,
       dedupe: ["react", "react-dom"],

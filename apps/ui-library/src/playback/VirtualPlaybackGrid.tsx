@@ -145,17 +145,16 @@ function VirtualPlaybackBox({
 
 	const unavailable = box.availability === "unavailable";
 	const assigned = box.availability === "assigned";
+	const vacant = !assigned;
 	const states: PoolCardState[] = [
-		...(box.availability === "empty" ? ["empty" as const] : []),
 		...(unavailable ? ["disabled" as const] : []),
 		...(box.running || actionHeld ? ["active" as const] : []),
+		...(box.assignmentTarget ? ["record-target" as const] : []),
 		...(box.updateTarget ? ["update-target" as const] : []),
 	];
-	const secondary = unavailable
-		? "Unavailable"
-		: assigned
-			? [box.actionLabel, box.currentCue].filter(Boolean).join(" · ")
-			: "Unassigned";
+	const secondary = assigned
+		? [box.actionLabel, box.currentCue].filter(Boolean).join(" · ")
+		: "Unassigned";
 
 	const activate = (event: ReactMouseEvent<HTMLButtonElement>) => {
 		if (
@@ -189,12 +188,13 @@ function VirtualPlaybackBox({
 			data-page={page}
 			data-virtual-playback-slot={box.slot}
 			data-grid-position={box.position}
+			data-availability={box.availability}
 			data-exclusion-zones={box.exclusionZones?.join(", ") ?? ""}
 			disabled={unavailable}
 			className={[
 				"virtual-playback-box",
 				assigned && "playback-colored",
-				unavailable && "unavailable",
+				vacant && "vacant",
 				box.running && "running",
 				actionHeld && "held-active",
 				box.configurationTarget && "configuration-armed",
@@ -207,10 +207,11 @@ function VirtualPlaybackBox({
 				.filter(Boolean)
 				.join(" ")}
 			model={{
-				number: box.icon ?? box.slot,
-				primary: box.label ?? (unavailable ? "Unavailable" : "Empty"),
+				number: box.slot,
+				primary: box.label ?? (vacant ? "Empty" : ""),
 				secondary,
 				color: box.color,
+				iconColor: box.color,
 				icon: box.backgroundImage ? undefined : box.icon,
 				image: box.backgroundImage
 					? {
@@ -256,15 +257,13 @@ function VirtualPlaybackBox({
 }
 
 function boxLabel(page: number, box: VirtualPlaybackBoxViewModel) {
-	if (box.availability === "unavailable")
-		return `Virtual playback page ${page} cell ${box.slot} unavailable`;
 	return `Virtual playback page ${page} cell ${box.slot}${
 		box.availability === "assigned" ? ` ${box.label ?? ""}` : " empty"
 	}`.trim();
 }
 
 function boxStyle(box: VirtualPlaybackBoxViewModel) {
-	const color = box.poolPresentation?.color ?? box.color;
+	const color = box.color ?? box.poolPresentation?.color;
 	return {
 		"--playback-color": color ?? "#20c997",
 		"--playback-contrast": contrastTextColor(color),

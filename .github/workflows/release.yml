@@ -220,6 +220,43 @@ jobs:
           path: .artifacts/test/help-screenshots
           if-no-files-found: ignore
 
+  marketing-screenshots:
+    name: Documentation / Generate marketing screenshots
+    needs: [metadata, unit]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Install Chrome for Playwright
+        run: npx playwright install --with-deps chrome
+
+      - name: Build Storybook and generate marketing screenshots
+        run: npm run screenshots:marketing
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: marketing-screenshots
+          path: docs/marketing/assets/screenshots
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: marketing-screenshot-diagnostics
+          path: .artifacts/test/marketing-screenshots
+          if-no-files-found: ignore
+
   manual:
     name: Documentation / Operator manual
     needs: [metadata, help-screenshots]
@@ -497,7 +534,13 @@ jobs:
   pages-build:
     name: Documentation / Assemble static website
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [metadata, manual, help-screenshots, visual-assets, release-performance]
+    needs:
+      - metadata
+      - manual
+      - help-screenshots
+      - marketing-screenshots
+      - visual-assets
+      - release-performance
     runs-on: ubuntu-22.04
     env:
       LIGHT_RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
@@ -531,6 +574,11 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
+          name: marketing-screenshots
+          path: docs/marketing/assets/screenshots
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
           name: product-demo
           path: .artifacts/test/visual-inspection/product-demo
 
@@ -550,6 +598,16 @@ jobs:
         with:
           path: ${{ steps.site.outputs.path }}
 
+      - name: Upload marketing screenshots to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          MARKETING_SCREENSHOTS_S3_BUCKET: ${{ secrets.MARKETING_SCREENSHOTS_S3_BUCKET }}
+          MARKETING_SCREENSHOTS_S3_BASE_PATH: ${{ secrets.MARKETING_SCREENSHOTS_S3_BASE_PATH }}
+        run: bash tools/upload-marketing-screenshots.sh
+
   release:
     name: Release / Tag and publish
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -560,6 +618,7 @@ jobs:
       - e2e
       - manual
       - help-screenshots
+      - marketing-screenshots
       - visual-assets
       - build
     runs-on: ubuntu-22.04

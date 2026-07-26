@@ -151,16 +151,16 @@ title-bar close button, insert the standard search divider between them.
 ### Visual contract
 
 - The divider is a slightly wider neutral gray bar, not a hairline border.
-- A centered one-device-pixel vertical line uses a cyan-tinted near-white color at partial
-  opacity.
+- A centered two-CSS-pixel vertical line uses the primary cyan at partial opacity. This is
+  intentionally more prominent than the earlier device-pixel hairline proposal.
 - The gray bar occupies the title-bar height and visually separates the complete interaction
   groups.
 - The cyan-white line is centered inside the gray bar and does not touch button content.
 - The divider has no hover, pressed, or focus state and is not clickable.
-- At high device-pixel ratios, preserve a crisp one-device-pixel center line.
+- At high device-pixel ratios, preserve the same crisp two-CSS-pixel center line.
 
-A target structure is a 7–9 CSS-pixel gray separator containing a centered 1-device-pixel
-semi-opaque cyan-white line. Final width/opacity remain subject to operator visual review.
+The accepted structure is a 6-CSS-pixel gray separator containing a centered 2-CSS-pixel
+semi-opaque primary-cyan line.
 
 ### Structural rules
 
@@ -256,9 +256,10 @@ Implemented the shared modal, search-settings, and title-bar corrections:
   have no Apply/Save action, while conditional Clear settings remains.
 - The configured title-bar story now exposes one Save action. Dedicated configured keyboard,
   settings, third-child, search-only, window-search, and reopen interaction states cover the stack.
-- Modal and standard window title bars use the shared 8-pixel gray search divider with a centered
-  translucent cyan-white device-pixel line. Responsive layouts hide the divider when search moves
-  to its own row, and migrated application chrome no longer adds competing border-image dividers.
+- Modal and standard window title bars use the shared 6-pixel gray search divider with a centered
+  translucent 2-CSS-pixel primary-cyan line. Responsive layouts hide the divider when search
+  moves to its own row, and migrated application chrome no longer adds competing border-image
+  dividers.
 - Desktop tests that render package modal sources now use the required root provider instead of
   weakening the production provider contract.
 
@@ -271,6 +272,7 @@ Verification completed:
 - `npm run typecheck --workspace @tosklight/light-desktop` passed.
 - `npm run storybook:build --workspace @tosklight/ui` passed.
 - Focused Storybook modal/search/title-bar browser verification passed: 4 tests.
+- DPR 1 and DPR 2 browser contexts both retain the accepted prominent 2-CSS-pixel cyan line.
 - `git diff --check` passed for the affected package, desktop, and plan paths.
 
 The root-owned contained Storybook gate passed all 217 Playwright checks. Browser review confirmed

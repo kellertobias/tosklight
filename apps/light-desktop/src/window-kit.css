@@ -239,64 +239,6 @@
 		height: 44px;
 	}
 }
-.ui-kit-catalog {
-	height: 100vh;
-	padding: 18px;
-	overflow: auto;
-	background: #090d11;
-}
-.ui-kit-catalog > h1 {
-	margin-top: 0;
-}
-.ui-kit-catalog > section {
-	margin: 0 0 22px;
-	border: 1px solid var(--line);
-	background: var(--panel);
-}
-.ui-kit-catalog > section > h2 {
-	padding: 0 12px;
-}
-.catalog-window {
-	height: 520px;
-	container-type: inline-size;
-}
-.catalog-bottom {
-	padding: 10px;
-}
-.catalog-fader {
-	min-height: 180px;
-	display: grid;
-	justify-items: center;
-	padding: 8px;
-	border: 1px solid var(--line);
-	background: var(--panel2);
-}
-.catalog-fader input {
-	height: 130px;
-	writing-mode: vertical-lr;
-	direction: rtl;
-}
-.catalog-form-section {
-	padding: 0 14px 18px;
-}
-.catalog-form-section > h2 {
-	padding: 0 !important;
-}
-.catalog-form-section > h3 {
-	margin-top: 22px;
-	color: var(--muted);
-	font-size: 13px;
-}
-.catalog-connection-section {
-	padding: 0 14px 18px;
-}
-.catalog-connection-section > h2 {
-	padding: 0 !important;
-}
-.catalog-connection-section > .connection-card {
-	position: static;
-	margin: auto;
-}
 
 /* Strong visual grouping is part of the window chrome contract. */
 .ui-window-action-groups {
@@ -408,24 +350,27 @@
 .cue-fade-master > .vertical-touch-fader-stack {
 	height: 100%;
 }
-.playback-fader-bank article:has(> .vertical-touch-fader-stack) {
+.playback-fader-bank
+	article:not(.playback-card):has(> .vertical-touch-fader-stack) {
 	grid-template-rows: auto minmax(0, 1fr);
 }
-.playback-fader-bank article > .vertical-touch-fader-stack {
+.playback-fader-bank article:not(.playback-card) > .vertical-touch-fader-stack {
 	--vertical-fader-radius: 4px;
 }
-.playback-fader-bank article > .vertical-touch-fader-stack.has-actions {
+.playback-fader-bank
+	article:not(.playback-card)
+	> .vertical-touch-fader-stack.has-actions {
 	grid-template-rows: minmax(0, 1fr) 50px;
 }
 .playback-fader-bank
-	article
+	article:not(.playback-card)
 	> .vertical-touch-fader-stack
 	> .vertical-touch-fader {
 	padding: 3px;
 	border-radius: var(--vertical-fader-radius);
 }
 .playback-fader-bank
-	article
+	article:not(.playback-card)
 	> .vertical-touch-fader-stack
 	> .vertical-touch-fader:before {
 	inset: 2.4px;
@@ -575,21 +520,21 @@
 .group-shortcut-grid .group-card {
 	padding: 6px;
 }
-.cuelist-window.pool-window .cuelist-card.empty {
+.cuelist-window.pool-window .cuelist-card.empty:not(.pool-card) {
 	border-style: dashed;
 	color: var(--muted);
 	background: #0b0e12;
 }
-.cuelist-window.pool-window .cuelist-card.store-target {
+.cuelist-window.pool-window .cuelist-card.store-target:not(.pool-card) {
 	border-color: var(--amber);
 	background: #2c240d;
 }
-.cuelist-window.pool-window .cuelist-card.set-target {
+.cuelist-window.pool-window .cuelist-card.set-target:not(.pool-card) {
 	outline: 2px solid var(--cyan);
 	outline-offset: -3px;
 	background: #0a252b;
 }
-.ui-button-grid .empty:not(.store-target):not(.set-target) {
+.ui-button-grid .empty:not(.pool-card):not(.store-target):not(.set-target) {
 	border-color: #303b44 !important;
 	background: #080b0e !important;
 	color: #53606a !important;
@@ -714,7 +659,7 @@
 .dmx-raw-value .touch-value-button > .ui-button small {
 	text-align: right;
 }
-.group-pool-window .group-card {
+.group-pool-window .group-card:not(.empty) {
 	border-color: color-mix(in srgb, var(--pool-card-color) 68%, var(--line2));
 	background: color-mix(in srgb, var(--pool-card-color) 18%, var(--panel2));
 }

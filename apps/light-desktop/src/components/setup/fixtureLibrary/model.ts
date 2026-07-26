@@ -45,27 +45,35 @@ export function useFixtureLibraryModel({
 			].sort(),
 		[availableDefinitions],
 	);
+	const searchMatchedDefinitions = useMemo(() => {
+		const needle = query.toLowerCase().trim();
+		return availableDefinitions.filter(
+			(item) =>
+				(!typeFilter || item.device_type === typeFilter) &&
+				(!needle ||
+					`${item.manufacturer} ${item.name} ${item.model} ${item.mode} ${item.device_type}`
+						.toLowerCase()
+						.includes(needle)),
+		);
+	}, [availableDefinitions, query, typeFilter]);
 	const manufacturers = useMemo(
 		() =>
-			[...new Set(availableDefinitions.map((item) => item.manufacturer))]
+			[...new Set(searchMatchedDefinitions.map((item) => item.manufacturer))]
 				.filter(Boolean)
 				.sort(compareFixtureManufacturers),
-		[availableDefinitions],
+		[searchMatchedDefinitions],
 	);
 	const libraryFamilies = useMemo(() => {
-		const needle = query.toLowerCase().trim();
+		const resolvedManufacturer = manufacturers.includes(manufacturer)
+			? manufacturer
+			: "";
 		return groupFixtureFamilies(
-			availableDefinitions.filter(
+			searchMatchedDefinitions.filter(
 				(item) =>
-					(!manufacturer || item.manufacturer === manufacturer) &&
-					(!typeFilter || item.device_type === typeFilter) &&
-					(!needle ||
-						`${item.manufacturer} ${item.name} ${item.model} ${item.mode} ${item.device_type}`
-							.toLowerCase()
-							.includes(needle)),
+					!resolvedManufacturer || item.manufacturer === resolvedManufacturer,
 			),
 		);
-	}, [availableDefinitions, query, manufacturer, typeFilter]);
+	}, [manufacturer, manufacturers, searchMatchedDefinitions]);
 	const selectedFamily =
 		libraryFamilies.find((family) => family.key === selectedFamilyKey) ??
 		libraryFamilies[0] ??

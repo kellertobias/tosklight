@@ -10,6 +10,34 @@ import {
 	VerticalTouchFaderSurface,
 } from "../faders";
 
+export type PlaybackCardKind =
+	| "cue-list"
+	| "group-master"
+	| "speed-group"
+	| "special-master"
+	| "empty";
+
+export const PLAYBACK_CARD_DEFAULT_COLORS: Record<
+	Exclude<PlaybackCardKind, "empty">,
+	string
+> = {
+	"cue-list": "#63b46c",
+	"group-master": "#e79a26",
+	"speed-group": "#27c6d5",
+	"special-master": "#e8edf1",
+};
+
+export interface PlaybackCardSummary {
+	label: ReactNode;
+	detail?: ReactNode;
+	/** Normalized progress behind the summary text. */
+	progress?: number;
+	beat?: {
+		count: number;
+		active: number;
+	};
+}
+
 export interface PlaybackCardViewModel {
 	page: number;
 	slot: number;
@@ -17,16 +45,20 @@ export interface PlaybackCardViewModel {
 	rowUnits: number;
 	name: string;
 	assigned: boolean;
+	kind?: PlaybackCardKind;
 	selected?: boolean;
 	selectionPending?: boolean;
 	className?: string;
+	style?: CSSProperties;
 	color?: string;
 	hasFader: boolean;
 	faderValue: number;
 	faderLabel: string;
 	faderDisplay: string;
 	faderMode?: string;
+	summary?: PlaybackCardSummary;
 	status?: { kind: "loaded" | "flash" | "swap"; label: string };
+	hardwareButtonLabel?: ReactNode;
 	hardwarePickup?: {
 		physicalPosition: number;
 		pickupTarget: number;
@@ -44,6 +76,10 @@ export interface PlaybackCardCallbacks {
 	onFaderChange?: (value: number) => void;
 }
 
+export interface PlaybackCardSlots {
+	overlays?: ReactNode;
+}
+
 export interface PlaybackBankItem {
 	model: PlaybackCardViewModel;
 	callbacks?: PlaybackCardCallbacks;
@@ -55,6 +91,8 @@ export interface PlaybackBankViewProps {
 	mode: "touch" | "hardware";
 	items: readonly PlaybackBankItem[];
 	className?: string;
+	columns?: number;
+	rowWeights?: readonly number[];
 }
 
 function CardOverlays({ model }: { model: PlaybackCardViewModel }) {
@@ -93,6 +131,7 @@ export function PlaybackActionButtons({
 
 function PlaybackStatus({ model }: { model: PlaybackCardViewModel }) {
 	if (!model.status) return null;
+	if (model.status.kind === "loaded" && model.summary) return null;
 	return (
 		<span
 			className={`playback-status playback-status-${model.status.kind}`}
@@ -103,12 +142,123 @@ function PlaybackStatus({ model }: { model: PlaybackCardViewModel }) {
 	);
 }
 
+function modelKind(model: PlaybackCardViewModel): PlaybackCardKind {
+	return model.assigned ? (model.kind ?? "cue-list") : "empty";
+}
+
+export function playbackCardColor(model: PlaybackCardViewModel) {
+	const kind = modelKind(model);
+	return kind === "empty"
+		? "#66717a"
+		: (model.color ?? PLAYBACK_CARD_DEFAULT_COLORS[kind]);
+}
+
+function playbackCardClass(
+	model: PlaybackCardViewModel,
+	additionalClassName = "",
+) {
+	const kind = modelKind(model);
+	return [
+		"playback-card",
+		`playback-kind-${kind}`,
+		model.assigned ? "playback-colored" : "empty",
+		model.selected && "selected",
+		additionalClassName,
+		model.className,
+	]
+		.filter(Boolean)
+		.join(" ");
+}
+
+function playbackCardStyle(model: PlaybackCardViewModel) {
+	return {
+		"--playback-color": playbackCardColor(model),
+		...model.style,
+	} as CSSProperties;
+}
+
+function PlaybackIdentity({
+	model,
+	touch,
+}: {
+	model: PlaybackCardViewModel;
+	touch?: boolean;
+}) {
+	const content = (
+		<>
+			<b>{model.name}</b>
+			<strong>
+				{model.page}.{model.slot}
+			</strong>
+		</>
+	);
+	return touch ? (
+		<Button
+			className="playback-software-representation playback-identity"
+			aria-label={`Playback representation page ${model.page} playback ${model.slot}`}
+		>
+			{content}
+		</Button>
+	) : (
+		<div className="playback-software-representation playback-identity">
+			{content}
+		</div>
+	);
+}
+
+function PlaybackTopWidget({
+	summary,
+	status,
+}: {
+	summary?: PlaybackCardSummary;
+	status?: PlaybackCardViewModel["status"];
+}) {
+	if (!summary) return null;
+	const progress = Math.max(0, Math.min(1, summary.progress ?? 0));
+	return (
+		<div
+			className={`playback-top-widget playback-summary ${summary.beat ? "has-beat" : ""} ${status?.kind === "loaded" ? "has-loaded" : ""}`.trim()}
+			style={{ "--playback-summary-progress": progress } as CSSProperties}
+		>
+			{summary.beat && (
+				<i
+					className="playback-beat-track"
+					aria-label={`Beat ${summary.beat.active + 1} of ${summary.beat.count}`}
+				>
+					{Array.from(
+						{ length: Math.max(1, summary.beat.count) },
+						(_, index) => (
+							<b
+								data-active={index === summary.beat?.active || undefined}
+								key={index}
+							/>
+						),
+					)}
+				</i>
+			)}
+			<span>{summary.label}</span>
+			{!summary.beat &&
+				(status?.kind === "loaded" ? (
+					<small className="playback-summary-loaded" role="status">
+						{status.label}
+					</small>
+				) : (
+					summary.detail != null && <small>{summary.detail}</small>
+				))}
+		</div>
+	);
+}
+
 function cardData(model: PlaybackCardViewModel) {
+	const hasFader = model.assigned && model.hasFader;
 	return {
 		"data-page": model.page,
 		"data-playback-slot": model.slot,
 		"data-playback-row": model.row,
 		"data-row-units": model.rowUnits,
+		"data-playback-kind": modelKind(model),
+		"data-button-count": model.actions.length,
+		"data-has-fader": hasFader,
 		"data-selected-playback": model.selected || undefined,
 		"data-selection-pending": model.selectionPending || undefined,
 	};
@@ -117,48 +267,42 @@ function cardData(model: PlaybackCardViewModel) {
 export function TouchPlaybackCardView({
 	model,
 	callbacks = {},
+	slots = {},
 }: {
 	model: PlaybackCardViewModel;
 	callbacks?: PlaybackCardCallbacks;
+	slots?: PlaybackCardSlots;
 }) {
+	const hasFader = model.assigned && model.hasFader;
 	return (
 		// biome-ignore lint/a11y/useKeyWithClickEvents: The article delegates keyboard interaction to its real child controls.
 		<article
 			{...cardData(model)}
-			className={model.className}
-			style={
-				model.color
-					? ({ "--playback-color": model.color } as CSSProperties)
-					: undefined
-			}
+			data-ui-component="touch-playback-card"
+			className={playbackCardClass(model, "touch-playback-card")}
+			style={playbackCardStyle(model)}
 			onPointerDownCapture={callbacks.onPointerDownCapture}
 			onClickCapture={callbacks.onClickCapture}
 			onClick={callbacks.onActivate}
 		>
-			<CardOverlays model={model} />
-			<Button
-				className="playback-software-representation"
-				aria-label={`Playback representation page ${model.page} playback ${model.slot}`}
-			>
-				<b>
-					{model.slot} · {model.name}
-				</b>
-			</Button>
+			{slots.overlays ?? <CardOverlays model={model} />}
+			<PlaybackIdentity model={model} touch />
 			<PlaybackStatus model={model} />
-			{model.hasFader && (
+			<PlaybackTopWidget summary={model.summary} status={model.status} />
+			{hasFader && (
 				<VerticalTouchFaderSurface
 					hardware={false}
 					disabled={model.disabled || !model.assigned}
 					label={model.faderLabel}
 					value={model.faderValue}
-					accentColor={model.color}
+					accentColor={playbackCardColor(model)}
 					mode={model.faderMode}
 					display={model.faderDisplay}
 					actions={model.actions}
 					onChange={callbacks.onFaderChange}
 				/>
 			)}
-			{!model.hasFader && model.actions.length > 0 && (
+			{!hasFader && model.actions.length > 0 && (
 				<footer
 					className={`faderless-playback-actions action-count-${model.actions.length}`}
 					style={
@@ -167,6 +311,9 @@ export function TouchPlaybackCardView({
 				>
 					<PlaybackActionButtons actions={model.actions} />
 				</footer>
+			)}
+			{!hasFader && model.actions.length === 0 && (
+				<div className="playback-empty-body" />
 			)}
 		</article>
 	);
@@ -203,7 +350,10 @@ export function HardwareCueRowsView({
 				[next, "next"],
 			] as const);
 	return (
-		<div className={`hardware-cue-list ${compact ? "single" : "triple"}`}>
+		<div
+			className={`hardware-cue-list ${compact ? "single" : "triple"}`}
+			data-ui-component="hardware-cue-rows"
+		>
 			{rows.map(([cue, kind]) => (
 				<div
 					className={`hardware-cue-row ${kind} ${kind === "next" && nextLoaded ? "loaded-next" : ""}`}
@@ -234,36 +384,29 @@ export function HardwarePlaybackCardView({
 	cueRows,
 	group,
 	callbacks = {},
+	slots = {},
 }: {
 	model: PlaybackCardViewModel;
 	cueRows?: ReactNode;
 	group?: { name: string; master: string };
 	callbacks?: PlaybackCardCallbacks;
+	slots?: PlaybackCardSlots;
 }) {
+	const hasFader = model.assigned && model.hasFader;
 	return (
 		// biome-ignore lint/a11y/useKeyWithClickEvents: The article delegates keyboard interaction to its real child controls.
 		<article
 			{...cardData(model)}
-			className={`hardware-playback-card ${model.className ?? ""}`}
-			style={
-				model.color
-					? ({ "--playback-color": model.color } as CSSProperties)
-					: undefined
-			}
+			data-ui-component="hardware-playback-card"
+			className={playbackCardClass(model, "hardware-playback-card")}
+			style={playbackCardStyle(model)}
 			onPointerDownCapture={callbacks.onPointerDownCapture}
 			onClickCapture={callbacks.onClickCapture}
 			onClick={callbacks.onActivate}
 		>
-			<CardOverlays model={model} />
+			{slots.overlays ?? <CardOverlays model={model} />}
 			<header>
-				<div className="playback-software-representation">
-					<b>
-						{model.slot} · {model.name}
-					</b>
-				</div>
-				<strong>
-					{model.page}.{model.slot}
-				</strong>
+				<PlaybackIdentity model={model} />
 			</header>
 			<PlaybackStatus model={model} />
 			{cueRows ??
@@ -276,23 +419,31 @@ export function HardwarePlaybackCardView({
 						</div>
 					</div>
 				) : (
-					<div className="hardware-cue-list single" />
+					<div className="hardware-cue-list single">
+						<PlaybackTopWidget summary={model.summary} status={model.status} />
+					</div>
 				))}
-			<div className="hardware-playback-controls">
-				<footer>
-					<PlaybackActionButtons actions={model.actions} />
-				</footer>
-				{model.hasFader && (
-					<HardwarePlaybackFaderView
-						ariaLabel={`Page ${model.page} playback ${model.slot} fader`}
-						disabled={model.disabled || !model.assigned}
-						display={model.faderDisplay}
-						value={model.faderValue}
-						pickup={model.hardwarePickup}
-						onChange={callbacks.onFaderChange}
-					/>
-				)}
-			</div>
+			{model.hardwareButtonLabel != null ? (
+				<span className="hardware-playback-button-label">
+					{model.hardwareButtonLabel}
+				</span>
+			) : (
+				<div className="hardware-playback-controls">
+					<footer>
+						<PlaybackActionButtons actions={model.actions} />
+					</footer>
+					{hasFader && (
+						<HardwarePlaybackFaderView
+							ariaLabel={`Page ${model.page} playback ${model.slot} fader`}
+							disabled={model.disabled || !model.assigned}
+							display={model.faderDisplay}
+							value={model.faderValue}
+							pickup={model.hardwarePickup}
+							onChange={callbacks.onFaderChange}
+						/>
+					)}
+				</div>
+			)}
 		</article>
 	);
 }
@@ -380,27 +531,12 @@ export function HardwarePlaybackFaderView({
 				<i className="hardware-fader-fill" />
 				{pickupVisible && (
 					<>
-					<i className="hardware-fader-pickup-difference" />
-					<i className="hardware-fader-physical-marker" />
-					<i className="hardware-fader-target-marker" />
+						<i className="hardware-fader-pickup-difference" />
+						<i className="hardware-fader-physical-marker" />
 					</>
 				)}
 			</span>
-			<b>
-				{pickupVisible && targetLabel ? (
-					<>
-						<span>
-							Physical {physicalLabel} · Target {targetLabel}
-						</span>
-						<small>
-							{geometry?.direction === "raise" ? "Raise" : "Lower"} to{" "}
-							{targetLabel}
-						</small>
-					</>
-				) : (
-					display
-				)}
-			</b>
+			<b>{display}</b>
 			<Input
 				aria-label={ariaLabel}
 				aria-description={
@@ -424,11 +560,25 @@ export function PlaybackBankView({
 	mode,
 	items,
 	className = "",
+	columns = items.length || 1,
+	rowWeights,
 }: PlaybackBankViewProps) {
+	const rowCount = Math.max(1, ...items.map((item) => item.model.row + 1));
 	const bank = (
 		<div
-			className={`playback-fader-bank ${mode}-layout ${className}`.trim()}
+			className={`playback-fader-bank ${mode}-layout ${rowCount >= 3 ? "compact-rows" : ""} ${className}`.trim()}
 			data-playback-bank-mode={mode}
+			data-playback-rows={rowCount}
+			style={{
+				gridTemplateColumns: `repeat(${Math.max(1, columns)}, minmax(0, 1fr))`,
+				...(rowWeights?.length
+					? {
+							gridTemplateRows: rowWeights
+								.map((weight) => `minmax(0, ${Math.max(1, weight)}fr)`)
+								.join(" "),
+						}
+					: {}),
+			}}
 		>
 			{items.map((item) =>
 				mode === "touch" ? (
@@ -450,7 +600,9 @@ export function PlaybackBankView({
 		</div>
 	);
 	return mode === "hardware" ? (
-		<div className="hardware-connected">{bank}</div>
+		<div className="hardware-connected playback-bank-hardware-frame">
+			{bank}
+		</div>
 	) : (
 		bank
 	);

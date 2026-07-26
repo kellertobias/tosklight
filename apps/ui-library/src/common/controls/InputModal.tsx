@@ -5,6 +5,7 @@ import {
 	ModalNumberValue,
 	ModalTextKeyboard,
 } from "../../input/ModalInputControls";
+import { UnsavedInputCloseConfirmation } from "../../input/UnsavedInputCloseConfirmation";
 import { ModalLayer } from "../../modals/ModalStack";
 import { ModalTitleBar } from "../ModalTitleBar";
 import { Button } from "./foundation";
@@ -12,6 +13,7 @@ import { Button } from "./foundation";
 export interface InputModalProps {
 	kind: "text" | "multiline" | "number";
 	value: string;
+	initialCaret?: number;
 	allowDecimal?: boolean;
 	leadingIcon?: ReactNode;
 	secure?: boolean;
@@ -77,6 +79,7 @@ function ValuePreview({
 export function InputModal({
 	kind,
 	value,
+	initialCaret,
 	allowDecimal = false,
 	secure = false,
 	label,
@@ -87,66 +90,101 @@ export function InputModal({
 	onDraftChange,
 	onCancel,
 }: InputModalProps) {
+	const [initialValue] = useState(value);
 	const [draft, setDraft] = useState(value);
-	const [caret, setCaret] = useState(value.length);
+	const [caret, setCaret] = useState(() =>
+		Math.max(0, Math.min(initialCaret ?? value.length, value.length)),
+	);
+	const [confirmClose, setConfirmClose] = useState(false);
 	const title = label ?? (kind === "number" ? "Number input" : "Text input");
+	const hasUnsavedChanges = kind === "multiline" && draft !== initialValue;
 	const updateDraft = (next: string) => {
 		setDraft(next);
 		onDraftChange?.(next);
 	};
+	const cancel = () => {
+		if (hasUnsavedChanges) onDraftChange?.(initialValue);
+		setConfirmClose(false);
+		onCancel();
+	};
+	const requestClose = () => {
+		if (hasUnsavedChanges) {
+			setConfirmClose(true);
+			return;
+		}
+		onCancel();
+	};
+	const commit = () => {
+		setConfirmClose(false);
+		onCommit(draft);
+	};
 	return (
-		<ModalLayer
-			ariaLabel={title}
-			className="ui-input-modal-layer"
-			dialogClassName={
-				kind !== "number" ? "keyboard-modal" : "number-field-modal"
-			}
-			onClose={onCancel}
-		>
-			<ModalTitleBar
-				title={title}
-				closeLabel="Close input"
-				onClose={onCancel}
-				actions={
-					kind === "multiline" ? (
-						<Button variant="primary" onClick={() => onCommit(draft)}>
-							Done
-						</Button>
-					) : undefined
+		<>
+			<ModalLayer
+				ariaLabel={title}
+				className="ui-input-modal-layer"
+				dialogClassName={
+					kind !== "number" ? "keyboard-modal" : "number-field-modal"
 				}
-			/>
-			<ValuePreview
-				caret={caret}
-				kind={kind}
-				label={label}
-				leadingIcon={leadingIcon}
-				placeholder={placeholder}
-				secure={secure}
-				unit={unit}
-				value={draft}
-				onCaretChange={setCaret}
-			/>
-			{kind !== "number" ? (
-				<ModalTextKeyboard
-					value={draft}
-					caret={caret}
-					onChange={updateDraft}
-					onEnter={() => onCommit(draft)}
-					onEscape={onCancel}
-					onCaretChange={setCaret}
-					multiline={kind === "multiline"}
+				onClose={requestClose}
+			>
+				<ModalTitleBar
+					title={title}
+					closeLabel="Close input"
+					onClose={requestClose}
+					actions={
+						kind === "multiline" ? (
+							<Button
+								variant="primary"
+								className="ui-input-modal-done"
+								onClick={commit}
+							>
+								Done
+							</Button>
+						) : undefined
+					}
 				/>
-			) : (
-				<ModalNumberInput
-					value={draft}
+				<ValuePreview
 					caret={caret}
-					allowDecimal={allowDecimal}
-					onChange={updateDraft}
-					onEnter={() => onCommit(draft)}
-					onEscape={onCancel}
+					kind={kind}
+					label={label}
+					leadingIcon={leadingIcon}
+					placeholder={placeholder}
+					secure={secure}
+					unit={unit}
+					value={draft}
 					onCaretChange={setCaret}
+				/>
+				{kind !== "number" ? (
+					<ModalTextKeyboard
+						value={draft}
+						caret={caret}
+						onChange={updateDraft}
+						onEnter={commit}
+						onEscape={requestClose}
+						onCaretChange={setCaret}
+						multiline={kind === "multiline"}
+					/>
+				) : (
+					<ModalNumberInput
+						value={draft}
+						caret={caret}
+						allowDecimal={allowDecimal}
+						onChange={updateDraft}
+						onEnter={commit}
+						onEscape={requestClose}
+						onCaretChange={setCaret}
+					/>
+				)}
+			</ModalLayer>
+			{confirmClose && (
+				<UnsavedInputCloseConfirmation
+					ariaLabel="Unsaved multiline text changes"
+					onDiscard={cancel}
+					onSave={commit}
+					onStay={() => setConfirmClose(false)}
 				/>
 			)}
-		</ModalLayer>
+		</>
 	);
 }

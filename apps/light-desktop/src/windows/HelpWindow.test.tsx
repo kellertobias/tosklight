@@ -120,6 +120,53 @@ describe("help navigation", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Search Help" }), { target: { value: "No such topic" } });
     expect(screen.getByText("No matching help topics.")).toBeInTheDocument();
   });
+
+  it("centers illustrated loading and empty states in the topic pane", () => {
+    const props = {
+      onQueryChange: vi.fn(),
+      onSelect: vi.fn(),
+      query: "",
+      selected: null,
+      topic: null,
+    };
+    const { container, rerender } = render(
+      <HelpWindowView {...props} catalog={null} loading />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Loading help");
+    expect(container.querySelector(".help-state-icon")).toBeInTheDocument();
+    expect(container.querySelector(".help-topic-pane.empty")).toBeInTheDocument();
+
+    rerender(
+      <HelpWindowView
+        {...props}
+        catalog={{ topics: [], errors: [], live: false }}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("No help topics found");
+    expect(container.querySelector(".help-state-icon")).toBeInTheDocument();
+  });
+
+  it("renders catalog warnings as illustrated warning cards", () => {
+    const { container } = render(
+      <HelpWindowView
+        catalog={{
+          topics: entries,
+          errors: ["One optional topic could not be indexed."],
+          live: false,
+        }}
+        onQueryChange={vi.fn()}
+        onSelect={vi.fn()}
+        query=""
+        selected={null}
+        topic={null}
+      />,
+    );
+    const warning = screen.getByRole("status");
+    expect(warning).toHaveClass("help-catalog-warning");
+    expect(warning).toHaveTextContent("Help catalog warning");
+    expect(warning).toHaveTextContent("One optional topic could not be indexed.");
+    expect(container.querySelector(".help-catalog-warning > svg")).toBeInTheDocument();
+  });
 });
 
 describe("live Help adapter", () => {

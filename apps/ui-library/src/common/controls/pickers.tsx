@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import { ModalLayer } from "../../modals/ModalStack";
 import { activeModalPortalRoot } from "../ModalPortal";
 import { ModalTitleBar } from "../ModalTitleBar";
-import { TextField } from "./formFields";
+import { SelectField } from "./choices";
 import {
   Button,
   FormField,
@@ -17,10 +17,11 @@ import {
 } from "./foundation";
 import {
   ICON_CATALOG_GROUPS,
+  type IconCatalogGroup,
   iconCatalogItem,
   resolveIconGroup,
-  type IconCatalogGroup,
 } from "./iconCatalog";
+import { TextInput } from "./textInputs";
 
 export const DEFAULT_COLORS = [
   "#ef4444", "#f97316", "#f59e0b", "#eab308",
@@ -38,6 +39,11 @@ interface PickerFieldProps {
   labelPlacement?: LabelPlacement;
 }
 
+type IconPickerFieldProps = PickerFieldProps & {
+  defaultGroup?: string;
+  groups?: readonly IconCatalogGroup[];
+};
+
 function PickerDialog({
   title, actions, children, onClose,
 }: { title: string; actions?: ReactNode; children: ReactNode; onClose: () => void }) {
@@ -51,11 +57,6 @@ function PickerDialog({
     {children}
   </ModalLayer>;
 }
-
-type IconPickerFieldProps = PickerFieldProps & {
-  defaultGroup?: string;
-  groups?: readonly IconCatalogGroup[];
-};
 
 export function IconPickerField({
   label, value, onChange, defaultGroup, groups = ICON_CATALOG_GROUPS,
@@ -81,15 +82,18 @@ export function IconPickerField({
       <span>{current?.label ?? "Choose icon"}</span>
     </Button>
     {open && <PickerDialog title="Choose icon" onClose={() => setOpen(false)}
-      actions={<label className="ui-icon-group-control">
-        <span>Icon group</span>
-        <select aria-label="Icon group" value={group?.id ?? ""}
-          onChange={(event) => setGroupId(event.target.value)}>
-          {groups.map((candidate) => <option key={candidate.id} value={candidate.id}>
-            {candidate.label}
-          </option>)}
-        </select>
-      </label>}>
+      actions={<SelectField
+        className="ui-icon-group-control"
+        label="Icon group"
+        ariaLabel="Icon group"
+        size="compact"
+        value={group?.id ?? ""}
+        options={groups.map((candidate) => ({
+          value: candidate.id,
+          label: candidate.label,
+        }))}
+        onChange={setGroupId}
+      />}>
       <div className="ui-icon-grid" data-icon-group={group?.id}>
         {group?.icons.map((icon) => <Button key={icon.value}
           active={icon.value === value}
@@ -161,12 +165,17 @@ function ColorPopup({
           onClick={() => choose(color)}><span style={{ background: color }}/></Button>)}
       </div>
       <div className="ui-color-dropdown-custom">
-        <TextField label="Custom hex" value={custom} clearable
-          onChange={(event) => setCustom(event.target.value)}/>
-        <span className="ui-custom-color-preview" aria-label="Color preview"
-          style={{ background: validHex(custom) ? custom : "transparent" }}/>
-        <Button variant="primary" disabled={!validHex(custom)}
-          onClick={() => choose(custom)}>Use custom color</Button>
+        <FormField label="Custom hex" className="ui-color-dropdown-custom-field">
+          <div className="ui-color-dropdown-custom-controls">
+            <TextInput value={custom} clearable aria-label="Custom hex"
+              keyboardLabel="Custom hex"
+              onChange={(event) => setCustom(event.target.value)}/>
+            <Button variant="primary" disabled={!validHex(custom)}
+              onClick={() => choose(custom)}>Use custom color</Button>
+            <span className="ui-custom-color-preview" aria-label="Color preview"
+              style={{ background: validHex(custom) ? custom : "transparent" }}/>
+          </div>
+        </FormField>
       </div>
     </section>
   </div>, activeModalPortalRoot());

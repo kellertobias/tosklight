@@ -66,6 +66,11 @@ describe("DeskGrid view activity", () => {
 		mocks.maximizedPaneId = null;
 		mocks.paneProps.length = 0;
 		const rendered = render(<DeskGrid desk={desk} />);
+		expect(
+			rendered.container.querySelector(
+				'[data-ui-component="grid-desktop"]',
+			),
+		).toBeInTheDocument();
 		expect(mocks.paneProps).toEqual([
 			{ id: "stage", active: true, maximized: false },
 			{ id: "groups", active: true, maximized: false },

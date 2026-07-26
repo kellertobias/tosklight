@@ -134,15 +134,20 @@ production Storybook adoption, and superseded presentation-code cleanup are comp
   production windows, Setup sections, Text Editor, Virtual Playbacks, marketing composition, and
   representative modal workflows. Public-export coverage requires every package component to name
   a representative story.
+- Added the package-owned complete lower-desk composition and callback-driven Programmer keypad,
+  Playback tools, and hardware control-summary views. Storybook now covers all four
+  Programmer/Playbacks × software/hardware combinations without server or transport access, and
+  the desktop production adapters render those same views.
 - Re-audited all 47 screenshots after the last component and modal changes. The Storybook-owned
   Text Editor and Virtual Playbacks images now fill their documented frames, and Virtual
   Playbacks uses its configured rows and columns to fill the pane without changing square sizing
   for ordinary pool cards.
 
-Final verification on 2026-07-26, including the post-completion O2/UI-refactoring audit:
+Final verification on 2026-07-26, including the post-completion O2/UI-refactoring audit and final
+forms refinement:
 
-- The Storybook behavior/catalog run passed 219 of 219 checks; the separately rerun reviewed
-  screenshot check passed, completing the 220-check Storybook gate.
+- The complete contained Storybook gate passed 234 of 234 checks, including the behavior/catalog,
+  pool-color, touch-viewport, and reviewed deterministic screenshot contracts.
 - `npm run test:help-screenshots` — the complete 47-entry non-mutating manifest check passed.
 - `npm run test:help-screenshots-live` — the 27-image production composition/workflow set passed.
 - `npm run test:unit` — architecture, bench, UI package, desktop, hardware-controls, Rust workspace,

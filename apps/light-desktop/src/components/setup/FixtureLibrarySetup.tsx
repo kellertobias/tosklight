@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFixtureLibrary } from "../../features/fixtureLibrary/FixtureLibraryContext";
 import { FixtureLibraryBrowser } from "./fixtureLibrary/browser";
 import {
@@ -24,13 +24,31 @@ export {
 } from "./fixtureLibrary/definitions";
 export { importGdtf, importGdtfData } from "./fixtureLibrary/gdtf";
 
-export function FixtureLibrarySetup() {
+export function FixtureLibrarySetup({
+	query: controlledQuery,
+	typeFilter: controlledTypeFilter,
+	onQueryChange,
+	onTypeFilterChange,
+	showToolbarSearch = true,
+	toolbarActionsTarget,
+}: {
+	query?: string;
+	typeFilter?: string;
+	onQueryChange?: (query: string) => void;
+	onTypeFilterChange?: (type: string) => void;
+	showToolbarSearch?: boolean;
+	toolbarActionsTarget?: HTMLElement | null;
+} = {}) {
 	const server = useFixtureLibrary();
 	const [selectedFamilyKey, setSelectedFamilyKey] = useState("");
 	const [selectedModeKey, setSelectedModeKey] = useState("");
-	const [query, setQuery] = useState("");
-	const [typeFilter, setTypeFilter] = useState("");
+	const [localQuery, setLocalQuery] = useState("");
+	const [localTypeFilter, setLocalTypeFilter] = useState("");
 	const [manufacturer, setManufacturer] = useState("");
+	const query = controlledQuery ?? localQuery;
+	const typeFilter = controlledTypeFilter ?? localTypeFilter;
+	const setQuery = onQueryChange ?? setLocalQuery;
+	const setTypeFilter = onTypeFilterChange ?? setLocalTypeFilter;
 	const model = useFixtureLibraryModel({
 		fixtureProfiles: server?.fixtureProfiles ?? [],
 		legacyDefinitions: server?.fixtureLibrary ?? [],
@@ -40,6 +58,10 @@ export function FixtureLibrarySetup() {
 		selectedModeKey,
 		typeFilter,
 	});
+	useEffect(() => {
+		if (manufacturer && !model.manufacturers.includes(manufacturer))
+			setManufacturer("");
+	}, [manufacturer, model.manufacturers]);
 	const editor = useFixtureLibraryEditor(server?.fixtureProfiles ?? []);
 	const transfers = useFixtureLibraryTransfers({
 		selectedMode: model.selectedMode,
@@ -54,8 +76,10 @@ export function FixtureLibrarySetup() {
 	return (
 		<div className="fixture-library-setup">
 			<FixtureLibraryToolbar
+				actionsTarget={toolbarActionsTarget}
 				fixtureTypes={model.fixtureTypes}
 				query={query}
+				showSearch={showToolbarSearch}
 				typeFilter={typeFilter}
 				onCreate={editor.openCreate}
 				setImportModal={transfers.setModal}

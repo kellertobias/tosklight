@@ -72,6 +72,49 @@ describe("PoolWindow", () => {
 		expect(screen.getAllByText("Empty")).toHaveLength(198);
 	});
 
+	it("compacts filtered results while preserving their actual pool numbers", () => {
+		renderPool({
+			fillEmptySlots: false,
+			slots: [
+				{
+					id: "group-1",
+					position: 0,
+					card: { number: 1, primary: "Front" },
+				},
+				{
+					id: "group-4",
+					position: 3,
+					card: { number: 4, primary: "Back" },
+				},
+			],
+		});
+
+		const cards = document.querySelectorAll(".pool-card");
+		expect(cards).toHaveLength(2);
+		expect(cards[0]).toHaveAttribute("data-pool-position", "0");
+		expect(cards[0]?.querySelector(".number")).toHaveTextContent("1");
+		expect(cards[1]).toHaveAttribute("data-pool-position", "1");
+		expect(cards[1]?.querySelector(".number")).toHaveTextContent("4");
+	});
+
+	it("applies grid-level filled treatment and semantic workflow colors", () => {
+		renderPool({
+			appearance: {
+				filledStyle: "outline",
+				recordColor: "#aa0000",
+				updateColor: "#bbbb00",
+				setColor: "#00cccc",
+			},
+		});
+		const grid = document.querySelector(".pool-window-grid");
+		expect(grid).toHaveClass("pool-filled-outline");
+		expect(grid).toHaveStyle({
+			"--pool-record-color": "#aa0000",
+			"--pool-update-color": "#bbbb00",
+			"--pool-set-color": "#00cccc",
+		});
+	});
+
 	it("returns stable identities and positions for filled and empty click and hold", () => {
 		vi.useFakeTimers();
 		const click = vi.fn();

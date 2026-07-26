@@ -112,19 +112,22 @@ function PlaybackFaderBank(
 vi.mock("../../features/cueRecording/CueRecordingProvider", () => ({
 	useCueRecording: () => ({ record: mocks.recordCue }),
 }));
-vi.mock("../../features/programmingInteraction/ProgrammingInteractionView", () => ({
-	useProgrammingCommandLineView: () => ({
-		text: mocks.commandLine,
-		target: "FIXTURE",
-		pristine: false,
-		revision: 1,
-		pendingChoice: null,
+vi.mock(
+	"../../features/programmingInteraction/ProgrammingInteractionView",
+	() => ({
+		useProgrammingCommandLineView: () => ({
+			text: mocks.commandLine,
+			target: "FIXTURE",
+			pristine: false,
+			revision: 1,
+			pendingChoice: null,
+		}),
+		useProgrammingCommandLineActions: () => ({
+			reset: mocks.resetCommandLine,
+		}),
+		useProgrammingInteractionStatus: () => ({ status: "ready", error: null }),
 	}),
-	useProgrammingCommandLineActions: () => ({
-		reset: mocks.resetCommandLine,
-	}),
-	useProgrammingInteractionStatus: () => ({ status: "ready", error: null }),
-}));
+);
 vi.mock("../../features/playbackTopology/PlaybackTopologyView", () => ({
 	usePlaybackTopologyView: () => {
 		mocks.topologyView();
@@ -132,25 +135,25 @@ vi.mock("../../features/playbackTopology/PlaybackTopologyView", () => ({
 			ready: mocks.topologyReady,
 			error: mocks.error ? new Error(mocks.error) : null,
 			cueLists: mocks.scopedCueLists.map((body) => ({
-			kind: "cue_list",
-			id: body.storageId ?? `cue-list-object-${body.id}`,
-			revision: 2,
-			updated_at: "",
-			body,
+				kind: "cue_list",
+				id: body.storageId ?? `cue-list-object-${body.id}`,
+				revision: 2,
+				updated_at: "",
+				body,
 			})),
 			playbacks: mocks.playbacks.pool.map((body) => ({
-			kind: "playback",
-			id: `playback-object-${body.number}`,
-			revision: 5,
-			updated_at: "",
-			body,
+				kind: "playback",
+				id: `playback-object-${body.number}`,
+				revision: 5,
+				updated_at: "",
+				body,
 			})),
 			pages: mocks.playbacks.pages.map((body) => ({
-			kind: "playback_page",
-			id: `page-object-${body.number}`,
-			revision: 3,
-			updated_at: "",
-			body,
+				kind: "playback_page",
+				id: `page-object-${body.number}`,
+				revision: 3,
+				updated_at: "",
+				body,
 			})),
 		};
 	},
@@ -308,11 +311,15 @@ function resetPlaybackFaderMocks() {
 	mocks.dispatch.mockReset();
 	mocks.executeCommandLine.mockReset().mockResolvedValue(true);
 	mocks.refresh.mockReset().mockResolvedValue(undefined);
-	mocks.poolPlaybackAction.mockReset().mockResolvedValue({ status: "no_change" });
+	mocks.poolPlaybackAction
+		.mockReset()
+		.mockResolvedValue({ status: "no_change" });
 	mocks.resetCommandLine.mockReset();
 	mocks.savePlaybackSlot.mockReset().mockResolvedValue(true);
 	mocks.clearPlaybackSlot.mockReset().mockResolvedValue(true);
-	mocks.mapExistingPlayback.mockReset().mockResolvedValue({ status: "changed" });
+	mocks.mapExistingPlayback
+		.mockReset()
+		.mockResolvedValue({ status: "changed" });
 	mocks.recordCue.mockReset().mockResolvedValue({ status: "changed" });
 	mocks.playbacks.cue_lists = [
 		{
@@ -481,6 +488,9 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 				element.getAttribute("data-playback-slot"),
 			),
 		).toEqual(["1", "11", "21"]);
+		expect(
+			container.querySelectorAll('[data-ui-component="touch-playback-card"]'),
+		).toHaveLength(3);
 	});
 
 	it("fills hardware height with faderless and fader row weights", () => {
@@ -504,6 +514,11 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		expect(container.querySelector(".playback-fader-bank")).toHaveStyle({
 			gridTemplateRows: "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr)",
 		});
+		expect(
+			container.querySelectorAll(
+				'[data-ui-component="hardware-playback-card"]',
+			),
+		).toHaveLength(3);
 	});
 
 	it("assigns the selected Cuelist source to the touched physical page slot", async () => {
@@ -765,7 +780,7 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 			"selected",
 		);
 		expect(container.querySelector('[data-playback-slot="1"]')).toHaveStyle({
-			"--playback-color": "#93cc55",
+			"--playback-color": "#f6e58d",
 		});
 		expect(container.querySelector('[data-playback-slot="2"]')).toHaveClass(
 			"empty",
@@ -940,27 +955,26 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		);
 	});
 
-	it.each(["cancel", "lost capture"])(
-		"releases a held Flash once after pointer %s",
-		async (release) => {
-			assignPlayback();
-			render(<PlaybackFaderBank count={1} />);
-			const flash = screen.getByRole("button", { name: "FLASH" });
-			fireEvent.pointerDown(flash, { pointerId: 4 });
-			if (release === "cancel")
-				fireEvent.pointerCancel(flash, { pointerId: 4 });
-			else fireEvent.lostPointerCapture(flash, { pointerId: 4 });
-			fireEvent.lostPointerCapture(flash, { pointerId: 4 });
+	it.each([
+		"cancel",
+		"lost capture",
+	])("releases a held Flash once after pointer %s", async (release) => {
+		assignPlayback();
+		render(<PlaybackFaderBank count={1} />);
+		const flash = screen.getByRole("button", { name: "FLASH" });
+		fireEvent.pointerDown(flash, { pointerId: 4 });
+		if (release === "cancel") fireEvent.pointerCancel(flash, { pointerId: 4 });
+		else fireEvent.lostPointerCapture(flash, { pointerId: 4 });
+		fireEvent.lostPointerCapture(flash, { pointerId: 4 });
 
-			await waitFor(() =>
-				expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2),
-			);
-			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "flash", {
-				pressed: false,
-				surface: "physical",
-			});
-		},
-	);
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2),
+		);
+		expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "flash", {
+			pressed: false,
+			surface: "physical",
+		});
+	});
 
 	it("releases a held Flash when the bank unmounts", async () => {
 		assignPlayback();
@@ -1057,7 +1071,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 			screen.getByRole("button", {
 				name: "Playback representation page 1 playback 1",
 			}),
-		).toHaveTextContent("1 · Front Wash");
+		).toHaveTextContent("Front Wash1.1");
 		expect(
 			screen.queryByRole("button", { name: "DISABLED" }),
 		).not.toBeInTheDocument();
@@ -1174,8 +1188,12 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 		expect(fader).toHaveAttribute("data-pickup-physical", "0.8");
 		expect(fader).toHaveAttribute("data-pickup-target", "0.1");
 		expect(fader).toHaveAttribute("data-pickup-direction", "lower");
-		expect(screen.getByText("Physical 80% · Target 10%")).toBeInTheDocument();
-		expect(screen.getByText("Lower to 10%")).toBeInTheDocument();
+		expect(
+			screen.getByRole("slider", { name: "Page 1 playback 1 fader" }),
+		).toHaveAttribute(
+			"aria-description",
+			"Physical 80%. Target 10%. Lower to 10%.",
+		);
 		expect(
 			document.querySelector(".hardware-fader-pickup-difference"),
 		).toBeInTheDocument();
@@ -1189,7 +1207,9 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 			fader_pickup_required: false,
 			fader_pickup_target: null,
 		};
-		rendered.rerender(<PlaybackFaderBank key="replacement-authority" count={1} />);
+		rendered.rerender(
+			<PlaybackFaderBank key="replacement-authority" count={1} />,
+		);
 		expect(
 			document.querySelector(".hardware-fader-pickup-difference"),
 		).not.toBeInTheDocument();

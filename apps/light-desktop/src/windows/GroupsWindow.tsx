@@ -19,7 +19,7 @@ import { useGroupPoolModel } from "./groupsWindow/model";
 import type { WindowProps } from "./windowTypes";
 import { PoolColorSettings } from "../components/shared/PoolColorSettings";
 
-function GroupPoolHeader({
+export function GroupPoolHeader({
 	command,
 	onSettings,
 }: {

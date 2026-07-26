@@ -68,6 +68,7 @@ export function PaneView({
       tabIndex={-1}
       data-pane-id={pane.id}
       data-pane-type={pane.type}
+      data-ui-component="pane-view"
       data-grid-column={pane.x}
       data-grid-row={pane.y}
       data-grid-width={pane.width}

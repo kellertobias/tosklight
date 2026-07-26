@@ -76,9 +76,9 @@ export const stage3dFixtures: Stage3dFixture[] = fixtures.map((fixture, index) =
   index,
   position: {
     x: (index - 2) * 1.8,
-    y: index < 2 ? 3.8 : 0.2,
-    z: index < 2 ? -2.5 : -5.2,
-    rotationX: index < 2 ? -25 : 0,
+    y: index < 2 ? 1 : index < 4 ? 4.6 : 2.8,
+    z: index < 2 ? 3.8 : index < 4 ? 3.2 : 4.5,
+    rotationX: index < 2 ? -15 : 0,
     rotationY: 0,
     rotationZ: 0,
   },

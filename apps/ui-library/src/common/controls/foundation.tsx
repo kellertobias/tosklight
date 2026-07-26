@@ -23,10 +23,12 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
   fullWidth?: boolean;
   iconOnly?: boolean;
+  icon?: ReactNode;
+  contentAlign?: "center" | "left";
 }
 
 function buttonClassName(props: Required<Pick<ButtonProps,
-  "variant" | "size" | "active" | "fullWidth" | "iconOnly"
+  "variant" | "size" | "active" | "fullWidth" | "iconOnly" | "contentAlign"
 >> & { arrowOnly: boolean; className: string }) {
   return [
     "ui-button",
@@ -35,6 +37,7 @@ function buttonClassName(props: Required<Pick<ButtonProps,
     props.active && "is-active",
     props.fullWidth && "is-full-width",
     props.iconOnly && "is-icon-only",
+    props.contentAlign === "left" && "is-left-aligned",
     props.arrowOnly && "is-arrow-only",
     props.className,
   ].filter(Boolean).join(" ");
@@ -44,18 +47,25 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   {
     variant = "secondary", size = "default", active = false, loading = false,
     fullWidth = false, iconOnly = false, className = "", disabled, children,
-    type = "button", ...props
+    icon, contentAlign = "center", type = "button", ...props
   },
   ref,
 ) {
   const arrowOnly = typeof children === "string" && /^[←→▲▼‹›]$/.test(children.trim());
   const classes = buttonClassName({
-    variant, size, active, fullWidth, iconOnly, arrowOnly, className,
+    variant, size, active, fullWidth, iconOnly, contentAlign, arrowOnly, className,
   });
   return (
     <button {...props} ref={ref} type={type} disabled={disabled || loading}
       aria-busy={loading || undefined} className={classes}>
-      {loading ? <><span className="ui-spinner" aria-hidden="true"/>Loading</> : children}
+      {loading ? (
+        <><span className="ui-spinner" aria-hidden="true"/>Loading</>
+      ) : (
+        <>
+          {icon != null && <span className="ui-button-icon" aria-hidden="true">{icon}</span>}
+          {children}
+        </>
+      )}
     </button>
   );
 });

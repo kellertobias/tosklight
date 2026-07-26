@@ -37,8 +37,8 @@ export function DualVerticalTouchFader({
 		);
 		setInputValue(next);
 	};
-	const submit = () => {
-		const entered = Number(inputValue);
+	const submit = (candidate = inputValue) => {
+		const entered = Number(candidate);
 		const next = Math.max(
 			0,
 			Math.min(selected.maximum, entered + (selected.inputOffset ?? 0)),

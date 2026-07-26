@@ -112,6 +112,8 @@ function EncoderSurface({
 	return (
 		<TouchEncoder
 			label={`Enc ${index + 1} · ${label}`}
+			slot={index + 1}
+			attributeLabel={label}
 			value={value}
 			display={discrete ?? display}
 			accentColor={attributeColor(attribute)}

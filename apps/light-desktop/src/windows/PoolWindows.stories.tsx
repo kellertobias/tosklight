@@ -1,15 +1,30 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { type CSSProperties, useMemo, useState } from "react";
+import {
+	marketingColorPresets,
+	marketingGroupCards,
+	marketingKnownFixtureIds,
+	marketingPositionPresets,
+} from "../../../ui-library/storybook/fixtures/marketingApplication";
 import { ApplicationStateHarness } from "../../../ui-library/storybook/providers/ApplicationStateHarness";
 import type { CommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
-import { WindowHeader } from "@tosklight/ui/window-kit";
+import { defaultPoolPresentation } from "../features/poolPresentation/poolPresentation";
 import type { PresetCard } from "../features/presetRecording/presetCards";
 import { ShowObjectsStateProvider } from "../features/showObjects/ShowObjectsState";
 import { ShowObjectsStore } from "../features/showObjects/store";
+import type { PresetFamily } from "../presetFamilies";
+import { GroupPoolHeader } from "./GroupsWindow";
 import { GroupPoolGrid } from "./groupsWindow/GroupPoolGrid";
 import type { Group } from "./groupsWindow/model";
-import { PresetCardGrid } from "./presetsWindow/PresetsWindowView";
-import { defaultPoolPresentation } from "../features/poolPresentation/poolPresentation";
+import {
+	PresetCardGrid,
+	PresetWindowHeader,
+} from "./presetsWindow/PresetsWindowView";
+
+export {
+	marketingColorPresets,
+	marketingPositionPresets,
+} from "../../../ui-library/storybook/fixtures/marketingApplication";
 
 const SHOW_ID = "storybook-pools";
 const noopAsync = async () => false;
@@ -72,7 +87,6 @@ function cardsForGroups(objects: readonly Group[]) {
 	);
 }
 
-const groupCards = cardsForGroups(groups);
 const statusGroupCards = cardsForGroups(groupsWithStatus);
 
 const command: CommandLineSurface = {
@@ -94,22 +108,28 @@ const command: CommandLineSurface = {
 	cancelChoice: noopAsync,
 };
 
-interface PoolViewport {
+export interface PoolViewport {
 	width?: number;
-	height?: number;
+	height?: number | string;
+	showHeader?: boolean;
 }
 
 function poolViewportStyle({
 	width,
-	height = 680,
+	height = "100%",
 }: PoolViewport): CSSProperties {
 	return { width, height, minWidth: 0 };
 }
 
-function GroupPoolStory({
-	cards = groupCards,
+export function MarketingGroupsWindow({
+	cards = marketingGroupCards,
+	knownFixtureIds = marketingKnownFixtureIds,
+	showHeader = true,
 	...viewport
-}: PoolViewport & { cards?: (Group | null)[] } = {}) {
+}: PoolViewport & {
+	cards?: (Group | null)[];
+	knownFixtureIds?: Set<string>;
+} = {}) {
 	const [interaction, setInteraction] = useState("Ready");
 	const store = useMemo(() => {
 		const next = new ShowObjectsStore();
@@ -125,22 +145,17 @@ function GroupPoolStory({
 		<ApplicationStateHarness>
 			<ShowObjectsStateProvider store={store}>
 				<div
-					className="pool-window group-pool-window"
+					className="ui-window pool-window group-pool-window"
 					style={poolViewportStyle(viewport)}
 				>
-					<WindowHeader
-						title="Group Pool"
-						info={{
-							primary: "2 fixtures selected",
-							secondary: "Ordered selection",
-						}}
-						actions={[]}
-					/>
+					{showHeader && (
+						<GroupPoolHeader command={command} onSettings={() => undefined} />
+					)}
 					<GroupPoolGrid
 						active={false}
 						cards={cards}
 						capabilities={new Map()}
-						knownFixtureIds={new Set(["fixture-1", "fixture-2", "fixture-3"])}
+						knownFixtureIds={knownFixtureIds}
 						command={command}
 						onOpenContext={(id) => setInteraction(`Context Group ${id}`)}
 						onOpenProperties={(id) => setInteraction(`Properties Group ${id}`)}
@@ -159,63 +174,56 @@ function GroupPoolStory({
 	);
 }
 
-const presets = [
-	{
-		id: "2.1",
-		body: {
-			name: "Open White",
-			number: 1,
-			family: "Color",
-			values: { "fixture-1": { color: "#ffffff" } },
-			color: "#ffffff",
-			icon: "◇",
-		},
-	},
-	{
-		id: "2.5",
-		body: {
-			name: "Lavender",
-			number: 5,
-			family: "Color",
-			values: { "fixture-1": { color: "#b56cff" } },
-			color: "#b56cff",
-			icon: "◆",
-		},
-	},
-] satisfies PresetCard[];
+function cardsForPresets(presets: readonly PresetCard[]) {
+	return Array.from(
+		{ length: 200 },
+		(_, index) =>
+			presets.find((candidate) => candidate.body.number === index + 1) ?? null,
+	);
+}
 
-const presetCards = Array.from(
-	{ length: 200 },
-	(_, index) =>
-		presets.find((candidate) => candidate.body.number === index + 1) ?? null,
-);
-
-function PresetPoolStory(viewport: PoolViewport = {}) {
+export function MarketingPresetWindow({
+	family,
+	presets,
+	showHeader = true,
+	...viewport
+}: PoolViewport & {
+	family: PresetFamily;
+	presets: readonly PresetCard[];
+}) {
 	const [interaction, setInteraction] = useState("Ready");
+	const cards = cardsForPresets(presets);
 	return (
 		<ApplicationStateHarness>
 			<div
-				className="pool-window preset-pool-window pool-colors pool-family-color"
+				className={`ui-window pool-window preset-pool-window pool-colors pool-family-${family.toLowerCase()}`}
 				style={poolViewportStyle(viewport)}
 			>
-				<WindowHeader
-					title="Preset Pools"
-					info={{ primary: "Color presets" }}
-					actions={[]}
-				/>
+				{showHeader && (
+					<PresetWindowHeader
+						family={family}
+						compact
+						showFamilyActions={false}
+						onFamily={() => undefined}
+						onOpenGroups={() => undefined}
+						onSettings={() => undefined}
+					/>
+				)}
 				<PresetCardGrid
-					cards={presetCards}
-					family="Color"
+					cards={cards}
+					family={family}
 					customizations={{}}
 					poolPresentation={defaultPoolPresentation()}
 					showId={SHOW_ID}
 					surfaceKey={`show:${SHOW_ID}:builtin:preset`}
 					fallbackMode="type"
 					selectionCount={2}
-					storeArmed
+					storeArmed={false}
 					updateArmed={false}
 					setArmed={false}
-					onActivate={(index) => setInteraction(`Activated Color ${index + 1}`)}
+					onActivate={(index) =>
+						setInteraction(`Activated ${family} ${index + 1}`)
+					}
 				/>
 				<output aria-label="Preset pool interaction" hidden>
 					{interaction}
@@ -225,39 +233,73 @@ function PresetPoolStory(viewport: PoolViewport = {}) {
 	);
 }
 
+export function MarketingColorPresetsWindow(viewport: PoolViewport = {}) {
+	return (
+		<MarketingPresetWindow
+			{...viewport}
+			family="Color"
+			presets={marketingColorPresets}
+		/>
+	);
+}
+
+export function MarketingPositionPresetsWindow(viewport: PoolViewport = {}) {
+	return (
+		<MarketingPresetWindow
+			{...viewport}
+			family="Position"
+			presets={marketingPositionPresets}
+		/>
+	);
+}
+
 const meta = {
 	title: "Application/Windows/Pools",
 	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
+	excludeStories: /^(Marketing|marketing)/,
 } satisfies Meta;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Groups: Story = {
-	render: () => <GroupPoolStory />,
+	render: () => <MarketingGroupsWindow />,
 };
 
 export const Presets: Story = {
-	render: () => <PresetPoolStory />,
+	render: () => <MarketingColorPresetsWindow />,
+};
+
+export const ColorPresetsMarketing: Story = {
+	render: () => <MarketingColorPresetsWindow />,
+};
+
+export const PositionPresetsMarketing: Story = {
+	render: () => <MarketingPositionPresetsWindow />,
 };
 
 export const GroupsNarrowShort: Story = {
-	render: () => <GroupPoolStory width={420} height={380} />,
+	render: () => <MarketingGroupsWindow width={420} height={380} />,
 };
 
 export const GroupsWideTall: Story = {
-	render: () => <GroupPoolStory width={1280} height={760} />,
+	render: () => <MarketingGroupsWindow width={1280} height={760} />,
 };
 
 export const GroupsStatusMarkers: Story = {
-	render: () => <GroupPoolStory cards={statusGroupCards} />,
+	render: () => (
+		<MarketingGroupsWindow
+			cards={statusGroupCards}
+			knownFixtureIds={new Set(["fixture-1", "fixture-2", "fixture-3"])}
+		/>
+	),
 };
 
 export const PresetsNarrowShort: Story = {
-	render: () => <PresetPoolStory width={420} height={380} />,
+	render: () => <MarketingColorPresetsWindow width={420} height={380} />,
 };
 
 export const PresetsWideTall: Story = {
-	render: () => <PresetPoolStory width={1280} height={760} />,
+	render: () => <MarketingColorPresetsWindow width={1280} height={760} />,
 };
