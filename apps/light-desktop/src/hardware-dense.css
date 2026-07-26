@@ -61,8 +61,9 @@
 .hardware-playback-controls {
 	min-height: 0;
 	display: grid;
-	grid-template-columns: 3fr 2fr;
-	gap: 3px;
+	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr) 20px;
+	gap: 0;
 }
 .hardware-playback-card .hardware-playback-controls > footer {
 	min-height: 0;
@@ -139,7 +140,7 @@
 	background: #090d10;
 }
 .hardware-connected .playback-fader-bank article.hardware-playback-card {
-	grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.72fr);
+	grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.85fr);
 	gap: 0;
 	padding: 0;
 	overflow: hidden;
@@ -221,7 +222,7 @@
 }
 .hardware-playback-card .hardware-fader {
 	border: 0;
-	border-left: 1px solid var(--line);
+	border-top: 1px solid var(--line);
 	border-radius: 0;
 }
 .hardware-connected .playback-fader-bank {
@@ -263,7 +264,7 @@
 }
 .hardware-playback-card .hardware-fader {
 	margin: 0;
-	padding: 2px;
+	padding: 0;
 	background: #11181d;
 }
 .playback-fader-bank.hardware-layout {
@@ -276,7 +277,7 @@
 	min-width: 0;
 	display: grid;
 	grid-template-columns: 1fr;
-	grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.72fr);
+	grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.85fr);
 	gap: 0;
 	padding: 0;
 	overflow: hidden;

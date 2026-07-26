@@ -603,6 +603,37 @@ test("playback bank states are explicit, valid, and preserve readable geometry",
 	);
 
 	await page.goto(
+		"/iframe.html?id=playbacks-playback-bank--hardware-bank&viewMode=story",
+	);
+	const hardwareCard = page.locator(".hardware-playback-card").first();
+	const [cardBox, headerGeometry, controlsBox, faderBox, faderFillBox] =
+		await Promise.all([
+			hardwareCard.boundingBox(),
+			hardwareCard.locator(":scope > header").boundingBox(),
+			hardwareCard.locator(".hardware-playback-controls").boundingBox(),
+			hardwareCard.locator(".hardware-fader").boundingBox(),
+			hardwareCard.locator(".hardware-fader-fill").boundingBox(),
+		]);
+	expect(cardBox).not.toBeNull();
+	expect(headerGeometry).not.toBeNull();
+	expect(controlsBox).not.toBeNull();
+	expect(faderBox).not.toBeNull();
+	expect(faderFillBox).not.toBeNull();
+	expect(headerGeometry!.height).toBeLessThanOrEqual(32);
+	expect(controlsBox!.height).toBeGreaterThanOrEqual(77);
+	expect(faderBox!.width).toBeCloseTo(controlsBox!.width, 5);
+	expect(faderBox!.x).toBeCloseTo(controlsBox!.x, 5);
+	expect(faderBox!.y + faderBox!.height).toBeCloseTo(
+		controlsBox!.y + controlsBox!.height,
+		5,
+	);
+	expect(faderFillBox!.width).toBeCloseTo(faderBox!.width, 5);
+	expect(faderFillBox!.y + faderFillBox!.height).toBeCloseTo(
+		faderBox!.y + faderBox!.height,
+		5,
+	);
+
+	await page.goto(
 		"/iframe.html?id=playbacks-playback-bank--long-labels&viewMode=story",
 	);
 	const header = page.locator(".hardware-playback-card > header");

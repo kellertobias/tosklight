@@ -568,7 +568,10 @@ button {
 	right: 0;
 	text-align: center;
 }
-.playback-fader-bank article > div:not(.vertical-touch-fader-stack) i {
+.playback-fader-bank
+	article
+	> div:not(.vertical-touch-fader-stack):not(.hardware-playback-controls)
+	i {
 	position: absolute;
 	left: 28%;
 	right: 28%;

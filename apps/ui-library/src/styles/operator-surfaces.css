@@ -534,8 +534,12 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
-  padding: 4px 6px;
+  padding: 3px 5px;
   border-bottom: 1px solid var(--line);
+}
+
+.hardware-playback-card .playback-software-representation {
+  min-height: 24px;
 }
 
 .hardware-playback-card > header > strong {
@@ -582,10 +586,12 @@
 }
 
 .hardware-playback-controls {
+  min-height: 78px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 54px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 20px;
   gap: 3px;
-  padding: 3px;
+  padding: 3px 0 0;
 }
 
 .hardware-playback-controls footer {
@@ -593,27 +599,31 @@
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   gap: 2px;
+  margin: 0 3px;
 }
 
 .hardware-fader {
   position: relative;
-  min-height: 58px;
+  width: 100%;
+  min-height: 20px;
   display: grid;
   place-items: center;
   overflow: hidden;
-  border: 1px solid var(--line2);
-  border-radius: 5px;
+  border: 0;
+  border-top: 1px solid var(--line2);
+  border-radius: 0;
 }
 
 .hardware-fader-track {
 	position: absolute;
-	inset: 3px;
+	inset: 0;
 	overflow: visible;
 }
 
 .hardware-fader-track > .hardware-fader-fill {
 	position: absolute;
-	inset: auto 0 0;
+	inset: auto auto 0 0;
+	width: 100%;
 	height: var(--hardware-fader-level);
 	background: linear-gradient(
     0deg,
