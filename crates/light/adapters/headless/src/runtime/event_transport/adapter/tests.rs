@@ -169,16 +169,20 @@ fn show_object_batch_keeps_one_event_and_targeted_raw_deltas() {
         ActiveShowObjectsChange {
             show_id,
             show_revision: Default::default(),
-            changes: vec![ActiveShowObjectChange {
-                kind: ActiveShowObjectKind::CueList,
-                object_id: object_id.to_string(),
-                object_revision: 3,
-                body: Some(serde_json::json!({
-                    "id": object_id,
-                    "cues": [{"id": Uuid::from_u128(8), "future": true}]
-                })),
-                deleted: false,
-            }],
+            changes: vec![
+                ActiveShowObjectChange::present(
+                    ActiveShowObjectKind::Group,
+                    object_id.to_string(),
+                    3,
+                    serde_json::json!({
+                        "id": object_id,
+                        "name": "Group",
+                        "fixtures": [],
+                        "future": {"kept": true}
+                    }),
+                )
+                .unwrap(),
+            ],
         },
     ));
 
@@ -203,22 +207,26 @@ fn show_object_batch_keeps_one_event_and_targeted_raw_deltas() {
         Some(vec![
             wire::EventObject {
                 capability: wire::EventCapability::Show,
-                id: format!("objects:{}:kind:cue_list", show_id.0),
+                id: format!("objects:{}:kind:group", show_id.0),
             },
             wire::EventObject {
                 capability: wire::EventCapability::Show,
-                id: format!("objects:{}:kind:cue_list:object:{object_id}", show_id.0),
+                id: format!("objects:{}:kind:group:object:{object_id}", show_id.0),
             },
         ])
     );
     assert_eq!(change.show_id, show_id.0);
     assert_eq!(change.show_revision, 0);
-    assert_eq!(change.changes[0].kind, wire::ShowObjectKind::CueList);
-    assert_eq!(change.changes[0].object_id, object_id.to_string());
-    assert_eq!(
-        change.changes[0].body.as_ref().unwrap()["cues"][0]["future"],
-        true
-    );
+    let wire::ShowObjectChange::Group {
+        object_id: wire_object_id,
+        body,
+        ..
+    } = &change.changes[0]
+    else {
+        panic!("expected a typed group change");
+    };
+    assert_eq!(wire_object_id, &object_id.to_string());
+    assert_eq!(body.as_ref().unwrap()["future"]["kept"], true);
 }
 
 #[test]

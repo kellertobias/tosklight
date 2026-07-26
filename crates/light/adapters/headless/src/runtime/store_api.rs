@@ -127,7 +127,7 @@ async fn store_prepared_preload_target(
                 prepared.object_id,
                 expected,
                 prepared.body,
-            )],
+            )?],
         );
         let (result, activation) =
             run_active_show_object_action_async(state, activation, action).await?;

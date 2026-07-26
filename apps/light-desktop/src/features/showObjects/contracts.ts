@@ -1,25 +1,33 @@
 import type {
 	CueList,
+	PatchLayer,
 	PlaybackDefinition,
 	PlaybackPage,
 	StoredGroup,
 	StoredPreset,
 	VersionedObject,
 } from "../../api/types";
+import type { StoredDeskLayout, StoredStageLayout } from "../server/contracts";
 
 export type ShowObjectKind =
 	| "group"
 	| "preset"
 	| "cue_list"
+	| "patch_layer"
 	| "playback"
-	| "playback_page";
+	| "playback_page"
+	| "stage_layout"
+	| "user_layout";
 
 export interface ShowObjectBodies {
 	group: StoredGroup;
 	preset: StoredPreset;
 	cue_list: CueList;
+	patch_layer: PatchLayer;
 	playback: PlaybackDefinition;
 	playback_page: PlaybackPage;
+	stage_layout: StoredStageLayout;
+	user_layout: StoredDeskLayout;
 }
 
 export type ShowObject<K extends ShowObjectKind = ShowObjectKind> =

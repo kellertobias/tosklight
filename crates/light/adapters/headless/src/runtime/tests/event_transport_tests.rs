@@ -782,18 +782,23 @@ fn show_subscription(
 }
 
 fn show_objects_draft(show_id: ShowId, kind: ActiveShowObjectKind, object_id: &str) -> EventDraft {
+    let body = match kind {
+        ActiveShowObjectKind::Group => {
+            serde_json::json!({"id":object_id,"name":"Group","fixtures":[]})
+        }
+        ActiveShowObjectKind::Preset => {
+            serde_json::json!({"name":"Preset","family":"Color","number":1,"values":{}})
+        }
+        _ => panic!("test helper only supports Group and Preset"),
+    };
     EventDraft::active_show_objects_changed(
         &ActionContext::system(Uuid::from_u128(1), ActionSource::System),
         ActiveShowObjectsChange {
             show_id,
             show_revision: Default::default(),
-            changes: vec![ActiveShowObjectChange {
-                kind,
-                object_id: object_id.into(),
-                object_revision: 1,
-                body: Some(serde_json::json!({})),
-                deleted: false,
-            }],
+            changes: vec![
+                ActiveShowObjectChange::present(kind, object_id.into(), 1, body).unwrap(),
+            ],
         },
     )
 }

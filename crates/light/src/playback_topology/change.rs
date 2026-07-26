@@ -129,13 +129,13 @@ fn object_change(projection: &PlaybackTopologyObjectProjection) -> ActiveShowObj
             object_id,
             object_revision,
             raw_body,
-        } => ActiveShowObjectChange {
-            kind: *kind,
-            object_id: object_id.clone(),
-            object_revision: *object_revision,
-            body: Some(raw_body.as_ref().clone()),
-            deleted: false,
-        },
+        } => ActiveShowObjectChange::present(
+            *kind,
+            object_id.clone(),
+            *object_revision,
+            raw_body.as_ref().clone(),
+        )
+        .expect("prepared Playback topology projection must match its typed family"),
         PlaybackTopologyObjectProjection::Deleted {
             kind,
             object_id,

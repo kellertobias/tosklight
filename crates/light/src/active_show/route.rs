@@ -28,8 +28,10 @@ pub(super) fn prepare_route_mutation(
 
     let (transaction, route, route_to_terminate, deleted) = match &command.mutation {
         OutputRouteMutation::Put { body } => {
-            let route = decode_normalized_route(body)?;
-            let body = merge_route_fields(existing.map(PortableShowObject::body), body, &route)?;
+            let route = normalize_route(body.typed().clone())?;
+            let request = body.encode();
+            let body =
+                merge_route_fields(existing.map(PortableShowObject::body), &request, &route)?;
             let route_to_terminate = existing
                 .and_then(|object| decode_stored_route(object.body()).ok())
                 .filter(|previous| route_requires_termination(previous, Some(&route)));
@@ -102,8 +104,7 @@ fn next_object_revision(
     }
 }
 
-fn decode_normalized_route(body: &Value) -> Result<OutputRoute, ActionError> {
-    let mut route = serde_json::from_value::<OutputRoute>(body.clone()).map_err(invalid)?;
+fn normalize_route(mut route: OutputRoute) -> Result<OutputRoute, ActionError> {
     if route.delivery_mode.is_none() {
         route.delivery_mode = Some(route.resolved_delivery_mode());
     }

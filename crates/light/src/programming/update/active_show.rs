@@ -317,13 +317,13 @@ fn complete_update<P: ProgrammingUpdatePorts>(
         .expect("a successful Update always commits one real change");
     prepared.show_revision = commit.revision();
     ports.reconcile_programming_update(&prepared.projection);
-    let change = ActiveShowObjectChange {
-        kind: prepared.projection.kind,
-        object_id: prepared.projection.object_id.clone(),
-        object_revision: prepared.projection.object_revision,
-        body: Some(prepared.projection.raw_body.as_ref().clone()),
-        deleted: false,
-    };
+    let change = ActiveShowObjectChange::present(
+        prepared.projection.kind,
+        prepared.projection.object_id.clone(),
+        prepared.projection.object_revision,
+        prepared.projection.raw_body.as_ref().clone(),
+    )
+    .expect("prepared Programming projection must match its typed family");
     let event_sequence = events
         .publish(EventDraft::active_show_objects_changed(
             context,

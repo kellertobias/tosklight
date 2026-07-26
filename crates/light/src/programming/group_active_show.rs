@@ -152,12 +152,19 @@ fn complete_recording<P: ProgrammingGroupActiveShowPorts>(
         return result;
     };
     result.show_revision = commit.revision();
-    let change = ActiveShowObjectChange {
-        kind: ActiveShowObjectKind::Group,
-        object_id: result.projection.object_id.clone(),
-        object_revision: result.projection.object_revision,
-        body: result.projection.raw_body.as_deref().cloned(),
-        deleted: result.projection.deleted,
+    let change = match result.projection.raw_body.as_deref() {
+        Some(raw) => ActiveShowObjectChange::present(
+            ActiveShowObjectKind::Group,
+            result.projection.object_id.clone(),
+            result.projection.object_revision,
+            raw.clone(),
+        )
+        .expect("prepared Group projection must remain a typed Group"),
+        None => ActiveShowObjectChange::deleted(
+            ActiveShowObjectKind::Group,
+            result.projection.object_id.clone(),
+            result.projection.object_revision,
+        ),
     };
     result.event_sequence = Some(
         events

@@ -443,7 +443,7 @@ pub enum OperatorNotification {
 }
 
 #[cfg(test)]
-mod tests {
+mod capture_mode_tests {
     use super::*;
     use crate::v2::programming::{ProgrammingCaptureModeChange, ProgrammingCaptureModeProjection};
 
@@ -527,14 +527,72 @@ pub struct ShowObjectsChange {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-pub struct ShowObjectChange {
-    pub kind: ShowObjectKind,
-    pub object_id: String,
-    #[ts(type = "number")]
-    pub object_revision: u64,
-    #[ts(type = "unknown | null")]
-    pub body: Option<serde_json::Value>,
-    pub deleted: bool,
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ShowObjectChange {
+    CueList {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
+    Group {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
+    PatchLayer {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
+    Playback {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
+    PlaybackPage {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
+    Preset {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
+    StageLayout {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
+    UserLayout {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        deleted: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -620,4 +678,86 @@ pub enum OutputDeliveryMode {
     Broadcast,
     Multicast,
     Unicast,
+}
+
+#[cfg(test)]
+mod show_object_tests {
+    use super::ShowObjectChange;
+    use serde_json::json;
+
+    #[test]
+    fn show_object_change_is_discriminated_by_supported_family() {
+        let changes = [
+            ShowObjectChange::CueList {
+                object_id: "main".into(),
+                object_revision: 1,
+                body: Some(json!({"id":"main"})),
+                deleted: false,
+            },
+            ShowObjectChange::Group {
+                object_id: "1".into(),
+                object_revision: 1,
+                body: Some(json!({"id":"1"})),
+                deleted: false,
+            },
+            ShowObjectChange::PatchLayer {
+                object_id: "main".into(),
+                object_revision: 1,
+                body: Some(json!({"id":"main"})),
+                deleted: false,
+            },
+            ShowObjectChange::Playback {
+                object_id: "1".into(),
+                object_revision: 1,
+                body: Some(json!({"number":1})),
+                deleted: false,
+            },
+            ShowObjectChange::PlaybackPage {
+                object_id: "1".into(),
+                object_revision: 1,
+                body: Some(json!({"number":1})),
+                deleted: false,
+            },
+            ShowObjectChange::Preset {
+                object_id: "1.1".into(),
+                object_revision: 1,
+                body: Some(json!({"number":1})),
+                deleted: false,
+            },
+            ShowObjectChange::StageLayout {
+                object_id: "main".into(),
+                object_revision: 1,
+                body: Some(json!({"positions":{}})),
+                deleted: false,
+            },
+            ShowObjectChange::UserLayout {
+                object_id: "main".into(),
+                object_revision: 1,
+                body: Some(json!({"desks":[]})),
+                deleted: false,
+            },
+        ];
+
+        let kinds = [
+            "cue_list",
+            "group",
+            "patch_layer",
+            "playback",
+            "playback_page",
+            "preset",
+            "stage_layout",
+            "user_layout",
+        ];
+        for (change, kind) in changes.into_iter().zip(kinds) {
+            let encoded = serde_json::to_value(change).unwrap();
+            assert_eq!(encoded["kind"], kind);
+            assert!(serde_json::from_value::<ShowObjectChange>(encoded).is_ok());
+        }
+        assert!(
+            serde_json::from_value::<ShowObjectChange>(
+                json!({"kind":"fixture","object_id":"1","object_revision":1,"body":{},"deleted":false})
+            )
+            .is_err()
+        );
+    }
 }

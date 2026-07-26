@@ -125,8 +125,11 @@ fn route_mutation(
             route_id.clone(),
             0,
             light_application::OutputRouteMutation::Put {
-                body: serde_json::to_value(route)
-                    .map_err(|error| ApiError::internal(error.to_string()))?,
+                body: light_show::LosslessBody::<light_output::OutputRoute>::decode(
+                    serde_json::to_value(route)
+                        .map_err(|error| ApiError::internal(error.to_string()))?,
+                )
+                .map_err(|error| ApiError::bad_request(error.to_string()))?,
             },
         )),
         wire::OutputRouteAction::Update {
@@ -144,7 +147,10 @@ fn route_mutation(
             Ok((
                 route_id.clone(),
                 *expected_revision,
-                light_application::OutputRouteMutation::Put { body },
+                light_application::OutputRouteMutation::Put {
+                    body: light_show::LosslessBody::decode(body)
+                        .map_err(|error| ApiError::bad_request(error.to_string()))?,
+                },
             ))
         }
         wire::OutputRouteAction::Delete {

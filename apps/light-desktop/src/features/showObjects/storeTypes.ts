@@ -13,8 +13,11 @@ export interface ShowObjectsSnapshot {
 	groups: readonly ShowObject<"group">[];
 	presets: readonly ShowObject<"preset">[];
 	cueLists: readonly ShowObject<"cue_list">[];
+	patchLayers: readonly ShowObject<"patch_layer">[];
 	playbacks: readonly ShowObject<"playback">[];
 	playbackPages: readonly ShowObject<"playback_page">[];
+	stageLayouts: readonly ShowObject<"stage_layout">[];
+	userLayouts: readonly ShowObject<"user_layout">[];
 	readyCollections: ReadonlySet<ShowObjectKind>;
 	pendingObjectKeys: ReadonlySet<string>;
 	status: "idle" | "loading" | "ready" | "error";

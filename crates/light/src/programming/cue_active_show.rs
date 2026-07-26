@@ -100,13 +100,13 @@ fn projection_for_kind(
 }
 
 fn object_change(projection: &ProgrammingCueObjectProjection) -> ActiveShowObjectChange {
-    ActiveShowObjectChange {
-        kind: projection.kind,
-        object_id: projection.object_id.clone(),
-        object_revision: projection.object_revision,
-        body: Some(projection.raw_body.as_ref().clone()),
-        deleted: false,
-    }
+    ActiveShowObjectChange::present(
+        projection.kind,
+        projection.object_id.clone(),
+        projection.object_revision,
+        projection.raw_body.as_ref().clone(),
+    )
+    .expect("prepared Cue projection must match its typed family")
 }
 
 fn validate_show(

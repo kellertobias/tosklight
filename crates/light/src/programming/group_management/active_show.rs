@@ -43,13 +43,13 @@ fn complete_group_management<P: GroupManagementActiveShowPorts>(
         return result;
     };
     result.show_revision = commit.revision();
-    let change = ActiveShowObjectChange {
-        kind: ActiveShowObjectKind::Group,
-        object_id: result.projection.object_id.clone(),
-        object_revision: result.projection.object_revision,
-        body: Some(result.projection.raw_body.as_ref().clone()),
-        deleted: false,
-    };
+    let change = ActiveShowObjectChange::present(
+        ActiveShowObjectKind::Group,
+        result.projection.object_id.clone(),
+        result.projection.object_revision,
+        result.projection.raw_body.as_ref().clone(),
+    )
+    .expect("prepared Group projection must remain a typed Group");
     result.event_sequence = Some(
         events
             .publish(EventDraft::active_show_objects_changed(

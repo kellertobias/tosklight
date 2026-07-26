@@ -82,12 +82,15 @@ async fn stage_layout_action(
             operator_action_context(&session, light_application::ActionSource::Http)
                 .with_request_id(&request.request_id),
             show_id,
-            vec![put_active_show_object(
-                light_application::ActiveShowObjectKind::StageLayout,
-                "main",
-                expected,
-                body,
-            )],
+            vec![
+                put_active_show_object(
+                    light_application::ActiveShowObjectKind::StageLayout,
+                    "main",
+                    expected,
+                    body,
+                )
+                .map_err(StageLayoutHttpError::api)?,
+            ],
         );
         let (result, _activation) =
             run_active_show_object_action_async(&state, _activation, action)

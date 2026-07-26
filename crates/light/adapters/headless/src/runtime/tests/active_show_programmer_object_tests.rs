@@ -368,7 +368,8 @@ async fn active_object_undo_is_lossless_atomic_contextual_and_failure_safe() {
             && change.changes[0].kind == light_application::ActiveShowObjectKind::Group
             && change.changes[0].object_id == "7"
             && change.changes[0].object_revision == 3
-            && change.changes[0].body.as_ref() == Some(&original)
+            && change.changes[0].body.as_ref().map(light_application::ActiveShowObjectBody::encode)
+                == Some(original.clone())
     ));
     // The undo rides on the interval-gated recovery checkpoint created by the scenario's first
     // mutation, so a show-object checkpoint exists but does not carry the undo's identity.
@@ -866,7 +867,8 @@ fn preset_move_commits_destination_and_source_delete_atomically() {
                 "2.8",
                 0,
                 preset_body("Must not survive", light_programmer::PresetFamily::Color, 8),
-            ),
+            )
+            .unwrap(),
             delete_active_show_object(light_application::ActiveShowObjectKind::Preset, "2.2", 99),
         ],
     );

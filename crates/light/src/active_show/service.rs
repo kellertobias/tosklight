@@ -463,7 +463,10 @@ fn migrated_route_changes(
             show_revision: commit.revision(),
             route_id: object.key().id().to_string(),
             object_revision: object.revision(),
-            route: serde_json::from_value(object.body().clone()).ok(),
+            route: Some(
+                serde_json::from_value(object.body().clone())
+                    .expect("prepared route migration must remain decodable"),
+            ),
             deleted: false,
         })
         .collect()
@@ -487,13 +490,15 @@ fn migration_changes(
             {
                 return None;
             }
-            Some(super::ActiveShowObjectChange {
-                kind,
-                object_id: object_id.to_string(),
-                object_revision: object.revision(),
-                body: Some(object.body().clone()),
-                deleted: false,
-            })
+            Some(
+                super::ActiveShowObjectChange::present(
+                    kind,
+                    object_id.to_string(),
+                    object.revision(),
+                    object.body().clone(),
+                )
+                .expect("prepared object migration must match its typed family"),
+            )
         })
         .collect()
 }

@@ -1,5 +1,7 @@
 mod candidate;
 mod document;
+mod lossless_body;
+mod lossless_json;
 mod migration;
 mod profile_revision;
 mod repository;
@@ -10,6 +12,8 @@ pub use document::{
     PortablePatchRevision, PortableShowDocument, PortableShowObject, PortableShowObjectKey,
     PortableShowObjectUndo, PortableShowRevision,
 };
+pub use lossless_body::{LosslessBody, PortableJson};
+pub use lossless_json::{apply_delta, merge_typed, merge_typed_request, strip_zero_u64_echo};
 pub use profile_revision::{
     FixtureProfileDigest, FixtureProfileRevision, FixtureProfileRevisionId,
     FixtureProfileRevisionInsertResult, FixtureProfileRevisionInsertStatus,

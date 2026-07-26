@@ -299,13 +299,13 @@ fn candidate_projection(
 }
 
 fn object_change(projection: &ProgrammingCueTransferObjectProjection) -> ActiveShowObjectChange {
-    ActiveShowObjectChange {
-        kind: ActiveShowObjectKind::CueList,
-        object_id: projection.object_id.clone(),
-        object_revision: projection.object_revision,
-        body: Some(projection.raw_body.as_ref().clone()),
-        deleted: false,
-    }
+    ActiveShowObjectChange::present(
+        ActiveShowObjectKind::CueList,
+        projection.object_id.clone(),
+        projection.object_revision,
+        projection.raw_body.as_ref().clone(),
+    )
+    .expect("prepared Cue transfer projection must remain a typed Cuelist")
 }
 
 fn sort_cues(list: &mut CueList) {

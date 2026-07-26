@@ -68,7 +68,7 @@ async fn user_layout_action(
             object_id.clone(),
             expected_revision,
             body,
-        )],
+        )?],
     );
     let (result, _activation) =
         run_active_show_object_action_async(&state, _activation, action).await?;
@@ -139,7 +139,7 @@ async fn patch_layer_action(
             layer_id.clone(),
             expected_revision,
             body,
-        )],
+        )?],
     );
     let (result, _activation) =
         run_active_show_object_action_async(&state, _activation, action).await?;
@@ -219,7 +219,7 @@ async fn dynamic_record_action(
             cue_list_id.clone(),
             expected_revision,
             body,
-        )],
+        )?],
     );
     let (result, _activation) =
         run_active_show_object_action_async(&state, activation, action).await?;

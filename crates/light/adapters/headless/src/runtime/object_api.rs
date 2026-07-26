@@ -181,7 +181,10 @@ pub(super) async fn seed_object_for_test_put(
             show_id,
             object_id,
             expected,
-            light_application::OutputRouteMutation::Put { body },
+            light_application::OutputRouteMutation::Put {
+                body: light_show::LosslessBody::decode(body)
+                    .map_err(|error| ApiError::bad_request(error.to_string()))?,
+            },
         );
         let (result, _activation) = run_output_route_action(&state, activation, action).await?;
         terminate_changed_route(&state, result.route_to_terminate.as_ref()).await;
@@ -220,7 +223,7 @@ pub(super) async fn seed_object_for_test_put(
                     object_id.clone(),
                     expected,
                     body,
-                )],
+                )?],
             );
             let (result, _activation) =
                 run_active_show_object_action_async(&state, activation, action).await?;

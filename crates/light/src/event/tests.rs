@@ -557,13 +557,15 @@ fn show_objects_draft(show_id: ShowId, kind: ActiveShowObjectKind, object_id: &s
         ActiveShowObjectsChange {
             show_id,
             show_revision: Default::default(),
-            changes: vec![ActiveShowObjectChange {
-                kind,
-                object_id: object_id.into(),
-                object_revision: 1,
-                body: Some(serde_json::json!({})),
-                deleted: false,
-            }],
+            changes: vec![
+                ActiveShowObjectChange::present(
+                    kind,
+                    object_id.into(),
+                    1,
+                    serde_json::json!({"id":object_id,"name":"Group","fixtures":[]}),
+                )
+                .unwrap(),
+            ],
         },
     )
 }

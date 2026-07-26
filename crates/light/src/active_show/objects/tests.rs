@@ -1,6 +1,7 @@
 use super::normalize_body;
 use crate::active_show::{
-    ActiveShowObjectKind, ActiveShowObjectMutation, ActiveShowObjectMutationKind,
+    ActiveShowObjectBody, ActiveShowObjectKind, ActiveShowObjectMutation,
+    ActiveShowObjectMutationKind,
 };
 use serde_json::{Value, json};
 
@@ -104,7 +105,8 @@ fn preset_update_accepts_client_supplied_nested_extensions() {
     }));
 
     let mutation = mutation(ActiveShowObjectKind::Preset, "1.1", request.clone());
-    let normalized = normalize_body(None, &mutation, &request).unwrap();
+    let request = ActiveShowObjectBody::decode(ActiveShowObjectKind::Preset, request).unwrap();
+    let normalized = normalize_body(None, &mutation, &request).unwrap().encode();
 
     assert_eq!(
         normalized["values"][FIXTURE_ID]["intensity"]["future_client_metadata"],
@@ -178,24 +180,36 @@ fn numbered_objects_reject_non_numeric_storage_identity() {
         ),
     ] {
         let mutation = mutation(kind, "not-a-number", body.clone());
+        let body = ActiveShowObjectBody::decode(kind, body).unwrap();
         assert!(normalize_body(None, &mutation, &body).is_err());
     }
 }
 
 #[test]
 fn layout_and_patch_families_preserve_the_complete_lossless_candidate() {
-    let request = json!({
-        "known": {"nested": true},
-        "future_extension": [1, 2, 3],
-    });
-    for kind in [
-        ActiveShowObjectKind::PatchLayer,
-        ActiveShowObjectKind::StageLayout,
-        ActiveShowObjectKind::UserLayout,
+    for (kind, request) in [
+        (
+            ActiveShowObjectKind::PatchLayer,
+            json!({"id":"main","name":"Main","order":1,"future_extension":[1,2,3]}),
+        ),
+        (
+            ActiveShowObjectKind::StageLayout,
+            json!({"version":2,"positions":{},"positions3d":{},"future_extension":[1,2,3]}),
+        ),
+        (
+            ActiveShowObjectKind::UserLayout,
+            json!({"desks":[],"activeDeskId":"main","future_extension":[1,2,3]}),
+        ),
     ] {
         let mutation = mutation(kind, "main", request.clone());
         assert_eq!(
-            normalize_body(None, &mutation, &request).unwrap(),
+            normalize_body(
+                None,
+                &mutation,
+                &ActiveShowObjectBody::decode(kind, request.clone()).unwrap(),
+            )
+            .unwrap()
+            .encode(),
             request,
             "{} must preserve its route-prepared lossless body",
             kind.as_str()
@@ -203,9 +217,75 @@ fn layout_and_patch_families_preserve_the_complete_lossless_candidate() {
     }
 }
 
+#[test]
+fn every_active_show_family_decodes_to_its_discriminant_and_retains_extensions() {
+    let families = [
+        (ActiveShowObjectKind::CueList, cue_list(CUE_LIST_ID)),
+        (
+            ActiveShowObjectKind::Group,
+            json!({"id":"1","name":"Front","fixtures":[],"future_extension":{"kept":true}}),
+        ),
+        (
+            ActiveShowObjectKind::PatchLayer,
+            json!({"id":"main","name":"Main","order":0,"future_extension":{"kept":true}}),
+        ),
+        (
+            ActiveShowObjectKind::Playback,
+            serde_json::to_value(playback(1)).unwrap(),
+        ),
+        (
+            ActiveShowObjectKind::PlaybackPage,
+            json!({"number":1,"name":"Main","slots":{},"future_extension":{"kept":true}}),
+        ),
+        (
+            ActiveShowObjectKind::Preset,
+            preset(json!({"intensity":{"kind":"normalized","value":1.0}})),
+        ),
+        (
+            ActiveShowObjectKind::StageLayout,
+            json!({"version":2,"positions":{},"future_extension":{"kept":true}}),
+        ),
+        (
+            ActiveShowObjectKind::UserLayout,
+            json!({"desks":[],"activeDeskId":"main","future_extension":{"kept":true}}),
+        ),
+    ];
+
+    for (kind, mut raw) in families {
+        raw.as_object_mut()
+            .unwrap()
+            .insert("future_root".into(), json!({"kept": true}));
+        let decoded = ActiveShowObjectBody::decode(kind, raw).unwrap();
+        assert_eq!(decoded.kind(), kind);
+        assert_eq!(decoded.encode()["future_root"]["kept"], true);
+    }
+}
+
+#[test]
+fn typed_active_show_decoder_rejects_cross_family_and_unknown_kinds() {
+    let group = json!({"id":"1","name":"Front","fixtures":[]});
+    let error =
+        ActiveShowObjectBody::decode(ActiveShowObjectKind::Preset, group.clone()).unwrap_err();
+    assert!(error.to_string().contains("missing required field family"));
+    assert!(ActiveShowObjectBody::decode(ActiveShowObjectKind::UserLayout, group).is_err());
+    assert_eq!(ActiveShowObjectKind::from_storage_kind("fixture"), None);
+}
+
+#[test]
+fn legacy_opaque_user_layout_remains_lossless() {
+    let raw = json!({"marker":"legacy layout payload","future":{"kept":true}});
+    let decoded =
+        ActiveShowObjectBody::decode(ActiveShowObjectKind::UserLayout, raw.clone()).unwrap();
+    assert_eq!(decoded.encode(), raw);
+}
+
 fn normalize(existing: &Value, kind: ActiveShowObjectKind, id: &str, request: Value) -> Value {
     let mutation = mutation(kind, id, request.clone());
-    normalize_body(Some(existing), &mutation, &request).unwrap()
+    let existing = ActiveShowObjectBody::decode(kind, existing.clone()).unwrap();
+    let request = ActiveShowObjectBody::decode(kind, request).unwrap();
+    normalize_body(Some(&existing), &mutation, &request)
+        .unwrap()
+        .encode()
 }
 
 fn mutation(kind: ActiveShowObjectKind, id: &str, body: Value) -> ActiveShowObjectMutation {
@@ -213,7 +293,9 @@ fn mutation(kind: ActiveShowObjectKind, id: &str, body: Value) -> ActiveShowObje
         kind,
         object_id: id.into(),
         expected_object_revision: 1,
-        mutation: ActiveShowObjectMutationKind::Put { body },
+        mutation: ActiveShowObjectMutationKind::Put {
+            body: ActiveShowObjectBody::decode(kind, body).unwrap(),
+        },
     }
 }
 

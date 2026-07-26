@@ -1,8 +1,8 @@
 use super::support::*;
 use crate::{
-    ActionEnvelope, ActionErrorKind, ActiveShowObjectKind, ActiveShowObjectMutation,
-    ActiveShowObjectMutationKind, ApplicationEvent, EventFilter, EventReplay,
-    MutateActiveShowObjectsCommand, ShowEvent, selective_import::*,
+    ActionEnvelope, ActionErrorKind, ActiveShowObjectBody, ActiveShowObjectKind,
+    ActiveShowObjectMutation, ActiveShowObjectMutationKind, ApplicationEvent, EventFilter,
+    EventReplay, MutateActiveShowObjectsCommand, ShowEvent, selective_import::*,
 };
 use serde_json::json;
 use std::{
@@ -717,7 +717,11 @@ fn group_put(rig: &TestRig, id: &str) -> ActionEnvelope<MutateActiveShowObjectsC
                 object_id: id.into(),
                 expected_object_revision: 0,
                 mutation: ActiveShowObjectMutationKind::Put {
-                    body: json!({"id":id}),
+                    body: ActiveShowObjectBody::decode(
+                        ActiveShowObjectKind::Group,
+                        json!({"id":id,"name":"Group","fixtures":[]}),
+                    )
+                    .unwrap(),
                 },
             }],
         },

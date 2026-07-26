@@ -64,7 +64,8 @@ async fn active_preload_cue_is_one_lossless_contextual_show_transaction() {
         ) if change.changes.len() == 1
             && change.changes[0].kind == light_application::ActiveShowObjectKind::CueList
             && change.changes[0].object_id == scenario.cue_list_id()
-            && change.changes[0].body.as_ref() == Some(stored.body())
+            && change.changes[0].body.as_ref().map(light_application::ActiveShowObjectBody::encode)
+                == Some(stored.body().clone())
     ));
 }
 

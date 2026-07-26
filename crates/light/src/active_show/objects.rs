@@ -1,16 +1,15 @@
 use super::{
-    ActiveShowObjectChange, ActiveShowObjectKind, ActiveShowObjectMutation,
+    ActiveShowObjectBody, ActiveShowObjectChange, ActiveShowObjectMutation,
     ActiveShowObjectMutationKind, MutateActiveShowObjectsCommand,
 };
 use crate::{
-    ActionError, ActionErrorKind, lossless_json, prepare_show_candidate,
+    ActionError, ActionErrorKind, prepare_show_candidate,
     show_compiler::prepare_normalized_show_candidate_incremental,
 };
 use light_core::Revision;
 use light_playback::{CueList, PlaybackDefinition, PlaybackPage};
 use light_programmer::{GroupDefinition, Preset};
-use light_show::{PortableShowDocument, PortableShowObject, PortableShowTransaction};
-use serde_json::Value;
+use light_show::{LosslessBody, PortableShowDocument, PortableShowObject, PortableShowTransaction};
 use std::collections::HashSet;
 
 pub(super) struct PreparedObjectChanges {
@@ -108,11 +107,15 @@ fn apply_mutation(
     let revision = next_revision(mutation.expected_object_revision)?;
     match &mutation.mutation {
         ActiveShowObjectMutationKind::Put { body } => {
-            let body = normalize_body(existing.map(PortableShowObject::body), mutation, body)?;
+            let existing_body = existing
+                .map(|object| ActiveShowObjectBody::decode(mutation.kind, object.body().clone()))
+                .transpose()
+                .map_err(invalid)?;
+            let body = normalize_body(existing_body.as_ref(), mutation, body)?;
             transaction.put(
                 mutation.kind.as_str(),
                 mutation.object_id.clone(),
-                body.clone(),
+                body.encode(),
             );
             Ok(ActiveShowObjectChange {
                 kind: mutation.kind,
@@ -136,111 +139,140 @@ fn apply_mutation(
 }
 
 fn normalize_body(
-    existing: Option<&Value>,
+    existing: Option<&ActiveShowObjectBody>,
     mutation: &ActiveShowObjectMutation,
-    request: &Value,
-) -> Result<Value, ActionError> {
-    match mutation.kind {
-        ActiveShowObjectKind::CueList => normalize_cue_list(existing, mutation, request),
-        ActiveShowObjectKind::Group => normalize_group(existing, mutation, request),
-        ActiveShowObjectKind::PatchLayer
-        | ActiveShowObjectKind::StageLayout
-        | ActiveShowObjectKind::UserLayout => Ok(request.clone()),
-        ActiveShowObjectKind::Playback => normalize_playback(existing, mutation, request),
-        ActiveShowObjectKind::PlaybackPage => normalize_playback_page(existing, mutation, request),
-        ActiveShowObjectKind::Preset => normalize_preset(existing, mutation, request),
+    request: &ActiveShowObjectBody,
+) -> Result<ActiveShowObjectBody, ActionError> {
+    if request.kind() != mutation.kind {
+        return Err(invalid(format!(
+            "{} mutation cannot carry a {} body",
+            mutation.kind.as_str(),
+            request.kind().as_str()
+        )));
+    }
+    match request {
+        ActiveShowObjectBody::CueList(request) => normalize_cue_list(
+            existing.and_then(ActiveShowObjectBody::cue_list),
+            mutation,
+            request,
+        )
+        .map(ActiveShowObjectBody::CueList),
+        ActiveShowObjectBody::Group(request) => normalize_group(
+            existing.and_then(ActiveShowObjectBody::group),
+            mutation,
+            request,
+        )
+        .map(ActiveShowObjectBody::Group),
+        ActiveShowObjectBody::PatchLayer(request) => normalize_passthrough(
+            existing.and_then(ActiveShowObjectBody::patch_layer),
+            request,
+        )
+        .map(ActiveShowObjectBody::PatchLayer),
+        ActiveShowObjectBody::Playback(request) => normalize_playback(
+            existing.and_then(ActiveShowObjectBody::playback),
+            mutation,
+            request,
+        )
+        .map(ActiveShowObjectBody::Playback),
+        ActiveShowObjectBody::PlaybackPage(request) => normalize_playback_page(
+            existing.and_then(ActiveShowObjectBody::playback_page),
+            mutation,
+            request,
+        )
+        .map(ActiveShowObjectBody::PlaybackPage),
+        ActiveShowObjectBody::Preset(request) => normalize_preset(
+            existing.and_then(ActiveShowObjectBody::preset),
+            mutation,
+            request,
+        )
+        .map(ActiveShowObjectBody::Preset),
+        ActiveShowObjectBody::StageLayout(request) => normalize_passthrough(
+            existing.and_then(ActiveShowObjectBody::stage_layout),
+            request,
+        )
+        .map(ActiveShowObjectBody::StageLayout),
+        ActiveShowObjectBody::UserLayout(request) => normalize_passthrough(
+            existing.and_then(ActiveShowObjectBody::user_layout),
+            request,
+        )
+        .map(ActiveShowObjectBody::UserLayout),
     }
 }
 
 fn normalize_cue_list(
-    existing: Option<&Value>,
+    existing: Option<&LosslessBody<CueList>>,
     mutation: &ActiveShowObjectMutation,
-    request: &Value,
-) -> Result<Value, ActionError> {
-    let requested = serde_json::from_value::<CueList>(request.clone()).map_err(invalid)?;
-    let stored = existing
-        .map(|body| serde_json::from_value::<CueList>(body.clone()).map_err(invalid))
-        .transpose()?;
+    request: &LosslessBody<CueList>,
+) -> Result<LosslessBody<CueList>, ActionError> {
+    let requested = request.typed();
     let mut normalized = requested.clone();
     if let Ok(id) = uuid::Uuid::parse_str(&mutation.object_id) {
         normalized.id = light_core::CueListId(id);
     }
     normalized.validate().map_err(invalid)?;
-    let mut merged = lossless_json::merge_typed_request(
-        existing,
-        stored.as_ref(),
-        request,
-        &requested,
-        &normalized,
-    )
-    .map_err(invalid)?;
-    lossless_json::strip_zero_u64_echo(&mut merged, "chaser_xfade_millis");
+    let mut merged =
+        LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)?;
+    merged.strip_zero_u64_echo("chaser_xfade_millis");
     Ok(merged)
 }
 
 fn normalize_group(
-    existing: Option<&Value>,
+    existing: Option<&LosslessBody<GroupDefinition>>,
     mutation: &ActiveShowObjectMutation,
-    request: &Value,
-) -> Result<Value, ActionError> {
-    let requested = serde_json::from_value::<GroupDefinition>(request.clone()).map_err(invalid)?;
-    let stored = existing
-        .map(|body| serde_json::from_value::<GroupDefinition>(body.clone()).map_err(invalid))
-        .transpose()?;
+    request: &LosslessBody<GroupDefinition>,
+) -> Result<LosslessBody<GroupDefinition>, ActionError> {
+    let requested = request.typed();
     let mut normalized = requested.clone();
     normalized.id.clone_from(&mutation.object_id);
-    lossless_json::merge_typed_request(existing, stored.as_ref(), request, &requested, &normalized)
-        .map_err(invalid)
+    LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
 }
 
 fn normalize_preset(
-    existing: Option<&Value>,
+    existing: Option<&LosslessBody<Preset>>,
     mutation: &ActiveShowObjectMutation,
-    request: &Value,
-) -> Result<Value, ActionError> {
-    let requested = serde_json::from_value::<Preset>(request.clone()).map_err(invalid)?;
-    let stored = existing
-        .map(|body| serde_json::from_value::<Preset>(body.clone()).map_err(invalid))
-        .transpose()?;
+    request: &LosslessBody<Preset>,
+) -> Result<LosslessBody<Preset>, ActionError> {
+    let requested = request.typed();
     let mut normalized = requested.clone();
     normalized
         .reconcile_address(&mutation.object_id)
         .map_err(invalid)?;
-    lossless_json::merge_typed_request(existing, stored.as_ref(), request, &requested, &normalized)
-        .map_err(invalid)
+    LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
 }
 
 fn normalize_playback(
-    existing: Option<&Value>,
+    existing: Option<&LosslessBody<PlaybackDefinition>>,
     mutation: &ActiveShowObjectMutation,
-    request: &Value,
-) -> Result<Value, ActionError> {
-    let requested =
-        serde_json::from_value::<PlaybackDefinition>(request.clone()).map_err(invalid)?;
-    let stored = existing
-        .map(|body| serde_json::from_value::<PlaybackDefinition>(body.clone()).map_err(invalid))
-        .transpose()?;
+    request: &LosslessBody<PlaybackDefinition>,
+) -> Result<LosslessBody<PlaybackDefinition>, ActionError> {
+    let requested = request.typed();
     let mut normalized = requested.clone();
     normalized.number = parse_storage_number(&mutation.object_id, "playback")?;
     normalized.validate().map_err(invalid)?;
-    lossless_json::merge_typed_request(existing, stored.as_ref(), request, &requested, &normalized)
-        .map_err(invalid)
+    LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
 }
 
 fn normalize_playback_page(
-    existing: Option<&Value>,
+    existing: Option<&LosslessBody<PlaybackPage>>,
     mutation: &ActiveShowObjectMutation,
-    request: &Value,
-) -> Result<Value, ActionError> {
-    let requested = serde_json::from_value::<PlaybackPage>(request.clone()).map_err(invalid)?;
-    let stored = existing
-        .map(|body| serde_json::from_value::<PlaybackPage>(body.clone()).map_err(invalid))
-        .transpose()?;
+    request: &LosslessBody<PlaybackPage>,
+) -> Result<LosslessBody<PlaybackPage>, ActionError> {
+    let requested = request.typed();
     let mut normalized = requested.clone();
     normalized.number = parse_storage_number(&mutation.object_id, "playback page")?;
     normalized.validate().map_err(invalid)?;
-    lossless_json::merge_typed_request(existing, stored.as_ref(), request, &requested, &normalized)
-        .map_err(invalid)
+    LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
+}
+
+fn normalize_passthrough<T>(
+    existing: Option<&LosslessBody<T>>,
+    request: &LosslessBody<T>,
+) -> Result<LosslessBody<T>, ActionError>
+where
+    T: Clone + serde::Serialize + serde::de::DeserializeOwned,
+{
+    let typed = request.typed().clone();
+    LosslessBody::merge_normalized_body(existing, request, typed).map_err(invalid)
 }
 
 fn parse_storage_number<T>(object_id: &str, label: &str) -> Result<T, ActionError>

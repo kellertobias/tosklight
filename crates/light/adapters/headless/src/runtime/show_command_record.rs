@@ -165,12 +165,15 @@ fn record_group(
     let action = active_show_object_action(
         context.clone(),
         entry.id,
-        vec![put_active_show_object(
-            light_application::ActiveShowObjectKind::Group,
-            id.clone(),
-            existing.as_ref().map_or(0, |object| object.revision),
-            serde_json::to_value(group).map_err(|error| error.to_string())?,
-        )],
+        vec![
+            put_active_show_object(
+                light_application::ActiveShowObjectKind::Group,
+                id.clone(),
+                existing.as_ref().map_or(0, |object| object.revision),
+                serde_json::to_value(group).map_err(|error| error.to_string())?,
+            )
+            .map_err(|error| error.message)?,
+        ],
     );
     run_active_show_object_action_in_programming_interaction(state, action)
         .map_err(|error| error.message)?;
@@ -254,12 +257,15 @@ fn record_preset(
     let action = active_show_object_action(
         context.clone(),
         entry.id,
-        vec![put_active_show_object(
-            light_application::ActiveShowObjectKind::Preset,
-            storage_key,
-            existing.as_ref().map_or(0, |object| object.revision),
-            serde_json::to_value(preset).map_err(|error| error.to_string())?,
-        )],
+        vec![
+            put_active_show_object(
+                light_application::ActiveShowObjectKind::Preset,
+                storage_key,
+                existing.as_ref().map_or(0, |object| object.revision),
+                serde_json::to_value(preset).map_err(|error| error.to_string())?,
+            )
+            .map_err(|error| error.message)?,
+        ],
     );
     run_active_show_object_action_in_programming_interaction(state, action)
         .map_err(|error| error.message)?;

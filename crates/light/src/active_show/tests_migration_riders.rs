@@ -24,7 +24,10 @@ fn cue_list_mutation_drops_the_stored_zero_chaser_xfade_echo() {
                 object_id: storage_id.clone(),
                 expected_object_revision: 1,
                 mutation: ActiveShowObjectMutationKind::Put {
-                    body: cue_list_body(cue_list_id, "Edited"),
+                    body: typed(
+                        ActiveShowObjectKind::CueList,
+                        cue_list_body(cue_list_id, "Edited"),
+                    ),
                 },
             }]),
             &rig.ports,
@@ -42,7 +45,7 @@ fn cue_list_mutation_drops_the_stored_zero_chaser_xfade_echo() {
             .contains_key("chaser_xfade_millis"),
         "merged cue_list body must not echo the skip-serialized zero"
     );
-    let merged = result.changes[0].body.as_ref().unwrap();
+    let merged = result.changes[0].body.as_ref().unwrap().encode();
     assert!(
         !merged
             .as_object()
@@ -71,7 +74,10 @@ fn committed_migration_write_backs_are_published_as_object_changes() {
                 object_id: "9".into(),
                 expected_object_revision: 0,
                 mutation: ActiveShowObjectMutationKind::Put {
-                    body: json!({"id":"9","name":"Unrelated","fixtures":[]}),
+                    body: typed(
+                        ActiveShowObjectKind::Group,
+                        json!({"id":"9","name":"Unrelated","fixtures":[]}),
+                    ),
                 },
             }]),
             &rig.ports,
@@ -148,7 +154,7 @@ fn route_mutation_publishes_migration_write_backs() {
                 "main",
                 0,
                 OutputRouteMutation::Put {
-                    body: json!({
+                    body: typed_route(json!({
                         "protocol": "art_net",
                         "logical_universe": 1,
                         "destination_universe": 1,
@@ -156,7 +162,7 @@ fn route_mutation_publishes_migration_write_backs() {
                         "destination": null,
                         "enabled": true,
                         "minimum_slots": 512
-                    }),
+                    })),
                 },
             ),
             &rig.ports,

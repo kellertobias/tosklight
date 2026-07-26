@@ -600,7 +600,7 @@ export type OutputRuntimeSnapshot = { cursor: EventSnapshotCursor, projection: O
 
 export type ShowObjectKind = "cue_list" | "group" | "patch_layer" | "playback" | "playback_page" | "preset" | "stage_layout" | "user_layout";
 
-export type ShowObjectChange = { kind: ShowObjectKind, object_id: string, object_revision: number, body: unknown | null, deleted: boolean, };
+export type ShowObjectChange = { "kind": "cue_list", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "group", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "patch_layer", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "playback", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "playback_page", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "preset", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "stage_layout", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "user_layout", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, };
 
 export type ShowObjectsChange = { show_id: string, show_revision: number, changes: Array<ShowObjectChange>, };
 

@@ -1,11 +1,11 @@
-import type { EventServerMessage } from "./generated/light-wire";
 import type {
 	ShowObjectChange,
 	ShowObjectKind,
 	ShowObjectsEventMessage,
 } from "../features/showObjects/contracts";
-import { WireValidationError } from "./wireValidation";
+import type { EventServerMessage } from "./generated/light-wire";
 import { decodeShowObjectBody } from "./showObjectBodyWire";
+import { WireValidationError } from "./wireValidation";
 
 function recordAt(value: unknown, path: string): Record<string, unknown> {
 	if (!value || typeof value !== "object" || Array.isArray(value))
@@ -54,18 +54,44 @@ function validateRelatedObjects(event: Record<string, unknown>) {
 	}
 }
 
-function supportedKindAt(value: unknown, path: string): ShowObjectKind | null {
+const SHOW_OBJECT_KINDS = [
+	"group",
+	"preset",
+	"cue_list",
+	"patch_layer",
+	"playback",
+	"playback_page",
+	"stage_layout",
+	"user_layout",
+] as const satisfies readonly ShowObjectKind[];
+
+function supportedKindAt(
+	value: unknown,
+	path: string,
+	tolerateUnsupported: boolean,
+): ShowObjectKind | null {
 	const kind = stringAt(value, path);
-	return ["group", "preset", "cue_list", "playback", "playback_page"].includes(
+	if ((SHOW_OBJECT_KINDS as readonly string[]).includes(kind))
+		return kind as ShowObjectKind;
+	if (tolerateUnsupported) return null;
+	throw new WireValidationError(
+		path,
+		"supported active-show object kind",
 		kind,
-	)
-		? (kind as ShowObjectKind)
-		: null;
+	);
 }
 
-function decodeChange(value: unknown, path: string): ShowObjectChange | null {
+function decodeChange(
+	value: unknown,
+	path: string,
+	tolerateUnsupported: boolean,
+): ShowObjectChange | null {
 	const change = recordAt(value, path);
-	const kind = supportedKindAt(change.kind, `${path}.kind`);
+	const kind = supportedKindAt(
+		change.kind,
+		`${path}.kind`,
+		tolerateUnsupported,
+	);
 	if (!kind) return null;
 	const deleted = booleanAt(change.deleted, `${path}.deleted`);
 	const body = change.body;
@@ -89,7 +115,10 @@ function decodeChange(value: unknown, path: string): ShowObjectChange | null {
 }
 
 function decodeCursor(message: Record<string, unknown>, path: string) {
-	return integerAt(recordAt(message.cursor, `${path}.cursor`).sequence, `${path}.cursor.sequence`);
+	return integerAt(
+		recordAt(message.cursor, `${path}.cursor`).sequence,
+		`${path}.cursor.sequence`,
+	);
 }
 
 /** Maps the generated v2 envelope into the feature-owned Group/Preset contract. */
@@ -111,10 +140,7 @@ export function decodeShowObjectsEventMessage(
 					gap.oldest_available,
 					"$.gap.oldest_available",
 				),
-				latestSequence: integerAt(
-					gap.latest_sequence,
-					"$.gap.latest_sequence",
-				),
+				latestSequence: integerAt(gap.latest_sequence, "$.gap.latest_sequence"),
 			};
 		}
 		case "error":
@@ -131,7 +157,9 @@ export function decodeShowObjectsEventMessage(
 				return null;
 			const change = recordAt(payload.change, "$.event.payload.change");
 			const rawChanges =
-				payloadType === "show_objects_changed" ? change.changes : change.objects;
+				payloadType === "show_objects_changed"
+					? change.changes
+					: change.objects;
 			if (!Array.isArray(rawChanges))
 				throw new WireValidationError(
 					`$.event.payload.change.${payloadType === "show_objects_changed" ? "changes" : "objects"}`,
@@ -150,11 +178,15 @@ export function decodeShowObjectsEventMessage(
 					changes: rawChanges.flatMap((item, index) => {
 						const candidate =
 							payloadType === "selective_import_applied"
-								? { ...recordAt(item, "$.event.payload.change.objects"), deleted: false }
+								? {
+										...recordAt(item, "$.event.payload.change.objects"),
+										deleted: false,
+									}
 								: item;
 						const decoded = decodeChange(
 							candidate,
 							`$.event.payload.change.${payloadType === "show_objects_changed" ? "changes" : "objects"}[${index}]`,
+							payloadType === "selective_import_applied",
 						);
 						return decoded ? [decoded] : [];
 					}),

@@ -28,13 +28,14 @@ pub use action::{
     ApplicationCommand, CommandFamily,
 };
 pub use active_show::{
-    ActiveShowObjectChange, ActiveShowObjectKind, ActiveShowObjectMutation,
+    ActiveShowObjectBody, ActiveShowObjectChange, ActiveShowObjectKind, ActiveShowObjectMutation,
     ActiveShowObjectMutationKind, ActiveShowObjectsChange, ActiveShowPorts, ActiveShowService,
     ActiveShowUnitOfWork, BackupIdentity, MutateActiveShowObjectsCommand,
     MutateActiveShowObjectsResult, MutateOutputRouteCommand, MutateOutputRouteResult,
-    OutputRouteChange, OutputRouteMutation, UndoActiveShowObjectCommand,
-    UndoActiveShowObjectResult, UndoActiveShowRecordingCommand, UndoActiveShowRecordingObject,
-    UndoActiveShowRecordingOperation,
+    OutputRouteChange, OutputRouteMutation, PatchLayer, StageCamera3d, StageLayout,
+    StagePosition2d, StagePosition3d, UndoActiveShowObjectCommand, UndoActiveShowObjectResult,
+    UndoActiveShowRecordingCommand, UndoActiveShowRecordingObject,
+    UndoActiveShowRecordingOperation, UserLayout,
 };
 pub use event::{
     ApplicationEvent, DeliveryPolicy, DeskActionNotification, DeskEvent, EventBus, EventCapability,

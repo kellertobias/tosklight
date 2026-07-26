@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { WireValidationError } from "./wireValidation";
 import { decodeShowObject } from "./showObjectWire";
+import { WireValidationError } from "./wireValidation";
 
 const CUE_LIST_ID = "11111111-1111-4111-8111-111111111111";
 const CUE_ID = "22222222-2222-4222-8222-222222222222";
@@ -128,10 +128,60 @@ describe("show-object wire decoders", () => {
 	});
 
 	it.each([
+		["group", "1", { name: "Front", fixtures: ["fixture-1"] }],
+		["preset", "1", { name: "Open", family: "Dimmer", number: 1, values: {} }],
+		["patch_layer", "base", { id: "base", name: "Base", order: 0 }],
 		[
-			"mismatched object kind",
-			versioned("preset", CUE_LIST_ID, cueListBody()),
+			"stage_layout",
+			"stage",
+			{
+				version: 2,
+				positions: { "fixture-1": { x: 1, y: 2, rotation: 0 } },
+				positions3d: {
+					"fixture-1": {
+						x: 1,
+						y: 2,
+						z: 3,
+						rotationX: 0,
+						rotationY: 0,
+						rotationZ: 0,
+					},
+				},
+				camera3d: { position: [0, 1, 2], target: [0, 0, 0] },
+			},
 		],
+		[
+			"user_layout",
+			"user",
+			{
+				desks: [
+					{
+						id: "desk-1",
+						name: "Main",
+						panes: [
+							{
+								id: "stage-1",
+								kind: "stage",
+								title: "Stage",
+								x: 1,
+								y: 1,
+								width: 12,
+								height: 9,
+							},
+						],
+					},
+				],
+				activeDeskId: "desk-1",
+			},
+		],
+	] as const)("decodes the typed %s family", (kind, id, body) => {
+		const decoded = decodeShowObject(versioned(kind, id, body), kind);
+		expect(decoded.kind).toBe(kind);
+		expect(decoded.body).toMatchObject(body);
+	});
+
+	it.each([
+		["mismatched object kind", versioned("preset", CUE_LIST_ID, cueListBody())],
 		[
 			"invalid Cue number",
 			versioned("cue_list", CUE_LIST_ID, {

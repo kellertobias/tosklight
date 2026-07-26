@@ -28,13 +28,16 @@ pub(super) fn put_active_show_object(
     object_id: impl Into<String>,
     expected_object_revision: u64,
     body: serde_json::Value,
-) -> light_application::ActiveShowObjectMutation {
-    light_application::ActiveShowObjectMutation {
+) -> Result<light_application::ActiveShowObjectMutation, ApiError> {
+    let body = light_application::ActiveShowObjectBody::decode(kind, body).map_err(|error| {
+        ApiError::bad_request(format!("invalid {} body: {error}", kind.as_str()))
+    })?;
+    Ok(light_application::ActiveShowObjectMutation {
         kind,
         object_id: object_id.into(),
         expected_object_revision,
         mutation: light_application::ActiveShowObjectMutationKind::Put { body },
-    }
+    })
 }
 
 pub(super) fn delete_active_show_object(

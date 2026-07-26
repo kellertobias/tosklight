@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ShowObjectsProtocolError } from "../features/showObjects/transport";
+import type { ShowObjectsProtocolError } from "../features/showObjects/transport";
 import { WebSocketShowObjectsEventTransport } from "./ShowObjectsEventTransport";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
@@ -106,7 +106,7 @@ describe("WebSocketShowObjectsEventTransport", () => {
 		expect(observer.closed).not.toHaveBeenCalled();
 	});
 
-	it("maps exact scoped bodies and ignores unrelated object kinds", () => {
+	it("rejects unsupported kinds in typed active-show change events", () => {
 		FakeWebSocket.instances = [];
 		const observer = {
 			message: vi.fn(),
@@ -164,24 +164,12 @@ describe("WebSocketShowObjectsEventTransport", () => {
 			}),
 		);
 
-		expect(observer.error).not.toHaveBeenCalled();
-		expect(observer.message).toHaveBeenCalledWith({
-			type: "event",
-			change: {
-				showId: SHOW_ID,
-				showRevision: 14,
-				eventSequence: 52,
-				changes: [
-					{
-						kind: "group",
-						objectId: "1",
-						objectRevision: 3,
-						body: { name: "Front", fixtures: ["fixture-1"] },
-						deleted: false,
-					},
-				],
-			},
-		});
+		expect(observer.message).not.toHaveBeenCalled();
+		expect(observer.error).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: expect.stringContaining("supported active-show object kind"),
+			}),
+		);
 	});
 
 	it("rejects malformed typed related-object routes", () => {

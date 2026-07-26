@@ -89,12 +89,13 @@ fn update_recorded_cue_list(
     }
     list.cues
         .sort_by(|left, right| left.number.total_cmp(&right.number));
-    Ok(put_active_show_object(
+    put_active_show_object(
         light_application::ActiveShowObjectKind::CueList,
         object.id.clone(),
         object.revision,
         serde_json::to_value(list).map_err(|error| error.to_string())?,
-    ))
+    )
+    .map_err(|error| error.message)
 }
 
 fn new_cue_list(
@@ -157,13 +158,15 @@ fn store_new_cue_list(
             list_id,
             0,
             serde_json::to_value(list).map_err(|error| error.to_string())?,
-        ),
+        )
+        .map_err(|error| error.message)?,
         put_active_show_object(
             light_application::ActiveShowObjectKind::Playback,
             playback_id,
             0,
             serde_json::to_value(definition).map_err(|error| error.to_string())?,
-        ),
+        )
+        .map_err(|error| error.message)?,
     ])
 }
 

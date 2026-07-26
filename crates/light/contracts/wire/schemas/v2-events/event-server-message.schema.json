@@ -3963,43 +3963,231 @@
       ]
     },
     "ShowObjectChange": {
-      "type": "object",
-      "properties": {
-        "body": true,
-        "deleted": {
-          "type": "boolean"
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "deleted": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "const": "cue_list"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "object_id",
+            "object_revision",
+            "body",
+            "deleted"
+          ]
         },
-        "kind": {
-          "$ref": "#/$defs/ShowObjectKind"
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "deleted": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "const": "group"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "object_id",
+            "object_revision",
+            "body",
+            "deleted"
+          ]
         },
-        "object_id": {
-          "type": "string"
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "deleted": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "const": "patch_layer"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "object_id",
+            "object_revision",
+            "body",
+            "deleted"
+          ]
         },
-        "object_revision": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "deleted": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "const": "playback"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "object_id",
+            "object_revision",
+            "body",
+            "deleted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "deleted": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "const": "playback_page"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "object_id",
+            "object_revision",
+            "body",
+            "deleted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "deleted": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "const": "preset"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "object_id",
+            "object_revision",
+            "body",
+            "deleted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "deleted": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "const": "stage_layout"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "object_id",
+            "object_revision",
+            "body",
+            "deleted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "body": true,
+            "deleted": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "const": "user_layout"
+            },
+            "object_id": {
+              "type": "string"
+            },
+            "object_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "object_id",
+            "object_revision",
+            "body",
+            "deleted"
+          ]
         }
-      },
-      "required": [
-        "kind",
-        "object_id",
-        "object_revision",
-        "body",
-        "deleted"
-      ]
-    },
-    "ShowObjectKind": {
-      "type": "string",
-      "enum": [
-        "cue_list",
-        "group",
-        "patch_layer",
-        "playback",
-        "playback_page",
-        "preset",
-        "stage_layout",
-        "user_layout"
       ]
     },
     "ShowObjectsChange": {

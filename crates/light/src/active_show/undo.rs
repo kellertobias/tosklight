@@ -59,13 +59,15 @@ pub(super) fn prepare_object_undo(
     Ok(PreparedObjectChanges {
         transaction,
         snapshot,
-        changes: vec![ActiveShowObjectChange {
-            kind: command.kind,
-            object_id: command.object_id.clone(),
-            object_revision: next_revision(command.expected_object_revision)?,
-            body: Some(body),
-            deleted: false,
-        }],
+        changes: vec![
+            ActiveShowObjectChange::present(
+                command.kind,
+                command.object_id.clone(),
+                next_revision(command.expected_object_revision)?,
+                body,
+            )
+            .map_err(|error| invalid(error.to_string()))?,
+        ],
     })
 }
 
@@ -119,21 +121,29 @@ pub(super) fn prepare_recording_undo(
                 }
                 let body = undo.body().clone();
                 transaction.undo_object(undo);
-                Some(body)
+                Some(
+                    super::ActiveShowObjectBody::decode(object.kind, body)
+                        .map_err(|error| invalid(error.to_string()))?,
+                )
             }
             UndoActiveShowRecordingOperation::DeleteCreated => {
                 transaction.delete(object.kind.as_str(), object.object_id.clone());
                 None
             }
         };
-        changes.push(ActiveShowObjectChange {
-            kind: object.kind,
-            object_id: object.object_id.clone(),
-            object_revision: next_revision(object.expected_object_revision)?,
-            body,
-            deleted: matches!(
-                object.operation,
-                UndoActiveShowRecordingOperation::DeleteCreated
+        let object_revision = next_revision(object.expected_object_revision)?;
+        changes.push(match body {
+            Some(body) => ActiveShowObjectChange {
+                kind: object.kind,
+                object_id: object.object_id.clone(),
+                object_revision,
+                body: Some(body),
+                deleted: false,
+            },
+            None => ActiveShowObjectChange::deleted(
+                object.kind,
+                object.object_id.clone(),
+                object_revision,
             ),
         });
     }

@@ -207,13 +207,13 @@ fn cue_index(list: &CueList, number: f64) -> Result<usize, ActionError> {
 }
 
 fn object_change(projection: &ProgrammingCueDeletionObjectProjection) -> ActiveShowObjectChange {
-    ActiveShowObjectChange {
-        kind: ActiveShowObjectKind::CueList,
-        object_id: projection.object_id.clone(),
-        object_revision: projection.object_revision,
-        body: Some(projection.raw_body.as_ref().clone()),
-        deleted: false,
-    }
+    ActiveShowObjectChange::present(
+        ActiveShowObjectKind::CueList,
+        projection.object_id.clone(),
+        projection.object_revision,
+        projection.raw_body.as_ref().clone(),
+    )
+    .expect("prepared Cue deletion projection must remain a typed Cuelist")
 }
 
 fn decode<T: DeserializeOwned>(value: &Value, label: &str) -> Result<T, ActionError> {

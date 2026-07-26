@@ -17,12 +17,13 @@ pub use model::{
 pub use portable::{
     FixtureProfileDigest, FixtureProfileRevision, FixtureProfileRevisionId,
     FixtureProfileRevisionInsertResult, FixtureProfileRevisionInsertStatus,
-    LegacyInlineProfileSnapshot, PortablePatchRevision, PortableShowCandidate,
-    PortableShowCandidateObject, PortableShowCandidateObjects, PortableShowCandidateProfiles,
-    PortableShowCommit, PortableShowDocument, PortableShowObject, PortableShowObjectKey,
-    PortableShowObjectUndo, PortableShowRevision, PortableShowTransaction,
-    canonical_fixture_profile_json, canonicalize_legacy_inline_profile_snapshots,
-    discover_legacy_inline_profile_snapshots,
+    LegacyInlineProfileSnapshot, LosslessBody, PortableJson, PortablePatchRevision,
+    PortableShowCandidate, PortableShowCandidateObject, PortableShowCandidateObjects,
+    PortableShowCandidateProfiles, PortableShowCommit, PortableShowDocument, PortableShowObject,
+    PortableShowObjectKey, PortableShowObjectUndo, PortableShowRevision, PortableShowTransaction,
+    apply_delta, canonical_fixture_profile_json, canonicalize_legacy_inline_profile_snapshots,
+    discover_legacy_inline_profile_snapshots, merge_typed, merge_typed_request,
+    strip_zero_u64_echo,
 };
 pub use show_store::{
     AtomicObjectDelete, AtomicObjectWrite, ShowStore, initialise_show, validate_show_file,

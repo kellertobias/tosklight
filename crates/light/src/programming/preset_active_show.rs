@@ -117,13 +117,13 @@ fn complete_recording<P: ProgrammingPresetActiveShowPorts>(
     };
     result.show_revision = commit.revision();
     ports.reconcile_programming_preset(&result.projection);
-    let change = ActiveShowObjectChange {
-        kind: ActiveShowObjectKind::Preset,
-        object_id: result.projection.object_id.clone(),
-        object_revision: result.projection.object_revision,
-        body: Some(result.projection.raw_body.as_ref().clone()),
-        deleted: false,
-    };
+    let change = ActiveShowObjectChange::present(
+        ActiveShowObjectKind::Preset,
+        result.projection.object_id.clone(),
+        result.projection.object_revision,
+        result.projection.raw_body.as_ref().clone(),
+    )
+    .expect("prepared Preset projection must remain a typed Preset");
     result.event_sequence = Some(
         events
             .publish(EventDraft::active_show_objects_changed(

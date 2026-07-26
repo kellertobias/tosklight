@@ -5,10 +5,10 @@ pub(super) fn put_page(
     expected: u64,
 ) -> Result<light_application::ActiveShowObjectMutation, ApiError> {
     page.validate().map_err(ApiError::bad_request)?;
-    Ok(put_active_show_object(
+    put_active_show_object(
         light_application::ActiveShowObjectKind::PlaybackPage,
         page.number.to_string(),
         expected,
         serde_json::to_value(page).map_err(|error| ApiError::internal(error.to_string()))?,
-    ))
+    )
 }

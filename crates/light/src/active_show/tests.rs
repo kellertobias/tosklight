@@ -17,6 +17,14 @@ use serde_json::{Value, json};
 use std::{fs, path::PathBuf, sync::Arc};
 use uuid::Uuid;
 
+fn typed(kind: ActiveShowObjectKind, body: Value) -> ActiveShowObjectBody {
+    ActiveShowObjectBody::decode(kind, body).unwrap()
+}
+
+fn typed_route(body: Value) -> light_show::LosslessBody<light_output::OutputRoute> {
+    light_show::LosslessBody::decode(body).unwrap()
+}
+
 #[test]
 fn route_update_prepares_before_one_backup_and_preserves_raw_extensions() {
     let rig = TestRig::new();
@@ -40,7 +48,7 @@ fn route_update_prepares_before_one_backup_and_preserves_raw_extensions() {
                 "main",
                 1,
                 OutputRouteMutation::Put {
-                    body: json!({
+                    body: typed_route(json!({
                         "protocol": "art_net",
                         "logical_universe": 1,
                         "destination_universe": 2,
@@ -49,7 +57,7 @@ fn route_update_prepares_before_one_backup_and_preserves_raw_extensions() {
                         "enabled": true,
                         "minimum_slots": 128,
                         "future_client_field": "accepted"
-                    }),
+                    })),
                 },
             ),
             &rig.ports,
@@ -102,7 +110,7 @@ fn invalid_route_stops_before_backup_commit_install_and_event() {
                 "broken",
                 0,
                 OutputRouteMutation::Put {
-                    body: json!({
+                    body: typed_route(json!({
                         "protocol": "art_net",
                         "logical_universe": 1,
                         "destination_universe": 1,
@@ -110,7 +118,7 @@ fn invalid_route_stops_before_backup_commit_install_and_event() {
                         "destination": null,
                         "enabled": true,
                         "minimum_slots": 512
-                    }),
+                    })),
                 },
             ),
             &rig.ports,
@@ -229,13 +237,17 @@ fn group_batch_preserves_extensions_empty_state_and_ordered_membership() {
                     kind: ActiveShowObjectKind::Group,
                     object_id: "7".into(),
                     expected_object_revision: 1,
-                    mutation: ActiveShowObjectMutationKind::Put { body: ordered },
+                    mutation: ActiveShowObjectMutationKind::Put {
+                        body: typed(ActiveShowObjectKind::Group, ordered),
+                    },
                 },
                 ActiveShowObjectMutation {
                     kind: ActiveShowObjectKind::Group,
                     object_id: "8".into(),
                     expected_object_revision: 0,
-                    mutation: ActiveShowObjectMutationKind::Put { body: empty },
+                    mutation: ActiveShowObjectMutationKind::Put {
+                        body: typed(ActiveShowObjectKind::Group, empty),
+                    },
                 },
             ]),
             &rig.ports,
@@ -310,7 +322,9 @@ fn cue_list_mutation_uses_one_prepared_boundary_and_keeps_action_context() {
         kind: ActiveShowObjectKind::CueList,
         object_id: cue_list_id.0.to_string(),
         expected_object_revision: 0,
-        mutation: ActiveShowObjectMutationKind::Put { body },
+        mutation: ActiveShowObjectMutationKind::Put {
+            body: typed(ActiveShowObjectKind::CueList, body),
+        },
     }]);
     let correlation_id = action.context.correlation_id;
 
@@ -386,13 +400,17 @@ fn playback_and_page_batch_prepares_backs_up_commits_and_installs_once() {
                     kind: ActiveShowObjectKind::Playback,
                     object_id: "1".into(),
                     expected_object_revision: 0,
-                    mutation: ActiveShowObjectMutationKind::Put { body: playback },
+                    mutation: ActiveShowObjectMutationKind::Put {
+                        body: typed(ActiveShowObjectKind::Playback, playback),
+                    },
                 },
                 ActiveShowObjectMutation {
                     kind: ActiveShowObjectKind::PlaybackPage,
                     object_id: "1".into(),
                     expected_object_revision: 0,
-                    mutation: ActiveShowObjectMutationKind::Put { body: page },
+                    mutation: ActiveShowObjectMutationKind::Put {
+                        body: typed(ActiveShowObjectKind::PlaybackPage, page),
+                    },
                 },
             ]),
             &rig.ports,
@@ -443,7 +461,9 @@ fn preset_address_is_validated_before_backup_and_commit() {
                 kind: ActiveShowObjectKind::Preset,
                 object_id: "2.1".into(),
                 expected_object_revision: 0,
-                mutation: ActiveShowObjectMutationKind::Put { body },
+                mutation: ActiveShowObjectMutationKind::Put {
+                    body: typed(ActiveShowObjectKind::Preset, body),
+                },
             }]),
             &rig.ports,
         )
@@ -482,7 +502,11 @@ fn stale_member_of_a_batch_leaves_every_group_and_preset_unchanged() {
                     object_id: "1".into(),
                     expected_object_revision: 1,
                     mutation: ActiveShowObjectMutationKind::Put {
-                        body: json!({"name":"After"}),
+                        body: typed(ActiveShowObjectKind::Group, {
+                            let mut changed = group.clone();
+                            changed["name"] = json!("After");
+                            changed
+                        }),
                     },
                 },
                 ActiveShowObjectMutation {
@@ -538,7 +562,14 @@ fn object_undo_commits_exact_history_through_one_prepared_boundary() {
     );
     assert_eq!(result.show_revision.value(), 3);
     assert_eq!(result.change.object_revision, 3);
-    assert_eq!(result.change.body, Some(original.clone()));
+    assert_eq!(
+        result
+            .change
+            .body
+            .as_ref()
+            .map(ActiveShowObjectBody::encode),
+        Some(original.clone())
+    );
     assert_eq!(result.event_sequence, 1);
     assert_eq!(rig.object_body("group", "7"), original);
     assert_eq!(rig.installed_revision(), Some(3));

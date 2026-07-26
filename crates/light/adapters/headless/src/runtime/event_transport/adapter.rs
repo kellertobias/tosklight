@@ -539,21 +539,28 @@ fn wire_show_objects_change(
 }
 
 fn wire_show_object_change(change: &application::ActiveShowObjectChange) -> wire::ShowObjectChange {
-    wire::ShowObjectChange {
-        kind: match change.kind {
-            application::ActiveShowObjectKind::CueList => wire::ShowObjectKind::CueList,
-            application::ActiveShowObjectKind::Group => wire::ShowObjectKind::Group,
-            application::ActiveShowObjectKind::PatchLayer => wire::ShowObjectKind::PatchLayer,
-            application::ActiveShowObjectKind::Playback => wire::ShowObjectKind::Playback,
-            application::ActiveShowObjectKind::PlaybackPage => wire::ShowObjectKind::PlaybackPage,
-            application::ActiveShowObjectKind::Preset => wire::ShowObjectKind::Preset,
-            application::ActiveShowObjectKind::StageLayout => wire::ShowObjectKind::StageLayout,
-            application::ActiveShowObjectKind::UserLayout => wire::ShowObjectKind::UserLayout,
-        },
-        object_id: change.object_id.clone(),
-        object_revision: change.object_revision,
-        body: change.body.clone(),
-        deleted: change.deleted,
+    macro_rules! variant {
+        ($variant:ident) => {
+            wire::ShowObjectChange::$variant {
+                object_id: change.object_id.clone(),
+                object_revision: change.object_revision,
+                body: change
+                    .body
+                    .as_ref()
+                    .map(application::ActiveShowObjectBody::encode),
+                deleted: change.deleted,
+            }
+        };
+    }
+    match change.kind {
+        application::ActiveShowObjectKind::CueList => variant!(CueList),
+        application::ActiveShowObjectKind::Group => variant!(Group),
+        application::ActiveShowObjectKind::PatchLayer => variant!(PatchLayer),
+        application::ActiveShowObjectKind::Playback => variant!(Playback),
+        application::ActiveShowObjectKind::PlaybackPage => variant!(PlaybackPage),
+        application::ActiveShowObjectKind::Preset => variant!(Preset),
+        application::ActiveShowObjectKind::StageLayout => variant!(StageLayout),
+        application::ActiveShowObjectKind::UserLayout => variant!(UserLayout),
     }
 }
 

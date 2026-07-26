@@ -69,12 +69,15 @@ pub(super) fn execute_preset_mutation(
         let destination_id = destination.storage_key();
         let mut destination_body = source_object.body.clone();
         destination_body["number"] = serde_json::json!(destination.number);
-        let mut mutations = vec![put_active_show_object(
-            light_application::ActiveShowObjectKind::Preset,
-            destination_id,
-            0,
-            destination_body,
-        )];
+        let mut mutations = vec![
+            put_active_show_object(
+                light_application::ActiveShowObjectKind::Preset,
+                destination_id,
+                0,
+                destination_body,
+            )
+            .map_err(|error| error.message)?,
+        ];
         if operation == "MOVE" {
             mutations.push(delete_active_show_object(
                 light_application::ActiveShowObjectKind::Preset,

@@ -188,7 +188,8 @@ pub(super) fn generate_profile_presets_action(
                 body.clone(),
             )
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.message)?;
     let request_id = context
         .request_id
         .clone()
