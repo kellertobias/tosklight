@@ -49,8 +49,6 @@ mod preload_values;
 mod preload_values_replay;
 #[path = "service/preset_recall.rs"]
 mod preset_recall;
-#[path = "service/preset_recall_replay.rs"]
-mod preset_recall_replay;
 #[path = "service/preset_recording.rs"]
 mod preset_recording;
 #[path = "service/preset_recording_replay.rs"]
@@ -95,7 +93,6 @@ use group_recording_replay::GroupRecordingReplayCache;
 use lifecycle_publication::LifecyclePublicationGate;
 use preload_lifecycle_replay::PreloadLifecycleReplayCache;
 use preload_values_replay::PreloadValuesReplayCache;
-use preset_recall_replay::PresetRecallReplayCache;
 use preset_recording_replay::PresetRecordingReplayCache;
 use priority_replay::PriorityReplayCache;
 use state::{interaction_change, reconciliation};
@@ -130,7 +127,6 @@ pub struct ProgrammingService {
     group_management_replay: Arc<Mutex<GroupManagementReplayCache>>,
     group_recording_replay: Arc<Mutex<GroupRecordingReplayCache>>,
     preset_recording_replay: Arc<Mutex<PresetRecordingReplayCache>>,
-    preset_recall_replay: Arc<Mutex<PresetRecallReplayCache>>,
     show_history: Arc<Mutex<ShowHistory>>,
     update_replay: Arc<Mutex<UpdateReplayCache>>,
     pub(super) events: EventBus,
@@ -160,7 +156,6 @@ impl ProgrammingService {
             group_management_replay: Arc::default(),
             group_recording_replay: Arc::default(),
             preset_recording_replay: Arc::default(),
-            preset_recall_replay: Arc::default(),
             show_history: Arc::default(),
             update_replay: Arc::default(),
             events,

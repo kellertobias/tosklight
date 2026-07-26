@@ -4,7 +4,10 @@
   "type": "object",
   "properties": {
     "active_context": {
-      "type": "string"
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "applied_fixtures": {
       "type": "integer",
@@ -19,6 +22,9 @@
     "correlation_id": {
       "type": "string",
       "format": "uuid"
+    },
+    "disposition": {
+      "$ref": "#/$defs/PresetRecallDisposition"
     },
     "interaction_event_sequence": {
       "type": [
@@ -36,11 +42,10 @@
       "format": "uint64",
       "minimum": 0
     },
-    "replayed": {
-      "type": "boolean"
-    },
-    "request_id": {
-      "type": "string"
+    "selected_targets": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
     },
     "selection_revision": {
       "type": "integer",
@@ -104,18 +109,24 @@
     }
   ],
   "required": [
-    "request_id",
     "correlation_id",
-    "replayed",
+    "disposition",
     "show_revision",
     "programmer_revision",
     "capture_mode_revision",
     "selection_revision",
     "applied_fixtures",
-    "active_context",
+    "selected_targets",
     "preset"
   ],
   "$defs": {
+    "PresetRecallDisposition": {
+      "type": "string",
+      "enum": [
+        "recalled",
+        "targets_selected"
+      ]
+    },
     "ProgrammingAttributeValue": {
       "oneOf": [
         {

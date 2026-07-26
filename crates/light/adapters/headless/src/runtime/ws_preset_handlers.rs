@@ -52,13 +52,14 @@ pub(super) fn ws_preset_apply(
     Ok(WsTypedProgrammingAction {
         payload: serde_json::json!({
             "applied":result.applied_fixtures,
+            "selected":result.selected_targets,
             "programmer":state.programmers.get(session.id),
         }),
         interaction_changed: result.interaction_event_sequence.is_some(),
         values_changed,
         preload_values_changed: false,
         preload_queue_changed: false,
-        replayed: result.replayed,
+        replayed: false,
     })
 }
 
@@ -79,9 +80,6 @@ pub(super) fn ws_preset_recall_action(
         "/api/v2/events preset.recall.action",
         &command.payload,
     );
-    if input.request.request_id != command.request_id {
-        return Err("Preset payload request_id must match the WebSocket request_id".into());
-    }
     let expectation = light_application::ProgrammingPresetRecallRevisionExpectation::Exact;
     let request = input.request;
     let result = state
@@ -106,7 +104,6 @@ pub(super) fn ws_preset_recall_action(
         .map_err(|error| error.message)?;
     let interaction_changed = result.interaction_event_sequence.is_some();
     let values_changed = result.outcome.values_event_sequence().is_some();
-    let replayed = result.replayed;
     let payload = serde_json::to_value(command_http::preset_recall_outcome(result))
         .map_err(|error| error.to_string())?;
     Ok(WsTypedProgrammingAction {
@@ -115,7 +112,7 @@ pub(super) fn ws_preset_recall_action(
         values_changed,
         preload_values_changed: false,
         preload_queue_changed: false,
-        replayed,
+        replayed: false,
     })
 }
 

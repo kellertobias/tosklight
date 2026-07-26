@@ -52,19 +52,19 @@ function valuesProjection(revision = 6, level = 0.25) {
 }
 
 function outcome(
-	request: PresetRecallRequest,
+	_request: PresetRecallRequest,
 	overrides: Partial<PresetRecallOutcome> = {},
 ): PresetRecallOutcome {
 	return {
-		requestId: request.requestId,
 		correlationId: CORRELATION_ID,
-		replayed: false,
+		disposition: "recalled",
 		showRevision: 12,
 		programmerRevision: 7,
 		captureModeRevision: 3,
 		selectionRevision: 8,
 		interactionEventSequence: null,
 		appliedFixtures: 1,
+		selectedTargets: 0,
 		activeContext: "preset:2.7",
 		preset: preset(),
 		warning: null,
@@ -104,7 +104,10 @@ function currentCommand(store: ProgrammingInteractionStore) {
 	return commandLine;
 }
 
-function harness(recallImplementation?: PresetRecallTransport["recall"]) {
+function harness(
+	recallImplementation?: PresetRecallTransport["recall"],
+	selected: readonly string[] = [FIXTURE_ID],
+) {
 	const showStore = new ShowObjectsStore();
 	showStore.reset(SHOW_ID, "session-a");
 	showStore.setCollection(SHOW_ID, "preset", [preset()], 30, 12);
@@ -137,7 +140,7 @@ function harness(recallImplementation?: PresetRecallTransport["recall"]) {
 				pendingChoice: null,
 			},
 			selection: {
-				selected: [FIXTURE_ID],
+				selected: [...selected],
 				expression: { type: "static" },
 				revision: 8,
 				gestureOpen: false,
@@ -338,15 +341,14 @@ describe("PresetRecallWriter", () => {
 		expect(setup.loadPreset).toHaveBeenCalledOnce();
 	});
 
-	it("handles replay, context-only changed, and no-change without materializing values", async () => {
+	it("handles context-only changed and no-change without materializing values", async () => {
 		const setup = harness();
 		setup.recall.mockImplementationOnce(async (_scope, request) =>
-			sparseOutcome(request, { replayed: true }),
+			sparseOutcome(request),
 		);
 		const contextOnly = await setup.writer.recall(input);
 		expect(contextOnly).toMatchObject({
 			status: "changed",
-			replayed: true,
 			projection: null,
 		});
 		expect(setup.valuesStore.getSnapshot().projection?.revision).toBe(6);
@@ -357,6 +359,47 @@ describe("PresetRecallWriter", () => {
 		const noChange = await setup.writer.recall(input);
 		expect(noChange?.status).toBe("no_change");
 		expect(setup.valuesStore.getSnapshot().projection?.revision).toBe(6);
+	});
+
+	it("sends an empty authoritative selection and reconciles selected targets without values", async () => {
+		let setup!: ReturnType<typeof harness>;
+		setup = harness(async (_scope, request) => {
+			setup.programmingStore.applyChange(
+				{
+					deskId: DESK_ID,
+					selection: {
+						selected: [FIXTURE_ID],
+						expression: { type: "static" },
+						revision: 9,
+						gestureOpen: false,
+					},
+				},
+				42,
+			);
+			return sparseOutcome(request, {
+				disposition: "targets_selected",
+				selectionRevision: 9,
+				interactionEventSequence: 42,
+				appliedFixtures: 0,
+				selectedTargets: 1,
+				activeContext: null,
+			});
+		}, []);
+
+		const selected = await setup.writer.recall(input);
+
+		expect(setup.recall.mock.calls[0][1].selectedFixtureCount).toBe(0);
+		expect(selected).toMatchObject({
+			disposition: "targets_selected",
+			appliedFixtures: 0,
+			selectedTargets: 1,
+			projection: null,
+		});
+		expect(setup.valuesStore.getSnapshot().projection?.revision).toBe(6);
+		expect(setup.programmingStore.getSnapshot().selection?.selected).toEqual([
+			FIXTURE_ID,
+		]);
+		expect(setup.repairSelection).not.toHaveBeenCalled();
 	});
 
 	it("does not resend failed recalls and leaves authority untouched", async () => {
@@ -409,7 +452,7 @@ describe("PresetRecallWriter", () => {
 		await expect(first).resolves.toMatchObject({ status: "changed" });
 	});
 
-	it("refuses missing, pending, redirected, and empty-selection authority", async () => {
+	it("refuses missing, pending, and redirected authority", async () => {
 		const loading = harness();
 		loading.showStore.markCollectionDormant("preset");
 		await expect(loading.writer.recall(input)).resolves.toBeNull();
@@ -428,23 +471,6 @@ describe("PresetRecallWriter", () => {
 		);
 		await expect(redirected.writer.recall(input)).resolves.toBeNull();
 		expect(redirected.recall).not.toHaveBeenCalled();
-
-		const empty = harness();
-		empty.programmingStore.installSnapshot({
-			cursor: 31,
-			projection: {
-				deskId: DESK_ID,
-				commandLine: currentCommand(empty.programmingStore),
-				selection: {
-					selected: [],
-					expression: { type: "static" },
-					revision: 9,
-					gestureOpen: false,
-				},
-			},
-		});
-		await expect(empty.writer.recall(input)).resolves.toBeNull();
-		expect(empty.recall).not.toHaveBeenCalled();
 	});
 
 	it("drops late outcomes after session, Show, and writer replacement", async () => {

@@ -31,7 +31,6 @@ async fn recall_preset(
     let session = authenticated_mutation(&state, &headers)?;
     let show_id = show.resolve(&state).map_err(PresetRecallHttpError::api)?;
     let TolerantJson(request) = request.map_err(PresetRecallHttpError::json)?;
-    super::routes::validate_request_id(&request.request_id).map_err(PresetRecallHttpError::api)?;
     let address =
         preset_recording_wire::address(request.address).map_err(PresetRecallHttpError::invalid)?;
     let expectation = light_application::ProgrammingPresetRecallRevisionExpectation::Exact;
@@ -44,7 +43,7 @@ async fn recall_preset(
         expected_capture_mode_revision: expectation(request.expected_capture_mode_revision),
         expected_selection_revision: expectation(request.expected_selection_revision),
     };
-    let context = super::routes::http_context(&session, Some(&request.request_id));
+    let context = super::routes::http_context(&session, None);
     let result = run_action(state, session, ActionEnvelope { context, command }).await?;
     let response = super::preset_recall_wire::outcome(result);
     Ok(json_with_etag(response.programmer_revision, response))

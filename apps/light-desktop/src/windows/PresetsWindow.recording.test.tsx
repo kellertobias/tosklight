@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
 	commandReset: vi.fn(async () => true),
 	storePreload: vi.fn(async () => true),
 	recall: vi.fn(async () => null),
+	updateTarget: vi.fn(),
 	preload: {
 		ready: true,
 		armed: false,
@@ -67,6 +68,9 @@ vi.mock(
 vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
 	useCommandLineSurface: () => ({ reset: mocks.commandReset }),
 }));
+vi.mock("../components/control/updateWorkflow", () => ({
+	requestUpdateTarget: mocks.updateTarget,
+}));
 vi.mock("../components/shared/GroupStrip", () => ({ GroupStrip: () => null }));
 
 function firstPresetCell() {
@@ -88,6 +92,7 @@ beforeEach(() => {
 	mocks.commandReset.mockClear();
 	mocks.storePreload.mockClear();
 	mocks.recall.mockClear();
+	mocks.updateTarget.mockClear();
 });
 
 afterEach(cleanup);
@@ -159,6 +164,36 @@ describe("PresetsWindow normal recording boundary", () => {
 			objectId: "2.1",
 			address: { family: "Color", number: 1 },
 		});
+	});
+
+	it("keeps Update ahead of Set, Store, and ordinary recall", () => {
+		mocks.state.updateArmed = true;
+		mocks.state.presetSetArmed = true;
+		mocks.state.storeArmed = true;
+		mocks.presets = [
+			{
+				kind: "preset",
+				id: "2.1",
+				revision: 4,
+				updated_at: "",
+				body: {
+					name: "Blue",
+					number: 1,
+					family: "Color",
+					values: {},
+				},
+			},
+		];
+		render(<PresetsWindow compact />);
+
+		fireEvent.click(firstPresetCell());
+
+		expect(mocks.updateTarget).toHaveBeenCalledWith({
+			family: { type: "preset" },
+			object_id: "2.1",
+		});
+		expect(mocks.recall).not.toHaveBeenCalled();
+		expect(mocks.record).not.toHaveBeenCalled();
 	});
 
 	it("records an empty cell as one action-time overwrite at revision zero", () => {

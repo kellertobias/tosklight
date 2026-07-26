@@ -1,18 +1,4 @@
 import type {
-	CommandLineProjection,
-	ProgrammingSnapshot,
-	SelectionActionOutcome,
-	SelectionActionRequest,
-} from "../../features/programmingInteraction/contracts";
-import type {
-	ProgrammerValuesActionOutcome,
-	ProgrammerValuesActionRequest,
-} from "../../features/programmerValues/contracts";
-import type {
-	ProgrammerPriorityActionOutcome,
-	ProgrammerPriorityActionRequest,
-} from "../../features/programmerPriority/contracts";
-import type {
 	PresetRecallOutcome,
 	PresetRecallRequest,
 	PresetRecallScope,
@@ -25,10 +11,20 @@ import type {
 	ProgrammerPreloadValuesActionOutcome,
 	ProgrammerPreloadValuesActionRequest,
 } from "../../features/programmerPreloadValues/contracts";
-import {
-	decodeProgrammerPriorityActionOutcome,
-	encodeProgrammerPriorityActionRequest,
-} from "../programmerPriorityWire";
+import type {
+	ProgrammerPriorityActionOutcome,
+	ProgrammerPriorityActionRequest,
+} from "../../features/programmerPriority/contracts";
+import type {
+	ProgrammerValuesActionOutcome,
+	ProgrammerValuesActionRequest,
+} from "../../features/programmerValues/contracts";
+import type {
+	CommandLineProjection,
+	ProgrammingSnapshot,
+	SelectionActionOutcome,
+	SelectionActionRequest,
+} from "../../features/programmingInteraction/contracts";
 import {
 	decodePresetRecallOutcome,
 	encodePresetRecallRequest,
@@ -42,13 +38,17 @@ import {
 	encodeProgrammerPreloadValuesActionRequest,
 } from "../programmerPreloadValuesWire";
 import {
-	decodeSelectionActionOutcome,
-	encodeSelectionActionRequest,
-} from "../programmingSelectionWire";
+	decodeProgrammerPriorityActionOutcome,
+	encodeProgrammerPriorityActionRequest,
+} from "../programmerPriorityWire";
 import {
 	decodeProgrammerValuesActionOutcome,
 	encodeProgrammerValuesActionRequest,
 } from "../programmerValuesWire";
+import {
+	decodeSelectionActionOutcome,
+	encodeSelectionActionRequest,
+} from "../programmingSelectionWire";
 import {
 	decodeProgrammingCommandLine,
 	decodeProgrammingInteractionSnapshot,
@@ -143,7 +143,7 @@ export class ProgrammingApiClient {
 		const value = await this.transport.commandWithRequestId(
 			"preset.recall.action",
 			{ show_id: scope.showId, request: wireRequest },
-			wireRequest.request_id,
+			request.requestId,
 		);
 		return decodePresetRecallOutcome(value, scope.userId, request);
 	}

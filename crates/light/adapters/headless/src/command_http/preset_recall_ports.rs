@@ -57,6 +57,7 @@ fn environment(
     // lock keeps it current through the mutation, while deriving Groups here prevents a stale or
     // independently replaced engine snapshot from changing recall membership.
     let groups = decode_groups(&document)?;
+    let (selectable_targets, target_expansions) = selectable_targets(ports);
     Ok(ProgrammingPresetRecallEnvironment {
         show_id: document.id(),
         show_revision: document.revision(),
@@ -66,8 +67,31 @@ fn environment(
         raw_body: Arc::new(object.body().clone()),
         preset: Arc::new(preset),
         groups: Arc::new(groups),
+        selectable_targets: Arc::new(selectable_targets),
+        target_expansions: Arc::new(target_expansions),
         programmer_fade_millis: ports.state().configuration.read().programmer_fade_millis,
     })
+}
+
+fn selectable_targets(
+    ports: &ServerProgrammingPorts<'_>,
+) -> (
+    Vec<light_core::FixtureId>,
+    HashMap<light_core::FixtureId, Vec<light_core::FixtureId>>,
+) {
+    let mut targets = Vec::new();
+    let mut expansions = HashMap::new();
+    for fixture in ports.state().engine.snapshot().fixtures.iter() {
+        let selectable = super::super::selectable_fixture_ids(fixture);
+        targets.extend(selectable.iter().copied());
+        expansions.insert(fixture.fixture_id, selectable);
+        for head in &fixture.logical_heads {
+            expansions.insert(head.fixture_id, vec![head.fixture_id]);
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    targets.retain(|target| seen.insert(*target));
+    (targets, expansions)
 }
 
 fn decode_groups(

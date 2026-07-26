@@ -296,13 +296,15 @@ export type PresetRecordErrorKind = "invalid" | "unauthorized" | "forbidden" | "
 
 export type PresetRecordErrorResponse = { kind: PresetRecordErrorKind, error: string, current_revision?: number | null, retryable: boolean, };
 
-export type PresetRecallRequest = { request_id: string, address: PresetRecordingAddress, expected_preset_revision: number, expected_show_revision: number, expected_programmer_revision: number, expected_capture_mode_revision: number, expected_selection_revision: number, };
+export type PresetRecallRequest = { address: PresetRecordingAddress, expected_preset_revision: number, expected_show_revision: number, expected_programmer_revision: number, expected_capture_mode_revision: number, expected_selection_revision: number, };
 
 export type RecalledPresetProjection = { id: string, revision: number, body: unknown, };
 
+export type PresetRecallDisposition = "recalled" | "targets_selected";
+
 export type PresetRecallActionState = { "status": "changed", projection?: ProgrammingValuesProjection | null, event_sequence?: number | null, } | { "status": "no_change" };
 
-export type PresetRecallOutcome = { request_id: string, correlation_id: string, replayed: boolean, show_revision: number, programmer_revision: number, capture_mode_revision: number, selection_revision: number, interaction_event_sequence?: number | null, applied_fixtures: number, active_context: string, preset: RecalledPresetProjection, warning?: string | null, } & ({ "status": "changed", projection?: ProgrammingValuesProjection | null, event_sequence?: number | null, } | { "status": "no_change" });
+export type PresetRecallOutcome = { correlation_id: string, disposition: PresetRecallDisposition, show_revision: number, programmer_revision: number, capture_mode_revision: number, selection_revision: number, interaction_event_sequence?: number | null, applied_fixtures: number, selected_targets: number, active_context?: string | null, preset: RecalledPresetProjection, warning?: string | null, } & ({ "status": "changed", projection?: ProgrammingValuesProjection | null, event_sequence?: number | null, } | { "status": "no_change" });
 
 export type PresetRecallErrorKind = "invalid" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "unavailable" | "internal";
 

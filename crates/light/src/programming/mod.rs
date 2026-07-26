@@ -112,9 +112,10 @@ pub use preload_values_projection::{
     ProgrammingPreloadValuesSnapshot,
 };
 pub use preset_recall::{
-    ProgrammingPresetRecallEnvironment, ProgrammingPresetRecallOutcome,
-    ProgrammingPresetRecallPorts, ProgrammingPresetRecallRequest, ProgrammingPresetRecallResult,
-    ProgrammingPresetRecallRevisionExpectation, ProgrammingRecalledPresetProjection,
+    ProgrammingPresetRecallDisposition, ProgrammingPresetRecallEnvironment,
+    ProgrammingPresetRecallOutcome, ProgrammingPresetRecallPorts, ProgrammingPresetRecallRequest,
+    ProgrammingPresetRecallResult, ProgrammingPresetRecallRevisionExpectation,
+    ProgrammingRecalledPresetProjection,
 };
 pub use preset_recording::{
     ProgrammingPresetActiveShowPorts, ProgrammingPresetCommit, ProgrammingPresetCommitResult,

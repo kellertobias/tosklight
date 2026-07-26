@@ -9,6 +9,7 @@ export interface PresetRecallScope {
 }
 
 export interface PresetRecallRequest {
+	/** WebSocket envelope correlation only; never sent as HTTP action identity. */
 	requestId: string;
 	presetId: string;
 	address: PresetAddress;
@@ -21,16 +22,16 @@ export interface PresetRecallRequest {
 }
 
 interface PresetRecallOutcomeBase {
-	requestId: string;
 	correlationId: string;
-	replayed: boolean;
+	disposition: "recalled" | "targets_selected";
 	showRevision: number;
 	programmerRevision: number;
 	captureModeRevision: number;
 	selectionRevision: number;
 	interactionEventSequence: number | null;
 	appliedFixtures: number;
-	activeContext: string;
+	selectedTargets: number;
+	activeContext: string | null;
 	preset: ShowObject<"preset">;
 	warning: string | null;
 }

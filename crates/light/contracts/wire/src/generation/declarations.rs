@@ -402,6 +402,7 @@ fn programming(config: &Config) -> Vec<String> {
         PresetRecordErrorResponse::decl(config),
         PresetRecallRequest::decl(config),
         RecalledPresetProjection::decl(config),
+        PresetRecallDisposition::decl(config),
         PresetRecallActionState::decl(config),
         PresetRecallOutcome::decl(config),
         PresetRecallErrorKind::decl(config),

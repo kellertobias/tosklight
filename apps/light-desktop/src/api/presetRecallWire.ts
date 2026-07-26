@@ -14,7 +14,6 @@ import type {
 	PresetRecordingFamily as WirePresetRecordingFamily,
 } from "./generated/light-wire";
 import {
-	booleanAt,
 	enumAt,
 	exactRecordAt,
 	integerAt,
@@ -44,7 +43,6 @@ export function encodePresetRecallRequest(
 ): WirePresetRecallRequest {
 	validateRequest(request);
 	return {
-		request_id: request.requestId,
 		address: {
 			family: WIRE_FAMILY[request.address.family],
 			number: request.address.number,
@@ -64,10 +62,11 @@ export function decodePresetRecallOutcome(
 ): PresetRecallOutcome {
 	const response = recordAt(value, "$");
 	const status = enumAt(response.status, "$.status", ["changed", "no_change"]);
+	const disposition = enumAt(response.disposition, "$.disposition", [
+		"recalled",
+		"targets_selected",
+	]);
 	assertOutcomeFields(response);
-	const requestId = stringAt(response.request_id, "$.request_id");
-	if (requestId !== expectedRequest.requestId)
-		throw mismatch("$.request_id", expectedRequest.requestId, requestId);
 	const projection = optionalProjection(
 		response,
 		expectedUserId,
@@ -91,9 +90,8 @@ export function decodePresetRecallOutcome(
 		expectedRequest,
 	);
 	const base = {
-		requestId,
 		correlationId: uuidAt(response.correlation_id, "$.correlation_id"),
-		replayed: booleanAt(response.replayed, "$.replayed"),
+		disposition,
 		showRevision: exactRevision(
 			response.show_revision,
 			"$.show_revision",
@@ -111,18 +109,49 @@ export function decodePresetRecallOutcome(
 		),
 		selectionRevision,
 		interactionEventSequence,
-		appliedFixtures: exactRevision(
-			response.applied_fixtures,
-			"$.applied_fixtures",
-			expectedRequest.selectedFixtureCount,
+		appliedFixtures: integerAt(response.applied_fixtures, "$.applied_fixtures"),
+		selectedTargets: integerAt(response.selected_targets, "$.selected_targets"),
+		activeContext: activeContextAt(
+			response.active_context,
+			expectedRequest,
+			disposition,
 		),
-		activeContext: activeContextAt(response.active_context, expectedRequest),
 		preset: decodeRecalledPreset(response.preset, expectedRequest),
 		warning: optionalString(response, "warning", "$"),
 	};
+	assertDispositionCounts(base, expectedRequest);
 	return status === "changed"
 		? { ...base, status, projection, eventSequence }
 		: { ...base, status, projection: null, eventSequence: null };
+}
+
+function assertDispositionCounts(
+	outcome: {
+		disposition: "recalled" | "targets_selected";
+		appliedFixtures: number;
+		selectedTargets: number;
+	},
+	request: PresetRecallRequest,
+) {
+	const expectedApplied =
+		outcome.disposition === "recalled" ? request.selectedFixtureCount : 0;
+	if (outcome.appliedFixtures !== expectedApplied)
+		throw mismatch(
+			"$.applied_fixtures",
+			expectedApplied,
+			outcome.appliedFixtures,
+		);
+	if (outcome.disposition === "recalled" && outcome.selectedTargets !== 0)
+		throw mismatch("$.selected_targets", 0, outcome.selectedTargets);
+	if (
+		outcome.disposition === "targets_selected" &&
+		request.selectedFixtureCount !== 0
+	)
+		throw mismatch(
+			"$.disposition",
+			"recalled for a non-empty selection",
+			outcome.disposition,
+		);
 }
 
 function optionalProjection(
@@ -252,7 +281,13 @@ function valuesAt(value: unknown, path: string) {
 		recordAt(attributes, `${path}.${owner}`);
 }
 
-function activeContextAt(value: unknown, request: PresetRecallRequest) {
+function activeContextAt(
+	value: unknown,
+	request: PresetRecallRequest,
+	disposition: "recalled" | "targets_selected",
+) {
+	if (disposition === "targets_selected")
+		return value == null ? null : stringAt(value, "$.active_context");
 	const context = stringAt(value, "$.active_context");
 	const expected = `preset:${presetStorageKey(request.address)}`;
 	if (context !== expected)
@@ -284,15 +319,15 @@ function validateRequest(request: PresetRecallRequest) {
 
 function assertOutcomeFields(response: Record<string, unknown>) {
 	assertOptionalFields(response, [
-		"request_id",
 		"correlation_id",
-		"replayed",
+		"disposition",
 		"show_revision",
 		"programmer_revision",
 		"capture_mode_revision",
 		"selection_revision",
 		"interaction_event_sequence",
 		"applied_fixtures",
+		"selected_targets",
 		"active_context",
 		"preset",
 		"status",

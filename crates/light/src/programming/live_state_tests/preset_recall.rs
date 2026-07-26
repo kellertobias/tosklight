@@ -117,6 +117,11 @@ impl RecallSetup {
                     ..GroupDefinition::default()
                 },
             )])),
+            selectable_targets: Arc::new(vec![fixtures[1], fixtures[0]]),
+            target_expansions: Arc::new(HashMap::from([
+                (fixtures[0], vec![fixtures[0]]),
+                (fixtures[1], vec![fixtures[1]]),
+            ])),
             programmer_fade_millis: 900,
         };
         Self {
@@ -157,6 +162,13 @@ impl RecallSetup {
                 &self.ports,
             )
             .unwrap()
+    }
+
+    fn clear_selection_request(&mut self) -> ProgrammingPresetRecallRequest {
+        let session = SessionId(self.context.session_id.unwrap());
+        let revision = self.registry.select(session, []);
+        self.request.expected_selection_revision = exact(revision);
+        self.request.clone()
     }
 }
 
@@ -209,16 +221,21 @@ fn preset_recall_is_one_atomic_ordered_values_transition_with_one_timestamp_and_
     assert_eq!(setup.events.latest_sequence(), 1);
     assert_eq!(result.preset.raw_body["future_extension"]["retain"], true);
 
-    let replay = setup.apply("recall-1", setup.request.clone());
-    assert!(replay.replayed);
-    assert_eq!(replay.interaction_event_sequence, None);
-    assert_eq!(*setup.ports.environment_reads.lock(), 1);
+    let mut repeated_request = setup.request.clone();
+    repeated_request.expected_values_revision = exact(1);
+    let repeated = setup.apply("recall-1", repeated_request);
+    assert!(matches!(
+        repeated.outcome,
+        ProgrammingPresetRecallOutcome::NoChange { .. }
+    ));
+    assert_eq!(repeated.interaction_event_sequence, None);
+    assert_eq!(*setup.ports.environment_reads.lock(), 2);
     assert_eq!(setup.ports.persisted.lock().len(), 1);
     assert_eq!(setup.events.latest_sequence(), 1);
 }
 
 #[test]
-fn gesture_close_is_one_sparse_interaction_transition_and_replay_emits_nothing() {
+fn gesture_close_is_one_sparse_interaction_transition_and_repeat_emits_nothing() {
     let setup = RecallSetup::new();
     setup.apply("recall-values", setup.request.clone());
     let session = SessionId(setup.context.session_id.unwrap());
@@ -261,16 +278,152 @@ fn gesture_close_is_one_sparse_interaction_transition_and_replay_emits_nothing()
     assert_eq!(setup.events.latest_sequence(), 2);
     assert_eq!(setup.ports.persisted.lock().len(), 2);
 
-    let replay = setup.apply("recall-close-gesture", request);
-    assert!(replay.replayed);
-    assert_eq!(replay.interaction_event_sequence, Some(2));
-    assert_eq!(replay.selection_revision, closed.selection_revision);
+    request.expected_selection_revision = exact(closed.selection_revision);
+    let repeated = setup.apply("recall-close-gesture", request);
+    assert_eq!(repeated.interaction_event_sequence, None);
+    assert_eq!(repeated.selection_revision, closed.selection_revision);
     assert_eq!(
         crate::programming::values_projection::projection_read_count(),
         0
     );
     assert_eq!(setup.events.latest_sequence(), 2);
     assert_eq!(setup.ports.persisted.lock().len(), 2);
+}
+
+#[test]
+fn empty_selection_first_tap_selects_targets_without_recalling_then_second_tap_recalls() {
+    let mut setup = RecallSetup::new();
+    let request = setup.clear_selection_request();
+    let session = SessionId(setup.context.session_id.unwrap());
+
+    let selected = setup.apply("select-targets", request);
+
+    assert_eq!(
+        selected.disposition,
+        ProgrammingPresetRecallDisposition::TargetsSelected
+    );
+    assert!(matches!(
+        selected.outcome,
+        ProgrammingPresetRecallOutcome::Changed {
+            values_revision: 0,
+            projection: None,
+            values_event_sequence: None,
+        }
+    ));
+    assert_eq!(
+        (selected.applied_fixtures, selected.selected_targets),
+        (0, 2)
+    );
+    assert_eq!(selected.interaction_event_sequence, Some(1));
+    assert_eq!(
+        setup.registry.selection(session).unwrap().selected,
+        vec![setup.fixtures[1], setup.fixtures[0]]
+    );
+    let programmer = setup.registry.get(session).unwrap();
+    assert!(programmer.values.is_empty());
+    assert_eq!(programmer.active_context, None);
+    assert_eq!(*setup.ports.persisted.lock(), vec!["preset.select_targets"]);
+
+    let mut recall = setup.request.clone();
+    recall.expected_selection_revision = exact(selected.selection_revision);
+    let recalled = setup.apply("recall-second-tap", recall);
+    assert_eq!(
+        recalled.disposition,
+        ProgrammingPresetRecallDisposition::Recalled
+    );
+    assert_eq!(recalled.applied_fixtures, 2);
+    assert_eq!(recalled.selected_targets, 0);
+    assert!(matches!(
+        recalled.outcome,
+        ProgrammingPresetRecallOutcome::Changed {
+            values_revision: 1,
+            projection: Some(_),
+            values_event_sequence: Some(_),
+        }
+    ));
+}
+
+#[test]
+fn color_position_and_mixed_presets_share_empty_selection_target_behavior() {
+    for family in [
+        PresetFamily::Color,
+        PresetFamily::Position,
+        PresetFamily::Mixed,
+    ] {
+        let mut setup = RecallSetup::new();
+        let address = PresetAddress::new(family, 1).unwrap();
+        setup.request.address = address;
+        setup.ports.environment.address = address;
+        Arc::make_mut(&mut setup.ports.environment.preset).family = family;
+        let request = setup.clear_selection_request();
+
+        let result = setup.apply("select-family-targets", request);
+
+        assert_eq!(
+            result.disposition,
+            ProgrammingPresetRecallDisposition::TargetsSelected
+        );
+        assert_eq!(result.selected_targets, 2);
+        assert_eq!(
+            setup
+                .registry
+                .selection(SessionId(setup.context.session_id.unwrap()))
+                .unwrap()
+                .selected,
+            vec![setup.fixtures[1], setup.fixtures[0]]
+        );
+    }
+}
+
+#[test]
+fn missing_targets_are_skipped_with_warning_and_empty_preset_is_a_true_no_op() {
+    let mut setup = RecallSetup::new();
+    let missing = FixtureId::new();
+    Arc::make_mut(&mut setup.ports.environment.preset)
+        .values
+        .insert(
+            missing,
+            HashMap::from([(AttributeKey::intensity(), AttributeValue::Normalized(0.5))]),
+        );
+    let request = setup.clear_selection_request();
+    let selected = setup.apply("select-partial", request);
+    assert_eq!(selected.selected_targets, 2);
+    assert!(
+        selected
+            .warning
+            .as_deref()
+            .is_some_and(|warning| warning.contains("1 missing fixture target"))
+    );
+
+    let mut empty = RecallSetup::new();
+    let preset = Arc::make_mut(&mut empty.ports.environment.preset);
+    preset.values.clear();
+    preset.group_values.clear();
+    let request = empty.clear_selection_request();
+    let revision_before = empty
+        .registry
+        .selection(SessionId(empty.context.session_id.unwrap()))
+        .unwrap()
+        .revision;
+    let result = empty.apply("empty-preset", request);
+    assert_eq!(
+        result.disposition,
+        ProgrammingPresetRecallDisposition::TargetsSelected
+    );
+    assert!(matches!(
+        result.outcome,
+        ProgrammingPresetRecallOutcome::NoChange { .. }
+    ));
+    assert_eq!(result.selected_targets, 0);
+    assert_eq!(result.interaction_event_sequence, None);
+    assert_eq!(
+        empty
+            .registry
+            .selection(SessionId(empty.context.session_id.unwrap()))
+            .unwrap()
+            .revision,
+        revision_before
+    );
 }
 
 #[test]

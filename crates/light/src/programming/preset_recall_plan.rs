@@ -6,6 +6,124 @@ use light_programmer::{
 };
 use std::collections::{HashMap, HashSet};
 
+pub(super) struct PresetTargetPlan {
+    pub(super) selected: Vec<FixtureId>,
+    pub(super) warning: Option<String>,
+}
+
+/// Resolve a Preset's stored owners into one frozen programmer selection.
+///
+/// `Preset` currently stores fixture and Group owners in maps, so it has no stored cross-owner
+/// order to preserve. The active desk's selectable catalog is therefore the deterministic fallback
+/// order. Whole-fixture owners expand through the same logical-head map used by ordinary selection.
+pub(super) fn target_selection(
+    preset: &Preset,
+    groups: &HashMap<String, light_programmer::GroupDefinition>,
+    selectable_targets: &[FixtureId],
+    target_expansions: &HashMap<FixtureId, Vec<FixtureId>>,
+) -> PresetTargetPlan {
+    let selectable = selectable_targets.iter().copied().collect::<HashSet<_>>();
+    let mut requested = HashSet::new();
+    let mut missing_fixture_targets = 0usize;
+    let mut missing_groups = Vec::new();
+    let mut missing_group_members = 0usize;
+
+    for (fixture_id, attributes) in &preset.values {
+        if attributes.is_empty() {
+            continue;
+        }
+        if !append_expanded_target(&mut requested, *fixture_id, target_expansions, &selectable) {
+            missing_fixture_targets += 1;
+        }
+    }
+
+    let mut group_ids = preset
+        .group_values
+        .iter()
+        .filter(|(_, attributes)| !attributes.is_empty())
+        .map(|(group_id, _)| group_id)
+        .collect::<Vec<_>>();
+    group_ids.sort();
+    for group_id in group_ids {
+        match light_programmer::resolve_group(group_id, groups) {
+            Ok(members) => {
+                for fixture_id in members {
+                    if !append_expanded_target(
+                        &mut requested,
+                        fixture_id,
+                        target_expansions,
+                        &selectable,
+                    ) {
+                        missing_group_members += 1;
+                    }
+                }
+            }
+            Err(_) => missing_groups.push(group_id.clone()),
+        }
+    }
+
+    let selected = selectable_targets
+        .iter()
+        .copied()
+        .filter(|fixture_id| requested.contains(fixture_id))
+        .collect();
+    let warning = target_warning(
+        missing_fixture_targets,
+        missing_group_members,
+        &missing_groups,
+    );
+    PresetTargetPlan { selected, warning }
+}
+
+fn append_expanded_target(
+    requested: &mut HashSet<FixtureId>,
+    owner: FixtureId,
+    target_expansions: &HashMap<FixtureId, Vec<FixtureId>>,
+    selectable: &HashSet<FixtureId>,
+) -> bool {
+    let Some(expanded) = target_expansions.get(&owner) else {
+        return false;
+    };
+    let mut found = false;
+    for target in expanded {
+        if selectable.contains(target) {
+            requested.insert(*target);
+            found = true;
+        }
+    }
+    found
+}
+
+fn target_warning(
+    missing_fixture_targets: usize,
+    missing_group_members: usize,
+    missing_groups: &[String],
+) -> Option<String> {
+    let missing_targets = missing_fixture_targets + missing_group_members;
+    if missing_targets == 0 && missing_groups.is_empty() {
+        return None;
+    }
+    let mut skipped = Vec::new();
+    if missing_targets > 0 {
+        skipped.push(format!(
+            "{missing_targets} missing fixture target{}",
+            if missing_targets == 1 { "" } else { "s" }
+        ));
+    }
+    if !missing_groups.is_empty() {
+        skipped.push(format!(
+            "{} missing Group{} ({})",
+            missing_groups.len(),
+            if missing_groups.len() == 1 { "" } else { "s" },
+            missing_groups.join(", ")
+        ));
+    }
+    Some(format!(
+        "Preset skipped {}. Restore the missing show objects or update the Preset.",
+        skipped.join(" and ")
+    ))
+}
+
 pub(super) fn plan(
     selection: &ProgrammerSelection,
     preset: &Preset,
@@ -309,6 +427,96 @@ mod tests {
                 (first, "intensity".into(), normalized(0.1)),
             ]
         );
+    }
+
+    #[test]
+    fn target_selection_expands_parents_deduplicates_unions_and_uses_desk_order() {
+        let parent = FixtureId::new();
+        let head_a = FixtureId::new();
+        let head_b = FixtureId::new();
+        let standalone = FixtureId::new();
+        let missing = FixtureId::new();
+        let intensity = AttributeKey::intensity();
+        let preset = Preset {
+            family: PresetFamily::Mixed,
+            number: 1,
+            values: HashMap::from([
+                (
+                    parent,
+                    HashMap::from([(intensity.clone(), normalized(0.1))]),
+                ),
+                (
+                    standalone,
+                    HashMap::from([(intensity.clone(), normalized(0.2))]),
+                ),
+                (
+                    missing,
+                    HashMap::from([(intensity.clone(), normalized(0.3))]),
+                ),
+            ]),
+            group_values: HashMap::from([
+                (
+                    "front".into(),
+                    HashMap::from([(intensity.clone(), normalized(0.4))]),
+                ),
+                ("gone".into(), HashMap::from([(intensity, normalized(0.5))])),
+            ]),
+            ..Preset::default()
+        };
+        let groups = HashMap::from([("front".into(), group("front", vec![standalone, head_b]))]);
+        let desk_order = vec![head_b, standalone, head_a];
+        let expansions = HashMap::from([
+            (parent, vec![head_a, head_b]),
+            (head_a, vec![head_a]),
+            (head_b, vec![head_b]),
+            (standalone, vec![standalone]),
+        ]);
+
+        let planned = target_selection(&preset, &groups, &desk_order, &expansions);
+
+        assert_eq!(planned.selected, desk_order);
+        let warning = planned.warning.unwrap();
+        assert!(warning.contains("1 missing fixture target"));
+        assert!(warning.contains("1 missing Group (gone)"));
+    }
+
+    #[test]
+    fn target_selection_ignores_empty_values_and_empty_groups_without_warning() {
+        let fixture = FixtureId::new();
+        let preset = Preset {
+            values: HashMap::from([(fixture, HashMap::new())]),
+            group_values: HashMap::from([("empty".into(), HashMap::new())]),
+            ..Preset::default()
+        };
+        let expansions = HashMap::from([(fixture, vec![fixture])]);
+
+        let planned = target_selection(&preset, &HashMap::new(), &[fixture], &expansions);
+
+        assert!(planned.selected.is_empty());
+        assert_eq!(planned.warning, None);
+    }
+
+    #[test]
+    fn target_selection_is_shared_by_color_position_and_mixed_presets() {
+        let fixture = FixtureId::new();
+        let expansions = HashMap::from([(fixture, vec![fixture])]);
+
+        for (family, attribute) in [
+            (PresetFamily::Color, AttributeKey("red".into())),
+            (PresetFamily::Position, AttributeKey("pan".into())),
+            (PresetFamily::Mixed, AttributeKey::intensity()),
+        ] {
+            let preset = Preset {
+                family,
+                values: HashMap::from([(fixture, HashMap::from([(attribute, normalized(0.5))]))]),
+                ..Preset::default()
+            };
+
+            let planned = target_selection(&preset, &HashMap::new(), &[fixture], &expansions);
+
+            assert_eq!(planned.selected, vec![fixture]);
+            assert_eq!(planned.warning, None);
+        }
     }
 
     fn selection(selected: Vec<FixtureId>) -> ProgrammerSelection {

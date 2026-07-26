@@ -38,6 +38,12 @@ pub struct ProgrammingPresetRecallEnvironment {
     pub raw_body: Arc<serde_json::Value>,
     pub preset: Arc<Preset>,
     pub groups: Arc<HashMap<String, GroupDefinition>>,
+    /// Every currently selectable fixture or logical-head identity in deterministic desk order.
+    /// Unpatched fixtures remain in this catalog; deleted identities do not.
+    pub selectable_targets: Arc<Vec<light_core::FixtureId>>,
+    /// Stored whole-fixture owners expand through the same logical-head contract as an ordinary
+    /// fixture selection. Logical-head owners map to themselves.
+    pub target_expansions: Arc<HashMap<light_core::FixtureId, Vec<light_core::FixtureId>>>,
     pub programmer_fade_millis: u64,
 }
 
@@ -64,6 +70,12 @@ pub enum ProgrammingPresetRecallOutcome {
     },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProgrammingPresetRecallDisposition {
+    Recalled,
+    TargetsSelected,
+}
+
 impl ProgrammingPresetRecallOutcome {
     pub const fn values_revision(&self) -> u64 {
         match self {
@@ -88,13 +100,13 @@ impl ProgrammingPresetRecallOutcome {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProgrammingPresetRecallResult {
     pub context: ActionContext,
-    pub request_id: String,
-    pub replayed: bool,
+    pub disposition: ProgrammingPresetRecallDisposition,
     pub applied_fixtures: usize,
+    pub selected_targets: usize,
     pub selection_revision: u64,
     pub interaction_event_sequence: Option<u64>,
     pub capture_mode_revision: u64,
-    pub active_context: String,
+    pub active_context: Option<String>,
     pub preset: ProgrammingRecalledPresetProjection,
     pub outcome: ProgrammingPresetRecallOutcome,
     pub warning: Option<String>,

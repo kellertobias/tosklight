@@ -182,7 +182,6 @@ export class PresetRecallWriter implements PresetRecallActions {
 			state.deskId !== this.options.scope.deskId ||
 			state.status !== "ready" ||
 			!state.selection ||
-			state.selection.selected.length === 0 ||
 			state.pendingCapabilities.has("selection") ||
 			!this.options.programmingStore.isScopeCurrent(scope)
 		)
@@ -191,10 +190,7 @@ export class PresetRecallWriter implements PresetRecallActions {
 	}
 
 	private async send(authority: RecallAuthority) {
-		return this.options.transport.recall(
-			this.options.scope,
-			authority.request,
-		);
+		return this.options.transport.recall(this.options.scope, authority.request);
 	}
 
 	private async reconcile(
@@ -344,8 +340,6 @@ function assertOutcome(
 	outcome: PresetRecallOutcome,
 	userId: string,
 ) {
-	if (outcome.requestId !== request.requestId)
-		throw new Error("Preset recall response request ID does not match");
 	if (outcome.preset.id !== request.presetId)
 		throw new Error("Preset recall response object does not match");
 	if (outcome.projection && outcome.projection.userId !== userId)

@@ -9,8 +9,6 @@ use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PresetRecallRequest {
-    #[schemars(length(min = 1, max = 128))]
-    pub request_id: String,
     pub address: PresetRecordingAddress,
     #[ts(type = "number")]
     pub expected_preset_revision: u64,
@@ -36,9 +34,8 @@ pub struct RecalledPresetProjection {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PresetRecallOutcome {
-    pub request_id: String,
     pub correlation_id: Uuid,
-    pub replayed: bool,
+    pub disposition: PresetRecallDisposition,
     #[ts(type = "number")]
     pub show_revision: u64,
     #[ts(type = "number")]
@@ -52,13 +49,24 @@ pub struct PresetRecallOutcome {
     pub interaction_event_sequence: Option<u64>,
     #[ts(type = "number")]
     pub applied_fixtures: u64,
-    pub active_context: String,
+    #[ts(type = "number")]
+    pub selected_targets: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub active_context: Option<String>,
     pub preset: RecalledPresetProjection,
     #[serde(flatten)]
     pub outcome: PresetRecallActionState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub warning: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PresetRecallDisposition {
+    Recalled,
+    TargetsSelected,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -108,7 +116,6 @@ mod tests {
     #[test]
     fn request_ignores_future_client_fields_without_authoring_values() {
         let value = serde_json::json!({
-            "request_id": "recall-1",
             "address": {"family":"color", "number":1},
             "expected_preset_revision": 2,
             "expected_show_revision": 3,

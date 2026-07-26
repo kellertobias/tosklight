@@ -30,15 +30,9 @@
       "type": "integer",
       "format": "uint64",
       "minimum": 0
-    },
-    "request_id": {
-      "type": "string",
-      "maxLength": 128,
-      "minLength": 1
     }
   },
   "required": [
-    "request_id",
     "address",
     "expected_preset_revision",
     "expected_show_revision",

@@ -5,8 +5,8 @@ import {
 	presetAddress,
 	presetStorageKey,
 } from "../../../apps/light-desktop/src/presetFamilies";
-import type { ApiDriver } from "../core/api";
 import type { BrowserCommands } from "../command-selection/commandScenario";
+import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
 import type { SimulatedHardware } from "../hardware/hardwareScenario";
 import { recallPreset } from "./presetRecall";
@@ -50,7 +50,11 @@ class PresetActionSurface {
 		private readonly route: PresetRoute,
 	) {}
 
-	store(family: PresetFamily, number: number, options: { mode: "merge" | "overwrite" }) {
+	store(
+		family: PresetFamily,
+		number: number,
+		options: { mode: "merge" | "overwrite" },
+	) {
 		return this.owner.storeVia(this.route, family, number, options.mode);
 	}
 
@@ -112,7 +116,11 @@ export class BrowserPresets {
 	) {}
 	private actionIndex = 0;
 
-	store(family: PresetFamily, number: number, options: { mode: "merge" | "overwrite" }) {
+	store(
+		family: PresetFamily,
+		number: number,
+		options: { mode: "merge" | "overwrite" },
+	) {
 		return this.unqualified(
 			"store",
 			family,
@@ -172,7 +180,9 @@ export class BrowserPresets {
 			});
 		} else if (route === "pool") {
 			await this.activateFamily(family);
-			await this.desk.click(this.page.locator(".global-store-button:visible").first());
+			await this.desk.click(
+				this.page.locator(".global-store-button:visible").first(),
+			);
 			await this.desk.click(this.presetCard(number));
 			const choice = this.page.getByRole("button", {
 				name: mode === "merge" ? "Merge" : "Overwrite",
@@ -217,6 +227,48 @@ export class BrowserPresets {
 		else await this.sendOsc([...presetAddressKeys(family, number), "enter"]);
 	}
 
+	async tapEmptyPoolSlot(family: PresetFamily, number: number) {
+		number = validPresetNumber(number);
+		if (await this.object(family, number))
+			throw new Error(`${family} Preset ${number} is populated`);
+		await this.activateFamily(family);
+		await this.desk.click(this.presetCard(number));
+	}
+
+	async expectVisibleSelection(...fixtureNumbers: number[]) {
+		const patch = await this.api.patch();
+		const fixtures = fixtureNumbers.map((number) => {
+			const fixture = patch.fixtures.find(
+				(candidate) => candidate.fixture_number === number,
+			);
+			if (!fixture)
+				throw new Error(`Fixture ${number} is not present in the active patch`);
+			return fixture;
+		});
+		for (const fixture of fixtures) {
+			const fixtureId = cssAttributeValue(fixture.fixture_id);
+			await expect(
+				this.page.locator(
+					`[data-pane-type="fixtures"] .ui-data-table-row[data-fixture-id="${fixtureId}"]`,
+				),
+			).toHaveClass(/(?:^|\s)selected(?:\s|$)/);
+			await expect(
+				this.page.locator(
+					`[data-pane-type="stage"] .stage-fixture[data-fixture-id="${fixtureId}"]`,
+				),
+			).toHaveClass(/(?:^|\s)selected(?:\s|$)/);
+		}
+	}
+
+	async expectVisibleSelectionCount(count: number) {
+		await expect(
+			this.page.locator('[data-pane-type="fixtures"] .ui-window-info b'),
+		).toHaveText(`${count} selected`);
+		await expect(
+			this.page.locator('[data-pane-type="stage"] .ui-window-info b'),
+		).toHaveText(`${count} selected`);
+	}
+
 	async editVia(
 		route: PresetRoute,
 		family: PresetFamily,
@@ -224,11 +276,17 @@ export class BrowserPresets {
 		properties: PresetProperties,
 	) {
 		if (route !== "pool")
-			throw new Error(`Preset button customization has no truthful ${route} route`);
+			throw new Error(
+				`Preset button customization has no truthful ${route} route`,
+			);
 		await this.commands.clear();
 		await this.activateFamily(family);
 		const card = this.presetCard(validPresetNumber(number));
-		if (!(await card.evaluate((element) => element.classList.contains("set-target"))))
+		if (
+			!(await card.evaluate((element) =>
+				element.classList.contains("set-target"),
+			))
+		)
 			await this.desk.click(
 				this.page.locator('[data-keypad-key="SET"]:visible').first(),
 			);
@@ -241,7 +299,9 @@ export class BrowserPresets {
 			await dialog.getByLabel("Title").fill(properties.title);
 		if (properties.icon) {
 			await dialog.getByRole("button", { name: /Choose icon/i }).click();
-			await this.page.getByRole("button", { name: `Use ${properties.icon}` }).click();
+			await this.page
+				.getByRole("button", { name: `Use ${properties.icon}` })
+				.click();
 		}
 		if (properties.color) {
 			await dialog.getByRole("button", { name: /#[0-9a-f]{6}/i }).click();
@@ -260,7 +320,11 @@ export class BrowserPresets {
 		if (route === "api") await this.commands.via.api.execute(command);
 		else if (route === "keypad") await this.commands.via.ui.execute(command);
 		else if (route === "osc")
-			await this.sendOsc(["delete", ...presetAddressKeys(family, number), "enter"]);
+			await this.sendOsc([
+				"delete",
+				...presetAddressKeys(family, number),
+				"enter",
+			]);
 		else throw new Error("Preset pool has no visible delete action");
 		await expect.poll(async () => this.object(family, number)).toBeNull();
 	}
@@ -295,9 +359,13 @@ export class BrowserPresets {
 		await this.activateFamily(family);
 		const card = this.presetCard(validPresetNumber(number));
 		if (properties.title !== undefined)
-			await expect(card.getByText(properties.title, { exact: true })).toBeVisible();
+			await expect(
+				card.getByText(properties.title, { exact: true }),
+			).toBeVisible();
 		if (properties.icon !== undefined)
-			await expect(card.getByText(properties.icon, { exact: true })).toBeVisible();
+			await expect(
+				card.getByText(properties.icon, { exact: true }),
+			).toBeVisible();
 		if (properties.color !== undefined)
 			await expect
 				.poll(() =>
@@ -387,7 +455,12 @@ export class BrowserPresets {
 	}
 
 	private session() {
-		if (!this.api.session) throw new Error("Preset helper requires an API session");
+		if (!this.api.session)
+			throw new Error("Preset helper requires an API session");
 		return this.api.session;
 	}
+}
+
+function cssAttributeValue(value: string): string {
+	return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }

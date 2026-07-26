@@ -130,6 +130,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario.create_and_open_show("Preset recall route").await;
     let selected = [light_core::FixtureId::new(), light_core::FixtureId::new()];
+    let missing = light_core::FixtureId::new();
     let group = light_programmer::GroupDefinition {
         id: "5".into(),
         name: "Document group".into(),
@@ -153,7 +154,13 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
         name: "Document look".into(),
         family: light_programmer::PresetFamily::Intensity,
         number: 1,
-        values: HashMap::new(),
+        values: HashMap::from([(
+            missing,
+            HashMap::from([(
+                light_core::AttributeKey::intensity(),
+                light_core::AttributeValue::Normalized(0.2),
+            )]),
+        )]),
         group_values: HashMap::from([(
             "5".into(),
             HashMap::from([(
@@ -177,18 +184,19 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
         .portable_revision()
         .unwrap()
         .value();
-    let selection_revision = scenario
-        .state
-        .programmers
-        .select(scenario.session.id, [selected[1], selected[0]]);
+    let selection_revision = scenario.state.programmers.select(scenario.session.id, []);
 
     // Deliberately contradict the portable Group graph. Recall must derive Group membership from
     // the exact same portable document and revision as the Preset, not this runtime projection.
     let engine_revision = scenario.state.engine.snapshot().revision;
+    let mut unpatched = operational_fixture(selected[0]);
+    unpatched.universe = None;
+    unpatched.address = None;
     scenario
         .state
         .engine
         .replace_snapshot(EngineSnapshot {
+            fixtures: vec![operational_fixture(selected[1]), unpatched].into(),
             groups: vec![light_programmer::GroupDefinition {
                 id: "5".into(),
                 fixtures: vec![selected[1]],
@@ -232,29 +240,69 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
     assert_eq!(response.status(), StatusCode::OK);
     let changed: light_wire::v2::preset_recall::PresetRecallOutcome =
         serde_json::from_value(json(response).await).unwrap();
-    assert_eq!(changed.programmer_revision, 1);
+    assert_eq!(
+        changed.disposition,
+        light_wire::v2::preset_recall::PresetRecallDisposition::TargetsSelected
+    );
+    assert_eq!(changed.programmer_revision, 0);
     assert_eq!(changed.show_revision, show_revision);
     assert_eq!(changed.preset.revision, 1);
     assert_eq!(changed.preset.body["future_extension"]["retained"], true);
-    let light_wire::v2::preset_recall::PresetRecallActionState::Changed {
-        projection: Some(projection),
-        event_sequence: Some(event_sequence),
-    } = changed.outcome
-    else {
-        panic!("Preset recall should return one authoritative values projection")
-    };
-    assert_eq!(event_sequence, baseline + 1);
-    assert_eq!(projection.fixture_values.len(), 1);
-    assert_eq!(projection.fixture_values[0].fixture_id, selected[0].0);
-    assert_eq!(values_event_count(&scenario.state, scenario.session.user.id.0), 1);
+    assert!(matches!(
+        changed.outcome,
+        light_wire::v2::preset_recall::PresetRecallActionState::Changed {
+            projection: None,
+            event_sequence: None,
+        }
+    ));
+    assert_eq!((changed.applied_fixtures, changed.selected_targets), (0, 1));
+    assert_eq!(changed.active_context, None);
+    assert_eq!(changed.interaction_event_sequence, Some(baseline + 1));
+    assert!(
+        changed
+            .warning
+            .as_deref()
+            .is_some_and(|warning| warning.contains("1 missing fixture target"))
+    );
+    assert_eq!(
+        scenario
+            .state
+            .programmers
+            .selection(scenario.session.id)
+            .unwrap()
+            .selected,
+        vec![selected[0]]
+    );
+    assert_eq!(values_event_count(&scenario.state, scenario.session.user.id.0), 0);
     assert_eq!(compatibility_event_count(&scenario.state), compatibility_before);
 
-    let replay = scenario
-        .preset_recall_action(&show_id, Some(&scenario.token), request)
+    let recalled = scenario
+        .preset_recall_action(
+            &show_id,
+            Some(&scenario.token),
+            preset_recall_request(
+                "preset-recall-second-tap",
+                show_revision,
+                changed.selection_revision,
+                0,
+            ),
+        )
         .await;
-    let replay: light_wire::v2::preset_recall::PresetRecallOutcome =
-        serde_json::from_value(json(replay).await).unwrap();
-    assert!(replay.replayed);
+    let recalled: light_wire::v2::preset_recall::PresetRecallOutcome =
+        serde_json::from_value(json(recalled).await).unwrap();
+    assert_eq!(
+        recalled.disposition,
+        light_wire::v2::preset_recall::PresetRecallDisposition::Recalled
+    );
+    let light_wire::v2::preset_recall::PresetRecallActionState::Changed {
+        projection: Some(projection),
+        event_sequence: Some(_),
+    } = recalled.outcome
+    else {
+        panic!("second Preset tap should return one authoritative values projection")
+    };
+    assert_eq!(projection.fixture_values.len(), 1);
+    assert_eq!(projection.fixture_values[0].fixture_id, selected[0].0);
     assert_eq!(values_event_count(&scenario.state, scenario.session.user.id.0), 1);
 
     let no_change = scenario
@@ -264,7 +312,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
             preset_recall_request(
                 "preset-recall-no-change",
                 show_revision,
-                selection_revision,
+                changed.selection_revision,
                 1,
             ),
         )
@@ -284,7 +332,7 @@ async fn preset_recall_uses_one_portable_show_graph_and_one_values_event() {
             preset_recall_request(
                 "preset-recall-conflict",
                 show_revision,
-                selection_revision,
+                changed.selection_revision,
                 0,
             ),
         )
@@ -335,7 +383,7 @@ async fn preset_v1_recall_is_rejected_before_show_reads_while_activation_is_lock
 }
 
 #[tokio::test]
-async fn priority_and_preset_v1_compatibility_reuse_typed_services_and_replay_quietly() {
+async fn priority_replays_but_preset_v1_live_action_reexecutes_without_semantic_replay() {
     let scenario = CommandHttpScenario::new().await;
     let priority = || WsCommand {
         protocol_version: 1,
@@ -411,9 +459,10 @@ async fn priority_and_preset_v1_compatibility_reuse_typed_services_and_replay_qu
     let payload = first.payload.unwrap();
     assert_eq!(
         payload.as_object().unwrap().keys().collect::<Vec<_>>(),
-        vec!["applied", "programmer"]
+        vec!["applied", "programmer", "selected"]
     );
     assert_eq!(payload["applied"], 1);
+    assert_eq!(payload["selected"], 0);
     assert_eq!(payload["programmer"]["active_context"], "preset:1.2");
     assert_eq!(audit_kind_count(&scenario.state, "command_applied"), commands_before + 1);
     assert_eq!(audit_kind_count(&scenario.state, "programmer_changed"), changed_before + 1);
@@ -433,9 +482,9 @@ async fn priority_and_preset_v1_compatibility_reuse_typed_services_and_replay_qu
         values_before + 1
     );
 
-    let replay = dispatch_ws_command(&scenario.state, &scenario.session, recall());
-    assert!(replay.ok, "{:?}", replay.error);
-    assert_eq!(audit_kind_count(&scenario.state, "command_applied"), commands_before + 1);
+    let repeated = dispatch_ws_command(&scenario.state, &scenario.session, recall());
+    assert!(repeated.ok, "{:?}", repeated.error);
+    assert_eq!(audit_kind_count(&scenario.state, "command_applied"), commands_before + 2);
     assert_eq!(audit_kind_count(&scenario.state, "programmer_changed"), changed_before + 1);
     assert_eq!(
         values_event_count(&scenario.state, scenario.session.user.id.0),
@@ -515,7 +564,6 @@ async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_poli
         payload: serde_json::json!({
             "show_id":show_id,
             "request":{
-                "request_id":"preset-ws-exact",
                 "address":{"family":"intensity","number":3},
                 "expected_preset_revision":1,
                 "expected_show_revision":show_revision,
@@ -531,21 +579,26 @@ async fn priority_and_preset_typed_ws_actions_keep_exact_authority_and_lock_poli
     assert!(first.ok, "{:?}", first.error);
     let payload = first.payload.unwrap();
     assert_eq!(payload["status"], "changed");
+    assert_eq!(payload["disposition"], "recalled");
     assert_eq!(payload["preset"]["id"], "1.3");
-    let replay = dispatch_ws_command(&scenario.state, &scenario.session, recall());
-    assert!(replay.ok, "{:?}", replay.error);
-    assert_eq!(replay.payload.unwrap()["replayed"], true);
+    let repeated = dispatch_ws_command(&scenario.state, &scenario.session, recall());
+    assert!(!repeated.ok);
+    assert!(
+        repeated
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("revision conflict"))
+    );
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
 fn preset_recall_request(
-    request_id: &str,
+    _request_id: &str,
     show_revision: u64,
     selection_revision: u64,
     programmer_revision: u64,
 ) -> serde_json::Value {
     serde_json::json!({
-        "request_id":request_id,
         "address":{"family":"intensity","number":1},
         "expected_preset_revision":1,
         "expected_show_revision":show_revision,

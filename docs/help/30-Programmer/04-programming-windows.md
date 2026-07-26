@@ -15,6 +15,14 @@ Use the window that gives the clearest view of the current task; all of them ope
 
 Selections made in Stage, Fixtures, Groups, Presets, or the command line are the same actual programmer selection. While using [Highlight and Step Through](02-selecting-and-setting-values.md#highlight-and-step-through), PREV and NEXT replace that actual selection with one item, ALL restores the current membership of the remembered live source, and any ordinary selection from one of these windows becomes the new complete step basis. Preset, encoder, dialog, and other value changes use the actual selection but do not reset the basis. HIGH remains independent and follows whatever is actually selected.
 
+With an empty programmer selection, the first ordinary tap on a populated Preset selects every
+fixture or logical head for which that Preset stores a value; it does not recall values. Tap the
+Preset again to recall it onto that selection. The selection is immediately shared with Stage,
+Fixtures, the command line, OSC, and attached controls. Unpatched fixtures remain selectable.
+Targets that no longer exist are skipped and reported without substituting another fixture. An
+empty Preset slot remains inactive unless a recording workflow is armed. Record/Store, Update, and
+Set keep priority over this selection shortcut.
+
 ## Return Position fixtures home
 
 Open **Position → Special Dialog** and press **Return Home** beside the relative-position controls to return the current ordered selection to its fixture-profile Position defaults. Each selected logical head uses its own Pan and Tilt defaults; a missing default falls back independently to 50%. Fixtures without the corresponding Position attribute are skipped. With no selection, Return Home is disabled and never addresses every moving light in the show.

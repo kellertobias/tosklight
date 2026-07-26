@@ -67,14 +67,14 @@ function preset() {
 
 function changedOutcome() {
 	return {
-		request_id: REQUEST_ID,
 		correlation_id: CORRELATION_ID,
-		replayed: false,
+		disposition: "recalled",
 		show_revision: 12,
 		programmer_revision: 7,
 		capture_mode_revision: 3,
 		selection_revision: 8,
 		applied_fixtures: 1,
+		selected_targets: 0,
 		active_context: "preset:2.7",
 		preset: preset(),
 		status: "changed",
@@ -86,7 +86,6 @@ function changedOutcome() {
 describe("Preset recall v2 wire", () => {
 	it("encodes only captured revisions and the operator address", () => {
 		expect(encodePresetRecallRequest(request())).toEqual({
-			request_id: REQUEST_ID,
 			address: { family: "color", number: 7 },
 			expected_preset_revision: 4,
 			expected_show_revision: 12,
@@ -99,7 +98,7 @@ describe("Preset recall v2 wire", () => {
 		);
 	});
 
-	it("decodes a lossless values change and replay", () => {
+	it("decodes a lossless values change", () => {
 		const decoded = decodePresetRecallOutcome(
 			changedOutcome(),
 			USER_ID,
@@ -108,6 +107,7 @@ describe("Preset recall v2 wire", () => {
 		expect(decoded).toMatchObject({
 			status: "changed",
 			programmerRevision: 7,
+			disposition: "recalled",
 			eventSequence: 41,
 			projection: { userId: USER_ID, revision: 7 },
 			preset: {
@@ -116,10 +116,6 @@ describe("Preset recall v2 wire", () => {
 				body: { future_extension: { retained: true } },
 			},
 		});
-		const replay = { ...changedOutcome(), replayed: true };
-		expect(decodePresetRecallOutcome(replay, USER_ID, request())).toMatchObject(
-			{ replayed: true, eventSequence: 41 },
-		);
 	});
 
 	it("accepts interaction-only, context-only, and no-change sparse outcomes", () => {
@@ -152,6 +148,28 @@ describe("Preset recall v2 wire", () => {
 		expect(decodePresetRecallOutcome(sparse, USER_ID, request())).toMatchObject(
 			{ status: "no_change", projection: null },
 		);
+
+		const targetsSelected = {
+			...sparse,
+			status: "changed",
+			disposition: "targets_selected",
+			selection_revision: 9,
+			interaction_event_sequence: 42,
+			applied_fixtures: 0,
+			selected_targets: 1,
+			active_context: null,
+		};
+		expect(
+			decodePresetRecallOutcome(
+				targetsSelected,
+				USER_ID,
+				request({ selectedFixtureCount: 0 }),
+			),
+		).toMatchObject({
+			disposition: "targets_selected",
+			selectedTargets: 1,
+			activeContext: null,
+		});
 	});
 
 	it("rejects mismatched authority and malformed sparse values", () => {
@@ -237,9 +255,7 @@ describe("Preset recall v2 HTTP adapter", () => {
 
 		expect(fetchMock).toHaveBeenCalledOnce();
 		const [url, init] = fetchMock.mock.calls[0];
-		expect(String(url)).toBe(
-			"http://desk.local/api/v2/presets/recall",
-		);
+		expect(String(url)).toBe("http://desk.local/api/v2/presets/recall");
 		expect(init?.method).toBe("POST");
 		expect((init?.headers as Headers).get("authorization")).toBe(
 			"Bearer session-token",
@@ -248,6 +264,7 @@ describe("Preset recall v2 HTTP adapter", () => {
 			"desk-token",
 		);
 		expect((init?.headers as Headers).get("x-tosk-show")).toBe(SHOW_ID);
+		expect(JSON.parse(String(init?.body))).not.toHaveProperty("request_id");
 		expect(String(url)).not.toMatch(/bootstrap|playbacks|programmers/);
 	});
 

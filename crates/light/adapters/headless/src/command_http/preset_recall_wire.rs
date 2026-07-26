@@ -21,15 +21,22 @@ pub(crate) fn outcome(
         }
     };
     wire::PresetRecallOutcome {
-        request_id: result.request_id,
         correlation_id: result.context.correlation_id,
-        replayed: result.replayed,
+        disposition: match result.disposition {
+            application::ProgrammingPresetRecallDisposition::Recalled => {
+                wire::PresetRecallDisposition::Recalled
+            }
+            application::ProgrammingPresetRecallDisposition::TargetsSelected => {
+                wire::PresetRecallDisposition::TargetsSelected
+            }
+        },
         show_revision: result.preset.show_revision.value(),
         programmer_revision,
         capture_mode_revision: result.capture_mode_revision,
         selection_revision: result.selection_revision,
         interaction_event_sequence: result.interaction_event_sequence,
         applied_fixtures: result.applied_fixtures as u64,
+        selected_targets: result.selected_targets as u64,
         active_context: result.active_context,
         preset: wire::RecalledPresetProjection {
             id: result.preset.object_id,

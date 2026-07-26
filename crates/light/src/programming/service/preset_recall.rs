@@ -1,18 +1,17 @@
 use super::{ProgrammingService, state::interaction_change, support::Snapshot};
 use crate::{
-    ActionEnvelope, ActionError, ActionErrorKind, ProgrammingPresetRecallEnvironment,
-    ProgrammingPresetRecallOutcome, ProgrammingPresetRecallPorts, ProgrammingPresetRecallRequest,
-    ProgrammingPresetRecallResult, ProgrammingPresetRecallRevisionExpectation,
-    ProgrammingRecalledPresetProjection,
+    ActionEnvelope, ActionError, ActionErrorKind, ProgrammingPresetRecallDisposition,
+    ProgrammingPresetRecallEnvironment, ProgrammingPresetRecallOutcome,
+    ProgrammingPresetRecallPorts, ProgrammingPresetRecallRequest, ProgrammingPresetRecallResult,
+    ProgrammingPresetRecallRevisionExpectation, ProgrammingRecalledPresetProjection,
 };
 use light_core::{SessionId, UserId};
+use light_programmer::SelectionExpression;
 use std::sync::Arc;
 
 struct RecallIdentity {
     session_id: SessionId,
     user_id: UserId,
-    desk_id: uuid::Uuid,
-    request_id: String,
 }
 
 impl ProgrammingService {
@@ -36,15 +35,6 @@ impl ProgrammingService {
         ports.authorize_preset_recall(&action.context)?;
         self.assert_recall_owner(identity.session_id, identity.user_id)?;
         validate_request(&action.command)?;
-        if let Some(result) = self.preset_recall_replay.lock().get(
-            identity.user_id,
-            identity.desk_id,
-            identity.session_id,
-            &identity.request_id,
-            &action.command,
-        )? {
-            return Ok(result);
-        }
         let values_revision = self.assert_recall_values_revision(
             identity.user_id,
             action.command.expected_values_revision,
@@ -72,6 +62,18 @@ impl ProgrammingService {
         )?;
         let environment = ports.preset_recall_environment(&action.context, &action.command)?;
         validate_environment(&action.command, &environment, values_revision)?;
+        if selection.selected.is_empty() {
+            return self.select_preset_targets(
+                action,
+                ports,
+                identity,
+                selection,
+                before,
+                environment,
+                values_revision,
+                capture_mode_revision,
+            );
+        }
         let mutations = super::super::preset_recall_plan::plan(
             &selection,
             &environment.preset,
@@ -130,9 +132,85 @@ impl ProgrammingService {
         };
         let result = ProgrammingPresetRecallResult {
             context: action.context.clone(),
-            request_id: identity.request_id.clone(),
-            replayed: false,
+            disposition: ProgrammingPresetRecallDisposition::Recalled,
             applied_fixtures: selection.selected.len(),
+            selected_targets: 0,
+            selection_revision: after.selection_revision,
+            interaction_event_sequence,
+            capture_mode_revision,
+            active_context: Some(active_context),
+            preset: recalled_projection(environment),
+            outcome,
+            warning,
+        };
+        Ok(result)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn select_preset_targets(
+        &self,
+        action: ActionEnvelope<ProgrammingPresetRecallRequest>,
+        ports: &dyn ProgrammingPresetRecallPorts,
+        identity: RecallIdentity,
+        selection: light_programmer::ProgrammerSelection,
+        before: Snapshot,
+        environment: ProgrammingPresetRecallEnvironment,
+        values_revision: u64,
+        capture_mode_revision: u64,
+    ) -> Result<ProgrammingPresetRecallResult, ActionError> {
+        let target_plan = super::super::preset_recall_plan::target_selection(
+            &environment.preset,
+            &environment.groups,
+            &environment.selectable_targets,
+            &environment.target_expansions,
+        );
+        if !target_plan.selected.is_empty() {
+            self.programmers
+                .replace_selection_if_revision(
+                    identity.session_id,
+                    selection.revision,
+                    target_plan.selected.iter().copied(),
+                    SelectionExpression::Static,
+                )
+                .map_err(super::support::selection_replace_error)?;
+        }
+        let after = Snapshot::read(
+            &self.programmers,
+            action.context.desk_id,
+            identity.session_id,
+            identity.user_id,
+        )?;
+        let interaction = interaction_change(
+            &self.programmers,
+            action.context.desk_id,
+            identity.session_id,
+            &before,
+            &after,
+        );
+        let changed = interaction.is_some();
+        let persistence_warning = changed
+            .then(|| ports.persist_preset_recall(&action.context, "preset.select_targets"))
+            .flatten();
+        let warning = combine_warnings(target_plan.warning, persistence_warning);
+        let interaction_event_sequence = self.publish_interaction(&action.context, interaction);
+        let active_context = self
+            .programmers
+            .get(identity.session_id)
+            .and_then(|programmer| programmer.active_context);
+        let outcome = if changed {
+            ProgrammingPresetRecallOutcome::Changed {
+                values_revision,
+                projection: None,
+                values_event_sequence: None,
+            }
+        } else {
+            ProgrammingPresetRecallOutcome::NoChange { values_revision }
+        };
+        let result = ProgrammingPresetRecallResult {
+            context: action.context.clone(),
+            disposition: ProgrammingPresetRecallDisposition::TargetsSelected,
+            applied_fixtures: 0,
+            selected_targets: target_plan.selected.len(),
             selection_revision: after.selection_revision,
             interaction_event_sequence,
             capture_mode_revision,
@@ -141,14 +219,6 @@ impl ProgrammingService {
             outcome,
             warning,
         };
-        self.preset_recall_replay.lock().insert(
-            identity.user_id,
-            identity.desk_id,
-            identity.session_id,
-            identity.request_id,
-            action.command,
-            result.clone(),
-        );
         Ok(result)
     }
 
@@ -231,18 +301,9 @@ fn recall_identity(
             "Preset recall requires an authenticated user",
         )
     })?;
-    let request_id = action.context.request_id.as_deref().ok_or_else(|| {
-        ActionError::new(
-            ActionErrorKind::Invalid,
-            "Preset recall requires a request_id",
-        )
-    })?;
-    super::values_validation::validate_request_id(request_id)?;
     Ok(RecallIdentity {
         session_id,
         user_id,
-        desk_id: action.context.desk_id,
-        request_id: request_id.to_owned(),
     })
 }
 
@@ -318,4 +379,12 @@ fn recall_unavailable() -> ActionError {
         ActionErrorKind::NotFound,
         "Preset recall authority is unavailable",
     )
+}
+
+fn combine_warnings(first: Option<String>, second: Option<String>) -> Option<String> {
+    match (first, second) {
+        (Some(first), Some(second)) => Some(format!("{first} {second}")),
+        (Some(warning), None) | (None, Some(warning)) => Some(warning),
+        (None, None) => None,
+    }
 }
