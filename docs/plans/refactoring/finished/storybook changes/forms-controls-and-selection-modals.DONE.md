@@ -302,3 +302,16 @@ The integrated Storybook gate subsequently passed all 217 Playwright checks, inc
 reviewed screenshot contract and playback-bank geometry. Browser review confirmed the regular,
 number, and multiline keyboards, cursor buttons, conditional number-pad keys, title-bar Done
 action, multiline scroll controls, and playback-style color field at the supplied desk scale.
+
+The final O2/UI-refactoring audit consolidated every direct number editor onto
+`ModalNumberEditor`. Number values now keep both cursor arrows in the value row on the right,
+while the keypad retains fixed empty grid cells when decimal or THRU is disabled. The same shared
+surface is used by touch and hardware encoders, vertical faders, dual encoders, and the hardware
+fade controls. The regular select exposes its listbox and active option through ARIA, and stale
+desktop form, input, fader, modal, table, pool, and window-kit base rules were removed so the
+package remains the presentation owner.
+
+Post-audit verification passed 108 UI-package tests, 1,993 desktop tests, both TypeScript gates,
+the architecture/CSS-ownership ratchet, 219 Storybook behavior/catalog checks, the separately
+reviewed screenshot check, the 47-entry non-mutating screenshot manifest, the 27-image live-app
+capture, manual generation, and the packaged `npm run open` readiness path.

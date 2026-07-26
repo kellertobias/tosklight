@@ -6,12 +6,8 @@ import {
 	useState,
 } from "react";
 import { Button, type ButtonProps, Input } from "../common";
-import {
-	ModalCaretValue,
-	ModalNumberInput,
-} from "../input/ModalInputControls";
+import { ModalNumberEditor } from "../input/ModalNumberEditor";
 import { submitNumericExpression } from "../input/numericExpression";
-import { ModalLayer } from "../modals/ModalStack";
 
 export interface VerticalTouchFaderAction
 	extends Omit<ButtonProps, "children"> {
@@ -63,27 +59,20 @@ function SetValueDialog({
 	onSubmit,
 	onClose,
 }: SetValueDialogProps) {
-	const [caret, setCaret] = useState(value.length);
 	const entered = Number(value);
 	const faderValue = Number.isFinite(entered)
 		? Math.max(0, Math.min(maximum, entered + offset))
 		: offset;
 	return (
-		<ModalLayer
+		<ModalNumberEditor
 			ariaLabel={`${label} value`}
-			dialogClassName="direct-value-modal"
+			title={label}
+			value={value}
+			onChange={onChange}
+			onSubmit={onSubmit}
 			onClose={onClose}
-		>
-			<Button
-				className="modal-close"
-				aria-label="Close attribute value"
-				onClick={onClose}
-			>
-				×
-			</Button>
-			<h3>{label}</h3>
-			<ModalCaretValue value={value} caret={caret} />
-			<div className="direct-value-modal-body">
+			allowThrough={allowThrough}
+			bodyAside={
 				<VerticalTouchFaderSurface
 					label={label}
 					value={faderValue}
@@ -92,17 +81,8 @@ function SetValueDialog({
 					onChange={onFaderChange}
 					hardware={false}
 				/>
-				<ModalNumberInput
-					value={value}
-					onChange={onChange}
-					onCaretChange={setCaret}
-					onEnter={onSubmit}
-					onEscape={onClose}
-					replaceOnFirstInput
-					allowThrough={allowThrough}
-				/>
-			</div>
-		</ModalLayer>
+			}
+		/>
 	);
 }
 

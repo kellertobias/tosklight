@@ -79,7 +79,7 @@ function CardOverlays({ model }: { model: PlaybackCardViewModel }) {
 	);
 }
 
-function PlaybackActionButtons({
+export function PlaybackActionButtons({
 	actions,
 }: {
 	actions: VerticalTouchFaderAction[];
@@ -378,14 +378,16 @@ export function HardwarePlaybackFaderView({
 				} as CSSProperties
 			}
 		>
-			<i className="hardware-fader-fill" />
-			{pickupVisible && (
-				<>
+			<span className="hardware-fader-track" aria-hidden="true">
+				<i className="hardware-fader-fill" />
+				{pickupVisible && (
+					<>
 					<i className="hardware-fader-pickup-difference" />
 					<i className="hardware-fader-physical-marker" />
 					<i className="hardware-fader-target-marker" />
-				</>
-			)}
+					</>
+				)}
+			</span>
 			<b>
 				{pickupVisible && targetLabel ? (
 					<>

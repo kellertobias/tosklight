@@ -214,12 +214,14 @@ function PickupExample({
 	multiple?: boolean;
 }) {
 	const [physical, setPhysical] = useState(initialPhysical);
-	const [authority, setAuthority] = useState<"hardware" | "replacement">(
+	const [authority, setAuthority] = useState<
+		"hardware" | "replacement" | "disconnected"
+	>(
 		"hardware",
 	);
 	const direction = target - initialPhysical;
 	const satisfied =
-		authority === "replacement" ||
+		authority !== "hardware" ||
 		(direction >= 0 ? physical >= target : physical <= target);
 	const slots = multiple ? [1, 2, 3] : [1];
 	const items = slots.map((slot) => {
@@ -244,21 +246,27 @@ function PickupExample({
 			<button type="button" onClick={() => setAuthority("replacement")}>
 				Replace hardware authority
 			</button>
+			<button type="button" onClick={() => setAuthority("disconnected")}>
+				Disconnect hardware
+			</button>
+			<button type="button" onClick={() => setAuthority("hardware")}>
+				Reconnect hardware
+			</button>
 			<PlaybackBankView mode={mode} items={items} />
 		</div>
 	);
 }
 
 export const PickupRaise: Story = {
-	render: () => <PickupExample initialPhysical={0.2} target={0.75} />,
+	render: () => <PickupExample initialPhysical={0.5} target={0.75} />,
 };
 
 export const PickupLower: Story = {
-	render: () => <PickupExample initialPhysical={0.85} target={0.35} />,
+	render: () => <PickupExample initialPhysical={0.75} target={0.5} />,
 };
 
 export const PickupLowerToZero: Story = {
-	render: () => <PickupExample initialPhysical={0.62} target={0} />,
+	render: () => <PickupExample initialPhysical={0.75} target={0} />,
 };
 
 export const PickupSatisfied: Story = {
@@ -279,6 +287,10 @@ export const PickupApproachAndReleaseFromAbove: Story = {
 
 export const PickupAuthorityReplacement: Story = {
 	render: () => <PickupExample initialPhysical={0.8} target={0} />,
+};
+
+export const PickupHardwareDisconnectedAndReconnected: Story = {
+	render: () => <PickupExample initialPhysical={0.5} target={0.75} />,
 };
 
 export const OnlyOneOfMultipleFadersRequiresPickup: Story = {

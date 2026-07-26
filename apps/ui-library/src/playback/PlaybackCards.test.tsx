@@ -71,10 +71,10 @@ describe("playback card views", () => {
 			<HardwarePlaybackCardView
 				model={{
 					...model,
-					faderValue: 25,
-					faderDisplay: "25%",
+					faderValue: 50,
+					faderDisplay: "50%",
 					hardwarePickup: {
-						physicalPosition: 0.25,
+						physicalPosition: 0.5,
 						pickupTarget: 0.75,
 					},
 				}}
@@ -82,22 +82,22 @@ describe("playback card views", () => {
 		);
 		const fader = document.querySelector(".hardware-fader");
 		expect(fader).toHaveAttribute("data-pickup-direction", "raise");
-		expect(fader).toHaveAttribute("data-pickup-physical", "0.25");
+		expect(fader).toHaveAttribute("data-pickup-physical", "0.5");
 		expect(fader).toHaveAttribute("data-pickup-target", "0.75");
 		expect(fader).toHaveStyle({
-			"--hardware-pickup-start": "25%",
-			"--hardware-pickup-size": "50%",
+			"--hardware-pickup-start": "50%",
+			"--hardware-pickup-size": "25%",
 		});
 		expect(
 			document.querySelector(".hardware-fader-pickup-difference"),
 		).toBeInTheDocument();
-		expect(screen.getByText("Physical 25% · Target 75%")).toBeInTheDocument();
+		expect(screen.getByText("Physical 50% · Target 75%")).toBeInTheDocument();
 		expect(screen.getByText("Raise to 75%")).toBeInTheDocument();
 		expect(
 			screen.getByRole("slider", { name: "Page 2 playback 3 fader" }),
 		).toHaveAttribute(
 			"aria-description",
-			"Physical 25%. Target 75%. Raise to 75%.",
+			"Physical 50%. Target 75%. Raise to 75%.",
 		);
 
 		rendered.rerender(
@@ -108,7 +108,7 @@ describe("playback card views", () => {
 					faderDisplay: "75%",
 					hardwarePickup: {
 						physicalPosition: 0.75,
-						pickupTarget: 0.25,
+						pickupTarget: 0.5,
 					},
 				}}
 			/>,
@@ -117,7 +117,7 @@ describe("playback card views", () => {
 			"data-pickup-direction",
 			"lower",
 		);
-		expect(screen.getByText("Lower to 25%")).toBeInTheDocument();
+		expect(screen.getByText("Lower to 50%")).toBeInTheDocument();
 	});
 
 	it("clamps pickup geometry and suppresses a satisfied difference", () => {

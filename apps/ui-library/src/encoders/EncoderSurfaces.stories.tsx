@@ -106,23 +106,38 @@ export const IndividualTouchIndexed: Story = {
 };
 
 export const IndividualHardware: Story = {
-	render: ({ disabled, showSecondary }) => (
-		<div className="hardware-connected" style={{ width: 140, height: 170 }}>
-			<HardwareEncoderDisplayView
-				slot={1}
-				target={{ label: "Pan", value: "20°", role: "Turn" }}
-				secondary={
-					showSecondary
-						? { label: "Tilt", value: "30°", role: "Press-turn" }
-						: undefined
-				}
-				editValue={20}
-				canRelease
-				onEdit={disabled ? undefined : () => undefined}
-				onRelease={() => undefined}
-			/>
-		</div>
-	),
+	render: ({ disabled, showSecondary }) => {
+		const [value, setValue] = useState(20);
+		const [owned, setOwned] = useState(true);
+		return (
+			<div className="hardware-connected" style={{ width: 140, height: 170 }}>
+				<HardwareEncoderDisplayView
+					slot={1}
+					target={{
+						label: "Pan",
+						value: owned ? `${value}°` : "Released",
+						role: "Turn",
+					}}
+					secondary={
+						showSecondary
+							? { label: "Tilt", value: "30°", role: "Press-turn" }
+							: undefined
+					}
+					editValue={value}
+					canRelease={owned}
+					onEdit={
+						disabled
+							? undefined
+							: (next) => {
+									setValue(next);
+									setOwned(true);
+								}
+					}
+					onRelease={() => setOwned(false)}
+				/>
+			</div>
+		);
+	},
 };
 
 function FamilyExample(props: EncoderStoryProps) {

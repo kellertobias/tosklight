@@ -1,21 +1,8 @@
 import type { PlaybackDefinition } from "../../../api/types";
 import { Button } from "@tosklight/ui";
-import type { VerticalTouchFaderAction } from "@tosklight/ui/faders";
 import { assignPlayback, isPlaybackSetClickArmed } from "./actions";
 import type { PlaybackBankController } from "./controller";
 import type { PlaybackSnapshotActive } from "./types";
-
-export function PlaybackActionButtons({
-	actions,
-}: {
-	actions: VerticalTouchFaderAction[];
-}) {
-	return actions.map(({ id, label, ...props }) => (
-		<Button {...props} key={id}>
-			{label}
-		</Button>
-	));
-}
 
 export function PlaybackRuntimeStatus({
 	active,

@@ -6,6 +6,7 @@ import { Button, FormField, type LabelPlacement } from "./foundation";
 export interface GroupedSelectionOption<T extends string> {
   value: T;
   label: ReactNode;
+  icon?: ReactNode;
   description?: ReactNode;
   disabled?: boolean;
 }
@@ -62,8 +63,13 @@ export function GroupedSelectionField<T extends string>({
       aria-expanded={open}
       onClick={() => setOpen(true)}
     >
-      <span>{clearSelected ? clearAction.label : selected?.label ?? value}</span>
-      <i aria-hidden="true">›</i>
+      <span className={`ui-grouped-selection-value ${selected?.icon ? "has-icon" : "has-no-icon"}`}>
+        {selected?.icon && <span className="ui-grouped-selection-icon" aria-hidden="true">
+          {selected.icon}
+        </span>}
+        <span>{clearSelected ? clearAction.label : selected?.label ?? value}</span>
+      </span>
+      <span className="ui-grouped-selection-arrow" aria-hidden="true">›</span>
     </Button>
     {open && (
       <ModalLayer
@@ -93,8 +99,15 @@ export function GroupedSelectionField<T extends string>({
                 disabled={option.disabled}
                 onClick={() => choose(option.value)}
               >
-                <b>{option.label}</b>
-                {option.description && <small>{option.description}</small>}
+                <span className={`ui-grouped-selection-option ${option.icon ? "has-icon" : "has-no-icon"}`}>
+                  {option.icon && <span className="ui-grouped-selection-icon" aria-hidden="true">
+                    {option.icon}
+                  </span>}
+                  <span className="ui-grouped-selection-copy">
+                    <b>{option.label}</b>
+                    {option.description && <small>{option.description}</small>}
+                  </span>
+                </span>
               </Button>)}
             </div>
           </section>)}

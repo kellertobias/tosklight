@@ -110,11 +110,11 @@ function FormsExample() {
   ].join("\n");
   const selectionGroups = [
     { label: "Step Control", options: [
-      { value: "go", label: "GO", description: "Advance to the next cue." },
+      { value: "go", label: "GO", icon: "▶", description: "Advance to the next cue." },
       { value: "go-minus", label: "GO MINUS", description: "Return to the previous cue." },
     ] },
     { label: "Temporary State", options: [
-      { value: "flash", label: "FLASH", description: "Output while the button is held." },
+      { value: "flash", label: "FLASH", icon: "⚡", description: "Output while the button is held." },
     ] },
   ] as const;
   return (

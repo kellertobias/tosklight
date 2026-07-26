@@ -8,8 +8,7 @@ import {
 	useState,
 } from "react";
 import { Button } from "../common";
-import { ModalCaretValue, ModalNumberInput } from "../input/ModalInputControls";
-import { ModalLayer } from "../modals/ModalStack";
+import { ModalNumberEditor } from "../input/ModalNumberEditor";
 import { submitNumericExpression } from "../input/numericExpression";
 
 export const TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS = 80;
@@ -101,39 +100,18 @@ function TouchEncoderEditor({
 	onClose(): void;
 	onRelease?(): void;
 }) {
-	const [caret, setCaret] = useState(inputValue.length);
 	return (
-		<ModalLayer
+		<ModalNumberEditor
 			ariaLabel={`${label} value`}
 			dialogClassName="direct-value-modal hardware-encoder-modal"
+			title={label}
+			value={inputValue}
+			onChange={onInput}
+			onSubmit={onSubmit}
 			onClose={onClose}
-		>
-			<Button
-				className="modal-close"
-				aria-label="Close encoder value"
-				onClick={onClose}
-			>
-				×
-			</Button>
-			<h3>{label}</h3>
-			<ModalCaretValue value={inputValue} caret={caret} />
-			<ModalNumberInput
-				value={inputValue}
-				onChange={onInput}
-				onCaretChange={setCaret}
-				onEnter={onSubmit}
-				onEscape={onClose}
-				replaceOnFirstInput
-				allowThrough={allowThrough}
-			/>
-			{canRelease && onRelease && (
-				<footer className="modal-actions">
-					<Button variant="danger" onClick={onRelease}>
-						Release
-					</Button>
-				</footer>
-			)}
-		</ModalLayer>
+			allowThrough={allowThrough}
+			onRelease={canRelease ? onRelease : undefined}
+		/>
 	);
 }
 

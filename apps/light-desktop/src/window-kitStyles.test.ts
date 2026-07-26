@@ -14,14 +14,12 @@ function ruleBodies(source: string, selector: string): string[] {
 	);
 }
 
-describe("desktop DataTable compatibility styles", () => {
-	it("does not reintroduce a second horizontal separator", () => {
+describe("desktop DataTable styles", () => {
+	it("leaves generic table separators entirely package-owned", () => {
 		const tableRules = ruleBodies(desktopStyles, ".ui-data-table");
 		const cellRules = ruleBodies(desktopStyles, ".ui-data-table-row > span");
 
-		expect(tableRules.length).toBeGreaterThan(0);
-		expect(tableRules.join("\n")).not.toMatch(/(?:repeating-)?linear-gradient/);
-		expect(tableRules.join("\n")).not.toMatch(/border-(?:top|bottom)\s*:/);
-		expect(cellRules.join("\n")).not.toMatch(/border-(?:top|bottom)\s*:/);
+		expect(tableRules).toHaveLength(0);
+		expect(cellRules).toHaveLength(0);
 	});
 });

@@ -269,8 +269,7 @@
 		grid-template-columns: repeat(auto-fit, minmax(16px, 1fr));
 	}
 }
-.modal-card,
-.nested-modal {
+.modal-card {
 	position: relative;
 }
 .modal-close {

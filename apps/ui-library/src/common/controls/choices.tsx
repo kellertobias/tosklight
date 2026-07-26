@@ -128,8 +128,9 @@ function handleSelectKey<T extends string>(
 }
 
 function SelectOptions<T extends string>({
-  label, options, value, active, position, setActive, choose, close,
+  id, label, options, value, active, position, setActive, choose, close,
 }: {
+  id: string;
   label?: ReactNode;
   options: SelectOption<T>[];
   value: T;
@@ -141,9 +142,11 @@ function SelectOptions<T extends string>({
 }) {
   return createPortal(<div className="ui-select-backdrop"
     onPointerDown={(event) => event.target === event.currentTarget && close()}>
-    <div className="ui-select-options" style={position} role="listbox"
+    <div id={id} className="ui-select-options" style={position} role="listbox"
+      aria-activedescendant={`${id}-option-${active}`}
       aria-label={typeof label === "string" ? label : "Options"}>
       {options.map((option, index) => <Button role="option" key={option.value}
+        id={`${id}-option-${index}`}
         aria-selected={option.value === value} active={option.value === value}
         className={index === active ? "is-highlighted" : ""} disabled={option.disabled}
         onPointerMove={() => setActive(index)} onClick={() => choose(option.value)}>
@@ -160,6 +163,7 @@ export function SelectField<T extends string>({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(() => Math.max(0, options.findIndex((item) => item.value === value)));
   const [position, setPosition] = useState<CSSProperties>({});
+  const listboxId = useId();
   const button = useRef<HTMLButtonElement>(null);
   const place = () => setPosition(popupPosition(button.current) ?? {});
   const close = () => { setOpen(false); button.current?.focus(); };
@@ -182,11 +186,21 @@ export function SelectField<T extends string>({
     className={className} labelPlacement={labelPlacement}>
     <Button ref={button} className="ui-select-trigger" size={size} disabled={disabled}
       aria-label={ariaLabel}
-      aria-haspopup="listbox" aria-expanded={open}
-      onClick={() => { if (!open) place(); setOpen(!open); }}>
-      <span>{chosen?.label ?? value}</span><i aria-hidden="true">▼</i>
+      aria-haspopup="listbox" aria-expanded={open} aria-controls={listboxId}
+      aria-activedescendant={open ? `${listboxId}-option-${active}` : undefined}
+      onClick={() => {
+        if (!open) {
+          place();
+          setActive(Math.max(0, options.findIndex((item) => item.value === value)));
+        }
+        setOpen(!open);
+      }}>
+      <span className="ui-select-value">{chosen?.label ?? value}</span>
+      <span className={`ui-select-chevron ${open ? "is-open" : ""}`} aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+      </span>
     </Button>
-    {open && <SelectOptions label={label} options={options} value={value} active={active}
+    {open && <SelectOptions id={listboxId} label={label} options={options} value={value} active={active}
       position={position} setActive={setActive} choose={choose} close={close}/>}
   </FormField>;
 }

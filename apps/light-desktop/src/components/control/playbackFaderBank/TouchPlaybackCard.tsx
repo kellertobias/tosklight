@@ -9,6 +9,7 @@ import {
 	type VerticalTouchFaderAction,
 	VerticalTouchFaderSurface,
 } from "@tosklight/ui/faders";
+import { PlaybackActionButtons } from "@tosklight/ui/playback";
 import { openPlaybackConfiguration } from "./actions";
 import type { PlaybackBankController } from "./controller";
 import {
@@ -18,7 +19,6 @@ import {
 } from "./feedback";
 import { playbackRowUnits } from "./projection";
 import {
-	PlaybackActionButtons,
 	PlaybackAssignmentTarget,
 	PlaybackConfigurationTarget,
 	PlaybackRepresentation,

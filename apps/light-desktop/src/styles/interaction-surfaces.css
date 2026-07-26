@@ -154,68 +154,6 @@
 	}
 }
 
-/* Physical on-screen keyboard: staggered key rows with a full-height action column. */
-.modal-keyboard-row {
-	display: flex;
-	justify-content: flex-start;
-	gap: 6px;
-	padding: 0 !important;
-}
-.modal-keyboard-row.row-2 {
-	padding-left: 24px !important;
-}
-.modal-keyboard-row.row-3 {
-	padding-left: 42px !important;
-}
-.modal-keyboard-row.row-4 {
-	padding-left: 64px !important;
-}
-.modal-text-keyboard .escape {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	border-color: var(--amber);
-	color: var(--amber);
-}
-.modal-text-keyboard .modal-keyboard-bottom .space {
-	width: 430px;
-	max-width: none;
-	flex: 0 0 430px;
-}
-.modal-keyboard-actions {
-	display: grid;
-	grid-template-rows: 72px minmax(0, 1fr);
-	gap: 6px;
-}
-.modal-text-keyboard .modal-keyboard-actions button {
-	width: 100%;
-	min-height: 0;
-}
-.modal-keyboard-actions .backspace {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	font-size: 19px;
-}
-.modal-keyboard-actions .enter {
-	font-size: 18px;
-	font-weight: 900;
-}
-@media (max-height: 800px) {
-	.modal-keyboard-main {
-		gap: 4px;
-	}
-	.modal-text-keyboard {
-		gap: 5px;
-	}
-	.modal-keyboard-actions {
-		grid-template-rows: 62px minmax(0, 1fr);
-		gap: 4px;
-	}
-}
-
 /* Compact control-surface refinements. */
 .command-field .command-input {
 	padding-right: 165px;
@@ -272,12 +210,6 @@
 	border-color: var(--cyan);
 	background: #0a252b;
 	color: var(--cyan);
-}
-.modal-keyboard-actions .enter {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
 }
 .preload-button b,
 .preload-button small {
@@ -1352,17 +1284,6 @@
 }
 .debug-diagnostics small {
 	color: var(--muted);
-}
-.ui-number-control {
-	width: 100%;
-	min-width: 0;
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) 44px;
-	gap: 5px;
-}
-.ui-number-control > .ui-button {
-	width: 44px;
-	min-width: 44px;
 }
 .ui-number-backdrop {
 	position: fixed;

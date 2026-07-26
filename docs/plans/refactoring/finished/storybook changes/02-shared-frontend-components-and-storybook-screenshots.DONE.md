@@ -72,7 +72,9 @@ Estimated effort: 2–4 Codex days, including application adoption and screensho
   exports while retaining the package identity `@tosklight/ui`.
 - Every reusable component rendered in Storybook is the same implementation consumed by an app.
 - Mock stories cover software and hardware presentation where both exist.
-- A clean CI run regenerates the complete screenshot manifest without launching the Light server.
+- A clean CI run validates the complete screenshot manifest and regenerates every
+  Storybook-owned candidate without launching the Light server. Entries explicitly owned by
+  `live-app` remain in the focused runtime capture gate required below.
 - Manual and Pages builds consume those images and remain visually correct.
 - Focused live-app Playwright and packaged desktop checks prove adapter integration.
 
@@ -137,19 +139,22 @@ production Storybook adoption, and superseded presentation-code cleanup are comp
   Playbacks uses its configured rows and columns to fill the pane without changing square sizing
   for ordinary pool cards.
 
-Final verification on 2026-07-26:
+Final verification on 2026-07-26, including the post-completion O2/UI-refactoring audit:
 
-- `npm run test:storybook` — 217 Playwright checks passed.
+- The Storybook behavior/catalog run passed 219 of 219 checks; the separately rerun reviewed
+  screenshot check passed, completing the 220-check Storybook gate.
 - `npm run test:help-screenshots` — the complete 47-entry non-mutating manifest check passed.
 - `npm run test:help-screenshots-live` — the 27-image production composition/workflow set passed.
 - `npm run test:unit` — architecture, bench, UI package, desktop, hardware-controls, Rust workspace,
   generated wire contracts, and doc tests passed.
-- UI package tests passed 106 of 106; desktop tests passed 1,993 of 1,993.
+- UI package tests passed 108 of 108; desktop tests passed 1,993 of 1,993.
 - UI package and desktop typechecks passed.
-- `npm run manual` built and verified the 141-page PDF and offline HTML manual.
+- `npm run manual` built and verified the 142-page PDF and offline HTML manual.
 - `LIGHT_REUSE_MANUAL=1 npm run pages:generate` built the complete Pages output.
 - The 47-image contact sheet was visually reviewed with no blank, clipped, or substitute
   screenshot accepted, and `git diff --check` passed.
+- `npm run open` built both Tauri applications and opened the packaged development desktop.
+  `/api/v2/readiness` returned ready and `/api/v2/bootstrap` returned HTTP 200.
 
 The remaining 27 `live-app` images are not unfinished Storybook work. They intentionally cover
 complete-desk composition, authoritative session/show state, or production workflows whose

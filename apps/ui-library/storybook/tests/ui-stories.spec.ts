@@ -57,16 +57,18 @@ const publicComponentStoryCoverage: Record<string, string> = {
 	HorizontalTouchFader: "faders-horizontal-fader--default",
 	InputModal: "input-keyboard-and-numpad--input-modal-configurations",
 	ModalNumberInput: "input-keyboard-and-numpad--number-pad",
+	ModalNumberValue: "input-keyboard-and-numpad--number-pad",
+	ModalNumberEditor: "input-keyboard-and-numpad--number-pad",
 	ModalTextKeyboard: "input-keyboard-and-numpad--keyboard",
 	ModalCaretValue: "input-keyboard-and-numpad--keyboard",
 	ModalPortal: "modals-production-modal-stack--portal-primitive",
 	ModalTitleBar: "modals-production-modal-stack--title-bar-configuration",
-	TitleBarSearchDivider: "modals-production-modal-stack--title-bar-configuration",
+	TitleBarSearchDivider:
+		"modals-production-modal-stack--title-bar-configuration",
 	ModalProvider: "modals-production-modal-stack--three-deep",
 	ModalLayer: "modals-production-modal-stack--close-policies",
 	ModalFrame: "modals-production-modal-stack--close-policies",
-	ModalRegistration:
-		"modals-production-modal-stack--application-registration",
+	ModalRegistration: "modals-production-modal-stack--application-registration",
 	WindowHeader: "windows-production-window-kit--header-configurations",
 	WindowSettings: "windows-production-window-kit--settings-configurations",
 	WindowFrame: "windows-production-window-kit--configuration",
@@ -391,6 +393,81 @@ test("application control stories cover parameter families, playback banks, and 
 	await expect(page.getByRole("button", { name: "NEXT" })).toBeVisible();
 });
 
+test("touch and hardware encoder stories exercise continuous input, modal entry, and release", async ({
+	page,
+}) => {
+	await page.goto(
+		"/iframe.html?id=encoders-production-encoder-surfaces--individual-touch&viewMode=story",
+	);
+	const encoder = page.getByRole("group", { name: "Enc 1 · Dimmer" });
+	const value = encoder.locator("header strong");
+	await expect(value).toHaveText("52%");
+	await encoder.locator(".touch-encoder-tap-positive").click();
+	await expect(value).toHaveText("53%");
+	await encoder.locator(".touch-encoder-tap-negative").click();
+	await expect(value).toHaveText("52%");
+	await encoder.hover();
+	await page.mouse.wheel(0, -100);
+	await expect(value).toHaveText("53%");
+	await page.keyboard.down("Shift");
+	await page.mouse.wheel(0, 100);
+	await page.keyboard.up("Shift");
+	await expect(value).toHaveText("43%");
+
+	const box = await encoder.boundingBox();
+	expect(box).not.toBeNull();
+	await page.mouse.move((box?.x ?? 0) + 30, (box?.y ?? 0) + 180);
+	await page.mouse.down();
+	await page.mouse.move((box?.x ?? 0) + 30, (box?.y ?? 0) + 160);
+	await expect(encoder.getByText("Up · Fine")).toBeVisible();
+	await page.waitForTimeout(90);
+	await page.mouse.move((box?.x ?? 0) + 30, (box?.y ?? 0) + 110);
+	await expect(encoder.getByText("Up · Coarse")).toBeVisible();
+	await page.waitForTimeout(90);
+	await page.mouse.up();
+	await expect(value).not.toHaveText("43%");
+
+	await encoder.getByRole("button", { name: "Set Value" }).click();
+	const touchEditor = page.getByRole("dialog", {
+		name: "Enc 1 · Dimmer value",
+	});
+	await touchEditor.getByRole("button", { name: "7" }).click();
+	await touchEditor.getByRole("button", { name: "5" }).click();
+	await touchEditor.getByRole("button", { name: "ENTER" }).click();
+	await expect(value).toHaveText("75%");
+	await encoder.getByRole("button", { name: "Set Value" }).click();
+	await touchEditor.getByRole("button", { name: "Release" }).click();
+	await expect(value).toHaveText("Released");
+
+	for (const constrained of [
+		"individual-touch-disabled",
+		"individual-touch-indexed",
+	]) {
+		await page.goto(
+			`/iframe.html?id=encoders-production-encoder-surfaces--${constrained}&viewMode=story`,
+		);
+		const constrainedEncoder = page.getByRole("group");
+		await expect(constrainedEncoder).toHaveAttribute("aria-disabled", "true");
+		await expect(
+			constrainedEncoder.getByRole("button", { name: "Set Value" }),
+		).toBeDisabled();
+	}
+
+	await page.goto(
+		"/iframe.html?id=encoders-production-encoder-surfaces--individual-hardware&viewMode=story",
+	);
+	await page
+		.getByRole("button", { name: "Encoder 1: Pan, 20°" })
+		.click();
+	const hardwareEditor = page.getByRole("dialog", {
+		name: "Encoder 1 value",
+	});
+	await hardwareEditor.getByRole("button", { name: "Release Pan" }).click();
+	await expect(
+		page.getByRole("button", { name: "Encoder 1: Pan, Released" }),
+	).toBeVisible();
+});
+
 test("playback bank states are explicit, valid, and preserve readable geometry", async ({
 	page,
 }) => {
@@ -525,6 +602,67 @@ test("playback bank states are explicit, valid, and preserve readable geometry",
 test("hardware pickup uses explicit physical and target positions and clears safely", async ({
 	page,
 }) => {
+	const expectPickupGeometry = async ({
+		physical,
+		story,
+		target,
+	}: {
+		physical: number;
+		story: string;
+		target: number;
+	}) => {
+		await page.goto(
+			`/iframe.html?id=playbacks-playback-bank--${story}&viewMode=story`,
+		);
+		const track = page.locator(".hardware-fader-track");
+		const fill = track.locator(".hardware-fader-fill");
+		const difference = track.locator(".hardware-fader-pickup-difference");
+		const physicalMarker = track.locator(".hardware-fader-physical-marker");
+		const targetMarker = track.locator(".hardware-fader-target-marker");
+		const [trackBox, fillBox, differenceBox, physicalBox, targetBox] =
+			await Promise.all([
+				track.boundingBox(),
+				fill.boundingBox(),
+				difference.boundingBox(),
+				physicalMarker.boundingBox(),
+				targetMarker.boundingBox(),
+			]);
+		const trackBottom = (trackBox?.y ?? 0) + (trackBox?.height ?? 0);
+		const boundary = (percent: number) =>
+			trackBottom - (trackBox?.height ?? 0) * percent;
+		expect(Math.abs((fillBox?.y ?? 0) - boundary(physical))).toBeLessThan(1);
+		expect(
+			Math.abs(
+				(differenceBox?.height ?? 0) -
+					(trackBox?.height ?? 0) * Math.abs(target - physical),
+			),
+		).toBeLessThan(1);
+		expect(
+			Math.abs(
+				(physicalBox?.y ?? 0) +
+					(physicalBox?.height ?? 0) / 2 -
+					boundary(physical),
+			),
+		).toBeLessThan(1);
+		expect(
+			Math.abs(
+				(targetBox?.y ?? 0) +
+					(targetBox?.height ?? 0) / 2 -
+					boundary(target),
+			),
+		).toBeLessThan(1);
+	};
+	await expectPickupGeometry({
+		story: "pickup-raise",
+		physical: 0.5,
+		target: 0.75,
+	});
+	await expectPickupGeometry({
+		story: "pickup-lower",
+		physical: 0.75,
+		target: 0.5,
+	});
+
 	await page.goto(
 		"/iframe.html?id=playbacks-playback-bank--pickup-required&viewMode=story",
 	);
@@ -576,6 +714,15 @@ test("hardware pickup uses explicit physical and target positions and clears saf
 	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(
 		0,
 	);
+
+	await page.goto(
+		"/iframe.html?id=playbacks-playback-bank--pickup-hardware-disconnected-and-reconnected&viewMode=story",
+	);
+	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(1);
+	await page.getByRole("button", { name: "Disconnect hardware" }).click();
+	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(0);
+	await page.getByRole("button", { name: "Reconnect hardware" }).click();
+	await expect(page.locator(".hardware-fader-pickup-difference")).toHaveCount(1);
 });
 
 test("application Stage stories render deterministic 2D fixtures and the real 3D canvas", async ({
@@ -1163,6 +1310,28 @@ test("configured search children share stack order, focus, form geometry, and di
 	expect(searchBox!.y).toBeGreaterThanOrEqual(actionBox!.y + actionBox!.height);
 });
 
+test("title-bar search dividers remain one device pixel at DPR 1 and 2", async ({
+	browser,
+}) => {
+	for (const deviceScaleFactor of [1, 2]) {
+		const context = await browser.newContext({
+			deviceScaleFactor,
+			viewport: { width: 1280, height: 800 },
+		});
+		const dprPage = await context.newPage();
+		await dprPage.goto(
+			"/iframe.html?id=modals-production-modal-stack--title-bar-configuration&viewMode=story",
+		);
+		const divider = dprPage.locator(".ui-titlebar-search-divider").first();
+		await expect(divider).toBeVisible();
+		const cssWidth = await divider.evaluate((element) =>
+			Number.parseFloat(getComputedStyle(element, "::after").width),
+		);
+		expect(cssWidth * deviceScaleFactor).toBeCloseTo(1, 5);
+		await context.close();
+	}
+});
+
 test("window and modal chrome use the same standard search geometry", async ({
 	page,
 }) => {
@@ -1469,7 +1638,32 @@ test("Forms story keeps state, scrolling, fader, pickers, grouped selections, an
 	).toHaveCount(0);
 	await page.locator('[data-icon-group="fixture-type"] button').first().click();
 
-	await page.getByRole("button", { name: /^GO$/u }).click();
+	const modeSelect = page.getByRole("button", { name: /^Software$/u });
+	await expect(modeSelect.locator(".ui-select-chevron svg")).toBeVisible();
+	await expect(modeSelect).toHaveAttribute("aria-expanded", "false");
+	await modeSelect.click();
+	await expect(modeSelect).toHaveAttribute("aria-expanded", "true");
+	await expect(page.getByRole("listbox", { name: "Mode" })).toBeVisible();
+	await page.getByRole("option", { name: "Hardware" }).click();
+	await expect(page.getByRole("button", { name: /^Hardware$/u })).toBeVisible();
+
+	const groupedTrigger = page.getByRole("button", { name: /^GO$/u });
+	await expect(
+		groupedTrigger.locator(".ui-grouped-selection-icon"),
+	).toContainText("▶");
+	const plainGroupedTrigger = page.getByRole("button", { name: /^Master$/u });
+	await expect(
+		plainGroupedTrigger.locator(".ui-grouped-selection-icon"),
+	).toHaveCount(0);
+	await expect(
+		plainGroupedTrigger.locator(".ui-grouped-selection-value"),
+	).toHaveClass(/has-no-icon/u);
+	const plainValueBox = await plainGroupedTrigger
+		.locator(".ui-grouped-selection-value")
+		.boundingBox();
+	const plainTriggerBox = await plainGroupedTrigger.boundingBox();
+	expect((plainValueBox?.x ?? 0) - (plainTriggerBox?.x ?? 0)).toBeLessThan(20);
+	await groupedTrigger.click();
 	const grouped = page.getByRole("dialog", { name: "Choose Top button" });
 	await expect(grouped.getByText("Advance to the next cue.")).toBeVisible();
 	await expect(
@@ -1510,18 +1704,42 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 	);
 	const numberModal = page.getByRole("dialog", { name: "Fade time" });
 	await expect(numberModal.locator(".modal-caret-value > i")).toBeVisible();
+	const numberColor = await numberModal
+		.locator(".modal-caret-value")
+		.evaluate((element) => getComputedStyle(element).color);
 	const numberKeys = numberModal.locator(".modal-number-input .ui-button");
 	const firstKey = await numberKeys.first().boundingBox();
 	expect(firstKey?.width).toBeGreaterThanOrEqual(63);
 	expect(firstKey?.height).toBeGreaterThanOrEqual(63);
+	const numberPreview = numberModal.getByRole("textbox", {
+		name: "Fade time value",
+	});
+	const previewBox = await numberPreview.boundingBox();
+	const cursorLeft = numberModal.getByRole("button", {
+		name: "Move cursor left",
+	});
+	const cursorRight = numberModal.getByRole("button", {
+		name: "Move cursor right",
+	});
+	const cursorLeftBox = await cursorLeft.boundingBox();
+	const cursorRightBox = await cursorRight.boundingBox();
+	expect(cursorLeftBox?.x).toBeGreaterThan(
+		(previewBox?.x ?? 0) + (previewBox?.width ?? 0),
+	);
+	expect(cursorRightBox?.x).toBeGreaterThan(cursorLeftBox?.x ?? 0);
+	expect(cursorLeftBox?.y).toBe(previewBox?.y);
+	expect(cursorRightBox?.y).toBe(previewBox?.y);
+	await expect(
+		numberModal.locator(".modal-number-input").getByRole("button", {
+			name: "Move cursor left",
+		}),
+	).toHaveCount(0);
 	const enter = numberModal.getByRole("button", { name: "ENTER" });
 	const enterBox = await enter.boundingBox();
 	expect(enterBox?.height).toBeGreaterThanOrEqual(136);
-	await numberModal.getByRole("button", { name: "Move cursor left" }).click();
+	await cursorLeft.click();
 	await numberModal.getByRole("button", { name: "9" }).click();
-	await expect(
-		numberModal.getByRole("textbox", { name: "Fade time value" }),
-	).toContainText("62.98");
+	await expect(numberPreview).toContainText("62.98");
 
 	await page.goto(
 		"/iframe.html?id=input-keyboard-and-numpad--empty-text-input-modal&viewMode=story",
@@ -1534,12 +1752,20 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 	await expect(preview).toContainText("Enter fixture name");
 	await expect(preview.locator("> i")).toBeVisible();
 	const rail = textModal.locator(".modal-keyboard-actions");
+	const textBackspace = textModal.getByRole("button", { name: "Backspace" });
 	const textEnter = textModal.getByRole("button", { name: "Enter · Confirm" });
 	const railBox = await rail.boundingBox();
+	const textBackspaceBox = await textBackspace.boundingBox();
 	const textEnterBox = await textEnter.boundingBox();
+	expect(textBackspaceBox?.x).toBe(textEnterBox?.x);
+	expect(textBackspaceBox?.width).toBe(textEnterBox?.width);
 	expect(
-		Math.abs((railBox?.height ?? 0) - (textEnterBox?.height ?? 0)),
-	).toBeLessThan(2);
+		(textBackspaceBox?.y ?? 0) + (textBackspaceBox?.height ?? 0),
+	).toBeLessThan(textEnterBox?.y ?? 0);
+	expect(railBox?.height).toBeGreaterThan(textEnterBox?.height ?? 0);
+	await expect(
+		textModal.locator(".modal-keyboard-bottom .backspace"),
+	).toHaveCount(0);
 	const right = textModal.getByRole("button", { name: "Move cursor right" });
 	const space = textModal.getByRole("button", { name: "SPACE", exact: true });
 	const rightBox = await right.boundingBox();
@@ -1554,6 +1780,27 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 		),
 	).not.toBe("rgba(0, 0, 0, 0)");
 	const shift = textModal.getByRole("button", { name: "Shift" });
+	for (const letter of ["F", "I", "X"]) {
+		await textModal.getByRole("button", { name: letter, exact: true }).click();
+	}
+	const leadingText = preview.locator("> span").first();
+	const leadingBefore = await leadingText.boundingBox();
+	await textModal.getByRole("button", { name: "Move cursor left" }).click();
+	const leadingAfter = await leadingText.boundingBox();
+	expect(
+		Math.abs((leadingAfter?.x ?? 0) - (leadingBefore?.x ?? 0)),
+	).toBeLessThan(1);
+	await expect(preview).toHaveCSS("justify-content", "flex-start");
+	await expect(preview).toHaveCSS("text-align", "left");
+	expect(
+		Number.parseFloat(
+			await preview.evaluate((element) => getComputedStyle(element).fontSize),
+		),
+	).toBeLessThanOrEqual(20);
+	const textColor = await preview.evaluate(
+		(element) => getComputedStyle(element).color,
+	);
+	expect(textColor).not.toBe(numberColor);
 	await shift.click();
 	await expect(shift).toHaveAttribute("data-shift-state", "one-shot");
 	await textModal.getByRole("button", { name: "A", exact: true }).click();
@@ -1564,13 +1811,53 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 		"/iframe.html?id=input-keyboard-and-numpad--multiline-input-modal&viewMode=story",
 	);
 	const multiline = page.getByRole("dialog", { name: "Fixture name" });
-	await expect(
-		multiline.getByRole("textbox", { name: "Fixture name value" }),
-	).toHaveAttribute("aria-multiline", "true");
+	const multilineEditor = multiline.getByRole("textbox", {
+		name: "Fixture name value",
+	});
+	await expect(multilineEditor).toHaveAttribute("readonly", "");
+	await expect(multilineEditor).toHaveCSS("overflow-y", "scroll");
+	expect(
+		await multilineEditor.evaluate(
+			(editor) => editor.scrollHeight > editor.clientHeight,
+		),
+	).toBe(true);
+	await multilineEditor.click({ position: { x: 14, y: 45 } });
+	await expect
+		.poll(() =>
+			multilineEditor.evaluate(
+				(editor: HTMLTextAreaElement) => editor.selectionStart,
+			),
+		)
+		.toBe(11);
+	await multiline.getByRole("button", { name: "X", exact: true }).click();
+	await expect(multilineEditor).toHaveValue(
+		"First line\nxSecond line\nThird line\nFourth line\nFifth line\nSixth line\nSeventh line\nEighth line",
+	);
+	await expect
+		.poll(() =>
+			multilineEditor.evaluate(
+				(editor: HTMLTextAreaElement) => editor.selectionStart,
+			),
+		)
+		.toBe(12);
 	await expect(
 		multiline.getByRole("button", { name: "Enter · New line" }),
 	).toBeVisible();
 	await expect(multiline.getByRole("button", { name: "Done" })).toBeVisible();
+	const multilineShift = multiline.getByRole("button", { name: "Shift" });
+	const physicalZ = multiline.locator('[data-keyboard-code="KeyZ"]');
+	expect(
+		await multilineShift.evaluate(
+			(shift, z) => shift.parentElement === (z as HTMLElement).parentElement,
+			await physicalZ.elementHandle(),
+		),
+	).toBe(true);
+	const shiftBox = await multilineShift.boundingBox();
+	const zBox = await physicalZ.boundingBox();
+	expect(shiftBox?.width).toBeGreaterThan(
+		zBox?.width ?? Number.POSITIVE_INFINITY,
+	);
+	await expect(multilineShift.locator(".modal-shift-icon")).toBeVisible();
 });
 
 test("production marketing and application modal stories preserve their real compositions and workflows", async ({

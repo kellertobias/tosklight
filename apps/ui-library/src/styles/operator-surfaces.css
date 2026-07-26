@@ -573,46 +573,53 @@
   border-radius: 5px;
 }
 
-.hardware-fader > .hardware-fader-fill {
-  position: absolute;
-  inset: auto 3px 3px;
-  height: var(--hardware-fader-level);
-  background: linear-gradient(
+.hardware-fader-track {
+	position: absolute;
+	inset: 3px;
+	overflow: visible;
+}
+
+.hardware-fader-track > .hardware-fader-fill {
+	position: absolute;
+	inset: auto 0 0;
+	height: var(--hardware-fader-level);
+	background: linear-gradient(
     0deg,
     color-mix(in srgb, var(--playback-color, #176777) 78%, #071015),
     var(--playback-color, #176777)
   );
 }
 
-.hardware-fader > .hardware-fader-pickup-difference {
-  position: absolute;
-  z-index: 1;
-  right: 3px;
-  bottom: calc(3px + var(--hardware-pickup-start));
-  left: 3px;
+.hardware-fader-track > .hardware-fader-pickup-difference {
+	position: absolute;
+	z-index: 1;
+	right: 0;
+	bottom: var(--hardware-pickup-start);
+	left: 0;
   height: var(--hardware-pickup-size);
   min-height: 0;
   background: linear-gradient(0deg, #9f1723, #ed4050);
 }
 
-.hardware-fader > .hardware-fader-physical-marker,
-.hardware-fader > .hardware-fader-target-marker {
+.hardware-fader-track > .hardware-fader-physical-marker,
+.hardware-fader-track > .hardware-fader-target-marker {
   position: absolute;
   z-index: 2;
-  right: 2px;
-  left: 2px;
-  height: 2px;
-  pointer-events: none;
+	right: -1px;
+	left: -1px;
+	height: 2px;
+	pointer-events: none;
+	transform: translateY(50%);
 }
 
-.hardware-fader > .hardware-fader-physical-marker {
-  bottom: calc(3px + var(--hardware-fader-level));
+.hardware-fader-track > .hardware-fader-physical-marker {
+  bottom: var(--hardware-fader-level);
   background: #fff;
   box-shadow: 0 0 3px #000;
 }
 
-.hardware-fader > .hardware-fader-target-marker {
-  bottom: calc(3px + var(--hardware-pickup-target));
+.hardware-fader-track > .hardware-fader-target-marker {
+  bottom: var(--hardware-pickup-target);
   background: #ff5361;
   box-shadow: 0 0 3px #000;
 }

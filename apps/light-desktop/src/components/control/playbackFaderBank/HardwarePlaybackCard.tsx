@@ -3,7 +3,10 @@ import type {
 	MouseEvent as ReactMouseEvent,
 	PointerEvent as ReactPointerEvent,
 } from "react";
-import { HardwarePlaybackFaderView } from "@tosklight/ui/playback";
+import {
+	HardwarePlaybackFaderView,
+	PlaybackActionButtons,
+} from "@tosklight/ui/playback";
 import type { PlaybackRuntimeProjection } from "../../../api/types";
 import type { VerticalTouchFaderAction } from "@tosklight/ui/faders";
 import { activateHardwareCard } from "./actions";
@@ -12,7 +15,6 @@ import { playbackFaderDisplay } from "./feedback";
 import { HardwareCueRows } from "./HardwareCueRows";
 import { playbackRowUnits } from "./projection";
 import {
-	PlaybackActionButtons,
 	PlaybackAssignmentTarget,
 	PlaybackConfigurationTarget,
 	PlaybackRuntimeStatus,
