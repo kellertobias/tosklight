@@ -1,14 +1,14 @@
 import {
 	numericPadLayout,
 	softwareKeyLabel,
-} from "@tosklight/light-controls/programmer-keypad";
+} from "@tosklight/ui/programmer-keypad";
 import type { SoftwareKey } from "./softwareKeypad";
 import { Button } from "@tosklight/ui";
 import { HighlightControls } from "./HighlightControls";
 import { useNumericPadController } from "./numericPad/useNumericPadController";
 import { ProgrammerFadeFader } from "./ProgrammerFadeFader";
 
-export { numericPadLayout } from "@tosklight/light-controls/programmer-keypad";
+export { numericPadLayout } from "@tosklight/ui/programmer-keypad";
 
 const ACTION_KEYS: readonly SoftwareKey[] = [
 	"AT",

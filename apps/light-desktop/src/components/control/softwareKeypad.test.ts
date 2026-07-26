@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	numericPadLayout,
 	oscProgrammerActionForKey,
-} from "@tosklight/light-controls/programmer-keypad";
+} from "@tosklight/ui/programmer-keypad";
 import { commandTargetAfterEnter, defaultCommandLine, editCommandWithSoftwareKey, editTargetedCommandWithSoftwareKey, softwareKeyFromKeyboard, softwareKeypadRows } from "./softwareKeypad";
 
 describe("software keypad", () => {

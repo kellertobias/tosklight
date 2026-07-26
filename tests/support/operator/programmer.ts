@@ -9,7 +9,7 @@ import type { Page } from "@playwright/test";
 import {
 	oscProgrammerActionForKey,
 	type SoftwareKey,
-} from "@tosklight/light-controls/programmer-keypad";
+} from "@tosklight/ui/programmer-keypad";
 
 export type ProgrammerSurface =
 	| { via: "command-line"; api: ApiDriver }

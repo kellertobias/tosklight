@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { oscProgrammerActionForKey } from "@tosklight/light-controls/programmer-keypad";
+import { oscProgrammerActionForKey } from "@tosklight/ui/programmer-keypad";
 import {
 	dereferencedGroup,
 	fixture,

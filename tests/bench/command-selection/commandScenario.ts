@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import type { SoftwareKey } from "@tosklight/light-controls/programmer-keypad";
+import type { SoftwareKey } from "@tosklight/ui/programmer-keypad";
 import type { ApiDriver, CommandOperationResponse } from "../core/api";
 import type { DeskDriver } from "../core/desk";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { numericPadLayout } from "@tosklight/light-controls/programmer-keypad";
+import { numericPadLayout } from "@tosklight/ui/programmer-keypad";
 import {
   attachedHighlightKeys,
   attachedKeypadContentRowOffset,

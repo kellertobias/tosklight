@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { oscProgrammerActionForKey } from "@tosklight/light-controls/programmer-keypad";
+import { oscProgrammerActionForKey } from "@tosklight/ui/programmer-keypad";
 import type { ApiDriver } from "../core/api";
 import type {
 	BrowserCommands,

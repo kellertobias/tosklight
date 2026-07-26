@@ -3,7 +3,7 @@ import {
   oscProgrammerActionForKey,
   softwareKeyLabel,
   type NumericPadSection,
-} from "@tosklight/light-controls/programmer-keypad";
+} from "@tosklight/ui/programmer-keypad";
 import { ControlButton } from "../components/ControlButton";
 import {
   darkLamp,

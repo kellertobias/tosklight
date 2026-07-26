@@ -1,7 +1,7 @@
 import {
 	oscProgrammerActionForKey,
 	type SoftwareKey,
-} from "@tosklight/light-controls/programmer-keypad";
+} from "@tosklight/ui/programmer-keypad";
 import {
 	type fixture,
 	group,

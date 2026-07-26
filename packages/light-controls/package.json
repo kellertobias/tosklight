@@ -1,9 +1,0 @@
-{
-  "name": "@tosklight/light-controls",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "exports": {
-    "./programmer-keypad": "./src/programmerKeypad.ts"
-  }
-}

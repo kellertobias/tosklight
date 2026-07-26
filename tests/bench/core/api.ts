@@ -1,4 +1,4 @@
-import type { SoftwareKey } from "@tosklight/light-controls/programmer-keypad";
+import type { SoftwareKey } from "@tosklight/ui/programmer-keypad";
 import type {
   FixtureLibraryAction,
   FixtureLibraryActionOutcome,

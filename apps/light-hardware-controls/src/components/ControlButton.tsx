@@ -1,5 +1,5 @@
 import { useRef, useState, type CSSProperties } from "react";
-import type { SoftwareKey } from "@tosklight/light-controls/programmer-keypad";
+import type { SoftwareKey } from "@tosklight/ui/programmer-keypad";
 import { darkLamp, type Lamp } from "../controller/types";
 
 type HardwareKey =

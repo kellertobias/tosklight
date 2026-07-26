@@ -14,8 +14,7 @@
   "workspaces": [
     "apps/light-desktop",
     "apps/light-hardware-controls",
-    "apps/ui-library",
-    "packages/*"
+    "apps/ui-library"
   ],
   "scripts": {
     "dev": "bash tools/dev.sh both",

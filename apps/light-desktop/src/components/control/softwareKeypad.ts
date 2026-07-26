@@ -1,8 +1,8 @@
-import type { SoftwareKey } from "@tosklight/light-controls/programmer-keypad";
+import type { SoftwareKey } from "@tosklight/ui/programmer-keypad";
 import type { CommandTargetMode } from "../../controlSurface/commandTarget";
 import { removeCommandToken } from "./commandLineEditing";
 
-export type { SoftwareKey } from "@tosklight/light-controls/programmer-keypad";
+export type { SoftwareKey } from "@tosklight/ui/programmer-keypad";
 export type { CommandTargetMode } from "../../controlSurface/commandTarget";
 export {
 	commandTargetAfterEnter,

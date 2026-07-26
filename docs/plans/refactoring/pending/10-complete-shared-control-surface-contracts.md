@@ -2,9 +2,9 @@
 
 ## Goal
 
-Extend `packages/light-controls` beyond the numeric keypad so desktop, Hardware Controls, tests,
-and future applications share stable operator intent and physical-layout contracts without
-importing another application's internals.
+Extend the public control-surface contracts in `apps/ui-library` beyond the numeric keypad so
+desktop, Hardware Controls, tests, and future applications share stable operator intent and
+physical-layout contracts without importing another application's internals.
 
 Estimated effort: 0.3–0.6 Codex day.
 
@@ -18,7 +18,7 @@ second temporary compatibility contract.
 
 1. Inventory stable shared keypad IDs, OSC action/path mappings, Highlight actions, playback
    addressing, encoder actions, and attached physical-layout metadata.
-2. Move only proven cross-application contracts into public package exports.
+2. Move only proven cross-application contracts into public `@tosklight/ui` exports.
 3. Keep transport connections, runtime state, application controllers, and rendering in their
    owning applications.
 4. Replace desktop tests that deep-import Hardware Controls internals.
@@ -26,7 +26,7 @@ second temporary compatibility contract.
 
 ## Acceptance and verification
 
-- Both applications and root tests consume package exports.
+- Both applications and root tests consume `@tosklight/ui` exports.
 - Current software/hardware action names, layout order, page semantics, and OSC vocabulary remain
   exact.
 - Package unit/type tests, both application builds/tests, architecture checks, and hardware

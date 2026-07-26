@@ -15,7 +15,6 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
-    "@tosklight/light-controls": "0.1.0",
     "@tosklight/ui": "0.1.0",
     "@tauri-apps/api": "^2.11.1",
     "@types/three": "^0.185.1",
