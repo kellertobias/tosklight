@@ -6,6 +6,9 @@ declare const artifactResolver: {
     cargo: string;
     controlFrontend: string;
     hardwareFrontend: string;
+    storybook: string;
+    viteCache: string;
+    pythonCache: string;
     manual: string;
     release: string;
     runtime: string;

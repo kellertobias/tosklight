@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { artifactPaths } from "../artifact-paths.mjs";
 import {
 	compileSemanticTestCatalog,
 	discoverMarkedSpecs,
@@ -17,6 +17,7 @@ const root = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
 	"../..",
 );
+fs.mkdirSync(artifactPaths.tmp, { recursive: true });
 
 test("central narration separates actions, outcomes, surfaces, and returned handles", () => {
 	assert.deepEqual(
@@ -122,7 +123,7 @@ test("central narration separates actions, outcomes, surfaces, and returned hand
 
 test("AST compiler preserves dynamic expressions and unknown helpers as diagnostics", async () => {
 	const fixture = fs.mkdtempSync(
-		path.join(os.tmpdir(), "light-semantic-docs-"),
+		path.join(artifactPaths.tmp, "light-semantic-docs-"),
 	);
 	const tests = path.join(fixture, "tests");
 	const docs = path.join(fixture, "docs/engineering");
@@ -201,7 +202,7 @@ scenario("EXAMPLE-001", "shows unresolved source", async (t) => {
 
 test("ambiguous or missing migration rows stay unresolved and branches stay visible", async () => {
 	const fixture = fs.mkdtempSync(
-		path.join(os.tmpdir(), "light-semantic-status-"),
+		path.join(artifactPaths.tmp, "light-semantic-status-"),
 	);
 	const tests = path.join(fixture, "tests");
 	const docs = path.join(fixture, "docs/engineering");
@@ -338,7 +339,7 @@ test("repository compiler finds every marked scenario once and stays determinist
 });
 
 test("Playwright JSON merges only into separate last-run metadata with aggregate precedence", () => {
-	const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "light-results-"));
+	const fixture = fs.mkdtempSync(path.join(artifactPaths.tmp, "light-results-"));
 	const report = path.join(fixture, "report.json");
 	fs.writeFileSync(
 		report,
@@ -516,7 +517,7 @@ test("HTML is self-contained, searchable, and safely embeds catalog text", () =>
 
 test("CLI check rejects stale alternate outputs and accepts a subsequent write", () => {
 	const outputDirectory = fs.mkdtempSync(
-		path.join(os.tmpdir(), "light-doc-check-"),
+		path.join(artifactPaths.tmp, "light-doc-check-"),
 	);
 	const cli = path.join(root, "tools/semantic-test-docs/cli.mjs");
 	const args = ["--output-dir", outputDirectory];
@@ -541,7 +542,7 @@ test("CLI check rejects stale alternate outputs and accepts a subsequent write",
 });
 
 test("CLI refuses run-specific results in the canonical documentation directory", () => {
-	const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "light-doc-results-"));
+	const fixture = fs.mkdtempSync(path.join(artifactPaths.tmp, "light-doc-results-"));
 	const report = path.join(fixture, "report.json");
 	fs.writeFileSync(report, JSON.stringify({ suites: [] }));
 	const cli = path.join(root, "tools/semantic-test-docs/cli.mjs");

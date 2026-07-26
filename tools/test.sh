@@ -13,6 +13,7 @@ CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 usage(){ echo "Usage: npm run test:{unit|architecture|ui-package|storybook|e2e|e2e-api|e2e-ui|app-icons|artifact-paths|help-screenshots|help-screenshots-live|record|demo|all}"; }
 build_e2e(){ (cd "$UI" && npm run build); cargo build --manifest-path "$ROOT/Cargo.toml" -p light-headless --no-default-features; }
 architecture(){
+  "$ROOT/tools/test-artifact-paths.sh"
   node --test "$ROOT/tools/cargo-workspace-lints.test.mjs"
   node --test "$ROOT/tools/check-control-state-labels.test.mjs"
   node --test "$ROOT/tools/run-release-performance.test.mjs"

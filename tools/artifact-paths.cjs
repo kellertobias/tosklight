@@ -35,6 +35,8 @@ const artifactPaths = Object.freeze({
   controlFrontend: artifact("LIGHT_CONTROL_FRONTEND_DIR", "FRONTEND_CONTROL"),
   hardwareFrontend: artifact("LIGHT_HARDWARE_FRONTEND_DIR", "FRONTEND_HARDWARE"),
   storybook: artifact("LIGHT_STORYBOOK_UI_DIR", "STORYBOOK_UI"),
+  viteCache: artifact("LIGHT_VITE_CACHE_DIR", "CACHE_VITE"),
+  pythonCache: artifact("LIGHT_PYTHON_CACHE_DIR", "CACHE_PYTHON"),
   manual: artifact("LIGHT_MANUAL_ROOT", "MANUAL_ROOT"),
   iconContactSheets: artifact("LIGHT_ICON_CONTACT_SHEETS_DIR", "ICON_CONTACT_SHEETS"),
   release: artifact("LIGHT_RELEASE_DIR", "RELEASE_ROOT"),
@@ -48,5 +50,10 @@ const artifactPaths = Object.freeze({
   visual: artifact("LIGHT_VISUAL_INSPECTION_DIR", "TEST_VISUAL"),
   tmp: artifact("LIGHT_TMP_DIR", "TMP_ROOT"),
 });
+
+fs.mkdirSync(artifactPaths.tmp, { recursive: true });
+process.env.TMPDIR = artifactPaths.tmp;
+process.env.TMP = artifactPaths.tmp;
+process.env.TEMP = artifactPaths.tmp;
 
 module.exports = { artifactPaths, artifactRoot, repositoryRoot };

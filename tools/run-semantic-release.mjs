@@ -2,11 +2,11 @@
 
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import semanticRelease from "semantic-release";
+import { artifactPaths } from "./artifact-paths.mjs";
 
 const require = createRequire(import.meta.url);
 const configuration = require("../release.config.cjs");
@@ -47,7 +47,8 @@ try {
   const options = { ...configuration };
 
   if (dryRun) {
-    disposableRemote = mkdtempSync(join(tmpdir(), "tosklight-semantic-release-"));
+    mkdirSync(artifactPaths.tmp, { recursive: true });
+    disposableRemote = mkdtempSync(join(artifactPaths.tmp, "tosklight-semantic-release-"));
     git(["init", "--bare", disposableRemote]);
     git(["push", "--quiet", disposableRemote, "HEAD:refs/heads/main", "--tags"]);
     options.repositoryUrl = pathToFileURL(disposableRemote).href;

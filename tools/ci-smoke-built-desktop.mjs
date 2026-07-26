@@ -3,7 +3,6 @@
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import net from "node:net";
-import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { artifactPaths } from "./artifact-paths.mjs";
@@ -30,8 +29,9 @@ const executable =
 			);
 
 await fs.access(executable);
+await fs.mkdir(artifactPaths.tmp, { recursive: true });
 const dataDirectory = await fs.mkdtemp(
-	path.join(os.tmpdir(), "tosklight-ci-launch-"),
+	path.join(artifactPaths.tmp, "tosklight-ci-launch-"),
 );
 const port = await freePort();
 const output = [];

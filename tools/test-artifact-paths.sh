@@ -6,7 +6,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/artifact-paths.sh"
 source "$ROOT/tools/artifact-maintenance.sh"
 
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/light artifact paths.XXXXXX")"
+BOOTSTRAP_TMP_ROOT="${LIGHT_TMP_DIR:-$ROOT/.artifacts/tmp}"
+mkdir -p "$BOOTSTRAP_TMP_ROOT"
+TEST_ROOT="$(mktemp -d "$BOOTSTRAP_TMP_ROOT/light artifact paths.XXXXXX")"
 trap 'rm -rf -- "$TEST_ROOT"' EXIT
 cp "$ROOT/tools/artifact-layout.conf" "$TEST_ROOT/artifact-layout.conf"
 mkdir -p "$TEST_ROOT/repository/tools"
@@ -14,12 +16,43 @@ cp "$ROOT/tools/artifact-layout.conf" "$TEST_ROOT/repository/tools/artifact-layo
 
 LIGHT_ARTIFACTS_DIR="$TEST_ROOT/artifacts with spaces"
 unset LIGHT_DATA_DIR CARGO_TARGET_DIR LIGHT_CONTROL_FRONTEND_DIR LIGHT_HARDWARE_FRONTEND_DIR
-unset LIGHT_PNPM_STORE_DIR LIGHT_MANUAL_ROOT LIGHT_RELEASE_DIR LIGHT_RUNTIME_DATA_DIR
+unset LIGHT_STORYBOOK_UI_DIR LIGHT_PNPM_STORE_DIR LIGHT_VITE_CACHE_DIR LIGHT_PYTHON_CACHE_DIR
+unset LIGHT_MANUAL_ROOT LIGHT_ICON_CONTACT_SHEETS_DIR LIGHT_RELEASE_DIR LIGHT_RUNTIME_DATA_DIR
 unset LIGHT_TEST_COVERAGE_DIR LIGHT_PLAYWRIGHT_REPORT_DIR LIGHT_TEST_RESULTS_DIR
-unset LIGHT_VISUAL_INSPECTION_DIR LIGHT_TMP_DIR
+unset LIGHT_VISUAL_INSPECTION_DIR LIGHT_TMP_DIR LIGHT_PAGES_DIR LIGHT_SAFARI_DIR
 light_init_artifact_paths "$TEST_ROOT/repository"
 [[ "$CARGO_TARGET_DIR" == "$TEST_ROOT/artifacts with spaces/build/cargo" ]]
+[[ "$LIGHT_CONTROL_FRONTEND_DIR" == "$TEST_ROOT/artifacts with spaces/build/frontend/light-desktop" ]]
+[[ "$LIGHT_HARDWARE_FRONTEND_DIR" == "$TEST_ROOT/artifacts with spaces/build/frontend/light-hardware-controls" ]]
+[[ "$LIGHT_STORYBOOK_UI_DIR" == "$TEST_ROOT/artifacts with spaces/build/storybook/ui" ]]
+[[ "$LIGHT_VITE_CACHE_DIR" == "$TEST_ROOT/artifacts with spaces/cache/vite" ]]
+[[ "$LIGHT_PYTHON_CACHE_DIR" == "$TEST_ROOT/artifacts with spaces/cache/python" ]]
+[[ "$LIGHT_MANUAL_ROOT" == "$TEST_ROOT/artifacts with spaces/generated/manual" ]]
+[[ "$LIGHT_RELEASE_DIR" == "$TEST_ROOT/artifacts with spaces/release" ]]
+[[ "$LIGHT_TEST_RESULTS_DIR" == "$TEST_ROOT/artifacts with spaces/test/results" ]]
+[[ "$LIGHT_PLAYWRIGHT_REPORT_DIR" == "$TEST_ROOT/artifacts with spaces/test/playwright-report" ]]
+[[ "$LIGHT_TMP_DIR" == "$TEST_ROOT/artifacts with spaces/tmp" ]]
 [[ "$LIGHT_DATA_DIR" == "$TEST_ROOT/artifacts with spaces/runtime/light-data" ]]
+[[ "$TMPDIR" == "$LIGHT_TMP_DIR" && "$TMP" == "$LIGHT_TMP_DIR" && "$TEMP" == "$LIGHT_TMP_DIR" ]]
+[[ "$PYTHONPYCACHEPREFIX" == "$LIGHT_PYTHON_CACHE_DIR" ]]
+[[ "$(node -e 'const { artifactPaths } = require(process.argv[1]); process.stdout.write(artifactPaths.tmp)' "$ROOT/tools/artifact-paths.cjs")" == "$LIGHT_TMP_DIR" ]]
+[[ "$(PYTHONPATH="$ROOT/tools" python3 -c 'from artifact_paths import artifact_path; print(artifact_path("LIGHT_TMP_DIR", "TMP_ROOT"))')" == "$LIGHT_TMP_DIR" ]]
+
+printf root-file > "$TEST_ROOT/repository/README.md"
+mkdir -p "$TEST_ROOT/repository/.next"
+printf generated > "$TEST_ROOT/repository/.next/output"
+ln -s "$TEST_ROOT/repository/README.md" "$TEST_ROOT/repository/root-link"
+unexpected="$(light_list_unexpected_root_entries "$TEST_ROOT/repository")"
+[[ "$unexpected" == *"$TEST_ROOT/repository/.next"* ]]
+[[ "$unexpected" == *"$TEST_ROOT/repository/root-link"* ]]
+[[ "$unexpected" != *"$TEST_ROOT/repository/tools"* ]]
+[[ "$unexpected" != *"$TEST_ROOT/repository/README.md"* ]]
+light_clean_repository_root >/dev/null
+[[ ! -e "$TEST_ROOT/repository/.next" && ! -L "$TEST_ROOT/repository/root-link" ]]
+cleanup_archive="$(find "$LIGHT_ARTIFACTS_DIR/cleanup/repository-root" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+[[ -n "$cleanup_archive" ]]
+[[ "$(<"$cleanup_archive/.next/output")" == generated ]]
+[[ -L "$cleanup_archive/root-link" ]]
 
 LIGHT_LEGACY_DATA_DIR="$TEST_ROOT/legacy/light-data"
 mkdir -p "$LIGHT_LEGACY_DATA_DIR/matter"
@@ -47,11 +80,14 @@ fi
 [[ "$(<"$LIGHT_RUNTIME_DATA_DIR/conflict")" == current ]]
 rm -rf -- "$LIGHT_LEGACY_DATA_DIR"
 
-mkdir -p "$LIGHT_ARTIFACTS_DIR"/{build,cache,generated,release,test,tmp} "$LIGHT_RUNTIME_DATA_DIR"
+mkdir -p "$LIGHT_ARTIFACTS_DIR"/{build,cache,generated,legacy,performance,release,test,tmp} "$LIGHT_RUNTIME_DATA_DIR"
 printf keep > "$LIGHT_RUNTIME_DATA_DIR/sentinel"
+printf recovery > "$LIGHT_ARTIFACTS_DIR/cleanup/recovery-sentinel"
 light_clean_reproducible >/dev/null
 [[ "$(<"$LIGHT_RUNTIME_DATA_DIR/sentinel")" == keep ]]
 [[ ! -e "$LIGHT_ARTIFACTS_DIR/build" && ! -e "$LIGHT_ARTIFACTS_DIR/test" ]]
+[[ ! -e "$LIGHT_ARTIFACTS_DIR/legacy" && ! -e "$LIGHT_ARTIFACTS_DIR/performance" ]]
+[[ "$(<"$LIGHT_ARTIFACTS_DIR/cleanup/recovery-sentinel")" == recovery ]]
 
 if light_clean_runtime wrong >/dev/null 2>&1; then
   echo "error: runtime cleanup accepted an incorrect confirmation" >&2
@@ -86,5 +122,53 @@ if (LIGHT_ARTIFACTS_DIR=""; light_init_artifact_paths "$TEST_ROOT/repository" >/
   echo "error: an explicitly empty artifact root was silently accepted" >&2
   exit 1
 fi
+
+if rg -n '\$RUNNER_TEMP|os\.tmpdir\(\)|mktemp -d\)' \
+  "$ROOT/.github" \
+  "$ROOT/tools"/*.mjs \
+  "$ROOT/tools/semantic-test-docs"/*.mjs \
+  "$ROOT/tests/bench/core/lightBench.ts"; then
+  echo "error: repository-owned command or CI temporary output bypasses .artifacts/tmp" >&2
+  exit 1
+fi
+
+if [[ -e "$ROOT/artifacts" ]]; then
+  echo "error: legacy undotted artifact root exists: $ROOT/artifacts" >&2
+  exit 1
+fi
+unexpected="$(light_list_unexpected_root_entries "$ROOT")"
+if [[ -n "$unexpected" ]]; then
+  echo "error: unexpected non-file entries exist at the repository root:" >&2
+  while IFS= read -r entry; do
+    printf '  %s\n' "$entry" >&2
+  done <<<"$unexpected"
+  echo "Run: npm run clean:root" >&2
+  exit 1
+fi
+if rg -n --pcre2 '(?<![.[:alnum:]_-])artifacts/' \
+  "$ROOT/.github" \
+  "$ROOT/package.json" \
+  "$ROOT/apps"/*/package.json \
+  "$ROOT/tools"/*.mjs \
+  "$ROOT/tools/build.sh" \
+  "$ROOT/tools/dev.sh" \
+  "$ROOT/tools/test.sh"; then
+  echo "error: repository-owned command references the legacy undotted artifacts directory" >&2
+  exit 1
+fi
+if rg -Fq '/artifacts/' "$ROOT/.gitignore"; then
+  echo "error: .gitignore hides the forbidden undotted artifact root" >&2
+  exit 1
+fi
+
+rg -Fq 'target-dir = ".artifacts/build/cargo"' "$ROOT/.cargo/config.toml"
+rg -Fq 'outputDir: artifactPaths.results' "$ROOT/playwright.config.ts"
+rg -Fq 'outDir: artifactPaths.controlFrontend' "$ROOT/apps/light-desktop/vite.config.ts"
+rg -Fq 'cacheDir: `${artifactPaths.viteCache}/light-desktop`' "$ROOT/apps/light-desktop/vite.config.ts"
+rg -Fq 'outDir: artifactPaths.hardwareFrontend' "$ROOT/apps/light-hardware-controls/vite.config.ts"
+rg -Fq 'cacheDir: `${artifactPaths.viteCache}/light-hardware-controls`' "$ROOT/apps/light-hardware-controls/vite.config.ts"
+rg -Fq 'cacheDir: `${artifactPaths.viteCache}/ui-library-vitest`' "$ROOT/apps/ui-library/vitest.config.ts"
+rg -Fq 'cacheDir: `${artifactPaths.viteCache}/ui-library-storybook`' "$ROOT/apps/ui-library/storybook/config/main.ts"
+rg -Fq 'cacheDir: `${artifactPaths.viteCache}/root`' "$ROOT/vitest.config.ts"
 
 echo "Artifact path, migration, override, and cleanup safety tests passed."

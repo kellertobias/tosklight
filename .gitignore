@@ -27,8 +27,7 @@
 *.pyc
 
 __pycache__
-# Generated release packages
-/artifacts/
+# Legacy generated output locations (kept visible so regressions are not hidden)
 /output/
 /tmp/
 

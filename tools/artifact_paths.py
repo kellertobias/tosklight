@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(
+    os.environ.get("LIGHT_REPOSITORY_ROOT", Path(__file__).resolve().parents[1])
+).expanduser().resolve()
 
 
 def _layout() -> dict[str, str]:

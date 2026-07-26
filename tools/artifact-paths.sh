@@ -40,6 +40,8 @@ light_init_artifact_paths() {
   light_export_path LIGHT_HARDWARE_FRONTEND_DIR "$repository_root" "${LIGHT_HARDWARE_FRONTEND_DIR-$LIGHT_ARTIFACTS_DIR/$FRONTEND_HARDWARE}" || return 1
   light_export_path LIGHT_STORYBOOK_UI_DIR "$repository_root" "${LIGHT_STORYBOOK_UI_DIR-$LIGHT_ARTIFACTS_DIR/$STORYBOOK_UI}" || return 1
   light_export_path LIGHT_PNPM_STORE_DIR "$repository_root" "${LIGHT_PNPM_STORE_DIR-$LIGHT_ARTIFACTS_DIR/$CACHE_PNPM}" || return 1
+  light_export_path LIGHT_VITE_CACHE_DIR "$repository_root" "${LIGHT_VITE_CACHE_DIR-$LIGHT_ARTIFACTS_DIR/$CACHE_VITE}" || return 1
+  light_export_path LIGHT_PYTHON_CACHE_DIR "$repository_root" "${LIGHT_PYTHON_CACHE_DIR-$LIGHT_ARTIFACTS_DIR/$CACHE_PYTHON}" || return 1
   light_export_path LIGHT_MANUAL_ROOT "$repository_root" "${LIGHT_MANUAL_ROOT-$LIGHT_ARTIFACTS_DIR/$MANUAL_ROOT}" || return 1
   light_export_path LIGHT_ICON_CONTACT_SHEETS_DIR "$repository_root" "${LIGHT_ICON_CONTACT_SHEETS_DIR-$LIGHT_ARTIFACTS_DIR/$ICON_CONTACT_SHEETS}" || return 1
   light_export_path LIGHT_RELEASE_DIR "$repository_root" "${LIGHT_RELEASE_DIR-$LIGHT_ARTIFACTS_DIR/$RELEASE_ROOT}" || return 1
@@ -62,4 +64,10 @@ light_init_artifact_paths() {
     export LIGHT_DATA_DIR="$LIGHT_RUNTIME_DATA_DIR"
     export LIGHT_DATA_DIR_EXPLICIT=0
   fi
+
+  mkdir -p "$LIGHT_TMP_DIR"
+  export TMPDIR="$LIGHT_TMP_DIR"
+  export TMP="$LIGHT_TMP_DIR"
+  export TEMP="$LIGHT_TMP_DIR"
+  export PYTHONPYCACHEPREFIX="$LIGHT_PYTHON_CACHE_DIR"
 }

@@ -32,11 +32,12 @@ tools/build.sh is invoked by the root package.json scripts:
   npm run bundle               Create self-contained server archives for macOS, Windows, Linux AMD64/ARM64
   npm run bundle:install       Also install and open ToskLight.app in ~/Applications
   npm run migrate-artifacts    Move legacy ./light-data to the canonical development runtime directory
-  npm run clean                Remove reproducible artifacts while preserving development runtime data
+  npm run clean:root           Move unexpected root directories into recoverable artifact storage
+  npm run clean:artifacts      Remove generated artifacts while preserving runtime and root-cleanup recovery
   npm run artifact-path NAME   Print a resolved artifact path (for CI and tooling)
 
 Direct subcommands: open | manual | icon-contact-sheets | safari | pages | pages-serve [PORT] | codesafari |
-  archive [install] | migrate-artifacts | clean [runtime PATH] | path NAME
+  archive [install] | migrate-artifacts | clean-root | clean-artifacts [runtime PATH] | path NAME
 EOF
 }
 
@@ -407,6 +408,7 @@ print_artifact_path() {
     safari) printf '%s\n' "$LIGHT_SAFARI_DIR" ;;
     release) printf '%s\n' "$LIGHT_RELEASE_DIR" ;;
     runtime) printf '%s\n' "$LIGHT_RUNTIME_DATA_DIR" ;;
+    tmp) printf '%s\n' "$LIGHT_TMP_DIR" ;;
     test-results) printf '%s\n' "$LIGHT_TEST_RESULTS_DIR" ;;
     playwright-report) printf '%s\n' "$LIGHT_PLAYWRIGHT_REPORT_DIR" ;;
     visual-inspection) printf '%s\n' "$LIGHT_VISUAL_INSPECTION_DIR" ;;
@@ -455,7 +457,11 @@ case "${1:-}" in
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
     light_migrate_runtime
     ;;
-  clean)
+  clean-root)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    light_clean_repository_root
+    ;;
+  clean|clean-artifacts)
     case "${2:-}" in
       "") [[ $# -eq 1 ]] || { usage >&2; exit 2; }; light_clean_reproducible ;;
       runtime) [[ $# -eq 3 ]] || { usage >&2; exit 2; }; light_clean_runtime "$3" ;;

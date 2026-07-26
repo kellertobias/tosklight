@@ -406,7 +406,7 @@ jobs:
         if: matrix.desktop
         shell: bash
         run: |
-          config="$RUNNER_TEMP/tauri-control-release.json"
+          config=".artifacts/tmp/tauri-control-release.json"
           node tools/write-tauri-artifact-config.mjs control "$config"
           npm run --prefix apps/light-desktop tauri:build -- --target ${{ matrix.target }} --config "$config"
 
@@ -435,7 +435,7 @@ jobs:
         if: matrix.slug == 'macos-arm64'
         shell: bash
         run: |
-          config="$RUNNER_TEMP/tauri-hardware-release.json"
+          config=".artifacts/tmp/tauri-hardware-release.json"
           node tools/write-tauri-artifact-config.mjs hardware "$config"
           npm run --prefix apps/light-hardware-controls tauri:build -- --target ${{ matrix.target }} --config "$config"
 
@@ -449,9 +449,12 @@ jobs:
           set -euo pipefail
           version="$LIGHT_RELEASE_VERSION"
           out=".artifacts/release"
-          mkdir -p "$out"
+          tmp=".artifacts/tmp"
+          mkdir -p "$out" "$tmp"
 
-          stage="$(mktemp -d)/light-headless-$version-$SLUG"
+          stage_root="$(mktemp -d "$tmp/release-stage.XXXXXX")"
+          trap 'rm -rf -- "$stage_root"' EXIT
+          stage="$stage_root/light-headless-$version-$SLUG"
           mkdir -p "$stage"
           cp ".artifacts/build/cargo/$TARGET/release/$HEADLESS_BINARY" "$stage/"
           if [[ "$SLUG" == "linux-amd64" ]]; then
@@ -660,10 +663,12 @@ jobs:
 
           if [[ "$RELEASE_CREATED" == "true" ]]; then
             archive="light-headless-${VERSION}-linux-amd64.zip"
-            gh release download "v${VERSION}" --pattern "$archive" --dir "$RUNNER_TEMP"
-            mkdir -p "$RUNNER_TEMP/release-performance"
-            unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP/release-performance"
-            benchmark="$(find "$RUNNER_TEMP/release-performance" -type f -name light-benchmark -print -quit)"
+            tmp=".artifacts/tmp/release-performance"
+            rm -rf -- "$tmp"
+            mkdir -p "$tmp/unpacked"
+            gh release download "v${VERSION}" --pattern "$archive" --dir "$tmp"
+            unzip -q "$tmp/$archive" -d "$tmp/unpacked"
+            benchmark="$(find "$tmp/unpacked" -type f -name light-benchmark -print -quit)"
             if [[ -n "$benchmark" ]]; then
               chmod +x "$benchmark"
               node tools/run-release-performance.mjs \

@@ -54,12 +54,69 @@ light_assert_safe_cleanup_target() {
   [[ ! -L "$target" ]] || { echo "error: refusing symlinked cleanup target: $target" >&2; return 1; }
 }
 
+light_root_directory_allowed() {
+  case "$1" in
+    .agents|.artifacts|.cargo|.forgejo|.git|.github|.show|.tour|apps|assets|crates|docs|experiments|node_modules|tests|tools)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+light_list_unexpected_root_entries() {
+  local repository_root="$1" entry name
+  [[ -n "$repository_root" && "$repository_root" = /* && -d "$repository_root" ]] || {
+    echo "error: repository root must be an existing absolute directory" >&2
+    return 1
+  }
+  while IFS= read -r -d '' entry; do
+    name="${entry##*/}"
+    if [[ -f "$entry" && ! -L "$entry" ]]; then
+      continue
+    fi
+    if light_root_directory_allowed "$name" && [[ -d "$entry" && ! -L "$entry" ]]; then
+      continue
+    fi
+    printf '%s\n' "$entry"
+  done < <(find "$repository_root" -mindepth 1 -maxdepth 1 -print0)
+}
+
+light_clean_repository_root() {
+  local repository_root="$LIGHT_REPOSITORY_ROOT" entry name
+  local -a unexpected=()
+  while IFS= read -r entry; do
+    unexpected+=("$entry")
+  done < <(light_list_unexpected_root_entries "$repository_root")
+  if [[ "${#unexpected[@]}" -eq 0 ]]; then
+    echo "Repository root already contains only approved directories and files."
+    return 0
+  fi
+
+  local archive="$LIGHT_ARTIFACTS_DIR/cleanup/repository-root/$(date -u '+%Y%m%dT%H%M%SZ')-$$"
+  light_assert_safe_cleanup_target "$archive" "$LIGHT_ARTIFACTS_DIR" || return 1
+  mkdir -p "$archive"
+  for entry in "${unexpected[@]}"; do
+    name="${entry##*/}"
+    [[ ! -e "$archive/$name" && ! -L "$archive/$name" ]] || {
+      echo "error: cleanup archive collision: $archive/$name" >&2
+      return 1
+    }
+    mv -- "$entry" "$archive/$name"
+  done
+  echo "Moved ${#unexpected[@]} unexpected root entries to $archive"
+  echo "Recovery: move any required entry from that directory back to $repository_root."
+}
+
 light_clean_reproducible() {
   local target
   for target in \
     "$LIGHT_ARTIFACTS_DIR/build" \
     "$LIGHT_ARTIFACTS_DIR/cache" \
     "$LIGHT_ARTIFACTS_DIR/generated" \
+    "$LIGHT_ARTIFACTS_DIR/legacy" \
+    "$LIGHT_ARTIFACTS_DIR/performance" \
     "$LIGHT_ARTIFACTS_DIR/release" \
     "$LIGHT_ARTIFACTS_DIR/test" \
     "$LIGHT_ARTIFACTS_DIR/tmp"; do
@@ -69,12 +126,14 @@ light_clean_reproducible() {
     "$LIGHT_ARTIFACTS_DIR/build" \
     "$LIGHT_ARTIFACTS_DIR/cache" \
     "$LIGHT_ARTIFACTS_DIR/generated" \
+    "$LIGHT_ARTIFACTS_DIR/legacy" \
+    "$LIGHT_ARTIFACTS_DIR/performance" \
     "$LIGHT_ARTIFACTS_DIR/release" \
     "$LIGHT_ARTIFACTS_DIR/test" \
     "$LIGHT_ARTIFACTS_DIR/tmp"; do
     [[ ! -e "$target" ]] || rm -rf -- "$target"
   done
-  echo "Removed reproducible artifacts; preserved runtime at $LIGHT_RUNTIME_DATA_DIR"
+  echo "Removed generated artifacts; preserved runtime at $LIGHT_RUNTIME_DATA_DIR and root-cleanup recovery under $LIGHT_ARTIFACTS_DIR/cleanup"
 }
 
 light_clean_runtime() {
@@ -82,7 +141,7 @@ light_clean_runtime() {
   light_assert_safe_cleanup_target "$LIGHT_RUNTIME_DATA_DIR" "$LIGHT_ARTIFACTS_DIR" || return 1
   [[ "$confirmation" == "$LIGHT_RUNTIME_DATA_DIR" ]] || {
     echo "error: runtime cleanup includes local shows and desk state" >&2
-    echo "Confirm with: npm run clean -- runtime '$LIGHT_RUNTIME_DATA_DIR'" >&2
+    echo "Confirm with: npm run clean:artifacts -- runtime '$LIGHT_RUNTIME_DATA_DIR'" >&2
     return 1
   }
   [[ ! -e "$LIGHT_RUNTIME_DATA_DIR" ]] || rm -rf -- "$LIGHT_RUNTIME_DATA_DIR"

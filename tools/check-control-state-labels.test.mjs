@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { artifactPaths } from "./artifact-paths.mjs";
 import { controlStateLabelWarnings } from "./check-control-state-labels.mjs";
 
 function fixture(source) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "tosklight-control-labels-"));
+  fs.mkdirSync(artifactPaths.tmp, { recursive: true });
+  const root = fs.mkdtempSync(path.join(artifactPaths.tmp, "tosklight-control-labels-"));
   const directory = path.join(root, "apps", "example", "src");
   fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(path.join(directory, "Example.tsx"), source);
