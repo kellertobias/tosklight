@@ -869,7 +869,9 @@ describe("ParameterControls programmer targets and alignment", () => {
 			},
 		];
 		render(<ParameterControls />);
-		fireEvent.click(screen.getByRole("button", { name: "Set Value" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Dimmer value" }),
+		);
 		fireEvent.click(screen.getByRole("button", { name: "Release" }));
 		expect(normalValuesActions.batch).toHaveBeenCalledWith({
 			requestId: expect.any(String),

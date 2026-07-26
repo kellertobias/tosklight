@@ -105,10 +105,11 @@
 
 .touch-encoder {
   position: relative;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  display: block;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--encoder-color) 55%, var(--line));
   border-radius: 8px;
@@ -116,40 +117,11 @@
   touch-action: none;
 }
 
-.touch-encoder > header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 2px 6px;
-  padding: 6px 7px;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--encoder-color) 12%, #10171c);
-}
-
-.touch-encoder > header span {
-  overflow: hidden;
-  color: #a5afb6;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.touch-encoder > header strong {
-  color: #fff;
-  font-size: 13px;
-}
-
-.touch-encoder > header small {
-  grid-column: 1 / -1;
-  color: var(--cyan);
-  font-size: 8px;
-}
-
 .touch-encoder-surface {
   position: relative;
-  display: grid;
-  grid-template-rows: minmax(44px, 1fr) minmax(54px, auto) minmax(44px, 1fr);
+  width: 100%;
+  height: 100%;
   min-height: 0;
-  padding: 5px;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--encoder-color) 9%, transparent), transparent 45%, color-mix(in srgb, #000 14%, transparent)),
     #121a1f;
@@ -157,36 +129,103 @@
 }
 
 .touch-encoder-tap-zone {
-  min-height: 0;
-}
-
-.touch-encoder-drag-affordance {
   position: absolute;
-  top: 18px;
-  left: 50%;
-  width: 28px;
-  height: 34px;
-  transform: translateX(-50%);
-  opacity: 0.55;
-  background:
-    linear-gradient(135deg, transparent 42%, var(--muted) 43% 55%, transparent 56%) top center / 10px 10px no-repeat,
-    linear-gradient(45deg, transparent 42%, var(--muted) 43% 55%, transparent 56%) top center / 10px 10px no-repeat,
-    linear-gradient(45deg, transparent 42%, var(--muted) 43% 55%, transparent 56%) bottom center / 10px 10px no-repeat,
-    linear-gradient(135deg, transparent 42%, var(--muted) 43% 55%, transparent 56%) bottom center / 10px 10px no-repeat;
+  z-index: 1;
+  left: 0;
+  width: 100%;
+  height: 50%;
 }
 
-.touch-encoder-surface > .touch-encoder-set {
-  align-self: stretch;
-  min-width: 0;
-  min-height: 54px;
-  margin: 3px 9px;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--encoder-color) 14%, #151d22);
-  border-color: color-mix(in srgb, var(--encoder-color) 65%, var(--line));
-  color: var(--cyan);
-  font-size: 12px;
-  font-weight: 750;
+.touch-encoder-tap-positive {
+  top: 0;
+}
+
+.touch-encoder-tap-negative {
+  bottom: 0;
+}
+
+.touch-encoder-ridges {
+  position: absolute;
+  z-index: 0;
+  inset: 13px 35px 13px 12px;
+  opacity: 0.38;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 14px,
+    color-mix(in srgb, var(--encoder-color) 62%, var(--muted)) 14px 16px,
+    transparent 16px 23px
+  );
+}
+
+.touch-encoder-value {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  max-width: calc(100% - 54px);
+  margin: 0;
+  padding: 5px 8px;
+  overflow: hidden;
+  border: 0;
+  background: #121a1fe6;
+  color: #fff;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 4px #000;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
   cursor: pointer;
+}
+
+.touch-encoder-value:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.touch-encoder-value:disabled {
+  cursor: default;
+}
+
+.touch-encoder-legend {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  right: 5px;
+  bottom: 8px;
+  width: 25px;
+  display: grid;
+  grid-template-rows: auto minmax(8px, 1fr) auto minmax(8px, 1fr) auto;
+  place-items: center;
+  color: color-mix(in srgb, var(--encoder-color) 72%, #d7e3e8);
+  pointer-events: none;
+}
+
+.touch-encoder-legend span,
+.touch-encoder-legend strong {
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+}
+
+.touch-encoder-legend strong {
+  color: var(--cyan);
+  font-size: 8px;
+}
+
+.touch-encoder-legend i {
+  color: var(--muted);
+  font-size: 8px;
+  font-style: normal;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  writing-mode: vertical-rl;
 }
 
 .touch-encoder:focus-visible {
@@ -209,13 +248,6 @@
 .touch-encoder.disabled {
   filter: grayscale(1);
   opacity: 0.4;
-}
-
-.touch-encoder-constraint {
-  padding: 3px 6px;
-  color: var(--muted);
-  font-size: 8px;
-  text-align: center;
 }
 
 .hardware-connected .hardware-encoder-display {

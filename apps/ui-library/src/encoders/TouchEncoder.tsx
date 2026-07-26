@@ -7,7 +7,6 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { Button } from "../common";
 import { ModalNumberEditor } from "../input/ModalNumberEditor";
 import { submitNumericExpression } from "../input/numericExpression";
 
@@ -42,42 +41,49 @@ interface DragState {
 
 function TouchEncoderSurface({
 	disabled,
+	display,
 	indexed,
+	label,
 	onStep,
 	onSet,
 }: {
 	disabled: boolean;
+	display: string;
 	indexed: boolean;
+	label: string;
 	onStep(delta: number): void;
 	onSet(): void;
 }) {
 	return (
-		<>
-			<div className="touch-encoder-surface">
-				<div
-					className="touch-encoder-tap-zone touch-encoder-tap-positive"
-					aria-hidden="true"
-					onClick={() => onStep(TOUCH_ENCODER_FINE_STEP)}
-				>
-					<span className="touch-encoder-drag-affordance" />
-				</div>
-				<Button
-					className="touch-encoder-set"
-					disabled={disabled || indexed}
-					onClick={onSet}
-				>
-					Set Value
-				</Button>
-				<div
-					className="touch-encoder-tap-zone touch-encoder-tap-negative"
-					aria-hidden="true"
-					onClick={() => onStep(-TOUCH_ENCODER_FINE_STEP)}
-				/>
+		<div className="touch-encoder-surface">
+			<span className="touch-encoder-ridges" aria-hidden="true" />
+			<div
+				className="touch-encoder-tap-zone touch-encoder-tap-positive"
+				aria-hidden="true"
+				onClick={() => onStep(TOUCH_ENCODER_FINE_STEP)}
+			/>
+			<button
+				type="button"
+				className="touch-encoder-value"
+				aria-label={`Set ${label} value`}
+				disabled={disabled || indexed}
+				onClick={onSet}
+			>
+				{display}
+			</button>
+			<div
+				className="touch-encoder-tap-zone touch-encoder-tap-negative"
+				aria-hidden="true"
+				onClick={() => onStep(-TOUCH_ENCODER_FINE_STEP)}
+			/>
+			<div className="touch-encoder-legend" aria-hidden="true">
+				<span>Increase</span>
+				<i>•••</i>
+				<strong>Set</strong>
+				<i>•••</i>
+				<span>Decrease</span>
 			</div>
-			{indexed && (
-				<small className="touch-encoder-constraint">Indexed value</small>
-			)}
-		</>
+		</div>
 	);
 }
 
@@ -204,7 +210,6 @@ export function TouchEncoder({
 	value,
 	disabled = false,
 	accentColor,
-	mode,
 	indexed = false,
 	canRelease = false,
 	onStep,
@@ -267,20 +272,17 @@ export function TouchEncoder({
 				onWheel={onWheel}
 				onKeyDown={onKeyDown}
 			>
-				<header>
-					<span>{label}</span>
-					<strong aria-live="polite">{display}</strong>
-					{mode && <small>{mode}</small>}
-				</header>
 				<TouchEncoderSurface
 					disabled={disabled}
+					display={display}
 					indexed={indexed}
+					label={label}
 					onStep={interaction.step}
 					onSet={openEditor}
 				/>
 				<span id={instructionsId} className="visually-hidden">
 					Upper and lower surface taps step the value. Drag vertically to
-					accelerate. Press Enter for Set Value.
+					accelerate. Press the centered value or Enter for absolute entry.
 				</span>
 				{interaction.dragFeedback && (
 					<output className="touch-encoder-drag-feedback" aria-live="polite">

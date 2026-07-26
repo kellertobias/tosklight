@@ -400,7 +400,31 @@ test("touch and hardware encoder stories exercise continuous input, modal entry,
 		"/iframe.html?id=encoders-production-encoder-surfaces--individual-touch&viewMode=story",
 	);
 	const encoder = page.getByRole("group", { name: "Enc 1 · Dimmer" });
-	const value = encoder.locator("header strong");
+	const value = encoder.locator(".touch-encoder-value");
+	await expect(encoder.locator(":scope > header")).toHaveCount(0);
+	await expect(encoder.locator(".touch-encoder-set")).toHaveCount(0);
+	await expect(encoder.locator(".touch-encoder-legend")).toHaveText(
+		"Increase•••Set•••Decrease",
+	);
+	const [encoderGeometry, valueGeometry, legendGeometry] = await Promise.all([
+		encoder.boundingBox(),
+		value.boundingBox(),
+		encoder.locator(".touch-encoder-legend").boundingBox(),
+	]);
+	expect(encoderGeometry).not.toBeNull();
+	expect(valueGeometry).not.toBeNull();
+	expect(legendGeometry).not.toBeNull();
+	expect(
+		(valueGeometry?.x ?? 0) +
+			(valueGeometry?.width ?? 0) / 2 -
+			((encoderGeometry?.x ?? 0) + (encoderGeometry?.width ?? 0) / 2),
+	).toBeCloseTo(0, 5);
+	expect(
+		(valueGeometry?.y ?? 0) +
+			(valueGeometry?.height ?? 0) / 2 -
+			((encoderGeometry?.y ?? 0) + (encoderGeometry?.height ?? 0) / 2),
+	).toBeCloseTo(0, 5);
+	expect(legendGeometry?.x).toBeGreaterThan(valueGeometry?.x ?? 0);
 	await expect(value).toHaveText("52%");
 	await encoder.locator(".touch-encoder-tap-positive").click();
 	await expect(value).toHaveText("53%");
@@ -427,7 +451,9 @@ test("touch and hardware encoder stories exercise continuous input, modal entry,
 	await page.mouse.up();
 	await expect(value).not.toHaveText("43%");
 
-	await encoder.getByRole("button", { name: "Set Value" }).click();
+	await encoder
+		.getByRole("button", { name: "Set Enc 1 · Dimmer value" })
+		.click();
 	const touchEditor = page.getByRole("dialog", {
 		name: "Enc 1 · Dimmer value",
 	});
@@ -435,7 +461,9 @@ test("touch and hardware encoder stories exercise continuous input, modal entry,
 	await touchEditor.getByRole("button", { name: "5" }).click();
 	await touchEditor.getByRole("button", { name: "ENTER" }).click();
 	await expect(value).toHaveText("75%");
-	await encoder.getByRole("button", { name: "Set Value" }).click();
+	await encoder
+		.getByRole("button", { name: "Set Enc 1 · Dimmer value" })
+		.click();
 	await touchEditor.getByRole("button", { name: "Release" }).click();
 	await expect(value).toHaveText("Released");
 
@@ -449,7 +477,9 @@ test("touch and hardware encoder stories exercise continuous input, modal entry,
 		const constrainedEncoder = page.getByRole("group");
 		await expect(constrainedEncoder).toHaveAttribute("aria-disabled", "true");
 		await expect(
-			constrainedEncoder.getByRole("button", { name: "Set Value" }),
+			constrainedEncoder.getByRole("button", {
+				name: /Set Enc 1 · Dimmer value/u,
+			}),
 		).toBeDisabled();
 	}
 

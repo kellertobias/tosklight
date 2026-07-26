@@ -35,10 +35,17 @@ function renderEncoder(
 }
 
 describe("TouchEncoder", () => {
-	it("uses one continuous surface with fine tap zones and explicit absolute entry", () => {
+	it("uses one continuous ridged surface with a centered absolute value", () => {
 		const { onStep } = renderEncoder();
 		const surface = document.querySelector(".touch-encoder-surface");
 		expect(surface).not.toBeNull();
+		expect(surface?.querySelector(".touch-encoder-ridges")).toBeInTheDocument();
+		expect(surface?.querySelector(".touch-encoder-legend")).toHaveTextContent(
+			"Increase•••Set•••Decrease",
+		);
+		expect(surface?.querySelector(".touch-encoder-value")).toHaveTextContent("50%");
+		expect(document.querySelector(".touch-encoder > header")).not.toBeInTheDocument();
+		expect(document.querySelector(".touch-encoder-set")).not.toBeInTheDocument();
 		fireEvent.click(
 			surface?.querySelector(".touch-encoder-tap-positive") as Element,
 		);
@@ -53,7 +60,9 @@ describe("TouchEncoder", () => {
 				screen.queryByRole("button", { name: removedName }),
 			).not.toBeInTheDocument();
 
-		fireEvent.click(screen.getByRole("button", { name: "Set Value" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
+		);
 		expect(
 			screen.getByRole("dialog", { name: "Enc 1 · Pan value" }),
 		).toBeInTheDocument();
@@ -105,7 +114,7 @@ describe("TouchEncoder", () => {
 		const encoder = screen.getByRole("group", { name: "Enc 1 · Pan" });
 		const zones = [
 			document.querySelector(".touch-encoder-tap-positive"),
-			screen.getByRole("button", { name: "Set Value" }),
+			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
 			document.querySelector(".touch-encoder-tap-negative"),
 		];
 		zones.forEach((zone, index) => {
@@ -156,8 +165,10 @@ describe("TouchEncoder", () => {
 
 	it("shows indexed values as constrained instead of applying a normalized step", () => {
 		const { onStep } = renderEncoder({ indexed: true, display: "Gobo 3" });
-		expect(screen.getByText("Indexed value")).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: "Set Value" })).toBeDisabled();
+		expect(screen.getByText("Gobo 3")).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
+		).toBeDisabled();
 		const encoder = screen.getByRole("group", { name: "Enc 1 · Pan" });
 		expect(encoder).toHaveAttribute("aria-disabled", "true");
 		fireEvent.wheel(encoder, {
@@ -169,14 +180,16 @@ describe("TouchEncoder", () => {
 		expect(onStep).not.toHaveBeenCalled();
 	});
 
-	it("keeps Release off the encoder face and offers it only in Set Value", () => {
+	it("keeps Release off the encoder face and offers it only in absolute entry", () => {
 		const onRelease = vi.fn();
 		const { onSet } = renderEncoder({ canRelease: true, onRelease });
 
 		expect(
 			screen.queryByRole("button", { name: "Release Pan" }),
 		).not.toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Set Value" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
+		);
 		fireEvent.click(screen.getByRole("button", { name: "Release" }));
 
 		expect(onRelease).toHaveBeenCalledOnce();
@@ -186,14 +199,18 @@ describe("TouchEncoder", () => {
 
 	it("does not offer modal Release without both ownership and a callback", () => {
 		const rendered = renderEncoder({ canRelease: true });
-		fireEvent.click(screen.getByRole("button", { name: "Set Value" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
+		);
 		expect(
 			screen.queryByRole("button", { name: "Release" }),
 		).not.toBeInTheDocument();
 
 		cleanup();
 		renderEncoder({ canRelease: false, onRelease: vi.fn() });
-		fireEvent.click(screen.getByRole("button", { name: "Set Value" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
+		);
 		expect(
 			screen.queryByRole("button", { name: "Release" }),
 		).not.toBeInTheDocument();
