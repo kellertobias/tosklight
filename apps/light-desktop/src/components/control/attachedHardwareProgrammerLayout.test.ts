@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { numericPadLayout } from "@tosklight/ui/programmer-keypad";
 import {
   attachedHighlightKeys,
   attachedKeypadContentRowOffset,
   attachedProgrammerActionLayout,
-} from "../../../../light-hardware-controls/src/programmerLayout";
-import { oscPaths } from "../../../../light-hardware-controls/src/oscPaths";
+  controlSurfaceOscPaths,
+} from "@tosklight/ui/control-surface-contracts";
+import { numericPadLayout } from "@tosklight/ui/programmer-keypad";
 
 describe("attached hardware Programmer layout contract", () => {
   it("aligns HIGH, PREV, NEXT, and ALL directly above GRP, CUE, TIME, and DIV", () => {
@@ -15,7 +15,7 @@ describe("attached hardware Programmer layout contract", () => {
       { label: "NEXT", action: "next", column: 3, row: 1 },
       { label: "ALL", action: "all", column: 4, row: 1 },
     ]);
-    expect(oscPaths.highlight("all")).toBe("highlight/all");
+    expect(controlSurfaceOscPaths.highlight("all")).toBe("highlight/all");
 
     const targets = ["GRP", "CUE", "TIME", "DIV"];
     for (const [index, key] of targets.entries()) {

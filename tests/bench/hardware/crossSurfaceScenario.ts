@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
+import { controlSurfaceOscPaths } from "@tosklight/ui/control-surface-contracts";
 import type { BrowserCommands } from "../command-selection/commandScenario";
 import type { ApiDriver, Session } from "../core/api";
 import type { DeskDriver } from "../core/desk";
@@ -50,8 +51,8 @@ export class BrowserCrossSurface {
 				"page",
 				"command-line",
 				"programmer/group",
-				"page-playback/1/fader",
-				"page-playback/1/button/1",
+				controlSurfaceOscPaths.pagePlaybackControl(1, "fader"),
+				controlSurfaceOscPaths.pagePlaybackControl(1, "button/1"),
 				"speed-group/1",
 				"speed-group/5",
 			])

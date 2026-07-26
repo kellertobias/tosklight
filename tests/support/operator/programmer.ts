@@ -177,7 +177,7 @@ async function tapOscKey(
 	key: SoftwareKey,
 ): Promise<void> {
 	if (!surface.api.session) throw new Error("OSC programmer surface lost its API session");
-	const action = key === "REC" ? "record" : oscProgrammerActionForKey(key);
+	const action = oscProgrammerActionForKey(key);
 	const alias = surface.api.session.desk.osc_alias;
 	const address = `/light/${alias}/programmer/${action}`;
 	await sendOscPhase(surface.hardware, alias, address, true);

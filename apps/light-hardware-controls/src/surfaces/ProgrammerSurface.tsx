@@ -1,8 +1,15 @@
 import {
+  attachedHighlightKeys,
+  attachedKeypadContentRowOffset,
+  attachedProgrammerActionLayout,
+  controlSurfaceOscPaths,
+  type ProgrammerControlAction,
+} from "@tosklight/ui/control-surface-contracts";
+import {
+  type NumericPadSection,
   numericPadLayout,
   oscProgrammerActionForKey,
   softwareKeyLabel,
-  type NumericPadSection,
 } from "@tosklight/ui/programmer-keypad";
 import { ControlButton } from "../components/ControlButton";
 import {
@@ -11,12 +18,6 @@ import {
   type Lamp,
   type SendControl,
 } from "../controller/types";
-import { oscPaths } from "../oscPaths";
-import {
-  attachedHighlightKeys,
-  attachedKeypadContentRowOffset,
-  attachedProgrammerActionLayout,
-} from "../programmerLayout";
 import { TimeFader } from "./programmer/TimeFader";
 
 interface ProgrammerSurfaceProps {
@@ -32,8 +33,8 @@ export function ProgrammerSurface({
   highlight,
   send,
 }: ProgrammerSurfaceProps) {
-  const action = (name: string, down: boolean) => {
-    send(oscPaths.programmer(name), [down]);
+  const action = (name: ProgrammerControlAction, down: boolean) => {
+    send(controlSurfaceOscPaths.programmer(name), [down]);
   };
 
   const renderKeypadSection = (section: NumericPadSection) =>
@@ -100,8 +101,12 @@ export function ProgrammerSurface({
               keypadKey={item.label}
               showHoldFeedback={item.action !== "toggle"}
               style={{ gridColumn: item.column, gridRow: item.row }}
-              onDown={() => send(oscPaths.highlight(item.action), [true])}
-              onUp={() => send(oscPaths.highlight(item.action), [false])}
+              onDown={() =>
+                send(controlSurfaceOscPaths.highlight(item.action), [true])
+              }
+              onUp={() =>
+                send(controlSurfaceOscPaths.highlight(item.action), [false])
+              }
             />
           ))}
           {renderKeypadSection("numbers")}
@@ -110,13 +115,13 @@ export function ProgrammerSurface({
       <div className="fade-times">
         <TimeFader
           label="Prog Fade"
-          path="programmer/prog-fade"
+          path={controlSurfaceOscPaths.programmerFade("programmer")}
           maximum={20}
           send={send}
         />
         <TimeFader
           label="Cue Fade"
-          path="programmer/cue-fade"
+          path={controlSurfaceOscPaths.programmerFade("cue")}
           maximum={60}
           send={send}
         />

@@ -1,6 +1,9 @@
+import {
+  controlSurfaceOscPaths,
+  type ProgrammerControlAction,
+} from "@tosklight/ui/control-surface-contracts";
 import { ControlButton } from "../../components/ControlButton";
 import type { SendControl } from "../../controller/types";
-import { oscPaths } from "../../oscPaths";
 
 interface NavigationRailProps {
   page: number;
@@ -8,14 +11,14 @@ interface NavigationRailProps {
 }
 
 export function NavigationRail({ page, send }: NavigationRailProps) {
-  const programmerKey = (label: string) => {
-    const action = label.toLowerCase();
+  const programmerKey = (label: "ESCAPE" | "MENU" | "PROG-PLAYBACK") => {
+    const action = label.toLowerCase() as ProgrammerControlAction;
     return (
       <ControlButton
         className={`key-${action}`}
         label={label}
-        onDown={() => send(oscPaths.programmer(action), [true])}
-        onUp={() => send(oscPaths.programmer(action), [false])}
+        onDown={() => send(controlSurfaceOscPaths.programmer(action), [true])}
+        onUp={() => send(controlSurfaceOscPaths.programmer(action), [false])}
       />
     );
   };
@@ -33,11 +36,21 @@ export function NavigationRail({ page, send }: NavigationRailProps) {
         onUp={() => undefined}
       />
       <span className="button-spacer" />
-      <button onClick={() => send(oscPaths.page, [Math.max(1, page - 1)])}>
+      <button
+        type="button"
+        onClick={() =>
+          send(controlSurfaceOscPaths.page, [Math.max(1, page - 1)])
+        }
+      >
         PAGE UP
       </button>
       <strong>{page}</strong>
-      <button onClick={() => send(oscPaths.page, [page + 1])}>PAGE DOWN</button>
+      <button
+        type="button"
+        onClick={() => send(controlSurfaceOscPaths.page, [page + 1])}
+      >
+        PAGE DOWN
+      </button>
     </aside>
   );
 }

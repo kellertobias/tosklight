@@ -5,5 +5,5 @@
   "type": "module",
   "scripts": {"dev":"vite --host 127.0.0.1","build":"tsc --noEmit && vite build","test":"vitest run","typecheck":"tsc --noEmit --pretty false","tauri":"tauri","tauri:dev":"tauri dev","tauri:build":"tauri build"},
   "dependencies": {"@tosklight/ui":"0.1.0","@tauri-apps/api":"^2.11.1","@vitejs/plugin-react":"latest","react":"latest","react-dom":"latest","vite":"latest"},
-  "devDependencies": {"@tauri-apps/cli":"^2.11.4","@types/react":"latest","@types/react-dom":"latest","typescript":"latest","vitest":"^4.1.10"}
+  "devDependencies": {"@tauri-apps/cli":"^2.11.4","@testing-library/react":"latest","@types/react":"latest","@types/react-dom":"latest","typescript":"latest","vitest":"^4.1.10"}
 }

@@ -1,6 +1,9 @@
+import {
+  controlSurfaceOscPaths,
+  type EncoderControlAction,
+} from "@tosklight/ui/control-surface-contracts";
 import { useState } from "react";
 import type { SendControl } from "../../controller/types";
-import { oscPaths } from "../../oscPaths";
 
 interface EncoderEmulationProps {
   number: number;
@@ -14,7 +17,9 @@ export function EncoderEmulation({
   send,
 }: EncoderEmulationProps) {
   const [held, setHeld] = useState(false);
-  const path = nav ? oscPaths.navigation : oscPaths.encoder(number);
+  const path = nav
+    ? controlSurfaceOscPaths.navigation
+    : controlSurfaceOscPaths.encoder(number);
   const name = nav ? "Navigation" : `Encoder ${number}`;
 
   return (
@@ -22,7 +27,9 @@ export function EncoderEmulation({
       <button
         type="button"
         aria-label={`${name} ${held ? "left" : "up"}`}
-        onClick={() => send(path, [held ? "left" : "up"])}
+        onClick={() =>
+          send(path, [(held ? "left" : "up") satisfies EncoderControlAction])
+        }
       >
         {held ? "‹" : "⌃"}
       </button>
@@ -30,7 +37,7 @@ export function EncoderEmulation({
         <button
           type="button"
           aria-label={`${name} click`}
-          onClick={() => send(path, ["press"])}
+          onClick={() => send(path, ["press" satisfies EncoderControlAction])}
         >
           CLK
         </button>
@@ -46,7 +53,9 @@ export function EncoderEmulation({
       <button
         type="button"
         aria-label={`${name} ${held ? "right" : "down"}`}
-        onClick={() => send(path, [held ? "right" : "down"])}
+        onClick={() =>
+          send(path, [(held ? "right" : "down") satisfies EncoderControlAction])
+        }
       >
         {held ? "›" : "⌄"}
       </button>

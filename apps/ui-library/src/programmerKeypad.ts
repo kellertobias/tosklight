@@ -1,3 +1,17 @@
+import type { ProgrammerControlAction } from "./controlSurfaceContracts";
+
+export type DigitKey =
+	| "0"
+	| "1"
+	| "2"
+	| "3"
+	| "4"
+	| "5"
+	| "6"
+	| "7"
+	| "8"
+	| "9";
+
 export type SoftwareKey =
 	| "SET"
 	| "GRP"
@@ -21,7 +35,7 @@ export type SoftwareKey =
 	| "+"
 	| "-"
 	| "."
-	| `${number}`;
+	| DigitKey;
 
 export type NumericPadSection = "commands" | "numbers";
 
@@ -67,7 +81,7 @@ export const numericPadLayout: NumericPadLayoutItem[] = [
 	{ key: "ENT", section: "numbers", column: 7, row: 5 },
 ];
 
-const oscActionNames: Partial<Record<SoftwareKey, string>> = {
+const oscActionNames: Partial<Record<SoftwareKey, ProgrammerControlAction>> = {
 	BACKSPACE: "backspace",
 	ENT: "enter",
 	GRP: "group",
@@ -79,11 +93,21 @@ const oscActionNames: Partial<Record<SoftwareKey, string>> = {
 	MOV: "mov",
 	CPY: "cpy",
 	ESC: "escape",
+	CLR: "clear",
+	UND: "undo",
+	REC: "record",
+	PRE: "preload",
 };
 
-export function oscProgrammerActionForKey(key: SoftwareKey): string {
-	if (/^\d$/.test(key)) return `digit-${key}`;
-	return oscActionNames[key] ?? key.toLowerCase();
+export function oscProgrammerActionForKey(
+	key: SoftwareKey,
+): ProgrammerControlAction {
+	if (isDigitKey(key)) return `digit-${key}`;
+	return oscActionNames[key] ?? (key.toLowerCase() as ProgrammerControlAction);
+}
+
+function isDigitKey(key: SoftwareKey): key is DigitKey {
+	return /^\d$/.test(key);
 }
 
 export function softwareKeyLabel(key: SoftwareKey): string {

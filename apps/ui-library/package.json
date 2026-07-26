@@ -21,6 +21,7 @@
     "./playback": "./src/playback.ts",
     "./pools": "./src/pools.ts",
     "./programmer-keypad": "./src/programmerKeypad.ts",
+    "./control-surface-contracts": "./src/controlSurfaceContracts.ts",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {

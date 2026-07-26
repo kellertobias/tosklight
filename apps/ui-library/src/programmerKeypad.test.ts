@@ -24,6 +24,10 @@ describe("programmer keypad contract", () => {
 		expect(oscProgrammerActionForKey("7")).toBe("digit-7");
 		expect(oscProgrammerActionForKey("TRU")).toBe("thru");
 		expect(oscProgrammerActionForKey("BACKSPACE")).toBe("backspace");
+		expect(oscProgrammerActionForKey("CLR")).toBe("clear");
+		expect(oscProgrammerActionForKey("UND")).toBe("undo");
+		expect(oscProgrammerActionForKey("REC")).toBe("record");
+		expect(oscProgrammerActionForKey("PRE")).toBe("preload");
 		expect(softwareKeyLabel("BACKSPACE")).toBe("←");
 		expect(softwareKeyLabel("SELECT")).toBe("SELECT");
 	});

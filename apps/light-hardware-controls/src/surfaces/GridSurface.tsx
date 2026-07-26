@@ -1,6 +1,9 @@
+import {
+  attachedPlaybackLayout,
+  controlSurfaceOscPaths,
+} from "@tosklight/ui/control-surface-contracts";
 import { ControlButton } from "../components/ControlButton";
 import type { Lamp, SendControl } from "../controller/types";
-import { oscPaths } from "../oscPaths";
 import { SpeedGroups } from "./grid/SpeedGroups";
 import { Playback } from "./playback/Playback";
 
@@ -20,20 +23,30 @@ export function GridSurface({
   return (
     <section className="grid-layout">
       <div className="button-grid">
-        {Array.from({ length: 50 }, (_, index) => index + 41).map((slot) => (
+        {attachedPlaybackLayout.gridButtonSlots.map((slot) => (
           <ControlButton
             key={slot}
             label={String(slot)}
             lamp={lamps[`${slot}/1`]}
-            onDown={() => send(`${oscPaths.pagePlayback(slot)}/button/1`, [true])}
-            onUp={() => send(`${oscPaths.pagePlayback(slot)}/button/1`, [false])}
+            onDown={() =>
+              send(
+                controlSurfaceOscPaths.pagePlaybackControl(slot, "button/1"),
+                [true],
+              )
+            }
+            onUp={() =>
+              send(
+                controlSurfaceOscPaths.pagePlaybackControl(slot, "button/1"),
+                [false],
+              )
+            }
           />
         ))}
       </div>
       <aside className="grid-sidebar">
         <section className="six">
           <h2>Playbacks 91–96</h2>
-          {Array.from({ length: 6 }, (_, index) => index + 91).map((slot) => (
+          {attachedPlaybackLayout.gridPlaybackSlots.map((slot) => (
             <Playback
               key={slot}
               slot={slot}

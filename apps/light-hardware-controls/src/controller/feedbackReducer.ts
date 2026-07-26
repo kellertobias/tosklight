@@ -1,4 +1,4 @@
-import { feedbackPagePlaybackOffset } from "../oscPaths";
+import { feedbackPagePlaybackOffset } from "@tosklight/ui/control-surface-contracts";
 import type { Blink, FeedbackMessage, FeedbackState, Lamp } from "./types";
 import { initialFeedbackState } from "./types";
 

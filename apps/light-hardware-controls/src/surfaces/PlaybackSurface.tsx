@@ -1,6 +1,9 @@
+import {
+  attachedPlaybackLayout,
+  controlSurfaceOscPaths,
+} from "@tosklight/ui/control-surface-contracts";
 import { ControlButton } from "../components/ControlButton";
 import type { Lamp, SendControl } from "../controller/types";
-import { oscPaths } from "../oscPaths";
 import { EncoderEmulation } from "./playback/EncoderEmulation";
 import { Playback } from "./playback/Playback";
 
@@ -22,24 +25,38 @@ export function PlaybackSurface({
       className={`playback-surface ${topRowVisible ? "with-top-row" : "without-top-row"}`}
     >
       <div className="encoder-row">
-        {Array.from({ length: 6 }, (_, index) => (
-          <EncoderEmulation key={index} number={index + 1} send={send} />
+        {attachedPlaybackLayout.encoderSlots.map((number) => (
+          <EncoderEmulation key={number} number={number} send={send} />
         ))}
-        <EncoderEmulation number={7} nav send={send} />
+        <EncoderEmulation
+          number={attachedPlaybackLayout.navigationEncoder}
+          nav
+          send={send}
+        />
       </div>
       <div className="top-row">
-        {Array.from({ length: 20 }, (_, index) => index + 21).map((slot) => (
+        {attachedPlaybackLayout.topSlots.map((slot) => (
           <ControlButton
             key={slot}
             label={String(slot)}
             lamp={lamps[`${slot}/1`]}
-            onDown={() => send(`${oscPaths.pagePlayback(slot)}/button/1`, [true])}
-            onUp={() => send(`${oscPaths.pagePlayback(slot)}/button/1`, [false])}
+            onDown={() =>
+              send(
+                controlSurfaceOscPaths.pagePlaybackControl(slot, "button/1"),
+                [true],
+              )
+            }
+            onUp={() =>
+              send(
+                controlSurfaceOscPaths.pagePlaybackControl(slot, "button/1"),
+                [false],
+              )
+            }
           />
         ))}
       </div>
       <div className="playback-bank">
-        {Array.from({ length: 20 }, (_, index) => index + 1).map((slot) => (
+        {attachedPlaybackLayout.mainSlots.map((slot) => (
           <Playback
             key={slot}
             slot={slot}

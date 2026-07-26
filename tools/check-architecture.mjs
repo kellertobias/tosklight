@@ -231,11 +231,17 @@ function walk(directory) {
   });
 }
 
-function localImports(source) {
+function importSpecifiers(source) {
   const imports = [];
   const expression = /(?:import|export)\s+(?:type\s+)?(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu;
   for (const match of source.matchAll(expression)) imports.push(match[1]);
-  return imports.filter((specifier) => specifier.startsWith("."));
+  const dynamicExpression = /\b(?:import|require)\s*\(\s*["']([^"']+)["']\s*\)/gu;
+  for (const match of source.matchAll(dynamicExpression)) imports.push(match[1]);
+  return imports;
+}
+
+function localImports(source) {
+  return importSpecifiers(source).filter((specifier) => specifier.startsWith("."));
 }
 
 function typeScriptDependencyDirections() {
@@ -437,6 +443,59 @@ function sharedUiDependencyDirections() {
   }
 }
 
+function applicationSourceDirections() {
+  const applications = [
+    {
+      packageName: "@tosklight/light-desktop",
+      packageRoot: path.join(repositoryRoot, "apps/light-desktop"),
+    },
+    {
+      packageName: "@tosklight/light-hardware-controls",
+      packageRoot: path.join(repositoryRoot, "apps/light-hardware-controls"),
+    },
+  ];
+  for (const application of applications) {
+    const sourceRoot = path.join(application.packageRoot, "src");
+    const otherApplications = applications.filter((candidate) => candidate !== application);
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(application.packageRoot, "package.json"), "utf8"),
+    );
+    const dependencies = {
+      ...manifest.dependencies,
+      ...manifest.devDependencies,
+      ...manifest.peerDependencies,
+    };
+    for (const other of otherApplications)
+      if (dependencies[other.packageName])
+        fail(`${application.packageName} must not depend on ${other.packageName}`);
+    for (const file of walk(sourceRoot).filter((candidate) => /\.[cm]?tsx?$/u.test(candidate))) {
+      const source = fs.readFileSync(file, "utf8");
+      for (const specifier of importSpecifiers(source)) {
+        for (const other of otherApplications)
+          if (
+            specifier === other.packageName ||
+            specifier.startsWith(`${other.packageName}/`)
+          )
+            fail(
+              `${relative(file)} imports ${other.packageName}; move proven shared contracts to ` +
+                "@tosklight/ui and keep application adapters private",
+            );
+        if (!specifier.startsWith(".")) continue;
+        const resolved = path.resolve(path.dirname(file), specifier);
+        const importedApplication = otherApplications.find(
+          ({ packageRoot }) =>
+            resolved === packageRoot || resolved.startsWith(`${packageRoot}${path.sep}`),
+        );
+        if (importedApplication)
+          fail(
+            `${relative(file)} imports ${relative(importedApplication.packageRoot)} through ${specifier}; ` +
+              "move proven shared contracts to @tosklight/ui and keep application adapters private",
+          );
+      }
+    }
+  }
+}
+
 const legacyPlaybackPatterns = [
   ["server.playbacks", /\bserver\s*\.\s*playbacks\b/u],
   ["state.playbacks", /\bstate\s*\.\s*playbacks\b/u],
@@ -509,6 +568,7 @@ activeShowMutationDirections();
 playbackOwnershipBoundaries();
 typeScriptDependencyDirections();
 sharedUiDependencyDirections();
+applicationSourceDirections();
 legacyPlaybackSnapshotBoundaries();
 testCommandBoundaries();
 privateTestBoundaries();
