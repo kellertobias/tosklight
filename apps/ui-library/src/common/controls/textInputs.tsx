@@ -41,6 +41,7 @@ export interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElemen
   clearLabel?: string;
   keyboardLabel?: string;
   liveKeyboard?: boolean;
+  modalLeadingIcon?: ReactNode;
   onValueChange?: (value: string) => void;
   onKeyboardCommit?: (value: string) => void;
   openKeyboardInitially?: boolean;
@@ -51,7 +52,7 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
   {
     className = "", value, defaultValue, onChange, onValueChange, onKeyboardCommit,
     clearable = false, clearLabel = "Clear input", keyboardLabel,
-    liveKeyboard = false, openKeyboardInitially = false, secure = false,
+    liveKeyboard = false, modalLeadingIcon, openKeyboardInitially = false, secure = false,
     disabled, readOnly, ...props
   },
   ref,
@@ -77,15 +78,17 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
         onValueChange?.(event.target.value);
         onChange?.(event);
       }}/>
-    {clearable && current && <Button size="compact" iconOnly className="ui-input-clear"
-      aria-label={clearLabel} disabled={disabled || readOnly}
+    {clearable && <Button size="compact" iconOnly
+      className={`ui-input-clear ${current ? "" : "is-empty"}`.trim()}
+      aria-label={clearLabel} aria-hidden={!current} tabIndex={current ? undefined : -1}
+      disabled={disabled || readOnly || !current}
       onClick={() => { update(""); native.current?.focus(); }}>×</Button>}
     <Button size="compact" iconOnly className="ui-input-keyboard" aria-label="Open keyboard"
       disabled={disabled || readOnly} onClick={() => setOpen(true)}>
       <span className="ui-keyboard-icon" aria-hidden="true">⌨</span>
     </Button>
     {open && <InputModal kind="text" value={current} secure={secure} placeholder={props.placeholder}
-      label={keyboardLabel ?? props["aria-label"]}
+      label={keyboardLabel ?? props["aria-label"]} leadingIcon={modalLeadingIcon}
       onDraftChange={liveKeyboard ? update : undefined}
       onCommit={commit} onCancel={close}/>}
   </span>;

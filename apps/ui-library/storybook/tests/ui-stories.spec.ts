@@ -1344,15 +1344,26 @@ test("window and modal chrome use the same standard search geometry", async ({
 }) => {
 	const measure = async () =>
 		page.locator(".console-search").evaluate((element) => {
+			const control = element.querySelector(".ui-text-control");
+			const clear = element.querySelector(
+				".ui-input-clear",
+			) as HTMLElement | null;
 			return {
+				controlWidth: Math.round(control?.getBoundingClientRect().width ?? 0),
 				inputHeight: Math.round(
 					element.querySelector("input")?.getBoundingClientRect().height ?? 0,
 				),
 				clearHeight: Math.round(
-					element
-						.querySelector('[aria-label="Clear search"]')
-						?.getBoundingClientRect().height ?? 0,
+					clear?.getBoundingClientRect().height ?? 0,
 				),
+				clearCenterOffset: clear
+					? Math.round(
+							clear.getBoundingClientRect().top +
+								clear.getBoundingClientRect().height / 2 -
+								(control?.getBoundingClientRect().top ?? 0) -
+								(control?.getBoundingClientRect().height ?? 0) / 2,
+						)
+					: null,
 				usesStandardClass: element.classList.contains("console-search"),
 			};
 		});
@@ -1364,8 +1375,28 @@ test("window and modal chrome use the same standard search geometry", async ({
 		"/iframe.html?id=modals-production-modal-stack--title-bar-configuration&viewMode=story",
 	);
 	const modalSearch = await measure();
-	expect(modalSearch).toEqual(windowSearch);
+	const { controlWidth: windowControlWidth, ...windowGeometry } = windowSearch;
+	const { controlWidth: modalControlWidth, ...modalGeometry } = modalSearch;
+	expect(modalGeometry).toEqual(windowGeometry);
 	expect(modalSearch.inputHeight).toBeGreaterThanOrEqual(44);
+	expect(modalSearch.clearCenterOffset).toBe(0);
+	expect(windowControlWidth).toBeGreaterThan(0);
+	expect(modalControlWidth).toBeGreaterThan(0);
+	const search = page.getByRole("textbox", { name: "Search Patch fixtures" });
+	await search.fill("");
+	const emptyWidth = (await measure()).controlWidth;
+	await search.fill("spot");
+	expect((await measure()).controlWidth).toBe(emptyWidth);
+	await page.getByRole("button", { name: "Open keyboard" }).click();
+	const inputDialog = page.getByRole("dialog", { name: "Search Patch fixtures" });
+	await expect(inputDialog.locator(".modal-value-leading-icon svg")).toBeVisible();
+	const [iconBox, valueBox] = await Promise.all([
+		inputDialog.locator(".modal-value-leading-icon").boundingBox(),
+		inputDialog.locator(".modal-caret-value").boundingBox(),
+	]);
+	expect(iconBox).not.toBeNull();
+	expect(valueBox).not.toBeNull();
+	expect(iconBox?.x).toBeLessThan(valueBox?.x ?? 0);
 });
 
 test("desktop story uses the real 24 × 18 non-overlapping geometry", async ({

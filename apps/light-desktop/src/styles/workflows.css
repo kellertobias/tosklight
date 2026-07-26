@@ -497,14 +497,9 @@
 	gap: 4px;
 	padding: 0;
 	border: 0;
-	border-radius: 0;
+	border-radius: 7px 0 0 7px;
 	background: transparent;
 	color: var(--muted);
-}
-.console-search-input > button.console-search-options:hover,
-.console-search-input > button.console-search-options.active {
-	background: #12303a;
-	color: var(--cyan);
 }
 .console-search-options svg {
 	width: 18px;

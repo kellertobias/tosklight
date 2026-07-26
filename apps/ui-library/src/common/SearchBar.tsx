@@ -167,6 +167,7 @@ export function SearchBar({
 					clearLabel="Clear search"
 					liveKeyboard
 					keyboardLabel={ariaLabel}
+					modalLeadingIcon={<SearchIcon />}
 					openKeyboardInitially={keyboardInitiallyOpen}
 					aria-label={ariaLabel}
 					value={value}

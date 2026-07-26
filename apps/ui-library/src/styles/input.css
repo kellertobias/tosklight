@@ -184,6 +184,36 @@
 	white-space: pre-wrap;
 }
 
+.modal-value-with-leading-icon {
+	display: grid;
+	grid-template-columns: 50px minmax(0, 1fr);
+	align-items: stretch;
+}
+
+.modal-value-leading-icon {
+	display: grid;
+	place-items: center;
+	border: 1px solid var(--line2);
+	border-right: 0;
+	border-radius: 7px 0 0 7px;
+	background: #0b0f13;
+	color: var(--muted);
+}
+
+.modal-value-leading-icon svg {
+	width: 20px;
+	height: 20px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+}
+
+.modal-value-with-leading-icon > .modal-caret-value {
+	min-width: 0;
+	border-radius: 0 7px 7px 0;
+}
+
 .modal-caret-value.multiline {
 	width: 100%;
 	height: 132px;

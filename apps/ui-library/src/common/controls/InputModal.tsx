@@ -13,6 +13,7 @@ export interface InputModalProps {
 	kind: "text" | "multiline" | "number";
 	value: string;
 	allowDecimal?: boolean;
+	leadingIcon?: ReactNode;
 	secure?: boolean;
 	label?: string;
 	placeholder?: string;
@@ -26,6 +27,7 @@ function ValuePreview({
 	caret,
 	kind,
 	label,
+	leadingIcon,
 	onCaretChange,
 	placeholder,
 	secure,
@@ -33,7 +35,7 @@ function ValuePreview({
 	value,
 }: Pick<
 	InputModalProps,
-	"kind" | "label" | "placeholder" | "secure" | "unit" | "value"
+	"kind" | "label" | "leadingIcon" | "placeholder" | "secure" | "unit" | "value"
 > & {
 	caret: number;
 	onCaretChange: (position: number) => void;
@@ -50,7 +52,7 @@ function ValuePreview({
 			/>
 		);
 	}
-	return (
+	const valuePreview = (
 		<ModalCaretValue
 			value={value}
 			caret={caret}
@@ -61,6 +63,15 @@ function ValuePreview({
 			onCaretChange={onCaretChange}
 		/>
 	);
+	if (!leadingIcon) return valuePreview;
+	return (
+		<div className="modal-value-with-leading-icon">
+			<span className="modal-value-leading-icon" aria-hidden="true">
+				{leadingIcon}
+			</span>
+			{valuePreview}
+		</div>
+	);
 }
 
 export function InputModal({
@@ -69,6 +80,7 @@ export function InputModal({
 	allowDecimal = false,
 	secure = false,
 	label,
+	leadingIcon,
 	placeholder,
 	unit,
 	onCommit,
@@ -107,6 +119,7 @@ export function InputModal({
 				caret={caret}
 				kind={kind}
 				label={label}
+				leadingIcon={leadingIcon}
 				placeholder={placeholder}
 				secure={secure}
 				unit={unit}

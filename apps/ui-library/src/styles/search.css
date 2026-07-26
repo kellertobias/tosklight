@@ -37,8 +37,16 @@
   min-height: 0;
   padding: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: 7px 0 0 7px;
   background: transparent;
+}
+
+.console-search-input > button.console-search-options:hover,
+.console-search-input > button.console-search-options:focus-visible,
+.console-search-input > button.console-search-options.active,
+.console-search-input > button.console-search-options.is-active {
+  background: #12303a;
+  color: var(--cyan);
 }
 
 .console-search-icon svg {

@@ -19,6 +19,9 @@ describe("SearchBar", () => {
 		expect(bar.querySelector(".console-search-icon")).toBeInTheDocument();
 		expect(screen.getByRole("textbox", { name: "Search" })).toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
+		const reservedClear = bar.querySelector(".ui-input-clear");
+		expect(reservedClear).toHaveAttribute("aria-hidden", "true");
+		expect(reservedClear).toBeDisabled();
 		expect(screen.getByRole("button", { name: "Open keyboard" })).toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: "Search settings" })).not.toBeInTheDocument();
 
@@ -41,6 +44,22 @@ describe("SearchBar", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
 		expect(change).toHaveBeenCalledWith("");
 		unmount();
+	});
+
+	it("shows a magnifier beside the text in its keyboard modal", () => {
+		const { container } = render(
+			<SearchBar value="orbit" onChange={vi.fn()} />,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Open keyboard" }));
+		const dialog = screen.getByRole("dialog", { name: "Search" });
+		const preview = dialog.querySelector(".modal-value-with-leading-icon");
+		expect(preview).toBeInTheDocument();
+		expect(preview?.querySelector(".modal-value-leading-icon svg")).toBeInTheDocument();
+		expect(preview?.querySelector('[role="textbox"]')).toHaveTextContent("orbit");
+		expect(container.querySelector(".search-options-layer")).not.toBeInTheDocument();
+		fireEvent.keyDown(document, { key: "Escape" });
+		expect(screen.queryByRole("dialog", { name: "Search" })).not.toBeInTheDocument();
 	});
 
 	it("renders typed settings in a body-level modal and restores trigger focus", async () => {

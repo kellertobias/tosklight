@@ -432,6 +432,14 @@
 	display: flex !important;
 	align-items: stretch;
 }
+.ui-modal-title-search
+	.console-search-input
+	> button.console-search-options,
+.ui-window-header-search
+	.console-search-input
+	> button.console-search-options {
+	border-radius: 0;
+}
 .ui-modal-title-search .console-search-input > .ui-text-control,
 .ui-window-header-search .console-search-input > .ui-text-control {
 	height: 100%;
@@ -544,7 +552,9 @@
 	.console-search-input
 	> .ui-text-control
 	> .ui-input-clear {
-	padding-bottom: 4px;
+	display: grid;
+	place-items: center;
+	padding: 0;
 }
 .ui-window-header-search
 	.console-search-input
