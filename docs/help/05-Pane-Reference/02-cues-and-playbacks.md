@@ -6,7 +6,7 @@ The Cuelist Pool is numbered storage for sequences and Chasers. A populated tile
 
 The full window can search the 1,000-position pool by number or name using the shared [window search bar](../01-application-layout.md#search-bars). Holding a populated tile opens Cuelist configuration: Sequence or Chaser mode, priority, HTP/LTP intensity mode, wrap behavior, restart behavior, timing overrides, Cue renumbering, and Chaser speed, multiplier, and crossfade. **Chaser X-fade** is stored from `0%` to `100%` of the effective step: `0%` snaps, `50%` fades for half the interval, and `100%` fades for the complete interval. Changing the Speed Group BPM or multiplier changes the live fade duration without changing the stored percentage. These settings change the Cuelist itself and must not be confused with Pane Settings.
 
-**Pane configuration:** only common size and removal controls. Search and Cuelist configuration belong to the full content window.
+**Pane configuration:** **Type colors / Individual colors** chooses the configured lime Cuelist treatment or explicit item colors for this pane. Search and Cuelist configuration belong to the full content window. Common size and removal controls also apply.
 
 ![Cuelist Pool pane](../assets/screenshots/panes/cuelist-pool.png)
 
@@ -43,6 +43,7 @@ A cell displays its cell number, assigned playback name, and action. When that p
 **Pane configuration:**
 
 - **Rows** and **Columns** independently accept 1-12, allowing 1 to 144 cells.
+- **Type colors / Individual colors** controls the object-color treatment used when a cell represents a Cuelist or Group.
 - Resizing the pane does not change its logical row/column count.
 
 Assignment uses the same Set workflow as any other playback. Use **Set Source**, **Add Target**, or press `[SET]`, select the source, and select the Virtual Playback. Pressing `[SET]` and then a Virtual Playback opens the standard Playback Configuration modal for that one-button, faderless target. Virtual Playbacks additionally support an icon or image background.

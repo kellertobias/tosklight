@@ -12,6 +12,11 @@ import { useGroupSelectionActions } from "../../features/groupSelection/useGroup
 import { useApp } from "../../state/AppContext";
 import { GroupCard } from "./GroupCard";
 import type { FixtureMetadata, Group } from "./model";
+import {
+	poolSurfaceKey,
+	usePoolPresentationConfiguration,
+} from "../../features/poolPresentation/poolPresentation";
+import { useActiveShowId } from "../../features/deskSnapshot/DeskSnapshotState";
 
 export function GroupPoolGrid({
 	active = true,
@@ -24,6 +29,7 @@ export function GroupPoolGrid({
 	onOpenRecord,
 	recordGroup,
 	runCommand,
+	paneId,
 }: Pick<FixtureMetadata, "capabilities" | "knownFixtureIds"> & {
 	active?: boolean;
 	cards: (Group | null)[];
@@ -33,9 +39,13 @@ export function GroupPoolGrid({
 	onOpenRecord: (target: GroupRecordingTarget) => void;
 	recordGroup: (target: GroupRecordingTarget) => Promise<unknown>;
 	runCommand: (command: string) => Promise<unknown>;
+	paneId?: string;
 }) {
 	const groupSelection = useGroupSelectionActions(active);
 	const { state, dispatch } = useApp();
+	const poolPresentation = usePoolPresentationConfiguration();
+	const showId = useActiveShowId() ?? "unresolved";
+	const surfaceKey = poolSurfaceKey(showId, "group", paneId);
 	const hold = useRef<number | null>(null);
 	const cancelHold = () => {
 		if (hold.current) window.clearTimeout(hold.current);
@@ -104,6 +114,9 @@ export function GroupPoolGrid({
 							selected={command.selectedGroupId === group?.id}
 							storeArmed={state.storeArmed}
 							updateArmed={state.updateArmed}
+							poolPresentation={poolPresentation}
+							showId={showId}
+							surfaceKey={surfaceKey}
 							beginHold={() => {
 								if (group && !state.updateArmed) {
 									hold.current = window.setTimeout(

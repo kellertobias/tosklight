@@ -7,7 +7,11 @@ import {
 	useState,
 } from "react";
 import { ButtonGrid } from "../grids";
-import { PoolCard, type PoolCardState } from "../pools";
+import {
+	PoolCard,
+	type PoolCardState,
+	type ResolvedPoolPresentation,
+} from "../pools";
 
 export type VirtualPlaybackBoxAvailability =
 	| "assigned"
@@ -33,6 +37,7 @@ export interface VirtualPlaybackBoxViewModel {
 	exclusionZones?: readonly string[];
 	exclusionSelected?: boolean;
 	selectingExclusionZone?: boolean;
+	poolPresentation?: ResolvedPoolPresentation;
 }
 
 export interface VirtualPlaybackGridCallbacks {
@@ -197,6 +202,7 @@ function VirtualPlaybackBox({
 				box.updateTarget && "update-target",
 				box.exclusionMember && "exclusion-member",
 				box.exclusionSelected && "exclusion-selected",
+				box.poolPresentation?.className,
 			]
 				.filter(Boolean)
 				.join(" ")}
@@ -228,7 +234,7 @@ function VirtualPlaybackBox({
 							: undefined,
 				states,
 			}}
-			style={boxStyle(box)}
+			style={{ ...boxStyle(box), ...box.poolPresentation?.style }}
 			onPointerDown={pointerDown}
 			onPointerUp={() => {
 				if (held.current) release(false);
@@ -258,9 +264,10 @@ function boxLabel(page: number, box: VirtualPlaybackBoxViewModel) {
 }
 
 function boxStyle(box: VirtualPlaybackBoxViewModel) {
+	const color = box.poolPresentation?.color ?? box.color;
 	return {
-		"--playback-color": box.color ?? "#20c997",
-		"--playback-contrast": contrastTextColor(box.color),
+		"--playback-color": color ?? "#20c997",
+		"--playback-contrast": contrastTextColor(color),
 	} as CSSProperties;
 }
 

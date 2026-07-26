@@ -23,6 +23,7 @@ export interface DeskConfiguration {
 	preload_virtual_playback_actions: boolean;
 	patch_preview_highlight_dmx?: boolean;
 	matter_enabled?: boolean;
+	pool_presentation?: PoolPresentationConfiguration;
 	update_settings_by_desk?: Record<string, unknown>;
 	file_manager_system_picker_fallback: boolean;
 	file_manager_roots: Array<{
@@ -31,6 +32,28 @@ export interface DeskConfiguration {
 		path: string;
 		icon?: string;
 	}>;
+}
+
+export interface PoolPresentationConfiguration {
+	palette: {
+		group: string;
+		macro_color: string;
+		dynamic: string;
+		cuelist: string;
+		sequence: string;
+		preset: {
+			mixed: string;
+			intensity: string;
+			color: string;
+			position: string;
+			beam: string;
+		};
+	};
+	modes: Record<string, "type" | "individual">;
+	items: Record<
+		string,
+		{ title?: string | null; icon?: string | null; color?: string | null }
+	>;
 }
 
 export interface MatterPairingData {

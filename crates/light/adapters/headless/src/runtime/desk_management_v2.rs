@@ -518,6 +518,9 @@ fn patched_configuration(
     if let Some(value) = patch.matter_enabled {
         configuration.matter_enabled = value;
     }
+    if let Some(value) = patch.pool_presentation {
+        configuration.pool_presentation = application_pool_presentation(value);
+    }
     if let Some(value) = patch.file_manager_system_picker_fallback {
         configuration.file_manager_system_picker_fallback = value;
     }
@@ -534,6 +537,54 @@ fn patched_configuration(
     }
     configuration.validate()?;
     Ok(configuration)
+}
+
+fn application_pool_presentation(
+    value: wire::PoolPresentationConfiguration,
+) -> PoolPresentationConfiguration {
+    PoolPresentationConfiguration {
+        palette: PoolColorPalette {
+            group: value.palette.group,
+            macro_color: value.palette.macro_color,
+            dynamic: value.palette.dynamic,
+            cuelist: value.palette.cuelist,
+            sequence: value.palette.sequence,
+            preset: PresetPoolColorPalette {
+                mixed: value.palette.preset.mixed,
+                intensity: value.palette.preset.intensity,
+                color: value.palette.preset.color,
+                position: value.palette.preset.position,
+                beam: value.palette.preset.beam,
+            },
+        },
+        modes: value
+            .modes
+            .into_iter()
+            .map(|(key, mode)| {
+                (
+                    key,
+                    match mode {
+                        wire::PoolColorMode::Type => PoolColorMode::Type,
+                        wire::PoolColorMode::Individual => PoolColorMode::Individual,
+                    },
+                )
+            })
+            .collect(),
+        items: value
+            .items
+            .into_iter()
+            .map(|(key, item)| {
+                (
+                    key,
+                    PoolItemPresentation {
+                        title: item.title,
+                        icon: item.icon,
+                        color: item.color,
+                    },
+                )
+            })
+            .collect(),
+    }
 }
 
 fn parse_socket(value: Option<String>, field: &str) -> Result<Option<SocketAddr>, ApiError> {

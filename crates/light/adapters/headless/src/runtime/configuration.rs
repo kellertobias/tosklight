@@ -16,6 +16,88 @@ pub(super) fn default_speed_group_sources() -> [SpeedGroupSource; 5] {
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum PoolColorMode {
+    #[default]
+    Type,
+    Individual,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub(super) struct PresetPoolColorPalette {
+    pub(super) mixed: String,
+    pub(super) intensity: String,
+    pub(super) color: String,
+    pub(super) position: String,
+    pub(super) beam: String,
+}
+
+impl Default for PresetPoolColorPalette {
+    fn default() -> Self {
+        Self {
+            mixed: "#89939e".into(),
+            intensity: "#89939e".into(),
+            color: "#89939e".into(),
+            position: "#89939e".into(),
+            beam: "#89939e".into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub(super) struct PoolColorPalette {
+    pub(super) group: String,
+    pub(super) macro_color: String,
+    pub(super) dynamic: String,
+    pub(super) cuelist: String,
+    pub(super) sequence: String,
+    pub(super) preset: PresetPoolColorPalette,
+}
+
+impl Default for PoolColorPalette {
+    fn default() -> Self {
+        Self {
+            group: "#d8ad55".into(),
+            macro_color: "#8f3541".into(),
+            dynamic: "#3bbdce".into(),
+            cuelist: "#93cc55".into(),
+            sequence: "#93cc55".into(),
+            preset: PresetPoolColorPalette::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub(super) struct PoolItemPresentation {
+    pub(super) title: Option<String>,
+    pub(super) icon: Option<String>,
+    pub(super) color: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub(super) struct PoolPresentationConfiguration {
+    pub(super) palette: PoolColorPalette,
+    /// Surface keys include the active show UUID plus a built-in type or stable pane ID.
+    pub(super) modes: HashMap<String, PoolColorMode>,
+    /// Item keys include the active show UUID, object type, and stable object ID.
+    pub(super) items: HashMap<String, PoolItemPresentation>,
+}
+
+impl Default for PoolPresentationConfiguration {
+    fn default() -> Self {
+        Self {
+            palette: PoolColorPalette::default(),
+            modes: HashMap::new(),
+            items: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(super) enum SpeedGroupSource {
     #[default]
@@ -74,6 +156,8 @@ pub(super) struct DeskConfiguration {
     pub(super) patch_preview_highlight_dmx: bool,
     /// Desk-persistent opt-in for the global page/playback Matter bridge.
     pub(super) matter_enabled: bool,
+    /// Pool colors are a desk presentation preference, never portable show content.
+    pub(super) pool_presentation: PoolPresentationConfiguration,
     /// Workflow defaults belong to a concrete desk rather than to portable show data.
     pub(super) update_settings_by_desk: HashMap<Uuid, update::UpdateSettings>,
     pub(super) file_manager_system_picker_fallback: bool,
@@ -133,6 +217,7 @@ impl Default for DeskConfiguration {
             preload_virtual_playback_actions: false,
             patch_preview_highlight_dmx: false,
             matter_enabled: false,
+            pool_presentation: PoolPresentationConfiguration::default(),
             update_settings_by_desk: HashMap::new(),
             file_manager_system_picker_fallback: false,
             file_manager_roots: Vec::new(),
@@ -198,7 +283,67 @@ impl DeskConfiguration {
                 ));
             }
         }
+        self.pool_presentation.validate()?;
         Ok(())
+    }
+}
+
+impl PoolPresentationConfiguration {
+    fn validate(&self) -> Result<(), ApiError> {
+        for color in [
+            &self.palette.group,
+            &self.palette.macro_color,
+            &self.palette.dynamic,
+            &self.palette.cuelist,
+            &self.palette.sequence,
+            &self.palette.preset.mixed,
+            &self.palette.preset.intensity,
+            &self.palette.preset.color,
+            &self.palette.preset.position,
+            &self.palette.preset.beam,
+        ] {
+            validate_pool_color(color)?;
+        }
+        if self.modes.len() > 1_024 || self.items.len() > 10_000 {
+            return Err(ApiError::bad_request(
+                "pool presentation contains too many surface or item entries",
+            ));
+        }
+        for key in self.modes.keys().chain(self.items.keys()) {
+            if key.is_empty() || key.len() > 256 || key.chars().any(char::is_control) {
+                return Err(ApiError::bad_request(
+                    "pool presentation keys must contain 1-256 printable characters",
+                ));
+            }
+        }
+        for item in self.items.values() {
+            if let Some(color) = &item.color {
+                validate_pool_color(color)?;
+            }
+            for value in [&item.title, &item.icon].into_iter().flatten() {
+                if value.len() > 1_024 || value.chars().any(char::is_control) {
+                    return Err(ApiError::bad_request(
+                        "pool presentation labels must be printable and at most 1024 characters",
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn validate_pool_color(color: &str) -> Result<(), ApiError> {
+    let valid = color.len() == 7
+        && color.starts_with('#')
+        && color[1..]
+            .chars()
+            .all(|character| character.is_ascii_hexdigit());
+    if valid {
+        Ok(())
+    } else {
+        Err(ApiError::bad_request(
+            "pool presentation colors must use #RRGGBB",
+        ))
     }
 }
 

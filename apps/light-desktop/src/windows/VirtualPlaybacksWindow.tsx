@@ -71,6 +71,7 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 				onConfigure={controller.openConfiguration}
 				onAssign={(slot) => void controller.assignSource(slot)}
 				onToggleZone={controller.toggleZoneSlot}
+				paneId={paneId}
 			/>
 			{controller.configuration && (
 				<VirtualPlaybackConfigurationModal

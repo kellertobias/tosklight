@@ -15,6 +15,12 @@ import {
 	cueUpdateTarget,
 	requestUpdateTarget,
 } from "../updateWorkflow";
+import {
+	poolSurfaceKey,
+	resolveConfiguredPoolPresentation,
+	usePoolPresentationConfiguration,
+} from "../../../features/poolPresentation/poolPresentation";
+import { useActiveShowId } from "../../../features/deskSnapshot/DeskSnapshotState";
 
 export const MAX_PLAYBACK_SLOT = 127;
 
@@ -37,13 +43,25 @@ interface VirtualPlaybackGridProps {
 	onConfigure(playback: PlaybackDefinition | null, slot: number): void;
 	onAssign(slot: number): void;
 	onToggleZone(slot: number): void;
+	paneId?: string;
 }
 
 export function VirtualPlaybackGrid(props: VirtualPlaybackGridProps) {
 	const heldActions = useHeldPlaybackActions(props.runtimeActions);
+	const poolPresentation = usePoolPresentationConfiguration();
+	const showId = useActiveShowId() ?? "unresolved";
+	const surfaceKey = poolSurfaceKey(showId, "cuelist", props.paneId);
 	const boxes = Array.from(
 		{ length: props.rows * props.columns },
-		(_, position) => boxViewModel(props, position + 1, position),
+		(_, position) =>
+			boxViewModel(
+				props,
+				position + 1,
+				position,
+				poolPresentation,
+				showId,
+				surfaceKey,
+			),
 	);
 	const playbackAt = (slot: number) => {
 		const number = props.page?.slots[String(slot)];
@@ -89,6 +107,9 @@ function boxViewModel(
 	props: VirtualPlaybackGridProps,
 	slot: number,
 	position: number,
+	poolPresentation: ReturnType<typeof usePoolPresentationConfiguration>,
+	showId: string,
+	surfaceKey: string,
 ): VirtualPlaybackBoxViewModel {
 	const available = validPlaybackSlot(slot);
 	const number = available ? props.page?.slots[String(slot)] : undefined;
@@ -106,6 +127,35 @@ function boxViewModel(
 	const containingZones = props.zones.filter((zone) =>
 		zone.slots.includes(slot),
 	);
+	const representedType =
+		playback?.target.type === "group"
+			? "group"
+			: playback?.target.type === "cue_list"
+				? "cuelist"
+				: null;
+	const representedId =
+		playback?.target.type === "group"
+			? playback.target.group_id
+			: playback?.target.type === "cue_list"
+				? playback.target.cue_list_id
+				: undefined;
+	const presentation = representedType
+		? resolveConfiguredPoolPresentation(poolPresentation, {
+				showId,
+				surfaceKey,
+				objectType: representedType,
+				itemColorKey: representedId,
+				itemColor: playback?.color,
+				states: [
+					...(!available || !playback ? (["empty"] as const) : []),
+					...(!available ? (["disabled"] as const) : []),
+					...(runtime?.enabled === true ? (["active"] as const) : []),
+					...(props.assignmentPending ? (["record-target"] as const) : []),
+					...(props.assignmentPending ? (["store-target"] as const) : []),
+					...(props.updateArmed ? (["update-target"] as const) : []),
+				],
+			})
+		: undefined;
 	return {
 		slot,
 		position,
@@ -135,6 +185,7 @@ function boxViewModel(
 		exclusionZones: containingZones.map((zone) => zone.name),
 		exclusionSelected: props.selectedSlots.includes(slot),
 		selectingExclusionZone: props.shiftArmed,
+		poolPresentation: presentation,
 	};
 }
 

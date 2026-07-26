@@ -6,6 +6,7 @@ import {
 } from "react";
 import type { ConfigurationUpdateResult } from "../../api/client/deskManagement";
 import type { DeskConfiguration } from "../../api/types";
+import type { PoolPresentationConfiguration } from "../../api/types";
 import type { ConfigurationStore } from "./store";
 
 export type ControlTimingInput = Partial<
@@ -22,12 +23,16 @@ export interface ConfigurationActions {
 	saveConfiguration(next: DeskConfiguration): Promise<boolean>;
 	/** Merges timing settings onto the authoritative configuration. */
 	setControlTiming(input: ControlTimingInput): Promise<void>;
+	setPoolPresentation(input: PoolPresentationConfiguration): Promise<void>;
 }
 
 interface ConfigurationActionsProviderProps {
 	store: ConfigurationStore;
 	updateConfiguration(
 		next: DeskConfiguration,
+	): Promise<ConfigurationUpdateResult>;
+	updatePoolPresentation(
+		next: PoolPresentationConfiguration,
 	): Promise<ConfigurationUpdateResult>;
 	onApplied(result: ConfigurationUpdateResult): void;
 	onError(message: string | null): void;
@@ -42,6 +47,7 @@ export function ConfigurationActionsProvider({
 	children,
 	store,
 	updateConfiguration,
+	updatePoolPresentation,
 	onApplied,
 	onError,
 }: PropsWithChildren<ConfigurationActionsProviderProps>) {
@@ -72,8 +78,18 @@ export function ConfigurationActionsProvider({
 					onError(asMessage(reason));
 				}
 			},
+			setPoolPresentation: async (input) => {
+				try {
+					const result = await updatePoolPresentation(input);
+					onApplied(result);
+					onError(null);
+				} catch (reason) {
+					onError(asMessage(reason));
+					throw reason;
+				}
+			},
 		};
-	}, [onApplied, onError, store, updateConfiguration]);
+	}, [onApplied, onError, store, updateConfiguration, updatePoolPresentation]);
 	return (
 		<ConfigurationActionsContext.Provider value={actions}>
 			{children}

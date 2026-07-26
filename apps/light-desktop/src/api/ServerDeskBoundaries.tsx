@@ -9,6 +9,7 @@ import { ShellStatusStateProvider } from "../features/shellStatus/ShellStatusSta
 import type { useServerState } from "../features/server/useServerState";
 import { StageLayoutStateProvider } from "../features/stageLayout/StageLayoutState";
 import type { ConfigurationUpdateResult } from "./client/deskManagement";
+import { PoolPresentationLegacyMigration } from "../features/poolPresentation/PoolPresentationLegacyMigration";
 
 type ServerState = ReturnType<typeof useServerState>;
 
@@ -47,6 +48,11 @@ export function ServerDeskBoundaries({
 			state.api.desk.updateConfiguration(...args),
 		[state.api],
 	);
+	const updatePoolPresentation = useCallback(
+		(...args: Parameters<typeof state.api.desk.updatePoolPresentation>) =>
+			state.api.desk.updatePoolPresentation(...args),
+		[state.api],
+	);
 	return (
 		<DeskSnapshotStateProvider store={state.deskSnapshotStore}>
 		<CommandHistoryStateProvider store={state.commandHistoryStore}>
@@ -63,9 +69,11 @@ export function ServerDeskBoundaries({
 			<ConfigurationActionsProvider
 				store={state.configurationStore}
 				updateConfiguration={updateConfiguration}
+				updatePoolPresentation={updatePoolPresentation}
 				onApplied={applyConfigurationUpdate}
 				onError={state.setError}
 			>
+				<PoolPresentationLegacyMigration />
 				<StageLayoutStateProvider store={state.stageLayoutStore}>
 					{children}
 				</StageLayoutStateProvider>

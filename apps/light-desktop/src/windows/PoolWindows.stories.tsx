@@ -9,6 +9,7 @@ import { ShowObjectsStore } from "../features/showObjects/store";
 import { GroupPoolGrid } from "./groupsWindow/GroupPoolGrid";
 import type { Group } from "./groupsWindow/model";
 import { PresetCardGrid } from "./presetsWindow/PresetsWindowView";
+import { defaultPoolPresentation } from "../features/poolPresentation/poolPresentation";
 
 const SHOW_ID = "storybook-pools";
 const noopAsync = async () => false;
@@ -206,7 +207,10 @@ function PresetPoolStory(viewport: PoolViewport = {}) {
 					cards={presetCards}
 					family="Color"
 					customizations={{}}
-					colorsEnabled
+					poolPresentation={defaultPoolPresentation()}
+					showId={SHOW_ID}
+					surfaceKey={`show:${SHOW_ID}:builtin:preset`}
+					fallbackMode="type"
 					selectionCount={2}
 					storeArmed
 					updateArmed={false}

@@ -348,8 +348,6 @@
 }
 .cuelist-pool-grid {
 	padding: 10px;
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 	gap: 6px;
 	overflow: auto;
 	align-content: start;
@@ -689,9 +687,14 @@
 .cuelist-pool-grid .cuelist-card {
 	position: relative;
 	padding: 8px;
-	border: 1px solid var(--line2);
+	border: 1px solid
+		color-mix(in srgb, var(--pool-card-color, var(--line2)) 68%, var(--line2));
 	border-radius: 8px;
-	background: var(--panel2);
+	background: color-mix(
+		in srgb,
+		var(--pool-card-color, var(--line2)) 18%,
+		var(--panel2)
+	);
 }
 .cuelist-card .number {
 	position: absolute;

@@ -9,10 +9,10 @@ Each tile shows its number, title, family, icon or artwork, and how many fixture
 **Pane configuration:**
 
 - **Preset family** selects Mixed, Intensity, Color, Position, or Beam for this pane only. Mixed is a family for presets containing any combination of attributes; it is not an aggregate list of the other families. Two Preset panes can therefore show different families.
-- **Enable pool colors** enables the family and custom-button color treatment.
+- **Type colors / Individual colors** chooses the color source for this pane. Type mode uses the configured Preset-family default. Individual mode shows only an explicit button color and leaves uncolored tiles grey.
 - **Show group shortcuts** adds the Group strip below the pool so fixtures can be selected before a preset is recalled or recorded.
 
-The full Presets window additionally exposes family buttons in its header. With Set armed, tapping a preset opens its local button presentation settings: title, icon, and button color. Those presentation choices belong to the operator interface and do not change the stored preset values.
+The full Presets window additionally exposes family buttons and pool-color settings in its header. With Set armed, tapping a preset opens its local button presentation settings: title, icon, and button color. Those presentation choices are stored in desk data, scoped to the active show identity, and do not change the stored preset values.
 
 ![Preset pool pane](../assets/screenshots/panes/presets.png)
 
@@ -26,7 +26,7 @@ A populated tile shows its number, name, member count, and status information su
 
 The Group master limits the intensity of members when that Group is assigned to a playback fader. It does not rewrite their programmer or Cue values. Missing fixture IDs are reported and skipped; they do not turn the Group into an empty Group.
 
-**Pane configuration:** the Group pool has only the common size and removal settings. Its membership and Group-master controls are content operations, not pane-layout settings.
+**Pane configuration:** **Type colors / Individual colors** chooses the shared Group default or explicit item colors for this pane. Its membership and Group-master controls are content operations, not pane-layout settings. The common size and removal settings also apply.
 
 ![Group pool pane](../assets/screenshots/panes/groups.png)
 

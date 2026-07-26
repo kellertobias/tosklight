@@ -632,6 +632,16 @@
 	background: var(--panel);
 	font-size: 18px;
 }
+.pool-color-settings fieldset.button-group {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.pool-color-settings fieldset.button-group legend {
+	margin-bottom: 6px;
+	color: var(--muted);
+	font-size: 12px;
+}
 .desk-icon-picker {
 	display: grid;
 	grid-template-columns: repeat(4, 1fr);
@@ -880,14 +890,31 @@
 	margin-top: 28px;
 }
 .pool-cell.empty {
-	border: 1px solid #252e36 !important;
-	background: #0a0d11 !important;
-	color: #56616a !important;
+	border: 1px dashed
+		color-mix(
+			in srgb,
+			var(--pool-card-color, #56616a) 42%,
+			var(--line2)
+		) !important;
+	background: color-mix(
+		in srgb,
+		var(--pool-card-color, #56616a) 8%,
+		#0a0d11
+	) !important;
+	color: var(--muted) !important;
 	opacity: 1 !important;
 }
 .pool-cell.empty:hover {
-	border-color: #52616d !important;
-	background: #0d1217 !important;
+	border-color: color-mix(
+		in srgb,
+		var(--pool-card-color, #52616d) 62%,
+		var(--line2)
+	) !important;
+	background: color-mix(
+		in srgb,
+		var(--pool-card-color, #52616d) 12%,
+		#0d1217
+	) !important;
 }
 .pool-cell.filtered {
 	border-color: #202830;

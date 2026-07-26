@@ -47,7 +47,17 @@ export type ControlDeskConfigurationActionOutcome = { request_id: string, replay
 
 export type ConfigurationUpdateRequest = { request_id: string, patch: ConfigurationPatch, };
 
-export type ConfigurationPatch = { frame_rate_hz?: number | null, output_bind_ip?: string | null, osc_bind?: string | null | null, art_timecode_bind?: string | null | null, midi_inputs?: Array<string> | null, rtp_midi_bind?: string | null | null, timecode_sources?: Array<TimecodeSourceConfiguration> | null, osc_timecode?: OscTimecodeConfiguration | null | null, backup_retention?: number | null, autosave_interval_seconds?: number, programmer_fade_millis?: number, command_line_at_uses_programmer_fade?: boolean | null, sequence_master_fade_millis?: number, preload_programmer_changes?: boolean | null, preload_physical_playback_actions?: boolean | null, preload_virtual_playback_actions?: boolean | null, patch_preview_highlight_dmx?: boolean | null, matter_enabled?: boolean | null, file_manager_system_picker_fallback?: boolean | null, file_manager_roots?: Array<FileManagerRoot> | null, };
+export type ConfigurationPatch = { frame_rate_hz?: number | null, output_bind_ip?: string | null, osc_bind?: string | null | null, art_timecode_bind?: string | null | null, midi_inputs?: Array<string> | null, rtp_midi_bind?: string | null | null, timecode_sources?: Array<TimecodeSourceConfiguration> | null, osc_timecode?: OscTimecodeConfiguration | null | null, backup_retention?: number | null, autosave_interval_seconds?: number, programmer_fade_millis?: number, command_line_at_uses_programmer_fade?: boolean | null, sequence_master_fade_millis?: number, preload_programmer_changes?: boolean | null, preload_physical_playback_actions?: boolean | null, preload_virtual_playback_actions?: boolean | null, patch_preview_highlight_dmx?: boolean | null, matter_enabled?: boolean | null, pool_presentation?: PoolPresentationConfiguration | null, file_manager_system_picker_fallback?: boolean | null, file_manager_roots?: Array<FileManagerRoot> | null, };
+
+export type PoolPresentationConfiguration = { palette: PoolColorPalette, modes: { [key in string]: PoolColorMode }, items: { [key in string]: PoolItemPresentation }, };
+
+export type PoolColorPalette = { group: string, macro_color: string, dynamic: string, cuelist: string, sequence: string, preset: PresetPoolColorPalette, };
+
+export type PresetPoolColorPalette = { mixed: string, intensity: string, color: string, position: string, beam: string, };
+
+export type PoolColorMode = "type" | "individual";
+
+export type PoolItemPresentation = { title?: string | null, icon?: string | null, color?: string | null, };
 
 export type TimecodeSourceConfiguration = { source_prefix: string, priority: number, fallback: boolean, loss_timeout_millis: number, };
 

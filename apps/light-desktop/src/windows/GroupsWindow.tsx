@@ -8,7 +8,7 @@ import {
 	type RecordMode,
 	RecordModeDialog,
 } from "../components/shared/RecordModeDialog";
-import { WindowHeader } from "@tosklight/ui/window-kit";
+import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useGroupRecording } from "../features/groupRecording/GroupRecordingProvider";
 import type { GroupRecordingTarget } from "../features/groupRecording/target";
 import { useApp } from "../state/AppContext";
@@ -17,8 +17,15 @@ import { GroupPoolGrid } from "./groupsWindow/GroupPoolGrid";
 import { GroupPropertiesDialog } from "./groupsWindow/GroupPropertiesDialog";
 import { useGroupPoolModel } from "./groupsWindow/model";
 import type { WindowProps } from "./windowTypes";
+import { PoolColorSettings } from "../components/shared/PoolColorSettings";
 
-function GroupPoolHeader({ command }: { command: CommandLineSurface }) {
+function GroupPoolHeader({
+	command,
+	onSettings,
+}: {
+	command: CommandLineSurface;
+	onSettings(anchor: DOMRect): void;
+}) {
 	const { state, dispatch } = useApp();
 	return (
 		<WindowHeader
@@ -47,11 +54,13 @@ function GroupPoolHeader({ command }: { command: CommandLineSurface }) {
 					},
 				],
 			]}
+			settings
+			onSettings={(button) => onSettings(button.getBoundingClientRect())}
 		/>
 	);
 }
 
-export function GroupsWindow({ active = true, compact }: WindowProps) {
+export function GroupsWindow({ active = true, compact, paneId }: WindowProps) {
 	const groupScope = useActiveShowId();
 	const groupRecording = useGroupRecording();
 	const command = useCommandLineSurface({
@@ -66,6 +75,8 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 		null,
 	);
 	const [propertiesGroup, setPropertiesGroup] = useState<string | null>(null);
+	const [colorSettingsAnchor, setColorSettingsAnchor] =
+		useState<DOMRect | null>(null);
 	const contextual = model.groups.find((group) => group.id === contextGroup);
 	const propertiesTarget = model.groups.find(
 		(group) => group.id === propertiesGroup,
@@ -117,7 +128,12 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 
 	return (
 		<div className="pool-window group-pool-window">
-			{!compact && <GroupPoolHeader command={command} />}
+			{!compact && (
+				<GroupPoolHeader
+					command={command}
+					onSettings={setColorSettingsAnchor}
+				/>
+			)}
 			{model.groupRuntimeReady ? (
 				<GroupPoolGrid
 					active={active}
@@ -130,6 +146,7 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 					onOpenRecord={setRecordGroup}
 					recordGroup={recordGroupAction}
 					runCommand={runCommand}
+					paneId={paneId}
 				/>
 			) : (
 				<p className="pool-loading" role="status">
@@ -159,6 +176,23 @@ export function GroupsWindow({ active = true, compact }: WindowProps) {
 					key={`${propertiesTarget.id}:${propertiesTarget.revision}`}
 					group={propertiesTarget}
 					onClose={() => setPropertiesGroup(null)}
+				/>
+			)}
+			{colorSettingsAnchor && (
+				<WindowSettings
+					modal={false}
+					anchor={colorSettingsAnchor}
+					title="Group Pool Settings"
+					onClose={() => setColorSettingsAnchor(null)}
+					tabs={[
+						{
+							id: "colors",
+							label: "Colors",
+							content: (
+								<PoolColorSettings objectType="group" paneId={paneId} />
+							),
+						},
+					]}
 				/>
 			)}
 		</div>

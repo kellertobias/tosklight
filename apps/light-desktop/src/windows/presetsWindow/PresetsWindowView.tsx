@@ -1,23 +1,29 @@
-import { PoolGrid, type PoolSlotViewModel } from "@tosklight/ui/pools";
-import type { CSSProperties } from "react";
 import {
 	Button,
 	ColorPickerField,
 	FormLayout,
 	IconPickerField,
 	ModalPortal,
-	SwitchField,
 	TextField,
 } from "@tosklight/ui";
 import {
-	type RecordMode,
-	RecordModeDialog,
-} from "../../components/shared/RecordModeDialog";
+	INDIVIDUAL_POOL_COLOR_FALLBACK,
+	type PoolColorMode,
+	PoolGrid,
+	type PoolSlotViewModel,
+} from "@tosklight/ui/pools";
 import {
 	WindowHeader,
 	WindowScrollArea,
 	WindowSettings,
 } from "@tosklight/ui/window-kit";
+import type { PoolPresentationConfiguration } from "../../api/types";
+import { PoolColorSettings } from "../../components/shared/PoolColorSettings";
+import {
+	type RecordMode,
+	RecordModeDialog,
+} from "../../components/shared/RecordModeDialog";
+import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
 import type { PresetCard } from "../../features/presetRecording/presetCards";
 import {
 	normalizePresetFamily,
@@ -69,7 +75,10 @@ interface PresetCardGridProps {
 	cards: readonly (PresetCard | null)[];
 	family: PresetFamily;
 	customizations: Record<string, PresetCustomization>;
-	colorsEnabled: boolean;
+	poolPresentation: PoolPresentationConfiguration;
+	showId: string;
+	surfaceKey: string;
+	fallbackMode: PoolColorMode;
 	selectionCount: number;
 	storeArmed: boolean;
 	updateArmed: boolean;
@@ -81,7 +90,10 @@ export function PresetCardGrid({
 	cards,
 	family,
 	customizations,
-	colorsEnabled,
+	poolPresentation,
+	showId,
+	surfaceKey,
+	fallbackMode,
 	selectionCount,
 	storeArmed,
 	updateArmed,
@@ -123,11 +135,32 @@ export function PresetCardGrid({
 					const id =
 						preset?.id ?? presetStorageKey(presetAddress(family, index + 1));
 					const customization = customizations[id];
+					const presentation = resolveConfiguredPoolPresentation(
+						poolPresentation,
+						{
+							showId,
+							surfaceKey,
+							fallbackMode,
+							objectType: "preset",
+							presetFamily:
+								storedFamily.toLowerCase() as Lowercase<PresetFamily>,
+							itemColorKey: id,
+							itemColor: preset?.body.color,
+							states: [
+								...(!preset ? (["empty"] as const) : []),
+								...(filtered ? (["disabled"] as const) : []),
+								...(storeArmed ? (["record-target"] as const) : []),
+								...(storeArmed ? (["store-target"] as const) : []),
+								...(updateArmed ? (["update-target"] as const) : []),
+								...(setArmed ? (["set-target"] as const) : []),
+							],
+						},
+					);
 					return (
 						<Button
 							disabled={filtered}
-							className={`preset-card pool-cell preset-family-${preset ? storedFamily.toLowerCase() : family.toLowerCase()} ${!preset ? "empty" : ""} ${filtered ? "filtered" : ""} ${storeArmed ? "store-target" : ""} ${updateArmed ? "update-target" : ""} ${setArmed ? "set-target" : ""}`}
-							style={cardStyle(colorsEnabled, customization)}
+							className={`preset-card pool-cell preset-family-${preset ? storedFamily.toLowerCase() : family.toLowerCase()} ${presentation.className} ${filtered ? "filtered" : ""}`}
+							style={presentation.style}
 							onClick={() => onActivate(index)}
 						>
 							<span className="number">{index + 1}</span>
@@ -168,10 +201,7 @@ function PresetCardContent({
 	if (preset && !filtered)
 		return (
 			<>
-				<span
-					className="preset-art"
-					style={{ background: `${preset.body.color ?? "#2cb7d6"}44` }}
-				>
+				<span className="preset-art">
 					{customization?.icon ?? preset.body.icon ?? "◇"}
 				</span>
 				<b>{customization?.title ?? preset.body.name}</b>
@@ -200,30 +230,21 @@ function PresetCardContent({
 	);
 }
 
-function cardStyle(
-	colorsEnabled: boolean,
-	customization?: PresetCustomization,
-) {
-	return colorsEnabled && customization?.color
-		? ({ "--preset-family": customization.color } as CSSProperties)
-		: undefined;
-}
-
 interface PresetSettingsProps {
 	anchor: DOMRect;
 	family: PresetFamily;
-	colorsEnabled: boolean;
+	paneId?: string;
+	legacyColorsEnabled: boolean;
 	onFamily(family: PresetFamily): void;
-	onColors(enabled: boolean): void;
 	onClose(): void;
 }
 
 export function PresetSettings({
 	anchor,
 	family,
-	colorsEnabled,
+	paneId,
+	legacyColorsEnabled,
 	onFamily,
-	onColors,
 	onClose,
 }: PresetSettingsProps) {
 	return (
@@ -250,12 +271,11 @@ export function PresetSettings({
 									</Button>
 								))}
 							</div>
-							<SwitchField
-								label="Pool colors"
-								offLabel="Disabled"
-								onLabel="Enabled"
-								checked={colorsEnabled}
-								onChange={(event) => onColors(event.target.checked)}
+							<PoolColorSettings
+								objectType="preset"
+								paneId={paneId}
+								presetFamily={family.toLowerCase() as Lowercase<PresetFamily>}
+								legacyPresetColors={legacyColorsEnabled}
 							/>
 						</>
 					),
@@ -314,7 +334,7 @@ export function PresetCustomizationDialog({
 						/>
 						<ColorPickerField
 							label="Button color"
-							value={draft.color ?? "#d98236"}
+							value={draft.color ?? INDIVIDUAL_POOL_COLOR_FALLBACK}
 							onChange={(color) => onDraft({ ...draft, color })}
 						/>
 					</FormLayout>
@@ -333,13 +353,13 @@ export function PresetCustomizationDialog({
 interface PresetWindowOverlaysProps {
 	settingsAnchor: DOMRect | null;
 	family: PresetFamily;
-	colorsEnabled: boolean;
+	paneId?: string;
+	legacyColorsEnabled: boolean;
 	cards: readonly (PresetCard | null)[];
 	recordIndex: number | null;
 	configureIndex: number | null;
 	configureDraft: PresetCustomization;
 	onFamily(family: PresetFamily): void;
-	onColors(enabled: boolean): void;
 	onCloseSettings(): void;
 	onRecord(index: number, mode: RecordMode): void;
 	onCancelRecord(): void;
@@ -351,13 +371,13 @@ interface PresetWindowOverlaysProps {
 export function PresetWindowOverlays({
 	settingsAnchor,
 	family,
-	colorsEnabled,
+	paneId,
+	legacyColorsEnabled,
 	cards,
 	recordIndex,
 	configureIndex,
 	configureDraft,
 	onFamily,
-	onColors,
 	onCloseSettings,
 	onRecord,
 	onCancelRecord,
@@ -372,9 +392,9 @@ export function PresetWindowOverlays({
 				<PresetSettings
 					anchor={settingsAnchor}
 					family={family}
-					colorsEnabled={colorsEnabled}
+					paneId={paneId}
+					legacyColorsEnabled={legacyColorsEnabled}
 					onFamily={onFamily}
-					onColors={onColors}
 					onClose={onCloseSettings}
 				/>
 			)}

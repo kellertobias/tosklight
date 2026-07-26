@@ -715,33 +715,8 @@
 	text-align: right;
 }
 .group-pool-window .group-card {
-	--pool-hint: #718596;
-	border-color: color-mix(in srgb, var(--pool-hint) 50%, var(--line2));
-	background: color-mix(in srgb, var(--pool-hint) 10%, var(--panel2));
-}
-.preset-pool-window.pool-colors .preset-family-mixed {
-	--preset-family: #d98236;
-}
-.preset-pool-window.pool-colors .preset-family-intensity {
-	--preset-family: #d7bd45;
-}
-.preset-pool-window.pool-colors .preset-family-color {
-	--preset-family: #c95d59;
-}
-.preset-pool-window.pool-colors .preset-family-position {
-	--preset-family: #4faebc;
-}
-.preset-pool-window.pool-colors .preset-family-beam {
-	--preset-family: #557fb5;
-}
-.preset-pool-window.pool-colors .preset-card {
-	border-color: color-mix(in srgb, var(--preset-family) 55%, var(--line2));
-	background: color-mix(in srgb, var(--preset-family) 11%, var(--panel2));
-}
-.preset-pool-window.pool-colors-disabled .preset-card {
-	--preset-family: var(--line2) !important;
-	border-top-width: 1px;
-	background: var(--panel2);
+	border-color: color-mix(in srgb, var(--pool-card-color) 68%, var(--line2));
+	background: color-mix(in srgb, var(--pool-card-color) 18%, var(--panel2));
 }
 .preset-card.set-target {
 	outline: 2px solid var(--amber);

@@ -1,23 +1,28 @@
-import { useState } from "react";
-import {
-	useActiveShowId,
-	useBootstrapReady,
-} from "../features/deskSnapshot/DeskSnapshotState";
-import { useProgrammerActions } from "../features/programmerActions/ProgrammerActionsContext";
+import { INDIVIDUAL_POOL_COLOR_FALLBACK } from "@tosklight/ui/pools";
+import { useMemo, useState } from "react";
 import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
 import { requestUpdateTarget } from "../components/control/updateWorkflow";
 import { GroupStrip } from "../components/shared/GroupStrip";
 import type { RecordMode } from "../components/shared/RecordModeDialog";
 import { presets } from "../data/mockData";
+import {
+	useActiveShowId,
+	useBootstrapReady,
+} from "../features/deskSnapshot/DeskSnapshotState";
+import {
+	poolSurfaceKey,
+	usePoolPresentationSettings,
+} from "../features/poolPresentation/poolPresentation";
 import type { PresetRecallActions } from "../features/presetRecall/contracts";
 import { usePresetRecall } from "../features/presetRecall/PresetRecallProvider";
 import { usePresetRecording } from "../features/presetRecording/PresetRecordingProvider";
-import { useProgrammerPreloadLifecycleView } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import {
 	type PresetCard,
 	resolvePresetCards,
 } from "../features/presetRecording/presetCards";
 import { submitPresetRecording } from "../features/presetRecording/submitRecording";
+import { useProgrammerActions } from "../features/programmerActions/ProgrammerActionsContext";
+import { useProgrammerPreloadLifecycleView } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { usePresets } from "../features/showObjects/ShowObjectsState";
 import {
 	normalizePresetFamily,
@@ -32,16 +37,6 @@ import {
 	PresetWindowOverlays,
 } from "./presetsWindow/PresetsWindowView";
 import type { WindowProps } from "./windowTypes";
-
-function loadPresetCustomizations() {
-	try {
-		return JSON.parse(
-			localStorage.getItem("light.preset-button-customizations") ?? "{}",
-		) as Record<string, PresetCustomization>;
-	} catch {
-		return {};
-	}
-}
 
 function fallbackPresets(enabled: boolean): PresetCard[] {
 	if (!enabled) return [];
@@ -87,7 +82,8 @@ function activatePreset(options: PresetActivationOptions) {
 		options.onConfigure(index, {
 			title: saved.title ?? preset?.body.name ?? `Preset ${index + 1}`,
 			icon: saved.icon ?? preset?.body.icon ?? "◇",
-			color: saved.color ?? preset?.body.color ?? "#d98236",
+			color:
+				saved.color ?? preset?.body.color ?? INDIVIDUAL_POOL_COLOR_FALLBACK,
 		});
 		options.onDisarmSet();
 		return;
@@ -125,16 +121,27 @@ function usePresetsWindowModel({
 		observeCommand: false,
 	});
 	const { state, dispatch } = useApp();
+	const poolSettings = usePoolPresentationSettings();
 	const family = compact
 		? (presetFamily ?? state.presetFamily)
 		: state.presetFamily;
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
-	const colorsEnabled = compact
+	const legacyColorsEnabled = compact
 		? (presetPoolColors ?? true)
 		: state.presetPoolColors;
-	const [customizations, setCustomizations] = useState<
-		Record<string, PresetCustomization>
-	>(loadPresetCustomizations);
+	const showId = activeShowId ?? "unresolved";
+	const colorSurfaceKey = poolSurfaceKey(showId, "preset", paneId);
+	const colorMode =
+		poolSettings.configuration.modes[colorSurfaceKey] ??
+		(legacyColorsEnabled ? "type" : "individual");
+	const customizations = useMemo(() => {
+		const prefix = `show:${showId}:preset:`;
+		return Object.fromEntries(
+			Object.entries(poolSettings.configuration.items)
+				.filter(([key]) => key.startsWith(prefix))
+				.map(([key, value]) => [key.slice(prefix.length), value]),
+		) as Record<string, PresetCustomization>;
+	}, [poolSettings.configuration.items, showId]);
 	const [configureIndex, setConfigureIndex] = useState<number | null>(null);
 	const [configureDraft, setConfigureDraft] = useState<PresetCustomization>({});
 	const [recordPresetIndex, setRecordPresetIndex] = useState<number | null>(
@@ -166,8 +173,7 @@ function usePresetsWindowModel({
 			mode,
 			preloadActive: preload.armed || preload.active,
 			actions: presetRecording,
-			storePreload:
-				programmerActions?.storePreload ?? (async () => false),
+			storePreload: programmerActions?.storePreload ?? (async () => false),
 		});
 		if (outcome) await command.reset();
 	};
@@ -193,30 +199,25 @@ function usePresetsWindowModel({
 			onDisarmSet: () =>
 				dispatch({ type: "SET_PRESET_SET_ARMED", value: false }),
 		});
-	const setColors = (value: boolean) =>
-		dispatch(
-			compact && paneId
-				? { type: "SET_PANE_PRESET_COLORS", id: paneId, value }
-				: { type: "SET_PRESET_POOL_COLORS", value },
-		);
 	const saveCustomization = () => {
 		if (configureIndex == null) return;
 		const id =
 			cards[configureIndex]?.id ??
 			presetStorageKey(presetAddress(family, configureIndex + 1));
-		const next = { ...customizations, [id]: configureDraft };
-		setCustomizations(next);
-		localStorage.setItem(
-			"light.preset-button-customizations",
-			JSON.stringify(next),
-		);
-		setConfigureIndex(null);
+		void poolSettings
+			.setItem("preset", id, configureDraft)
+			.then(() => setConfigureIndex(null));
 	};
 	return {
 		active,
 		compact,
 		family,
-		colorsEnabled,
+		colorMode,
+		colorSurfaceKey,
+		poolPresentation: poolSettings.configuration,
+		showId,
+		paneId,
+		legacyColorsEnabled,
 		cards,
 		customizations,
 		groupsVisible,
@@ -231,7 +232,6 @@ function usePresetsWindowModel({
 		activate,
 		setFamily,
 		setSettingsAnchor,
-		setColors,
 		cancelRecording,
 		recordPreset,
 		setConfigureDraft,
@@ -245,7 +245,7 @@ export function PresetsWindow(props: WindowProps) {
 	const model = usePresetsWindowModel(props);
 	return (
 		<div
-			className={`pool-window preset-pool-window ${model.colorsEnabled ? "pool-colors" : "pool-colors-disabled"} pool-family-${model.family.toLowerCase()}`}
+			className={`pool-window preset-pool-window pool-color-mode-${model.colorMode} pool-family-${model.family.toLowerCase()}`}
 		>
 			{!model.compact && (
 				<PresetWindowHeader
@@ -259,7 +259,10 @@ export function PresetsWindow(props: WindowProps) {
 				cards={model.cards}
 				family={model.family}
 				customizations={model.customizations}
-				colorsEnabled={model.colorsEnabled}
+				poolPresentation={model.poolPresentation}
+				showId={model.showId}
+				surfaceKey={model.colorSurfaceKey}
+				fallbackMode={model.legacyColorsEnabled ? "type" : "individual"}
 				selectionCount={model.selectionCount}
 				storeArmed={model.storeArmed}
 				updateArmed={model.updateArmed}
@@ -270,13 +273,13 @@ export function PresetsWindow(props: WindowProps) {
 			<PresetWindowOverlays
 				settingsAnchor={model.settingsAnchor}
 				family={model.family}
-				colorsEnabled={model.colorsEnabled}
+				paneId={model.paneId}
+				legacyColorsEnabled={model.legacyColorsEnabled}
 				cards={model.cards}
 				recordIndex={model.recordPresetIndex}
 				configureIndex={model.configureIndex}
 				configureDraft={model.configureDraft}
 				onFamily={model.setFamily}
-				onColors={model.setColors}
 				onCloseSettings={() => model.setSettingsAnchor(null)}
 				onRecord={model.recordPreset}
 				onCancelRecord={model.cancelRecording}

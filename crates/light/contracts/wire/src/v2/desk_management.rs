@@ -71,10 +71,59 @@ pub struct ConfigurationPatch {
     pub matter_enabled: Option<bool>,
     #[serde(default)]
     #[ts(optional = nullable)]
+    pub pool_presentation: Option<PoolPresentationConfiguration>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
     pub file_manager_system_picker_fallback: Option<bool>,
     #[serde(default)]
     #[ts(optional = nullable)]
     pub file_manager_roots: Option<Vec<FileManagerRoot>>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PoolPresentationConfiguration {
+    pub palette: PoolColorPalette,
+    pub modes: std::collections::HashMap<String, PoolColorMode>,
+    pub items: std::collections::HashMap<String, PoolItemPresentation>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PoolColorPalette {
+    pub group: String,
+    pub macro_color: String,
+    pub dynamic: String,
+    pub cuelist: String,
+    pub sequence: String,
+    pub preset: PresetPoolColorPalette,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PresetPoolColorPalette {
+    pub mixed: String,
+    pub intensity: String,
+    pub color: String,
+    pub position: String,
+    pub beam: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PoolColorMode {
+    Type,
+    Individual,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PoolItemPresentation {
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub title: Option<String>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub color: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

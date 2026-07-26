@@ -1,6 +1,9 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { groups } from "../../data/mockData";
-import { useBootstrapReady } from "../../features/deskSnapshot/DeskSnapshotState";
+import {
+	useActiveShowId,
+	useBootstrapReady,
+} from "../../features/deskSnapshot/DeskSnapshotState";
 import { useGroupRecording } from "../../features/groupRecording/GroupRecordingProvider";
 import {
 	captureGroupRecordingTarget,
@@ -16,6 +19,12 @@ import { useCommandLineSurface } from "../control/commandLine/useCommandLineSurf
 import { requestUpdateTarget } from "../control/updateWorkflow";
 import { ButtonGrid } from "@tosklight/ui/window-kit";
 import { type RecordMode, RecordModeDialog } from "./RecordModeDialog";
+import type { PoolPresentationConfiguration } from "../../api/types";
+import {
+	poolSurfaceKey,
+	resolveConfiguredPoolPresentation,
+	usePoolPresentationConfiguration,
+} from "../../features/poolPresentation/poolPresentation";
 
 const MIN_SHORTCUT_SIZE = 88;
 const SHORTCUT_GAP = 2;
@@ -67,6 +76,8 @@ function GroupShortcut({
 	updateArmed,
 	onClick,
 	onDoubleClick,
+	poolPresentation,
+	showId,
 }: {
 	group: ShortcutGroup | null;
 	index: number;
@@ -75,10 +86,28 @@ function GroupShortcut({
 	updateArmed: boolean;
 	onClick: () => void;
 	onDoubleClick: () => void;
+	poolPresentation: PoolPresentationConfiguration;
+	showId: string;
 }) {
+	const presentation = resolveConfiguredPoolPresentation(poolPresentation, {
+		showId,
+		surfaceKey: poolSurfaceKey(showId, "group"),
+		objectType: "group",
+		itemColorKey: group?.id,
+		itemColor: group?.body.color,
+		states: [
+			...(selected ? (["selected"] as const) : []),
+			...(group ? [] : (["empty"] as const)),
+			...(storeArmed && !group ? (["record-target"] as const) : []),
+			...(storeArmed && !group ? (["store-target"] as const) : []),
+			...(updateArmed ? (["update-target"] as const) : []),
+		],
+	});
 	return (
 		<Button
-			className={`group-card pool-cell ${selected ? "selected" : ""} ${group ? "" : "empty"} ${storeArmed && !group ? "store-target" : ""} ${updateArmed ? "update-target" : ""}`}
+			className={`group-card pool-cell ${presentation.className}`}
+			style={presentation.style}
+			aria-pressed={selected}
 			onClick={onClick}
 			onDoubleClick={onDoubleClick}
 		>
@@ -102,6 +131,8 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 	const groupSelection = useGroupSelectionActions(active);
 	const { state, dispatch } = useApp();
 	const { gridRef, slotCount } = useGroupShortcutCount(active);
+	const poolPresentation = usePoolPresentationConfiguration();
+	const showId = useActiveShowId() ?? "unresolved";
 	const [recordTarget, setRecordTarget] = useState<GroupRecordingTarget | null>(
 		null,
 	);
@@ -199,6 +230,8 @@ export function GroupStrip({ active = true }: { active?: boolean }) {
 							if (group && !state.updateArmed)
 								void groupSelection.selectFrozen(group);
 						}}
+						poolPresentation={poolPresentation}
+						showId={showId}
 					/>
 				))}
 			</ButtonGrid>

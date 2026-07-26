@@ -18,11 +18,11 @@ Typing filters immediately unless the feature page explicitly documents a differ
 
 ## Desktops and panes
 
-A Desktop uses a 24-column by 18-row grid. Create one with **New desktop** in the DESKTOPS dock. Open its settings to rename it, change its icon, clone the current layout, or delete it. At least one Desktop always remains.
+A Desktop uses a 24-column by 18-row grid. Create one with **New desktop** in the DESKTOPS dock. Open its settings to rename it, change its icon, clone the current layout, delete it, or customize the desk's shared pool-color defaults. At least one Desktop always remains.
 
 Add a pane from the empty-cell picker or window picker. Drag a pane by its header to move it. Open the pane settings to set its exact grid position and size, maximize it, change window-specific options, or remove it. Panes cannot overlap; moves and resizes are constrained to the grid.
 
-Some options belong to one pane rather than the whole application. Examples include Stage 2D/3D view and Follow Preload, Preset family and pool colors, Fixture ordering/filtering, the virtual-playback grid, and the selected text file.
+Some options belong to one pane rather than the whole application. Examples include Stage 2D/3D view and Follow Preload, Preset family and pool color mode, Fixture ordering/filtering, the virtual-playback grid, and the selected text file. Pool panes can use **Type colors** or **Individual colors**. Type colors use the configured object-type or Preset-family default. Individual colors show an item's explicit presentation color and use grey when none is assigned.
 
 ## Built-in windows
 
@@ -49,4 +49,4 @@ Configure physical screens in **Desk Setup > Screens & playback**. Each screen h
 
 ## Where settings are stored
 
-Desktop layouts, screens, users, network inputs, and output configuration live in desk data. Fixture patch, stage layout, groups, presets, Cuelists, and playbacks live in the active show. An unfinished command, open ordered selection/source gesture, page, and button state belong to the control desk. Confirmed temporary values belong to the active user's Programmer and are shared by that user's sessions on every desk; they remain distinct from the show until recorded.
+Desktop layouts, screens, users, network inputs, output configuration, and pool presentation defaults live in desk data. Pool presentation keys include the active show identity so equal object numbers from different shows do not share an override; the preferences do not travel in a show file. Fixture patch, stage layout, groups, presets, Cuelists, and playbacks live in the active show. An unfinished command, open ordered selection/source gesture, page, and button state belong to the control desk. Confirmed temporary values belong to the active user's Programmer and are shared by that user's sessions on every desk; they remain distinct from the show until recorded.

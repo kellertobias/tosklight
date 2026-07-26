@@ -412,15 +412,15 @@
 	color: var(--preset-family) !important;
 }
 .preset-card[class*="preset-family-"] {
-	border-top: 3px solid var(--preset-family);
+	border-top: 3px solid var(--pool-card-color);
 }
 .preset-card[class*="preset-family-"] .preset-art {
 	background: color-mix(
 		in srgb,
-		var(--preset-family) 22%,
+		var(--pool-card-color) 22%,
 		transparent
 	) !important;
-	color: var(--preset-family);
+	color: var(--pool-card-color);
 }
 
 /* DMX rows are explicit: no auto-fit wrapping inside a logical row. */

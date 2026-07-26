@@ -1,5 +1,7 @@
 import { Button } from "@tosklight/ui";
 import type { Group } from "./model";
+import type { PoolPresentationConfiguration } from "../../api/types";
+import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
 
 function missingFixtureCount(
 	group: Group | null,
@@ -45,6 +47,9 @@ export function GroupCard({
 	selected,
 	storeArmed,
 	updateArmed,
+	poolPresentation,
+	showId,
+	surfaceKey,
 	beginHold,
 	cancelHold,
 	openContext,
@@ -59,6 +64,9 @@ export function GroupCard({
 	selected: boolean;
 	storeArmed: boolean;
 	updateArmed: boolean;
+	poolPresentation: PoolPresentationConfiguration;
+	showId: string;
+	surfaceKey: string;
 	beginHold: () => void;
 	cancelHold: () => void;
 	openContext: () => void;
@@ -68,12 +76,27 @@ export function GroupCard({
 	const missing = missingFixtureCount(group, knownFixtureIds);
 	const attributes = Object.keys(group?.body.programming ?? {});
 	const unsupported = unsupportedValueCount(group, attributes, capabilities);
+	const presentation = resolveConfiguredPoolPresentation(poolPresentation, {
+		showId,
+		surfaceKey,
+		objectType: "group",
+		itemColorKey: group?.id,
+		itemColor: group?.body.color,
+		states: [
+			...(selected ? (["selected"] as const) : []),
+			...(!group || !group.body.fixtures.length ? (["empty"] as const) : []),
+			...(storeArmed && !group ? (["record-target"] as const) : []),
+			...(storeArmed && !group ? (["store-target"] as const) : []),
+			...(updateArmed ? (["update-target"] as const) : []),
+		],
+	});
 	return (
 		<Button
 			data-pool-slot-id={poolSlotId}
 			data-pool-position={index}
-			className={`group-card pool-cell ${group?.body.derived_from ? "derived" : ""} ${group?.body.frozen_from ? "frozen" : ""} ${selected ? "selected" : !group || !group.body.fixtures.length ? "empty" : ""} ${storeArmed && !group ? "store-target" : ""} ${updateArmed ? "update-target" : ""}`}
-			style={group?.body.color ? { borderColor: group.body.color } : undefined}
+			className={`group-card pool-cell ${presentation.className} ${group?.body.derived_from ? "derived" : ""} ${group?.body.frozen_from ? "frozen" : ""}`}
+			style={presentation.style}
+			aria-pressed={selected}
 			onPointerDown={beginHold}
 			onPointerUp={cancelHold}
 			onPointerCancel={cancelHold}

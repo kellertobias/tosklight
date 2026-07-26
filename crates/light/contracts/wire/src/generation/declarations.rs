@@ -79,6 +79,11 @@ fn desk_management(config: &Config) -> Vec<String> {
     vec![
         ConfigurationUpdateRequest::decl(config),
         ConfigurationPatch::decl(config),
+        PoolPresentationConfiguration::decl(config),
+        PoolColorPalette::decl(config),
+        PresetPoolColorPalette::decl(config),
+        PoolColorMode::decl(config),
+        PoolItemPresentation::decl(config),
         TimecodeSourceConfiguration::decl(config),
         OscTimecodeConfiguration::decl(config),
         FileManagerRoot::decl(config),

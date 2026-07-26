@@ -1,4 +1,8 @@
-import { PoolGrid, type PoolSlotViewModel } from "@tosklight/ui/pools";
+import {
+	PoolGrid,
+	type PoolSlotViewModel,
+	type ResolvedPoolPresentation,
+} from "@tosklight/ui/pools";
 import { useMemo, useRef, useState } from "react";
 import type { PlaybackDefinition, PlaybackPage } from "../../api/types";
 import { Button } from "@tosklight/ui";
@@ -12,6 +16,7 @@ import {
 	ButtonGrid,
 	WindowHeader,
 	WindowScrollArea,
+	WindowSettings,
 } from "@tosklight/ui/window-kit";
 import { useCueRecording } from "../../features/cueRecording/CueRecordingProvider";
 import { runtimeMaster } from "../../features/playbackRuntime/legacy";
@@ -20,6 +25,13 @@ import { usePlaybackPages } from "../../features/showObjects/ShowObjectsState";
 import { useShowObjectKindsView } from "../../features/showObjects/ShowObjectsView";
 import { useApp } from "../../state/AppContext";
 import { useCuelistPool } from "./useCuelistSelection";
+import {
+	poolSurfaceKey,
+	resolveConfiguredPoolPresentation,
+	usePoolPresentationConfiguration,
+} from "../../features/poolPresentation/poolPresentation";
+import { useActiveShowId } from "../../features/deskSnapshot/DeskSnapshotState";
+import { PoolColorSettings } from "../../components/shared/PoolColorSettings";
 
 interface CuelistPoolProps {
 	active: boolean;
@@ -32,6 +44,7 @@ interface CuelistPoolProps {
 	onSelectLocalCuelist: (number: number) => void;
 	onOpenSettings: (number: number) => void;
 	settings: React.ReactNode;
+	paneId?: string;
 }
 
 interface PoolSlotProps {
@@ -47,9 +60,11 @@ interface PoolSlotProps {
 	onPointerDown: () => void;
 	onPointerEnd: () => void;
 	onClick: () => void;
+	presentation: ResolvedPoolPresentation;
 }
 
 const CUELIST_POOL_KINDS = ["cue_list", "playback", "playback_page"] as const;
+const CUELIST_POOL_MINIMUM_CARD_WIDTH = 150;
 
 function CuelistPoolSlot(props: PoolSlotProps) {
 	const { number, playback, runtimeMaster, usage } = props;
@@ -57,7 +72,9 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 		<Button
 			data-pool-slot-id={number}
 			data-pool-position={props.poolPosition}
-			className={`pool-cell cuelist-card ${playback ? "" : "empty"} ${runtimeMaster != null ? "running" : ""} ${props.selectedCuelist === number && playback ? "selected" : ""} ${props.storeArmed ? "store-target" : ""} ${props.updateArmed ? "update-target" : ""} ${props.setTarget ? "set-target" : ""}`}
+			className={`pool-cell cuelist-card ${props.presentation.className} ${runtimeMaster != null ? "running" : ""}`}
+			style={props.presentation.style}
+			aria-pressed={props.selectedCuelist === number && Boolean(playback)}
 			onPointerDown={props.onPointerDown}
 			onPointerUp={props.onPointerEnd}
 			onPointerCancel={props.onPointerEnd}
@@ -199,7 +216,12 @@ function usePoolSlots(
 export function CuelistPool(props: CuelistPoolProps) {
 	const { state, clearHold, startHold, click } = useCuelistPoolActions(props);
 	const [search, setSearch] = useState("");
+	const [colorSettingsAnchor, setColorSettingsAnchor] =
+		useState<DOMRect | null>(null);
 	const pool = useCuelistPool();
+	const poolPresentation = usePoolPresentationConfiguration();
+	const showId = useActiveShowId() ?? "unresolved";
+	const surfaceKey = poolSurfaceKey(showId, "cuelist", props.paneId);
 	const pages = usePlaybackPages();
 	useShowObjectKindsView(CUELIST_POOL_KINDS, props.active);
 	const runtimes = usePlaybackProjectionMap(
@@ -222,8 +244,33 @@ export function CuelistPool(props: CuelistPoolProps) {
 	const renderSlot = (
 		slot: (typeof filteredPool)[number],
 		poolPosition: number,
-	) => (
-		<CuelistPoolSlot
+		) => {
+		const itemId =
+			slot.playback?.target.type === "cue_list"
+				? slot.playback.target.cue_list_id
+				: String(slot.number);
+		const presentation = resolveConfiguredPoolPresentation(poolPresentation, {
+			showId,
+			surfaceKey,
+			objectType: "cuelist",
+			itemColorKey: itemId,
+			itemColor: slot.playback?.color,
+			states: [
+				...(!slot.playback ? (["empty"] as const) : []),
+				...(slot.runtimeMaster != null ? (["active"] as const) : []),
+				...(props.selectedCuelist === slot.number && slot.playback
+					? (["selected"] as const)
+					: []),
+				...(state.storeArmed ? (["record-target"] as const) : []),
+				...(state.storeArmed ? (["store-target"] as const) : []),
+				...(state.updateArmed ? (["update-target"] as const) : []),
+				...(state.cueListSetTarget === slot.number
+					? (["set-target"] as const)
+					: []),
+			],
+		});
+		return (
+			<CuelistPoolSlot
 			key={slot.number}
 			{...slot}
 			poolPosition={poolPosition}
@@ -233,9 +280,11 @@ export function CuelistPool(props: CuelistPoolProps) {
 			setTarget={state.cueListSetTarget === slot.number}
 			onPointerDown={() => startHold(slot.number, slot.playback)}
 			onPointerEnd={clearHold}
-			onClick={() => click(slot.number, slot.playback)}
-		/>
-	);
+				onClick={() => click(slot.number, slot.playback)}
+				presentation={presentation}
+			/>
+		);
+	};
 	const workflowMessage =
 		state.cueListSetTarget != null
 			? `Cuelist ${state.cueListSetTarget} selected · touch a playback fader to assign it.`
@@ -259,7 +308,11 @@ export function CuelistPool(props: CuelistPoolProps) {
 						placeholder: "Number or name",
 					}}
 					onSearch={setSearch}
-					actions={[]}
+						actions={[]}
+						settings
+						onSettings={(button) =>
+							setColorSettingsAnchor(button.getBoundingClientRect())
+						}
 				/>
 			)}
 			{props.compact && workflowMessage && (
@@ -277,12 +330,16 @@ export function CuelistPool(props: CuelistPoolProps) {
 				}
 			>
 				{search ? (
-					<ButtonGrid className="card-pool cuelist-pool-grid">
+					<ButtonGrid
+						className="card-pool cuelist-pool-grid"
+						minimum={CUELIST_POOL_MINIMUM_CARD_WIDTH}
+					>
 						{filteredPool.map(renderSlot)}
 					</ButtonGrid>
 				) : (
 					<PoolGrid
 						className="cuelist-pool-grid"
+						minimumCardWidth={CUELIST_POOL_MINIMUM_CARD_WIDTH}
 						slots={poolSlots}
 						slotCount={1000}
 						emptySlot={(index) => ({
@@ -294,7 +351,27 @@ export function CuelistPool(props: CuelistPoolProps) {
 					/>
 				)}
 			</WindowScrollArea>
-			{props.settings}
+				{props.settings}
+				{colorSettingsAnchor && (
+					<WindowSettings
+						modal={false}
+						anchor={colorSettingsAnchor}
+						title="Cuelist Pool Settings"
+						onClose={() => setColorSettingsAnchor(null)}
+						tabs={[
+							{
+								id: "colors",
+								label: "Colors",
+								content: (
+									<PoolColorSettings
+										objectType="cuelist"
+										paneId={props.paneId}
+									/>
+								),
+							},
+						]}
+					/>
+				)}
 		</div>
 	);
 }

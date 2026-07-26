@@ -756,7 +756,7 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 			"selected",
 		);
 		expect(container.querySelector('[data-playback-slot="1"]')).toHaveStyle({
-			"--playback-color": "#f6e58d",
+			"--playback-color": "#93cc55",
 		});
 		expect(container.querySelector('[data-playback-slot="2"]')).toHaveClass(
 			"empty",

@@ -21,6 +21,7 @@ import type {
 	SpeedGroupId,
 	SpeedGroupSoundState,
 	SpeedGroupSource,
+	PoolPresentationConfiguration,
 } from "../types";
 import type { LiveClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
@@ -79,6 +80,19 @@ export class DeskManagementApiClient {
 		const request: ConfigurationUpdateRequest = {
 			request_id: crypto.randomUUID(),
 			patch: configurationPatch(configuration),
+		};
+		return this.transport.request(
+			"/api/v2/configuration/update",
+			jsonRequest("POST", request),
+		);
+	}
+
+	updatePoolPresentation(
+		poolPresentation: PoolPresentationConfiguration,
+	): Promise<ConfigurationUpdateResult> {
+		const request: ConfigurationUpdateRequest = {
+			request_id: crypto.randomUUID(),
+			patch: { pool_presentation: poolPresentation },
 		};
 		return this.transport.request(
 			"/api/v2/configuration/update",
@@ -240,6 +254,9 @@ function configurationPatch(
 		patch_preview_highlight_dmx:
 			configuration.patch_preview_highlight_dmx ?? false,
 		matter_enabled: configuration.matter_enabled ?? false,
+		...(configuration.pool_presentation
+			? { pool_presentation: configuration.pool_presentation }
+			: {}),
 		file_manager_system_picker_fallback:
 			configuration.file_manager_system_picker_fallback,
 		file_manager_roots: configuration.file_manager_roots,

@@ -23,6 +23,7 @@ export function CuelistWindow({
 	showCueSidebar = true,
 	cueListSource = "fixed",
 	fixedCueListNumber,
+	paneId,
 }: WindowProps) {
 	const saveCueList = useCueListTopologyWriter();
 	const { state, dispatch } = useApp();
@@ -100,6 +101,7 @@ export function CuelistWindow({
 				onSelectLocalCuelist={setLocalSelectedCuelist}
 				onOpenSettings={openSettings}
 				settings={settings}
+				paneId={paneId}
 			/>
 		);
 	return (
