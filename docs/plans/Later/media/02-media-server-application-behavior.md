@@ -920,7 +920,7 @@ The following map prevents ambiguous ownership during implementation. Target pat
 | `apps/server-core/src/CITPResponder.*` | Media adapter in `crates/media`, shared codec seam with existing `crates/light/adapters/media` only where proven | Preserve captured behavior, then implement server/sender separately from Light's existing client/receiver orchestration |
 | `apps/server-core/src/GDTFGenerator.*` and historical DMX XML generation | existing `crates/shared/fixture` plus Media personality adapter | Replace duplicate generators with the target's canonical fixture/GDTF model and writer |
 | `apps/server-core/src/WebServer.*` | `crates/media` HTTP/API adapter and `apps/media` bootstrap | Replace hand-built transport behavior with versioned schemas and target server conventions |
-| `apps/web-ui` | `apps/media` | Preserve React feature behavior inside the Media application while composing accepted `packages/ui` presentation components |
+| `apps/web-ui` | `apps/media` | Preserve React feature behavior inside the Media application while composing accepted `@tosklight/ui` presentation components from `apps/ui-library` |
 | `apps/lighting-console` | No target application | Retain only valuable packet captures, protocol fixtures, and interoperability scenarios as automated tests |
 | `media/` configuration and representative library data | versioned migration tool plus target test fixtures | Never copy operator data into Git; copy only sanitized deterministic fixtures and implement explicit config/catalog migration |
 | CMake/openFrameworks/vendor/build artifacts | No direct target | Use only as implementation evidence; select Rust dependencies through target architecture and license review |

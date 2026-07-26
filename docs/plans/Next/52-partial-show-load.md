@@ -6,7 +6,7 @@
 
 ## Goal
 
-Let an operator choose another show and load only selected parts of it into the current show. The load can include whole feature areas, such as Effects, Presets, Groups, Cuelists, Playbacks, Macros, Dynamics, Stage layout, and Fixture Patch, or narrower slices such as only Color Presets, only Position Presets, only selected Cuelists, only selected Macros, only the complete patch, or only one patch layer.
+Let an operator choose another show and load only selected parts of it into the current show. The load can include whole feature areas, such as Presets, Groups, Cuelists, Playbacks, Macros, Dynamics, Stage layout, and Fixture Patch, or narrower slices such as only Color Presets, only Position Presets, only selected Cuelists, only selected Macros, only selected Dynamics, only the complete patch, or only one patch layer.
 
 The operator must choose whether the selected content is loaded by replacement or by addition. In both modes, references between imported and existing objects must resolve deterministically so Cues, Presets, Groups, Macros, Dynamics, fixture references, patch layers, and future show objects continue to point at the intended targets.
 
@@ -20,7 +20,7 @@ The preview must support selecting:
 - Stage geometry and scenery that belong to the selected fixture or patch layer scope;
 - Groups;
 - Presets by family: Mixed, Intensity, Color, Position, and Beam;
-- Effects and Dynamics;
+- Dynamics;
 - Cuelists and Cues;
 - Playbacks and page assignments;
 - Macros and scheduled Macros once those show objects exist; and
@@ -45,7 +45,7 @@ If a selected imported object references an object type or position that is not 
 
 ### Add to end
 
-Additive load appends selected imported objects after the current destination section. New pool slots, Cuelists, playback pages or buttons, patch layers, Macros, Effects, and other selected sections receive destination positions that do not overwrite existing objects.
+Additive load appends selected imported objects after the current destination section. New pool slots, Cuelists, playback pages or buttons, patch layers, Macros, Dynamics, and other selected sections receive destination positions that do not overwrite existing objects.
 
 References inside the imported set must be rewritten to the newly appended imported objects. For example:
 
@@ -60,7 +60,7 @@ When an imported object intentionally references a destination object outside th
 
 Partial Fixture Patch loading must preserve fixture identity, fixture numbers, labels, profiles, modes, logical heads, split fixtures, multipatch placement, address state, Stage geometry, patch-layer membership, and unpatched-fixture semantics within the selected scope.
 
-Loading only a specific patch layer must include every fixture, geometry record, and patch-layer relation needed for that layer to remain coherent. References from selected Groups, Presets, Cues, Effects, Macros, or Stage data to fixtures outside the selected layer must be previewed as explicit dependencies or conflicts.
+Loading only a specific patch layer must include every fixture, geometry record, and patch-layer relation needed for that layer to remain coherent. References from selected Groups, Presets, Cues, Dynamics, Macros, or Stage data to fixtures outside the selected layer must be previewed as explicit dependencies or conflicts.
 
 Replacement by fixture number or layer position must not accidentally delete fixtures outside the selected layer. Additive layer load must allocate non-conflicting fixture numbers or require an operator-approved renumbering plan before confirmation.
 
@@ -100,13 +100,13 @@ Existing whole-show load remains available for operators who want to switch show
 ## Acceptance coverage
 
 1. The Show menu can choose another show and open a partial-load preview without mutating the active show.
-2. The preview can select and deselect Effects, Presets by family, Groups, Cuelists, Playbacks, Macros when available, complete Fixture Patch, and individual patch layers.
+2. The preview can select and deselect Dynamics, Presets by family, Groups, Cuelists, Playbacks, Macros when available, complete Fixture Patch, and individual patch layers.
 3. Replacement load of Color Presets replaces selected preset positions, and existing Cues that referenced those positions use the new imported presets.
 4. Replacement load of imported Cues resolves their preset references through the destination positions created by the replacement map.
 5. Additive load of Presets and Cues appends the imported presets and rewrites imported Cue references to those appended presets rather than existing same-number presets.
-6. Additive load of Macros or Effects rewrites references to appended imported dependencies and does not silently bind to same-number destination objects.
+6. Additive load of Macros or Dynamics rewrites references to appended imported dependencies and does not silently bind to same-number destination objects.
 7. Loading only one patch layer imports or replaces only that layer's fixtures and layer relations, while fixtures outside the selected layer remain unchanged.
-8. Patch-layer import previews every selected Group, Preset, Cue, Effect, or Macro reference to fixtures outside the selected layer as a dependency, explicit destination binding, or conflict.
+8. Patch-layer import previews every selected Group, Preset, Cue, Dynamic, or Macro reference to fixtures outside the selected layer as a dependency, explicit destination binding, or conflict.
 9. Identical destination objects can be skipped only when stable identity and content comparison prove they are identical for the selected object type.
 10. A reference that cannot be resolved, rewritten, or explicitly bound blocks confirmation with an actionable preview message.
 11. The confirmed partial load is one atomic show revision and one Undo step.

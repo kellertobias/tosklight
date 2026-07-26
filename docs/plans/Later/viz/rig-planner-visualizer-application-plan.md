@@ -49,7 +49,7 @@ The planning model is authoritative. Neither the WebGL viewport nor the Rust ren
 11. **Placement and patching are independent.** A fixture may exist spatially without a DMX address, universe or power assignment and may be patched later without being recreated.
 12. **Logistics are opt-in.** A project can stop at placement, patch and visualization. Cable, stock, rack, power and load workflows add information without becoming prerequisites for the core editor.
 13. **This is one ToskLight workspace.** The planner, visualizer integration and existing light-control applications live in `/Users/keller/repos/light` and share Rust crates, fixture definitions, protocols and frontend packages instead of maintaining parallel implementations.
-14. **The existing UI library defines the visual language.** Reusable controls come from `packages/ui`; the planner adds product-specific composition and adapters, not look-alike copies of common components.
+14. **The existing UI library defines the visual language.** Reusable controls come from `@tosklight/ui` in `apps/ui-library`; the planner adds product-specific composition and adapters, not look-alike copies of common components.
 15. **Code structure is a product requirement.** Modules, functions, methods, components, classes and traits remain small, focused and clearly owned. Names are concise and descriptive, dependencies point in one direction, and hierarchies remain shallow enough to understand without tracing many layers.
 
 ## 3. Scope boundaries
@@ -195,7 +195,7 @@ This is a firm workspace decision: the application is part of `/Users/keller/rep
 Exact Cargo package boundaries may be added inside `crates/viz` as the product
 grows. The ownership boundary matters more than the crate count: reusable Viz
 domain and application behavior belongs in `crates/viz`, reusable presentation
-belongs in `packages/ui`, editor bootstrapping belongs in `apps/viz-editor`, and
+belongs in `apps/ui-library`, editor bootstrapping belongs in `apps/viz-editor`, and
 renderer bootstrapping belongs in `apps/viz-renderer`.
 
 Reuse the existing fixture, MVR, source-GDTF retention, resolved-output and CITP seams after live inspection. Do not create a second fixture-definition system or copy fixture records into an independently evolving planner schema.
@@ -225,7 +225,7 @@ persistence, import/export and renderer adapters
     ↑
 Tauri application
 
-packages/ui ← typed view models and callbacks ← app-specific React controllers
+apps/ui-library (`@tosklight/ui`) ← typed view models and callbacks ← app-specific React controllers
 
 renderer-protocol ← Tauri supervisor and Rust renderer
 ```
@@ -234,11 +234,11 @@ Domain crates must not depend on React, Tauri, graphics libraries, or platform U
 
 ### 5.2 Reusable UI component contract
 
-The planner UI uses the existing `packages/ui` library and its design tokens as the default source for controls, tables, dialogs, window chrome and input surfaces.
+The planner UI uses the existing `@tosklight/ui` library in `apps/ui-library` and its design tokens as the default source for controls, tables, dialogs, window chrome and input surfaces.
 
 - Search for and reuse an existing component before adding an app-local equivalent.
-- If a missing control is broadly reusable, implement it in `packages/ui`, demonstrate it with deterministic Storybook stories, and test it there before integrating it into the planner.
-- Keep `packages/ui` presentational. It must not depend on application contexts, server APIs, Tauri/native integration, document persistence, renderer state or workspace layout state.
+- If a missing control is broadly reusable, implement it in `apps/ui-library`, demonstrate it with deterministic Storybook stories, and test it there before integrating it into the planner.
+- Keep `@tosklight/ui` in `apps/ui-library` presentational. It must not depend on application contexts, server APIs, Tauri/native integration, document persistence, renderer state or workspace layout state.
 - Shared components accept typed view models, values and callbacks. Application-owned adapters in `apps/viz-editor` connect them to commands, services and state.
 - Product-specific panels and workflows remain in `apps/viz-editor`, but still use shared primitives, tokens, typography, focus behavior and spacing.
 - Preserve established operator terminology, labels, geometry and keyboard behavior. Do not fork nearly identical controls for the planner.
@@ -1044,7 +1044,7 @@ Recommended default: a packaged show archive for portability, while allowing an 
 
 ## 15. React application
 
-The React application lives in `apps/viz-editor` and composes the existing reusable controls from `packages/ui`. React owns product UI and coordinates editor state; it does not own frame-by-frame viewport state or duplicate Rust domain rules.
+The React application lives in `apps/viz-editor` and composes the existing reusable controls from `@tosklight/ui` in `apps/ui-library`. React owns product UI and coordinates editor state; it does not own frame-by-frame viewport state or duplicate Rust domain rules.
 
 ### 15.1 Main workspaces
 
@@ -1208,7 +1208,7 @@ Treat show files, MVR archives, GDTF archives and model files as untrusted:
 
 ### 18.3 UI tests
 
-- Shared controls in `packages/ui` through deterministic Storybook stories and interaction tests.
+- Shared controls in `apps/ui-library` through deterministic Storybook stories and interaction tests.
 - Planner adapters against typed view models and callbacks, without Tauri or server dependencies in the shared components.
 - Manufacturer → Fixture → Mode browser.
 - Add fixture versus add-and-patch.
@@ -1264,7 +1264,7 @@ Every pull request must pass the relevant workspace checks:
 - TypeScript formatting, linting, type checking, unit/interaction tests and production build.
 - Storybook build and tests for changed reusable UI components.
 - Generated TypeScript/protocol types checked for drift from their authoritative schemas.
-- Dependency-boundary checks preventing domain crates from importing application/platform layers and preventing `packages/ui` from importing Tauri, server or product-state modules.
+- Dependency-boundary checks preventing domain crates from importing application/platform layers and preventing `apps/ui-library` from importing Tauri, server or product-state modules.
 - Duplicate-component review when a new app-local control resembles an existing shared component.
 - Focused review of large methods, components, classes or services that mix multiple responsibilities.
 - Cross-platform CI for `crates/viz`, `apps/viz-editor`, and `apps/viz-renderer`.
@@ -1333,7 +1333,7 @@ Deliver:
 
 - Establish `apps/viz-editor`, `apps/viz-renderer`, and `crates/viz` inside `/Users/keller/repos/light`.
 - Map existing workspace crates and packages before proposing any new crate or duplicate model.
-- Audit `packages/ui` and its Storybook stories for reusable planner controls.
+- Audit `apps/ui-library` and its Storybook stories for reusable planner controls.
 - Inspect and document the live ToskLight Manufacturer → Fixture → Mode schema.
 - Confirm the exact icon/model asset type and existing model-loading path.
 - Confirm shared library revision, manual authoring and GDTF-import contracts.
@@ -1345,7 +1345,7 @@ Deliver:
 Gate:
 
 - The applications build as members of the existing `/Users/keller/repos/light` workspace.
-- The prototype uses `packages/ui` controls through app-owned adapters and introduces no copied common controls.
+- The prototype uses `@tosklight/ui` controls from `apps/ui-library` through app-owned adapters and introduces no copied common controls.
 - Shared Rust behavior is consumed through workspace crates rather than duplicated inside the Tauri app.
 - The planner reads the real library and shows the same fixture/mode identity as ToskLight.
 - One built-in fixture and one manually imported GDTF load through the shared path.
@@ -1358,7 +1358,7 @@ Duration target: 6–10 weeks
 
 Deliver:
 
-- Desktop-oriented Manufacturer → Fixture → Mode browser composed from `packages/ui`.
+- Desktop-oriented Manufacturer → Fixture → Mode browser composed from `@tosklight/ui`.
 - Storybook stories and interaction tests for any new reusable components before planner integration.
 - **Add fixture** and **Add and patch** actions.
 - Unpatched fixtures in the canonical fixture list.
@@ -1539,7 +1539,7 @@ With four to six experienced contributors, a focused useful MVP could be reached
 | Semantic model becomes a generic mesh scene | Define attachments, ports, inventory and physical metadata before UI expansion |
 | The selected Rust graphics stack performs poorly with many moving shadowed fixtures | Phase 0 benchmark; explicit shadow/fog budgets; engine-neutral protocol |
 | Planner and ToskLight fixture definitions diverge | Consume the shared library/schema directly; no copied fixture database |
-| Planner UI drifts from the rest of ToskLight | Reuse `packages/ui`; add missing reusable controls through Storybook before app integration |
+| Planner UI drifts from the rest of ToskLight | Reuse `@tosklight/ui` from `apps/ui-library`; add missing reusable controls through Storybook before app integration |
 | Shared UI becomes coupled to planner or Tauri state | Typed view models and callbacks; app-owned adapters; automated dependency-boundary checks |
 | Large components or services become difficult to change | Short single-purpose methods, focused modules, shallow hierarchies and responsibility-focused review gates |
 | DMX mode assumptions break scenery variants | Explicit addressless/variant mode semantics and validation |
@@ -1558,7 +1558,7 @@ With four to six experienced contributors, a focused useful MVP could be reached
 
 ## 24. Decisions to settle before Phase 1
 
-The repository decision is settled: the application lives in `/Users/keller/repos/light`, with the editor under `apps/viz-editor`, the Rust renderer under `apps/viz-renderer`, reusable Viz behavior under `crates/viz`, and reusable React controls under `packages/ui`.
+The repository decision is settled: the application lives in `/Users/keller/repos/light`, with the editor under `apps/viz-editor`, the Rust renderer under `apps/viz-renderer`, reusable Viz behavior under `crates/viz`, and reusable React controls under `apps/ui-library` as `@tosklight/ui`.
 
 1. Is the license permissive (MIT/Apache-2.0) or reciprocal (GPL-3.0)?
 2. What is the portable show-package extension and internal structure?
@@ -1578,7 +1578,7 @@ The repository decision is settled: the application lives in `/Users/keller/repo
 Build the first prototype in this order:
 
 1. Create the Viz editor, renderer, and behavior boundaries inside the existing `/Users/keller/repos/light` workspace.
-2. Audit and reuse the required `packages/ui` controls; add and test missing reusable pieces in Storybook.
+2. Audit and reuse the required `@tosklight/ui` controls from `apps/ui-library`; add and test missing reusable pieces in Storybook.
 3. Open the real shared ToskLight fixture library through its existing Rust crate.
 4. Display Manufacturer → Fixture → Mode in a desktop fixture browser.
 5. Add one fixture without patching it.

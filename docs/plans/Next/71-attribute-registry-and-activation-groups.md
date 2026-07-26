@@ -289,5 +289,5 @@ Indexed Presets tests must use at least two different fixture profiles whose sam
 25. Recordable fixed/indexed choices create one programmer mutation and one Undo step and follow attribute-activation groups.
 26. Encoder-originated Indexed Presets change live output immediately regardless of Programmer Fade without recording an explicit `0s` Cue fade.
 27. Momentary, timed, latched, multi-channel, hazardous, and non-recordable control actions retain their authored behavior.
-28. Indexed Presets remain distinct from numbered show Presets and from future Dynamics use of regular Presets.
+28. Indexed Presets remain distinct from numbered show Presets and from the Dynamics use of regular Presets.
 29. Help, testing Markdown, coverage catalogs, focused tests, and Playwright permanently cover merging, scoping, action safety, timing, and real output.

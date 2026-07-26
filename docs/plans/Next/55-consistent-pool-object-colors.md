@@ -20,7 +20,7 @@ These colors are presentation defaults. They must not change the meaning of the 
 
 ## Pool behavior
 
-Every pool tile or button for one of these object types uses the configured object-type color by default. This applies consistently across all pool surfaces, including compact shortcut strips, full pool windows, pane-level pools, playback assignment pools where Cuelists or Sequences are represented, future Dynamics pools, and future Macro pools.
+Every pool tile or button for one of these object types uses the configured object-type color by default. This applies consistently across all pool surfaces, including compact shortcut strips, full pool windows, pane-level pools, playback assignment pools where Cuelists or Sequences are represented, the planned Dynamics pool, and future Macro pools.
 
 The default color applies to the whole tile or button treatment, not only a tiny marker. Text contrast, selected state, armed Store/Record/Update state, disabled state, empty slot state, and focus indication must remain readable and must not depend on color alone.
 
@@ -60,7 +60,7 @@ The same configured color language must be used by:
 - full object pool windows;
 - group shortcut surfaces;
 - playback or Cuelist selection surfaces where Cuelists or Sequences are shown as objects;
-- future Macro and Dynamics pools;
+- future Macro pools and the planned Dynamics pool;
 - hardware-connected software layouts that display these pool tiles; and
 - manual/help documentation once implemented.
 

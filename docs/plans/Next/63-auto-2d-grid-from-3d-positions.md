@@ -6,7 +6,7 @@
 
 ## Operator intent
 
-Every fixture selection and every Group has a spatial grid in addition to its ordinary ordered fixture sequence. The grid provides a stable spatial representation for viewing and selecting fixtures now and will later provide the spatial foundation for Dynamics.
+Every fixture selection and every Group has a spatial grid in addition to its ordinary ordered fixture sequence. The grid provides a stable spatial representation for viewing and selecting fixtures. Dynamics has its own replaceable Stage-position ordering provider for its first release and does not depend on this plan.
 
 The ordered sequence and the grid remain separate concepts. Building or changing a grid does not silently change the sequence. The operator explicitly chooses when to derive a new sequence from the current grid.
 
@@ -31,7 +31,7 @@ If the operator has not manually edited the 2D grid, the 2D grid should be deriv
 
 The feature may live in Patch, Stage, or both. The command should ask how the operator wants to unwrap the 3D positions into the 2D grid. Candidate unwrap modes include front, top, side, truss/line projection, venue zone, or another explicitly named projection.
 
-The generated grid should support desk programming and future paperwork use. It should be compatible with Stage selection, fixture layout, Dynamics grid ordering, and the dedicated renderer/paperwork app.
+The generated grid should support desk programming and future paperwork use. It should be compatible with Stage selection, fixture layout, a future replacement Dynamics ordering provider, and the dedicated renderer/paperwork app.
 
 ## Grid construction methods
 
@@ -137,7 +137,7 @@ Stage-position changes and any affected live grid state must be published consis
 2. Manual 2D grid edits prevent automatic regeneration from overwriting operator layout.
 3. The operator can intentionally regenerate the grid and choose an unwrap mode.
 4. Patch and Stage views agree on the generated positions when both expose the feature.
-5. Generated 2D positions remain suitable for selection, programming, Dynamics ordering, and paperwork.
+5. Generated 2D positions remain suitable for selection, programming, optional future Dynamics ordering, and paperwork.
 6. Default 2D Stage grids work for direct selections, new Groups, legacy Groups, and intentionally empty Groups.
 7. Every directional and rotational projection, editable axis origins, coordinate orientation, deterministic ranks, exact-position ties, and method cycling are covered.
 8. A single Group reuses its method, several matching Groups use their common method, and mixed configurations fall back to 2D Stage.
@@ -151,4 +151,4 @@ Stage-position changes and any affected live grid state must be published consis
 
 ## Deferred work
 
-This feature deliberately does not include Dynamics or effects, manual Rows/Columns grid construction, editable grid cells, point projection, or arbitrary projection cameras. Dynamics may later consume these grids to move effects across spatially ordered fixtures without changing this feature's selection and Group contracts.
+This feature deliberately does not include Dynamics, manual Rows/Columns grid construction, editable grid cells, point projection, or arbitrary projection cameras. Dynamics may later replace its initial Stage-position ordering provider with these grids without changing this feature's selection and Group contracts or the Dynamic phase contract.

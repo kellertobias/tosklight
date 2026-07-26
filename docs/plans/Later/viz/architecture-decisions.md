@@ -21,7 +21,7 @@ The planner and renderer integration live in `/Users/keller/repos/light`.
 - The Tauri/React editor belongs under `apps/viz-editor`.
 - The Rust renderer belongs under `apps/viz-renderer`.
 - Reusable visualization behavior belongs under `crates/viz`.
-- Reusable React presentation belongs in `packages/ui`.
+- Reusable React presentation belongs in `apps/ui-library` and is consumed as `@tosklight/ui`.
 
 Reasoning: fixtures, patching, show data, MVR/GDTF handling and live values already cross several Light applications. A separate repository would encourage duplicate models, conversions and release coordination. Proposed crate names in the main plan are ownership suggestions, not permission to recreate behavior already present elsewhere.
 
@@ -37,11 +37,11 @@ Reasoning: this preserves the existing ToskLight frontend stack, UI investment a
 
 Status: Accepted
 
-Common controls come from `packages/ui`. Shared components remain presentational and accept typed values, view models and callbacks. Editor state, Tauri calls, document services and renderer coordination remain in app-owned adapters under `apps/viz-editor`.
+Common controls come from `@tosklight/ui` in `apps/ui-library`. Shared components remain presentational and accept typed values, view models and callbacks. Editor state, Tauri calls, document services and renderer coordination remain in app-owned adapters under `apps/viz-editor`.
 
 Reasoning: visual consistency is a product requirement, and copying controls would create divergent behavior and styling. Storybook gives reusable components a deterministic environment before they are integrated into the live application.
 
-Consequence: a broadly reusable missing component is added and tested in `packages/ui` first. A product-specific panel may remain in the planner app, but it still composes shared primitives and design tokens.
+Consequence: a broadly reusable missing component is added and tested in `apps/ui-library` first. A product-specific panel may remain in the planner app, but it still composes shared `@tosklight/ui` primitives and design tokens.
 
 ## ADR-004 — Use a retained WebGL editor for planning views
 

@@ -1,0 +1,221 @@
+# Dynamics Window
+
+## Status and goal
+
+**IMPLEMENTABLE.** Build the numbered Dynamics pool and the full production editor, using the standalone experiment as the visual and encoder baseline while applying the settled behavior below.
+
+The production editor deliberately has no embedded fixture grid, fixture preview, preview transport, or browser-side Dynamic evaluator. Operators open a separate Stage pane when they want visualization. A Stage pane may follow Live or Preload through the real authoritative runtime.
+
+## Pool behavior
+
+The Dynamics pane/window opens in Pool view and uses the accepted shared pool/window primitives:
+
+- integer slots 1–9999, sparse paging, stable UUID identity, name, presentation color, target summary, validation state, and running-instance count;
+- default Dynamic pool color cyan/light blue, with the shared object-type and per-item color rules;
+- empty slots remain visible and distinct from invalid or deleted objects;
+- moving/renumbering preserves UUID identity; copying creates a new UUID; deleting follows the snapshot rule in the runtime plan;
+- no implicit merge of selected Dynamics; reuse is through Duplicate, Copy Lane, and Add Lane; and
+- no local-only selection or running state.
+
+Exact tile actions are:
+
+- ordinary tap/click on an empty tile opens the lane chooser; the Dynamic is created only after the first valid lane is selected;
+- ordinary tap/click on a populated tile toggles the matching Programmer Dynamic instance for the resolved target scope;
+- Shift-tap/Shift-click on a populated tile opens its editor;
+- software uses latched Shift and attached hardware uses held Shift;
+- `[SET]` followed by a Dynamic tile and a Playback assigns that Dynamic to the Playback, so Set is not an edit gesture; and
+- armed Record/Store/Update modes keep their documented precedence instead of accidentally starting an instance.
+
+For a populated tile, the toggle key is Dynamic UUID plus resolved target scope:
+
+- when no matching Programmer instance exists, the tap starts one;
+- when a matching Programmer instance exists, the tap applies Dynamic Off to that instance;
+- a target-bound Dynamic resolves its stored scope;
+- a targetless Dynamic uses the current ordered selection, or all compatible fixture/head targets when the selection is empty; and
+- multiple independent instances of one targetless Dynamic may still exist when they come from different target scopes, Cues, Playbacks, or users.
+
+## Pool-to-editor navigation
+
+The editor replaces Pool view inside the same Dynamics pane/window. The title bar contains **Back to Pool** and the standard window controls. Returning to the pool does not stop output or discard edits.
+
+There is no draft Save/Discard model after creation. Every accepted editor operation is an immediate server-authoritative object mutation:
+
+- discrete actions create discrete revisions and undo entries where the current show-object workflow supports undo;
+- a held/continuous encoder gesture uses one server-owned mutation/undo group and a bounded update cadence;
+- every accepted mutation commits its small SQLite transaction before acknowledgement;
+- a stale revision causes the client to re-read and deliberately reapply the operator action;
+- an invalid edit is rejected without changing the last valid stored or running revision; and
+- a valid revision hot-swaps running instances at the next sample boundary while preserving phase, source ownership, playback-local controls, and lifecycle.
+
+The editor shows actionable validation beside the affected control and on the pool tile. It never leaves a browser-only value that disagrees with the server.
+
+## Target binding
+
+A Dynamic has exactly one binding class:
+
+1. **Live Group** — a stable Group UUID whose current ordered membership is resolved when the singleton instance starts.
+2. **Frozen targets** — an ordered list of fixture/head identities captured from the authoritative selection.
+3. **Targetless** — a reusable template resolved per instance from the current selection or, with no selection, every compatible fixture/head.
+
+Both Live Group and Frozen targets are target-bound and permit only one runtime instance of that Dynamic. Targetless Dynamics permit independent instances.
+
+The editor provides:
+
+- **Take Selection** — stores one selected Group as a live Group reference; otherwise stores the exact ordered fixture/head selection;
+- **Clear Selection** — changes the definition to Targetless; and
+- a target summary showing Group identity or ordered target count, missing targets, unpatched targets, and compatible-lane coverage.
+
+Take Selection and Clear Selection are blocked while any instance of that Dynamic is running. The operator must turn every instance Off first. A target-bound Dynamic cannot be retargeted by a pool tap, command, Cue, or Playback. An explicit command selection must resolve exactly to the stored scope or fail without mutation.
+
+Live Group membership and order are resolved at instance start. A running singleton retains its resolved target projection until restart/retrigger. Unpatched targets remain present and evaluate normally; only physical DMX output is suppressed.
+
+For a targetless Dynamic:
+
+- a target is compatible when it exposes at least one lane attribute;
+- supported lanes run for that target;
+- unsupported lanes are skipped for that target without blocking supported lanes; and
+- the result reports a concise actionable warning and exact skipped target/lane counts.
+
+## Editor structure
+
+The standalone `experiments/dynamics-editor` is the full-view baseline, except that production removes its mock fixture grid and preview playhead. The editor retains three title-bar task views:
+
+1. **Curves** — scalar lane mode, sources, functions, keyframes, interpolation, Size, Width, and per-lane speed.
+2. **Phase Spread** — one shared target projection, phase expression, offset/span, Blocks, Repeats, Wings, spatial center, and ordering.
+3. **Speed** — fixed duration or Speed Group, beats per cycle, overall multiplier, activation policy, quantization, and transport status.
+
+The editor uses the normal six-slot ToskLight encoder surface. Slots never shift when a control is unavailable; an unsupported slot remains visible, numbered, and disabled. Software encoder gestures remain relative, the center **Set Value** path remains explicit absolute entry, and hardware/software fine/coarse semantics use the shared encoder contract.
+
+Vertically stacked lanes support one primary lane and additive multi-selection:
+
+- ordinary lane tap selects it as the sole primary lane;
+- Shift-tap adds/removes a lane while retaining at least one selected lane and one primary lane;
+- shape, speed multiplier, width/scale, and other explicitly shared edits affect all selected lanes;
+- keyframe and scalar-source edits affect only the primary lane;
+- Add Lane, Duplicate Lane, Delete Lane, and reorder actions are touch reachable and do not depend on hover; and
+- a lane always addresses one canonical continuous-scalar attribute.
+
+## Lane schema and modes
+
+The attribute registry supplies stable identity, family, display label, units, normalized/domain bounds, fixture-facing mappings, and continuous/discrete capability. Initial Dynamics lanes support continuous scalar attributes across Intensity, Position, Color components, Beam, Focus, Zoom, Iris, and compatible custom continuous attributes. Indexed/discrete functions, fixture control actions, compound values, and raw DMX values are rejected.
+
+Every lane preserves all three configurations while the operator switches modes:
+
+### Keyframes
+
+- Sources are **Current**, **Value**, or a live matching scalar value from an ordinary Preset.
+- The first keyframe at 0% is also the loop-closing value shown at 100%; the terminal point is an alias and cannot diverge.
+- Selecting sources A and B initially creates A at 0%, B at 50%, and closing A at 100%.
+- Inserted keyframes have explicit normalized cycle positions and remain lane-local.
+- Segment interpolation choices are Linear, Ease in, Ease out, Ease in + out, Hold, and Drop.
+- The default interpolation is Ease in + out.
+- Keyframe Scale changes points 1 through N-1 while the closing point remains at 100%; fine/coarse/reset behavior follows the experiment.
+- Playback Size scales every keyframe deviation around the first/closing keyframe.
+
+### Max/min function
+
+- Top and Bottom independently use Current, Value, or a matching scalar Preset value.
+- Functions are Sinus, Cosinus, Linear +, Linear -, and PWM.
+- Playback Size scales the Top/Bottom interval around its midpoint.
+
+### Middle/amplitude function
+
+- Middle uses Current, Value, or a matching scalar Preset value.
+- Amplitude uses the attribute's scalar display/domain unit and clamps only at the final supported attribute bounds.
+- Functions are Sinus, Cosinus, Linear +, Linear -, and PWM.
+- Playback Size multiplies Amplitude around Middle.
+
+Switching modes never converts or discards inactive settings. Only the selected mode evaluates.
+
+## PWM
+
+PWM uses Minimum/Maximum or Middle/Amplitude values from its selected mode and four normalized cycle portions:
+
+- Attack rises to the high value;
+- On holds the high value;
+- Decay returns to the low value; and
+- Off holds the low value.
+
+On and Off define the cycle partition; Attack is contained within On and Decay within Off. Editing either slope never moves the On/Off boundary or cycle end. Zero Attack and Decay produce a hard pulse. Each slope uses its chosen scalar interpolation.
+
+## Initial Random function
+
+Initial Random is a deterministic Gaussian pulse function, not the full experimental Random catalog.
+
+Each Dynamic owns local Random groups. A lane links to one group; lanes linked to the same group receive the same normalized per-target event/envelope stream and map it through their own Minimum/Maximum or Preset-derived scalar values. This synchronizes multi-component Color and other multi-lane Random content without creating combined attribute values.
+
+Each target makes an independent seeded event decision. Each independent Dynamic instance derives an independent stream; all linked lanes inside that instance remain correlated.
+
+Random controls are:
+
+- low and high scalar sources: Current, Value, or matching Preset;
+- decision interval in milliseconds;
+- start probability evaluated for an off target at each decision boundary;
+- Gaussian mean pulse duration in milliseconds;
+- Gaussian pulse-duration spread in milliseconds;
+- Attack and Decay as percentages of each sampled pulse duration, constrained so their sum is at most 100%;
+- the remaining duration as high-value hold;
+- a local Random group selector; and
+- Generate Seed for the selected local group.
+
+Pulse durations are deterministically drawn, bounded to at least one evaluator/output interval, and may cross a Dynamic cycle boundary. Decision interval and pulse durations scale inversely with overall Dynamic speed, lane multiplier, and playback-local Double/Half/learned speed. Zero Attack and Decay are hard binary pulses. Random timing, Markov stay-on/stay-off controls, density/grouping/burst modes, separate timing/gate modes, and Macro functions remain later extensions.
+
+## Phase Spread
+
+One phase projection is shared by every lane in an instance. It assigns phase only; it never changes target membership or stored selection order.
+
+Available orderings are:
+
+- authoritative selection/Group order;
+- Grid linear using Stage X/Z positions and a direction angle;
+- Radial out;
+- Radial in;
+- Axial/Radar around a center; and
+- Random each loop, usable with every lane shape.
+
+Grid-linear angles are 0° left-to-right, 90° top-to-bottom, 180° right-to-left, and 270° bottom-to-top; intermediate values are diagonal. Fine/coarse encoder steps are 5° and 45°, and Push resets to 90°.
+
+Radial and Axial/Radar default to the current target-position centroid and store an editable Stage X/Z center. Positioned targets are projected first. Targets without usable Stage positions are appended in stored order and produce a warning. A running instance captures its phase map at start; Stage movement affects only a later restart/retrigger.
+
+Phase assignment uses this pipeline:
+
+1. Resolve ordering and collapse exact spatial ties into common phase ranks.
+2. Apply Block Size to consecutive ranks; a short final block is valid.
+3. Split ranks into contiguous Repeats as evenly as possible; earlier repeats receive one extra rank when uneven.
+4. Apply Wings inside each repeat by calculating its first half and mirroring it; an odd repeat has one center peak.
+5. Spread each repeat endpoint-exclusively across Phase Span and then add Phase Offset.
+
+Automatic Phase Span is cyclic and endpoint-exclusive for every span. Thus 360° across four ranks is 0°, 90°, 180°, 270°; 720° produces two cycles. The experiment's 180°, 360°, and 720° presets remain. Tightening curve keyframes creates a narrower single band; increasing span creates additional wavefronts.
+
+Explicit phase entry accepts scalar degrees and `THRU` expressions. The existing deterministic multi-point spread resolver places explicit anchors. `0 THRU 360` over four ranks remains endpoint-exclusive at 0°, 90°, 180°, 270°. `0 THRU 360 THRU 0` over eight ranks yields 0°, 90°, 180°, 270°, 270°, 180°, 90°, 0°. Blocks, Repeats, and Wings then operate through the pipeline above.
+
+Random each loop derives a deterministic per-instance permutation from the Dynamic seed, instance identity, loop index, and stable target identity before phase assignment.
+
+## Speed view
+
+A Dynamic uses exactly one speed source:
+
+- fixed cycle duration; or
+- one authoritative Speed Group A-E.
+
+Speed-Group Dynamics store a positive rational beats-per-cycle value with a four-beat default. The Dynamic has an overall rational multiplier and every lane may have its own rational multiplier; required direct choices include multiply/divide by 2, 3, and 4. All lanes share one epoch even when rational multipliers make their cycle counts differ.
+
+The three activation policies are:
+
+- **Start now** — local epoch, immediate phase zero;
+- **Join sync now** — immediate activation at the current authoritative Speed Group position; and
+- **Next boundary** — pending until the selected next beat/bar boundary, then phase zero.
+
+Join/Next require a Speed Group. Fixed duration uses Start now. Fixture phase remains independent from transport position and activation quantization.
+
+The Speed view shows authoritative source, effective duration/BPM, paused/running/pending state, activation policy, boundary, beats per cycle, overall multiplier, and bounded transport position. It has no draggable or editable preview playhead.
+
+## UI review and acceptance
+
+Implementation first produces the complete working backend and frontend. The user then reviews and iterates the real pool/editor UI. Before that approval:
+
+- use Storybook and packaged desktop/manual inspection for development;
+- do not add new Dynamics pool/editor component tests, Playwright interaction tests, pixel snapshots, or help screenshots; and
+- do not treat the experiment's mock geometry as a production acceptance oracle.
+
+After approval, add focused tests for empty/populated/Shift/Set tile gestures, navigation, lane selection, immediate edits, target controls, encoder mappings, validation, touch and hardware modes, and dirty-free window behavior. Update help/manual screenshots only from the accepted production state.

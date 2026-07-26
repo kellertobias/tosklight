@@ -157,7 +157,7 @@ The flow enforces these rules:
 - Desk interaction state owns unfinished command-line text, the current command target, Shift and gesture context, and the desk page.
 - Programmer state owns the user's ordered selection expression, semantic values, timing, modes, and undo/redo history.
 - Groups, Presets, Cues, patching, and other portable definitions live in the show.
-- Programmer, Playback, Preload, and future Dynamics produce semantic attribute values; they never write DMX directly.
+- Programmer, Playback, Preload, and Dynamics produce semantic attribute values; they never write DMX directly.
 - Highlight remains a transient overlay and is never recorded into Programmer or Cue data.
 - Programmer LTP and Playback arbitration remain distinct.
 - Group Masters are independent HTP intensity limiters, never LTP or lowest-takes-
@@ -172,9 +172,9 @@ The flow enforces these rules:
 
 ### Extensible semantic values
 
-Every resolved value is addressed by fixture or logical head plus attribute. The internal value boundary must be able to grow from today's static values into future animated values without changing transport, storage, fixture projection, or output adapters.
+Every resolved value is addressed by fixture or logical head plus attribute. The internal value boundary must support static and animated values without changing transport, storage, fixture projection, or output adapters.
 
-Conceptually, future values may include static, animated, fixed or stomping, and release variants. The refactor does not define or implement the future Dynamics data model, `FAT` command, or pause behavior. It only ensures that the value and contribution interfaces are not restricted to stateless numeric producers.
+The canonical [Dynamics plans](Later/dynamics/README.md) define static, Dynamic On, Dynamic Off, `FixAT`/FAT, release, pause, and hidden-running behavior. This refactor does not implement those product features; it ensures that the value and contribution interfaces are not restricted to stateless numeric producers.
 
 This is sufficient for the planned Dynamics behavior:
 
@@ -182,9 +182,9 @@ This is sufficient for the planned Dynamics behavior:
 - the same semantic assignment can be staged in Preload or recorded into a Cue;
 - combined Dynamics can produce independent values for multiple attributes;
 - different Playbacks can own independent runtime instances; and
-- a future fixed value can suppress or control an animated value at the normal fixture/head-and-attribute arbitration boundary.
+- a Fixed At value can suppress an animated value at the normal fixture/head-and-attribute arbitration boundary.
 
-Whether a suppressed Dynamic freezes, continues hidden, or restarts remains inside a future Dynamic runtime policy and does not require another application-wide architectural change.
+A suppressed Dynamic instance continues running while hidden and resumes output if it becomes the winner again. Pause, Dynamic Off, and restart remain distinct typed operations and do not require another system-wide architectural change.
 
 ## Fixture management
 
@@ -236,7 +236,7 @@ flowchart LR
 - Refactor the engine into compiled show, contribution sources, merge and arbitration, transitions, fixture projection, DMX rendering, and visualization modules.
 - Replace `Engine::playback()` and other mutable-lock exposure with typed commands, queries, and immutable runtime projections.
 - Keep stateful animation outside the deterministic render core. The engine samples immutable values or batches supplied for the current render instant.
-- Split Playback into persisted model, Cue tracking, runtime, controls, transitions, phasers or future Dynamics integration, and contribution production.
+- Split Playback into persisted model, Cue tracking, runtime, controls, transitions, Dynamic instance integration, and contribution production.
 - Split Programmer into state, selection, Groups, Presets, Preload, history, and registry or service modules.
 - Split `light-control` stable action and mapping models from MIDI, OSC, RTP-MIDI, UDP, and timecode transports.
 - Split stable output models from Art-Net/sACN codecs, sockets, scheduler, health, and delivery adapters.
@@ -245,14 +245,14 @@ flowchart LR
 
 ### Output performance contract
 
-Efficiency is a hard architecture requirement, not a post-refactor polish item. The render, arbitration, fixture projection, and output scheduler paths must be designed and benchmarked against fully packed universes with multiple simultaneous contribution sources, including future Effects/Dynamics, overlapping Playback and Programmer values, and optional sound-to-light analysis.
+Efficiency is a hard architecture requirement, not a post-refactor polish item. The render, arbitration, fixture projection, and output scheduler paths must be designed and benchmarked against fully packed universes with multiple simultaneous contribution sources, including Dynamics, overlapping Playback and Programmer values, and optional sound-to-light analysis.
 
 - Hard acceptance floor: the server must generate complete output for at least 32 fully packed DMX universes at 100 Hz, including all contribution arbitration and output frame production for every universe on each tick.
 - Target performance goal: 64 fully packed universes at 120 Hz on slower ordinary show-control hardware, not only on a high-end development laptop.
 - Low-power goal: on very slow hardware such as a Raspberry Pi-class device, the output engine should still sustain 40 Hz across 4 to 8 universes.
 - Output benchmarks must run against release builds, document the reference hardware, and report p50, p95, p99, dropped/deferred ticks, CPU usage, allocation rate, and time split between contribution sampling, arbitration, fixture projection, protocol encoding, socket delivery, and optional sound-to-light analysis.
 - The render loop must avoid per-tick full-show cloning, broad mutex contention, JSON serialization, frontend projection work, fixture-library reads, persistence, or network adapter backpressure on the timing-critical output path.
-- Effects, future Dynamics, Macros, Timecode, sound-to-light detection, and external-device adapters may schedule or submit contributions, but they must not block output frame generation.
+- Dynamics, Macros, Timecode, sound-to-light detection, and external-device adapters may schedule or submit contributions, but they must not block output frame generation.
 - If the system cannot keep the configured output rate, it must report actionable output health and overload diagnostics rather than silently producing stale or irregular frames.
 
 ## Future Macro architecture
@@ -273,7 +273,7 @@ Macros belong above the domain services in the application layer, never inside t
 ## Timecode and managed assets
 
 - Introduce a monotonic runtime clock and scheduler boundary distinct from wall-clock metadata and external timecode input.
-- Keep Cue fades, Chasers, Move in Black, future Dynamics, Macro timers, and Timecode scheduling on the same deterministic timing foundation.
+- Keep Cue fades, Chasers, Move in Black, Dynamics, Macro timers, and Timecode scheduling on the same deterministic timing foundation.
 - Add a `ManagedAssetStore` before Timecode implementation for stable asset identity, import and validation, streaming, copying with a show, export, missing-state reporting, revision retention, and cleanup.
 - A future Timecode runtime calls the same typed Playback and Macro services as manual operation.
 - Timecode audio, timeline editing, seek behavior, missed events, and restart reconstruction remain future product decisions rather than refactor requirements.
@@ -355,7 +355,7 @@ Each stage must leave the application buildable, testable, and usable.
 - Remove mutable lock exposure and direct transport dependencies from the render domain.
 - Introduce immutable contribution batches, compiled fixtures, monotonic scheduling, and rendered-output batches.
 - Publish every externally observable engine and runtime state transition through the typed application event boundary without adding transport work to the timing-critical render loop.
-- Keep existing Cue Phaser behavior compatible while ensuring future stateful animated-value sources fit the contribution boundary.
+- Keep the contribution boundary suitable for stateful animated-value sources. When Dynamics is implemented, remove the accidental legacy Cue Phaser fields, evaluator, writer route, UI helpers, and tests as specified by the canonical Dynamics plans; old Phaser fields are ignored and dropped on the next save rather than evaluated or migrated.
 - Add release-build output benchmarks and profiling hooks for the hard 32-universe 100 Hz floor, the 64-universe 120 Hz target, and the 4-to-8-universe 40 Hz low-power goal.
 
 ### 7. Prove future extension seams
@@ -382,7 +382,7 @@ These are architectural tests using fakes, not production feature implementation
 - Playwright scenarios use UI, OSC, command-line HTTP, or explicit bench controls rather than implementation objects.
 - Exact OSC paths, aliases, feedback indices, desk sharing, and current-page versus explicit-page semantics remain unchanged.
 - Desk geometry, labels, gestures, focus behavior, software layout, and hardware-connected layout remain unchanged.
-- Existing show, desk, fixture-profile, patched-fixture, Cue Phaser, and layout data remains loadable and migratable.
+- Existing show, desk, fixture-profile, patched-fixture, and layout data remains loadable and migratable. Unsupported legacy Cue Phaser fields load safely, are ignored, and disappear on the next save.
 - Single and batch patching meet the Patch mutation performance contract, remain atomic, and never reload unchanged fixture-library or unrelated desk state.
 - Output generation meets the hard 32 fully packed universes at 100 Hz acceptance floor with multiple simultaneous contribution sources and optional sound-to-light analysis enabled or explicitly accounted for in benchmark results.
 - Benchmark evidence records progress toward the 64 fully packed universes at 120 Hz target and the Raspberry Pi-class 4-to-8-universe 40 Hz low-power goal.

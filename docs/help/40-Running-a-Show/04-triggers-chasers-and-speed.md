@@ -22,7 +22,9 @@ Use `[SHIFT] [TIME]` for the `SPD GRP` command-line workflow documented in [Comm
 
 ## Sound to Light
 
-Switch the lower control section to Playbacks. An ordinary tap or click on Speed Group A–E performs tap tempo immediately. Hold the control, or use Shift while tapping/clicking it, to open that group's settings.
+Switch the lower control section to Playbacks. An ordinary tap or click on Speed Group A–E performs tap tempo immediately in both the touch-only and hardware-connected views. Hold the control, use Shift while tapping/clicking it, or right-click it to open that group's settings.
+
+Tap tempo keeps a rolling calculation bucket. When the currently shown or calculated speed is 10 BPM or faster, a gap longer than 10 seconds makes the later tap the first tap of a new bucket. Below 10 BPM, that reset gap is longer than 30 seconds instead. The previous speed remains shown until the new bucket has enough taps to calculate a replacement.
 
 Choose the microphone once under **Desk Setup > Network & Inputs > Inputs**. Permission and the selected device ID stay in this browser, scoped to the desk rather than to an individual Speed Group. They are never written into the show, so another machine or browser starts unassigned instead of trying to open a device that may not exist there. If a saved local input still exists when the application reconnects, the browser resumes capture for Speed Groups that use Sound to Light.
 

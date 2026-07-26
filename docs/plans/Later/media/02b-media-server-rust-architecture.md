@@ -237,7 +237,7 @@ apps/media/src/
     lib/                  small application-specific helpers
 ```
 
-The workspace's `packages/ui` is the required frontend dependency. It remains a presentation-only React package: it accepts typed view models and callbacks and does not import product contexts, APIs, Tauri integration, or persisted application state. Ownership is divided as follows:
+The workspace's `apps/ui-library` package, consumed as `@tosklight/ui`, is the required frontend dependency. It remains a presentation-only React package: it accepts typed view models and callbacks and does not import product contexts, APIs, Tauri integration, or persisted application state. Ownership is divided as follows:
 
 | Shared UI framework owns | Media Core frontend owns |
 |---|---|
@@ -328,7 +328,7 @@ Work location: dedicated `/Users/keller/repos/light` Media worktree.
 
 9. Add the Media application/frontend workspace members, dependency rules, versioned multi-output configuration, logging, shutdown, and cross-platform CI skeleton.
 10. Implement and test the pure Media domain state, command reducer, v2 DMX personality, output collection, and control ownership.
-11. Extract only proven shared seams: CITP wire codec, canonical fixture/GDTF model/writer, portable audio-analysis contracts, Speed Group wire model, and accepted `packages/ui` components. Keep Light and Media orchestration separate and retain compatibility adapters until existing Light callers migrate safely.
+11. Extract only proven shared seams: CITP wire codec, canonical fixture/GDTF model/writer, portable audio-analysis contracts, Speed Group wire model, and accepted `@tosklight/ui` components from `apps/ui-library`. Keep Light and Media orchestration separate and retain compatibility adapters until existing Light callers migrate safely.
 
 Exit gate: the complete Light workspace still passes its baseline checks, the empty Media application starts and shuts down, dependency-direction tests pass, and no legacy source path is referenced.
 
@@ -341,7 +341,7 @@ Work location: dedicated `/Users/keller/repos/light` Media worktree; `/Users/kel
 14. Add cross-platform video playback, intrinsic BPM import, all ten playback modes, both tempo-source configurations, and Speed Group loss behavior.
 15. Add the media catalog, new folder/file ranges, versioned data migration, transactional operations, thumbnails, and bounded import jobs.
 16. Add sACN and Art-Net through the canonical personality and route input to stable output IDs.
-17. Implement the versioned HTTP API and React Media UI using accepted `packages/ui` components.
+17. Implement the versioned HTTP API and React Media UI using accepted `@tosklight/ui` components from `apps/ui-library`.
 18. Add text sources, shared portable audio analysis, and all generated visualizers.
 19. Implement layer masks, the selected effect chain, and master mask.
 20. Add Media's CITP sender/server over the shared codec and generate GDTF only through the canonical fixture model.
@@ -369,7 +369,7 @@ Every stage must remain runnable and testable. A later capability can be absent 
 - Passing legacy Media checks proves only the reference application. Passing focused Media target checks proves only that slice. Acceptance also requires the affected full `/Users/keller/repos/light` checks so shared-crate changes cannot regress the desk.
 - Cross-repository parity tests use sanitized fixtures copied into the target repository. CI must not assume that `/Users/keller/repos/media` exists beside a Light checkout.
 - Source and target may run side by side for manual comparison, but production target startup and tests must remain self-contained.
-- Shared UI additions begin as Media-owned compositions. A component moves into `packages/ui` only when it is genuinely presentation-only, follows the package's review process, and does not introduce Media state or API dependencies.
+- Shared UI additions begin as Media-owned compositions. A component moves into `apps/ui-library` only when it is genuinely presentation-only, follows the `@tosklight/ui` review process, and does not introduce Media state or API dependencies.
 - Shared Rust extraction follows callers, not speculation: add the target Media adapter first, identify identical stable behavior, extract a shared kernel, then keep separate Light and Media orchestration adapters.
 
 ## Known decisions to resolve
@@ -388,7 +388,7 @@ The code does not currently define these choices well enough. They should be dec
 10. Which media codecs and pixel formats are guaranteed on all supported operating systems?
 11. Is the HTTP service trusted-local-only, LAN authenticated, or both through configurable binding?
 12. Which CITP/MSEX versions and lighting-console products define the interoperability target?
-13. What is `packages/ui`'s versioning policy, theme entry point, and process for contributing generally useful Media components back to it?
+13. What is `@tosklight/ui`'s versioning policy, theme entry point, and process for contributing generally useful Media components back to `apps/ui-library`?
 14. Should the historical `paused` field be removed in favor of `playmode = Pause`, as recommended?
 15. Is an independent layer blackout latch needed? If retained, what sources may clear it and how does it interact with dimmer and media selection?
 16. What exact one-byte mapping should Playback BPM use, and what does byte `0` mean?

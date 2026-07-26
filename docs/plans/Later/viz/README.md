@@ -25,6 +25,6 @@ The current delivery priorities are:
 
 - Keep detailed requirements and phase gates in the canonical application plan.
 - Record durable technology or ownership decisions in the architecture-decision document.
-- Reuse the existing ToskLight fixture model, Rust crates and `packages/ui`; do not describe parallel replacements.
+- Reuse the existing ToskLight fixture model, Rust crates and `@tosklight/ui` from `apps/ui-library`; do not describe parallel replacements.
 - Preserve the distinction between a decision, an open question and a deferred feature.
 - When implementation begins, add evidence and links rather than changing planned work to “done” without verification.

@@ -2,13 +2,13 @@
 
 ## Status
 
-**Specification only.** This plan records future playback behavior configuration for Cuelist playbacks, with a later extension to Dynamic playbacks. It does not implement playback state changes, persistence, UI, API behavior, OSC behavior, hardware behavior, help changes, or executable tests.
+**Specification only.** This plan records future playback behavior configuration for Cuelist playbacks and the shared option vocabulary used by Dynamic playbacks. It does not implement playback state changes, persistence, UI, API behavior, OSC behavior, hardware behavior, help changes, or executable tests.
 
 ## Goal
 
 Add explicit behavior settings that can automatically turn a playback Off when the operator's own control gesture has ended, independent of the existing **Turn off when other playbacks take full control** rule.
 
-This plan is for Cuelist playbacks first. Once Dynamic playback assignment exists, the same policy family should apply to Dynamic playbacks where the matching fader and flash concepts exist.
+This plan is for Cuelist playbacks first. [Dynamics Playback Assignment](../Later/dynamics/04-playback-assignment.md) settles the corresponding Dynamic playback behavior.
 
 ## Relationship to Existing Behavior
 
@@ -62,9 +62,12 @@ Temp buttons and Temp faders do not use this option unless a future plan explici
 
 ## Dynamic Playbacks
 
-Once [Dynamics Playback Assignment](../Later/dynamics/04-playback-assignment.md) is implemented, Dynamic playbacks should use the same Auto-off behavior vocabulary where applicable.
+Dynamic playbacks use the same two independent options, both disabled by default:
 
-For Dynamic playbacks, **When fader reaches zero** must define whether zero stops, pauses, releases, or hides the Dynamic runtime instance. **When Flash is released** must define whether releasing Flash stops only a temporary contribution or turns off the assigned Dynamic playback source. Those runtime semantics belong to the Dynamics playback assignment chunk before Dynamic support can ship.
+- **When fader reaches zero** sends authoritative Off for the assigned Dynamic source. Raising the fader from zero starts it again.
+- **When Flash is released** removes the temporary Flash contribution first and then sends authoritative Off for the assigned Dynamic source.
+
+These options are independent of **Turn off when other playbacks take full control**, which is enabled by default for Dynamic playbacks and may be disabled per assignment. Full-control auto-off occurs only when every active address contributed by that source has been persistently superseded; temporary Flash/FAT entries do not count.
 
 ## Surface Requirements
 
@@ -95,4 +98,4 @@ No surface may locally decide to hide a zero-level playback as "effectively off"
 10. Temp button and Temp fader gestures do not trigger these Cuelist auto-off options.
 11. Software UI, virtual playback, hardware, OSC/API where exposed, playback feedback, and LEDs agree on the resulting Off state.
 12. The same Cuelist assigned to two playbacks can use different auto-off settings.
-13. Dynamic playback auto-off remains unavailable or clearly not implemented until the Dynamics playback assignment semantics define its runtime behavior.
+13. Dynamic playbacks expose the same independently configurable fader-zero and Flash-release options with the settled Off/restart behavior, plus the separately configurable full-control rule.
