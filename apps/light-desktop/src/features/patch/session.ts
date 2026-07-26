@@ -20,6 +20,7 @@ import {
 	shouldRepair,
 } from "./mutationSupport";
 import { PatchStore } from "./store";
+import { frontendPerformanceDiagnostics } from "../frontendWarmup/diagnostics";
 
 export interface PatchSessionOptions {
 	showId: string;
@@ -156,7 +157,13 @@ export class PatchSession {
 		const lifecycle = this.writableLifecycle();
 		if (lifecycle == null) return Promise.reject(authorityChanged());
 		const requestId = crypto.randomUUID();
+		const performanceSample =
+			frontendPerformanceDiagnostics.beginPatchMutation(
+				requestId,
+				initial.length,
+			);
 		this.store.begin(requestId, initial, removeFixtureIds);
+		performanceSample.optimisticStorePublished();
 		return this.enqueueWrite(() =>
 			this.runPatch(
 				requestId,
@@ -164,6 +171,7 @@ export class PatchSession {
 				materialize,
 				placements,
 				lifecycle,
+				performanceSample,
 			),
 		);
 	}
@@ -174,6 +182,9 @@ export class PatchSession {
 		materialize: CandidateMaterializer,
 		placements: readonly PatchPlacement[],
 		lifecycle: number,
+		performanceSample: ReturnType<
+			typeof frontendPerformanceDiagnostics.beginPatchMutation
+		>,
 	): Promise<PatchMutationOutcome> {
 		try {
 			this.requireActiveLifecycle(lifecycle);
@@ -184,9 +195,12 @@ export class PatchSession {
 				placements,
 				lifecycle,
 			);
+			performanceSample.responseDecoded();
 			this.requireActiveLifecycle(lifecycle);
 			this.requireRequestIdentity(requestId, outcome);
 			const result = this.store.applyOutcome(requestId, outcome);
+			performanceSample.authoritativeStorePublished();
+			afterVisiblePaint(performanceSample.visiblePainted);
 			if (result === "repair") await this.repair();
 			this.requireActiveLifecycle(lifecycle);
 			return outcome;
@@ -421,4 +435,13 @@ export class PatchSession {
 	private requireActiveLifecycle(lifecycle: number): void {
 		if (!this.isActive(lifecycle)) throw authorityChanged();
 	}
+}
+
+function afterVisiblePaint(callback: () => void) {
+	const frame = globalThis.requestAnimationFrame;
+	if (typeof frame !== "function") {
+		callback();
+		return;
+	}
+	frame(() => frame(callback));
 }

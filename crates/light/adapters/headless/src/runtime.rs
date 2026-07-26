@@ -178,7 +178,7 @@ mod show_objects_v2;
 mod show_open;
 mod show_patch_adapter;
 mod show_patch_http;
-mod show_patch_wire;
+pub(crate) mod show_patch_wire;
 mod speed_group_service;
 mod speed_group_v2;
 mod speed_groups;

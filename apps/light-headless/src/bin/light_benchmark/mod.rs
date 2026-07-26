@@ -2,6 +2,7 @@ mod arguments;
 mod loopback;
 mod metadata;
 mod mutation;
+mod patch_mutation;
 mod report;
 mod runner;
 mod sampled;

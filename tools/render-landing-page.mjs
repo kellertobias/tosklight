@@ -154,18 +154,36 @@ writeFileSync(
   resolve(siteRoot, "performance", "status.json"),
   `${JSON.stringify(performance, null, 2)}\n`,
 );
+const patchServer = performance.patch?.server;
+const metric = (scenario, label) =>
+  `<tr><th>${escape(label)}</th><td>${scenario?.p50_microseconds ?? "—"} µs</td>` +
+  `<td>${scenario?.p95_microseconds ?? "—"} µs</td>` +
+  `<td>${scenario?.gate_p95_microseconds ?? "—"} µs</td>` +
+  `<td>${scenario?.gate_met == null ? "unknown" : scenario.gate_met ? "pass" : "degraded"}</td></tr>`;
+writeFileSync(
+  resolve(siteRoot, "performance", "index.html"),
+  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">` +
+    `<title>ToskLight release performance</title><style>body{font:16px system-ui;max-width:900px;margin:3rem auto;padding:0 1rem;background:#101318;color:#eef2f6}` +
+    `a{color:#72c7ff}table{border-collapse:collapse;width:100%;margin:2rem 0}th,td{border:1px solid #44505c;padding:.7rem;text-align:left}` +
+    `code{background:#20262d;padding:.15rem .35rem}</style><main><p><a href="../">← ToskLight</a></p>` +
+    `<h1>Release performance</h1><p><strong>${escape(performance.status.toUpperCase())}</strong> — ${escape(performance.summary)}</p>` +
+    `<h2>Persisted Patch transaction</h2><table><thead><tr><th>Batch</th><th>p50</th><th>p95</th><th>p95 budget</th><th>Gate</th></tr></thead><tbody>` +
+    metric(patchServer?.single_fixture, "1 fixture") +
+    metric(patchServer?.hundred_fixtures, "100 fixtures") +
+    `</tbody></table><p>UI action-to-visible latency is informational and is not yet a release gate. ` +
+    `Raw per-phase samples, request/response sizes, and machine metadata are retained in the detailed release report.</p>` +
+    `<p><a href="${escape(performance.release?.url ?? releaseUrl)}">Download the detailed benchmark report →</a></p></main></html>`,
+);
 const performanceLabel = {
   healthy: "Performance healthy",
   degraded: "Performance degraded",
   unknown: "Performance unknown",
 }[performance.status];
-const performanceDetails =
-  typeof performance.release?.url === "string" ? performance.release.url : releaseUrl;
 const performanceMarkup =
   `<div class="performance-status performance-${escape(performance.status)}">` +
   `<strong>${escape(performanceLabel)}</strong>` +
   `<p>${escape(performance.summary)}</p>` +
-  `<a href="${escape(performanceDetails)}">Release details and benchmark report →</a>` +
+  `<a href="performance/">Performance details and raw report →</a>` +
   `</div>`;
 
 const demoSources = [

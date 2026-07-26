@@ -57,6 +57,7 @@ pub struct Arguments {
     pub warmup_seconds: u64,
     pub hardware_label: Option<String>,
     pub mutation_gate: bool,
+    pub patch_gate: bool,
     pub fixtures_per_universe: Option<u16>,
 }
 
@@ -127,6 +128,7 @@ impl Default for Arguments {
             warmup_seconds: DEFAULT_WARMUP_SECONDS,
             hardware_label: None,
             mutation_gate: false,
+            patch_gate: false,
             fixtures_per_universe: None,
         }
     }
@@ -171,6 +173,7 @@ impl Arguments {
                     parsed.hardware_label = Some(label);
                 }
                 "--mutation-gate" => parsed.mutation_gate = true,
+                "--patch-gate" => parsed.patch_gate = true,
                 "--fixtures-per-universe" => {
                     let value = parse_bounded_u64(
                         &required_value(&mut arguments, &argument)?,
@@ -206,6 +209,7 @@ impl Arguments {
           --hardware-label TEXT        Reference-machine description included in JSON\n\
           --fixtures-per-universe N    Equal-size fixtures filling every universe (1-128)\n\
           --mutation-gate              Run the large-show incremental mutation gate\n\
+          --patch-gate                 Run the real persisted Patch transaction gate\n\
           -h, --help\n"
     }
 }
@@ -286,6 +290,7 @@ mod tests {
             "--fixtures-per-universe",
             "32",
             "--mutation-gate",
+            "--patch-gate",
         ]);
         assert_eq!(arguments.profiles, vec![BenchmarkProfile::HardFloor]);
         assert_eq!(arguments.protocol, ProtocolSelection::Both);
@@ -295,6 +300,7 @@ mod tests {
         assert_eq!(arguments.hardware_label.as_deref(), Some("Test host"));
         assert_eq!(arguments.fixtures_per_universe, Some(32));
         assert!(arguments.mutation_gate);
+        assert!(arguments.patch_gate);
     }
 
     #[test]

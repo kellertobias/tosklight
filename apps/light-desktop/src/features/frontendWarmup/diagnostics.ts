@@ -27,6 +27,17 @@ export interface FrontendEventLagDiagnostic {
 	lagMs: number;
 }
 
+export interface FrontendPatchMutationDiagnostic {
+	requestId: string;
+	fixtureCount: number;
+	startedAt: number;
+	optimisticStoreAt: number | null;
+	responseDecodedAt: number | null;
+	authoritativeStoreAt: number | null;
+	visiblePaintAt: number | null;
+	actionToVisibleMs: number | null;
+}
+
 export interface FrontendPerformanceSnapshot {
 	startedAt: number;
 	firstUsablePaintAt: number | null;
@@ -38,6 +49,13 @@ export interface FrontendPerformanceSnapshot {
 	surfaceSwitches: readonly FrontendSurfaceSwitchDiagnostic[];
 	longTasks: readonly FrontendLongTaskDiagnostic[];
 	eventLags: readonly FrontendEventLagDiagnostic[];
+	patchMutations: readonly FrontendPatchMutationDiagnostic[];
+	patchActionToVisible: {
+		samples: number;
+		p50Ms: number | null;
+		p95Ms: number | null;
+		gateEnforced: false;
+	};
 }
 
 type PerformanceWithMemory = Performance & {
@@ -52,6 +70,7 @@ class FrontendPerformanceDiagnostics {
 	private readonly switches: FrontendSurfaceSwitchDiagnostic[] = [];
 	private readonly longTasks: FrontendLongTaskDiagnostic[] = [];
 	private readonly eventLags: FrontendEventLagDiagnostic[] = [];
+	private readonly patchMutations: FrontendPatchMutationDiagnostic[] = [];
 	private activeRequests = 0;
 	private maxSnapshotConcurrency = 0;
 	private longTaskObserver: PerformanceObserver | null = null;
@@ -162,7 +181,50 @@ class FrontendPerformanceDiagnostics {
 		if (this.eventLags.length > 2048) this.eventLags.shift();
 	}
 
+	beginPatchMutation(requestId: string, fixtureCount: number) {
+		const sample: FrontendPatchMutationDiagnostic = {
+			requestId,
+			fixtureCount,
+			startedAt: now(),
+			optimisticStoreAt: null,
+			responseDecodedAt: null,
+			authoritativeStoreAt: null,
+			visiblePaintAt: null,
+			actionToVisibleMs: null,
+		};
+		this.patchMutations.push(sample);
+		if (this.patchMutations.length > 512) this.patchMutations.shift();
+		const markName = `tosklight:patch:${requestId}`;
+		mark(`${markName}:start`);
+		return {
+			optimisticStorePublished: () => {
+				sample.optimisticStoreAt ??= now();
+				mark(`${markName}:optimistic-store`);
+			},
+			responseDecoded: () => {
+				sample.responseDecodedAt ??= now();
+				mark(`${markName}:response`);
+			},
+			authoritativeStorePublished: () => {
+				sample.authoritativeStoreAt ??= now();
+				mark(`${markName}:authoritative-store`);
+			},
+			visiblePainted: () => {
+				if (sample.visiblePaintAt !== null) return;
+				sample.visiblePaintAt = now();
+				sample.actionToVisibleMs = sample.visiblePaintAt - sample.startedAt;
+				mark(`${markName}:visible`);
+				measure(markName, `${markName}:start`, `${markName}:visible`);
+			},
+		};
+	}
+
 	snapshot(): FrontendPerformanceSnapshot {
+		const patchDurations = this.patchMutations
+			.flatMap(({ actionToVisibleMs }) =>
+				actionToVisibleMs == null ? [] : [actionToVisibleMs],
+			)
+			.sort((left, right) => left - right);
 		return {
 			startedAt: this.startedAt,
 			firstUsablePaintAt: this.firstUsablePaintAt,
@@ -177,6 +239,13 @@ class FrontendPerformanceDiagnostics {
 			surfaceSwitches: this.switches.map((sample) => ({ ...sample })),
 			longTasks: this.longTasks.map((task) => ({ ...task })),
 			eventLags: this.eventLags.map((sample) => ({ ...sample })),
+			patchMutations: this.patchMutations.map((sample) => ({ ...sample })),
+			patchActionToVisible: {
+				samples: patchDurations.length,
+				p50Ms: percentile(patchDurations, 50),
+				p95Ms: percentile(patchDurations, 95),
+				gateEnforced: false,
+			},
 		};
 	}
 
@@ -270,6 +339,12 @@ function rawEventOccurredAt(value: unknown) {
 
 function now() {
 	return globalThis.performance?.now() ?? Date.now();
+}
+
+function percentile(sorted: readonly number[], value: number) {
+	if (!sorted.length) return null;
+	const rank = Math.ceil((value / 100) * sorted.length);
+	return sorted[Math.max(0, rank - 1)];
 }
 
 function mark(name: string) {

@@ -6,10 +6,11 @@ import { fileURLToPath } from "node:url";
 import { classifyPerformance } from "./run-release-performance.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const result = (requiredFloorMet, gateMet = true) => ({
+const result = (requiredFloorMet, gateMet = true, patchGateMet = true) => ({
   report: {
     required_floor_met: requiredFloorMet,
     show_mutation: { gate_met: gateMet },
+    patch_mutation: patchGateMet == null ? null : { gate_met: patchGateMet },
   },
 });
 
@@ -18,9 +19,11 @@ test("unknown is reserved for missing or invalid benchmark evidence", () => {
   assert.equal(classifyPerformance({ report: {} }, null).status, "unknown");
 });
 
-test("missing the required floor or mutation gate is degraded", () => {
+test("missing the required floor or either mutation gate is degraded", () => {
   assert.equal(classifyPerformance(result(false), null).status, "degraded");
   assert.equal(classifyPerformance(result(true, false), null).status, "degraded");
+  assert.equal(classifyPerformance(result(true, true, false), null).status, "degraded");
+  assert.equal(classifyPerformance(result(true, true, null), null).status, "unknown");
 });
 
 test("passing the required floor is healthy regardless of the optional capacity probe", () => {
@@ -44,4 +47,7 @@ test("release workflow publishes before measuring and Pages consumes the status"
   assert.match(performance, /continue-on-error: true/u);
   assert.match(pages, /release-performance/u);
   assert.match(pages, /LIGHT_PERFORMANCE_STATUS_FILE/u);
+  const renderer = readFileSync(resolve(ROOT, "tools/render-landing-page.mjs"), "utf8");
+  assert.match(renderer, /performance", "index\.html/u);
+  assert.match(renderer, /Persisted Patch transaction/u);
 });

@@ -4,7 +4,7 @@ use light_fixture as fixture;
 use light_wire::v2::patch as wire;
 use std::collections::BTreeMap;
 
-pub(super) fn application_command(
+pub(crate) fn application_command(
     show_id: ShowId,
     request: wire::PatchFixturesRequest,
 ) -> Result<application::PatchFixturesCommand, String> {
@@ -60,7 +60,7 @@ fn application_placement(input: wire::PatchPlacementIntent) -> application::Patc
     }
 }
 
-pub(super) fn wire_outcome(result: application::PatchFixturesResult) -> wire::PatchFixturesOutcome {
+pub(crate) fn wire_outcome(result: application::PatchFixturesResult) -> wire::PatchFixturesOutcome {
     wire::PatchFixturesOutcome {
         request_id: result.request_id,
         replayed: result.replayed,

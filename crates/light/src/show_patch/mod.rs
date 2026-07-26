@@ -18,7 +18,7 @@ pub use model::{
     PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
     PatchSplitPlacementMode,
 };
-pub use ports::ShowPatchPorts;
+pub use ports::{PatchPerformancePhase, ShowPatchPorts};
 pub use service::ShowPatchService;
 
 #[cfg(test)]

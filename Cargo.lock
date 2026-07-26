@@ -2709,6 +2709,8 @@ dependencies = [
  "light-playback",
  "light-programmer",
  "light-show",
+ "light-wire",
+ "parking_lot",
  "serde",
  "serde_json",
  "tokio",

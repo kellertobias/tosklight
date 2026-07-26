@@ -3,14 +3,15 @@ use super::query::build_snapshot;
 use super::replay::{ReplayCache, ReplayKey};
 use super::validation::validate_action;
 use super::{
-    PatchChange, PatchFixturesCommand, PatchFixturesResult, PatchSnapshot, ShowPatchPorts,
+    PatchChange, PatchFixturesCommand, PatchFixturesResult, PatchPerformancePhase, PatchSnapshot,
+    ShowPatchPorts,
 };
 use crate::active_show::{CompletedActiveShowTransaction, PreparedActiveShowTransaction};
 use crate::{
     ActionEnvelope, ActionError, ActionErrorKind, ActiveShowService, EventBus, EventDraft,
 };
 use parking_lot::Mutex;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 /// Capability boundary for active-show patching.
 ///
@@ -58,8 +59,10 @@ impl ShowPatchService {
         envelope: ActionEnvelope<PatchFixturesCommand>,
         ports: &P,
     ) -> Result<PatchFixturesResult, ActionError> {
-        ports.authorize_patch(&envelope.context)?;
-        validate_action(&envelope.context, &envelope.command)?;
+        timed(ports, PatchPerformancePhase::BoundaryValidation, || {
+            ports.authorize_patch(&envelope.context)?;
+            validate_action(&envelope.context, &envelope.command)
+        })?;
         let key = required_replay_key(&envelope)?;
         if let Some(result) = self.cached(&key, &envelope)? {
             return Ok(result);
@@ -82,11 +85,18 @@ impl ShowPatchService {
         envelope: ActionEnvelope<PatchFixturesCommand>,
         ports: &P,
     ) -> Result<PatchFixturesResult, ActionError> {
-        let snapshot =
+        let snapshot = timed(ports, PatchPerformancePhase::SnapshotLoad, || {
             self.active_show
-                .snapshot(&envelope.context, envelope.command.show_id, ports)?;
-        validate_active_document(&snapshot, &envelope)?;
-        let plan = plan_patch(&snapshot, &envelope.command, ports)?;
+                .snapshot(&envelope.context, envelope.command.show_id, ports)
+        })?;
+        timed(ports, PatchPerformancePhase::ConflictDetection, || {
+            validate_active_document(&snapshot, &envelope)
+        })?;
+        let plan = timed(
+            ports,
+            PatchPerformancePhase::ProfileResolutionAndPlacement,
+            || plan_patch(&snapshot, &envelope.command, ports),
+        )?;
         let transaction_context = envelope.context.clone();
         let replay = Arc::clone(&self.replay);
         self.active_show.transact(
@@ -95,8 +105,13 @@ impl ShowPatchService {
             ports,
             "patch",
             move |document| {
-                validate_active_document(document, &envelope)?;
-                match prepare_patch(document, &envelope.command, plan)? {
+                timed(ports, PatchPerformancePhase::ConflictDetection, || {
+                    validate_active_document(document, &envelope)
+                })?;
+                let prepared = timed(ports, PatchPerformancePhase::CandidatePreparation, || {
+                    prepare_patch(document, &envelope.command, plan, ports)
+                })?;
+                match prepared {
                     PreparedPatch::Noop(change) => {
                         Ok(PreparedActiveShowTransaction::NoChange(PatchCompletion {
                             key,
@@ -161,10 +176,21 @@ fn complete_patch<P: ShowPatchPorts>(
         change.patch_revision = commit.patch_revision();
         // Adapter projections and caches must match the installed runtime before subscribers can
         // observe the corresponding event sequence.
+        let reconcile_started = Instant::now();
         ports.reconcile_patch_change(&change);
-        events
+        ports.record_patch_performance_phase(
+            PatchPerformancePhase::ProjectionReconcile,
+            reconcile_started.elapsed(),
+        );
+        let event_started = Instant::now();
+        let sequence = events
             .publish(EventDraft::patch_changed(&envelope.context, change.clone()))
-            .sequence
+            .sequence;
+        ports.record_patch_performance_phase(
+            PatchPerformancePhase::EventPublication,
+            event_started.elapsed(),
+        );
+        sequence
     });
     let result = PatchFixturesResult {
         context: envelope.context.clone(),
@@ -177,6 +203,20 @@ fn complete_patch<P: ShowPatchPorts>(
     replay
         .lock()
         .insert(key, &envelope.context, envelope.command, result.clone());
+    result
+}
+
+fn timed<P, T>(
+    ports: &P,
+    phase: PatchPerformancePhase,
+    operation: impl FnOnce() -> Result<T, ActionError>,
+) -> Result<T, ActionError>
+where
+    P: ShowPatchPorts,
+{
+    let started = Instant::now();
+    let result = operation();
+    ports.record_patch_performance_phase(phase, started.elapsed());
     result
 }
 

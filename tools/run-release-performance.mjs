@@ -31,6 +31,18 @@ export function classifyPerformance(baseline, doubled) {
       summary: "The release met the output floor but regressed the large-show mutation budget.",
     };
   }
+  if (!baseline.report.patch_mutation) {
+    return {
+      status: "unknown",
+      summary: "The released artifact did not produce the required Patch transaction evidence.",
+    };
+  }
+  if (baseline.report.patch_mutation.gate_met !== true) {
+    return {
+      status: "degraded",
+      summary: "The release met the output floor but regressed the persisted Patch latency budget.",
+    };
+  }
   if (!doubled?.report || doubled.report.required_floor_met == null) {
     return {
       status: "healthy",
@@ -72,7 +84,15 @@ function parseArguments(arguments_) {
   return values;
 }
 
-function runStage(binary, outputDirectory, label, fixturesPerUniverse, hardwareLabel, mutationGate) {
+function runStage(
+  binary,
+  outputDirectory,
+  label,
+  fixturesPerUniverse,
+  hardwareLabel,
+  mutationGate,
+  patchGate,
+) {
   const arguments_ = [
     "--profile",
     "hard-floor",
@@ -90,6 +110,7 @@ function runStage(binary, outputDirectory, label, fixturesPerUniverse, hardwareL
     hardwareLabel,
   ];
   if (mutationGate) arguments_.push("--mutation-gate");
+  if (patchGate) arguments_.push("--patch-gate");
   const result = spawnSync(binary, arguments_, {
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
@@ -116,7 +137,7 @@ function runStage(binary, outputDirectory, label, fixturesPerUniverse, hardwareL
 function statusDocument(options, baseline, doubled) {
   const classification = classifyPerformance(baseline, doubled);
   return {
-    schema_version: 1,
+    schema_version: 2,
     status: classification.status,
     summary: classification.summary,
     generated_at: new Date().toISOString(),
@@ -133,6 +154,38 @@ function statusDocument(options, baseline, doubled) {
       met: baseline?.report?.required_floor_met ?? null,
     },
     mutation_gate_met: baseline?.report?.show_mutation?.gate_met ?? null,
+    patch: baseline?.report?.patch_mutation
+      ? {
+          server: {
+            single_fixture: {
+              p50_microseconds:
+                baseline.report.patch_mutation.single_fixture.total_server.p50_microseconds,
+              p95_microseconds:
+                baseline.report.patch_mutation.single_fixture.total_server.p95_microseconds,
+              gate_p95_microseconds:
+                baseline.report.patch_mutation.single_fixture.gate_p95_microseconds,
+              gate_met: baseline.report.patch_mutation.single_fixture.gate_met,
+            },
+            hundred_fixtures: {
+              p50_microseconds:
+                baseline.report.patch_mutation.hundred_fixtures.total_server.p50_microseconds,
+              p95_microseconds:
+                baseline.report.patch_mutation.hundred_fixtures.total_server.p95_microseconds,
+              gate_p95_microseconds:
+                baseline.report.patch_mutation.hundred_fixtures.gate_p95_microseconds,
+              gate_met: baseline.report.patch_mutation.hundred_fixtures.gate_met,
+            },
+            gate_met: baseline.report.patch_mutation.gate_met,
+          },
+          ui: {
+            gate_enforced: false,
+            status: "informational",
+            p50_microseconds: null,
+            p95_microseconds: null,
+            note: "Action-to-visible Patch paint is measured by the focused browser acceptance run.",
+          },
+        }
+      : null,
     doubled_density: doubled
       ? {
           attempted: true,
@@ -161,10 +214,12 @@ function main() {
     BASELINE_FIXTURES_PER_UNIVERSE,
     hardwareLabel,
     true,
+    true,
   );
   const baselinePassed =
     baseline.report?.required_floor_met === true &&
-    baseline.report?.show_mutation?.gate_met !== false;
+    baseline.report?.show_mutation?.gate_met !== false &&
+    baseline.report?.patch_mutation?.gate_met === true;
   const doubled = baselinePassed
     ? runStage(
         resolve(options.binary),
@@ -172,6 +227,7 @@ function main() {
         "doubled-density",
         DOUBLED_FIXTURES_PER_UNIVERSE,
         hardwareLabel,
+        false,
         false,
       )
     : null;
@@ -187,6 +243,9 @@ function main() {
       `- Required floor: ${status.required_floor.fixture_count} fixtures across ` +
         `${status.required_floor.universes} full universes at ${status.required_floor.rate_hz} Hz`,
       `- Doubled density: ${status.doubled_density.attempted ? status.doubled_density.met : "skipped"}`,
+      `- Patch server p95 (1 fixture): ${status.patch?.server.single_fixture.p95_microseconds ?? "missing"} µs`,
+      `- Patch server p95 (100 fixtures): ${status.patch?.server.hundred_fixtures.p95_microseconds ?? "missing"} µs`,
+      "- Patch UI action-to-visible: informational browser evidence (not a release gate)",
       `- Release: ${status.release.url}`,
       "",
     ].join("\n"),

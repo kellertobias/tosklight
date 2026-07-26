@@ -2,6 +2,27 @@ use super::PatchChange;
 use crate::{ActionContext, ActionError, ActiveShowPorts};
 use light_core::{FixtureId, Revision};
 use light_show::FixtureProfileRevision;
+use std::time::Duration;
+
+/// Stable phase names emitted by the real Patch application boundary.
+///
+/// Production adapters may ignore these observations. The released performance probe records
+/// them so a regression can be attributed without changing Patch command or event semantics.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum PatchPerformancePhase {
+    BoundaryValidation,
+    SnapshotLoad,
+    ConflictDetection,
+    ProfileResolutionAndPlacement,
+    CandidatePreparation,
+    Compile,
+    RuntimePreparation,
+    Backup,
+    Persistence,
+    RuntimeInstall,
+    ProjectionReconcile,
+    EventPublication,
+}
 
 /// Adapters for active-show ownership, exact library reads, and live runtime installation.
 pub trait ShowPatchPorts: ActiveShowPorts {
@@ -22,4 +43,7 @@ pub trait ShowPatchPorts: ActiveShowPorts {
 
     /// Targeted adapter/cache reconciliation must not reopen or recompile the show.
     fn reconcile_patch_change(&self, change: &PatchChange);
+
+    /// Observes one Patch phase without making diagnostics part of the command outcome.
+    fn record_patch_performance_phase(&self, _phase: PatchPerformancePhase, _elapsed: Duration) {}
 }

@@ -4,10 +4,10 @@ use super::profiles::ResolvedProfiles;
 use super::projection::build_change;
 use super::record_index::StoredFixtureRecords;
 use super::records::{build_records, stage_records, stage_removals};
-use super::{PatchChange, PatchFixturesCommand, ShowPatchPorts};
+use super::{PatchChange, PatchFixturesCommand, PatchPerformancePhase, ShowPatchPorts};
 use crate::{ActionError, ActionErrorKind, PreparedShowCandidate, prepare_show_candidate};
 use light_show::{PortableShowCandidate, PortableShowDocument};
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, time::Instant};
 
 pub(super) struct PatchPlan {
     profiles: ResolvedProfiles,
@@ -41,10 +41,11 @@ pub(super) fn plan_patch<P: ShowPatchPorts>(
     Ok(PatchPlan { profiles, fixtures })
 }
 
-pub(super) fn prepare_patch(
+pub(super) fn prepare_patch<P: ShowPatchPorts>(
     document: &PortableShowDocument,
     command: &PatchFixturesCommand,
     plan: PatchPlan,
+    ports: &P,
 ) -> Result<PreparedPatch, ActionError> {
     let stored = StoredFixtureRecords::load(document)?;
     let profiles = plan.profiles;
@@ -64,7 +65,10 @@ pub(super) fn prepare_patch(
         return build_change(candidate, &fixtures, &removed, &modes).map(PreparedPatch::Noop);
     }
     transaction.mark_patch_changed();
-    let candidate = prepare_show_candidate(document, transaction)?;
+    let compile_started = Instant::now();
+    let candidate = prepare_show_candidate(document, transaction);
+    ports.record_patch_performance_phase(PatchPerformancePhase::Compile, compile_started.elapsed());
+    let candidate = candidate?;
     let projection = document
         .candidate(candidate.transaction())
         .map_err(candidate_error)?;

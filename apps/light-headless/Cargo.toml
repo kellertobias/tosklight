@@ -22,6 +22,8 @@ light-output = { path = "../../crates/light/domain/output" }
 light-playback = { path = "../../crates/light/domain/playback" }
 light-programmer = { path = "../../crates/light/domain/programmer" }
 light-show = { path = "../../crates/shared/show" }
+light-wire.workspace = true
+parking_lot.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

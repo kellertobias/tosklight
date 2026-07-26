@@ -41,8 +41,12 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
         .mutation_gate
         .then(crate::light_benchmark::mutation::run)
         .transpose()?;
+    let patch_mutation = arguments
+        .patch_gate
+        .then(crate::light_benchmark::patch_mutation::run)
+        .transpose()?;
     Ok(BenchmarkReport {
-        schema_version: 3,
+        schema_version: 4,
         benchmark: "tosklight_render_to_protocol_encoding_pipeline",
         reference: metadata::capture(arguments.hardware_label.as_deref()),
         configuration: RunConfiguration {
@@ -57,6 +61,7 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
         measurement_coverage: coverage(arguments.transport),
         required_floor_met,
         show_mutation,
+        patch_mutation,
     })
 }
 

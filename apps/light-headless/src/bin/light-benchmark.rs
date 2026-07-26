@@ -32,6 +32,10 @@ fn main() {
             .show_mutation
             .as_ref()
             .is_some_and(|result| !result.gate_met)
+        || report
+            .patch_mutation
+            .as_ref()
+            .is_some_and(|result| !result.gate_met)
     {
         std::process::exit(1);
     }

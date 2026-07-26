@@ -69,4 +69,32 @@ describe("frontend performance diagnostics", () => {
 		});
 		expect(diagnostics.snapshot().eventLags[0].lagMs).toBeGreaterThanOrEqual(0);
 	});
+
+	it("records Patch action, authority, and visible-paint timing as informational evidence", async () => {
+		const { frontendPerformanceDiagnostics: diagnostics } = await import(
+			"./diagnostics"
+		);
+		const patch = diagnostics.beginPatchMutation("patch-1", 100);
+		patch.optimisticStorePublished();
+		patch.responseDecoded();
+		patch.authoritativeStorePublished();
+		patch.visiblePainted();
+
+		expect(diagnostics.snapshot().patchMutations).toEqual([
+			expect.objectContaining({
+				requestId: "patch-1",
+				fixtureCount: 100,
+				actionToVisibleMs: expect.any(Number),
+			}),
+		]);
+		expect(diagnostics.snapshot().patchActionToVisible).toMatchObject({
+			samples: 1,
+			p50Ms: expect.any(Number),
+			p95Ms: expect.any(Number),
+			gateEnforced: false,
+		});
+		expect(
+			performance.getEntriesByName("tosklight:patch:patch-1", "measure"),
+		).toHaveLength(1);
+	});
 });

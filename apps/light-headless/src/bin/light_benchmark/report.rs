@@ -18,6 +18,8 @@ pub struct BenchmarkReport {
     pub required_floor_met: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_mutation: Option<crate::light_benchmark::mutation::ShowMutationReport>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub patch_mutation: Option<crate::light_benchmark::patch_mutation::PatchMutationReport>,
 }
 
 #[derive(Debug, Serialize)]
