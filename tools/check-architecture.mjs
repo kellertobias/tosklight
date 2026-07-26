@@ -121,6 +121,35 @@ function serverEntrypointIsThin() {
     fail("headless entry point must delegate lifecycle ownership to the runtime adapter");
 }
 
+function desktopHostIsCompositionRoot() {
+  const entrypoint = path.join(
+    repositoryRoot,
+    "apps/light-desktop/src-tauri/src/main.rs",
+  );
+  const source = fs.readFileSync(entrypoint, "utf8");
+  const nonEmptyLines = source.split(/\r?\n/u).filter((line) => line.trim()).length;
+  if (nonEmptyLines > 55)
+    fail("apps/light-desktop/src-tauri/src/main.rs must remain a thin composition root");
+  for (const forbidden of [
+    "AtomicBool",
+    "Command::new",
+    "MenuItemBuilder",
+    "TcpStream",
+    "WebviewWindowBuilder",
+    "thread::spawn",
+  ])
+    if (source.includes(forbidden))
+      fail(`desktop composition root must not own ${forbidden}`);
+  for (const required of [
+    "lifecycle::setup(app)",
+    "menu::install(app)",
+    "server::setup(app)",
+    "lifecycle::handle_run_event",
+  ])
+    if (!source.includes(required))
+      fail(`desktop composition root must delegate through ${required}`);
+}
+
 function activeShowMutationDirections() {
   const updateAdapter = path.join(repositoryRoot, "crates/light/adapters/headless/src/runtime/update_plans.rs");
   const source = fs.readFileSync(updateAdapter, "utf8");
@@ -314,6 +343,7 @@ function semanticWorldBoundaries() {
 
 rustDependencyDirections();
 serverEntrypointIsThin();
+desktopHostIsCompositionRoot();
 activeShowMutationDirections();
 playbackOwnershipBoundaries();
 typeScriptDependencyDirections();
