@@ -52,3 +52,39 @@ when its files, contracts, runtime state, and verification do not overlap.
 Plan 02 is currently active in that lane. Plans 03–05, 07b, and 08–13 record explicit dependencies
 on its shared components, application adapters, providers, generated consumers, or downstream
 typed contracts. Plans 06, 07a, and 14 completed independently.
+
+## Storybook handoff and continuation contract
+
+The frontend lane is handed back only when its owner:
+
+1. completes every plan in `pending/storybook changes/`, including focused and proportionate
+   broader verification;
+2. adds the required Result and commit information to the lane plans;
+3. moves the complete `pending/storybook changes/` directory to
+   `finished/storybook changes/`; and
+4. commits that coherent lane without leaving an active `.WORKING.md` plan behind.
+
+The directory move is the machine-readable signal that plan 02 and the frontend contracts it owns
+are stable. A partially renamed plan or a remaining file under `pending/storybook changes/` does
+not clear the dependency.
+
+After that signal, continue plans 03, 04, 05, 07b, 08, 09, 10, 11, 12, and 13 in numeric dependency
+order. Before claiming each new plan, query the large Codex usage window with the Tosken Raider MCP
+`get_remaining_usage` tool. Do not start another plan when the remaining large-window allowance is
+below 50%; finish and commit an already claimed coherent plan before stopping.
+
+Plan 11 has an external evidence dependency in addition to its queue dependency: the named
+reference Mac, attached controls, and Pi-class host must be available. Mocked or development-only
+evidence cannot substitute for those surfaces. If they are unavailable when plan 11 is reached,
+record the exact missing access and stop at that non-deferrable blocker.
+
+An empty pending queue is not by itself completion. After the numbered queue is empty, audit the
+current repository against every applicable requirement and acceptance item in
+`../major-refactoring.md`, including its known-incomplete list and retained operational evidence.
+Create new numbered pending plans for any genuine implementation or verification gaps, then
+continue them under this workflow while the large-window allowance remains at least 50%.
+
+Only when that final audit finds the major refactor genuinely complete should the agent run the
+proportionate final release gates, update the consolidated execution record, commit the coherent
+completion state, and push `main`. The authorization to push applies to that completed
+refactoring handoff only; do not push a partial queue.
