@@ -57,6 +57,34 @@ Honor the narrowest requested scope. If the request says to edit planning or tes
 - `docs/testing`: human-readable acceptance scenarios
 - `.artifacts/runtime/light-data`: local development data and current server log
 
+## Generated artifacts and temporary work
+
+- Put every repository-owned generated file, build product, test result, report, runtime scratch
+  directory, ad-hoc configuration, profiling workspace, and temporary directory under `.artifacts/`
+  or one of its canonical subdirectories.
+- Use `tools/artifact-paths.sh`, `tools/artifact-paths.mjs`, `tools/artifact_paths.py`, or
+  `npm run --silent artifact-path -- <name>` instead of inventing paths. Temporary work belongs
+  under the resolved `LIGHT_TMP_DIR`.
+- Do not create or direct tools to legacy root locations such as `target/`, `output/`,
+  `test-results/`, `playwright-report/`, `coverage/`, `dist/`, `storybook-static/`, or `tmp/`.
+- The undotted root `artifacts/` directory must not exist. Use `.artifacts/`; never add
+  `artifacts/` back to `.gitignore` or use it as a release, visual, or temporary destination.
+- A temporary Playwright configuration must import and extend the repository configuration, or
+  explicitly use the canonical Playwright results and report paths. The directory containing a
+  temporary config does not determine where Playwright writes its output.
+- Preserve explicit caller overrides such as `LIGHT_ARTIFACTS_DIR`, the focused `LIGHT_*_DIR`
+  variables, `LIGHT_DATA_DIR`, and `CARGO_TARGET_DIR`; an explicit override is an intentional
+  external destination, not a repository default.
+- Dependency installations, toolchain caches, tracked generated documentation/assets, and
+  CI-service files such as `$GITHUB_OUTPUT` and `$GITHUB_STEP_SUMMARY` are not repository build
+  artifacts. Keep their established ownership and workflows.
+- The only approved root directories are `.agents`, `.artifacts`, `.cargo`, `.forgejo`, `.git`,
+  `.github`, `.show`, `.tour`, `apps`, `assets`, `crates`, `docs`, `experiments`, `node_modules`,
+  `tests`, and `tools`. Regular root files are allowed. Use `npm run clean:root` to move any other
+  root entry into recoverable storage under `.artifacts/cleanup/repository-root/`.
+- Use `npm run clean:artifacts` to remove generated artifact trees while preserving
+  `.artifacts/runtime` and root-cleanup recovery.
+
 ## Verification
 
 Start with the smallest relevant checks, then widen according to risk:
