@@ -8,11 +8,13 @@ import {
 	within,
 } from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SpeedGroupId, SpeedGroupSoundState } from "../../api/types";
+import { registerControlSurfaceTarget } from "../../features/controlSurfaceInteraction/registry";
 import { PlaybackTools } from "./PlaybackTools";
 
-const render = (ui: Parameters<typeof rtlRender>[0]) => rtlRender(ui, { wrapper: ModalProvider });
+const render = (ui: Parameters<typeof rtlRender>[0]) =>
+	rtlRender(ui, { wrapper: ModalProvider });
 
 const dispatch = vi.fn();
 const state = {
@@ -157,7 +159,25 @@ vi.mock(
 	}),
 );
 
+let releaseSetTarget: (() => void) | null = null;
+beforeEach(() => {
+	releaseSetTarget = registerControlSurfaceTarget({
+		id: "playback",
+		priority: 100,
+		accepts: ({ type }) => type === "set",
+		handle: () => {
+			state.playbackSetArmed = !state.playbackSetArmed;
+			dispatch({
+				type: "SET_PLAYBACK_SET_ARMED",
+				value: state.playbackSetArmed,
+			});
+		},
+	});
+});
+
 afterEach(() => {
+	releaseSetTarget?.();
+	releaseSetTarget = null;
 	vi.useRealTimers();
 	cleanup();
 	server.session = null;

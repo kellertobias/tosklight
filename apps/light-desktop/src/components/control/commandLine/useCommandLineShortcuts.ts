@@ -1,10 +1,10 @@
 import { type Dispatch, useEffect, useLayoutEffect, useRef } from "react";
+import type { CommandTargetMode } from "../../../controlSurface/commandTarget";
 import { usePlaybackRuntimeActions } from "../../../features/playbackRuntime/PlaybackRuntimeView";
 import { usePlaybackTopologyActions } from "../../../features/playbackTopology/PlaybackTopologyProvider";
 import { useApp } from "../../../state/AppContext";
 import type { Action } from "../../../state/appReducer";
 import type { AppState } from "../../../types";
-import type { CommandTargetMode } from "../../../controlSurface/commandTarget";
 import {
 	editTargetedCommandWithSoftwareKey,
 	softwareKeyFromKeyboard,
@@ -13,8 +13,8 @@ import { openUpdateSettings } from "../updateWorkflow";
 import { KeyboardHeldActions } from "./keyboardFlashActions";
 import { usePlaybackShortcutAuthority } from "./playbackShortcutAuthority";
 import {
-	type PlaybackShortcutContext,
 	KeyboardPageActions,
+	type PlaybackShortcutContext,
 	pressPlaybackSlot,
 	releasePlaybackSlot,
 	stepPlaybackPage,
@@ -30,6 +30,11 @@ interface ShortcutCallbacks {
 	execute: (command?: string) => Promise<void>;
 	armUpdateOrMenu: () => void;
 	dismissPersistentError: () => void;
+	pressSet: () => void;
+	toggleRecord: () => void;
+	advancePreload: () => void;
+	clear: () => void;
+	undo: () => void;
 }
 
 interface UpdateGesture {
@@ -86,7 +91,6 @@ function handlePageKey(context: ShortcutContext, event: KeyboardEvent) {
 
 function handleEscape(context: ShortcutContext, event: KeyboardEvent) {
 	event.preventDefault();
-	if (document.querySelector("[role=dialog],.stacked-modal-layer")) return;
 	const { state, dispatch } = context;
 	if (state.updateArmed) {
 		dispatch({ type: "SET_UPDATE_ARMED", value: false });
@@ -140,19 +144,17 @@ function handleSoftwareKey(context: ShortcutContext, event: KeyboardEvent) {
 		(context.completed || context.commandLinePristine) &&
 		context.state.builtIn === "patch"
 	) {
-		document
-			.querySelector<HTMLButtonElement>('[data-keypad-key="SET"]')
-			?.click();
+		context.pressSet();
 	} else if (key === "REC" && event.shiftKey) {
 		beginUpdateGesture(context, event);
 	} else if (key === "REC") {
-		document.querySelector<HTMLButtonElement>(".global-store-button")?.click();
+		context.toggleRecord();
 	} else if (key === "PRE") {
-		document.querySelector<HTMLButtonElement>(".preload-button")?.click();
-	} else if (key === "CLR" || key === "UND") {
-		document
-			.querySelector<HTMLButtonElement>(`[data-keypad-key="${key}"]`)
-			?.click();
+		context.advancePreload();
+	} else if (key === "CLR") {
+		context.clear();
+	} else if (key === "UND") {
+		context.undo();
 	} else if (key === "ENT") {
 		void context.execute();
 	} else {

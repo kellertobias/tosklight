@@ -1,11 +1,56 @@
-import { useConnectionStatus } from "../../features/shellStatus/ShellStatusState";
 import { useEffect, useRef } from "react";
+import {
+	type ControlSurfaceIntent,
+	registerControlSurfaceTarget,
+} from "../../features/controlSurfaceInteraction/registry";
+import { useControlSurfaceTarget } from "../../features/controlSurfaceInteraction/useControlSurfaceTarget";
 import { useFiles } from "../../features/files/FilesContext";
 import type { FilesContextValue } from "../../features/files/types";
+import { useConnectionStatus } from "../../features/shellStatus/ShellStatusState";
 import { fileOperationOwnership } from "./operationOwnership";
 import type { FileManagerPickerOptions } from "./types";
 import type { FileManagerState } from "./useFileManagerState";
 import type { FileOperationActions } from "./useFileOperations";
+
+let pendingOwnerUsers = 0;
+let releasePendingOwner: (() => void) | null = null;
+
+function retainPendingFileOperationOwner() {
+	pendingOwnerUsers += 1;
+	if (pendingOwnerUsers === 1)
+		releasePendingOwner = registerControlSurfaceTarget({
+			id: "file-manager:pending-operation",
+			priority: 400,
+			accepts: isPendingFileOperationIntent,
+			handle: (intent) => {
+				if (intent.type !== "set" && intent.type !== "file_operation_key")
+					return;
+				const action = intent.type === "set" ? "rename" : intent.action;
+				if (
+					action === "rename" ||
+					action === "copy" ||
+					action === "move" ||
+					action === "delete"
+				)
+					fileOperationOwnership.pending = action;
+			},
+		});
+	return () => {
+		pendingOwnerUsers -= 1;
+		if (pendingOwnerUsers !== 0) return;
+		releasePendingOwner?.();
+		releasePendingOwner = null;
+	};
+}
+
+function isPendingFileOperationIntent(intent: ControlSurfaceIntent) {
+	return (
+		intent.type === "set" ||
+		(intent.type === "file_operation_key" &&
+			intent.action !== "escape" &&
+			intent.action !== "enter")
+	);
+}
 
 function useFileOperationRouting(
 	state: FileManagerState,
@@ -16,6 +61,34 @@ function useFileOperationRouting(
 	const connectionStatus = useConnectionStatus();
 	const serverRef = useRef(server);
 	serverRef.current = server;
+	useEffect(() => {
+		if (!enabled) return;
+		return retainPendingFileOperationOwner();
+	}, [enabled]);
+	useControlSurfaceTarget(
+		enabled
+			? {
+					id: `file-manager:${state.instanceId}`,
+					priority: 500,
+					accepts: (intent) =>
+						intent.type === "file_operation_key" &&
+						(intent.action === "escape" || intent.action === "enter") &&
+						fileOperationOwnership.claimed === state.instanceId &&
+						Boolean(state.operationRef.current),
+					handle: (intent) => {
+						if (intent.type !== "file_operation_key") return;
+						const action = intent.action;
+						if (
+							fileOperationOwnership.claimed !== state.instanceId ||
+							!state.operationRef.current
+						)
+							return;
+						if (action === "escape") operations.cancelOperation();
+						if (action === "enter") void operations.completeOperation();
+					},
+				}
+			: null,
+	);
 	useEffect(() => {
 		if (!enabled) return;
 		return () => {
@@ -30,35 +103,6 @@ function useFileOperationRouting(
 
 	useEffect(() => {
 		if (!enabled) return;
-		const routeDeskAction = (event: Event) => {
-			const action = String(
-				(event as CustomEvent<string>).detail ?? "",
-			).toLowerCase();
-			const next =
-				action === "set"
-					? "rename"
-					: action === "copy" || action === "cpy"
-						? "copy"
-						: action === "move" || action === "mov"
-							? "move"
-							: action === "delete" || action === "del"
-								? "delete"
-								: null;
-			if (next) fileOperationOwnership.pending = next;
-			if (
-				fileOperationOwnership.claimed !== state.instanceId ||
-				!state.operationRef.current
-			)
-				return;
-			if (action === "escape" || action === "esc") {
-				event.preventDefault();
-				operations.cancelOperation();
-			}
-			if (action === "enter" || action === "ent") {
-				event.preventDefault();
-				void operations.completeOperation();
-			}
-		};
 		const routeFileInput = (event: Event) => {
 			const detail = (
 				event as CustomEvent<{ action?: string; instance_id?: string }>
@@ -86,11 +130,9 @@ function useFileOperationRouting(
 				fileOperationOwnership.pending = null;
 			}
 		};
-		window.addEventListener("light:desk-action", routeDeskAction);
 		window.addEventListener("light:file-manager-input", routeFileInput);
 		document.addEventListener("pointerdown", releaseUnclaimed, true);
 		return () => {
-			window.removeEventListener("light:desk-action", routeDeskAction);
 			window.removeEventListener("light:file-manager-input", routeFileInput);
 			document.removeEventListener("pointerdown", releaseUnclaimed, true);
 		};

@@ -1,4 +1,3 @@
-import { useServerError } from "../../features/shellStatus/ShellStatusState";
 import {
 	type Dispatch,
 	type RefObject,
@@ -9,6 +8,7 @@ import {
 } from "react";
 import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useShellStatusActions } from "../../features/shellStatus/ShellStatusActionsProvider";
+import { useServerError } from "../../features/shellStatus/ShellStatusState";
 import { useApp } from "../../state/AppContext";
 import { CommandInput } from "./commandLine/CommandInput";
 import { CommandLineHistoryPanel } from "./commandLine/CommandLineHistoryPanel";
@@ -20,9 +20,10 @@ import { CommandRecordPreload } from "./commandLine/CommandRecordPreload";
 import { useCommandLineShortcuts } from "./commandLine/useCommandLineShortcuts";
 import { useCommandLineSurface } from "./commandLine/useCommandLineSurface";
 import { useRecordGesture } from "./commandLine/useRecordGesture";
+import { useNumericPadController } from "./numericPad/useNumericPadController";
 import "./CommandLineHistory.css";
-import { useProgrammerPreloadPlaybackQueueView } from "../../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
 import { useProgrammerPreloadLifecycleView } from "../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
+import { useProgrammerPreloadPlaybackQueueView } from "../../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
 import { useProgrammerValuesActivity } from "../../features/programmerValues/useProgrammerValuesActivity";
 import { openUpdateTargetMenu } from "./updateWorkflow";
 
@@ -117,8 +118,8 @@ export function CommandLineBar() {
 	const programmerActivity = useProgrammerValuesActivity();
 	const preloadPlaybackQueue = useProgrammerPreloadPlaybackQueueView();
 	const preload = useProgrammerPreloadLifecycleView();
-	const hardware =
-		hardwareAttached || Boolean(state.midiProfile);
+	const numericPad = useNumericPadController();
+	const hardware = hardwareAttached || Boolean(state.midiProfile);
 	const [completed, setCompleted] = useState(false);
 	const editGeneration = useRef(0);
 	const errors = useCommandErrors(setCompleted);
@@ -204,6 +205,11 @@ export function CommandLineBar() {
 		execute,
 		armUpdateOrMenu,
 		dismissPersistentError: errors.acknowledgePersistent,
+		pressSet: () => numericPad.press("SET", "keyboard"),
+		toggleRecord,
+		advancePreload: () => void advancePreload(),
+		clear: () => numericPad.press("CLR"),
+		undo: () => numericPad.press("UND"),
 	});
 	return (
 		<header

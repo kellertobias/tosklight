@@ -1,5 +1,3 @@
-import type { Dispatch, RefObject, SetStateAction } from "react";
-import type { Cue } from "../../api/types";
 import {
 	Button,
 	FormField,
@@ -8,6 +6,13 @@ import {
 	SelectField,
 	TextField,
 } from "@tosklight/ui";
+import {
+	type Dispatch,
+	type RefObject,
+	type SetStateAction,
+	useState,
+} from "react";
+import type { Cue } from "../../api/types";
 import { cueTrigger, cueTriggerKind } from "./cueFormatting";
 
 export interface CueFieldRefs {
@@ -39,9 +44,11 @@ function updateMillis(
 function CueTimingFields({
 	actions,
 	refs,
+	keyboardRequests,
 }: {
 	actions: CueDraftActions;
 	refs: CueFieldRefs;
+	keyboardRequests: Partial<Record<CueKeyboardField, number>>;
 }) {
 	return (
 		<>
@@ -49,6 +56,9 @@ function CueTimingFields({
 				<NumberField
 					key={key}
 					ref={key === "fade_millis" ? refs.fade : refs.delay}
+					keyboardRequest={
+						keyboardRequests[key === "fade_millis" ? "fade" : "delay"]
+					}
 					label={key === "fade_millis" ? "Fade" : "Delay"}
 					unit="s"
 					allowDecimal
@@ -74,12 +84,15 @@ function CueTimingFields({
 function CueTriggerFields({
 	actions,
 	refs,
+	keyboardRequests,
 }: {
 	actions: CueDraftActions;
 	refs: CueFieldRefs;
+	keyboardRequests: Partial<Record<CueKeyboardField, number>>;
 }) {
 	const kind = cueTriggerKind(actions.draft);
 	const triggerMillis = Number(actions.draft.trigger.delay_millis ?? 0);
+	const [triggerOpenRequest, setTriggerOpenRequest] = useState(0);
 	const updateTriggerTime = (seconds: string, commit: boolean) => {
 		const next = {
 			...actions.draft,
@@ -96,6 +109,7 @@ function CueTriggerFields({
 			<FormField label="Trigger">
 				<div className="cue-trigger-grid-control" ref={refs.triggerPicker}>
 					<SelectField
+						openRequest={triggerOpenRequest}
 						value={kind}
 						onChange={(value) => {
 							const next = {
@@ -115,11 +129,7 @@ function CueTriggerFields({
 						size="compact"
 						iconOnly
 						aria-label="Open Trigger picker"
-						onClick={() =>
-							refs.triggerPicker.current
-								?.querySelector<HTMLButtonElement>(".ui-select-trigger")
-								?.click()
-						}
+						onClick={() => setTriggerOpenRequest((request) => request + 1)}
 					>
 						<span className="ui-keyboard-icon" aria-hidden="true">
 							⌨
@@ -130,6 +140,7 @@ function CueTriggerFields({
 			{kind === "time" && (
 				<NumberField
 					ref={refs.triggerTime}
+					keyboardRequest={keyboardRequests.triggerTime}
 					label="Trigger time"
 					unit="s"
 					allowDecimal
@@ -151,9 +162,11 @@ function CueTriggerFields({
 export function CuePropertyFields({
 	actions,
 	refs,
+	keyboardRequests = {},
 }: {
 	actions: CueDraftActions;
 	refs: CueFieldRefs;
+	keyboardRequests?: Partial<Record<CueKeyboardField, number>>;
 }) {
 	return (
 		<FormLayout
@@ -164,6 +177,7 @@ export function CuePropertyFields({
 			<div ref={refs.grid} className="cue-settings-grid-measure">
 				<TextField
 					ref={refs.title}
+					keyboardRequest={keyboardRequests.title}
 					label="Title"
 					value={actions.draft.name}
 					onChange={(event) =>
@@ -188,9 +202,19 @@ export function CuePropertyFields({
 							});
 					}}
 				/>
-				<CueTimingFields actions={actions} refs={refs} />
-				<CueTriggerFields actions={actions} refs={refs} />
+				<CueTimingFields
+					actions={actions}
+					refs={refs}
+					keyboardRequests={keyboardRequests}
+				/>
+				<CueTriggerFields
+					actions={actions}
+					refs={refs}
+					keyboardRequests={keyboardRequests}
+				/>
 			</div>
 		</FormLayout>
 	);
 }
+
+export type CueKeyboardField = "title" | "fade" | "delay" | "triggerTime";

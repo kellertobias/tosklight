@@ -80,6 +80,7 @@ interface SelectFieldProps<T extends string> {
   size?: ControlSize;
   className?: string;
   labelPlacement?: LabelPlacement;
+  openRequest?: number;
 }
 
 function popupPosition(button: HTMLButtonElement | null): CSSProperties | undefined {
@@ -158,9 +159,10 @@ function SelectOptions<T extends string>({
 
 export function SelectField<T extends string>({
   label, value, options, onChange, description, error, disabled, size = "default",
-  className = "", labelPlacement, ariaLabel,
+  className = "", labelPlacement, ariaLabel, openRequest = 0,
 }: SelectFieldProps<T>) {
   const [open, setOpen] = useState(false);
+  const lastOpenRequest = useRef(openRequest);
   const [active, setActive] = useState(() => Math.max(0, options.findIndex((item) => item.value === value)));
   const [position, setPosition] = useState<CSSProperties>({});
   const listboxId = useId();
@@ -168,6 +170,11 @@ export function SelectField<T extends string>({
   const place = () => setPosition(popupPosition(button.current) ?? {});
   const close = () => { setOpen(false); button.current?.focus(); };
   const choose = (next: T) => { onChange(next); close(); };
+  useEffect(() => {
+    if (openRequest === lastOpenRequest.current) return;
+    lastOpenRequest.current = openRequest;
+    setOpen(true);
+  }, [openRequest]);
   useEffect(() => {
     if (!open) return;
     place();

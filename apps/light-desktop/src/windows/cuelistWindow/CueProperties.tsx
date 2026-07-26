@@ -1,6 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
-import { type CueDraftActions, CuePropertyFields } from "./CuePropertyFields";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useControlSurfaceTarget } from "../../features/controlSurfaceInteraction/useControlSurfaceTarget";
+import {
+	type CueDraftActions,
+	type CueKeyboardField,
+	CuePropertyFields,
+} from "./CuePropertyFields";
 import { cueTrigger, cueTriggerKind, formatCueSeconds } from "./cueFormatting";
 
 function useCuePropertiesLayout(active: boolean, dependencies: unknown[]) {
@@ -40,15 +45,16 @@ function useCuePropertiesLayout(active: boolean, dependencies: unknown[]) {
 	useEffect(() => {
 		if (fieldsFit) setSetArmed(false);
 	}, [fieldsFit]);
-	useEffect(() => {
-		if (fieldsFit || !active) return;
-		const handleSet = (event: Event) => {
-			if ((event as CustomEvent<string>).detail !== "set") return;
-			setSetArmed((armed) => !armed);
-		};
-		window.addEventListener("light:desk-action", handleSet);
-		return () => window.removeEventListener("light:desk-action", handleSet);
-	}, [active, fieldsFit]);
+	useControlSurfaceTarget(
+		!fieldsFit && active
+			? {
+					id: "compact-cue-properties",
+					priority: 300,
+					accepts: ({ type }) => type === "set",
+					handle: () => setSetArmed((armed) => !armed),
+				}
+			: null,
+	);
 	return {
 		propertiesRef,
 		previewRef,
@@ -214,15 +220,16 @@ export function CueProperties({
 	const layout = useCuePropertiesLayout(active, layoutDependencies);
 	refs.grid = layout.gridRef;
 	const [triggerModalOpen, setTriggerModalOpen] = useState(false);
-	const openInput = (field: "title" | "fade" | "delay" | "triggerTime") => {
+	const [keyboardRequests, setKeyboardRequests] = useState<
+		Partial<Record<CueKeyboardField, number>>
+	>({});
+	const openInput = (field: CueKeyboardField) => {
 		if (!layout.setArmed) return;
 		layout.setSetArmed(false);
-		const input = refs[field].current;
-		const buttonName = field === "title" ? "Open keyboard" : "Open number pad";
-		input
-			?.closest(".ui-form-field")
-			?.querySelector<HTMLButtonElement>(`button[aria-label="${buttonName}"]`)
-			?.click();
+		setKeyboardRequests((requests) => ({
+			...requests,
+			[field]: (requests[field] ?? 0) + 1,
+		}));
 	};
 	return (
 		<>
@@ -242,7 +249,11 @@ export function CueProperties({
 						Selected Cue · {actions.draft.number}
 					</b>
 				</section>
-				<CuePropertyFields actions={actions} refs={refs} />
+				<CuePropertyFields
+					actions={actions}
+					refs={refs}
+					keyboardRequests={keyboardRequests}
+				/>
 				{!layout.fieldsFit && (
 					<CompactCueProperties
 						actions={actions}

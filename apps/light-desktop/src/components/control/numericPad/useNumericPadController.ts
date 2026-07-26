@@ -1,11 +1,13 @@
-import { useProgrammerActions } from "../../../features/programmerActions/ProgrammerActionsContext";
+import type { ControlSurfaceSource } from "../../../features/controlSurfaceInteraction/registry";
+import { routeControlSurfaceIntent } from "../../../features/controlSurfaceInteraction/registry";
 import {
 	usePlaybackDeskView,
 	usePlaybackRuntimeStatus,
 } from "../../../features/playbackRuntime/PlaybackRuntimeView";
+import { useProgrammerActions } from "../../../features/programmerActions/ProgrammerActionsContext";
+import { useProgrammerPreloadLifecycleView } from "../../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useProgrammerValuesActions } from "../../../features/programmerValues/ProgrammerValuesView";
 import { useProgrammerValuesActivity } from "../../../features/programmerValues/useProgrammerValuesActivity";
-import { useProgrammerPreloadLifecycleView } from "../../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useProgrammingSelectionActions } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../../../state/AppContext";
 import type { BuiltInWindow } from "../../../types";
@@ -62,7 +64,8 @@ export function useNumericPadController() {
 		toggleRecord: () => toggleRecord(context),
 		advancePreload: () => advancePreload(context),
 		escape: () => void command.reset(),
-		press: (key: SoftwareKey) => pressKey(context, key),
+		press: (key: SoftwareKey, source: ControlSurfaceSource = "touch") =>
+			pressKey(context, key, source),
 	};
 }
 
@@ -96,7 +99,11 @@ async function advancePreload({ preload }: NumericPadContext) {
 	else await preload.actions.enter();
 }
 
-function pressKey(context: NumericPadContext, key: SoftwareKey) {
+function pressKey(
+	context: NumericPadContext,
+	key: SoftwareKey,
+	source: ControlSurfaceSource,
+) {
 	const { state, dispatch, command, programmerActions } = context;
 	const currentCommand = command.read();
 	if (key === "SHIFT") {
@@ -106,7 +113,7 @@ function pressKey(context: NumericPadContext, key: SoftwareKey) {
 	if (state.shiftArmed && handleShiftedKey(context, key, currentCommand.text))
 		return;
 	if (key === "CLR") return clearStep(context);
-	if (key === "SET" && currentCommand.pristine && handleSet(context)) return;
+	if (key === "SET" && currentCommand.pristine && handleSet(source)) return;
 	if (key === "UND") return void programmerActions?.undoProgrammer();
 	if (key === "ENT") return executeCommand(context);
 	const edited = editTargetedCommandWithSoftwareKey(
@@ -197,40 +204,9 @@ function clearableArmedStates(state: NumericPadContext["state"]) {
 	] as const;
 }
 
-function handleSet({ state, dispatch }: NumericPadContext) {
-	if (state.builtIn === "patch") {
-		dispatch({ type: "SET_PATCH_ARMED", value: !state.patchSetArmed });
-		return true;
-	}
-	if (document.querySelector(".cue-settings-compact-fallback")) {
-		window.dispatchEvent(
-			new CustomEvent("light:desk-action", { detail: "set" }),
-		);
-		return true;
-	}
-	if (document.querySelector(".cuelist-window.pool-window")) {
-		if (state.storeArmed) dispatch({ type: "SET_STORE_ARMED", value: false });
-		dispatch({ type: "SET_CUELIST_SET_ARMED", value: !state.cueListSetArmed });
-		return true;
-	}
-	if (document.querySelector(".playback-fader-bank,.virtual-playback-grid")) {
-		dispatch({
-			type: "SET_PLAYBACK_SET_ARMED",
-			value: !state.playbackSetArmed,
-		});
-		return true;
-	}
-	if (!presetSurfaceOpen(state)) return false;
-	dispatch({ type: "SET_PRESET_SET_ARMED", value: !state.presetSetArmed });
-	return true;
-}
-
-function presetSurfaceOpen(state: NumericPadContext["state"]) {
-	if (state.builtIn === "presets") return true;
-	const activeDesk = state.desks.find((desk) => desk.id === state.activeDeskId);
+function handleSet(source: ControlSurfaceSource) {
 	return (
-		state.builtIn == null &&
-		Boolean(activeDesk?.panes.some((pane) => pane.kind === "presets"))
+		routeControlSurfaceIntent({ type: "set", source }).status === "handled"
 	);
 }
 

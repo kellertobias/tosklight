@@ -5,10 +5,11 @@ import {
 	render,
 	screen,
 } from "@testing-library/react";
+import { Button } from "@tosklight/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { registerControlSurfaceTarget } from "../../features/controlSurfaceInteraction/registry";
 import { ProgrammingInteractionViewProvider } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { ProgrammingInteractionStore } from "../../features/programmingInteraction/store";
-import { createCommandLineTestAuthority } from "../../features/programmingInteraction/testing/commandLineTestAuthority";
 import {
 	commandChange,
 	commandLine,
@@ -18,12 +19,8 @@ import {
 	SHOW_ID,
 	settleSession,
 } from "../../features/programmingInteraction/testFixtures";
-import { Button } from "@tosklight/ui";
+import { createCommandLineTestAuthority } from "../../features/programmingInteraction/testing/commandLineTestAuthority";
 import { CommandLineBar } from "./CommandLineBar";
-import {
-	UPDATE_SETTINGS_EVENT,
-	UPDATE_TARGET_MENU_EVENT,
-} from "./updateWorkflow";
 
 const activity = vi.hoisted(() => ({
 	current: {
@@ -143,10 +140,13 @@ const server = {
 };
 
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
-vi.mock("../../features/commandHistory/CommandHistoryState", async (importOriginal) => ({
-	...(await importOriginal<object>()),
-	useCommandHistory: () => server.commandHistory,
-}));
+vi.mock(
+	"../../features/commandHistory/CommandHistoryState",
+	async (importOriginal) => ({
+		...(await importOriginal<object>()),
+		useCommandHistory: () => server.commandHistory,
+	}),
+);
 vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
 	useBootstrapReady: () => server.bootstrap !== null,
 	useFrameRateHz: () => server.bootstrap?.frame_rate_hz ?? null,
@@ -467,19 +467,23 @@ describe("Shift+Record Update gestures", () => {
 	it("routes the physical Home-key SET shortcut through the selected Patch control surface", () => {
 		state.builtIn = "patch";
 		const set = vi.fn();
-		render(
-			<>
-				<Button data-keypad-key="SET" onClick={set}>
-					SET target
-				</Button>
-				<CommandLineBar />
-			</>,
-		);
+		const release = registerControlSurfaceTarget({
+			id: "patch",
+			priority: 100,
+			accepts: ({ type }) => type === "set",
+			handle: set,
+		});
+		render(<CommandLineBar />);
 
 		fireEvent.keyDown(window, { code: "Home", key: "Home" });
 
 		expect(set).toHaveBeenCalledOnce();
+		expect(set.mock.calls[0][0]).toEqual({
+			type: "set",
+			source: "keyboard",
+		});
 		expect(server.setCommandLine).not.toHaveBeenCalled();
+		release();
 	});
 
 	it("disables the complete software keyboard shortcut layer", () => {
@@ -514,8 +518,14 @@ describe("Shift+Record Update gestures", () => {
 	it("keeps single, second-press, and long-press software gestures mutually exclusive", async () => {
 		const menu = vi.fn();
 		const settings = vi.fn();
-		window.addEventListener(UPDATE_TARGET_MENU_EVENT, menu);
-		window.addEventListener(UPDATE_SETTINGS_EVENT, settings);
+		const release = registerControlSurfaceTarget({
+			id: "update-test",
+			priority: 1,
+			accepts: ({ type }) =>
+				type === "update_target_menu" || type === "update_settings",
+			handle: (intent) =>
+				intent.type === "update_target_menu" ? menu() : settings(),
+		});
 		state.shiftArmed = true;
 		const authority = createCommandLineTestAuthority();
 		render(authority.wrap(<CommandLineBar />));
@@ -558,15 +568,20 @@ describe("Shift+Record Update gestures", () => {
 			),
 		).toHaveLength(1);
 
-		window.removeEventListener(UPDATE_TARGET_MENU_EVENT, menu);
-		window.removeEventListener(UPDATE_SETTINGS_EVENT, settings);
+		release();
 	});
 
 	it("uses the same exclusive gestures for Shift+End on a software-only desk", async () => {
 		const menu = vi.fn();
 		const settings = vi.fn();
-		window.addEventListener(UPDATE_TARGET_MENU_EVENT, menu);
-		window.addEventListener(UPDATE_SETTINGS_EVENT, settings);
+		const release = registerControlSurfaceTarget({
+			id: "update-test",
+			priority: 1,
+			accepts: ({ type }) =>
+				type === "update_target_menu" || type === "update_settings",
+			handle: (intent) =>
+				intent.type === "update_target_menu" ? menu() : settings(),
+		});
 		const authority = createCommandLineTestAuthority();
 		render(authority.wrap(<CommandLineBar />));
 		await act(authority.settle);
@@ -595,7 +610,6 @@ describe("Shift+Record Update gestures", () => {
 		expect(settings).toHaveBeenCalledTimes(1);
 		expect(state.updateArmed).toBe(false);
 
-		window.removeEventListener(UPDATE_TARGET_MENU_EVENT, menu);
-		window.removeEventListener(UPDATE_SETTINGS_EVENT, settings);
+		release();
 	});
 });

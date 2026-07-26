@@ -5,6 +5,7 @@ import type {
 	SessionResponse,
 	VersionedObject,
 } from "../../api/types";
+import { registerControlSurfaceTarget } from "../controlSurfaceInteraction/registry";
 import { routeOperatorEvent } from "./operatorEventRouting";
 import { createServerEventRouter } from "./serverEventRouter";
 import type { ServerState } from "./useServerState";
@@ -270,25 +271,33 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("server event routing", () => {
 	it("routes desk actions only to their matching desk", () => {
-		const received: string[] = [];
-		window.addEventListener(
-			"light:desk-action",
-			((incoming: CustomEvent<string>) => {
-				received.push(incoming.detail);
-			}) as EventListener,
-			{ once: true },
-		);
+		const received: unknown[] = [];
+		const release = registerControlSurfaceTarget({
+			id: "shortcut-test",
+			priority: 1,
+			accepts: ({ type }) => type === "desk_shortcut",
+			handle: (intent) => received.push(intent),
+		});
 		routeOperatorEvent(
-			event("desk_action", { action: "clear", desk_id: "another-desk" }),
+			event("desk_action", {
+				action: "shift-clear",
+				desk_id: "another-desk",
+			}),
 			session,
 			{} as ServerState,
 		);
 		routeOperatorEvent(
-			event("desk_action", { action: "go", desk_id: session.desk.id }),
+			event("desk_action", {
+				action: "shift-clear",
+				desk_id: session.desk.id,
+			}),
 			session,
 			{} as ServerState,
 		);
-		expect(received).toEqual(["go"]);
+		expect(received).toEqual([
+			{ type: "desk_shortcut", source: "osc", action: "shift_clear" },
+		]);
+		release();
 	});
 
 	it("routes encoder and navigation controls only for the matching OSC desk", () => {
@@ -317,22 +326,24 @@ describe("server event routing", () => {
 		}
 	});
 
-	it("routes Update requests through the desk-scoped UI event", () => {
+	it("routes Update requests through the typed interaction owner", () => {
 		const received: unknown[] = [];
-		window.addEventListener(
-			"light:update-target",
-			((incoming: CustomEvent) => {
-				received.push(incoming.detail);
-			}) as EventListener,
-			{ once: true },
-		);
+		const release = registerControlSurfaceTarget({
+			id: "update-test",
+			priority: 1,
+			accepts: ({ type }) => type === "update_target",
+			handle: (intent) => received.push(intent),
+		});
 		const target = { family: { type: "cue" }, object_id: "cue-list-1" };
 		routeOperatorEvent(
 			event("update_target_requested", { desk_id: session.desk.id, target }),
 			session,
 			{} as ServerState,
 		);
-		expect(received).toEqual([target]);
+		expect(received).toEqual([
+			{ type: "update_target", source: "osc", target },
+		]);
+		release();
 	});
 
 	it("does not broad-reload Playback runtime for typed Programmer events", async () => {

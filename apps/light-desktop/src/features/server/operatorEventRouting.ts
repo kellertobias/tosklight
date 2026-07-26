@@ -1,10 +1,11 @@
 import type {
 	OperatorNotification,
 	RuntimeCapabilityEvent,
-	UpdateWorkflowNotification,
 	SessionResponse,
 	UpdateTargetRequest,
+	UpdateWorkflowNotification,
 } from "../../api/types";
+import { routeControlSurfaceIntentWithFeedback } from "../controlSurfaceInteraction/registry";
 import type { ServerState } from "./useServerState";
 
 function routeDeskAction(
@@ -26,9 +27,26 @@ function routeDeskAction(
 			payload.session_id === session.session_id ||
 			payload.desk_id === session.desk.id)
 	) {
-		window.dispatchEvent(
-			new CustomEvent("light:desk-action", { detail: payload.action }),
-		);
+		if (payload.action === "set")
+			routeControlSurfaceIntentWithFeedback({ type: "set", source: "osc" });
+		else {
+			const fileAction = fileOperationKey(payload.action);
+			if (fileAction)
+				routeControlSurfaceIntentWithFeedback({
+					type: "file_operation_key",
+					source: "osc",
+					action: fileAction,
+				});
+			else {
+				const shortcut = deskShortcut(payload.action);
+				if (shortcut)
+					routeControlSurfaceIntentWithFeedback({
+						type: "desk_shortcut",
+						source: "osc",
+						action: shortcut,
+					});
+			}
+		}
 	}
 	if (
 		payload.control &&
@@ -36,6 +54,53 @@ function routeDeskAction(
 		(payload.control.startsWith("encode/") || payload.control === "nav")
 	) {
 		window.dispatchEvent(new CustomEvent("light:encoder-action", { detail }));
+	}
+}
+
+function deskShortcut(action: string) {
+	const normalized = action.toLowerCase().replaceAll("-", "_");
+	if (normalized === "shift_del") return "shift_delete" as const;
+	if (
+		[
+			"shift_down",
+			"shift_up",
+			"shift_clear",
+			"shift_delete",
+			"shift_0",
+			"shift_1",
+			"shift_2",
+			"shift_3",
+			"shift_4",
+			"shift_5",
+			"shift_6",
+			"shift_7",
+			"shift_8",
+			"shift_9",
+		].includes(normalized)
+	)
+		return normalized as import("../controlSurfaceInteraction/registry").DeskShortcut;
+	return null;
+}
+
+function fileOperationKey(action: string) {
+	switch (action.toLowerCase()) {
+		case "copy":
+		case "cpy":
+			return "copy" as const;
+		case "move":
+		case "mov":
+			return "move" as const;
+		case "delete":
+		case "del":
+			return "delete" as const;
+		case "escape":
+		case "esc":
+			return "escape" as const;
+		case "enter":
+		case "ent":
+			return "enter" as const;
+		default:
+			return null;
 	}
 }
 
@@ -79,9 +144,11 @@ function routeUpdateWorkflow(
 	if (event.desk_id !== session.desk.id) return;
 	switch (event.type) {
 		case "armed":
-			window.dispatchEvent(
-				new CustomEvent("light:update-armed", { detail: event.armed }),
-			);
+			routeControlSurfaceIntentWithFeedback({
+				type: "update_armed",
+				source: "osc",
+				armed: event.armed,
+			});
 			return;
 		case "target_requested": {
 			const target: UpdateTargetRequest = {
@@ -100,11 +167,11 @@ function routeUpdateWorkflow(
 							validate_active_context: event.target.validate_active_context,
 						}),
 			};
-			window.dispatchEvent(
-				new CustomEvent("light:update-target", {
-					detail: target,
-				}),
-			);
+			routeControlSurfaceIntentWithFeedback({
+				type: "update_target",
+				source: "osc",
+				target,
+			});
 			return;
 		}
 		case "target_rejected":
@@ -116,10 +183,16 @@ function routeUpdateWorkflow(
 			);
 			return;
 		case "targets_requested":
-			window.dispatchEvent(new Event("light:update-target-menu"));
+			routeControlSurfaceIntentWithFeedback({
+				type: "update_target_menu",
+				source: "osc",
+			});
 			return;
 		case "settings_requested":
-			window.dispatchEvent(new Event("light:update-settings"));
+			routeControlSurfaceIntentWithFeedback({
+				type: "update_settings",
+				source: "osc",
+			});
 	}
 }
 

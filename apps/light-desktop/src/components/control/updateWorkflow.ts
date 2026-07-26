@@ -6,11 +6,7 @@ import type {
 	UpdateTargetIdentity,
 	UpdateTargetRequest,
 } from "../../api/types";
-
-export const UPDATE_TARGET_EVENT = "light:update-target";
-export const UPDATE_ARMED_EVENT = "light:update-armed";
-export const UPDATE_SETTINGS_EVENT = "light:update-settings";
-export const UPDATE_TARGET_MENU_EVENT = "light:update-target-menu";
+import { routeControlSurfaceIntentWithFeedback } from "../../features/controlSurfaceInteraction/registry";
 
 export const cueUpdateModes: Array<{ value: CueUpdateMode; label: string }> = [
 	{ value: "existing_only", label: "Existing Only" },
@@ -80,19 +76,25 @@ export function requestFromUpdateIdentity(
 }
 
 export function requestUpdateTarget(target: UpdateTargetRequest) {
-	window.dispatchEvent(
-		new CustomEvent<UpdateTargetRequest>(UPDATE_TARGET_EVENT, {
-			detail: target,
-		}),
-	);
+	return routeControlSurfaceIntentWithFeedback({
+		type: "update_target",
+		source: "touch",
+		target,
+	});
 }
 
 export function openUpdateSettings() {
-	window.dispatchEvent(new Event(UPDATE_SETTINGS_EVENT));
+	return routeControlSurfaceIntentWithFeedback({
+		type: "update_settings",
+		source: "touch",
+	});
 }
 
 export function openUpdateTargetMenu() {
-	window.dispatchEvent(new Event(UPDATE_TARGET_MENU_EVENT));
+	return routeControlSurfaceIntentWithFeedback({
+		type: "update_target_menu",
+		source: "touch",
+	});
 }
 
 export function updateTargetKey(target: UpdateTargetIdentity) {

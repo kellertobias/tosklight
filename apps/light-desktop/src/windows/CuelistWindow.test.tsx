@@ -15,10 +15,12 @@ import type {
 	PlaybackSnapshot,
 } from "../api/types";
 import { PaneSettingsModal } from "../components/modals/PaneSettingsModal";
+import { routeControlSurfaceIntent } from "../features/controlSurfaceInteraction/registry";
 import { createCommandLineTestAuthority } from "../features/programmingInteraction/testing/commandLineTestAuthority";
 import { CuelistWindow } from "./CuelistWindow";
 
-const render = (ui: Parameters<typeof rtlRender>[0]) => rtlRender(ui, { wrapper: ModalProvider });
+const render = (ui: Parameters<typeof rtlRender>[0]) =>
+	rtlRender(ui, { wrapper: ModalProvider });
 
 const mocks = vi.hoisted(() => ({
 	dispatch: vi.fn(),
@@ -85,8 +87,7 @@ vi.mock("../api/ServerContext", () => ({
 }));
 vi.mock("../features/playbackTopology/PlaybackTopologyProvider", () => ({
 	usePlaybackTopologyActions: () => ({
-		saveCueList:
-			mocks.activeSaveTopologyCueList ?? mocks.saveTopologyCueList,
+		saveCueList: mocks.activeSaveTopologyCueList ?? mocks.saveTopologyCueList,
 	}),
 }));
 vi.mock("../features/cueRecording/CueRecordingProvider", () => ({
@@ -149,17 +150,19 @@ function resetCuelistWindowMocks() {
 	mocks.resetCommandLine.mockReset().mockResolvedValue(true);
 	mocks.recordCue.mockReset().mockResolvedValue({ status: "changed" });
 	mocks.activeSaveTopologyCueList = null;
-	mocks.saveTopologyCueList.mockReset().mockImplementation(
-		(
-			_cueListId: string,
-			expectedRevision: number,
-			expectedObjectId: string,
-			body: CueList,
-		) =>
-			Promise.resolve(
-				savedCueListOutcome(expectedObjectId, expectedRevision + 1, body),
-			),
-	);
+	mocks.saveTopologyCueList
+		.mockReset()
+		.mockImplementation(
+			(
+				_cueListId: string,
+				expectedRevision: number,
+				expectedObjectId: string,
+				body: CueList,
+			) =>
+				Promise.resolve(
+					savedCueListOutcome(expectedObjectId, expectedRevision + 1, body),
+				),
+		);
 	mocks.state.storeArmed = true;
 	mocks.state.paneSettingsId = null;
 	mocks.state.cueListSetArmed = false;
@@ -206,9 +209,7 @@ function showEditableCueList(cueList = editableCueList()) {
 			xfade_millis: 0,
 		},
 	];
-	mocks.cueObjects = [
-		{ id: "legacy-main", revision: 3, body: cueList },
-	];
+	mocks.cueObjects = [{ id: "legacy-main", revision: 3, body: cueList }];
 	return cueList;
 }
 
@@ -346,17 +347,15 @@ describe("CuelistWindow Cue settings", () => {
 		expect(
 			screen.getByText("Press SET, then press an attribute value to edit it."),
 		).toBeInTheDocument();
-		act(() =>
-			window.dispatchEvent(
-				new CustomEvent("light:desk-action", { detail: "set" }),
-			),
-		);
+		act(() => {
+			routeControlSurfaceIntent({ type: "set", source: "hardware" });
+		});
 		expect(
 			screen.getByText("SET is active. Press an attribute value to edit it."),
 		).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Set Cue Fade" }));
 		expect(screen.getByRole("dialog", { name: "Fade" })).toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Close input" }));
+		fireEvent.click(screen.getByRole("button", { name: "Close Fade" }));
 		vi.unstubAllGlobals();
 	});
 });
@@ -733,7 +732,9 @@ describe("CuelistWindow Cue draft validation", () => {
 		view.rerender(<CuelistWindow />);
 		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
 
-		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
+		);
 		expect(mocks.saveTopologyCueList).toHaveBeenCalledWith(
 			"main",
 			3,
@@ -749,7 +750,9 @@ describe("CuelistWindow Cue draft validation", () => {
 
 	it("rebases queued inline edits onto the preceding authoritative outcome", async () => {
 		showEditableCueList();
-		let resolveFirst!: (outcome: ReturnType<typeof savedCueListOutcome>) => void;
+		let resolveFirst!: (
+			outcome: ReturnType<typeof savedCueListOutcome>,
+		) => void;
 		const first = new Promise<ReturnType<typeof savedCueListOutcome>>(
 			(resolve) => {
 				resolveFirst = resolve;
@@ -766,11 +769,7 @@ describe("CuelistWindow Cue draft validation", () => {
 					body: CueList,
 				) =>
 					Promise.resolve(
-						savedCueListOutcome(
-							expectedObjectId,
-							expectedRevision + 1,
-							body,
-						),
+						savedCueListOutcome(expectedObjectId, expectedRevision + 1, body),
 					),
 			);
 		const view = render(<CuelistWindow />);
@@ -778,15 +777,15 @@ describe("CuelistWindow Cue draft validation", () => {
 		fireEvent.click(ui.getByText("Main").closest("button")!);
 		fireEvent.change(ui.getByLabelText("Fade"), { target: { value: "3" } });
 		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
-		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
+		);
 
 		fireEvent.change(ui.getByLabelText("Delay"), { target: { value: "2" } });
 		fireEvent.keyDown(ui.getByLabelText("Delay"), { key: "Enter" });
 		expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce();
 		const firstBody = mocks.saveTopologyCueList.mock.calls[0][3] as CueList;
-		act(() =>
-			resolveFirst(savedCueListOutcome("legacy-main", 4, firstBody)),
-		);
+		act(() => resolveFirst(savedCueListOutcome("legacy-main", 4, firstBody)));
 
 		await waitFor(() =>
 			expect(mocks.saveTopologyCueList).toHaveBeenCalledTimes(2),
@@ -823,11 +822,7 @@ describe("CuelistWindow Cue draft validation", () => {
 					body: CueList,
 				) =>
 					Promise.resolve(
-						savedCueListOutcome(
-							expectedObjectId,
-							expectedRevision + 1,
-							body,
-						),
+						savedCueListOutcome(expectedObjectId, expectedRevision + 1, body),
 					),
 			);
 		const view = render(<CuelistWindow />);
@@ -835,7 +830,9 @@ describe("CuelistWindow Cue draft validation", () => {
 		fireEvent.click(ui.getByText("Main").closest("button")!);
 		fireEvent.change(ui.getByLabelText("Fade"), { target: { value: "3" } });
 		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
-		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
+		);
 		fireEvent.change(ui.getByLabelText("Delay"), { target: { value: "2" } });
 		fireEvent.keyDown(ui.getByLabelText("Delay"), { key: "Enter" });
 
@@ -879,13 +876,17 @@ describe("CuelistWindow Cue draft validation", () => {
 		const oldResponse = new Promise<null>((resolve) => {
 			resolveOld = resolve;
 		});
-		mocks.saveTopologyCueList.mockReset().mockImplementationOnce(() => oldResponse);
+		mocks.saveTopologyCueList
+			.mockReset()
+			.mockImplementationOnce(() => oldResponse);
 		const view = render(<CuelistWindow />);
 		const ui = within(view.container);
 		fireEvent.click(ui.getByText("Main").closest("button")!);
 		fireEvent.change(ui.getByLabelText("Fade"), { target: { value: "3" } });
 		fireEvent.keyDown(ui.getByLabelText("Fade"), { key: "Enter" });
-		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
+		);
 
 		const replacementWriter = vi.fn(
 			(
@@ -895,11 +896,7 @@ describe("CuelistWindow Cue draft validation", () => {
 				body: CueList,
 			) =>
 				Promise.resolve(
-					savedCueListOutcome(
-						expectedObjectId,
-						expectedRevision + 1,
-						body,
-					),
+					savedCueListOutcome(expectedObjectId, expectedRevision + 1, body),
 				),
 		);
 		mocks.activeSaveTopologyCueList = replacementWriter;
@@ -927,11 +924,7 @@ describe("CuelistWindow Cue draft validation", () => {
 					body: CueList,
 				) =>
 					Promise.resolve(
-						savedCueListOutcome(
-							expectedObjectId,
-							expectedRevision + 1,
-							body,
-						),
+						savedCueListOutcome(expectedObjectId, expectedRevision + 1, body),
 					),
 			);
 		const view = render(<CuelistWindow />);
@@ -946,9 +939,7 @@ describe("CuelistWindow Cue draft validation", () => {
 		);
 
 		const retriedBody = mocks.saveTopologyCueList.mock.calls[1][3] as CueList;
-		mocks.cueObjects = [
-			{ id: "legacy-main", revision: 4, body: retriedBody },
-		];
+		mocks.cueObjects = [{ id: "legacy-main", revision: 4, body: retriedBody }];
 		view.rerender(<CuelistWindow />);
 		fireEvent.change(ui.getByLabelText("Delay"), { target: { value: "2" } });
 		mocks.cueObjects = [
@@ -1000,7 +991,9 @@ describe("CuelistWindow topology-backed Cuelist settings", () => {
 		view.rerender(<CuelistWindow />);
 		fireEvent.click(within(settings).getByRole("button", { name: "Save" }));
 
-		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
+		);
 		expect(mocks.saveTopologyCueList).toHaveBeenCalledWith(
 			"main",
 			3,
@@ -1016,14 +1009,18 @@ describe("CuelistWindow topology-backed Cuelist settings", () => {
 		fireEvent.click(screen.getByText("Main").closest("button")!);
 		fireEvent.click(screen.getByRole("button", { name: "Cuelist Settings" }));
 		const settings = screen.getByRole("dialog", { name: "Cuelist Settings" });
-		fireEvent.click(within(settings).getByRole("button", { name: "Renumber Cues" }));
+		fireEvent.click(
+			within(settings).getByRole("button", { name: "Renumber Cues" }),
+		);
 		const renumber = screen.getByRole("dialog", { name: "Renumber Cues" });
 		fireEvent.change(within(renumber).getByLabelText("Start Cue"), {
 			target: { value: "10" },
 		});
 		fireEvent.click(within(renumber).getByRole("button", { name: "Renumber" }));
 
-		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
+		);
 		expect(mocks.saveTopologyCueList).toHaveBeenCalledWith(
 			"main",
 			3,

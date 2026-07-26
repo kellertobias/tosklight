@@ -125,7 +125,6 @@ export function TouchPlaybackCardView({
 		// biome-ignore lint/a11y/useKeyWithClickEvents: The article delegates keyboard interaction to its real child controls.
 		<article
 			{...cardData(model)}
-			data-set-click-target
 			className={model.className}
 			style={
 				model.color
@@ -245,7 +244,6 @@ export function HardwarePlaybackCardView({
 		// biome-ignore lint/a11y/useKeyWithClickEvents: The article delegates keyboard interaction to its real child controls.
 		<article
 			{...cardData(model)}
-			data-set-click-target
 			className={`hardware-playback-card ${model.className ?? ""}`}
 			style={
 				model.color

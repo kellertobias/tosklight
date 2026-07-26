@@ -100,6 +100,11 @@ const callbacks = {
 	execute: vi.fn(async () => undefined),
 	armUpdateOrMenu: vi.fn(),
 	dismissPersistentError: vi.fn(),
+	pressSet: vi.fn(),
+	toggleRecord: vi.fn(),
+	advancePreload: vi.fn(),
+	clear: vi.fn(),
+	undo: vi.fn(),
 };
 
 function mount(hardware = false) {
@@ -297,7 +302,10 @@ describe("useCommandLineShortcuts playback keys", () => {
 	const teardowns: [string, (view: ReturnType<typeof mount>) => void][] = [
 		["window blur", () => window.dispatchEvent(new Event("blur"))],
 		["listener teardown", (view) => view.unmount()],
-		["hardware mode taking the keys", (view) => view.rerender({ hardware: true })],
+		[
+			"hardware mode taking the keys",
+			(view) => view.rerender({ hardware: true }),
+		],
 		[
 			"shortcuts being disabled",
 			(view) => {
@@ -409,7 +417,10 @@ describe("useCommandLineShortcuts page keys", () => {
 		await tick();
 
 		const replacementSetActivePage = vi.fn(async () => true);
-		runtimeActions = { poolPlaybackAction, setActivePage: replacementSetActivePage };
+		runtimeActions = {
+			poolPlaybackAction,
+			setActivePage: replacementSetActivePage,
+		};
 		act(() => view.rerender({ hardware: false }));
 		resolveCreate({});
 		await tick();

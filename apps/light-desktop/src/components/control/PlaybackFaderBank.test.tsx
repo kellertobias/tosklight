@@ -7,11 +7,11 @@ import {
 } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { registerControlSurfaceTarget } from "../../features/controlSurfaceInteraction/registry";
 import {
 	PlaybackFaderBank as PhysicalPlaybackFaderBank,
 	playbackRowUnits,
 } from "./PlaybackFaderBank";
-import { UPDATE_TARGET_EVENT } from "./updateWorkflow";
 
 describe("playback row height units", () => {
 	const oneButton = {
@@ -667,19 +667,28 @@ describe("PlaybackFaderBank configuration shortcuts", () => {
 			},
 		];
 		const selected = vi.fn();
-		window.addEventListener(UPDATE_TARGET_EVENT, selected);
+		const release = registerControlSurfaceTarget({
+			id: "update-test",
+			priority: 1,
+			accepts: ({ type }) => type === "update_target",
+			handle: selected,
+		});
 		render(<PlaybackFaderBank count={1} />);
 		fireEvent.click(screen.getByRole("button", { name: "GO +" }));
-		expect((selected.mock.calls[0][0] as CustomEvent).detail).toEqual({
-			family: { type: "cue" },
-			object_id: "front",
-			playback_number: 7,
-			cue_id: "cue-2",
-			cue_number: 2,
-			validate_active_context: true,
+		expect(selected.mock.calls[0][0]).toEqual({
+			type: "update_target",
+			source: "touch",
+			target: {
+				family: { type: "cue" },
+				object_id: "front",
+				playback_number: 7,
+				cue_id: "cue-2",
+				cue_number: 2,
+				validate_active_context: true,
+			},
 		});
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
-		window.removeEventListener(UPDATE_TARGET_EVENT, selected);
+		release();
 	});
 });
 
@@ -1187,12 +1196,10 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 		expect(screen.queryByText(/Physical/)).not.toBeInTheDocument();
 	});
 
-	it("recognizes the marked click produced by a playback right-click", () => {
+	it("routes a playback right-click directly to that card", () => {
 		assignPlayback();
 		const { container } = render(<PlaybackFaderBank count={1} />);
-		const click = new MouseEvent("click", { bubbles: true, cancelable: true });
-		Object.defineProperty(click, "lightSetShortcut", { value: true });
-		fireEvent(container.querySelector("article")!, click);
+		fireEvent.contextMenu(container.querySelector("article")!);
 		expect(
 			screen.getByRole("dialog", { name: "Playback Configuration" }),
 		).toBeInTheDocument();

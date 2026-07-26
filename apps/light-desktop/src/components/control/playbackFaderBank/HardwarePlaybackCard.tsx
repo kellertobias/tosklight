@@ -61,7 +61,6 @@ export function HardwarePlaybackCard({
 	return (
 		// biome-ignore lint/a11y/useKeyWithClickEvents: The hardware card is a pointer selection surface whose actionable child controls retain their own keyboard semantics.
 		<article
-			data-set-click-target
 			data-page={controller.activePageNumber}
 			data-playback-slot={slot}
 			data-playback-row={rowIndex}

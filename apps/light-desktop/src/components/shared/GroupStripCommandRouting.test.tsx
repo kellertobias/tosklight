@@ -6,8 +6,8 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { registerControlSurfaceTarget } from "../../features/controlSurfaceInteraction/registry";
 import { GroupStrip } from "./GroupStrip";
-import { UPDATE_TARGET_EVENT } from "../control/updateWorkflow";
 
 const mocks = vi.hoisted(() => ({
 	dispatch: vi.fn(),
@@ -115,7 +115,9 @@ describe("GroupStrip action routing", () => {
 
 	it("freezes shortcut groups through the scoped selectGroup action", () => {
 		render(<GroupStrip />);
-		fireEvent.doubleClick(screen.getByText("Shortcut Group").closest("button")!);
+		fireEvent.doubleClick(
+			screen.getByText("Shortcut Group").closest("button")!,
+		);
 		expect(mocks.selectFrozen).toHaveBeenCalledWith(mocks.groups[0]);
 		expect(mocks.selectLive).not.toHaveBeenCalled();
 	});
@@ -131,15 +133,24 @@ describe("GroupStrip action routing", () => {
 	it("routes an armed Update touch to the exact Group target without selecting it", () => {
 		mocks.state.updateArmed = true;
 		const selected = vi.fn();
-		window.addEventListener(UPDATE_TARGET_EVENT, selected);
+		const release = registerControlSurfaceTarget({
+			id: "update-test",
+			priority: 1,
+			accepts: ({ type }) => type === "update_target",
+			handle: selected,
+		});
 		render(<GroupStrip />);
 		fireEvent.click(screen.getByText("Shortcut Group").closest("button")!);
-		expect((selected.mock.calls[0][0] as CustomEvent).detail).toEqual({
-			family: { type: "group" },
-			object_id: "1",
+		expect(selected.mock.calls[0][0]).toEqual({
+			type: "update_target",
+			source: "touch",
+			target: {
+				family: { type: "group" },
+				object_id: "1",
+			},
 		});
 		expect(mocks.selectLive).not.toHaveBeenCalled();
-		window.removeEventListener(UPDATE_TARGET_EVENT, selected);
+		release();
 	});
 
 	it("records directly into stored empty shortcut groups", async () => {

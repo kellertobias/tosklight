@@ -7,10 +7,11 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react";
+import { Button } from "@tosklight/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileEntry } from "../api/types";
-import { Button } from "@tosklight/ui";
 import { requestPaneRemoval } from "../components/shell/paneRemovalGuard";
+import { routeControlSurfaceIntent } from "../features/controlSurfaceInteraction/registry";
 import { createCommandLineTestAuthority } from "../features/programmingInteraction/testing/commandLineTestAuthority";
 import {
 	FileManager,
@@ -305,12 +306,20 @@ describe("FileManager layout", () => {
 		]);
 		const search = screen.getByRole("textbox", { name: "Search File Manager" });
 		fireEvent.change(search, { target: { value: "image" } });
-		expect(screen.queryByRole("button", { name: "alpha.txt, file" })).not.toBeInTheDocument();
-		expect(screen.getByRole("button", { name: "image.png, file" })).toBeVisible();
+		expect(
+			screen.queryByRole("button", { name: "alpha.txt, file" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "image.png, file" }),
+		).toBeVisible();
 		fireEvent.change(search, { target: { value: "missing" } });
-		expect(screen.getByText("No files or folders match “missing”.")).toBeVisible();
+		expect(
+			screen.getByText("No files or folders match “missing”."),
+		).toBeVisible();
 		fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
-		expect(screen.getByRole("button", { name: "alpha.txt, file" })).toBeVisible();
+		expect(
+			screen.getByRole("button", { name: "alpha.txt, file" }),
+		).toBeVisible();
 
 		fireEvent.click(screen.getByRole("button", { name: "alpha.txt, file" }));
 		fireEvent.click(screen.getByRole("button", { name: "Edit" }));
@@ -921,18 +930,22 @@ describe("FileManager input ownership", () => {
 		});
 
 		act(() => {
-			window.dispatchEvent(
-				new CustomEvent("light:desk-action", { detail: "copy" }),
-			);
+			routeControlSurfaceIntent({
+				type: "file_operation_key",
+				source: "hardware",
+				action: "copy",
+			});
 		});
 		fireEvent.click(screen.getByRole("button", { name: "Lighting control" }));
 		expect(outside).toHaveBeenCalledOnce();
 		expect(mocks.server.claimFileInput).not.toHaveBeenCalled();
 
 		act(() => {
-			window.dispatchEvent(
-				new CustomEvent("light:desk-action", { detail: "copy" }),
-			);
+			routeControlSurfaceIntent({
+				type: "file_operation_key",
+				source: "hardware",
+				action: "copy",
+			});
 		});
 		fireEvent.pointerDown(
 			within(managers[1]).getByRole("heading", { name: "Locations" }),

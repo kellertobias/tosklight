@@ -1,5 +1,8 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useId, useState } from "react";
+import { routeControlSurfaceIntentWithFeedback } from "../../features/controlSurfaceInteraction/registry";
+import { useControlSurfaceTarget } from "../../features/controlSurfaceInteraction/useControlSurfaceTarget";
 import { PhysicalPlaybackConfigurationModal } from "./PhysicalPlaybackConfigurationModal";
+import { openPlaybackConfiguration } from "./playbackFaderBank/actions";
 import {
 	type PlaybackFaderBankProps,
 	usePlaybackBankController,
@@ -9,6 +12,26 @@ import { PlaybackSlot } from "./playbackFaderBank/PlaybackSlot";
 export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 	function PlaybackFaderBank(props: PlaybackFaderBankProps = {}) {
 		const controller = usePlaybackBankController(props);
+		const interactionSurfaceId = useId();
+		useControlSurfaceTarget({
+			id: `playback-bank:${interactionSurfaceId}`,
+			priority: 300,
+			accepts: (intent) =>
+				intent.type === "configure_playback" &&
+				intent.surfaceId === interactionSurfaceId,
+			handle: (intent) => {
+				if (intent.type !== "configure_playback") return;
+				const slotData = controller.slots.find(
+					(candidate) => candidate.slot === intent.slot,
+				);
+				if (slotData)
+					openPlaybackConfiguration(
+						controller,
+						slotData.playback,
+						slotData.slot,
+					);
+			},
+		});
 		// Once the grid has rendered for a ready topology, transient projection refetches
 		// (hardware connect, layout changes) must not tear the slot elements down — only a
 		// topology-scope reset returns the bank to its loading placeholder.
@@ -30,8 +53,23 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 			);
 		return (
 			<>
+				{/* biome-ignore lint/a11y/noStaticElementInteractions: This container routes the pointer-only context menu to the exact typed playback target. */}
 				<div
 					className={`playback-fader-bank ${controller.hardware ? "hardware-layout" : "touch-layout"}`}
+					onContextMenu={(event) => {
+						event.preventDefault();
+						const card = (event.target as Element).closest<HTMLElement>(
+							"[data-playback-slot]",
+						);
+						const slot = Number(card?.dataset.playbackSlot);
+						if (!Number.isInteger(slot)) return;
+						routeControlSurfaceIntentWithFeedback({
+							type: "configure_playback",
+							source: "context_menu",
+							surfaceId: interactionSurfaceId,
+							slot,
+						});
+					}}
 					style={{
 						gridTemplateColumns: `repeat(${controller.columns}, minmax(0, 1fr))`,
 						gridTemplateRows: controller.rowTracks,

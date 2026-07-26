@@ -9,13 +9,9 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UpdateSettings, UpdateTargetRequest } from "../../api/types";
+import { routeControlSurfaceIntent } from "../../features/controlSurfaceInteraction/registry";
 import { createCommandLineTestAuthority } from "../../features/programmingInteraction/testing/commandLineTestAuthority";
-import {
-	defaultUpdateSettings,
-	UPDATE_SETTINGS_EVENT,
-	UPDATE_TARGET_EVENT,
-	UPDATE_TARGET_MENU_EVENT,
-} from "../control/updateWorkflow";
+import { defaultUpdateSettings } from "../control/updateWorkflow";
 import { UpdateWorkflow } from "./UpdateWorkflow";
 import {
 	addNewAuthority,
@@ -89,7 +85,10 @@ describe("Update workflow integration", () => {
 		workflow.update.confirm.mockResolvedValue(mutationFor());
 		render(<UpdateWorkflow />);
 
-		fireEvent(window, new Event(UPDATE_TARGET_MENU_EVENT));
+		routeControlSurfaceIntent({
+			type: "update_target_menu",
+			source: "touch",
+		});
 		const dialog = await screen.findByRole("dialog", { name: "Update Update" });
 		expect(workflow.update.targets).toHaveBeenCalledWith(
 			"eligible_for_update_existing",
@@ -168,12 +167,11 @@ describe("Update workflow integration", () => {
 		await act(authority.settle);
 
 		expect(screen.getByRole("status")).toHaveTextContent("UPDATE armed");
-		fireEvent(
-			window,
-			new CustomEvent<UpdateTargetRequest>(UPDATE_TARGET_EVENT, {
-				detail: request,
-			}),
-		);
+		routeControlSurfaceIntent({
+			type: "update_target",
+			source: "touch",
+			target: request,
+		});
 
 		await waitFor(() =>
 			expect(workflow.update.applyDirect).toHaveBeenCalledWith(request, {
@@ -222,12 +220,11 @@ describe("Update workflow integration", () => {
 		workflow.update.confirm.mockResolvedValue(mutationFor());
 		render(<UpdateWorkflow />);
 
-		fireEvent(
-			window,
-			new CustomEvent<UpdateTargetRequest>(UPDATE_TARGET_EVENT, {
-				detail: request,
-			}),
-		);
+		routeControlSurfaceIntent({
+			type: "update_target",
+			source: "touch",
+			target: request,
+		});
 		const dialog = await screen.findByRole("dialog", {
 			name: "Update Main Cuelist",
 		});
@@ -254,7 +251,7 @@ describe("Update workflow integration", () => {
 		);
 		render(<UpdateWorkflow />);
 
-		fireEvent(window, new Event(UPDATE_SETTINGS_EVENT));
+		routeControlSurfaceIntent({ type: "update_settings", source: "touch" });
 		const dialog = await screen.findByRole("dialog", {
 			name: "Update Settings",
 		});
@@ -282,7 +279,10 @@ describe("Update workflow integration", () => {
 		);
 		render(<UpdateWorkflow />);
 
-		fireEvent(window, new Event(UPDATE_TARGET_MENU_EVENT));
+		routeControlSurfaceIntent({
+			type: "update_target_menu",
+			source: "touch",
+		});
 		const dialog = await screen.findByRole("dialog", { name: "Update Update" });
 		expect(await within(dialog).findByRole("alert")).toHaveTextContent(
 			"target query rejected",
@@ -294,7 +294,10 @@ describe("Update workflow integration", () => {
 		workflow.update.targets.mockReturnValue(pending.promise);
 		const view = render(<UpdateWorkflow />);
 
-		fireEvent(window, new Event(UPDATE_TARGET_MENU_EVENT));
+		routeControlSurfaceIntent({
+			type: "update_target_menu",
+			source: "touch",
+		});
 		await screen.findByRole("dialog", { name: "Update Update" });
 		workflow.update.scopeKey = "authority-b";
 		view.rerender(<UpdateWorkflow />);

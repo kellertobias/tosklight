@@ -8,6 +8,7 @@ import {
 	useMemo,
 	useReducer,
 } from "react";
+import { useControlSurfaceTarget } from "../features/controlSurfaceInteraction/useControlSurfaceTarget";
 import { frontendPerformanceDiagnostics } from "../features/frontendWarmup/diagnostics";
 import type { AppState, BuiltInWindow } from "../types";
 import { type Action, appReducer, initialState } from "./appReducer";
@@ -74,18 +75,31 @@ export function AppProvider({ children }: PropsWithChildren) {
 		reduce(action);
 		if (finish) afterNextPaint(finish);
 	}, []);
-	useEffect(() => {
-		const deskAction = (event: Event) => {
-			const action = (event as CustomEvent<string>).detail;
-			if (action === "shift-down" || action === "shift-up") {
-				dispatch({ type: "SET_SHIFT_ARMED", value: action === "shift-down" });
+	const setTarget = activeSetTarget(state);
+	useControlSurfaceTarget(
+		setTarget
+			? {
+					id: `app-set:${setTarget}`,
+					priority: 100,
+					accepts: ({ type }) => type === "set",
+					handle: () => applySetTarget(setTarget, state, dispatch),
+				}
+			: null,
+	);
+	useControlSurfaceTarget({
+		id: "app-desk-shortcuts",
+		priority: 100,
+		accepts: ({ type }) => type === "desk_shortcut",
+		handle: (intent) => {
+			if (intent.type !== "desk_shortcut") return;
+			if (intent.action === "shift_down" || intent.action === "shift_up") {
+				dispatch({
+					type: "SET_SHIFT_ARMED",
+					value: intent.action === "shift_down",
+				});
 				return;
 			}
-			if (
-				action === "shift-clear" ||
-				action === "shift-delete" ||
-				action === "shift-del"
-			) {
+			if (intent.action === "shift_clear" || intent.action === "shift_delete") {
 				dispatch({
 					type: "SET_MODAL",
 					modal: "systemControlsOpen",
@@ -93,54 +107,71 @@ export function AppProvider({ children }: PropsWithChildren) {
 				});
 				return;
 			}
-			if (action.startsWith("shift-")) {
-				const kind = shiftedWindows[action.slice(6)];
-				if (kind) dispatch({ type: "OPEN_BUILTIN", kind });
-				return;
-			}
-			if (action !== "set") return;
-			if (document.querySelector(".cue-settings-compact-fallback")) return;
-			if (state.builtIn === "patch")
-				dispatch({ type: "SET_PATCH_ARMED", value: !state.patchSetArmed });
-			else if (document.querySelector(".cuelist-window.pool-window")) {
-				if (state.storeArmed)
-					dispatch({ type: "SET_STORE_ARMED", value: false });
-				dispatch({
-					type: "SET_CUELIST_SET_ARMED",
-					value: !state.cueListSetArmed,
-				});
-			} else if (
-				document.querySelector(".playback-fader-bank,.virtual-playback-grid")
-			)
-				dispatch({
-					type: "SET_PLAYBACK_SET_ARMED",
-					value: !state.playbackSetArmed,
-				});
-			else if (
-				state.builtIn === "presets" ||
-				state.desks
-					.find((desk) => desk.id === state.activeDeskId)
-					?.panes.some((pane) => pane.kind === "presets")
-			)
-				dispatch({
-					type: "SET_PRESET_SET_ARMED",
-					value: !state.presetSetArmed,
-				});
-		};
-		window.addEventListener("light:desk-action", deskAction);
-		return () => window.removeEventListener("light:desk-action", deskAction);
-	}, [
-		state.builtIn,
-		state.patchSetArmed,
-		state.presetSetArmed,
-		state.cueListSetArmed,
-		state.playbackSetArmed,
-		state.storeArmed,
-		state.desks,
-		state.activeDeskId,
-	]);
+			const kind = shiftedWindows[intent.action.slice(6)];
+			if (kind) dispatch({ type: "OPEN_BUILTIN", kind });
+		},
+	});
 	const value = useMemo(() => ({ state, dispatch }), [state]);
 	return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+}
+
+function activeSetTarget(state: AppState) {
+	if (state.builtIn === "patch") return "patch" as const;
+	const kinds =
+		state.builtIn == null
+			? (state.desks
+					.find((desk) => desk.id === state.activeDeskId)
+					?.panes.filter(
+						(pane) =>
+							state.maximizedPaneId == null ||
+							pane.id === state.maximizedPaneId,
+					)
+					.map((pane) => pane.kind) ?? [])
+			: [state.builtIn];
+	if (
+		kinds.some((kind) =>
+			[
+				"cuelists",
+				"cuelist_pool",
+				"cue_list",
+				"cues",
+				"qlists",
+				"qlist_pool",
+				"qs",
+			].includes(kind),
+		)
+	)
+		return "cuelist" as const;
+	if (
+		kinds.some((kind) =>
+			["playback", "playback_pool", "virtual_playbacks"].includes(kind),
+		)
+	)
+		return "playback" as const;
+	if (kinds.includes("presets")) return "preset" as const;
+	return null;
+}
+
+function applySetTarget(
+	target: NonNullable<ReturnType<typeof activeSetTarget>>,
+	state: AppState,
+	dispatch: Dispatch<Action>,
+) {
+	if (target === "patch")
+		return dispatch({ type: "SET_PATCH_ARMED", value: !state.patchSetArmed });
+	if (target === "cuelist") {
+		if (state.storeArmed) dispatch({ type: "SET_STORE_ARMED", value: false });
+		return dispatch({
+			type: "SET_CUELIST_SET_ARMED",
+			value: !state.cueListSetArmed,
+		});
+	}
+	if (target === "playback")
+		return dispatch({
+			type: "SET_PLAYBACK_SET_ARMED",
+			value: !state.playbackSetArmed,
+		});
+	dispatch({ type: "SET_PRESET_SET_ARMED", value: !state.presetSetArmed });
 }
 
 function measuredSurface(action: Action) {

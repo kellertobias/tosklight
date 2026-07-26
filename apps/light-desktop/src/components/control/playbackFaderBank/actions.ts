@@ -1,11 +1,10 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { Cue, PlaybackDefinition } from "../../../api/types";
-import { isSetContextClick } from "../../../disableContextMenu";
+import { loadRecordSettings } from "../../setup/ProgrammerDefaults";
 import { normalizePlaybackTopology } from "../PlaybackConfigurationModal";
 import { cueUpdateTarget, requestUpdateTarget } from "../updateWorkflow";
 import type { PlaybackBankController } from "./controller";
 import { emptyConfiguration } from "./feedback";
-import { loadRecordSettings } from "../../setup/ProgrammerDefaults";
 
 export function isPlaybackSetClickArmed(controller: PlaybackBankController) {
 	const { state } = controller;
@@ -22,7 +21,9 @@ export function openPlaybackConfiguration(
 ) {
 	const { dispatch, activePageNumber, buttons, topology } = controller;
 	if (activePageNumber == null) return;
-	const slotData = controller.slots.find((candidate) => candidate.slot === slot);
+	const slotData = controller.slots.find(
+		(candidate) => candidate.slot === slot,
+	);
 	const fallbackButtons = Math.max(
 		0,
 		Math.min(3, slotData?.row?.button_count ?? buttons ?? 3),
@@ -76,10 +77,11 @@ export async function selectPlayback(
 export async function recordPlayback(
 	controller: PlaybackBankController,
 	event: ReactMouseEvent,
-	playback: PlaybackDefinition | null,
+	_playback: PlaybackDefinition | null,
 	slot: number,
 ) {
-	if (!controller.state.storeArmed || controller.activePageNumber == null) return;
+	if (!controller.state.storeArmed || controller.activePageNumber == null)
+		return;
 	event.preventDefault();
 	event.stopPropagation();
 	const settings = loadRecordSettings();
@@ -89,8 +91,7 @@ export async function recordPlayback(
 			page: controller.activePageNumber,
 			slot,
 		},
-		operation:
-			settings.mergeActiveCue ? "merge" : "overwrite",
+		operation: settings.mergeActiveCue ? "merge" : "overwrite",
 		timing: {},
 		cueOnly: settings.cueOnly,
 		capturePolicy: "current_capture",
@@ -110,10 +111,7 @@ export async function activateHardwareCard(
 	if (!playback || isPlaybackControlTarget(event.target)) return;
 	event.preventDefault();
 	event.stopPropagation();
-	if (
-		isSetContextClick(event.nativeEvent) ||
-		isPlaybackSetClickArmed(controller)
-	) {
+	if (isPlaybackSetClickArmed(controller)) {
 		openPlaybackConfiguration(controller, playback, slot);
 		return;
 	}

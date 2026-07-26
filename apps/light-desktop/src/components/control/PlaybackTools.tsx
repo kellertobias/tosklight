@@ -2,6 +2,7 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSequenceMasterFadeMillis } from "../../features/configuration/ConfigurationState";
 import { useConfigurationActions } from "../../features/configuration/ConfigurationActionsProvider";
+import { routeControlSurfaceIntentWithFeedback } from "../../features/controlSurfaceInteraction/registry";
 import type { SpeedGroupId } from "../../api/types";
 import { useSpeedGroupRuntimeView } from "../../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import { useApp } from "../../state/AppContext";
@@ -43,9 +44,9 @@ export function PlaybackTools() {
 			return;
 		}
 		if (key === "SET") {
-			dispatch({
-				type: "SET_PLAYBACK_SET_ARMED",
-				value: !state.playbackSetArmed,
+			routeControlSurfaceIntentWithFeedback({
+				type: "set",
+				source: "touch",
 			});
 			return;
 		}

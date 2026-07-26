@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { registerControlSurfaceTarget } from "../../features/controlSurfaceInteraction/registry";
 import "../../styles.css";
 import { NumericPad, numericPadLayout } from "./NumericPad";
 
@@ -88,7 +89,8 @@ const commandProjection = {
 const commandActions = {
 	replace: vi.fn(async (text: string) => {
 		commandProjection.text = text;
-		commandProjection.pristine = text.trim().toUpperCase() === commandProjection.target;
+		commandProjection.pristine =
+			text.trim().toUpperCase() === commandProjection.target;
 		return true;
 	}),
 	reset: vi.fn(async () => {
@@ -245,36 +247,55 @@ describe("NumericPad Clear and SET routing", () => {
 	});
 
 	it("arms playback configuration when a Virtual Playback grid is the available target surface", () => {
-		const grid = document.createElement("div");
-		grid.className = "virtual-playback-grid";
-		document.body.append(grid);
+		const release = registerControlSurfaceTarget({
+			id: "virtual-playbacks",
+			priority: 100,
+			accepts: ({ type }) => type === "set",
+			handle: () =>
+				dispatch({
+					type: "SET_PLAYBACK_SET_ARMED",
+					value: !state.playbackSetArmed,
+				}),
+		});
 		render(<NumericPad />);
 		fireEvent.click(screen.getByRole("button", { name: "SET" }));
 		expect(dispatch).toHaveBeenCalledWith({
 			type: "SET_PLAYBACK_SET_ARMED",
 			value: true,
 		});
-		grid.remove();
+		release();
 	});
 
 	it("routes software SET to a height-constrained Cue settings editor", () => {
-		const fallback = document.createElement("section");
-		fallback.className = "cue-settings-compact-fallback";
-		document.body.append(fallback);
 		const set = vi.fn();
-		window.addEventListener("light:desk-action", set, { once: true });
+		const release = registerControlSurfaceTarget({
+			id: "compact-cue-properties",
+			priority: 300,
+			accepts: ({ type }) => type === "set",
+			handle: set,
+		});
 		render(<NumericPad />);
 
 		fireEvent.click(screen.getByRole("button", { name: "SET" }));
 
 		expect(set).toHaveBeenCalledOnce();
-		expect((set.mock.calls[0][0] as CustomEvent<string>).detail).toBe("set");
+		expect(set.mock.calls[0][0]).toEqual({ type: "set", source: "touch" });
 		expect(commandActions.replace).not.toHaveBeenCalled();
-		fallback.remove();
+		release();
 	});
 
 	it("arms the same selected Patch target from the software SET key", () => {
 		state.builtIn = "patch";
+		const release = registerControlSurfaceTarget({
+			id: "patch",
+			priority: 100,
+			accepts: ({ type }) => type === "set",
+			handle: () =>
+				dispatch({
+					type: "SET_PATCH_ARMED",
+					value: !state.patchSetArmed,
+				}),
+		});
 		render(<NumericPad />);
 
 		fireEvent.click(screen.getByRole("button", { name: "SET" }));
@@ -284,6 +305,7 @@ describe("NumericPad Clear and SET routing", () => {
 			value: true,
 		});
 		expect(commandActions.replace).not.toHaveBeenCalled();
+		release();
 	});
 
 	it("does not let a hidden Presets pane steal SET from another visible built-in", () => {
@@ -470,9 +492,7 @@ describe("NumericPad Shift routing", () => {
 		commandProjection.text = "SPD GRP 1 AT";
 		commandProjection.pristine = false;
 		shifted("TIME");
-		expect(commandActions.replace).toHaveBeenCalledWith(
-			"SPD GRP 1 AT SPD GRP",
-		);
+		expect(commandActions.replace).toHaveBeenCalledWith("SPD GRP 1 AT SPD GRP");
 		shifted("7");
 		shifted("8");
 		shifted("9");

@@ -4,13 +4,11 @@ import type {
 	PointerEvent as ReactPointerEvent,
 } from "react";
 import type { PlaybackRuntimeProjection } from "../../../api/types";
-import { isSetContextClick } from "../../../disableContextMenu";
 import {
 	type VerticalTouchFaderAction,
 	VerticalTouchFaderSurface,
 } from "@tosklight/ui/faders";
 import { PlaybackActionButtons } from "@tosklight/ui/playback";
-import { openPlaybackConfiguration } from "./actions";
 import type { PlaybackBankController } from "./controller";
 import {
 	playbackFaderDisplay,
@@ -63,9 +61,8 @@ export function TouchPlaybackCard({
 		runtimeProjection,
 	);
 	return (
-		// biome-ignore lint/a11y/useKeyWithClickEvents: The touch card delegates keyboard semantics to its real child controls and uses article clicks only for the marked SET shortcut.
+		// biome-ignore lint/a11y/useKeyWithClickEvents: The touch card delegates keyboard semantics to its real child controls.
 		<article
-			data-set-click-target
 			data-page={controller.activePageNumber}
 			data-playback-slot={slot}
 			data-playback-row={rowIndex}
@@ -76,10 +73,6 @@ export function TouchPlaybackCard({
 			style={cardStyle}
 			onPointerDownCapture={interceptPointer}
 			onClickCapture={interceptClick}
-			onClick={(event) => {
-				if (isSetContextClick(event.nativeEvent))
-					openPlaybackConfiguration(controller, playback, slot);
-			}}
 		>
 			<PlaybackAssignmentTarget controller={controller} slot={slot} />
 			<PlaybackConfigurationTarget

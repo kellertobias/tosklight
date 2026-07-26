@@ -45,6 +45,7 @@ export interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElemen
   onValueChange?: (value: string) => void;
   onKeyboardCommit?: (value: string) => void;
   openKeyboardInitially?: boolean;
+  keyboardRequest?: number;
   secure?: boolean;
 }
 
@@ -53,14 +54,20 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
     className = "", value, defaultValue, onChange, onValueChange, onKeyboardCommit,
     clearable = false, clearLabel = "Clear input", keyboardLabel,
     liveKeyboard = false, modalLeadingIcon, openKeyboardInitially = false, secure = false,
-    disabled, readOnly, ...props
+    keyboardRequest = 0, disabled, readOnly, ...props
   },
   ref,
 ) {
   const [open, setOpen] = useState(openKeyboardInitially);
+  const lastKeyboardRequest = useRef(keyboardRequest);
   const native = useRef<HTMLInputElement>(null);
   useImperativeHandle(ref, () => native.current!);
   const current = String(value ?? native.current?.value ?? defaultValue ?? "");
+  useEffect(() => {
+    if (keyboardRequest === lastKeyboardRequest.current) return;
+    lastKeyboardRequest.current = keyboardRequest;
+    setOpen(true);
+  }, [keyboardRequest]);
   const update = (next: string) => emitInputValue(native.current, next, onChange, onValueChange);
   const close = () => {
     setOpen(false);
@@ -101,6 +108,7 @@ export interface NumberInputProps extends Omit<InputHTMLAttributes<HTMLInputElem
   onValueChange?: (value: string) => void;
   onKeyboardCommit?: (value: string) => void;
   unit?: ReactNode;
+  keyboardRequest?: number;
 }
 
 function clampNumber(value: number, min: NumberInputProps["min"], max: NumberInputProps["max"]) {
@@ -132,14 +140,20 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(functi
   {
     className = "", value, defaultValue, onChange, onValueChange, onKeyboardCommit,
     allowDecimal = false, showStepButtons = true, keyboardLabel, unit, disabled,
-    readOnly, min, max, step = 1, ...props
+    readOnly, min, max, step = 1, keyboardRequest = 0, ...props
   },
   ref,
 ) {
   const [open, setOpen] = useState(false);
+  const lastKeyboardRequest = useRef(keyboardRequest);
   const native = useRef<HTMLInputElement>(null);
   useImperativeHandle(ref, () => native.current!);
   const current = String(value ?? native.current?.value ?? defaultValue ?? "");
+  useEffect(() => {
+    if (keyboardRequest === lastKeyboardRequest.current) return;
+    lastKeyboardRequest.current = keyboardRequest;
+    setOpen(true);
+  }, [keyboardRequest]);
   const update = (next: string) => emitInputValue(
     native.current, normalizeNumberText(next, allowDecimal, current), onChange, onValueChange,
   );
