@@ -18,6 +18,10 @@ import {
 	mountFixtureModel,
 	type Stage3dFixture,
 } from "../stage3dScene";
+import {
+	interpolateVisualizationSnapshot,
+	STAGE_INTERPOLATION_MILLIS,
+} from "./interpolation";
 import { StageModelCache } from "./modelCache";
 
 export type Stage3dCallbacks = {
@@ -145,8 +149,9 @@ export function useStageScene({
 	const invalidateRef = useRef<(() => void) | null>(null);
 	const modelCacheRef = useRef<StageModelCache | null>(null);
 	const selectionRef = useRef({ selected, showSelection });
-	const modelCache =
-		modelCacheRef.current ?? (modelCacheRef.current = new StageModelCache());
+	const displayedVisualizationRef = useRef(visualization);
+	if (!modelCacheRef.current) modelCacheRef.current = new StageModelCache();
+	const modelCache = modelCacheRef.current;
 	const [renderVisualization, setRenderVisualization] = useState(visualization);
 	callbacksRef.current = callbacks;
 	selectionRef.current = { selected, showSelection };
@@ -219,12 +224,7 @@ export function useStageScene({
 			frontendPerformanceDiagnostics.recordStageSceneDisposal();
 		}
 		return cancelModels;
-	}, [
-		fixtures,
-		showFloorGrid,
-		environmentBrightness,
-		modelCache,
-	]);
+	}, [fixtures, showFloorGrid, environmentBrightness, modelCache]);
 
 	useEffect(
 		() => () => {
@@ -236,17 +236,40 @@ export function useStageScene({
 
 	useEffect(() => {
 		if (!sceneRef.current) return;
-		applyStageVisualization(
-			fixtures,
-			renderVisualization,
-			fixtureObjectsRef.current,
-			showBeamGuides,
-			renderQuality,
-			new Set(virtualHighlight),
-			new Set(selected),
-			showSelection,
-		);
-		invalidateRef.current?.();
+		const target = renderVisualization;
+		const from = displayedVisualizationRef.current;
+		let frame: number | null = null;
+		const apply = (snapshot: VisualizationSnapshot | null) => {
+			displayedVisualizationRef.current = snapshot;
+			applyStageVisualization(
+				fixtures,
+				snapshot,
+				fixtureObjectsRef.current,
+				showBeamGuides,
+				renderQuality,
+				new Set(virtualHighlight),
+				new Set(selected),
+				showSelection,
+			);
+			invalidateRef.current?.();
+		};
+		if (!from || !target) {
+			apply(target);
+			return;
+		}
+		const startedAt = performance.now();
+		const step = (now: number) => {
+			const progress = Math.min(
+				1,
+				Math.max(0, (now - startedAt) / STAGE_INTERPOLATION_MILLIS),
+			);
+			apply(interpolateVisualizationSnapshot(from, target, progress));
+			if (progress < 1) frame = requestAnimationFrame(step);
+		};
+		frame = requestAnimationFrame(step);
+		return () => {
+			if (frame !== null) cancelAnimationFrame(frame);
+		};
 	}, [
 		fixtures,
 		renderVisualization,
