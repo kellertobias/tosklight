@@ -300,3 +300,27 @@ numeric curve values live exclusively on the Programmer encoders.
 The Curves encoder mapping follows the experiment's mode-specific ordering. The
 touch encoder section has no extra divider or inset deck chrome, and its six
 encoders occupy the complete standard Programmer parameter-surface height.
+
+### Review iteration 6 — keyframe timeline, Speed, and Phase Spread, awaiting review
+
+The Curve Composer now uses the same visual hierarchy as a window title bar at
+the bottom of the Curves workspace. Keyframes, Max/min, and Middle/amplitude
+form one single-line toggle followed by one desk dropdown for the selected
+keyframe or supported function. Keyframe lanes show the real compact timeline:
+the first point is **A** at 0%, the implicit closing point is **A′** at 100%,
+and interior points can be selected and moved in the lane or edited with the
+shared Programmer encoders. Function curves remain narrow and repeat across the
+full lane width rather than being stretched into one oversized wave.
+
+The lane action is the shared desk dropdown with only **Change attribute** and
+**Delete lane**. The Speed task now presents its source and live beat grid on
+the left, with fixed BPM or Speed Group configuration, and desk-native
+multiplier, run-mode, activation, and boundary controls on the right. The Phase
+Spread task uses desk-native controls, adds a two-dimensional fixture-position
+preview, and exposes **Take Selection** and **Clear Selection** without removing
+them from Window Settings. The full-application story shares the editor's
+selected keyframe with the production Programmer encoder surface.
+
+This remains a visual-review checkpoint. Final Dynamics UI automation, pixel
+snapshots, and help screenshots remain blocked until the user explicitly
+accepts the production composition.

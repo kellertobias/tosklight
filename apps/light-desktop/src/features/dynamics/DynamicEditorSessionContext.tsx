@@ -13,6 +13,7 @@ export interface DynamicEditorSession {
 	dynamicId: string;
 	task: DynamicEditorTask;
 	primaryLaneId: string | null;
+	primaryKeyframeIndex: number;
 }
 
 interface DynamicEditorSessionValue {

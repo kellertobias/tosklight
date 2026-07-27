@@ -10,14 +10,14 @@ import type {
 	DynamicUpdateIntent,
 } from "../../../api/generated/light-wire";
 import { useActiveShowId } from "../../../features/deskSnapshot/DeskSnapshotState";
-import { useDynamicsActions } from "../../../features/dynamics/DynamicsActionsContext";
 import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
+import { useDynamicsActions } from "../../../features/dynamics/DynamicsActionsContext";
 import type { ProgrammerDynamicValue } from "../../../features/programmerValues/contracts";
 import { useProgrammerValuesView } from "../../../features/programmerValues/ProgrammerValuesView";
 import { useDynamics } from "../../../features/showObjects/ShowObjectsState";
 import {
-	DynamicEncoderDeck,
 	type DynamicEditorView,
+	DynamicEncoderDeck,
 } from "../../../windows/DynamicsWindow";
 import { HardwareEncoderDisplay } from "../HardwareEncoderDisplay";
 import type { ParameterController } from "./useParameterController";
@@ -38,12 +38,16 @@ export function DynamicDefinitionEncoderSurface({
 	dynamic,
 	lane,
 	view,
+	keyframeIndex = 0,
+	onKeyframeIndex,
 	onLaneChange,
 	onMutate,
 }: {
 	dynamic: DynamicDefinitionProjection;
 	lane: DynamicDefinitionProjection["lanes"][number] | null;
 	view: DynamicEditorView;
+	keyframeIndex?: number;
+	onKeyframeIndex?(index: number): void;
 	onLaneChange(
 		change: (
 			lane: DynamicDefinitionProjection["lanes"][number],
@@ -58,6 +62,8 @@ export function DynamicDefinitionEncoderSurface({
 				view={view}
 				lane={lane ?? undefined}
 				dynamic={dynamic}
+				keyframeIndex={keyframeIndex}
+				onKeyframeIndex={onKeyframeIndex}
 				onLaneChange={onLaneChange}
 				onMutate={onMutate}
 			/>
@@ -308,6 +314,10 @@ export function ProgrammerDynamicsSurface({
 				dynamic={selectedObject.body}
 				lane={selectedLane}
 				view={editor.session.task}
+				keyframeIndex={editor.session.primaryKeyframeIndex}
+				onKeyframeIndex={(primaryKeyframeIndex) =>
+					editor.update({ primaryKeyframeIndex })
+				}
 				onLaneChange={changeLane}
 				onMutate={mutateDefinition}
 			/>
@@ -404,6 +414,10 @@ export function ProgrammerDynamicsSurface({
 						view={view}
 						lane={selectedLane ?? undefined}
 						dynamic={selectedObject.body}
+						keyframeIndex={editor.session?.primaryKeyframeIndex ?? 0}
+						onKeyframeIndex={(primaryKeyframeIndex) =>
+							editor.update({ primaryKeyframeIndex })
+						}
 						onLaneChange={changeLane}
 						onMutate={mutateDefinition}
 					/>
@@ -479,7 +493,7 @@ export function ProgrammerDynamicsSurface({
 				label={`Enc 2 · ${selectedLane?.attribute ?? "Lane"}`}
 				slot={2}
 				attributeLabel={selectedLane?.attribute ?? "Lane"}
-				value={Math.max(0, lanes.indexOf(selectedLane!))}
+				value={selectedLane ? Math.max(0, lanes.indexOf(selectedLane)) : 0}
 				display={`${lanes.length} lane${lanes.length === 1 ? "" : "s"}`}
 				indexed
 				disabled={!selectedLane}

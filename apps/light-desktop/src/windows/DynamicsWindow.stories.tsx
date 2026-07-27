@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Button } from "@tosklight/ui";
 import { GridDesktop, PaneView } from "@tosklight/ui/desktop";
 import { useMemo, useState } from "react";
 import { CommandSectionFixture } from "../../../ui-library/storybook/fixtures/controlSection";
@@ -15,11 +14,12 @@ import type {
 	DynamicTargetBindingProjection,
 	DynamicUpdateIntent,
 } from "../api/generated/light-wire";
-import type { ShowObject } from "../features/showObjects/contracts";
+import { DynamicEditorTaskTabs } from "../components/control/parameterControls/ParameterFamilyTabs";
+import { DynamicDefinitionEncoderSurface } from "../components/control/parameterControls/ProgrammerDynamicsSurface";
 import { AppShellView } from "../components/shell/AppShell";
 import { LeftDock } from "../components/shell/LeftDock";
-import { DynamicDefinitionEncoderSurface } from "../components/control/parameterControls/ProgrammerDynamicsSurface";
-import { DynamicEditorTaskTabs } from "../components/control/parameterControls/ParameterFamilyTabs";
+import { useDynamicEditorSession } from "../features/dynamics/DynamicEditorSessionContext";
+import type { ShowObject } from "../features/showObjects/contracts";
 import {
 	createDefaultDynamicDefinition,
 	createDefaultDynamicLane,
@@ -75,7 +75,23 @@ function createStoryDynamic(): DynamicObject {
 			lanes: [
 				{
 					...base.lanes[0],
+					mode: "keyframes",
 					width: 0.72,
+					keyframes: {
+						...base.lanes[0].keyframes,
+						points: [
+							{
+								position: 0,
+								source: { type: "value", value: 0.18 },
+								interpolation: "ease_in_out",
+							},
+							{
+								position: 0.38,
+								source: { type: "value", value: 0.92 },
+								interpolation: "ease_in_out",
+							},
+						],
+					},
 					max_min: {
 						...base.lanes[0].max_min,
 						minimum: { type: "value", value: 0.18 },
@@ -269,9 +285,11 @@ function DynamicsProgrammerSurface({
 	view: DynamicEditorView;
 	onView(view: DynamicEditorView): void;
 }) {
+	const editor = useDynamicEditorSession();
 	const [laneId, setLaneId] = useState(dynamic.body.lanes[0]?.id ?? "");
+	const resolvedLaneId = editor.session?.primaryLaneId ?? laneId;
 	const lane =
-		dynamic.body.lanes.find((candidate) => candidate.id === laneId) ??
+		dynamic.body.lanes.find((candidate) => candidate.id === resolvedLaneId) ??
 		dynamic.body.lanes[0];
 	return (
 		<div className="parameter-controls">
@@ -280,13 +298,20 @@ function DynamicsProgrammerSurface({
 				onTask={onView}
 				dynamic={dynamic.body}
 				laneId={lane?.id}
-				onLane={setLaneId}
+				onLane={(id) => {
+					setLaneId(id);
+					editor.update({ primaryLaneId: id, primaryKeyframeIndex: 0 });
+				}}
 			/>
 			<div className="parameter-surfaces">
 				<DynamicDefinitionEncoderSurface
 					dynamic={dynamic.body}
 					lane={lane ?? null}
 					view={view}
+					keyframeIndex={editor.session?.primaryKeyframeIndex ?? 0}
+					onKeyframeIndex={(primaryKeyframeIndex) =>
+						editor.update({ primaryKeyframeIndex })
+					}
 					onLaneChange={async (change, mutationGroup) => {
 						if (!lane) return;
 						const next = change(lane);
@@ -420,6 +445,7 @@ function FullApplicationDynamicsMock() {
 				}
 				control={
 					<CommandSectionFixture
+						inheritAppState
 						initialMode="programmer"
 						programmer={
 							<DynamicsProgrammerSurface

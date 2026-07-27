@@ -3,8 +3,10 @@ import {
 	ColorPickerField,
 	FormLayout,
 	IconPickerField,
+	MultiValueToggle,
 	NumberField,
 	SelectField,
+	SwitchField,
 	TextField,
 } from "@tosklight/ui";
 import {
@@ -150,6 +152,7 @@ export function DynamicsWindow({
 				dynamicId: outcome.object.id,
 				task: "curves",
 				primaryLaneId: definition.lanes[0]?.id ?? null,
+				primaryKeyframeIndex: 0,
 			});
 		});
 	const mutate = (
@@ -347,6 +350,7 @@ export function DynamicsWindow({
 											dynamicId: dynamic.id,
 											task: "curves",
 											primaryLaneId: dynamic.body.lanes[0]?.id ?? null,
+											primaryKeyframeIndex: 0,
 										});
 										setSelectedId(dynamic.id);
 										dispatch({ type: "SET_SHIFT_ARMED", value: false });
@@ -380,6 +384,7 @@ export function DynamicsWindow({
 										dynamicId: dynamic.id,
 										task: "curves",
 										primaryLaneId: dynamic.body.lanes[0]?.id ?? null,
+										primaryKeyframeIndex: 0,
 									});
 									setSelectedId(dynamic.id);
 								}}
@@ -389,6 +394,7 @@ export function DynamicsWindow({
 										dynamicId: dynamic.id,
 										task: "curves",
 										primaryLaneId: dynamic.body.lanes[0]?.id ?? null,
+										primaryKeyframeIndex: 0,
 									});
 									setSelectedId(dynamic.id);
 								}}
@@ -444,7 +450,6 @@ export function DynamicEditor({
 	busy,
 	error,
 	attributes,
-	presets,
 	runtime,
 	selection,
 	selectedGroupId,
@@ -469,6 +474,10 @@ export function DynamicEditor({
 		new Set(primaryLane ? [primaryLane] : []),
 	);
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
+	const primaryKeyframeIndex =
+		session?.dynamicId === dynamic.id ? session.primaryKeyframeIndex : 0;
+	const setPrimaryKeyframeIndex = (index: number) =>
+		updateEditor({ primaryKeyframeIndex: index });
 	const lane =
 		dynamic.body.lanes.find((candidate) => candidate.id === primaryLane) ??
 		dynamic.body.lanes[0];
@@ -480,7 +489,7 @@ export function DynamicEditor({
 		);
 	const selectLane = (id: string, additive: boolean) => {
 		setPrimaryLane(id);
-		updateEditor({ primaryLaneId: id });
+		updateEditor({ primaryLaneId: id, primaryKeyframeIndex: 0 });
 		setSelectedLanes((current) => {
 			if (!additive) return new Set([id]);
 			const next = new Set(current);
@@ -503,13 +512,32 @@ export function DynamicEditor({
 			lane: createDefaultDynamicLane(attributes[0]?.id ?? "intensity"),
 			index: null,
 		});
+	const takeSelection = () =>
+		onMutate(dynamic, {
+			type: "set_target_binding",
+			target_binding: selectedGroupId
+				? {
+						type: "live_group",
+						group_id: selectedGroupId,
+					}
+				: {
+						type: "frozen_targets",
+						targets: [...selection],
+					},
+		});
+	const clearSelection = () =>
+		onMutate(dynamic, {
+			type: "set_target_binding",
+			target_binding: { type: "targetless" },
+		});
 	useEffect(() => {
 		openEditor({
 			dynamicId: dynamic.id,
 			task: view,
 			primaryLaneId: primaryLane,
+			primaryKeyframeIndex,
 		});
-	}, [dynamic.id, openEditor, primaryLane, view]);
+	}, [dynamic.id, openEditor, primaryKeyframeIndex, primaryLane, view]);
 
 	return (
 		<section
@@ -619,20 +647,7 @@ export function DynamicEditor({
 														? "Select a Group or fixtures first"
 														: undefined
 											}
-											onClick={() =>
-												onMutate(dynamic, {
-													type: "set_target_binding",
-													target_binding: selectedGroupId
-														? {
-																type: "live_group",
-																group_id: selectedGroupId,
-															}
-														: {
-																type: "frozen_targets",
-																targets: [...selection],
-															},
-												})
-											}
+											onClick={() => takeSelection()}
 										>
 											Take Selection
 										</Button>
@@ -646,12 +661,7 @@ export function DynamicEditor({
 													? "Turn every running instance Off before changing targets"
 													: undefined
 											}
-											onClick={() =>
-												onMutate(dynamic, {
-													type: "set_target_binding",
-													target_binding: { type: "targetless" },
-												})
-											}
+											onClick={() => clearSelection()}
 										>
 											Clear Selection
 										</Button>
@@ -676,14 +686,22 @@ export function DynamicEditor({
 							selectedLanes={selectedLanes}
 							shiftArmed={appState.shiftArmed}
 							attributes={attributes}
-							presets={presets}
+							primaryKeyframeIndex={primaryKeyframeIndex}
+							onPrimaryKeyframeIndex={setPrimaryKeyframeIndex}
 							onSelect={selectLane}
 							onReplace={replaceLane}
 							onMutate={onMutate}
 						/>
 					)}
 					{view === "phase" && (
-						<PhaseView dynamic={dynamic} onMutate={onMutate} />
+						<PhaseView
+							dynamic={dynamic}
+							running={running}
+							selectionCount={selection.length}
+							onTakeSelection={takeSelection}
+							onClearSelection={clearSelection}
+							onMutate={onMutate}
+						/>
 					)}
 					{view === "speed" && (
 						<SpeedView
@@ -704,7 +722,8 @@ function CurvesView({
 	selectedLanes,
 	shiftArmed,
 	attributes,
-	presets,
+	primaryKeyframeIndex,
+	onPrimaryKeyframeIndex,
 	onSelect,
 	onReplace,
 	onMutate,
@@ -714,7 +733,8 @@ function CurvesView({
 	selectedLanes: ReadonlySet<string>;
 	shiftArmed: boolean;
 	attributes: readonly { id: string; label: string; family: string }[];
-	presets: readonly PresetObject[];
+	primaryKeyframeIndex: number;
+	onPrimaryKeyframeIndex(index: number): void;
 	onSelect(id: string, additive: boolean): void;
 	onReplace(next: DynamicLaneProjection): Promise<void>;
 	onMutate(
@@ -723,8 +743,13 @@ function CurvesView({
 		mutationGroup?: string,
 	): Promise<void>;
 }) {
-	const [menuLaneId, setMenuLaneId] = useState<string | null>(null);
 	const [attributeLaneId, setAttributeLaneId] = useState<string | null>(null);
+	const [draggingKeyframe, setDraggingKeyframe] = useState<{
+		laneId: string;
+		index: number;
+		pointerId: number;
+		mutationGroup: string;
+	} | null>(null);
 	const [randomMethod, setRandomMethod] = useState<
 		"max_min" | "middle_amplitude"
 	>("max_min");
@@ -744,10 +769,6 @@ function CurvesView({
 		}
 		await onReplace({ ...lane, mode, random_group_id: groupId });
 	};
-	const randomGroup =
-		dynamic.body.random_groups.find(
-			(group) => group.id === lane.random_group_id,
-		) ?? null;
 	const displayedMethod = lane.mode === "random" ? randomMethod : lane.mode;
 	const chooseMethod = (mode: "keyframes" | "max_min" | "middle_amplitude") => {
 		if (lane.mode === "random" && mode !== "keyframes") {
@@ -786,6 +807,59 @@ function CurvesView({
 	const attributeLane = attributeLaneId
 		? dynamic.body.lanes.find((candidate) => candidate.id === attributeLaneId)
 		: undefined;
+	const keyframeIndex = Math.min(
+		primaryKeyframeIndex,
+		Math.max(0, lane.keyframes.points.length - 1),
+	);
+	const keyframeOptions = [
+		...lane.keyframes.points.map((point, index) => ({
+			value: String(index),
+			label: `${keyframeName(index)} · ${Math.round(point.position * 100)}% · ${scalarSourceEncoderDisplay(point.source)}`,
+		})),
+		{
+			value: "loop-close",
+			label: `A′ · 100% · alias of A`,
+			disabled: true,
+		},
+	];
+	const selectedFunction =
+		lane.mode === "random"
+			? "random"
+			: lane.mode === "middle_amplitude"
+				? lane.middle_amplitude.function
+				: lane.max_min.function;
+	const moveKeyframe = (
+		candidate: DynamicLaneProjection,
+		index: number,
+		clientX: number,
+		svg: SVGSVGElement,
+		mutationGroup: string,
+	) => {
+		if (index === 0) return;
+		const bounds = svg.getBoundingClientRect();
+		const previous = candidate.keyframes.points[index - 1]?.position ?? 0;
+		const next = candidate.keyframes.points[index + 1]?.position ?? 0.999;
+		const position = clamp(
+			(clientX - bounds.left) / Math.max(1, bounds.width),
+			previous + 0.01,
+			next - 0.01,
+		);
+		const points = candidate.keyframes.points.map((point, pointIndex) =>
+			pointIndex === index ? { ...point, position } : point,
+		);
+		void onMutate(
+			dynamic,
+			{
+				type: "replace_lane",
+				lane_id: candidate.id,
+				lane: {
+					...candidate,
+					keyframes: { ...candidate.keyframes, points },
+				},
+			},
+			mutationGroup,
+		);
+	};
 	return (
 		<div className="dynamic-curves-view">
 			<ul className="dynamic-lane-overview-list" aria-label="Dynamic lanes">
@@ -814,62 +888,135 @@ function CurvesView({
 								</span>
 								<span className="dynamic-lane-curve">
 									<svg
-										viewBox="0 0 1000 260"
+										viewBox="0 0 1000 200"
+										preserveAspectRatio="none"
 										role="img"
 										aria-label={`${attribute?.label ?? candidate.attribute}: ${modeLabel(candidate.mode)}`}
 									>
 										<title>{modeLabel(candidate.mode)}</title>
 										<path
 											className="grid"
-											d="M0 65H1000M0 130H1000M0 195H1000M250 0V260M500 0V260M750 0V260"
+											d="M0 50H1000M0 100H1000M0 150H1000M250 0V200M500 0V200M750 0V200"
 										/>
 										<path className="curve" d={curvePath(candidate)} />
+										{candidate.mode === "keyframes" && (
+											<g className="dynamic-keyframe-marks">
+												{candidate.keyframes.points.map((point, pointIndex) => (
+													<g key={`${candidate.id}-${pointIndex}`}>
+														<circle
+															className={
+																candidate.id === lane.id &&
+																pointIndex === keyframeIndex
+																	? "selected"
+																	: ""
+															}
+															cx={keyframeX(point.position)}
+															cy={keyframeY(point.source)}
+															r={pointIndex === 0 ? 7 : 8}
+															onPointerDown={(event) => {
+																event.preventDefault();
+																event.stopPropagation();
+																onSelect(candidate.id, false);
+																onPrimaryKeyframeIndex(pointIndex);
+																if (pointIndex === 0) return;
+																event.currentTarget.setPointerCapture(
+																	event.pointerId,
+																);
+																setDraggingKeyframe({
+																	laneId: candidate.id,
+																	index: pointIndex,
+																	pointerId: event.pointerId,
+																	mutationGroup: crypto.randomUUID(),
+																});
+															}}
+															onPointerMove={(event) => {
+																if (
+																	!draggingKeyframe ||
+																	draggingKeyframe.laneId !== candidate.id ||
+																	draggingKeyframe.index !== pointIndex ||
+																	draggingKeyframe.pointerId !== event.pointerId
+																)
+																	return;
+																const svg = event.currentTarget.ownerSVGElement;
+																if (svg)
+																	moveKeyframe(
+																		candidate,
+																		pointIndex,
+																		event.clientX,
+																		svg,
+																		draggingKeyframe.mutationGroup,
+																	);
+															}}
+															onPointerUp={(event) => {
+																if (
+																	draggingKeyframe?.pointerId ===
+																	event.pointerId
+																)
+																	setDraggingKeyframe(null);
+															}}
+															onPointerCancel={() => setDraggingKeyframe(null)}
+														/>
+														<text
+															x={keyframeX(point.position)}
+															y={Math.max(13, keyframeY(point.source) - 13)}
+															textAnchor={pointIndex === 0 ? "start" : "middle"}
+														>
+															{keyframeName(pointIndex)}
+														</text>
+													</g>
+												))}
+												<circle
+													className="loop-close"
+													cx={992}
+													cy={keyframeY(candidate.keyframes.points[0]?.source)}
+													r={7}
+												/>
+												<text
+													x={990}
+													y={Math.max(
+														13,
+														keyframeY(candidate.keyframes.points[0]?.source) -
+															13,
+													)}
+													textAnchor="end"
+												>
+													A′
+												</text>
+											</g>
+										)}
 									</svg>
+									<span className="dynamic-lane-axis start">0%</span>
+									<span className="dynamic-lane-axis middle">50%</span>
+									<span className="dynamic-lane-axis end">100%</span>
 								</span>
 							</button>
 							<div className="dynamic-lane-row-actions">
-								<Button
-									aria-haspopup="menu"
-									aria-expanded={menuLaneId === candidate.id}
-									onClick={() =>
-										setMenuLaneId((current) =>
-											current === candidate.id ? null : candidate.id,
-										)
-									}
-								>
-									Lane ▾
-								</Button>
-								{menuLaneId === candidate.id && (
-									<div
-										className="dynamic-lane-dropdown"
-										role="menu"
-										aria-label={`${attribute?.label ?? candidate.attribute} lane actions`}
-									>
-										<Button
-											role="menuitem"
-											onClick={() => {
-												setMenuLaneId(null);
-												setAttributeLaneId(candidate.id);
-											}}
-										>
-											Change attribute
-										</Button>
-										<Button
-											role="menuitem"
-											className="danger"
-											disabled={dynamic.body.lanes.length <= 1}
-											onClick={() => {
-												setMenuLaneId(null);
-												void onMutate(dynamic, {
-													type: "delete_lane",
-													lane_id: candidate.id,
-												});
-											}}
-										>
-											Delete lane
-										</Button>
-									</div>
-								)}
+								<SelectField
+									className="dynamic-lane-action-select"
+									ariaLabel={`${attribute?.label ?? candidate.attribute} lane actions`}
+									value="Lane"
+									size="compact"
+									options={[
+										{
+											value: "change_attribute",
+											label: "Change attribute",
+										},
+										{
+											value: "delete_lane",
+											label: "Delete lane",
+											disabled: dynamic.body.lanes.length <= 1,
+										},
+									]}
+									onChange={(action) => {
+										if (action === "change_attribute")
+											setAttributeLaneId(candidate.id);
+										else
+											void onMutate(dynamic, {
+												type: "delete_lane",
+												lane_id: candidate.id,
+											});
+									}}
+								/>
 							</div>
 						</li>
 					);
@@ -898,164 +1045,62 @@ function CurvesView({
 				className="dynamic-lane-bottom-editor"
 				aria-label="Curve Composer"
 			>
-				<aside className="dynamic-curve-methods">
-					<strong>Curve Composer</strong>
-					<fieldset className="button-group" aria-label="Curve method">
-						<Button
-							className={displayedMethod === "keyframes" ? "active" : ""}
-							onClick={() => chooseMethod("keyframes")}
-						>
-							<span>Key-</span>
-							<span>frames</span>
-						</Button>
-						<Button
-							className={displayedMethod === "max_min" ? "active" : ""}
-							onClick={() => chooseMethod("max_min")}
-						>
-							<span>Max /</span>
-							<span>min</span>
-						</Button>
-						<Button
-							className={displayedMethod === "middle_amplitude" ? "active" : ""}
-							onClick={() => chooseMethod("middle_amplitude")}
-						>
-							<span>Middle /</span>
-							<span>amplitude</span>
-						</Button>
-					</fieldset>
-				</aside>
-				<div className="dynamic-curve-method-editor">
-					{lane.mode === "keyframes" ? (
-						<KeyframeControls
-							lane={lane}
-							presets={presets}
-							onReplace={onReplace}
-						/>
-					) : lane.mode === "random" && randomGroup ? (
-						<section className="dynamic-function-controls">
-							<FunctionButtons value="random" onChange={chooseFunction} />
-						</section>
-					) : (
-						<FunctionControls
-							lane={lane}
-							onReplace={onReplace}
-							onRandom={() => chooseFunction("random")}
-						/>
-					)}
-				</div>
-				<div className="dynamic-curve-method-action">
-					{lane.mode === "keyframes" && (
-						<Button onClick={() => void onReplace(addKeyframeToLane(lane))}>
-							+ Add keyframe
-						</Button>
-					)}
-				</div>
+				<strong>Curve Composer</strong>
+				<MultiValueToggle
+					className="dynamic-curve-method-toggle"
+					ariaLabel="Curve method"
+					value={displayedMethod}
+					options={[
+						{ value: "keyframes", label: "Keyframes" },
+						{ value: "max_min", label: "Max / min" },
+						{ value: "middle_amplitude", label: "Middle / amplitude" },
+					]}
+					onChange={chooseMethod}
+				/>
+				{displayedMethod === "keyframes" ? (
+					<SelectField
+						className="dynamic-composer-choice"
+						ariaLabel="Selected keyframe"
+						value={String(keyframeIndex)}
+						size="compact"
+						options={keyframeOptions}
+						onChange={(index) => onPrimaryKeyframeIndex(Number(index))}
+					/>
+				) : (
+					<SelectField
+						className="dynamic-composer-choice"
+						ariaLabel="Curve function"
+						value={selectedFunction}
+						size="compact"
+						options={curveFunctionOptions}
+						onChange={chooseFunction}
+					/>
+				)}
+				<span className="dynamic-composer-summary">
+					{displayedMethod === "keyframes"
+						? `${lane.keyframes.points.length} keyframes · A′ closes at 100%`
+						: `${modeLabel(lane.mode)} · ${selectedLanes.size} selected`}
+				</span>
+				{displayedMethod === "keyframes" && (
+					<Button
+						size="compact"
+						onClick={() => {
+							const previousPositions = new Set(
+								lane.keyframes.points.map((point) => point.position),
+							);
+							const next = addKeyframeToLane(lane);
+							const nextIndex = next.keyframes.points.findIndex(
+								(point) => !previousPositions.has(point.position),
+							);
+							void onReplace(next);
+							if (nextIndex >= 0) onPrimaryKeyframeIndex(nextIndex);
+						}}
+					>
+						+ Keyframe
+					</Button>
+				)}
 			</section>
 		</div>
-	);
-}
-
-function KeyframeControls({
-	lane,
-	presets,
-	onReplace,
-}: {
-	lane: DynamicLaneProjection;
-	presets: readonly PresetObject[];
-	onReplace(next: DynamicLaneProjection): Promise<void>;
-}) {
-	return (
-		<section className="dynamic-source-cards">
-			{lane.keyframes.points.map((point, index) => (
-				<article key={`${point.position}-${index}`}>
-					<header>
-						<b>
-							{index === 0 ? "A · Loop start / close" : `Point ${index + 1}`}
-						</b>
-						{index === 0 ? (
-							<span>0% / 100%</span>
-						) : (
-							<NumberField
-								label={`Point ${index + 1} position`}
-								min={1}
-								max={99}
-								value={Math.round(point.position * 100)}
-								unit="%"
-								onValueChange={(value) => {
-									const position = clamp(Number(value) / 100, 0.01, 0.99);
-									const points = lane.keyframes.points
-										.map((candidate, target) =>
-											target === index ? { ...candidate, position } : candidate,
-										)
-										.sort((left, right) => left.position - right.position);
-									void onReplace({
-										...lane,
-										keyframes: { ...lane.keyframes, points },
-									});
-								}}
-							/>
-						)}
-					</header>
-					<ScalarSourceControl
-						source={point.source}
-						attribute={lane.attribute}
-						presets={presets}
-						onChange={(source) => {
-							const points = lane.keyframes.points.map((candidate, target) =>
-								target === index ? { ...candidate, source } : candidate,
-							);
-							onReplace({
-								...lane,
-								keyframes: { ...lane.keyframes, points },
-							});
-						}}
-					/>
-					<SelectField
-						label="Interpolation"
-						value={point.interpolation}
-						options={[
-							{ value: "linear", label: "Linear" },
-							{ value: "ease_in", label: "Ease in" },
-							{ value: "ease_out", label: "Ease out" },
-							{ value: "ease_in_out", label: "Ease in + out" },
-							{ value: "hold", label: "Hold" },
-							{ value: "drop", label: "Drop" },
-						]}
-						onChange={(interpolation) => {
-							const points = lane.keyframes.points.map((candidate, target) =>
-								target === index
-									? {
-											...candidate,
-											interpolation,
-										}
-									: candidate,
-							);
-							onReplace({
-								...lane,
-								keyframes: { ...lane.keyframes, points },
-							});
-						}}
-					/>
-					{index > 0 && lane.keyframes.points.length > 2 && (
-						<Button
-							onClick={() =>
-								void onReplace({
-									...lane,
-									keyframes: {
-										...lane.keyframes,
-										points: lane.keyframes.points.filter(
-											(_, target) => target !== index,
-										),
-									},
-								})
-							}
-						>
-							Remove point
-						</Button>
-					)}
-				</article>
-			))}
-		</section>
 	);
 }
 
@@ -1074,84 +1119,19 @@ function addKeyframeToLane(lane: DynamicLaneProjection): DynamicLaneProjection {
 	};
 }
 
-function FunctionButtons({
-	value,
-	onChange,
-}: {
-	value: DynamicPeriodicFunctionProjection | "random";
-	onChange(value: DynamicPeriodicFunctionProjection | "random"): void;
-}) {
-	const options: readonly {
-		value: DynamicPeriodicFunctionProjection | "random";
-		label: string;
-	}[] = [
-		{ value: "sinus", label: "Sinus" },
-		{ value: "cosinus", label: "Cosinus" },
-		{ value: "linear_up", label: "Linear +" },
-		{ value: "linear_down", label: "Linear −" },
-		{ value: "pwm", label: "PWM" },
-		{ value: "random", label: "Random" },
-	];
-	return (
-		<fieldset className="dynamic-function-buttons" aria-label="Curve function">
-			{options.map((option) => (
-				<Button
-					key={option.value}
-					className={value === option.value ? "active" : ""}
-					onClick={() => onChange(option.value)}
-				>
-					{option.label}
-				</Button>
-			))}
-		</fieldset>
-	);
-}
-
-function FunctionControls({
-	lane,
-	onReplace,
-	onRandom,
-}: {
-	lane: DynamicLaneProjection;
-	onReplace(next: DynamicLaneProjection): Promise<void>;
-	onRandom(): void;
-}) {
-	const config =
-		lane.mode === "middle_amplitude" ? lane.middle_amplitude : lane.max_min;
-	return (
-		<section className="dynamic-function-controls">
-			<FunctionButtons
-				value={config.function}
-				onChange={(functionName) => {
-					if (functionName === "random") {
-						onRandom();
-						return;
-					}
-					onReplace(
-						lane.mode === "middle_amplitude"
-							? {
-									...lane,
-									middle_amplitude: {
-										...lane.middle_amplitude,
-										function: functionName,
-									},
-								}
-							: {
-									...lane,
-									max_min: { ...lane.max_min, function: functionName },
-								},
-					);
-				}}
-			/>
-		</section>
-	);
-}
-
 function PhaseView({
 	dynamic,
+	running,
+	selectionCount,
+	onTakeSelection,
+	onClearSelection,
 	onMutate,
 }: {
 	dynamic: DynamicObject;
+	running: boolean;
+	selectionCount: number;
+	onTakeSelection(): void;
+	onClearSelection(): void;
 	onMutate(dynamic: DynamicObject, intent: DynamicUpdateIntent): void;
 }) {
 	const phase = dynamic.body.phase;
@@ -1162,113 +1142,155 @@ function PhaseView({
 		onMutate(dynamic, { type: "set_phase", phase: { ...phase, ...patch } });
 	return (
 		<div className="dynamic-phase-view">
-			<section className="phase-map">
-				<div className="phase-rings" aria-hidden="true">
-					{Array.from({ length: 12 }, (_, index) => (
-						<i
-							key={index}
-							style={{
-								transform: `rotate(${index * 30}deg) translateY(-7rem)`,
-							}}
-						/>
-					))}
+			<section className="dynamic-phase-preview">
+				<header>
+					<span>
+						<strong>2D phase distribution</strong>
+						<small>Fixture positions colored by their place in the wave</small>
+					</span>
+					<b>
+						{phase.offset_degrees}° →{" "}
+						{phase.offset_degrees + phase.span_degrees}°
+					</b>
+				</header>
+				<div
+					className="dynamic-phase-position-map"
+					role="img"
+					aria-label="Two dimensional phase spread preview"
+				>
+					{Array.from({ length: 48 }, (_, index) => {
+						const column = index % 8;
+						const row = Math.floor(index / 8);
+						const amount = phasePreviewAmount(index, phase.ordering);
+						return (
+							<i
+								key={index}
+								style={{
+									left: `${8 + column * 12}%`,
+									top: `${10 + row * 16}%`,
+									background: `hsl(${188 + amount * 48} 92% ${52 + amount * 18}%)`,
+									transform: `scale(${0.72 + amount * 0.45})`,
+								}}
+							/>
+						);
+					})}
 				</div>
-				<strong>{phase.span_degrees}°</strong>
-				<small>Shared target phase projection</small>
+				<footer>
+					<span>0°</span>
+					<span>{Math.round(phase.span_degrees / 2)}°</span>
+					<span>{phase.span_degrees}°</span>
+				</footer>
 			</section>
-			<section className="dynamic-settings-grid">
-				<label>
-					Ordering
-					<select
+			<section className="dynamic-phase-controls">
+				<FormLayout labelPlacement="top">
+					<SelectField
+						className="dynamic-phase-ordering"
+						label="Ordering"
 						value={phase.ordering.type}
-						onChange={(event) =>
-							update({ ordering: orderingFor(event.target.value) })
-						}
-					>
-						<option value="selection">Selection / Group order</option>
-						<option value="grid_linear">Grid linear</option>
-						<option value="radial_out">Radial out</option>
-						<option value="radial_in">Radial in</option>
-						<option value="axial">Axial / Radar</option>
-						<option value="random_each_loop">Random each loop</option>
-					</select>
-				</label>
-				{phase.ordering.type === "grid_linear" && (
-					<NumberControl
-						label="Direction"
-						value={phase.ordering.angle_degrees}
-						suffix="°"
-						onChange={(angle_degrees) =>
-							update({ ordering: { type: "grid_linear", angle_degrees } })
+						options={[
+							{ value: "selection", label: "Selection / Group order" },
+							{ value: "grid_linear", label: "Grid linear" },
+							{ value: "radial_out", label: "Radial out" },
+							{ value: "radial_in", label: "Radial in" },
+							{ value: "axial", label: "Axial / Radar" },
+							{ value: "random_each_loop", label: "Random each loop" },
+						]}
+						onChange={(ordering) => update({ ordering: orderingFor(ordering) })}
+					/>
+					{phase.ordering.type === "grid_linear" && (
+						<NumberField
+							label="Direction"
+							value={phase.ordering.angle_degrees}
+							allowDecimal
+							unit="°"
+							onValueChange={(angle_degrees) =>
+								update({
+									ordering: {
+										type: "grid_linear",
+										angle_degrees: Number(angle_degrees),
+									},
+								})
+							}
+						/>
+					)}
+					{spatialOrdering && (
+						<>
+							<NumberField
+								label="Center X"
+								value={spatialOrdering.center_x}
+								allowDecimal
+								onValueChange={(center_x) =>
+									update({
+										ordering: {
+											type: spatialOrdering.type,
+											center_x: Number(center_x),
+											center_z: spatialOrdering.center_z,
+										},
+									})
+								}
+							/>
+							<NumberField
+								label="Center Z"
+								value={spatialOrdering.center_z}
+								allowDecimal
+								onValueChange={(center_z) =>
+									update({
+										ordering: {
+											type: spatialOrdering.type,
+											center_x: spatialOrdering.center_x,
+											center_z: Number(center_z),
+										},
+									})
+								}
+							/>
+						</>
+					)}
+					<NumberField
+						label="Offset"
+						value={phase.offset_degrees}
+						allowDecimal
+						unit="°"
+						onValueChange={(offset_degrees) =>
+							update({ offset_degrees: Number(offset_degrees) })
 						}
 					/>
-				)}
-				{spatialOrdering && (
-					<>
-						<NumberControl
-							label="Center X"
-							value={spatialOrdering.center_x}
-							onChange={(center_x) =>
-								update({
-									ordering: {
-										type: spatialOrdering.type,
-										center_x,
-										center_z: spatialOrdering.center_z,
-									},
-								})
-							}
-						/>
-						<NumberControl
-							label="Center Z"
-							value={spatialOrdering.center_z}
-							onChange={(center_z) =>
-								update({
-									ordering: {
-										type: spatialOrdering.type,
-										center_x: spatialOrdering.center_x,
-										center_z,
-									},
-								})
-							}
-						/>
-					</>
-				)}
-				<NumberControl
-					label="Offset"
-					value={phase.offset_degrees}
-					suffix="°"
-					onChange={(offset_degrees) => update({ offset_degrees })}
-				/>
-				<NumberControl
-					label="Span"
-					value={phase.span_degrees}
-					suffix="°"
-					onChange={(span_degrees) => update({ span_degrees })}
-				/>
-				<NumberControl
-					label="Blocks"
-					value={phase.block_size}
-					onChange={(block_size) => update({ block_size })}
-				/>
-				<NumberControl
-					label="Repeats"
-					value={phase.repeats}
-					onChange={(repeats) => update({ repeats })}
-				/>
-				<label className="dynamic-check">
-					<input
-						type="checkbox"
+					<NumberField
+						label="Span"
+						value={phase.span_degrees}
+						allowDecimal
+						unit="°"
+						onValueChange={(span_degrees) =>
+							update({ span_degrees: Number(span_degrees) })
+						}
+					/>
+					<NumberField
+						label="Blocks"
+						value={phase.block_size}
+						min={1}
+						onValueChange={(block_size) =>
+							update({ block_size: Math.max(1, Number(block_size)) })
+						}
+					/>
+					<NumberField
+						label="Repeats"
+						value={phase.repeats}
+						min={1}
+						onValueChange={(repeats) =>
+							update({ repeats: Math.max(1, Number(repeats)) })
+						}
+					/>
+					<SwitchField
+						label="Wings"
 						checked={phase.wings}
 						onChange={(event) => update({ wings: event.target.checked })}
 					/>
-					Wings
-				</label>
-				<label>
-					Explicit phase anchors
-					<input
-						value={phase.anchors_degrees.join(" THRU ")}
+					<TextField
+						className="dynamic-phase-anchors"
+						key={phase.anchors_degrees.join(",")}
+						label="Explicit anchors"
+						defaultValue={phase.anchors_degrees.join(" THRU ")}
 						placeholder="Automatic"
-						onChange={(event) => {
+						onBlur={(event) => {
 							const text = event.target.value.trim();
 							if (!text) {
 								update({ anchors_degrees: [] });
@@ -1279,14 +1301,36 @@ function PhaseView({
 								update({ anchors_degrees: anchors });
 						}}
 					/>
-				</label>
-				<fieldset className="button-group" aria-label="Phase span presets">
-					{[180, 360, 720].map((span) => (
-						<Button key={span} onClick={() => update({ span_degrees: span })}>
-							{span}°
+				</FormLayout>
+				<footer className="dynamic-phase-footer">
+					<div className="dynamic-phase-target-actions">
+						<Button
+							disabled={running || selectionCount === 0}
+							onClick={onTakeSelection}
+						>
+							Take Selection
 						</Button>
-					))}
-				</fieldset>
+						<Button
+							disabled={
+								running || dynamic.body.target_binding.type === "targetless"
+							}
+							onClick={onClearSelection}
+						>
+							Clear Selection
+						</Button>
+					</div>
+					<fieldset className="button-group" aria-label="Phase span presets">
+						{[180, 360, 720].map((span) => (
+							<Button
+								key={span}
+								active={phase.span_degrees === span}
+								onClick={() => update({ span_degrees: span })}
+							>
+								{span}°
+							</Button>
+						))}
+					</fieldset>
+				</footer>
 			</section>
 		</div>
 	);
@@ -1317,225 +1361,190 @@ function SpeedView({
 				? "Paused"
 				: "Running"
 		: "Off";
+	const fixedBpm =
+		speed.type === "fixed"
+			? Math.max(1, Math.round(60_000 / speed.duration_millis))
+			: null;
+	const beatPhase = primaryRuntime?.beat_phase ?? 0;
 	return (
 		<div className="dynamic-speed-view">
-			<section className="speed-source-card">
-				<span>Authoritative source</span>
-				<strong>
-					{primaryRuntime?.speed_source ??
-						(speed.type === "fixed"
-							? `${(speed.duration_millis / 1000).toFixed(2)} s`
-							: `Speed Group ${speed.group}`)}
-				</strong>
-				<small>
-					{runtimeState}
-					{instances.length > 0
-						? ` · ${instances.length} ${instances.length === 1 ? "instance" : "instances"}`
-						: ""}
-				</small>
-				{primaryRuntime && (
-					<small>
-						Effective cycle{" "}
-						{primaryRuntime.effective_cycle_millis > 0
-							? `${(Number(primaryRuntime.effective_cycle_millis) / 1000).toFixed(2)} s`
-							: "stopped"}
-						{primaryRuntime.effective_bpm != null
-							? ` · ${primaryRuntime.effective_bpm.toFixed(1)} BPM`
-							: ""}
-						{` · ${primaryRuntime.activation_boundary} boundary`}
-					</small>
-				)}
-				{primaryRuntime?.beat_phase != null && (
-					<small>
-						Transport {(primaryRuntime.beat_phase * 100).toFixed(0)}%
-						{primaryRuntime.pending_until_millis != null
-							? ` · boundary ${primaryRuntime.pending_until_millis}`
-							: ""}
-					</small>
-				)}
-				<small>
-					Overall ×{dynamic.body.overall_speed_multiplier.numerator}/
-					{dynamic.body.overall_speed_multiplier.denominator}
-				</small>
-				{primaryRuntime?.aliasing_warning && (
-					<small className="warning">{primaryRuntime.aliasing_warning}</small>
-				)}
-				<small>No editor preview · output transport only</small>
-			</section>
-			<div className="dynamic-settings-grid">
-				<div className="button-group">
-					<Button
-						className={speed.type === "fixed" ? "active" : ""}
-						onClick={() =>
-							onMutate(dynamic, {
-								type: "set_speed",
-								speed: { type: "fixed", duration_millis: 4000 },
-							})
-						}
-					>
-						Fixed duration
-					</Button>
-					<Button
-						className={speed.type === "speed_group" ? "active" : ""}
-						onClick={() =>
-							onMutate(dynamic, {
-								type: "set_speed",
-								speed: {
-									type: "speed_group",
-									group: "A",
-									beats_per_cycle: { numerator: 4, denominator: 1 },
-								},
-							})
-						}
-					>
-						Speed Group
-					</Button>
-				</div>
+			<section className="dynamic-speed-transport">
+				<MultiValueToggle
+					ariaLabel="Speed source"
+					value={speed.type}
+					options={[
+						{ value: "fixed", label: "Fixed BPM" },
+						{ value: "speed_group", label: "Speed Group" },
+					]}
+					onChange={(type) =>
+						onMutate(dynamic, {
+							type: "set_speed",
+							speed:
+								type === "fixed"
+									? { type: "fixed", duration_millis: 500 }
+									: {
+											type: "speed_group",
+											group: "A",
+											beats_per_cycle: { numerator: 4, denominator: 1 },
+										},
+						})
+					}
+				/>
 				{speed.type === "fixed" ? (
-					<NumberControl
-						label="Complete cycle"
-						value={speed.duration_millis / 1000}
-						suffix="s"
-						onChange={(seconds) =>
+					<NumberField
+						label="Tempo"
+						value={fixedBpm ?? 120}
+						min={1}
+						max={999}
+						unit="BPM"
+						onValueChange={(bpm) =>
 							onMutate(dynamic, {
 								type: "set_speed",
 								speed: {
 									type: "fixed",
-									duration_millis: Math.max(1, Math.round(seconds * 1000)),
+									duration_millis: Math.max(
+										1,
+										Math.round(60_000 / Math.max(1, Number(bpm))),
+									),
 								},
 							})
 						}
 					/>
 				) : (
-					<>
-						<label>
-							Speed Group
-							<select
-								value={speed.group}
-								onChange={(event) =>
-									onMutate(dynamic, {
-										type: "set_speed",
-										speed: { ...speed, group: event.target.value },
-									})
-								}
-							>
-								{["A", "B", "C", "D", "E"].map((group) => (
-									<option key={group}>{group}</option>
-								))}
-							</select>
-						</label>
-						<NumberControl
+					<div className="dynamic-speed-source-fields">
+						<SelectField
+							label="Speed Group"
+							value={speed.group}
+							options={["A", "B", "C", "D", "E"].map((group) => ({
+								value: group,
+								label: `Speed Group ${group}`,
+							}))}
+							onChange={(group) =>
+								onMutate(dynamic, {
+									type: "set_speed",
+									speed: { ...speed, group },
+								})
+							}
+						/>
+						<NumberField
 							label="Beats per cycle"
 							value={speed.beats_per_cycle.numerator}
-							onChange={(numerator) =>
+							min={1}
+							onValueChange={(numerator) =>
 								onMutate(dynamic, {
 									type: "set_speed",
 									speed: {
 										...speed,
 										beats_per_cycle: {
-											numerator: Math.max(1, Math.round(numerator)),
+											numerator: Math.max(1, Math.round(Number(numerator))),
 											denominator: 1,
 										},
 									},
 								})
 							}
 						/>
-					</>
+					</div>
 				)}
-				<label>
-					Run mode
-					<select
+				<div
+					className="dynamic-beat-grid"
+					role="img"
+					aria-label="Speed transport beat grid"
+				>
+					<i style={{ left: `${clamp(beatPhase, 0, 1) * 100}%` }} />
+					{Array.from({ length: 16 }, (_, index) => (
+						<span key={index} className={index % 4 === 0 ? "bar-start" : ""}>
+							{(index % 4) + 1}
+						</span>
+					))}
+				</div>
+				<footer>
+					<strong>
+						{primaryRuntime?.effective_bpm?.toFixed(1) ?? fixedBpm ?? "—"} BPM
+					</strong>
+					<span>
+						{runtimeState} · transport {Math.round(beatPhase * 100)}%
+					</span>
+					{primaryRuntime?.aliasing_warning && (
+						<small>{primaryRuntime.aliasing_warning}</small>
+					)}
+				</footer>
+			</section>
+			<section className="dynamic-speed-controls">
+				<FormLayout labelPlacement="side">
+					<NumberField
+						label="Multiplier"
+						value={rationalValue(dynamic.body.overall_speed_multiplier)}
+						min={0.0625}
+						max={16}
+						step={0.25}
+						allowDecimal
+						unit="×"
+						onValueChange={(multiplier) =>
+							onMutate(dynamic, {
+								type: "set_overall_speed_multiplier",
+								multiplier: rationalFromNumber(Number(multiplier)),
+							})
+						}
+					/>
+					<SelectField
+						label="Run mode"
 						value={dynamic.body.run_mode}
-						onChange={(event) =>
-							onMutate(dynamic, {
-								type: "set_run_mode",
-								run_mode: event.target.value as "loop" | "one_shot",
-							})
+						options={[
+							{ value: "loop", label: "Loop" },
+							{ value: "one_shot", label: "One-shot" },
+						]}
+						onChange={(run_mode) =>
+							onMutate(dynamic, { type: "set_run_mode", run_mode })
 						}
-					>
-						<option value="loop">Loop</option>
-						<option value="one_shot">One-shot</option>
-					</select>
-				</label>
-				<label>
-					Activation
-					<select
+					/>
+					<SelectField
+						label="Activation"
 						value={dynamic.body.default_activation}
-						onChange={(event) =>
-							onMutate(dynamic, {
-								type: "set_activation",
-								activation: event.target.value,
-							})
+						options={[
+							{ value: "start_now", label: "Start now" },
+							{
+								value: "join_sync_now",
+								label: "Join sync now",
+								disabled: speed.type !== "speed_group",
+							},
+							{
+								value: "next_boundary",
+								label: "Next boundary",
+								disabled: speed.type !== "speed_group",
+							},
+						]}
+						onChange={(activation) =>
+							onMutate(dynamic, { type: "set_activation", activation })
 						}
-					>
-						<option value="start_now">Start now</option>
-						<option
-							value="join_sync_now"
-							disabled={speed.type !== "speed_group"}
-						>
-							Join sync now
-						</option>
-						<option
-							value="next_boundary"
-							disabled={speed.type !== "speed_group"}
-						>
-							Next boundary
-						</option>
-					</select>
-				</label>
-				<label>
-					Boundary
-					<select
+					/>
+					<SelectField
+						label="Boundary"
 						value={dynamic.body.activation_boundary}
 						disabled={
 							speed.type !== "speed_group" ||
 							dynamic.body.default_activation !== "next_boundary"
 						}
-						onChange={(event) =>
+						options={[
+							{ value: "beat", label: "Next beat" },
+							{ value: "bar", label: "Next bar (4 beats)" },
+						]}
+						onChange={(boundary) =>
 							onMutate(dynamic, {
 								type: "set_activation_boundary",
-								boundary: event.target.value as "beat" | "bar",
+								boundary,
 							})
 						}
-					>
-						<option value="beat">Next beat</option>
-						<option value="bar">Next bar (4 beats)</option>
-					</select>
-				</label>
-				<div className="dynamic-speed-multipliers">
-					<span>Overall multiplier</span>
-					{[2, 3, 4].map((factor) => (
-						<div className="button-group" key={factor}>
-							<Button
-								onClick={() =>
-									onMutate(dynamic, {
-										type: "set_overall_speed_multiplier",
-										multiplier: scaleRational(
-											dynamic.body.overall_speed_multiplier,
-											factor,
-										),
-									})
-								}
-							>
-								×{factor}
-							</Button>
-							<Button
-								onClick={() =>
-									onMutate(dynamic, {
-										type: "set_overall_speed_multiplier",
-										multiplier: scaleRational(
-											dynamic.body.overall_speed_multiplier,
-											1 / factor,
-										),
-									})
-								}
-							>
-								÷{factor}
-							</Button>
-						</div>
-					))}
-				</div>
-			</div>
+					/>
+				</FormLayout>
+				<small>
+					{instances.length} active{" "}
+					{instances.length === 1 ? "instance" : "instances"} ·{" "}
+					{primaryRuntime?.speed_source ??
+						(speed.type === "speed_group"
+							? `Speed Group ${speed.group}`
+							: `${fixedBpm} BPM`)}
+				</small>
+			</section>
 		</div>
 	);
 }
@@ -1544,12 +1553,16 @@ export function DynamicEncoderDeck({
 	view,
 	lane,
 	dynamic,
+	keyframeIndex = 0,
+	onKeyframeIndex = () => undefined,
 	onLaneChange,
 	onMutate,
 }: {
 	view: DynamicEditorView;
 	lane?: DynamicLaneProjection;
 	dynamic: DynamicDefinitionProjection;
+	keyframeIndex?: number;
+	onKeyframeIndex?(index: number): void;
 	onLaneChange(
 		update: (lane: DynamicLaneProjection) => DynamicLaneProjection,
 		mutationGroup?: string,
@@ -1572,7 +1585,13 @@ export function DynamicEncoderDeck({
 	);
 	const slots: DynamicEncoderSlot[] =
 		view === "curves"
-			? curveEditorEncoderSlots(lane, dynamic, onLaneChange)
+			? curveEditorEncoderSlots(
+					lane,
+					dynamic,
+					keyframeIndex,
+					onKeyframeIndex,
+					onLaneChange,
+				)
 			: view === "phase"
 				? [
 						{
@@ -1829,6 +1848,8 @@ interface DynamicEncoderSlot {
 function curveEditorEncoderSlots(
 	lane: DynamicLaneProjection | undefined,
 	dynamic: DynamicDefinitionProjection,
+	keyframeIndex: number,
+	onKeyframeIndex: (index: number) => void,
 	onLaneChange: (
 		update: (lane: DynamicLaneProjection) => DynamicLaneProjection,
 		mutationGroup?: string,
@@ -1896,20 +1917,29 @@ function curveEditorEncoderSlots(
 			),
 	};
 	if (!lane || lane.mode === "keyframes") {
-		const point = lane?.keyframes.points[0];
+		const resolvedIndex = Math.min(
+			keyframeIndex,
+			Math.max(0, (lane?.keyframes.points.length ?? 1) - 1),
+		);
+		const point = lane?.keyframes.points[resolvedIndex];
 		return [
 			{
 				id: "keyframe",
 				label: "Keyframe",
-				display: point ? `A · 1/${lane?.keyframes.points.length ?? 1}` : "—",
-				value: 0,
+				display: point
+					? `${keyframeName(resolvedIndex)} · ${resolvedIndex + 1}/${lane?.keyframes.points.length ?? 1}`
+					: "—",
+				value: resolvedIndex,
 				minimum: 0,
 				maximum: Math.max(0, (lane?.keyframes.points.length ?? 1) - 1),
 				inputScale: 1,
 				fineStep: 1,
 				coarseStep: 1,
 				disabled,
-				apply: async () => undefined,
+				apply: async (value) =>
+					onKeyframeIndex(
+						wrappedIndex(value, lane?.keyframes.points.length ?? 1),
+					),
 			},
 			sourceSlot(
 				"keyframe-value",
@@ -1920,7 +1950,7 @@ function curveEditorEncoderSlots(
 					keyframes: {
 						...item.keyframes,
 						points: item.keyframes.points.map((candidate, index) =>
-							index === 0 ? { ...candidate, source } : candidate,
+							index === resolvedIndex ? { ...candidate, source } : candidate,
 						),
 					},
 				}),
@@ -1935,8 +1965,28 @@ function curveEditorEncoderSlots(
 				inputScale: 100,
 				fineStep: 0.01,
 				coarseStep: 0.1,
-				disabled: true,
-				apply: async () => undefined,
+				disabled: disabled || resolvedIndex === 0,
+				apply: (value, group) =>
+					onLaneChange((item) => {
+						const previous =
+							item.keyframes.points[resolvedIndex - 1]?.position ?? 0;
+						const next =
+							item.keyframes.points[resolvedIndex + 1]?.position ?? 0.999;
+						return {
+							...item,
+							keyframes: {
+								...item.keyframes,
+								points: item.keyframes.points.map((candidate, index) =>
+									index === resolvedIndex
+										? {
+												...candidate,
+												position: clamp(value, previous + 0.01, next - 0.01),
+											}
+										: candidate,
+								),
+							},
+						};
+					}, group),
 			},
 			{
 				id: "interpolation",
@@ -2076,6 +2126,17 @@ const periodicFunctions: readonly DynamicPeriodicFunctionProjection[] = [
 	"linear_up",
 	"linear_down",
 	"pwm",
+];
+const curveFunctionOptions: Array<{
+	value: DynamicPeriodicFunctionProjection | "random";
+	label: string;
+}> = [
+	{ value: "sinus", label: "Sinus" },
+	{ value: "cosinus", label: "Cosinus" },
+	{ value: "linear_up", label: "Linear +" },
+	{ value: "linear_down", label: "Linear −" },
+	{ value: "pwm", label: "PWM" },
+	{ value: "random", label: "Random" },
 ];
 const interpolations = [
 	"linear",
@@ -2406,118 +2467,6 @@ function ChangeLaneAttributeModal({
 	);
 }
 
-function ScalarSourceControl({
-	label = "Source",
-	source,
-	attribute,
-	presets,
-	onChange,
-}: {
-	label?: string;
-	source: DynamicScalarSourceProjection;
-	attribute: string;
-	presets: readonly PresetObject[];
-	onChange?(source: DynamicScalarSourceProjection): void;
-}) {
-	const matchingPresets = presets.filter((preset) =>
-		Object.values(preset.body.values).some((values) =>
-			Object.hasOwn(values, attribute),
-		),
-	);
-	return (
-		<div className="dynamic-scalar-source-control">
-			<SelectField
-				label={label}
-				value={source.type}
-				options={[
-					{ value: "current", label: "Current" },
-					{ value: "value", label: "Value" },
-					{
-						value: "preset",
-						label: "Preset",
-						disabled: matchingPresets.length === 0,
-					},
-				]}
-				onChange={(type) =>
-					onChange?.(
-						type === "current"
-							? sourceCurrent
-							: type === "value"
-								? sourceZero
-								: {
-										type: "preset",
-										preset_id: matchingPresets[0]?.id ?? "",
-										attribute,
-										last_valid_by_target: [],
-									},
-					)
-				}
-			/>
-			{source.type === "value" && (
-				<NumberField
-					label={`${label} value`}
-					min={0}
-					max={1}
-					step={0.01}
-					allowDecimal
-					value={source.value}
-					onValueChange={(value) =>
-						onChange?.({
-							type: "value",
-							value: Number(value),
-						})
-					}
-				/>
-			)}
-			{source.type === "preset" && (
-				<SelectField
-					label={`${label} Preset`}
-					value={source.preset_id}
-					options={
-						matchingPresets.length === 0
-							? [{ value: "", label: "No matching Preset", disabled: true }]
-							: matchingPresets.map((preset) => ({
-									value: preset.id,
-									label: `${preset.body.number} · ${preset.body.name}`,
-								}))
-					}
-					onChange={(preset_id) =>
-						onChange?.({
-							type: "preset",
-							preset_id,
-							attribute,
-							last_valid_by_target: source.last_valid_by_target,
-						})
-					}
-				/>
-			)}
-		</div>
-	);
-}
-
-function NumberControl({
-	label,
-	value,
-	suffix,
-	onChange,
-}: {
-	label: string;
-	value: number;
-	suffix?: string;
-	onChange?(value: number): void;
-}) {
-	return (
-		<NumberField
-			label={label}
-			value={value}
-			allowDecimal
-			unit={suffix}
-			onValueChange={(next) => onChange?.(Number(next))}
-			disabled={!onChange}
-		/>
-	);
-}
-
 export function createDefaultDynamicDefinition(
 	poolNumber: number,
 	attribute: string,
@@ -2637,23 +2586,6 @@ function largestKeyframeGapMidpoint(
 	return clamp(midpoint, 0.01, 0.99);
 }
 
-function scaleRational(
-	value: { numerator: number; denominator: number },
-	factor: number,
-) {
-	const numerator =
-		factor >= 1 ? value.numerator * Math.round(factor) : value.numerator;
-	const denominator =
-		factor >= 1
-			? value.denominator
-			: value.denominator * Math.round(1 / factor);
-	const divisor = greatestCommonDivisor(numerator, denominator);
-	return {
-		numerator: Math.min(1_000_000, numerator / divisor),
-		denominator: Math.min(1_000_000, denominator / divisor),
-	};
-}
-
 function greatestCommonDivisor(left: number, right: number) {
 	let a = Math.abs(Math.round(left));
 	let b = Math.abs(Math.round(right));
@@ -2701,16 +2633,72 @@ function modeLabel(mode: DynamicLaneModeProjection) {
 }
 
 function curvePath(lane: DynamicLaneProjection) {
-	if (lane.mode === "keyframes")
-		return "M0 220 C180 220 300 40 500 40 S820 220 1000 220";
+	if (lane.mode === "keyframes") {
+		const points = [
+			...lane.keyframes.points,
+			{
+				position: 1,
+				source: lane.keyframes.points[0]?.source ?? sourceZero,
+			},
+		];
+		return points
+			.map(
+				(point, index) =>
+					`${index === 0 ? "M" : "L"}${keyframeX(point.position)} ${keyframeY(point.source)}`,
+			)
+			.join(" ");
+	}
 	const functionName =
 		lane.mode === "middle_amplitude"
 			? lane.middle_amplitude.function
 			: lane.max_min.function;
-	if (functionName === "linear_up") return "M0 220 L1000 35";
-	if (functionName === "linear_down") return "M0 35 L1000 220";
-	if (functionName === "pwm") return "M0 220 L100 35 H500 L600 220 H1000";
-	return "M0 130 C120 15 380 15 500 130 S880 245 1000 130";
+	const cycles = Math.max(2, Math.round(2 / clamp(lane.width, 0.35, 1)));
+	return Array.from({ length: 121 }, (_, index) => {
+		const progress = index / 120;
+		const phase = (progress * cycles) % 1;
+		const shape =
+			functionName === "linear_up"
+				? phase
+				: functionName === "linear_down"
+					? 1 - phase
+					: functionName === "pwm"
+						? phase < 0.5
+							? 1
+							: 0
+						: functionName === "cosinus"
+							? (Math.cos(phase * Math.PI * 2) + 1) / 2
+							: (Math.sin(phase * Math.PI * 2 - Math.PI / 2) + 1) / 2;
+		const minimum =
+			lane.mode === "middle_amplitude"
+				? scalarSourceCurveValue(lane.middle_amplitude.middle) -
+					lane.middle_amplitude.amplitude
+				: scalarSourceCurveValue(lane.max_min.minimum);
+		const maximum =
+			lane.mode === "middle_amplitude"
+				? scalarSourceCurveValue(lane.middle_amplitude.middle) +
+					lane.middle_amplitude.amplitude
+				: scalarSourceCurveValue(lane.max_min.maximum);
+		const value = clamp(minimum + (maximum - minimum) * shape, 0, 1);
+		return `${index === 0 ? "M" : "L"}${Math.round(progress * 1000)} ${Math.round(190 - value * 180)}`;
+	}).join(" ");
+}
+
+function scalarSourceCurveValue(
+	source: DynamicScalarSourceProjection | undefined,
+) {
+	return source?.type === "value" ? source.value : 0.5;
+}
+
+function keyframeName(index: number) {
+	return String.fromCharCode(65 + (index % 26));
+}
+
+function keyframeX(position: number) {
+	return Math.round(8 + clamp(position, 0, 1) * 984);
+}
+
+function keyframeY(source: DynamicScalarSourceProjection | undefined) {
+	return Math.round(190 - scalarSourceCurveValue(source) * 180);
 }
 
 function rationalValue(value: { numerator: number; denominator: number }) {
@@ -2849,6 +2837,36 @@ function isSpatialOrdering(
 		ordering.type === "radial_in" ||
 		ordering.type === "axial"
 	);
+}
+
+function phasePreviewAmount(
+	index: number,
+	ordering: DynamicPhaseOrderingProjection,
+) {
+	const column = index % 8;
+	const row = Math.floor(index / 8);
+	const x = column / 7 - 0.5;
+	const z = row / 5 - 0.5;
+	switch (ordering.type) {
+		case "grid_linear": {
+			const angle = (ordering.angle_degrees * Math.PI) / 180;
+			return clamp(
+				(x * Math.cos(angle) + z * Math.sin(angle) + 0.7) / 1.4,
+				0,
+				1,
+			);
+		}
+		case "radial_out":
+			return clamp(Math.hypot(x, z) / 0.71, 0, 1);
+		case "radial_in":
+			return 1 - clamp(Math.hypot(x, z) / 0.71, 0, 1);
+		case "axial":
+			return normalizeDegrees((Math.atan2(z, x) * 180) / Math.PI) / 360;
+		case "random_each_loop":
+			return ((index * 17 + ordering.seed) % 47) / 46;
+		case "selection":
+			return index / 47;
+	}
 }
 
 function clamp(value: number, minimum: number, maximum: number) {

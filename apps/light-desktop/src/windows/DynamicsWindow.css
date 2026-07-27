@@ -63,13 +63,12 @@
 .dynamic-workspace {
 	min-width: 0;
 	min-height: 100%;
-	padding: 0.8rem;
+	padding: 0;
 }
 
 .dynamic-curves-view {
 	display: grid;
 	grid-template-rows: minmax(0, 1fr) auto;
-	gap: 0.6rem;
 	min-height: 100%;
 }
 
@@ -79,7 +78,7 @@
 	gap: 0.35rem;
 	min-height: 0;
 	margin: 0;
-	padding: 0;
+	padding: 0.45rem;
 	list-style: none;
 }
 
@@ -88,7 +87,7 @@
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto;
 	align-items: stretch;
-	min-height: 4.3rem;
+	min-height: 3.45rem;
 	overflow: visible;
 	background: #0d1218;
 	border: 1px solid #25313b;
@@ -107,7 +106,7 @@
 .dynamic-lane-select-surface {
 	min-width: 0;
 	display: grid;
-	grid-template-columns: 8.5rem minmax(12rem, 1fr);
+	grid-template-columns: 7.4rem minmax(12rem, 1fr);
 	align-items: stretch;
 	padding: 0;
 	border: 0;
@@ -128,7 +127,7 @@
 	flex-direction: column;
 	justify-content: center;
 	gap: 0.1rem;
-	padding: 0.45rem 0.65rem;
+	padding: 0.3rem 0.55rem;
 	border-right: 1px solid #25313b;
 }
 
@@ -139,30 +138,77 @@
 }
 
 .dynamic-lane-curve {
+	position: relative;
 	min-width: 0;
-	padding: 0.25rem 0.6rem;
+	padding: 0.15rem 0.4rem 0.8rem;
 	background: linear-gradient(180deg, #111820, #0c1117);
 }
 
 .dynamic-lane-curve svg {
 	display: block;
 	width: 100%;
-	height: 3.7rem;
+	height: 2.55rem;
+	overflow: visible;
 }
 
-.dynamic-lane-curve .grid,
-.dynamic-curve-canvas .grid {
+.dynamic-lane-curve .grid {
 	stroke: rgb(255 255 255 / 8%);
 	stroke-width: 1;
 	fill: none;
 }
 
-.dynamic-lane-curve .curve,
-.dynamic-curve-canvas .curve {
+.dynamic-lane-curve .curve {
 	stroke: #4edcff;
-	stroke-width: 8;
+	stroke-width: 2.5;
 	fill: none;
 	vector-effect: non-scaling-stroke;
+}
+
+.dynamic-keyframe-marks circle {
+	fill: #0b1115;
+	stroke: #4edcff;
+	stroke-width: 2;
+	vector-effect: non-scaling-stroke;
+	cursor: ew-resize;
+}
+
+.dynamic-keyframe-marks circle.selected {
+	fill: #4edcff;
+}
+
+.dynamic-keyframe-marks circle.loop-close {
+	stroke-dasharray: 3 2;
+	cursor: default;
+}
+
+.dynamic-keyframe-marks text {
+	fill: #bfefff;
+	font:
+		700 21px ui-monospace,
+		monospace;
+	pointer-events: none;
+}
+
+.dynamic-lane-axis {
+	position: absolute;
+	bottom: 0.12rem;
+	color: #667580;
+	font:
+		0.58rem ui-monospace,
+		monospace;
+}
+
+.dynamic-lane-axis.start {
+	left: 0.4rem;
+}
+
+.dynamic-lane-axis.middle {
+	left: 50%;
+	transform: translateX(-50%);
+}
+
+.dynamic-lane-axis.end {
+	right: 0.4rem;
 }
 
 .dynamic-lane-row-actions {
@@ -170,99 +216,57 @@
 	display: flex;
 	align-items: center;
 	gap: 0.35rem;
-	padding: 0.4rem;
+	padding: 0.25rem 0.35rem;
 	border-left: 1px solid #25313b;
 }
 
-.dynamic-lane-dropdown {
-	position: absolute;
-	z-index: 30;
-	top: calc(100% + 0.2rem);
-	right: 0.4rem;
-	display: grid;
-	min-width: 10.5rem;
-	padding: 0.25rem;
-	background: var(--panel, #111820);
-	border: 1px solid var(--line2, #3b4a57);
-	border-radius: 0.35rem;
-	box-shadow: 0 0.55rem 1.4rem rgb(0 0 0 / 50%);
-}
-
-.dynamic-lane-dropdown .ui-button {
-	justify-content: flex-start;
-	border-color: transparent;
-	background: transparent;
+.dynamic-lane-action-select {
+	width: 7rem;
 }
 
 .dynamic-lane-bottom-editor {
 	display: grid;
-	grid-template-columns: 8.5rem minmax(0, 1fr) auto;
-	align-items: stretch;
-	gap: 0.55rem;
+	grid-template-columns: auto auto minmax(12rem, 19rem) minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 0.45rem;
 	width: 100%;
-	padding-top: 0.55rem;
-	border-top: 1px solid #25313b;
+	min-height: 2.9rem;
+	padding: 0.25rem 0.45rem;
+	overflow-x: auto;
+	background: #151b22;
+	border-top: 1px solid #34414b;
+	box-shadow: 0 -0.3rem 0.8rem rgb(0 0 0 / 28%);
 }
 
-.dynamic-curve-methods {
-	display: grid;
-	align-content: start;
-	gap: 0.35rem;
-	padding-right: 0.55rem;
-	border-right: 1px solid #25313b;
-}
-
-.dynamic-curve-methods > strong {
+.dynamic-lane-bottom-editor > strong {
 	color: #8fa0ad;
 	font-size: 0.68rem;
 	text-transform: uppercase;
 	letter-spacing: 0.05em;
+	white-space: nowrap;
 }
 
-.dynamic-curve-methods .button-group {
-	display: grid;
-	grid-template-columns: 1fr;
-	gap: 0.3rem;
-}
-
-.dynamic-curve-methods .ui-button {
+.dynamic-curve-method-toggle {
 	display: flex;
-	min-height: 2.7rem;
-	flex-direction: column;
-	align-items: flex-start;
-	justify-content: center;
-	line-height: 1.05;
+	flex-wrap: nowrap;
 }
 
-.dynamic-curve-method-editor {
+.dynamic-curve-method-toggle .ui-button {
+	min-height: 2.1rem;
+	white-space: nowrap;
+}
+
+.dynamic-composer-choice {
+	min-width: 12rem;
+}
+
+.dynamic-composer-summary {
 	min-width: 0;
-}
-
-.dynamic-curve-method-editor > .dynamic-source-cards,
-.dynamic-curve-method-editor > .dynamic-function-controls {
-	margin-top: 0;
-}
-
-.dynamic-curve-method-editor > .dynamic-function-controls {
-	display: block;
-}
-
-.dynamic-curve-method-action {
-	display: flex;
-	align-items: flex-start;
-	min-width: 8.5rem;
-	padding-left: 0.55rem;
-	border-left: 1px solid #25313b;
-}
-
-.dynamic-function-buttons {
-	grid-column: 1 / -1;
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.35rem;
-	margin: 0;
-	padding: 0;
-	border: 0;
+	overflow: hidden;
+	color: #83919c;
+	font-size: 0.7rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .dynamic-create-form {
@@ -277,192 +281,246 @@
 	gap: 0.5rem;
 }
 
-.dynamic-control-row {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: end;
-	justify-content: space-between;
+.dynamic-phase-view {
+	display: grid;
+	grid-template-columns: minmax(22rem, 1.35fr) minmax(20rem, 1fr);
 	gap: 0.7rem;
-}
-
-.dynamic-control-row label,
-.dynamic-function-controls label,
-.dynamic-settings-grid label {
-	display: grid;
-	gap: 0.3rem;
-	color: #9aa7b2;
-	font-size: 0.76rem;
-	text-transform: uppercase;
-	letter-spacing: 0.045em;
-}
-
-.dynamic-control-row select,
-.dynamic-function-controls select,
-.dynamic-settings-grid select,
-.dynamic-settings-grid > label > input,
-.dynamic-source-cards select,
-.dynamic-source-cards input,
-.dynamic-number-control input {
-	min-height: 2.5rem;
-	color: #f4f7f9;
-	background: #171d24;
-	border: 1px solid #36424d;
-	border-radius: 0.35rem;
-	padding: 0.4rem 0.55rem;
-}
-
-.dynamic-random-controls > button {
-	min-height: 3rem;
-	align-self: end;
-}
-
-.dynamic-curve-canvas {
-	display: grid;
-	grid-template-columns: repeat(5, 1fr);
-	margin-top: 0.7rem;
-	padding: 0.75rem 0.8rem 0.35rem;
-	background: linear-gradient(180deg, #151d25, #10161c);
-	border: 1px solid #263541;
-	border-radius: 0.6rem;
-}
-
-.dynamic-curve-canvas svg {
-	grid-column: 1 / -1;
-	width: 100%;
-	max-height: 18rem;
-	overflow: visible;
-}
-
-.dynamic-curve-canvas .grid {
-	stroke: rgb(255 255 255 / 8%);
-	stroke-width: 1;
-	fill: none;
-}
-
-.dynamic-curve-canvas .curve {
-	stroke: #53dcff;
-	stroke-width: 8;
-	stroke-linecap: round;
-	fill: none;
-	filter: drop-shadow(0 0 8px rgb(83 220 255 / 30%));
-}
-
-.dynamic-curve-canvas > span {
-	color: #7d8a95;
-	font-size: 0.7rem;
-	text-align: center;
-}
-
-.dynamic-source-cards,
-.dynamic-function-controls,
-.dynamic-settings-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-	gap: 0.65rem;
-	margin-top: 0.75rem;
-}
-
-.dynamic-source-cards article,
-.dynamic-function-controls > label,
-.dynamic-function-controls > .dynamic-number-control,
-.dynamic-settings-grid > label,
-.dynamic-settings-grid > .button-group {
+	height: 100%;
 	padding: 0.65rem;
-	background: #151b22;
-	border: 1px solid #29343e;
+	align-items: stretch;
+}
+
+.dynamic-phase-preview {
+	min-width: 0;
+	min-height: 0;
+	display: grid;
+	grid-template-rows: auto minmax(12rem, 1fr) auto;
+	gap: 0.5rem;
+	padding: 0.7rem;
+	border: 1px solid #2a3945;
 	border-radius: 0.45rem;
+	background: #0d1218;
 }
 
-.dynamic-source-cards article header {
+.dynamic-phase-preview header,
+.dynamic-phase-preview footer {
 	display: flex;
+	align-items: baseline;
 	justify-content: space-between;
-	margin-bottom: 0.45rem;
-}
-
-.dynamic-source-cards article label {
-	display: grid;
-	grid-template-columns: auto 1fr;
-	gap: 0.4rem;
-	align-items: center;
-}
-
-.dynamic-source-cards article > select {
-	width: 100%;
-	margin-top: 0.45rem;
-}
-
-.dynamic-pwm-grid {
-	grid-column: 1 / -1;
-	display: grid;
-	grid-template-columns: repeat(4, 1fr);
 	gap: 0.5rem;
 }
 
-.dynamic-phase-view {
+.dynamic-phase-preview header span {
 	display: grid;
-	grid-template-columns: minmax(16rem, 0.75fr) 1.25fr;
-	gap: 1rem;
-	height: 100%;
-	align-items: center;
+	gap: 0.15rem;
 }
 
-.phase-map {
+.dynamic-phase-preview header small,
+.dynamic-phase-preview footer {
+	color: #82919d;
+	font-size: 0.7rem;
+}
+
+.dynamic-phase-preview header b {
+	color: #62e0ff;
+}
+
+.dynamic-phase-position-map {
 	position: relative;
-	display: grid;
-	place-items: center;
-	aspect-ratio: 1;
-	max-width: 28rem;
-	margin: auto;
+	min-height: 0;
+	overflow: hidden;
+	background:
+		linear-gradient(rgb(255 255 255 / 5%) 1px, transparent 1px),
+		linear-gradient(90deg, rgb(255 255 255 / 5%) 1px, transparent 1px),
+		radial-gradient(circle at center, rgb(78 220 255 / 12%), transparent 68%),
+		#080c10;
+	background-size:
+		12.5% 16.666%,
+		12.5% 16.666%,
+		auto,
+		auto;
+	border: 1px solid #25313b;
+	border-radius: 0.35rem;
+}
+
+.dynamic-phase-position-map i {
+	position: absolute;
+	width: 0.8rem;
+	height: 0.8rem;
+	margin: -0.4rem;
+	border-radius: 50%;
+	box-shadow: 0 0 0.65rem currentcolor;
+	transition:
+		transform 120ms ease,
+		background 120ms ease;
+}
+
+.dynamic-phase-controls,
+.dynamic-speed-controls {
+	min-width: 0;
+	min-height: 0;
+	overflow: auto;
+	padding: 0.7rem;
+	background: #11171d;
 	border: 1px solid #2a3945;
-	border-radius: 50%;
-	background: radial-gradient(circle, rgb(78 220 255 / 18%), transparent 62%);
+	border-radius: 0.45rem;
 }
 
-.phase-map strong {
-	color: #5fddff;
-	font-size: 3rem;
+.dynamic-phase-controls .ui-form-layout,
+.dynamic-speed-controls .ui-form-layout {
+	gap: 0.45rem;
 }
 
-.phase-map small {
-	position: absolute;
-	top: 63%;
-	color: #8796a1;
+.dynamic-phase-controls .ui-form-layout {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.3rem;
 }
 
-.phase-rings {
-	position: absolute;
-	inset: 50%;
+.dynamic-phase-controls .ui-form-layout > * {
+	min-width: 0;
 }
 
-.phase-rings i {
-	position: absolute;
-	width: 0.75rem;
-	height: 0.75rem;
-	margin: -0.375rem;
-	background: #51d9fc;
-	border-radius: 50%;
-	box-shadow: 0 0 0.7rem #51d9fc;
+.dynamic-phase-ordering,
+.dynamic-phase-anchors {
+	grid-column: 1 / -1;
+}
+
+.dynamic-phase-ordering .ui-select-trigger {
+	width: 100%;
+}
+
+.dynamic-phase-footer {
+	display: grid;
+	grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+	gap: 0.35rem;
+	margin-top: 0.4rem;
+	padding-top: 0.4rem;
+	border-top: 1px solid #293640;
+}
+
+.dynamic-phase-target-actions,
+.dynamic-phase-footer > .button-group {
+	display: grid;
+	gap: 0.35rem;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.dynamic-phase-target-actions {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dynamic-phase-footer > .button-group {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .dynamic-speed-view {
 	display: grid;
-	grid-template-columns: minmax(14rem, 0.75fr) 1.5fr;
-	gap: 1rem;
-	align-items: start;
+	grid-template-columns: minmax(24rem, 1.35fr) minmax(20rem, 1fr);
+	gap: 0.7rem;
+	height: 100%;
+	padding: 0.65rem;
+	align-items: stretch;
 }
 
-.speed-source-card {
+.dynamic-speed-transport {
+	min-width: 0;
+	min-height: 0;
 	display: grid;
-	gap: 0.5rem;
-	padding: 1.3rem;
-	background: linear-gradient(150deg, rgb(78 220 255 / 16%), #151b22 58%);
+	grid-template-rows: auto auto minmax(8rem, 1fr) auto;
+	align-content: start;
+	gap: 0.65rem;
+	padding: 0.75rem;
+	background: #0d1218;
 	border: 1px solid rgb(78 220 255 / 28%);
-	border-radius: 0.65rem;
+	border-radius: 0.45rem;
 }
 
-.speed-source-card strong {
+.dynamic-speed-transport > .ui-multi-value-toggle {
+	justify-self: start;
+}
+
+.dynamic-speed-transport > .ui-form-field,
+.dynamic-speed-source-fields {
+	max-width: 28rem;
+}
+
+.dynamic-speed-source-fields {
+	display: grid;
+	grid-template-columns: minmax(12rem, 1fr) minmax(9rem, 0.65fr);
+	gap: 0.45rem;
+}
+
+.dynamic-beat-grid {
+	position: relative;
+	min-height: 8rem;
+	display: grid;
+	grid-template-columns: repeat(16, minmax(1.3rem, 1fr));
+	align-items: stretch;
+	overflow: hidden;
+	background: #080c10;
+	border: 1px solid #2b3944;
+	border-radius: 0.4rem;
+}
+
+.dynamic-beat-grid span {
+	display: grid;
+	place-items: end center;
+	padding-bottom: 0.45rem;
+	color: #71808b;
+	font:
+		0.66rem ui-monospace,
+		monospace;
+	border-left: 1px solid rgb(255 255 255 / 8%);
+}
+
+.dynamic-beat-grid span.bar-start {
+	border-left-color: rgb(78 220 255 / 42%);
+	background: rgb(78 220 255 / 4%);
+}
+
+.dynamic-beat-grid > i {
+	position: absolute;
+	z-index: 2;
+	top: 0;
+	bottom: 0;
+	width: 2px;
+	background: #4edcff;
+	box-shadow: 0 0 0.8rem #4edcff;
+	transform: translateX(-1px);
+}
+
+.dynamic-speed-transport footer {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	align-items: baseline;
+	gap: 0.25rem 0.7rem;
+}
+
+.dynamic-speed-transport footer strong {
 	color: #58ddff;
-	font-size: 2rem;
+	font-size: 1.45rem;
+}
+
+.dynamic-speed-transport footer span,
+.dynamic-speed-transport footer small,
+.dynamic-speed-controls > small {
+	color: #84939e;
+	font-size: 0.72rem;
+}
+
+.dynamic-speed-transport footer small {
+	grid-column: 1 / -1;
+	color: #f3bc63;
+}
+
+.dynamic-speed-controls > small {
+	display: block;
+	margin-top: 0.7rem;
+	padding-top: 0.7rem;
+	border-top: 1px solid #293640;
 }
 
 .dynamic-encoder-deck {
@@ -544,6 +602,14 @@
 
 	.dynamic-encoder-deck {
 		overflow-x: auto;
+	}
+
+	.dynamic-lane-bottom-editor {
+		grid-template-columns: max-content max-content 12rem max-content;
+	}
+
+	.dynamic-composer-summary {
+		display: none;
 	}
 
 	.dynamics-task-tabs {

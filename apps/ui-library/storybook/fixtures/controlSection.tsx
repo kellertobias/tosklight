@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import type { ParameterFamily } from "../../../light-desktop/src/components/control/parameterControls/model";
 import { ParameterControlView } from "../../../light-desktop/src/components/control/parameterControls/ParameterControlView";
 import type { ParameterController } from "../../../light-desktop/src/components/control/parameterControls/useParameterController";
@@ -398,6 +398,8 @@ export interface CommandSectionFixtureProps {
 	preloadArmed?: boolean;
 	/** Optional production surface used by full-application discussion stories. */
 	programmer?: ReactNode;
+	/** Reuse an enclosing application provider in full-application stories. */
+	inheritAppState?: boolean;
 }
 
 function CommandSectionFixtureContent({
@@ -445,6 +447,7 @@ function CommandSectionFixtureContent({
 }
 
 export function CommandSectionFixture(props: CommandSectionFixtureProps) {
+	if (props.inheritAppState) return <CommandSectionFixtureContent {...props} />;
 	return (
 		<ApplicationStateHarness>
 			<CommandSectionFixtureContent {...props} />
