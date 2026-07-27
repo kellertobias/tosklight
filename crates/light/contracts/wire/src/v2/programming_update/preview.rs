@@ -10,9 +10,24 @@ use uuid::Uuid;
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProgrammingUpdateAddress {
-    FixtureAttribute { fixture_id: Uuid, attribute: String },
-    GroupAttribute { group_id: String, attribute: String },
-    GroupMembership { fixture_id: Uuid },
+    FixtureAttribute {
+        fixture_id: Uuid,
+        attribute: String,
+    },
+    GroupAttribute {
+        group_id: String,
+        attribute: String,
+    },
+    DynamicAttribute {
+        fixture_id: Uuid,
+        attribute: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        instance_link: Option<Uuid>,
+    },
+    GroupMembership {
+        fixture_id: Uuid,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

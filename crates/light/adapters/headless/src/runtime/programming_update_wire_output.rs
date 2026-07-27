@@ -196,6 +196,15 @@ fn wire_preview_item(
                 group_id,
                 attribute: attribute.0,
             },
+            application::UpdateAddress::DynamicAttribute {
+                fixture_id,
+                attribute,
+                instance_link,
+            } => wire::ProgrammingUpdateAddress::DynamicAttribute {
+                fixture_id: fixture_id.0,
+                attribute: attribute.0,
+                instance_link,
+            },
             application::UpdateAddress::GroupMembership { fixture_id } => {
                 wire::ProgrammingUpdateAddress::GroupMembership {
                     fixture_id: fixture_id.0,

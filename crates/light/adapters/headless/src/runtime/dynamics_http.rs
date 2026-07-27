@@ -1,5 +1,5 @@
 use super::dynamics_adapter::{ServerDynamicsPorts, controller_for_runtime_instance};
-use super::live_action_http::run_http_programming_action;
+use super::live_action_http::run_fire_and_forget_http_programming_action;
 use super::playback_service::projection::dynamic_target_lane_coverage;
 use super::{
     ApiError, AppState, DeskContext, ShowContext, persist_output_runtime, persist_programmer,
@@ -21,12 +21,58 @@ use light_dynamics::{
     DynamicInstanceOverrides, DynamicSpeed, DynamicValueTiming, Rational, SpeedGroup,
 };
 use light_wire::v2::dynamics::{
-    DynamicControllerActionOutcome, DynamicControllerValueActionRequest,
-    DynamicDefinitionStatusProjection, DynamicFixAtActionRequest, DynamicInstanceActionOutcome,
-    DynamicOffActionRequest, DynamicRuntimeControllerProjection, DynamicRuntimeInstanceProjection,
-    DynamicRuntimeSnapshotProjection, DynamicStartActionRequest,
+    DynamicDefinitionStatusProjection, DynamicInstanceOverridesProjection,
+    DynamicRuntimeControllerProjection, DynamicRuntimeInstanceProjection,
+    DynamicRuntimeSnapshotProjection, DynamicValueTimingProjection,
 };
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+#[derive(Deserialize)]
+struct DynamicStartHttpActionRequest {
+    #[serde(default)]
+    targets: Vec<Uuid>,
+    #[serde(default)]
+    overrides: DynamicInstanceOverridesProjection,
+    #[serde(default)]
+    timing: DynamicValueTimingProjection,
+}
+
+#[derive(Deserialize)]
+struct DynamicOffHttpActionRequest {
+    #[serde(default)]
+    timing: DynamicValueTimingProjection,
+}
+
+#[derive(Deserialize)]
+struct DynamicControllerValueHttpActionRequest {
+    value: f32,
+    #[serde(default)]
+    undo_group: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct DynamicFixAtHttpActionRequest {
+    targets: Vec<Uuid>,
+    attribute: String,
+    value: f32,
+    #[serde(default)]
+    timing: DynamicValueTimingProjection,
+}
+
+#[derive(Serialize)]
+struct DynamicInstanceHttpActionOutcome {
+    runtime_instance_id: Uuid,
+    controller_id: Uuid,
+    targets: Vec<Uuid>,
+    started: bool,
+}
+
+#[derive(Serialize)]
+struct DynamicControllerHttpActionOutcome {
+    controller_id: Uuid,
+    changed: bool,
+}
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
@@ -349,8 +395,8 @@ async fn start(
     show: ShowContext,
     desk: DeskContext,
     headers: HeaderMap,
-    TolerantJson(request): TolerantJson<DynamicStartActionRequest>,
-) -> Result<Json<DynamicInstanceActionOutcome>, ApiError> {
+    TolerantJson(request): TolerantJson<DynamicStartHttpActionRequest>,
+) -> Result<Json<DynamicInstanceHttpActionOutcome>, ApiError> {
     start_or_toggle(state, dynamic_id, show, desk, headers, request, false).await
 }
 
@@ -360,8 +406,8 @@ async fn toggle(
     show: ShowContext,
     desk: DeskContext,
     headers: HeaderMap,
-    TolerantJson(request): TolerantJson<DynamicStartActionRequest>,
-) -> Result<Json<DynamicInstanceActionOutcome>, ApiError> {
+    TolerantJson(request): TolerantJson<DynamicStartHttpActionRequest>,
+) -> Result<Json<DynamicInstanceHttpActionOutcome>, ApiError> {
     start_or_toggle(state, dynamic_id, show, desk, headers, request, true).await
 }
 
@@ -371,14 +417,12 @@ async fn start_or_toggle(
     show: ShowContext,
     desk: DeskContext,
     headers: HeaderMap,
-    request: DynamicStartActionRequest,
+    request: DynamicStartHttpActionRequest,
     toggle: bool,
-) -> Result<Json<DynamicInstanceActionOutcome>, ApiError> {
-    validate_request_id(&request.request_id)?;
+) -> Result<Json<DynamicInstanceHttpActionOutcome>, ApiError> {
     let session = session_for_desk(&state, &headers, &desk)?;
     show.verify(&state)?;
-    let request_id = request.request_id.clone();
-    run_http_programming_action(state, session, request_id, move |state, session, _| {
+    run_fire_and_forget_http_programming_action(state, session, move |state, session| {
         let ports = ServerDynamicsPorts { state, session };
         let command = DynamicStartCommand {
             dynamic_id,
@@ -394,19 +438,14 @@ async fn start_or_toggle(
             timing: timing(request.timing),
         };
         let result = if toggle {
-            state
-                .dynamics
-                .toggle(&context(session, &request.request_id), command, &ports)
+            state.dynamics.toggle(&context(session), command, &ports)
         } else {
-            state
-                .dynamics
-                .start(&context(session, &request.request_id), command, &ports)
+            state.dynamics.start(&context(session), command, &ports)
         }
         .map_err(|error| error.message)?;
         persist_programmer(state, session).map_err(|error| error.message)?;
         persist_output_runtime(state).map_err(|error| error.message)?;
-        Ok(DynamicInstanceActionOutcome {
-            request_id: request.request_id,
+        Ok(DynamicInstanceHttpActionOutcome {
             runtime_instance_id: result.runtime_instance_id,
             controller_id: result.controller_id,
             targets: result.targets.into_iter().map(|target| target.0).collect(),
@@ -423,19 +462,17 @@ async fn off(
     show: ShowContext,
     desk: DeskContext,
     headers: HeaderMap,
-    TolerantJson(request): TolerantJson<DynamicOffActionRequest>,
-) -> Result<Json<DynamicInstanceActionOutcome>, ApiError> {
-    validate_request_id(&request.request_id)?;
+    TolerantJson(request): TolerantJson<DynamicOffHttpActionRequest>,
+) -> Result<Json<DynamicInstanceHttpActionOutcome>, ApiError> {
     let session = session_for_desk(&state, &headers, &desk)?;
     show.verify(&state)?;
-    let request_id = request.request_id.clone();
-    run_http_programming_action(state, session, request_id, move |state, session, _| {
+    run_fire_and_forget_http_programming_action(state, session, move |state, session| {
         let ports = ServerDynamicsPorts { state, session };
         let controller_id = controller_for_runtime_instance(state, session, instance_id)?;
         let result = state
             .dynamics
             .off(
-                &context(session, &request.request_id),
+                &context(session),
                 DynamicOffCommand {
                     controller_id,
                     timing: timing(request.timing),
@@ -445,8 +482,7 @@ async fn off(
             .map_err(|error| error.message)?;
         persist_programmer(state, session).map_err(|error| error.message)?;
         persist_output_runtime(state).map_err(|error| error.message)?;
-        Ok(DynamicInstanceActionOutcome {
-            request_id: request.request_id,
+        Ok(DynamicInstanceHttpActionOutcome {
             runtime_instance_id: result.runtime_instance_id,
             controller_id: result.controller_id,
             targets: result.targets.into_iter().map(|target| target.0).collect(),
@@ -463,8 +499,8 @@ async fn size(
     show: ShowContext,
     desk: DeskContext,
     headers: HeaderMap,
-    TolerantJson(request): TolerantJson<DynamicControllerValueActionRequest>,
-) -> Result<Json<DynamicControllerActionOutcome>, ApiError> {
+    TolerantJson(request): TolerantJson<DynamicControllerValueHttpActionRequest>,
+) -> Result<Json<DynamicControllerHttpActionOutcome>, ApiError> {
     update(
         state,
         instance_id,
@@ -483,8 +519,8 @@ async fn speed(
     show: ShowContext,
     desk: DeskContext,
     headers: HeaderMap,
-    TolerantJson(request): TolerantJson<DynamicControllerValueActionRequest>,
-) -> Result<Json<DynamicControllerActionOutcome>, ApiError> {
+    TolerantJson(request): TolerantJson<DynamicControllerValueHttpActionRequest>,
+) -> Result<Json<DynamicControllerHttpActionOutcome>, ApiError> {
     update(
         state,
         instance_id,
@@ -503,8 +539,8 @@ async fn phase(
     show: ShowContext,
     desk: DeskContext,
     headers: HeaderMap,
-    TolerantJson(request): TolerantJson<DynamicControllerValueActionRequest>,
-) -> Result<Json<DynamicControllerActionOutcome>, ApiError> {
+    TolerantJson(request): TolerantJson<DynamicControllerValueHttpActionRequest>,
+) -> Result<Json<DynamicControllerHttpActionOutcome>, ApiError> {
     update(
         state,
         instance_id,
@@ -529,14 +565,12 @@ async fn update(
     show: ShowContext,
     desk: DeskContext,
     headers: HeaderMap,
-    request: DynamicControllerValueActionRequest,
+    request: DynamicControllerValueHttpActionRequest,
     field: ControllerField,
-) -> Result<Json<DynamicControllerActionOutcome>, ApiError> {
-    validate_request_id(&request.request_id)?;
+) -> Result<Json<DynamicControllerHttpActionOutcome>, ApiError> {
     let session = session_for_desk(&state, &headers, &desk)?;
     show.verify(&state)?;
-    let request_id = request.request_id.clone();
-    run_http_programming_action(state, session, request_id, move |state, session, _| {
+    run_fire_and_forget_http_programming_action(state, session, move |state, session| {
         let ports = ServerDynamicsPorts { state, session };
         let controller_id = controller_for_runtime_instance(state, session, runtime_instance_id)?;
         let (size, speed_multiplier, phase_offset_degrees) = match field {
@@ -547,7 +581,7 @@ async fn update(
         state
             .dynamics
             .update_controller(
-                &context(session, &request.request_id),
+                &context(session),
                 DynamicControllerUpdate {
                     controller_id,
                     size,
@@ -560,8 +594,7 @@ async fn update(
             .map_err(|error| error.message)?;
         persist_programmer(state, session).map_err(|error| error.message)?;
         persist_output_runtime(state).map_err(|error| error.message)?;
-        Ok(DynamicControllerActionOutcome {
-            request_id: request.request_id,
+        Ok(DynamicControllerHttpActionOutcome {
             controller_id,
             changed: true,
         })
@@ -575,18 +608,16 @@ async fn fix_at(
     show: ShowContext,
     desk: DeskContext,
     headers: HeaderMap,
-    TolerantJson(request): TolerantJson<DynamicFixAtActionRequest>,
-) -> Result<Json<DynamicControllerActionOutcome>, ApiError> {
-    validate_request_id(&request.request_id)?;
+    TolerantJson(request): TolerantJson<DynamicFixAtHttpActionRequest>,
+) -> Result<Json<DynamicControllerHttpActionOutcome>, ApiError> {
     let session = session_for_desk(&state, &headers, &desk)?;
     show.verify(&state)?;
-    let request_id = request.request_id.clone();
-    run_http_programming_action(state, session, request_id, move |state, session, _| {
+    run_fire_and_forget_http_programming_action(state, session, move |state, session| {
         let ports = ServerDynamicsPorts { state, session };
         state
             .dynamics
             .fix_at(
-                &context(session, &request.request_id),
+                &context(session),
                 DynamicFixAtCommand {
                     targets: request.targets.into_iter().map(FixtureId).collect(),
                     attribute: AttributeKey(request.attribute),
@@ -598,8 +629,7 @@ async fn fix_at(
             .map_err(|error| error.message)?;
         persist_programmer(state, session).map_err(|error| error.message)?;
         persist_output_runtime(state).map_err(|error| error.message)?;
-        Ok(DynamicControllerActionOutcome {
-            request_id: request.request_id,
+        Ok(DynamicControllerHttpActionOutcome {
             controller_id: Uuid::nil(),
             changed: true,
         })
@@ -608,14 +638,13 @@ async fn fix_at(
     .map(Json)
 }
 
-fn context(session: &super::Session, request_id: &str) -> ActionContext {
+fn context(session: &super::Session) -> ActionContext {
     ActionContext::operator(
         session.desk.id,
         session.user.id.0,
         session.id.0,
         ActionSource::Http,
     )
-    .with_request_id(request_id)
 }
 
 fn timing(value: light_wire::v2::dynamics::DynamicValueTimingProjection) -> DynamicValueTiming {
@@ -623,13 +652,4 @@ fn timing(value: light_wire::v2::dynamics::DynamicValueTimingProjection) -> Dyna
         fade_millis: value.fade_millis,
         delay_millis: value.delay_millis,
     }
-}
-
-fn validate_request_id(value: &str) -> Result<(), ApiError> {
-    if value.is_empty() || value.len() > 128 {
-        return Err(ApiError::bad_request(
-            "request_id must contain between 1 and 128 bytes",
-        ));
-    }
-    Ok(())
 }

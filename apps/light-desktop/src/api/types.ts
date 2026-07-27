@@ -61,6 +61,12 @@ export interface UpdateTargetIdentity {
 export type UpdateAddress =
 	| { type: "fixture_attribute"; fixture_id: string; attribute: string }
 	| { type: "group_attribute"; group_id: string; attribute: string }
+	| {
+			type: "dynamic_attribute";
+			fixture_id: string;
+			attribute: string;
+			instance_link?: string | null;
+	  }
 	| { type: "group_membership"; fixture_id: string };
 
 export interface UpdateCueSource {

@@ -88,6 +88,35 @@
         {
           "type": "object",
           "properties": {
+            "attribute": {
+              "type": "string"
+            },
+            "fixture_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "instance_link": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "dynamic_attribute"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "fixture_id",
+            "attribute"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "fixture_id": {
               "type": "string",
               "format": "uuid"

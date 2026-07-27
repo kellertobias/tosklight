@@ -521,7 +521,7 @@ export type ProgrammingUpdateObjectIdentity = { kind: ProgrammingUpdateObjectKin
 
 export type ProgrammingUpdateTargetFilter = "eligible_for_update_existing" | "show_all_active";
 
-export type ProgrammingUpdateAddress = { "type": "fixture_attribute", fixture_id: string, attribute: string, } | { "type": "group_attribute", group_id: string, attribute: string, } | { "type": "group_membership", fixture_id: string, };
+export type ProgrammingUpdateAddress = { "type": "fixture_attribute", fixture_id: string, attribute: string, } | { "type": "group_attribute", group_id: string, attribute: string, } | { "type": "dynamic_attribute", fixture_id: string, attribute: string, instance_link?: string | null, } | { "type": "group_membership", fixture_id: string, };
 
 export type ProgrammingUpdateCueSource = { cue_id: string, cue_number: number, cue_index: number, };
 

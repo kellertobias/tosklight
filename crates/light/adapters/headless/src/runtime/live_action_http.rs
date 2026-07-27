@@ -278,6 +278,36 @@ where
     completed?.output.map_err(action_api_error)
 }
 
+pub(super) async fn run_fire_and_forget_http_programming_action<T>(
+    state: AppState,
+    session: Session,
+    operation: impl FnOnce(&AppState, &Session) -> Result<T, String> + Send + 'static,
+) -> Result<T, ApiError>
+where
+    T: Send + 'static,
+{
+    let activation = state.active_show.acquire().await;
+    let worker_state = state.clone();
+    let worker_session = session.clone();
+    let context = programming_context(&session, light_application::ActionSource::Http, None);
+    let (completed, _activation) = tokio::task::spawn_blocking(move || {
+        (
+            run_programming_interaction(
+                &worker_state,
+                &worker_session,
+                &context,
+                "http_live_action",
+                ProgrammingLockPolicy::RequireUnlocked,
+                || operation(&worker_state, &worker_session),
+            ),
+            activation,
+        )
+    })
+    .await
+    .map_err(|error| ApiError::internal(format!("Programming action task failed: {error}")))?;
+    completed?.output.map_err(action_api_error)
+}
+
 fn action_api_error(message: String) -> ApiError {
     let normalized = message.to_ascii_lowercase();
     if normalized.contains("revision")

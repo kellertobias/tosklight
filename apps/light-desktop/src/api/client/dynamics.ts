@@ -34,8 +34,7 @@ export class DynamicsApiClient {
 		overrides: DynamicInstanceOverridesProjection = DEFAULT_OVERRIDES,
 		timing: DynamicValueTimingProjection = NO_TIMING,
 	): Promise<DynamicInstanceActionOutcome> {
-		const request: DynamicStartActionRequest = {
-			request_id: crypto.randomUUID(),
+		const request: Omit<DynamicStartActionRequest, "request_id"> = {
 			targets,
 			overrides,
 			timing,
@@ -74,8 +73,7 @@ export class DynamicsApiClient {
 		controllerId: string,
 		timing: DynamicValueTimingProjection = NO_TIMING,
 	): Promise<DynamicInstanceActionOutcome> {
-		const request: DynamicOffActionRequest = {
-			request_id: crypto.randomUUID(),
+		const request: Omit<DynamicOffActionRequest, "request_id"> = {
 			timing,
 		};
 		return this.post(
@@ -110,8 +108,7 @@ export class DynamicsApiClient {
 		value: number,
 		undoGroup?: string,
 	): Promise<DynamicControllerActionOutcome> {
-		const request: DynamicControllerValueActionRequest = {
-			request_id: crypto.randomUUID(),
+		const request: Omit<DynamicControllerValueActionRequest, "request_id"> = {
 			value,
 			undo_group: undoGroup ?? null,
 		};
@@ -147,10 +144,7 @@ export class DynamicsApiClient {
 		showId: string,
 		request: Omit<DynamicFixAtActionRequest, "request_id">,
 	): Promise<DynamicControllerActionOutcome> {
-		return this.post("/api/v2/programmer/values/fix-at", showId, {
-			...request,
-			request_id: crypto.randomUUID(),
-		});
+		return this.post("/api/v2/programmer/values/fix-at", showId, request);
 	}
 
 	fixAtLive(

@@ -158,7 +158,7 @@ async fn dynamic_object_intents_are_revisioned_atomic_and_replay_safe() {
 }
 
 #[tokio::test]
-async fn dynamic_live_request_ids_replay_across_the_shared_application_service() {
+async fn dynamic_live_http_is_fire_and_forget_without_request_identity() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -175,7 +175,6 @@ async fn dynamic_live_request_ids_replay_across_the_shared_application_service()
     snapshot.fixtures = vec![operational_fixture(light_core::FixtureId(fixture))].into();
     state.output.replace_snapshot(snapshot).unwrap();
     let request = serde_json::json!({
-        "request_id": "dynamic-live-replay-1",
         "targets": [fixture],
         "attribute": "intensity",
         "value": 0.35,
@@ -190,24 +189,13 @@ async fn dynamic_live_request_ids_replay_across_the_shared_application_service()
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{first}");
-    let (status, replayed) = post_show_object_intent(
-        &app,
-        &token,
-        show_id,
-        "/api/v2/programmer/values/fix-at",
-        request,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{replayed}");
-    assert_eq!(replayed, first);
-
-    let (status, conflict) = post_show_object_intent(
+    assert!(first.get("request_id").is_none());
+    let (status, second) = post_show_object_intent(
         &app,
         &token,
         show_id,
         "/api/v2/programmer/values/fix-at",
         serde_json::json!({
-            "request_id": "dynamic-live-replay-1",
             "targets": [fixture],
             "attribute": "intensity",
             "value": 0.75,
@@ -215,8 +203,8 @@ async fn dynamic_live_request_ids_replay_across_the_shared_application_service()
         }),
     )
     .await;
-    assert_eq!(status, StatusCode::CONFLICT);
-    assert!(conflict["error"].as_str().unwrap().contains("request_id"));
+    assert_eq!(status, StatusCode::OK, "{second}");
+    assert!(second.get("request_id").is_none());
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -243,7 +231,6 @@ async fn dynamic_http_routes_use_runtime_instance_identity_and_project_authorita
         &show_id,
         &format!("/api/v2/dynamics/{dynamic_id}/start"),
         serde_json::json!({
-            "request_id": "dynamic-http-start-1",
             "targets": [target],
             "timing": {}
         }),
@@ -258,7 +245,6 @@ async fn dynamic_http_routes_use_runtime_instance_identity_and_project_authorita
             &show_id,
             &format!("/api/v2/dynamic-instances/{instance_id}/{path}"),
             serde_json::json!({
-                "request_id": format!("dynamic-http-{path}-1"),
                 "value": value
             }),
         )
@@ -295,24 +281,19 @@ async fn dynamic_http_routes_use_runtime_instance_identity_and_project_authorita
         &show_id,
         &format!("/api/v2/dynamic-instances/{instance_id}/off"),
         serde_json::json!({
-            "request_id": "dynamic-http-off-1",
             "timing": {}
         }),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{off}");
 
-    for (request_id, expected_started) in [
-        ("dynamic-http-toggle-on", true),
-        ("dynamic-http-toggle-off", false),
-    ] {
+    for expected_started in [true, false] {
         let (status, toggled) = post_show_object_intent(
             &app,
             &token,
             &show_id,
             &format!("/api/v2/dynamics/{dynamic_id}/toggle"),
             serde_json::json!({
-                "request_id": request_id,
                 "targets": [target],
                 "timing": {}
             }),
