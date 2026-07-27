@@ -1,15 +1,15 @@
 import { useMemo } from "react";
-import { usePatchedFixturesView } from "../../features/patch/PatchState";
-import { useBootstrapReady } from "../../features/deskSnapshot/DeskSnapshotState";
 import type { PatchedFixture, VisualizationSnapshot } from "../../api/types";
 import { fixtures as visualFixtures } from "../../data/mockData";
-import { useVisualizationRuntimeSnapshot } from "../../features/visualizationRuntime/VisualizationRuntimeView";
+import { useBootstrapReady } from "../../features/deskSnapshot/DeskSnapshotState";
+import { usePatchedFixturesView } from "../../features/patch/PatchState";
+import { useVisualizationRuntimeView } from "../../features/visualizationRuntime/VisualizationRuntimeView";
 import { fixtureValue } from "../fixtureVisualization";
 import { migrateStagePosition, type Stage3dFixture } from "../stage3dScene";
 import type { StageFixturePresentation, StageLayoutModel } from "./types";
 
-function useVisualizationSnapshot(followPreload: boolean, active: boolean) {
-	return useVisualizationRuntimeSnapshot({
+function useVisualizationView(followPreload: boolean, active: boolean) {
+	return useVisualizationRuntimeView({
 		lane: followPreload ? "preload" : "normal",
 		enabled: active,
 		intervalMillis: 100,
@@ -124,7 +124,10 @@ function useFixtures3d(
 }
 
 export function patchPreviewFixtureIds(
-	stageFixtures: readonly Pick<PatchedFixture, "fixture_id" | "logical_heads">[],
+	stageFixtures: readonly Pick<
+		PatchedFixture,
+		"fixture_id" | "logical_heads"
+	>[],
 	selectedFixtureIds: ReadonlySet<string>,
 ) {
 	return stageFixtures
@@ -147,7 +150,8 @@ export function useStageVisualization(
 	patchedFixtures?: readonly PatchedFixture[],
 ) {
 	const bootstrapReady = useBootstrapReady();
-	const visualization = useVisualizationSnapshot(followPreload, active);
+	const visualizationView = useVisualizationView(followPreload, active);
+	const visualization = visualizationView.snapshot;
 	const stageFixtures = usePatchedFixtures(patchedFixtures);
 	const patchPreviewFixtures = useMemo(
 		() => patchPreviewFixtureIds(stageFixtures, selectedFixtureIds),
@@ -166,6 +170,8 @@ export function useStageVisualization(
 		: fallbackFixturePresentation();
 	return {
 		visualization,
+		visualizationStatus: visualizationView.status,
+		visualizationError: visualizationView.error,
 		fixtures,
 		fixtures3d: useFixtures3d(stageFixtures, layout),
 		patchPreviewFixtures,

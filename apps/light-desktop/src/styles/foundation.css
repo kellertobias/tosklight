@@ -792,6 +792,24 @@ button {
 		linear-gradient(90deg, #172027 1px, transparent 1px);
 	background-size: 28px 28px;
 }
+.stage-visualization-state {
+	position: absolute;
+	z-index: 5;
+	right: 10px;
+	bottom: 10px;
+	max-width: calc(100% - 20px);
+	padding: 6px 9px;
+	border: 1px solid var(--line2);
+	border-radius: 5px;
+	background: #091317e8;
+	color: var(--muted);
+	font-size: 11px;
+	pointer-events: none;
+}
+.stage-visualization-state.error {
+	border-color: #9c6d20;
+	color: #f0b95c;
+}
 .selection-summary {
 	position: absolute;
 	z-index: 3;

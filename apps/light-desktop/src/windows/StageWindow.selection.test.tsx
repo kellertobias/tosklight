@@ -7,11 +7,12 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { VisualizationSnapshot } from "../api/types";
 import type {
+	ProgrammingSnapshot,
 	SelectionActionOutcome,
 	SelectionActionRequest,
 	SelectionProjection,
-	ProgrammingSnapshot,
 } from "../features/programmingInteraction/contracts";
 import { ProgrammingInteractionViewProvider } from "../features/programmingInteraction/ProgrammingInteractionView";
 import { ProgrammingInteractionStore } from "../features/programmingInteraction/store";
@@ -22,14 +23,25 @@ import {
 	FIXTURE_2,
 	FIXTURE_3,
 	programmingSnapshot,
+	SHOW_ID,
 	selection,
 	selectionChange,
-	SHOW_ID,
 } from "../features/programmingInteraction/testFixtures";
-import type { StageSelectionModel } from "./stageWindow/useStageSelection";
+import type { VisualizationRuntimeStatus } from "../features/visualizationRuntime/contracts";
 import { StageWindow } from "./StageWindow";
+import type { StageSelectionModel } from "./stageWindow/useStageSelection";
 
 const legacyServer = vi.hoisted(() => ({ use: vi.fn() }));
+const visualizationState = vi.hoisted(() => ({
+	current: {
+		visualization: null as VisualizationSnapshot | null,
+		visualizationStatus: "ready" as VisualizationRuntimeStatus,
+		visualizationError: null as Error | null,
+		fixtures: [],
+		fixtures3d: [],
+		patchPreviewFixtures: [],
+	},
+}));
 
 vi.mock("../api/ServerContext", () => ({ useServer: legacyServer.use }));
 vi.mock("./stageWindow/useStageLayout", () => ({
@@ -58,16 +70,18 @@ vi.mock("./stageWindow/useStageOptions", () => ({
 	}),
 }));
 vi.mock("./stageWindow/useStageVisualization", () => ({
-	useStageVisualization: () => ({
-		visualization: null,
-		fixtures: [],
-		fixtures3d: [],
-		patchPreviewFixtures: [],
-	}),
+	useStageVisualization: () => visualizationState.current,
 }));
 vi.mock("./stageWindow/Stage2dView", () => ({
-	Stage2dView: ({ selection: stageSelection }: { selection: StageSelectionModel }) => (
-		<div data-testid="stage-selection" data-selection={stageSelection.fixtureIds.join(",")}>
+	Stage2dView: ({
+		selection: stageSelection,
+	}: {
+		selection: StageSelectionModel;
+	}) => (
+		<div
+			data-testid="stage-selection"
+			data-selection={stageSelection.fixtureIds.join(",")}
+		>
 			<button
 				type="button"
 				onClick={() => void stageSelection.applyFixtureGesture(FIXTURE_2)}
@@ -120,8 +134,7 @@ function outcome(
 	return {
 		requestId: request.requestId,
 		correlationId: request.requestId,
-		action:
-			request.action.type === "replace" ? "replaced" : "gesture_applied",
+		action: request.action.type === "replace" ? "replaced" : "gesture_applied",
 		applied: selected.selected.length,
 		selection: selected,
 		eventSequence: selected.revision + 10,
@@ -170,6 +183,14 @@ function renderStage({
 afterEach(() => {
 	cleanup();
 	legacyServer.use.mockReset();
+	visualizationState.current = {
+		visualization: null,
+		visualizationStatus: "ready",
+		visualizationError: null,
+		fixtures: [],
+		fixtures3d: [],
+		patchPreviewFixtures: [],
+	};
 });
 
 describe("Stage selection projection", () => {
@@ -242,10 +263,7 @@ describe("Stage selection projection", () => {
 		const secondRequest = applySelection.mock
 			.calls[1]?.[1] as SelectionActionRequest;
 		secondResponse.resolve(
-			outcome(
-				secondRequest,
-				openSelection(3, [FIXTURE_2, FIXTURE_3]),
-			),
+			outcome(secondRequest, openSelection(3, [FIXTURE_2, FIXTURE_3])),
 		);
 		await waitFor(() =>
 			expect(store.getSnapshot().pendingCapabilities).toEqual(new Set()),
@@ -309,5 +327,37 @@ describe("Stage selection projection", () => {
 		rendered.rerender(rendered.view(true));
 		await screen.findByText("1 selected");
 		expect(rendered.transport.subscriptions).toHaveLength(1);
+	});
+
+	it("shows a lightweight connection state before the first frame", () => {
+		visualizationState.current.visualizationStatus = "loading";
+		renderStage();
+
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Connecting to Live visualization…",
+		);
+	});
+
+	it("marks a retained scene stale while reconnecting", () => {
+		visualizationState.current.visualization = {
+			revision: 4,
+			generated_at: "2026-07-27T10:00:00Z",
+			grand_master: 1,
+			blackout: false,
+			preload: false,
+			values: [],
+			profile_output_values: [],
+		};
+		visualizationState.current.visualizationError = new Error("socket closed");
+		renderStage();
+
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Live visualization stale · reconnecting…",
+		);
+		expect(
+			screen
+				.getByText("Live visualization stale · reconnecting…")
+				.closest(".stage-window"),
+		).toHaveAttribute("data-visualization-state", "stale");
 	});
 });

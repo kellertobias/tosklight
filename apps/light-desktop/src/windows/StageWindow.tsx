@@ -23,7 +23,16 @@ export function StageWindow(props: StageWindowProps) {
 		props.patchedFixtures,
 	);
 	return (
-		<div className={`stage-window ${props.compact ? "compact" : ""}`}>
+		<div
+			className={`stage-window ${props.compact ? "compact" : ""}`}
+			data-visualization-state={
+				stage.visualizationError
+					? stage.visualization
+						? "stale"
+						: "unavailable"
+					: stage.visualizationStatus
+			}
+		>
 			{!props.compact && (
 				<StageHeader
 					options={options}
@@ -49,6 +58,20 @@ export function StageWindow(props: StageWindowProps) {
 					selection={selection}
 				/>
 			)}
+			{active &&
+				(!stage.visualization || stage.visualizationError) &&
+				(stage.visualizationError ? (
+					<div className="stage-visualization-state error" role="status">
+						{stage.visualization
+							? `${options.followPreload ? "Preload" : "Live"} visualization stale · reconnecting…`
+							: "Visualization unavailable · reconnecting…"}
+					</div>
+				) : (
+					<div className="stage-visualization-state" role="status">
+						Connecting to {options.followPreload ? "Preload" : "Live"}{" "}
+						visualization…
+					</div>
+				))}
 			{options.groupsVisible && <GroupStrip active={active} />}
 		</div>
 	);
