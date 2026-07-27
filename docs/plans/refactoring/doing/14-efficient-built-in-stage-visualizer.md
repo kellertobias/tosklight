@@ -1,17 +1,16 @@
 # Efficient Built-in Stage Visualizer
 
-This plan follows the currently claimed
-[`Dynamics`](../doing/16-dynamics/README.md) plan.
+This plan follows the completed
+[`Dynamics`](../finished/16-dynamics/README.md) plan.
 
 ## Status
 
-**IMPLEMENTABLE.** This plan defines the refactor, settings, and acceptance
+**DOING.** This plan defines the active refactor, settings, and acceptance
 contract for the Stage visualizer embedded in ToskLight.
 
-This remains a planning contract. Updating it does not implement the renderer,
-transport, benchmarks, executable tests, or UI changes. Implementation starts
-only after Dynamics is complete and this file moves from `pending/` to
-`doing/` under the refactoring queue workflow.
+Dynamics is complete and this file is claimed under the refactoring queue
+workflow. The renderer, transport, benchmarks, executable tests, and UI changes
+must still satisfy the phased gates below.
 
 This plan supersedes the earlier proposal to add an opt-in high-fidelity profile
 to the embedded Stage renderer. High-quality rendering belongs to the separate
