@@ -74,6 +74,42 @@ describe("VisualizationRuntimeSession", () => {
 		expect(harness.store.getSnapshot().preload.snapshot?.preload).toBe(true);
 	});
 
+	it("uses one multiplexed stream without periodic HTTP when available", async () => {
+		const store = new VisualizationRuntimeStore();
+		store.reset(scope);
+		const updateClaims = vi.fn();
+		const close = vi.fn();
+		let observer:
+			| Parameters<NonNullable<VisualizationRuntimeTransport["openStream"]>>[1]
+			| undefined;
+		const transport: VisualizationRuntimeTransport = {
+			loadSnapshot: vi.fn(),
+			openStream: vi.fn((_scope, nextObserver) => {
+				observer = nextObserver;
+				return { updateClaims, close };
+			}),
+		};
+		const session = new VisualizationRuntimeSession({ scope, store, transport });
+
+		const releaseNormal = session.activate("normal", 100);
+		const releasePreload = session.activate("preload", 100);
+		await vi.advanceTimersByTimeAsync(1_000);
+
+		expect(transport.openStream).toHaveBeenCalledOnce();
+		expect(transport.loadSnapshot).not.toHaveBeenCalled();
+		expect(updateClaims).toHaveBeenLastCalledWith(
+			["normal", "preload"],
+			10,
+		);
+		observer?.snapshot("normal", snapshot("normal"));
+		expect(store.getSnapshot().normal.status).toBe("ready");
+
+		releasePreload();
+		expect(updateClaims).toHaveBeenLastCalledWith(["normal"], 10);
+		releaseNormal();
+		expect(close).toHaveBeenCalledOnce();
+	});
+
 	it("drops an old response after immediate scope replacement", async () => {
 		const pending = deferred<VisualizationSnapshot>();
 		const harness = createHarness(() => pending.promise);

@@ -14,6 +14,41 @@ const scope: VisualizationRuntimeScope = {
 	authorityKey: "server-a",
 };
 
+class FakeWebSocket extends EventTarget {
+	static readonly OPEN = 1;
+	static instances: FakeWebSocket[] = [];
+	readonly sent: string[] = [];
+	readyState = 0;
+
+	constructor(
+		readonly url: string | URL,
+		readonly protocols?: string | string[],
+	) {
+		super();
+		FakeWebSocket.instances.push(this);
+	}
+
+	open() {
+		this.readyState = FakeWebSocket.OPEN;
+		this.dispatchEvent(new Event("open"));
+	}
+
+	message(value: unknown) {
+		this.dispatchEvent(
+			new MessageEvent("message", { data: JSON.stringify(value) }),
+		);
+	}
+
+	send(value: string) {
+		this.sent.push(value);
+	}
+
+	close() {
+		this.readyState = 3;
+		this.dispatchEvent(new Event("close"));
+	}
+}
+
 describe("HttpVisualizationRuntimeTransport", () => {
 	it("loads only the exact v1 Visualization endpoint with authenticated headers", async () => {
 		const fetch = vi.fn(
@@ -56,6 +91,54 @@ describe("HttpVisualizationRuntimeTransport", () => {
 		expect(fetch.mock.calls[0]?.[0]).toBe(
 			"http://desk.test/api/v2/output/visualization?preload=true",
 		);
+	});
+
+	it("multiplexes claimed lanes over the dedicated authenticated stream", () => {
+		FakeWebSocket.instances = [];
+		const transport = createTransport(
+			vi.fn<typeof globalThis.fetch>(),
+			FakeWebSocket as unknown as typeof WebSocket,
+		);
+		const observer = { snapshot: vi.fn(), error: vi.fn() };
+		const stream = transport.openStream(scope, observer);
+		stream.updateClaims(["normal", "preload"], 10);
+
+		const socket = FakeWebSocket.instances[0];
+		expect(socket?.url.toString()).toBe(
+			"ws://desk.test/api/v2/visualization/stream",
+		);
+		expect(socket?.protocols).toEqual([
+			"light.visualization.v1",
+			"light.token.session-token",
+		]);
+		socket?.open();
+		expect(JSON.parse(socket?.sent[0] ?? "")).toEqual({
+			type: "subscribe",
+			lanes: ["normal", "preload"],
+			max_rate_hz: 10,
+		});
+		socket?.message({
+			type: "hello",
+			protocol_version: 1,
+			max_rate_hz: 10,
+			lanes: ["normal", "preload"],
+		});
+		socket?.message({
+			type: "snapshot",
+			lane: "normal",
+			sequence: 1,
+			source_frame: 7,
+			source_timestamp: "2026-07-21T09:00:00Z",
+			published_at: "2026-07-21T09:00:00Z",
+			snapshot: snapshot(false),
+		});
+
+		expect(observer.snapshot).toHaveBeenCalledWith(
+			"normal",
+			expect.objectContaining({ revision: 7, preload: false }),
+		);
+		expect(observer.error).not.toHaveBeenCalled();
+		stream.close();
 	});
 
 	it("rejects a foreign Show, session, or server before issuing a request", async () => {
@@ -182,7 +265,10 @@ describe("decodeVisualizationRuntimeSnapshot", () => {
 	});
 });
 
-function createTransport(fetch: typeof globalThis.fetch) {
+function createTransport(
+	fetch: typeof globalThis.fetch,
+	webSocket?: typeof globalThis.WebSocket,
+) {
 	return new HttpVisualizationRuntimeTransport({
 		baseUrl: "http://desk.test/",
 		sessionToken: "session-token",
@@ -191,6 +277,7 @@ function createTransport(fetch: typeof globalThis.fetch) {
 		authorityKey: "server-a",
 		deskBoundaryToken: "desk-token",
 		fetch,
+		webSocket,
 	});
 }
 

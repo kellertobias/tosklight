@@ -9,6 +9,26 @@ export interface VisualizationRuntimeTransport {
 		scope: VisualizationRuntimeScope,
 		lane: VisualizationRuntimeLane,
 	): Promise<VisualizationSnapshot>;
+	openStream?(
+		scope: VisualizationRuntimeScope,
+		observer: VisualizationRuntimeStreamObserver,
+	): VisualizationRuntimeStream;
+}
+
+export interface VisualizationRuntimeStreamObserver {
+	snapshot(
+		lane: VisualizationRuntimeLane,
+		snapshot: VisualizationSnapshot,
+	): void;
+	error(error: Error): void;
+}
+
+export interface VisualizationRuntimeStream {
+	updateClaims(
+		lanes: readonly VisualizationRuntimeLane[],
+		maxRateHz: number,
+	): void;
+	close(): void;
 }
 
 /** The v1 adapter returned data outside the exact requested authority or lane. */

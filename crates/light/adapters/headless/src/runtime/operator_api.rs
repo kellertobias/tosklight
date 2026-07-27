@@ -183,12 +183,21 @@ pub(super) async fn visualization_snapshot(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
     show.verify(&state)?;
+    Ok(Json(visualization_snapshot_for_session(
+        &state,
+        &session,
+        query.preload,
+    )?))
+}
+
+pub(super) fn visualization_snapshot_for_session(
+    state: &AppState,
+    session: &Session,
+    preload: bool,
+) -> Result<serde_json::Value, ApiError> {
     let snapshot = state.output.snapshot();
     let options = state.output.render_options();
-    let programmer = query
-        .preload
-        .then(|| state.programming.get(session.id))
-        .flatten();
+    let programmer = preload.then(|| state.programming.get(session.id)).flatten();
     let extra_dynamic_values = programmer
         .as_ref()
         .map(|programmer| {
@@ -203,10 +212,8 @@ pub(super) async fn visualization_snapshot(
     let ordinary = state.output.resolved_values();
     let (mut resolved, dynamic_runtime, dynamic_samples) = state
         .output
-        .visualization_dynamic_projection(&extra_dynamic_values, query.preload);
-    if query.preload
-        && let Some(programmer) = programmer
-    {
+        .visualization_dynamic_projection(&extra_dynamic_values, preload);
+    if preload && let Some(programmer) = programmer {
         for value in programmer
             .preload_active
             .iter()
@@ -267,16 +274,16 @@ pub(super) async fn visualization_snapshot(
         &dynamic_samples,
         &extra_dynamic_values,
     );
-    Ok(Json(serde_json::json!({
+    Ok(serde_json::json!({
         "revision": snapshot.revision,
         "generated_at": chrono::Utc::now(),
         "grand_master": options.grand_master,
         "blackout": options.blackout,
-        "preload": query.preload,
+        "preload": preload,
         "values": values,
         "dynamic_stack": dynamic_stack,
         "profile_output_values": profile_output_values,
-    })))
+    }))
 }
 
 #[derive(Serialize)]

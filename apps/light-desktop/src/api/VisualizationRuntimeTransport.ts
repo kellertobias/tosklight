@@ -3,7 +3,11 @@ import type {
 	VisualizationRuntimeLane,
 	VisualizationRuntimeScope,
 } from "../features/visualizationRuntime/contracts";
-import type { VisualizationRuntimeTransport } from "../features/visualizationRuntime/transport";
+import type {
+	VisualizationRuntimeStream,
+	VisualizationRuntimeStreamObserver,
+	VisualizationRuntimeTransport,
+} from "../features/visualizationRuntime/transport";
 import {
 	VisualizationRuntimeHttpError,
 	VisualizationRuntimeProtocolError,
@@ -32,6 +36,7 @@ export interface HttpVisualizationRuntimeTransportOptions {
 	authorityKey: string;
 	deskBoundaryToken?: string;
 	fetch?: typeof globalThis.fetch;
+	webSocket?: typeof globalThis.WebSocket;
 }
 
 /** Narrow, authenticated adapter for the transitional v1 Visualization snapshot. */
@@ -79,6 +84,19 @@ export class HttpVisualizationRuntimeTransport
 		}
 	}
 
+	openStream(
+		scope: VisualizationRuntimeScope,
+		observer: VisualizationRuntimeStreamObserver,
+	): VisualizationRuntimeStream {
+		this.validateScope(scope);
+		return new WebSocketVisualizationRuntimeStream(
+			this.baseUrl,
+			this.options.sessionToken,
+			observer,
+			this.options.webSocket ?? globalThis.WebSocket,
+		);
+	}
+
 	private validateScope(scope: VisualizationRuntimeScope) {
 		const showId = programmingUuidAt(scope.showId, "$.scope.showId");
 		const sessionId = programmingUuidAt(scope.sessionId, "$.scope.sessionId");
@@ -104,6 +122,152 @@ export class HttpVisualizationRuntimeTransport
 		if (this.options.deskBoundaryToken)
 			headers.set("x-light-desk-token", this.options.deskBoundaryToken);
 		return headers;
+	}
+}
+
+class WebSocketVisualizationRuntimeStream
+	implements VisualizationRuntimeStream
+{
+	private socket: WebSocket | null = null;
+	private claims = new Set<VisualizationRuntimeLane>();
+	private maxRateHz = 10;
+	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+	private reconnectDelay = 250;
+	private stopped = false;
+	private lastSequence = 0;
+
+	constructor(
+		private readonly baseUrl: string,
+		private readonly sessionToken: string,
+		private readonly observer: VisualizationRuntimeStreamObserver,
+		private readonly WebSocketImplementation: typeof globalThis.WebSocket,
+	) {}
+
+	updateClaims(
+		lanes: readonly VisualizationRuntimeLane[],
+		maxRateHz: number,
+	) {
+		const removed = [...this.claims].filter((lane) => !lanes.includes(lane));
+		this.claims = new Set(lanes);
+		this.maxRateHz = Math.max(1, Math.min(10, Math.floor(maxRateHz)));
+		if (!this.claims.size) {
+			this.closeSocket();
+			return;
+		}
+		if (!this.socket) this.connect();
+		else {
+			if (removed.length) this.send({ type: "unsubscribe", lanes: removed });
+			this.sendSubscription();
+		}
+	}
+
+	close() {
+		this.stopped = true;
+		this.claims.clear();
+		if (this.reconnectTimer !== null)
+			globalThis.clearTimeout(this.reconnectTimer);
+		this.reconnectTimer = null;
+		this.closeSocket();
+	}
+
+	private connect() {
+		if (this.stopped || this.socket || !this.claims.size) return;
+		const url = new URL("/api/v2/visualization/stream", this.baseUrl);
+		url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+		const socket = new this.WebSocketImplementation(url, [
+			"light.visualization.v1",
+			`light.token.${this.sessionToken}`,
+		]);
+		this.socket = socket;
+		socket.addEventListener("open", () => {
+			this.reconnectDelay = 250;
+			this.lastSequence = 0;
+			this.sendSubscription();
+		});
+		socket.addEventListener("message", (event) => this.receive(event.data));
+		socket.addEventListener("error", () =>
+			this.observer.error(
+				new VisualizationRuntimeProtocolError(
+					"Visualization stream connection failed",
+				),
+			),
+		);
+		socket.addEventListener("close", () => {
+			if (this.socket === socket) this.socket = null;
+			this.scheduleReconnect();
+		});
+	}
+
+	private receive(raw: unknown) {
+		try {
+			if (typeof raw !== "string")
+				throw new VisualizationRuntimeProtocolError(
+					"Visualization stream message was not text",
+				);
+			const message = recordAt(JSON.parse(raw) as unknown, "$");
+			const type = stringAt(message.type, "$.type");
+			if (type === "hello") {
+				if (integerAt(message.protocol_version, "$.protocol_version") !== 1)
+					throw new VisualizationRuntimeProtocolError(
+						"Visualization stream protocol version is unsupported",
+					);
+				return;
+			}
+			if (type === "snapshot") {
+				const lane = enumAt(message.lane, "$.lane", ["normal", "preload"]);
+				const sequence = integerAt(message.sequence, "$.sequence");
+				if (this.lastSequence && sequence !== this.lastSequence + 1)
+					this.send({ type: "resynchronize", lane });
+				this.lastSequence = sequence;
+				const snapshot = decodeVisualizationRuntimeSnapshot(
+					message.snapshot,
+					lane,
+				);
+				this.observer.snapshot(lane, snapshot);
+				return;
+			}
+			if (type === "structural_invalidation") {
+				for (const lane of this.claims)
+					this.send({ type: "resynchronize", lane });
+				return;
+			}
+			if (type === "error")
+				throw new VisualizationRuntimeProtocolError(
+					stringAt(message.message, "$.message"),
+				);
+		} catch (reason) {
+			this.observer.error(asError(reason));
+		}
+	}
+
+	private sendSubscription() {
+		if (!this.claims.size) return;
+		this.send({
+			type: "subscribe",
+			lanes: [...this.claims],
+			max_rate_hz: this.maxRateHz,
+		});
+	}
+
+	private send(message: unknown) {
+		if (this.socket?.readyState === this.WebSocketImplementation.OPEN)
+			this.socket.send(JSON.stringify(message));
+	}
+
+	private scheduleReconnect() {
+		if (this.stopped || !this.claims.size || this.reconnectTimer !== null) return;
+		const delay = this.reconnectDelay;
+		this.reconnectDelay = Math.min(this.reconnectDelay * 2, 2_000);
+		this.reconnectTimer = globalThis.setTimeout(() => {
+			this.reconnectTimer = null;
+			this.connect();
+		}, delay);
+	}
+
+	private closeSocket() {
+		const socket = this.socket;
+		this.socket = null;
+		socket?.close();
 	}
 }
 

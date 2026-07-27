@@ -7,6 +7,7 @@ import type { VisualizationRuntimeStore } from "./store";
 import {
 	type VisualizationRuntimeTransport,
 	VisualizationRuntimeProtocolError,
+	type VisualizationRuntimeStream,
 } from "./transport";
 
 interface LaneRuntime {
@@ -37,6 +38,7 @@ export class VisualizationRuntimeSession {
 	private nextClaimId = 0;
 	private lifecycle = 0;
 	private stopped = false;
+	private stream: VisualizationRuntimeStream | null = null;
 
 	constructor(options: VisualizationRuntimeSessionOptions) {
 		this.scope = options.scope;
@@ -55,9 +57,10 @@ export class VisualizationRuntimeSession {
 		if (first) {
 			runtime.generation++;
 			this.store.setLoading(lane, this.store.captureScope());
-			this.scheduleRefresh(lane);
+			if (!this.transport.openStream) this.scheduleRefresh(lane);
 		}
-		this.restartTimer(lane);
+		if (this.transport.openStream) this.syncStream();
+		else this.restartTimer(lane);
 		let active = true;
 		return () => {
 			if (!active) return;
@@ -83,6 +86,8 @@ export class VisualizationRuntimeSession {
 		if (this.stopped) return;
 		this.stopped = true;
 		this.lifecycle++;
+		this.stream?.close();
+		this.stream = null;
 		for (const lane of lanes()) {
 			const runtime = this.lanes[lane];
 			runtime.claims.clear();
@@ -95,13 +100,15 @@ export class VisualizationRuntimeSession {
 		const runtime = this.lanes[lane];
 		if (!runtime.claims.delete(claimId)) return;
 		if (runtime.claims.size) {
-			this.restartTimer(lane);
+			if (this.transport.openStream) this.syncStream();
+			else this.restartTimer(lane);
 			return;
 		}
 		runtime.generation++;
 		this.clearTimer(runtime);
 		if (this.store.matchesScope(this.scope))
 			this.store.setIdle(lane, this.store.captureScope());
+		if (this.transport.openStream) this.syncStream();
 	}
 
 	private scheduleRefresh(lane: VisualizationRuntimeLane) {
@@ -171,6 +178,45 @@ export class VisualizationRuntimeSession {
 	private clearTimer(runtime: LaneRuntime) {
 		if (runtime.timer !== null) globalThis.clearInterval(runtime.timer);
 		runtime.timer = null;
+	}
+
+	private syncStream() {
+		const claimedLanes = lanes().filter(
+			(lane) => this.lanes[lane].claims.size > 0,
+		);
+		if (!claimedLanes.length) {
+			this.stream?.close();
+			this.stream = null;
+			return;
+		}
+		this.stream ??= this.transport.openStream?.(this.scope, {
+			snapshot: (lane, snapshot) => {
+				if (
+					this.stopped ||
+					!this.lanes[lane].claims.size ||
+					!this.store.matchesScope(this.scope)
+				)
+					return;
+				this.store.install(lane, snapshot, this.store.captureScope());
+				this.onError?.(null);
+			},
+			error: (error) => {
+				for (const lane of lanes()) {
+					if (this.lanes[lane].claims.size)
+						this.store.setError(lane, error, this.store.captureScope());
+				}
+				this.onError?.(error);
+			},
+		}) ?? null;
+		const fastest = Math.min(
+			...claimedLanes.flatMap((lane) => [
+				...this.lanes[lane].claims.values(),
+			]),
+		);
+		this.stream?.updateClaims(
+			claimedLanes,
+			Math.max(1, Math.min(10, Math.ceil(1_000 / fastest))),
+		);
 	}
 }
 

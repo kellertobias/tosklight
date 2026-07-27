@@ -12,7 +12,7 @@ function useVisualizationSnapshot(followPreload: boolean, active: boolean) {
 	return useVisualizationRuntimeSnapshot({
 		lane: followPreload ? "preload" : "normal",
 		enabled: active,
-		intervalMillis: 200,
+		intervalMillis: 100,
 	});
 }
 

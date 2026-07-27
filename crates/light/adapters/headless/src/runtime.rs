@@ -30,6 +30,7 @@ mod runtime_wire;
 mod startup_options;
 mod startup_state;
 mod visualization_frame;
+mod visualization_transport;
 
 use crate::tolerant_json::TolerantJson;
 use crate::update;

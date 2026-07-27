@@ -9,7 +9,7 @@ use uuid::Uuid;
 pub const VISUALIZATION_PROTOCOL_VERSION: u16 = 1;
 pub const VISUALIZATION_MAX_RATE_HZ: u8 = 10;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum VisualizationLane {
     Normal,
@@ -38,6 +38,41 @@ pub struct VisualizationValue {
     pub value: ProgrammingPreloadAttributeValue,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum VisualizationStackEntryType {
+    OrdinaryStatic,
+    Dynamic,
+    FixAt,
+    DynamicOff,
+    Static,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct VisualizationDynamicStackEntry {
+    pub fixture_id: Uuid,
+    pub attribute: String,
+    pub entry_type: VisualizationStackEntryType,
+    pub priority: i16,
+    #[ts(type = "number")]
+    pub changed_at_millis: u64,
+    pub source: String,
+    pub dynamic_id: Option<Uuid>,
+    pub pool_number: Option<u16>,
+    pub name: String,
+    pub runtime_instance_id: Option<Uuid>,
+    pub controller_id: Option<Uuid>,
+    pub lane_id: Option<Uuid>,
+    pub size: Option<f32>,
+    pub activation_mix: Option<f32>,
+    pub paused: bool,
+    pub hidden: bool,
+    pub pending: bool,
+    pub winning: bool,
+    pub value: Option<ProgrammingPreloadAttributeValue>,
+    pub resolved_value: Option<ProgrammingPreloadAttributeValue>,
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct VisualizationLaneSnapshot {
     #[ts(type = "number")]
@@ -47,6 +82,8 @@ pub struct VisualizationLaneSnapshot {
     pub blackout: bool,
     pub preload: bool,
     pub values: Vec<VisualizationValue>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dynamic_stack: Vec<VisualizationDynamicStackEntry>,
     pub profile_output_values: Vec<VisualizationValue>,
 }
 
