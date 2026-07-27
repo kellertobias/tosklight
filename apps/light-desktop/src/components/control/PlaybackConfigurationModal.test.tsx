@@ -34,6 +34,16 @@ const mocks = vi.hoisted(() => ({
 		{ id: "cue-2", name: "Encore" },
 	] as Array<{ id: string; name: string; storageId?: string }>,
 	groups: [{ id: "group-1", body: { name: "Front Wash" } }],
+	dynamics: [
+		{
+			id: "dynamic-1",
+			body: {
+				pool_number: 1,
+				name: "Pulse",
+				target_binding: { type: "targetless" },
+			},
+		},
+	],
 }));
 
 vi.mock("../../features/server/useShowObjectsState", () => ({
@@ -41,6 +51,7 @@ vi.mock("../../features/server/useShowObjectsState", () => ({
 }));
 vi.mock("../../features/showObjects/ShowObjectsState", () => ({
 	usePortableGroups: () => mocks.groups,
+	useDynamics: () => mocks.dynamics,
 	useCueLists: () =>
 		mocks.scopedCueLists.map((body) => ({
 			kind: "cue_list",
@@ -486,6 +497,22 @@ describe("PlaybackConfigurationModal layout and persistence", () => {
 });
 
 describe("PlaybackConfigurationModal topology defaults", () => {
+	it("uses the server Dynamic Playback defaults", () => {
+		show(
+			withFunctionDefaults(
+				base,
+				"dynamic",
+				"cue-1",
+				"group-1",
+				mocks.dynamics[0] as never,
+			),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Layout" }));
+		expect(selectTrigger("Top button")).toHaveTextContent("Off");
+		expect(selectTrigger("Middle button")).toHaveTextContent("Pause");
+		expect(selectTrigger("Bottom button")).toHaveTextContent("Flash");
+	});
+
 	it.each([
 		"programmer_fade",
 		"cue_fade",
