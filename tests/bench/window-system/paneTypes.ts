@@ -67,6 +67,13 @@ export enum StageView {
 	ThreeDimensional = "3d",
 }
 
+export enum StageRenderQuality {
+	LinesOnly = "Lines only",
+	LinesAndBeams = "Lines + beams",
+	Beams = "Beams",
+	ImprovedBeams = "Improved beams",
+}
+
 export enum PresetFamily {
 	Mixed = "Mixed",
 	Dimmer = "Dimmer",
@@ -80,6 +87,7 @@ export interface StagePaneConfiguration {
 	view?: StageView;
 	followPreload?: boolean;
 	beamGuides?: boolean;
+	renderQuality?: StageRenderQuality;
 	showGroupShortcuts?: boolean;
 }
 
@@ -107,14 +115,19 @@ export interface TextEditorPaneConfiguration {
 	view?: "plain" | "markdown" | "split";
 }
 
-export type PaneConfiguration<T extends PaneType> =
-	T extends PaneType.Stage ? StagePaneConfiguration
-		: T extends PaneType.Fixtures ? FixtureSheetPaneConfiguration
-			: T extends PaneType.Presets ? PresetPaneConfiguration
-				: T extends PaneType.Cues ? CuesPaneConfiguration
-					: T extends PaneType.VirtualPlaybacks ? VirtualPlaybackPaneConfiguration
-						: T extends PaneType.TextEditor ? TextEditorPaneConfiguration
-							: Record<never, never>;
+export type PaneConfiguration<T extends PaneType> = T extends PaneType.Stage
+	? StagePaneConfiguration
+	: T extends PaneType.Fixtures
+		? FixtureSheetPaneConfiguration
+		: T extends PaneType.Presets
+			? PresetPaneConfiguration
+			: T extends PaneType.Cues
+				? CuesPaneConfiguration
+				: T extends PaneType.VirtualPlaybacks
+					? VirtualPlaybackPaneConfiguration
+					: T extends PaneType.TextEditor
+						? TextEditorPaneConfiguration
+						: Record<never, never>;
 
 export const paneLabels: Readonly<Record<PaneType, string>> = {
 	[PaneType.Stage]: "Stage",

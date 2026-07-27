@@ -57,6 +57,7 @@ import { BrowserShows } from "../show/showScenario";
 import { BrowserPatch } from "../show-setup/patchScenario";
 import { BrowserSystemIntegrations } from "../show-setup/systemIntegrationScenario";
 import { BrowserFiles } from "../specific-features/fileTextScenario";
+import { BrowserStageVisualizer } from "../specific-features/stageVisualizerScenario";
 import { BrowserDeskLock } from "../window-system/deskLockScenario";
 import { BrowserDesktops } from "../window-system/desktopScenario";
 import { BrowserOperatorShell } from "../window-system/operatorShellScenario";
@@ -138,6 +139,7 @@ export class BrowserScenarioWorld {
 	readonly special: BrowserProgrammerSpecials;
 	readonly recipe: BrowserRecipes;
 	readonly files: BrowserFiles;
+	readonly stage: BrowserStageVisualizer;
 	readonly routeSeed: string;
 	private readonly semanticTrace: Array<{
 		title: string;
@@ -342,6 +344,7 @@ export class BrowserScenarioWorld {
 			desk.observeSemanticSteps(observer),
 		);
 		this.files = new BrowserFiles(api, page, desk, bench);
+		this.stage = new BrowserStageVisualizer(page, testInfo);
 		const outputPackets = new BrowserOutputPackets(bench);
 		this.expect = {
 			dmx: (universe) => this.dmx.expect(universe),
@@ -471,9 +474,12 @@ export class BrowserBuiltIns {
 	}
 
 	async open(type: BuiltInPaneType): Promise<void> {
-		await this.page
-			.getByRole("button", { name: "BUILT-INS", exact: true })
-			.click();
+		const toggle = this.page.getByRole("button", {
+			name: "Desktops / Built-ins",
+			exact: true,
+		});
+		if ((await toggle.getAttribute("data-dock-mode")) !== "builtins")
+			await toggle.click();
 		await this.page
 			.locator("[aria-label='Built-ins']")
 			.getByRole("button", { name: builtInLabels[type], exact: true })
