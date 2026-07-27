@@ -92,6 +92,7 @@ function StageSettings({
 							/>
 							<MultiValueToggleField
 								label="Render quality"
+								description="Improved beams adds bounded feathered falloff. Surface lighting, opaque-beam occlusion, and cast shadows are not available in the embedded Stage; use Viz for those rendering features."
 								value={options.renderQuality}
 								onChange={(renderQuality) =>
 									dispatch({
