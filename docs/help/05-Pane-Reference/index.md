@@ -6,7 +6,10 @@ Every pane has a **Pane Settings** tab. **Grid width** uses 1-24 columns, **Grid
 
 Those common grid and removal controls work the same way for every pane and are documented only here. The reference shows a Pane Settings image only when that pane adds settings of its own.
 
-The following pages document every operator choice currently offered by **Open Window**, including a screenshot of the pane. They include a settings screenshot only when that pane adds settings beyond the common controls above. Dynamics is the deliberate exception: it remains a future feature, so its generated screenshot is retained for development review but is not presented as an operator surface in this manual.
+The following pages document every operator choice currently offered by **Open Window**. They
+include a settings screenshot only when that pane adds settings beyond the common controls above.
+The Dynamics production UI is documented in text while its replacement screenshot waits for the
+required explicit visual-review checkpoint.
 
 - [Programming and visualization panes](01-programming-and-visualization.md)
 - [Cue and playback panes](02-cues-and-playbacks.md)

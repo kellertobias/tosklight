@@ -2,7 +2,7 @@
 
 ## Status and goal
 
-**IMPLEMENTABLE.** Add Dynamic On, Dynamic Off, and Fixed At as first-class Programmer values, expose the Dynamics encoder surface, and keep UI, command line, HTTP/WebSocket, OSC, and attached hardware on one server-authoritative operation path.
+**DOING.** Add Dynamic On, Dynamic Off, and Fixed At as first-class Programmer values, expose the Dynamics encoder surface, and keep UI, command line, HTTP/WebSocket, OSC, and attached hardware on one server-authoritative operation path.
 
 The full object editor lives in the Dynamics window. The Programmer Dynamics surface is the fast live-programming and running-instance workflow.
 

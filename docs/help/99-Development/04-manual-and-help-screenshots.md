@@ -38,7 +38,11 @@ stories. The command still drives the production browser desk and server; Storyb
 from that run go only to `.artifacts/test/help-screenshots/live-app` and cannot overwrite their
 reviewed documentation files.
 
-The Dynamics pane remains in screenshot generation so future UI changes are detected, but its screenshot is intentionally not embedded in the manual while Dynamics is a future feature. Development remains available through developer tooling, but it is not an operator **Open Window** choice and is therefore excluded from the Pane Reference screenshot set.
+Dynamics pool/editor screenshots are refreshed only after an explicit user review of the production
+UI. This prevents component tests and pixel references from freezing an unaccepted interaction or
+layout. Until that checkpoint is complete, keep the existing Dynamics image and manifest ownership
+unchanged; documentation text may describe the implemented operator contract without presenting an
+unreviewed replacement image.
 
 ## Refresh icon contact sheets
 

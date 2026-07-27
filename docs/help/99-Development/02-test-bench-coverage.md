@@ -207,7 +207,7 @@ The executable workflows that use this patch are cataloged under the concrete Gr
 ## BENCH-CLOCK-DMX-001–002 — Scenario clock and output observations
 
 - **Starting show:** Use the isolated twelve-dimmer bench show and its test-owned Art-Net and
-  sACN receivers; the free-run case installs one test-owned Phaser playback.
+  sACN receivers; the free-run case installs one test-owned Dynamic source.
 - **Surface:** Typed scenario clock, fixture-aware and raw logical-DMX observations, and decoded
   Art-Net/sACN packets.
 - **Actions:** Render one zero-time step; visit named 999/1000/1001 ms boundaries; resolve
@@ -258,7 +258,7 @@ The executable workflows that use this patch are cataloged under the concrete Gr
 | OSC-001–006 | Hardware OSC | feedback subscription, commands, subscriber isolation, invalid input, same-desk UI/OSC interaction state, desk isolation, and current/explicit page addressing | received OSC messages, command/audit state, UDP output |
 | API-001–002 | REST/events | authentication, revision conflicts, CRUD, matching events, and audit ordering | HTTP status/body, events, audit |
 | CROSS-001–002 | Cross-surface agreement | equivalent Group value through UI/API/OSC and visible UI synchronization after external mutation | normalized programmer/output state and visible UI |
-| TIME-001–003 | Virtual time | zero tick, exact fade boundaries, chaser/phaser speed, pause/resume, and maximum one-week jump | exact virtual timestamp, runtime phase, and output frame |
+| TIME-001–003 | Virtual time | zero tick, exact fade boundaries, chaser/Dynamic speed, pause/resume, and maximum one-week jump | exact virtual timestamp, runtime phase, and output frame |
 | BENCH-CLOCK-DMX-001–002 | Test-bench clock and DMX helpers | exact steps and named boundaries, genuine scheduler free run, fixture/profile component resolution, repatch-safe semantic lookup, fixture ranges, raw logical frames, and distinct wire packets | application timestamp, latest logical frame, decoded Art-Net/sACN history, and diagnostic artifacts |
 | FILE-001–002, FILE-016 | File Manager | confined revision-safe text, visible browse/edit, authenticated roots/capabilities/range streaming, file operations, configured roots, pane input ownership, and hosted picker contracts | HTTP status/body, persisted files, visible pane/picker state, OSC-owned input context |
 | TEXT-001, TEXT-015 | Text Editor | file association and dirty state, multi-pane synchronization/conflicts, external updates, rename/delete recovery, read-only and Markdown modes | persisted text/layout and visible editor state |

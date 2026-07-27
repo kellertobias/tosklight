@@ -2,7 +2,7 @@
 
 ## Status and goal
 
-**IMPLEMENTABLE.** Build the numbered Dynamics pool and the full production editor, using the standalone experiment as the visual and encoder baseline while applying the settled behavior below.
+**DOING.** Build the numbered Dynamics pool and the full production editor, using the standalone experiment as the visual and encoder baseline while applying the settled behavior below.
 
 The production editor deliberately has no embedded fixture grid, fixture preview, preview transport, or browser-side Dynamic evaluator. Operators open a separate Stage pane when they want visualization. A Stage pane may follow Live or Preload through the real authoritative runtime.
 
@@ -158,7 +158,7 @@ Random controls are:
 - a local Random group selector; and
 - Generate Seed for the selected local group.
 
-Pulse durations are deterministically drawn, bounded to at least one evaluator/output interval, and may cross a Dynamic cycle boundary. Decision interval and pulse durations scale inversely with overall Dynamic speed, lane multiplier, and playback-local Double/Half/learned speed. Zero Attack and Decay are hard binary pulses. Random timing, Markov stay-on/stay-off controls, density/grouping/burst modes, separate timing/gate modes, and Macro functions remain later extensions.
+Pulse durations are deterministically drawn, bounded to at least one evaluator/output interval, and may cross a Dynamic cycle boundary. Decision interval and pulse durations scale inversely with overall Dynamic speed, lane multiplier, and playback-local Double/Half/learned speed. Zero Attack and Decay are hard binary pulses. Random timing, Markov stay-on/stay-off controls, density/grouping/burst modes, and separate timing/gate modes remain later extensions. Macro functions are not a Dynamics extension: [Macros](../../../Later/46-macros-and-scheduled-macros.md) may edit and start Dynamics, but Dynamics never call Macros.
 
 ## Phase Spread
 
@@ -200,6 +200,13 @@ A Dynamic uses exactly one speed source:
 
 Speed-Group Dynamics store a positive rational beats-per-cycle value with a four-beat default. The Dynamic has an overall rational multiplier and every lane may have its own rational multiplier; required direct choices include multiply/divide by 2, 3, and 4. All lanes share one epoch even when rational multipliers make their cycle counts differ.
 
+Run Mode is independent from activation timing:
+
+- **Loop** repeats until its exact controller or instance is turned Off; and
+- **One-shot** evaluates one complete effective Dynamic cycle, then stops and disappears from operator-visible running state. Its internal source ownership remains terminal until that authored activation is removed or deliberately retriggered.
+
+One-shot completion is remembered for the authored activation identity so a still-active Programmer, Cue, or Playback value cannot restart it on the next output tick. A later deliberate activation may trigger it again. Older stored Dynamics omit Run Mode and therefore migrate as Loop.
+
 The three activation policies are:
 
 - **Start now** — local epoch, immediate phase zero;
@@ -208,7 +215,7 @@ The three activation policies are:
 
 Join/Next require a Speed Group. Fixed duration uses Start now. Fixture phase remains independent from transport position and activation quantization.
 
-The Speed view shows authoritative source, effective duration/BPM, paused/running/pending state, activation policy, boundary, beats per cycle, overall multiplier, and bounded transport position. It has no draggable or editable preview playhead.
+The Speed view shows authoritative source, effective duration/BPM, paused/running/pending state, Run Mode, activation policy, boundary, beats per cycle, overall multiplier, and bounded transport position. Run Mode is editable from both the form and the sixth encoder. It has no draggable or editable preview playhead.
 
 ## UI review and acceptance
 

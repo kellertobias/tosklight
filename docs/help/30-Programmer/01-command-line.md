@@ -207,6 +207,47 @@ An attribute touch encoder is a relative control, not a fader. Its card contains
 
 The center **Set Value** zone opens deliberate absolute entry. With multiple fixtures selected, the modal accepts `0 [THRU] 50 [ENTER]` and spreads that attribute over the ordered selection exactly like the command line. Relative steps, continuous encoder movement, encoder Set Value, attached hardware/OSC encoder turns, and channel faders update the encoder target, Fixture Sheet, Stage, and physical output immediately even when Programmer Fade is non-zero. These immediate operations store no explicit zero-second timing override, so a later Cue still uses its normal Cue or playback timing fallback. Preset recall and **PRELOAD GO** retain Programmer Fade where documented.
 
+### Dynamics and Fixed At
+
+`DYNAMIC <number>` toggles a Dynamic on the current ordered selection. Put an explicit fixture or
+Group selection before `DYNAMIC` to address a targetless Dynamic, for example
+`FIXTURE 1 THRU 10 DYNAMIC 12`. A target-bound Dynamic accepts only its exact stored target scope;
+it is never retargeted by a command.
+
+The live instance forms are:
+
+| Operation | Command |
+| --- | --- |
+| Toggle | `DYNAMIC 12` |
+| Off | `DYNAMIC 12 OFF` |
+| Size | `DYNAMIC 12 SIZE AT 50` |
+| Local speed | `DYNAMIC 12 SPEED AT 2` |
+| Phase offset | `DYNAMIC 12 PHASE AT 90` |
+| Assign to Playback | `SET DYNAMIC 12 PLAYBACK 5` |
+
+Size uses percent, speed uses a positive multiplier, and phase uses degrees. When more than one
+targetless running instance could match, the desk opens an exact instance choice with each running
+controller and target count. Choosing one executes a revision-checked `INSTANCE` command; the desk
+never selects one by array order.
+
+The command line spells a Fixed At value **`FixAT`**; operator buttons and help labels use **FAT**.
+FAT temporarily fixes the current attribute above a Dynamic without stopping its clock. Clearing
+or releasing FAT reveals the current phase of the underlying winning Dynamic.
+
+`[SHIFT] [AT]` enters `FixAT` without also entering ordinary `AT`. `FixAT 100` uses the most
+recently authored continuous parameter as the active parameter context. Use
+`ATTRIBUTE <attribute-name>` before `FixAT` for an explicit parameter, with the normal fixture or
+Group selection grammar before it:
+
+| FAT command | Result |
+| --- | --- |
+| `FixAT 100` | Fix the active parameter on the current selection at full. |
+| `FIXTURE 1 THRU 10 ATTRIBUTE pan FixAT 50` | Fix Pan at 50% on the explicit ordered fixture selection. |
+| `GROUP 2 ATTRIBUTE intensity FixAT 75 TIME 2 DELAY 1` | Fix Group 2 intensity after one second, fading for two seconds. |
+
+An absent active parameter, unsupported parameter, or discrete parameter is rejected before any
+Programmer value changes.
+
 ### Value fade and delay times
 
 Append `[TIME] <seconds>` to set an explicit fade for only the values in this command. Pressing `[TIME]` twice changes the second press to `DELAY` in the command line; append the delay in seconds after it. Fade and delay may appear in either order because fading always begins after the delay.
@@ -370,3 +411,30 @@ The desk alias scopes interaction, not ownership of programmer values. A Tauri o
 - `/light/cuelist/{Cuelist}/{action}` directly operates a Cuelist when a page playback is not the intended target.
 
 The hardware simulator uses `page-playback`. The former `paged-playback`, `/light/qlist/{number}/{action}`, and direct `/light/playback/{Cuelist}/{action}` forms remain compatibility aliases for existing integrations.
+
+### OSC Dynamics
+
+Dynamics OSC is scoped to a subscribed desk alias. Pool actions take one pressed Boolean or numeric
+value; release values are ignored:
+
+- `/light/{desk}/dynamic/{pool-number}/toggle`
+- `/light/{desk}/dynamic/{pool-number}/off`
+
+Live-instance actions use the runtime instance UUID from feedback and one numeric argument:
+
+- `/light/{desk}/dynamic/instance/{uuid}/size` — normalized `0.0` through `1.0`
+- `/light/{desk}/dynamic/instance/{uuid}/speed` — positive multiplier
+- `/light/{desk}/dynamic/instance/{uuid}/phase` — finite degrees
+
+`/light/{desk}/programmer/fix-at` takes an attribute-name string followed by one normalized numeric
+value and uses the desk's current selection. Definition editing is not exposed through OSC.
+
+Rejected actions return
+`/light/{desk}/feedback/dynamic/error <original-address> <message>`. Subscription snapshots publish
+`global-paused`, `runtime-count`, and one
+`runtime/{runtime-uuid}/{active|pool-number|name|target-count|controller-count|winning-controller|paused}`
+family per running instance. Each controller publishes
+`controller/{controller-uuid}/{runtime-instance|source|priority|size|speed|phase|paused|winning|releasing}`.
+Programmer-owned summaries remain under `feedback/dynamic/instance/{uuid}` and
+`feedback/dynamic/{pool-number}/active`. Treat each refresh as authoritative: `runtime-count` and
+the identities present in that snapshot replace a locally cached list.

@@ -2,7 +2,7 @@
 
 ## Status and goal
 
-**IMPLEMENTABLE.** Implement portable Dynamic definitions, first-class Dynamic/FAT Programmer and Cue values, authoritative runtime instances, deterministic sampling, persistence, tracking, Preload, projection, and output through the existing application and contribution boundaries.
+**DOING.** Implement portable Dynamic definitions, first-class Dynamic/FAT Programmer and Cue values, authoritative runtime instances, deterministic sampling, persistence, tracking, Preload, projection, and output through the existing application and contribution boundaries.
 
 ## Portable definitions
 
@@ -200,6 +200,8 @@ Speed and editor controls follow the Dynamics Window plan.
 - Overall and per-lane rational multipliers support multiply/divide by at least 2, 3, and 4.
 - All lanes in an instance use one monotonic epoch.
 - Fixture phase is independent from transport phase and activation quantization.
+
+Each definition has a backward-compatible Run Mode. Loop is the default. One-shot samples exactly one complete effective cycle, marks its owned runtime instance terminal at the cycle boundary, removes it from operator-visible running projections and output, and emits the normal authoritative instance-off transition. Runtime persistence retains that terminal ownership while the authored source remains active, so reconciliation of an unchanged Programmer, Cue, or Playback `DynamicOn` cannot restart a completed one-shot after the next tick or process restart. Removing that source releases the terminal ownership; a later deliberate activation may run the Dynamic once again.
 
 Activation policies are Start now, Join sync now, and Next boundary. Join/Next require a Speed Group. A missing/deleted Speed Group blocks a new start and leaves an already compiled instance in a visible failed/held state; it never silently changes to a different group.
 

@@ -2,7 +2,7 @@
 
 ## Status and goal
 
-**IMPLEMENTABLE.** Allow a Dynamic to be assigned to a Playback and operated as a single animated-value source with configurable fader and button actions, independent source ownership, exact feedback, Preload, page addressing, and auto-off.
+**DOING.** Allow a Dynamic to be assigned to a Playback and operated as a single animated-value source with configurable fader and button actions, independent source ownership, exact feedback, Preload, page addressing, and auto-off.
 
 ## Assignment
 

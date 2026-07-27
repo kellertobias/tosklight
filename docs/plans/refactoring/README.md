@@ -26,22 +26,29 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 | 00 | [Programmer relative encoders and fade-time scope](finished/00-programmer-relative-encoders-and-fade-time-scope.md) | Completed cross-surface encoder behavior contract. |
 | 01 | [Unpatched fixtures from Add Fixture](finished/01-unpatched-fixtures-on-add-fixture.md) | Completed **Empty** address workflow. |
 | 02 | [Shared frontend components and deterministic screenshots](finished/storybook%20changes/02-shared-frontend-components-and-storybook-screenshots.DONE.md) | Completed production UI-library adoption, Storybook validation, and deterministic/live documentation screenshot ownership. |
-| 03 | [Consistent pool-object colors](pending/03-consistent-pool-object-colors.md) | Next unblocked plan; consume the accepted shared pool primitives from plan 02. |
-| 04 | [Empty-selection object target selection](pending/04-empty-selection-object-target-selection.md) | Queued after plan 03; stable application pool adapters are now available. |
-| 05 | [Warm frontend state for instant surface switching](pending/05-warm-frontend-state-for-instant-switching.md) | Queued after plan 04; the frontend provider and Storybook-harness prerequisite is complete. |
+| 03 | [Consistent pool-object colors](finished/03-consistent-pool-object-colors.md) | Completed shared pool-color semantics and adoption. |
+| 04 | [Empty-selection object target selection](finished/04-empty-selection-object-target-selection.md) | Completed authoritative empty-selection target workflow. |
+| 05 | [Warm frontend state for instant surface switching](finished/05-warm-frontend-state-for-instant-switching.md) | Completed authoritative frontend capability warmup. |
 | 06 | [Exclusive active-show mutation boundary](finished/06-exclusive-active-show-mutation-boundary.md) | Completed single transaction owner for active-show writes. |
 | 07a | [Backend Highlight application service](finished/07a-highlight-application-service.md) | Completed independent backend prerequisite; existing HTTP, WebSocket, OSC, persistence, output, event, and feedback behavior now shares one application service. |
-| 07b | [Typed commands and capability events](pending/07b-typed-commands-and-capability-events.md) | Queued after plans 03–05; its plan 02 frontend prerequisite and Highlight-service prerequisite are complete. |
-| 08 | [Typed control-surface interaction routing](pending/08-typed-control-surface-interaction-routing.md) | Queued after plan 07b; plan 02's component callback and modal/interaction boundaries are stable. |
-| 09 | [Patch performance benchmarks](pending/09-patch-performance-benchmarks.md) | Waiting for plan 02 and plan 05's stable client-store and visible-paint path. |
-| 10 | [Complete shared control-surface contracts](pending/10-complete-shared-control-surface-contracts.md) | Waiting for plans 07–08 to stabilize typed command and interaction names. |
-| 11 | [Packaged operator and reference-hardware verification](pending/11-packaged-operator-and-reference-hardware-verification.md) | Waiting for the accepted frontend and access to the required reference hardware. |
-| 12 | [Typed active-show object contracts](pending/12-typed-active-show-object-contracts.md) | Waiting for plan 07's final semantic event and generated-client boundaries. |
-| 13 | [Capability-owned application state](pending/13-capability-owned-application-state.md) | Waiting for plan 07's mutation/event owners, as required by the plan. |
+| 07b | [Typed commands and capability events](finished/07b-typed-commands-and-capability-events.md) | Completed typed application commands and semantic capability events. |
+| 08 | [Typed control-surface interaction routing](finished/08-typed-control-surface-interaction-routing.md) | Completed typed software and hardware interaction routing. |
+| 09 | [Patch performance benchmarks](finished/09-patch-performance-benchmarks.md) | Completed retained Patch performance evidence. |
+| 10 | [Complete shared control-surface contracts](finished/10-complete-shared-control-surface-contracts.md) | Completed shared control-surface contracts. |
+| 11 | [Sustained complex-show output benchmark](finished/11-sustained-complex-show-output-benchmark.md) | Completed retained complex-show output benchmark evidence. |
+| 12 | [Typed active-show object contracts](finished/12-typed-active-show-object-contracts.md) | Completed typed active-show object contracts. |
+| 13 | [Capability-owned application state](finished/13-capability-owned-application-state.md) | Completed capability-owned application state. |
 | 14 | [Modular desktop host](finished/14-modular-desktop-host.md) | Completed thin Tauri composition root and cohesive host modules. |
+| 16 | [Dynamics](doing/16-dynamics/README.md) | Currently owned; implementation and Storybook review surface are awaiting the required user visual-acceptance checkpoint. |
+| 17 | [Efficient built-in Stage visualizer](pending/14-efficient-built-in-stage-visualizer.md) | Immediately after Dynamics; add isolated visualization telemetry, retained rendering, and the four Stage render qualities without slowing engine or DMX output. |
+| 18 | [Dedicated Virtual Playbacks and exclusion zones](pending/15-virtual-playbacks-and-exclusion-zones.md) | Final current queue item; replace page-slot aliases with Virtual Playbacks 1001–9998 and rebuild exclusion zones on the new identity. |
 
 Product-roadmap work under `docs/plans/Next` and `docs/plans/Later` remains separate unless a queue
 file explicitly links it as its behavior contract.
+
+The filenames of the two remaining pending plans retain their originally authored
+numbers. The table's execution order is authoritative: finish Dynamics first, then
+the built-in Stage visualizer, then Dedicated Virtual Playbacks.
 
 ## Completed Storybook lane
 
@@ -64,21 +71,17 @@ The frontend lane was handed back after its owner:
 The directory move is the machine-readable signal that plan 02 and the frontend contracts it owns
 are stable. That signal is now present.
 
-After that signal, continue plans 03, 04, 05, 07b, 08, 09, 10, 11, 12, and 13 in numeric dependency
-order. Before claiming each new plan, query the large Codex usage window with the Tosken Raider MCP
+The current execution order is Dynamics, the built-in Stage visualizer, and Dedicated
+Virtual Playbacks. The Stage plan starts only after Dynamics is complete. Before claiming
+each new plan, query the large Codex usage window with the Tosken Raider MCP
 `get_remaining_usage` tool. Do not start another plan when the remaining large-window allowance is
-below 50%; finish and commit an already claimed coherent plan before stopping.
-
-Plan 11 has an external evidence dependency in addition to its queue dependency: the named
-reference Mac, attached controls, and Pi-class host must be available. Mocked or development-only
-evidence cannot substitute for those surfaces. If they are unavailable when plan 11 is reached,
-record the exact missing access and stop at that non-deferrable blocker.
+below 30%; finish and commit an already claimed coherent plan before stopping.
 
 An empty pending queue is not by itself completion. After the numbered queue is empty, audit the
 current repository against every applicable requirement and acceptance item in
 `../major-refactoring.md`, including its known-incomplete list and retained operational evidence.
 Create new numbered pending plans for any genuine implementation or verification gaps, then
-continue them under this workflow while the large-window allowance remains at least 50%.
+continue them under this workflow while the large-window allowance remains at least 30%.
 
 Only when that final audit finds the major refactor genuinely complete should the agent run the
 proportionate final release gates, update the consolidated execution record, commit the coherent

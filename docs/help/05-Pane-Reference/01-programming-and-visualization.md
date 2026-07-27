@@ -101,4 +101,25 @@ The full Channels window has previous/next controls and a page picker with at le
 
 ## Dynamics
 
-> **Dynamics is a future feature.**
+The Dynamics pane is the numbered pool for animated values. Tap a populated tile to toggle that
+Dynamic on the current ordered selection. A target-bound Dynamic always uses its stored target
+scope; an explicit selection must match that scope exactly. Shift-click a populated tile to open
+the production editor. With Set armed, touching a Dynamic and then a Playback assigns that Dynamic
+to the Playback instead of starting it.
+
+The pool uses sparse pages covering numbers 1-9999. Empty positions remain available for future
+Dynamics without renumbering existing show data. A populated tile reports its name and number; its
+running state comes from the authoritative runtime rather than a browser-side animation.
+
+The editor separates **Curves**, **Phase Spread**, and **Speed**. Curves contain scalar lanes for
+fixture attributes. Phase Spread controls ordered target projection, Offset/Span, Blocks, Repeats,
+Wings, and spatial ordering. Speed uses a fixed duration, Speed Group, or supported sound source.
+The editor contains no private fixture preview or browser-side evaluator: open a Stage pane and
+choose Live or **Follow Preload** for authoritative visualization.
+
+**Take Selection** stores the current target scope. One selected live Group remains a live Group
+binding; any other selection becomes an exact frozen ordered target list. **Clear Selection**
+returns the Dynamic to targetless operation. Both actions are disabled while any instance of that
+Dynamic is running, so an active definition cannot silently retarget.
+
+**Pane configuration:** only the common size and removal controls.

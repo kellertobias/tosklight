@@ -1,13 +1,23 @@
 # Dynamics
 
-This is chunk 14 of the overall refactoring efforts
+This is chunk 16 of the overall refactoring effort.
 
 
 ## Status
 
-**IMPLEMENTABLE.** The product, data, runtime, persistence, control-surface, playback, migration, and acceptance decisions for the first complete Dynamics release are settled in this folder.
+**DOING.** The product, data, runtime, persistence, control-surface, playback, migration, and acceptance decisions for the first complete Dynamics release are settled in this folder.
 
-This is a planning contract only. Updating these documents does not implement Dynamics or add executable tests.
+The implementation checkpoint is now committed. The plan remains in `doing/` until the required
+user visual review, post-acceptance UI automation/screenshots, remaining acceptance gates, and
+`## Result` records are complete.
+
+## Committed implementation checkpoint
+
+- `4b5c2f88` — canonical scalar attribute mappings and fixture-schema prerequisite.
+- `b3c59791` — authoritative Dynamics runtime, persistence, Programmer/Cue/Preload, playback,
+  HTTP/WebSocket/OSC, benchmark, and legacy Phaser removal.
+- `160c4ee0` — production Dynamics pool/editor, live controls, encoders, and Storybook review
+  surface.
 
 ## Product model
 

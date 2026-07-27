@@ -18,6 +18,31 @@ Playback addresses deliberately distinguish current-page and explicit-page opera
 
 Changing a page in the application changes where the same `page-playback` packet is routed. It does not change the meaning of an explicit `/light/playback/{page}/...` address. Compatibility aliases may remain available, but new integrations should use the canonical forms above.
 
+### Dynamics
+
+Dynamics OSC is scoped to a subscribed desk alias. Pool actions take one pressed Boolean or numeric
+value; release values are ignored:
+
+| Input address | Arguments | Authoritative action |
+| --- | --- | --- |
+| `/light/{desk}/dynamic/{pool-number}/toggle` | Pressed Boolean or nonzero number | Start the resolved Programmer Dynamic instance, or apply Dynamic Off to its exact matching instance. |
+| `/light/{desk}/dynamic/{pool-number}/off` | Pressed Boolean or nonzero number | Apply Dynamic Off to the matching Programmer instance without affecting Cue, Playback, user, or differently targeted instances. |
+| `/light/{desk}/dynamic/instance/{uuid}/size` | One normalized number from `0.0` through `1.0` | Set the named runtime controller's Size. |
+| `/light/{desk}/dynamic/instance/{uuid}/speed` | One positive number | Set the named runtime controller's speed multiplier. |
+| `/light/{desk}/dynamic/instance/{uuid}/phase` | One finite number in degrees | Set the named runtime controller's phase offset. |
+| `/light/{desk}/programmer/fix-at` | Attribute-name string, then one normalized number | Store FAT for the desk's current ordered selection. |
+
+OSC does not edit Dynamic definitions. Rejected inputs leave authoritative state unchanged and
+return `/light/{desk}/feedback/dynamic/error <original-address> <message>`.
+
+Every subscription snapshot publishes `global-paused`, `runtime-count`, and one
+`runtime/{runtime-uuid}/{active|pool-number|name|target-count|controller-count|winning-controller|paused}`
+family per running instance. Each controller publishes
+`controller/{controller-uuid}/{runtime-instance|source|priority|size|speed|phase|paused|winning|releasing}`.
+Programmer-owned summaries remain under `feedback/dynamic/instance/{uuid}` and
+`feedback/dynamic/{pool-number}/active`. Treat `runtime-count` and the identities in each refresh
+as authoritative replacements for a locally cached instance list.
+
 ### Highlight and Step Through
 
 Highlight and selection-step actions use the OSC subscriber's authenticated user/session and the desk named in the address. Send a pressed Boolean value to one of these addresses; releases and messages from an unsubscribed command socket are ignored. Highlight state is independent of the actual programmer selection and its step state.

@@ -2,11 +2,10 @@
 
 ## Effect Engine
 
-Our effect engine will be called "Dynamics". We want it to be similar to MA's Phasers and likely will use the 2d stage view as the grid for effects where a grid is required.
-
-You can add lamps to dynamics and use presets as start/ stop values/ steps and choose how they are modulated.
-
-On top of that, Dynamics is still in planning
+There are no open product questions for the first Dynamics release. The implemented model uses
+scalar lanes, portable Preset references, deterministic target ordering, and Stage X/Z positions
+without an embedded editor preview grid. Runtime visualization belongs to a separate Stage surface
+following Live or Preload.
 
 ## Value Spreading Across an Even Selection (resolved)
 

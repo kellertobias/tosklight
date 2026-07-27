@@ -9,11 +9,13 @@ Use the window that gives the clearest view of the current task; all of them ope
 | Channels | Channel-oriented value and source inspection. |
 | Groups | Reusable ordered selections and group masters. |
 | Presets | Mixed, Intensity, Color, Position, and Beam pools. |
-| Dynamics | Placeholder for the planned effect editor; it currently contains no operator controls. |
+| Dynamics | Numbered Dynamic pool, scalar-lane editor, Phase Spread, Speed, targets, and running state. |
 | Cuelists / Cues | Cue content, order, timing, triggers, tracking, and execution. |
 | DMX | Final universe output and diagnostic overrides. |
 
 Selections made in Stage, Fixtures, Groups, Presets, or the command line are the same actual programmer selection. While using [Highlight and Step Through](02-selecting-and-setting-values.md#highlight-and-step-through), PREV and NEXT replace that actual selection with one item, ALL restores the current membership of the remembered live source, and any ordinary selection from one of these windows becomes the new complete step basis. Preset, encoder, dialog, and other value changes use the actual selection but do not reset the basis. HIGH remains independent and follows whatever is actually selected.
+
+In the Dynamics Speed view, choose **Loop** to repeat until Off or **One-shot** to run one complete effective cycle and stop automatically. Run Mode is separate from Start now, Join sync now, and Next boundary, which determine when and where the cycle begins. A completed one-shot does not restart merely because its Cue, Programmer, or Playback value remains active; trigger it again with a new deliberate activation.
 
 With an empty programmer selection, the first ordinary tap on a populated Preset selects every
 fixture or logical head for which that Preset stores a value; it does not recall values. Tap the
@@ -47,4 +49,6 @@ The Fixture Sheet is also the on-desk step-state view: remembered-base rows rema
 
 Pane settings are local to that pane. A Stage pane can follow Preload while another shows live output; a Preset pane can remain on Position while another shows Color.
 
-See [Channel Faders](05-channel-faders.md) for the current Channels workflow. Dynamics remains a future feature documented under [Open Questions](../99-Development/01-open-questions.md); do not depend on it for show programming yet.
+See [Channel Faders](05-channel-faders.md) for the current Channels workflow. Use Dynamics for
+animated Programmer values and Dynamic Playback assignments; use a Live or Preload-following Stage
+window to inspect their authoritative output.

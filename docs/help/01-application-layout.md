@@ -32,7 +32,7 @@ The operator windows are:
 - **Fixtures** and **Channels** - current values, source ownership, selection, and fixture/channel detail.
 - **Groups** and **Presets** - reusable selection and attribute pools.
 - **Cuelists**, **Cues**, and **Playbacks** - stored scenes, timing, assignment, and execution.
-- **Dynamics** - phaser and dynamic-attribute work.
+- **Dynamics** - animated attribute pools, editing, and running-source control.
 - **DMX** - live universe output, raw overrides, and diagnostics. Output routes are configured in **Desk Setup > Outputs**.
 - **Patch** - fixture IDs, modes, addresses, and multi-patch instances.
 - **Virtual Playbacks** - a configurable grid of playback actions.

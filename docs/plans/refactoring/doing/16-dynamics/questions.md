@@ -2,7 +2,7 @@
 
 ## Status
 
-There are currently **no open product, architecture, runtime, persistence, control-surface, playback, migration, or acceptance questions blocking implementation**.
+There are currently **no open product, architecture, runtime, persistence, control-surface, playback, migration, or acceptance questions blocking the claimed implementation**.
 
 The first complete Dynamics release is decision-complete in the other documents in this folder and is marked **IMPLEMENTABLE**.
 
