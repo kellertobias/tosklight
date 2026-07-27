@@ -289,3 +289,14 @@ The redundant checkbox is removed. Each lane has one regular dropdown containing
 only **Change attribute** and **Delete lane**. Change attribute opens the standard
 desk modal and applies the selected continuous scalar attribute only after
 confirmation.
+
+### Review iteration 5 — flat composer and full-height encoders, awaiting review
+
+The Curve Composer is now a full-width strip at the bottom of the Curves
+workspace instead of a separate pane. It contains only the curve method,
+function, and keyframe structure; Top, Bottom, Middle, Amplitude, and the other
+numeric curve values live exclusively on the Programmer encoders.
+
+The Curves encoder mapping follows the experiment's mode-specific ordering. The
+touch encoder section has no extra divider or inset deck chrome, and its six
+encoders occupy the complete standard Programmer parameter-surface height.

@@ -78,12 +78,15 @@
 	align-content: start;
 	gap: 0.35rem;
 	min-height: 0;
+	margin: 0;
+	padding: 0;
+	list-style: none;
 }
 
 .dynamic-lane-overview {
 	position: relative;
 	display: grid;
-	grid-template-columns: 8.5rem minmax(12rem, 1fr) auto;
+	grid-template-columns: minmax(0, 1fr) auto;
 	align-items: stretch;
 	min-height: 4.3rem;
 	overflow: visible;
@@ -99,6 +102,25 @@
 .dynamic-lane-overview.primary {
 	border-color: rgb(78 220 255 / 62%);
 	box-shadow: inset 3px 0 #4edcff;
+}
+
+.dynamic-lane-select-surface {
+	min-width: 0;
+	display: grid;
+	grid-template-columns: 8.5rem minmax(12rem, 1fr);
+	align-items: stretch;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.dynamic-lane-select-surface:focus-visible {
+	outline: 2px solid var(--cyan);
+	outline-offset: -2px;
 }
 
 .dynamic-lane-identity {
@@ -177,10 +199,9 @@
 	grid-template-columns: 8.5rem minmax(0, 1fr) auto;
 	align-items: stretch;
 	gap: 0.55rem;
-	padding: 0.55rem;
-	background: #0d1218;
-	border: 1px solid #25313b;
-	border-radius: 0.45rem;
+	width: 100%;
+	padding-top: 0.55rem;
+	border-top: 1px solid #25313b;
 }
 
 .dynamic-curve-methods {
@@ -220,6 +241,10 @@
 .dynamic-curve-method-editor > .dynamic-source-cards,
 .dynamic-curve-method-editor > .dynamic-function-controls {
 	margin-top: 0;
+}
+
+.dynamic-curve-method-editor > .dynamic-function-controls {
+	display: block;
 }
 
 .dynamic-curve-method-action {
@@ -441,9 +466,16 @@
 }
 
 .dynamic-encoder-deck {
-	padding: 0.45rem;
-	background: #090d11;
-	border-top: 1px solid rgb(255 255 255 / 9%);
+	height: 100%;
+	min-height: 0;
+	padding: 0;
+	background: transparent;
+	border: 0;
+}
+
+.dynamic-encoder-deck > .encoder-section {
+	height: 100%;
+	min-height: 0;
 }
 
 .dynamic-encoder-deck .encoder-section-header {
@@ -459,7 +491,8 @@
 }
 
 .dynamic-encoder-deck .encoder-section-items {
-	min-height: 7.5rem;
+	height: 100%;
+	min-height: 0;
 }
 
 .dynamic-target-settings {

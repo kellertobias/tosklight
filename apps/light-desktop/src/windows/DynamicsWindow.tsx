@@ -23,14 +23,7 @@ import {
 	WindowScrollArea,
 	WindowSettings,
 } from "@tosklight/ui/window-kit";
-import {
-	type ReactNode,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiRequestError } from "../api/ApiRequestError";
 import { createLightApi } from "../api/client/api";
 import type {
@@ -51,8 +44,8 @@ import {
 	useAttributeRegistry,
 	useHardwareConnected,
 } from "../features/deskSnapshot/DeskSnapshotState";
-import { useDynamicsActions } from "../features/dynamics/DynamicsActionsContext";
 import { useDynamicEditorSession } from "../features/dynamics/DynamicEditorSessionContext";
+import { useDynamicsActions } from "../features/dynamics/DynamicsActionsContext";
 import {
 	useProgrammingCommandLineActions,
 	useProgrammingDeleteCommandActive,
@@ -790,44 +783,51 @@ function CurvesView({
 					},
 		);
 	};
+	const attributeLane = attributeLaneId
+		? dynamic.body.lanes.find((candidate) => candidate.id === attributeLaneId)
+		: undefined;
 	return (
 		<div className="dynamic-curves-view">
-			<div className="dynamic-lane-overview-list" aria-label="Dynamic lanes">
+			<ul className="dynamic-lane-overview-list" aria-label="Dynamic lanes">
 				{dynamic.body.lanes.map((candidate, index) => {
 					const attribute =
 						attributes.find((item) => item.id === candidate.attribute) ?? null;
 					const selected = selectedLanes.has(candidate.id);
 					return (
-						<article
+						<li
 							key={candidate.id}
+							aria-current={candidate.id === lane.id}
 							className={`dynamic-lane-overview ${candidate.id === lane.id ? "primary" : ""} ${selected ? "selected" : ""}`}
-							onClick={(event) =>
-								onSelect(candidate.id, event.shiftKey || shiftArmed)
-							}
 						>
-							<div className="dynamic-lane-identity">
-								<small>Lane {index + 1}</small>
-								<strong>{attribute?.label ?? candidate.attribute}</strong>
-								<span>{modeLabel(candidate.mode)}</span>
-							</div>
-							<div className="dynamic-lane-curve">
-								<svg
-									viewBox="0 0 1000 260"
-									role="img"
-									aria-label={`${attribute?.label ?? candidate.attribute}: ${modeLabel(candidate.mode)}`}
-								>
-									<title>{modeLabel(candidate.mode)}</title>
-									<path
-										className="grid"
-										d="M0 65H1000M0 130H1000M0 195H1000M250 0V260M500 0V260M750 0V260"
-									/>
-									<path className="curve" d={curvePath(candidate)} />
-								</svg>
-							</div>
-							<div
-								className="dynamic-lane-row-actions"
-								onClick={(event) => event.stopPropagation()}
+							<button
+								type="button"
+								className="dynamic-lane-select-surface"
+								aria-pressed={selected}
+								onClick={(event) =>
+									onSelect(candidate.id, event.shiftKey || shiftArmed)
+								}
 							>
+								<span className="dynamic-lane-identity">
+									<small>Lane {index + 1}</small>
+									<strong>{attribute?.label ?? candidate.attribute}</strong>
+									<span>{modeLabel(candidate.mode)}</span>
+								</span>
+								<span className="dynamic-lane-curve">
+									<svg
+										viewBox="0 0 1000 260"
+										role="img"
+										aria-label={`${attribute?.label ?? candidate.attribute}: ${modeLabel(candidate.mode)}`}
+									>
+										<title>{modeLabel(candidate.mode)}</title>
+										<path
+											className="grid"
+											d="M0 65H1000M0 130H1000M0 195H1000M250 0V260M500 0V260M750 0V260"
+										/>
+										<path className="curve" d={curvePath(candidate)} />
+									</svg>
+								</span>
+							</button>
+							<div className="dynamic-lane-row-actions">
 								<Button
 									aria-haspopup="menu"
 									aria-expanded={menuLaneId === candidate.id}
@@ -871,17 +871,13 @@ function CurvesView({
 									</div>
 								)}
 							</div>
-						</article>
+						</li>
 					);
 				})}
-			</div>
-			{attributeLaneId && (
+			</ul>
+			{attributeLane && (
 				<ChangeLaneAttributeModal
-					lane={
-						dynamic.body.lanes.find(
-							(candidate) => candidate.id === attributeLaneId,
-						)!
-					}
+					lane={attributeLane}
 					attributes={attributes}
 					onClose={() => setAttributeLaneId(null)}
 					onChoose={(nextAttribute) => {
@@ -936,27 +932,12 @@ function CurvesView({
 							onReplace={onReplace}
 						/>
 					) : lane.mode === "random" && randomGroup ? (
-						<RandomControls
-							lane={lane}
-							group={randomGroup}
-							groups={dynamic.body.random_groups}
-							presets={presets}
-							onReplaceLane={onReplace}
-							onReplaceGroup={(group) =>
-								onMutate(dynamic, {
-									type: "replace_random_group",
-									group_id: group.id,
-									group,
-								})
-							}
-							functions={
-								<FunctionButtons value="random" onChange={chooseFunction} />
-							}
-						/>
+						<section className="dynamic-function-controls">
+							<FunctionButtons value="random" onChange={chooseFunction} />
+						</section>
 					) : (
 						<FunctionControls
 							lane={lane}
-							presets={presets}
 							onReplace={onReplace}
 							onRandom={() => chooseFunction("random")}
 						/>
@@ -1128,12 +1109,10 @@ function FunctionButtons({
 
 function FunctionControls({
 	lane,
-	presets,
 	onReplace,
 	onRandom,
 }: {
 	lane: DynamicLaneProjection;
-	presets: readonly PresetObject[];
 	onReplace(next: DynamicLaneProjection): Promise<void>;
 	onRandom(): void;
 }) {
@@ -1164,206 +1143,6 @@ function FunctionControls({
 					);
 				}}
 			/>
-			{lane.mode === "middle_amplitude" ? (
-				<>
-					<ScalarSourceControl
-						label="Middle"
-						source={lane.middle_amplitude.middle}
-						attribute={lane.attribute}
-						presets={presets}
-						onChange={(middle) =>
-							onReplace({
-								...lane,
-								middle_amplitude: { ...lane.middle_amplitude, middle },
-							})
-						}
-					/>
-					<NumberControl
-						label="Amplitude"
-						value={lane.middle_amplitude.amplitude}
-						onChange={(amplitude) =>
-							onReplace({
-								...lane,
-								middle_amplitude: {
-									...lane.middle_amplitude,
-									amplitude,
-								},
-							})
-						}
-					/>
-				</>
-			) : (
-				<>
-					<ScalarSourceControl
-						label="Top"
-						source={lane.max_min.maximum}
-						attribute={lane.attribute}
-						presets={presets}
-						onChange={(maximum) =>
-							onReplace({
-								...lane,
-								max_min: { ...lane.max_min, maximum },
-							})
-						}
-					/>
-					<ScalarSourceControl
-						label="Bottom"
-						source={lane.max_min.minimum}
-						attribute={lane.attribute}
-						presets={presets}
-						onChange={(minimum) =>
-							onReplace({
-								...lane,
-								max_min: { ...lane.max_min, minimum },
-							})
-						}
-					/>
-				</>
-			)}
-			{config.function === "pwm" && (
-				<div className="dynamic-pwm-grid">
-					{(["attack", "on", "decay", "off"] as const).map((field) => (
-						<NumberControl
-							key={field}
-							label={`${field[0].toUpperCase()}${field.slice(1)}`}
-							value={config.pwm[field]}
-							onChange={(value) => {
-								const pwm = { ...config.pwm, [field]: clamp(value, 0, 1) };
-								void onReplace(
-									lane.mode === "middle_amplitude"
-										? {
-												...lane,
-												middle_amplitude: {
-													...lane.middle_amplitude,
-													pwm,
-												},
-											}
-										: {
-												...lane,
-												max_min: { ...lane.max_min, pwm },
-											},
-								);
-							}}
-						/>
-					))}
-				</div>
-			)}
-		</section>
-	);
-}
-
-function RandomControls({
-	lane,
-	group,
-	groups,
-	presets,
-	onReplaceLane,
-	onReplaceGroup,
-	functions,
-}: {
-	lane: DynamicLaneProjection;
-	group: DynamicRandomGroupProjection;
-	groups: readonly DynamicRandomGroupProjection[];
-	presets: readonly PresetObject[];
-	onReplaceLane(next: DynamicLaneProjection): Promise<void>;
-	onReplaceGroup(next: DynamicRandomGroupProjection): Promise<void>;
-	functions: ReactNode;
-}) {
-	const update = (patch: Partial<DynamicRandomGroupProjection>) =>
-		void onReplaceGroup({ ...group, ...patch });
-	return (
-		<section className="dynamic-function-controls dynamic-random-controls">
-			{functions}
-			<SelectField
-				label="Random group"
-				value={group.id}
-				options={groups.map((candidate, index) => ({
-					value: candidate.id,
-					label: `Group ${index + 1}`,
-				}))}
-				onChange={(random_group_id) =>
-					void onReplaceLane({ ...lane, random_group_id })
-				}
-			/>
-			<ScalarSourceControl
-				label="Low"
-				source={group.low}
-				attribute={lane.attribute}
-				presets={presets}
-				onChange={(low) => update({ low })}
-			/>
-			<ScalarSourceControl
-				label="High"
-				source={group.high}
-				attribute={lane.attribute}
-				presets={presets}
-				onChange={(high) => update({ high })}
-			/>
-			<NumberControl
-				label="Decision interval"
-				value={group.decision_interval_millis}
-				suffix="ms"
-				onChange={(decision_interval_millis) =>
-					update({
-						decision_interval_millis: Math.max(1, decision_interval_millis),
-					})
-				}
-			/>
-			<NumberControl
-				label="Start probability"
-				value={group.start_probability * 100}
-				suffix="%"
-				onChange={(value) =>
-					update({ start_probability: clamp(value / 100, 0, 1) })
-				}
-			/>
-			<NumberControl
-				label="Mean pulse"
-				value={group.mean_duration_millis}
-				suffix="ms"
-				onChange={(mean_duration_millis) =>
-					update({ mean_duration_millis: Math.max(1, mean_duration_millis) })
-				}
-			/>
-			<NumberControl
-				label="Duration spread"
-				value={group.duration_spread_millis}
-				suffix="ms"
-				onChange={(duration_spread_millis) =>
-					update({
-						duration_spread_millis: Math.max(0, duration_spread_millis),
-					})
-				}
-			/>
-			<NumberControl
-				label="Attack"
-				value={group.attack_ratio * 100}
-				suffix="%"
-				onChange={(value) =>
-					update({
-						attack_ratio: clamp(value / 100, 0, 1 - group.decay_ratio),
-					})
-				}
-			/>
-			<NumberControl
-				label="Decay"
-				value={group.decay_ratio * 100}
-				suffix="%"
-				onChange={(value) =>
-					update({
-						decay_ratio: clamp(value / 100, 0, 1 - group.attack_ratio),
-					})
-				}
-			/>
-			<Button
-				onClick={() =>
-					update({
-						seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 0,
-					})
-				}
-			>
-				Generate Seed
-			</Button>
 		</section>
 	);
 }
@@ -1793,119 +1572,7 @@ export function DynamicEncoderDeck({
 	);
 	const slots: DynamicEncoderSlot[] =
 		view === "curves"
-			? [
-					{
-						id: "size",
-						label: "Size",
-						display: lane ? `${Math.round(laneConfigSize(lane) * 100)}%` : "—",
-						value: lane ? laneConfigSize(lane) : 0,
-						minimum: 0,
-						maximum: 2,
-						inputScale: 100,
-						fineStep: 0.01,
-						coarseStep: 0.1,
-						disabled: !lane,
-						apply: (value, group) =>
-							onLaneChange((item) => setLaneSizeValue(item, value), group),
-					},
-					{
-						id: "width",
-						label: "Width",
-						display: lane ? `${Math.round(lane.width * 100)}%` : "—",
-						value: lane?.width ?? 0,
-						minimum: 0,
-						maximum: 1,
-						inputScale: 100,
-						fineStep: 0.01,
-						coarseStep: 0.1,
-						disabled: !lane,
-						apply: (value, group) =>
-							onLaneChange(
-								(item) => ({
-									...item,
-									width: clamp(value, 0, 1),
-								}),
-								group,
-							),
-					},
-					{
-						id: "lane-speed",
-						label: "Lane speed",
-						display: lane
-							? `${lane.speed_multiplier.numerator}/${lane.speed_multiplier.denominator}`
-							: "—",
-						value: lane ? rationalValue(lane.speed_multiplier) : 1,
-						minimum: 0.0625,
-						maximum: 16,
-						inputScale: 1,
-						fineStep: 0.0625,
-						coarseStep: 0.5,
-						disabled: !lane,
-						apply: (value, group) =>
-							onLaneChange(
-								(item) => ({
-									...item,
-									speed_multiplier: rationalFromNumber(value),
-								}),
-								group,
-							),
-					},
-					{
-						id: "mode",
-						label: "Mode",
-						display: lane ? modeLabel(lane.mode) : "—",
-						value: lane ? laneModes.indexOf(lane.mode) : 0,
-						minimum: 0,
-						maximum: laneModes.length - 1,
-						inputScale: 1,
-						fineStep: 1,
-						coarseStep: 1,
-						disabled: !lane,
-						apply: (value, group) =>
-							onLaneChange(
-								(item) => ({
-									...item,
-									mode: laneModes[wrappedIndex(value, laneModes.length)],
-								}),
-								group,
-							),
-					},
-					{
-						id: "shape",
-						label: "Shape",
-						display: lane ? laneShapeLabel(lane) : "—",
-						value: lane ? periodicFunctionIndex(lane) : 0,
-						minimum: 0,
-						maximum: periodicFunctions.length - 1,
-						inputScale: 1,
-						fineStep: 1,
-						coarseStep: 1,
-						disabled:
-							!lane || lane.mode === "keyframes" || lane.mode === "random",
-						apply: (value, group) =>
-							onLaneChange(
-								(item) => setLanePeriodicFunction(item, value),
-								group,
-							),
-					},
-					{
-						id: "interpolation",
-						label: "Interpolation",
-						display: lane ? primaryInterpolationLabel(lane) : "—",
-						value: lane ? primaryInterpolationIndex(lane) : 0,
-						minimum: 0,
-						maximum: interpolations.length - 1,
-						inputScale: 1,
-						fineStep: 1,
-						coarseStep: 1,
-						disabled: !lane || lane.mode !== "keyframes",
-						apply: (value, group) =>
-							onLaneChange(
-								(item) => setPrimaryInterpolation(item, value),
-								group,
-							),
-					},
-				]
+			? curveEditorEncoderSlots(lane, dynamic, onLaneChange)
 			: view === "phase"
 				? [
 						{
@@ -2159,12 +1826,250 @@ interface DynamicEncoderSlot {
 	apply(value: number, mutationGroup: string): Promise<void>;
 }
 
-const laneModes: readonly DynamicLaneModeProjection[] = [
-	"keyframes",
-	"max_min",
-	"middle_amplitude",
-	"random",
-];
+function curveEditorEncoderSlots(
+	lane: DynamicLaneProjection | undefined,
+	dynamic: DynamicDefinitionProjection,
+	onLaneChange: (
+		update: (lane: DynamicLaneProjection) => DynamicLaneProjection,
+		mutationGroup?: string,
+	) => Promise<void>,
+): DynamicEncoderSlot[] {
+	const disabled = !lane;
+	const unassigned = (id: string): DynamicEncoderSlot => ({
+		id,
+		label: "Unassigned",
+		display: "—",
+		value: 0,
+		minimum: 0,
+		maximum: 1,
+		inputScale: 1,
+		fineStep: 0.01,
+		coarseStep: 0.1,
+		disabled: true,
+		apply: async () => undefined,
+	});
+	const sourceSlot = (
+		id: string,
+		label: string,
+		source: DynamicScalarSourceProjection | undefined,
+		replace: (
+			lane: DynamicLaneProjection,
+			source: DynamicScalarSourceProjection,
+		) => DynamicLaneProjection,
+	): DynamicEncoderSlot => ({
+		id,
+		label,
+		display: scalarSourceEncoderDisplay(source),
+		value: scalarSourceEncoderValue(source),
+		minimum: 0,
+		maximum: 1,
+		inputScale: 100,
+		fineStep: 0.01,
+		coarseStep: 0.1,
+		disabled,
+		apply: (value, group) =>
+			onLaneChange(
+				(item) => replace(item, { type: "value", value: clamp(value, 0, 1) }),
+				group,
+			),
+	});
+	const speedSlot: DynamicEncoderSlot = {
+		id: "lane-speed",
+		label: "Speed",
+		display: lane
+			? `${lane.speed_multiplier.numerator}/${lane.speed_multiplier.denominator}`
+			: "—",
+		value: lane ? rationalValue(lane.speed_multiplier) : 1,
+		minimum: 0.0625,
+		maximum: 16,
+		inputScale: 1,
+		fineStep: 0.0625,
+		coarseStep: 0.5,
+		disabled,
+		apply: (value, group) =>
+			onLaneChange(
+				(item) => ({
+					...item,
+					speed_multiplier: rationalFromNumber(value),
+				}),
+				group,
+			),
+	};
+	if (!lane || lane.mode === "keyframes") {
+		const point = lane?.keyframes.points[0];
+		return [
+			{
+				id: "keyframe",
+				label: "Keyframe",
+				display: point ? `A · 1/${lane?.keyframes.points.length ?? 1}` : "—",
+				value: 0,
+				minimum: 0,
+				maximum: Math.max(0, (lane?.keyframes.points.length ?? 1) - 1),
+				inputScale: 1,
+				fineStep: 1,
+				coarseStep: 1,
+				disabled,
+				apply: async () => undefined,
+			},
+			sourceSlot(
+				"keyframe-value",
+				point?.source.type === "value" ? "Value" : "Source value",
+				point?.source,
+				(item, source) => ({
+					...item,
+					keyframes: {
+						...item.keyframes,
+						points: item.keyframes.points.map((candidate, index) =>
+							index === 0 ? { ...candidate, source } : candidate,
+						),
+					},
+				}),
+			),
+			{
+				id: "keyframe-time",
+				label: "Keyframe time",
+				display: point ? `${Math.round(point.position * 100)}%` : "—",
+				value: point?.position ?? 0,
+				minimum: 0,
+				maximum: 1,
+				inputScale: 100,
+				fineStep: 0.01,
+				coarseStep: 0.1,
+				disabled: true,
+				apply: async () => undefined,
+			},
+			{
+				id: "interpolation",
+				label: "Interpolation",
+				display: lane ? primaryInterpolationLabel(lane) : "—",
+				value: lane ? primaryInterpolationIndex(lane) : 0,
+				minimum: 0,
+				maximum: interpolations.length - 1,
+				inputScale: 1,
+				fineStep: 1,
+				coarseStep: 1,
+				disabled,
+				apply: (value, group) =>
+					onLaneChange((item) => setPrimaryInterpolation(item, value), group),
+			},
+			unassigned("keyframe-unassigned"),
+			speedSlot,
+		];
+	}
+	if (lane.mode === "middle_amplitude")
+		return [
+			functionSelectionSlot(lane, onLaneChange),
+			sourceSlot(
+				"middle",
+				"Middle",
+				lane.middle_amplitude.middle,
+				(item, middle) => ({
+					...item,
+					middle_amplitude: { ...item.middle_amplitude, middle },
+				}),
+			),
+			{
+				id: "amplitude",
+				label: "Amplitude",
+				display: `${Math.round(lane.middle_amplitude.amplitude * 100)}%`,
+				value: lane.middle_amplitude.amplitude,
+				minimum: 0,
+				maximum: 1,
+				inputScale: 100,
+				fineStep: 0.01,
+				coarseStep: 0.1,
+				apply: (value, group) =>
+					onLaneChange(
+						(item) => ({
+							...item,
+							middle_amplitude: {
+								...item.middle_amplitude,
+								amplitude: clamp(value, 0, 1),
+							},
+						}),
+						group,
+					),
+			},
+			unassigned("middle-unassigned-1"),
+			unassigned("middle-unassigned-2"),
+			speedSlot,
+		];
+	if (lane.mode === "random") {
+		const group = dynamic.random_groups.find(
+			(candidate) => candidate.id === lane.random_group_id,
+		);
+		return [
+			{
+				...functionSelectionSlot(lane, onLaneChange),
+				display: "Random",
+				disabled: true,
+			},
+			{
+				...sourceSlot("random-low", "Low", group?.low, (item) => item),
+				disabled: true,
+			},
+			{
+				...sourceSlot("random-high", "High", group?.high, (item) => item),
+				disabled: true,
+			},
+			unassigned("random-unassigned-1"),
+			unassigned("random-unassigned-2"),
+			speedSlot,
+		];
+	}
+	return [
+		functionSelectionSlot(lane, onLaneChange),
+		sourceSlot("maximum", "Top", lane.max_min.maximum, (item, maximum) => ({
+			...item,
+			max_min: { ...item.max_min, maximum },
+		})),
+		sourceSlot("minimum", "Bottom", lane.max_min.minimum, (item, minimum) => ({
+			...item,
+			max_min: { ...item.max_min, minimum },
+		})),
+		unassigned("bounds-unassigned-1"),
+		unassigned("bounds-unassigned-2"),
+		speedSlot,
+	];
+}
+
+function functionSelectionSlot(
+	lane: DynamicLaneProjection,
+	onLaneChange: (
+		update: (lane: DynamicLaneProjection) => DynamicLaneProjection,
+		mutationGroup?: string,
+	) => Promise<void>,
+): DynamicEncoderSlot {
+	return {
+		id: "function",
+		label: "Function",
+		display: laneShapeLabel(lane),
+		value: periodicFunctionIndex(lane),
+		minimum: 0,
+		maximum: periodicFunctions.length - 1,
+		inputScale: 1,
+		fineStep: 1,
+		coarseStep: 1,
+		apply: (value, group) =>
+			onLaneChange((item) => setLanePeriodicFunction(item, value), group),
+	};
+}
+
+function scalarSourceEncoderValue(
+	source: DynamicScalarSourceProjection | undefined,
+) {
+	return source?.type === "value" ? source.value : 0;
+}
+
+function scalarSourceEncoderDisplay(
+	source: DynamicScalarSourceProjection | undefined,
+) {
+	if (!source) return "—";
+	if (source.type === "current") return "Current";
+	if (source.type === "preset") return "Preset";
+	return `${Math.round(source.value * 100)}%`;
+}
+
 const periodicFunctions: readonly DynamicPeriodicFunctionProjection[] = [
 	"sinus",
 	"cosinus",
@@ -2806,33 +2711,6 @@ function curvePath(lane: DynamicLaneProjection) {
 	if (functionName === "linear_down") return "M0 35 L1000 220";
 	if (functionName === "pwm") return "M0 220 L100 35 H500 L600 220 H1000";
 	return "M0 130 C120 15 380 15 500 130 S880 245 1000 130";
-}
-
-function laneConfigSize(lane: DynamicLaneProjection) {
-	if (lane.mode === "keyframes") return lane.keyframes.size;
-	if (lane.mode === "middle_amplitude") return lane.middle_amplitude.size;
-	return lane.max_min.size;
-}
-
-function setLaneSizeValue(lane: DynamicLaneProjection, value: number) {
-	const adjusted = clamp(value, 0, 2);
-	if (lane.mode === "keyframes")
-		return {
-			...lane,
-			keyframes: { ...lane.keyframes, size: adjusted },
-		};
-	if (lane.mode === "middle_amplitude")
-		return {
-			...lane,
-			middle_amplitude: {
-				...lane.middle_amplitude,
-				size: adjusted,
-			},
-		};
-	return {
-		...lane,
-		max_min: { ...lane.max_min, size: adjusted },
-	};
 }
 
 function rationalValue(value: { numerator: number; denominator: number }) {
