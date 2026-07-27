@@ -447,7 +447,9 @@ describe("emitter direction and Patch selection", () => {
 		expect(lines.getObjectByName("beam-volume")?.visible).toBe(false);
 		const combined = sceneFor("lines_and_beams");
 		expect(combined.getObjectByName("beam-centerline")?.visible).toBe(true);
-		expect(combined.getObjectByName("beam-ground-footprint")?.visible).toBe(true);
+		expect(combined.getObjectByName("beam-ground-footprint")?.visible).toBe(
+			true,
+		);
 		expect(combined.getObjectByName("beam-volume")?.visible).toBe(true);
 		const beams = sceneFor("beams");
 		expect(beams.getObjectByName("beam-centerline")?.visible).toBe(false);
@@ -473,9 +475,9 @@ describe("emitter direction and Patch selection", () => {
 			"lines_only",
 		);
 		const retainedRoot = retained.fixtureObjects.values().next().value;
-		const retainedImproved = retained.scene.getObjectByName(
-			"beam-improved-volume",
-		);
+		expect(
+			retained.scene.getObjectByName("beam-improved-volume"),
+		).toBeUndefined();
 		applyStageVisualization(
 			stageFixture,
 			null,
@@ -484,11 +486,24 @@ describe("emitter direction and Patch selection", () => {
 			"improved_beams",
 		);
 		expect(retained.fixtureObjects.values().next().value).toBe(retainedRoot);
-		expect(
-			retained.scene.getObjectByName("beam-improved-volume"),
-		).toBe(retainedImproved);
+		const retainedImproved = retained.scene.getObjectByName(
+			"beam-improved-volume",
+		);
+		expect(retainedImproved).toBeTruthy();
 		expect(retainedImproved?.visible).toBe(true);
 		expect(retained.scene.getObjectByName("beam-volume")?.visible).toBe(false);
+		applyStageVisualization(
+			stageFixture,
+			null,
+			retained.fixtureObjects,
+			true,
+			"beams",
+		);
+		expect(retained.fixtureObjects.values().next().value).toBe(retainedRoot);
+		expect(
+			retained.scene.getObjectByName("beam-improved-volume"),
+		).toBeUndefined();
+		expect(retained.scene.getObjectByName("beam-volume")?.visible).toBe(true);
 
 		const withoutFloor = buildStageScene(
 			stageFixture,
