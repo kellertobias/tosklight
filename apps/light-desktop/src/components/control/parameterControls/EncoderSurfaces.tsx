@@ -7,6 +7,7 @@ import {
 import { formatNormalizedValue, parameterLabels } from "./model";
 import type { ParameterController } from "./useParameterController";
 import { ProgrammerDynamicsSurface } from "./ProgrammerDynamicsSurface";
+import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
 
 function attributeColor(attribute: string) {
 	return (
@@ -141,11 +142,12 @@ export function EncoderSurfaces({
 }: {
 	controller: ParameterController;
 }) {
+	const editor = useDynamicEditorSession();
 	const deleteArmed = useProgrammingDeleteCommandActive(
 		controller.hardwareConnected,
 	);
 	const commandLineActions = useProgrammingCommandLineActions();
-	if (controller.dynamicsMode)
+	if (editor.session || controller.dynamicsMode)
 		return <ProgrammerDynamicsSurface controller={controller} />;
 	if (!controller.selectedFixtureIds.length && !controller.selectedGroupId)
 		return (

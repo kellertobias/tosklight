@@ -1,11 +1,23 @@
-import { Button } from "@tosklight/ui";
+import {
+	Button,
+	ColorPickerField,
+	FormLayout,
+	IconPickerField,
+	SelectField,
+	TextField,
+} from "@tosklight/ui";
 import {
 	EncoderSection,
 	type EncoderSectionItem,
 	type HardwareEncoderDisplayHandle,
 } from "@tosklight/ui/encoders";
-import { PoolCard } from "@tosklight/ui/pools";
-import { WindowScrollArea } from "@tosklight/ui/window-kit";
+import { ModalFrame } from "@tosklight/ui/modals";
+import {
+	PoolCard,
+	PoolGrid,
+	type PoolSlotViewModel,
+} from "@tosklight/ui/pools";
+import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiRequestError } from "../api/ApiRequestError";
 import { createLightApi } from "../api/client/api";
@@ -28,6 +40,11 @@ import {
 	useHardwareConnected,
 } from "../features/deskSnapshot/DeskSnapshotState";
 import { useDynamicsActions } from "../features/dynamics/DynamicsActionsContext";
+import { useDynamicEditorSession } from "../features/dynamics/DynamicEditorSessionContext";
+import {
+	useProgrammingCommandLineActions,
+	useProgrammingDeleteCommandActive,
+} from "../features/programmingInteraction/ProgrammingInteractionView";
 import type { ShowObject } from "../features/showObjects/contracts";
 import {
 	useDynamics,
@@ -58,15 +75,23 @@ export function DynamicsWindow({
 	const isolatedApi = useMemo(() => createLightApi(), []);
 	const api = useDynamicsActions() ?? isolatedApi;
 	const command = useCommandLineSurface({ selection: true, enabled: active });
+	const commandActions = useProgrammingCommandLineActions();
+	const deleteArmed = useProgrammingDeleteCommandActive(active);
+	const { open: openEditor, close: closeEditor } = useDynamicEditorSession();
 	const { state: appState, dispatch } = useApp();
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [chooserSlot, setChooserSlot] = useState<number | null>(null);
-	const [page, setPage] = useState(1);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [runtime, setRuntime] =
 		useState<DynamicRuntimeSnapshotProjection | null>(null);
 	const selected = dynamics.find((item) => item.id === selectedId) ?? null;
+	useEffect(
+		() => () => {
+			if (selectedId) closeEditor(selectedId);
+		},
+		[closeEditor, selectedId],
+	);
 	const attributes = registry.filter(
 		(attribute) =>
 			attribute.recordable &&
@@ -112,12 +137,15 @@ export function DynamicsWindow({
 	const create = (poolNumber: number, attribute: string) =>
 		run(async () => {
 			if (!showId) throw new Error("No active show");
-			const outcome = await api.showObjects.createDynamic(
-				showId,
-				createDefaultDynamicDefinition(poolNumber, attribute),
-			);
+			const definition = createDefaultDynamicDefinition(poolNumber, attribute);
+			const outcome = await api.showObjects.createDynamic(showId, definition);
 			setChooserSlot(null);
 			setSelectedId(outcome.object.id);
+			openEditor({
+				dynamicId: outcome.object.id,
+				task: "curves",
+				primaryLaneId: definition.lanes[0]?.id ?? null,
+			});
 		});
 	const mutate = (
 		dynamic: DynamicObject,
@@ -165,7 +193,10 @@ export function DynamicsWindow({
 				runtime={runtime}
 				selection={command.selected}
 				selectedGroupId={command.selectedGroupId}
-				onBack={() => setSelectedId(null)}
+				onBack={() => {
+					closeEditor(selected.id);
+					setSelectedId(null);
+				}}
 				onMutate={mutate}
 				onDelete={() =>
 					run(async () => {
@@ -175,6 +206,7 @@ export function DynamicsWindow({
 							selected.id,
 							selected.revision,
 						);
+						closeEditor(selected.id);
 						setSelectedId(null);
 					})
 				}
@@ -207,62 +239,43 @@ export function DynamicsWindow({
 	const occupied = new Map(
 		dynamics.map((dynamic) => [dynamic.body.pool_number, dynamic]),
 	);
-	const pageSize = compact ? 24 : 40;
-	const pageCount = Math.ceil(9_999 / pageSize);
-	const firstPoolNumber = (page - 1) * pageSize + 1;
-	const lastPoolNumber = Math.min(9_999, firstPoolNumber + pageSize - 1);
+	const slotCount = Math.max(
+		200,
+		...dynamics.map((dynamic) => dynamic.body.pool_number),
+	);
+	const slots: PoolSlotViewModel<number>[] = dynamics.map((dynamic) => ({
+		id: dynamic.body.pool_number,
+		position: dynamic.body.pool_number - 1,
+		card: {
+			number: dynamic.body.pool_number,
+			primary: dynamic.body.name,
+		},
+	}));
 	return (
 		<section className="dynamics-window" aria-busy={busy}>
-			<header className="window-toolbar dynamics-toolbar">
-				<h1>
-					Dynamics{" "}
-					<small>
-						Pool {firstPoolNumber}–{lastPoolNumber}
-					</small>
-				</h1>
-				<fieldset className="dynamics-paging" aria-label="Dynamic pool page">
-					<Button disabled={page <= 1} onClick={() => setPage(page - 1)}>
-						←
-					</Button>
-					<label>
-						Page
-						<input
-							type="number"
-							min={1}
-							max={pageCount}
-							value={page}
-							onChange={(event) =>
-								setPage(
-									Math.max(
-										1,
-										Math.min(pageCount, Number(event.target.value) || 1),
-									),
-								)
-							}
-						/>
-						/{pageCount}
-					</label>
-					<Button
-						disabled={page >= pageCount}
-						onClick={() => setPage(page + 1)}
-					>
-						→
-					</Button>
-				</fieldset>
-				<span className="dynamics-legend">
-					∿ Immediate, server-authoritative
-				</span>
-			</header>
+			{!compact && (
+				<WindowHeader
+					title="Dynamics"
+					info={{ primary: `${dynamics.length} Dynamics` }}
+					actions={[]}
+				/>
+			)}
 			{error && (
 				<p className="dynamics-error" role="alert">
 					{error}
 				</p>
 			)}
 			<WindowScrollArea>
-				<div className="dynamics-pool-grid">
-					{Array.from({ length: pageSize }, (_, index) => {
-						const poolNumber = firstPoolNumber + index;
-						if (poolNumber > 9_999) return null;
+				<PoolGrid
+					slots={slots}
+					slotCount={slotCount}
+					emptySlot={(index) => ({
+						id: index + 1,
+						position: index,
+						card: { number: index + 1, primary: "Empty", states: ["empty"] },
+					})}
+					renderSlot={(_, index) => {
+						const poolNumber = index + 1;
 						const dynamic = occupied.get(poolNumber);
 						const running = dynamic
 							? runningCount(runtime, dynamic.id) > 0
@@ -303,6 +316,18 @@ export function DynamicsWindow({
 									states: [...(!dynamic ? (["empty"] as const) : [])],
 								}}
 								onClick={(event) => {
+									if (deleteArmed) {
+										if (!dynamic || !showId) return;
+										void run(async () => {
+											await api.showObjects.deleteDynamic(
+												showId,
+												dynamic.id,
+												dynamic.revision,
+											);
+											await commandActions?.reset();
+										});
+										return;
+									}
 									if (!dynamic) {
 										setChooserSlot(poolNumber);
 										return;
@@ -313,6 +338,11 @@ export function DynamicsWindow({
 										return;
 									}
 									if (event.shiftKey || appState.shiftArmed) {
+										openEditor({
+											dynamicId: dynamic.id,
+											task: "curves",
+											primaryLaneId: dynamic.body.lanes[0]?.id ?? null,
+										});
 										setSelectedId(dynamic.id);
 										dispatch({ type: "SET_SHIFT_ARMED", value: false });
 										return;
@@ -338,10 +368,29 @@ export function DynamicsWindow({
 									}
 									void toggle(dynamic);
 								}}
+								onContextMenu={(event) => {
+									event.preventDefault();
+									if (!dynamic) return;
+									openEditor({
+										dynamicId: dynamic.id,
+										task: "curves",
+										primaryLaneId: dynamic.body.lanes[0]?.id ?? null,
+									});
+									setSelectedId(dynamic.id);
+								}}
+								onPressHold={() => {
+									if (!dynamic) return;
+									openEditor({
+										dynamicId: dynamic.id,
+										task: "curves",
+										primaryLaneId: dynamic.body.lanes[0]?.id ?? null,
+									});
+									setSelectedId(dynamic.id);
+								}}
 							/>
 						);
-					})}
-				</div>
+					}}
+				/>
 			</WindowScrollArea>
 			{chooserSlot !== null && (
 				<LaneChooser
@@ -366,6 +415,7 @@ export interface DynamicEditorProps {
 	runtime: DynamicRuntimeSnapshotProjection | null;
 	selection: readonly string[];
 	selectedGroupId: string | null;
+	view?: DynamicEditorView;
 	onBack(): void;
 	onMutate(
 		dynamic: DynamicObject,
@@ -392,6 +442,7 @@ export function DynamicEditor({
 	runtime,
 	selection,
 	selectedGroupId,
+	view: controlledView,
 	onBack,
 	onMutate,
 	onDelete,
@@ -399,7 +450,14 @@ export function DynamicEditor({
 	onCopy,
 }: DynamicEditorProps) {
 	const { state: appState, dispatch } = useApp();
-	const [view, setView] = useState<DynamicEditorView>("curves");
+	const {
+		session,
+		open: openEditor,
+		update: updateEditor,
+	} = useDynamicEditorSession();
+	const view: DynamicEditorView =
+		controlledView ??
+		(session?.dynamicId === dynamic.id ? session.task : "curves");
 	const [primaryLane, setPrimaryLane] = useState(
 		dynamic.body.lanes[0]?.id ?? null,
 	);
@@ -420,6 +478,7 @@ export function DynamicEditor({
 		);
 	const selectLane = (id: string, additive: boolean) => {
 		setPrimaryLane(id);
+		updateEditor({ primaryLaneId: id });
 		setSelectedLanes((current) => {
 			if (!additive) return new Set([id]);
 			const next = new Set(current);
@@ -430,18 +489,15 @@ export function DynamicEditor({
 		if (appState.shiftArmed)
 			dispatch({ type: "SET_SHIFT_ARMED", value: false });
 	};
-	const updateSelected = async (
-		update: (lane: DynamicLaneProjection) => DynamicLaneProjection,
-		mutationGroup = crypto.randomUUID(),
-	) => {
-		const selected = dynamic.body.lanes.filter((candidate) =>
-			selectedLanes.has(candidate.id),
-		);
-		for (const candidate of selected)
-			await replaceLane(update(candidate), mutationGroup);
-	};
 	const running = runningCount(runtime, dynamic.id) > 0;
 	const status = definitionStatus(runtime, dynamic.id);
+	useEffect(() => {
+		openEditor({
+			dynamicId: dynamic.id,
+			task: view,
+			primaryLaneId: primaryLane,
+		});
+	}, [dynamic.id, openEditor, primaryLane, view]);
 
 	return (
 		<section
@@ -453,21 +509,6 @@ export function DynamicEditor({
 				<h1>
 					{dynamic.body.name} <small>Dynamic {dynamic.body.pool_number}</small>
 				</h1>
-				<nav className="dynamics-task-tabs" aria-label="Dynamic editor views">
-					{(["curves", "phase", "speed"] as const).map((candidate) => (
-						<Button
-							key={candidate}
-							className={view === candidate ? "active" : ""}
-							onClick={() => setView(candidate)}
-						>
-							{candidate === "curves"
-								? "Curves"
-								: candidate === "phase"
-									? "Phase Spread"
-									: "Speed"}
-						</Button>
-					))}
-				</nav>
 			</header>
 			{error && (
 				<p className="dynamics-error" role="alert">
@@ -476,12 +517,12 @@ export function DynamicEditor({
 			)}
 			<div className="dynamics-editor-body">
 				<aside className="dynamic-lane-rail">
-					<fieldset className="dynamic-object-metadata">
-						<legend>Dynamic</legend>
-						<label>
-							Name
-							<input
+					<section className="dynamic-object-metadata">
+						<h3>Dynamic settings</h3>
+						<FormLayout labelPlacement="side">
+							<TextField
 								key={`name-${dynamic.revision}`}
+								label="Name"
 								defaultValue={dynamic.body.name}
 								maxLength={128}
 								onBlur={(event) => {
@@ -490,34 +531,22 @@ export function DynamicEditor({
 										void onMutate(dynamic, { type: "set_name", name });
 								}}
 							/>
-						</label>
-						<label>
-							Icon
-							<input
-								key={`icon-${dynamic.revision}`}
-								defaultValue={dynamic.body.icon ?? ""}
-								maxLength={8}
-								onBlur={(event) => {
-									const icon = event.target.value.trim() || null;
-									if (icon !== dynamic.body.icon)
-										void onMutate(dynamic, { type: "set_icon", icon });
-								}}
-							/>
-						</label>
-						<label>
-							Color
-							<input
-								type="color"
-								value={dynamic.body.color ?? "#4edcff"}
-								onChange={(event) =>
-									void onMutate(dynamic, {
-										type: "set_color",
-										color: event.target.value,
-									})
+							<IconPickerField
+								label="Icon"
+								value={dynamic.body.icon ?? "∿"}
+								onChange={(icon) =>
+									void onMutate(dynamic, { type: "set_icon", icon })
 								}
 							/>
-						</label>
-					</fieldset>
+							<ColorPickerField
+								label="Color"
+								value={dynamic.body.color ?? "#4edcff"}
+								onChange={(color) =>
+									void onMutate(dynamic, { type: "set_color", color })
+								}
+							/>
+						</FormLayout>
+					</section>
 					<header>
 						<b>Lanes</b>
 						<small>{selectedLanes.size} selected</small>
@@ -617,24 +646,34 @@ export function DynamicEditor({
 					</div>
 				</aside>
 				<main className="dynamic-workspace">
-					{view === "curves" && lane && (
-						<CurvesView
-							lane={lane}
-							attributes={attributes}
-							presets={presets}
-							randomGroups={dynamic.body.random_groups}
-							onReplace={replaceLane}
-							onAddRandomGroup={(group) =>
-								onMutate(dynamic, { type: "add_random_group", group })
-							}
-							onReplaceRandomGroup={(group) =>
-								onMutate(dynamic, {
-									type: "replace_random_group",
-									group_id: group.id,
-									group,
-								})
-							}
-						/>
+					{view === "curves" && (
+						<div className="dynamic-lane-stack">
+							{dynamic.body.lanes.map((candidate) => (
+								<section
+									key={candidate.id}
+									className={`dynamic-lane-workspace-card ${candidate.id === primaryLane ? "primary" : ""}`}
+									onPointerDown={() => selectLane(candidate.id, false)}
+								>
+									<CurvesView
+										lane={candidate}
+										attributes={attributes}
+										presets={presets}
+										randomGroups={dynamic.body.random_groups}
+										onReplace={replaceLane}
+										onAddRandomGroup={(group) =>
+											onMutate(dynamic, { type: "add_random_group", group })
+										}
+										onReplaceRandomGroup={(group) =>
+											onMutate(dynamic, {
+												type: "replace_random_group",
+												group_id: group.id,
+												group,
+											})
+										}
+									/>
+								</section>
+							))}
+						</div>
 					)}
 					{view === "phase" && (
 						<PhaseView dynamic={dynamic} onMutate={onMutate} />
@@ -648,13 +687,6 @@ export function DynamicEditor({
 					)}
 				</main>
 			</div>
-				<DynamicEncoderDeck
-				view={view}
-				lane={lane}
-				dynamic={dynamic.body}
-				onLaneChange={updateSelected}
-				onMutate={(intent, group) => onMutate(dynamic, intent, group)}
-			/>
 			<footer className="dynamic-editor-footer">
 				<div>
 					<strong>{targetSummary(dynamic.body)}</strong>
@@ -2271,36 +2303,45 @@ function LaneChooser({
 	onCancel(): void;
 	onChoose(attribute: string): void;
 }) {
+	const [attribute, setAttribute] = useState(attributes[0]?.id ?? "");
 	return (
-		<div className="dynamic-dialog-layer">
-			<section className="dynamic-dialog" role="dialog" aria-modal="true">
-				<header>
-					<div>
-						<small>Dynamic {slot}</small>
-						<h2>Choose the first lane</h2>
-					</div>
-					<Button onClick={onCancel}>×</Button>
-				</header>
+		<ModalFrame
+			id={`create-dynamic-${slot}`}
+			ariaLabel={`Create Dynamic ${slot}`}
+			title={`Create Dynamic ${slot}`}
+			details="Choose the first lane"
+			onClose={onCancel}
+		>
+			<section className="dynamic-create-form">
 				<p>
 					The Dynamic is created only after a valid scalar lane is selected.
 				</p>
-				<div className="dynamic-lane-chooser">
-					{attributes.map((attribute) => (
-						<Button
-							key={attribute.id}
-							disabled={busy}
-							onClick={() => onChoose(attribute.id)}
-						>
-							<strong>{attribute.label}</strong>
-							<small>{attribute.family}</small>
-						</Button>
-					))}
-				</div>
+				<FormLayout labelPlacement="side">
+					<SelectField
+						label="First lane"
+						value={attribute}
+						options={attributes.map((candidate) => ({
+							value: candidate.id,
+							label: `${candidate.family} · ${candidate.label}`,
+						}))}
+						onChange={setAttribute}
+					/>
+				</FormLayout>
 				{attributes.length === 0 && (
 					<p role="alert">No continuous scalar attributes are available.</p>
 				)}
+				<footer>
+					<Button onClick={onCancel}>Cancel</Button>
+					<Button
+						variant="primary"
+						disabled={busy || !attribute}
+						onClick={() => onChoose(attribute)}
+					>
+						{busy ? "Creating…" : "Create and edit"}
+					</Button>
+				</footer>
 			</section>
-		</div>
+		</ModalFrame>
 	);
 }
 

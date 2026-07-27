@@ -8,6 +8,8 @@ import {
 	specialParameterFamilies,
 } from "./model";
 import type { ParameterController } from "./useParameterController";
+import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
+import type { DynamicEditorTask } from "../../../features/dynamics/DynamicEditorSessionContext";
 
 function FamilyLabel({ full, compact }: { full: string; compact: string }) {
 	return (
@@ -97,6 +99,8 @@ export function ParameterFamilyTabs({
 }: {
 	controller: ParameterController;
 }) {
+	const editor = useDynamicEditorSession();
+	if (editor.session) return <DynamicEditorTaskTabs />;
 	return (
 		<div className="family-tabs">
 			{(Object.keys(parameterFamilies) as ParameterFamily[]).map((name) => (
@@ -119,6 +123,47 @@ export function ParameterFamilyTabs({
 			>
 				<FamilyLabel full="Dynamics" compact="Dyn" />
 			</Button>
+		</div>
+	);
+}
+
+export function DynamicEditorTaskTabs({
+	task,
+	onTask,
+}: {
+	task?: DynamicEditorTask;
+	onTask?(task: DynamicEditorTask): void;
+} = {}) {
+	const editor = useDynamicEditorSession();
+	const activeTask = task ?? editor.session?.task;
+	if (!activeTask) return null;
+	return (
+		<div className="family-tabs dynamics-editor-family-tabs">
+			{(["curves", "phase", "speed"] as const).map((task) => {
+				const label =
+					task === "phase"
+						? "Phase Spread"
+						: task[0].toUpperCase() + task.slice(1);
+				return (
+					<Button
+						key={task}
+						aria-label={label}
+						className={activeTask === task ? "active" : ""}
+						onClick={() => (onTask ? onTask(task) : editor.update({ task }))}
+					>
+						<FamilyLabel
+							full={label}
+							compact={
+								task === "phase"
+									? "Phase"
+									: task === "curves"
+										? "Curves"
+										: "Speed"
+							}
+						/>
+					</Button>
+				);
+			})}
 		</div>
 	);
 }

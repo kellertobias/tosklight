@@ -18,6 +18,7 @@ import type {
 import type { ShowObject } from "../features/showObjects/contracts";
 import { AppShellView } from "../components/shell/AppShell";
 import { LeftDock } from "../components/shell/LeftDock";
+import { DynamicEditorTaskTabs } from "../components/control/parameterControls/ParameterFamilyTabs";
 import {
 	createDefaultDynamicDefinition,
 	createDefaultDynamicLane,
@@ -178,8 +179,7 @@ function applyIntent(
 		case "set_target_binding":
 			return {
 				...definition,
-				target_binding:
-					intent.target_binding as DynamicTargetBindingProjection,
+				target_binding: intent.target_binding as DynamicTargetBindingProjection,
 			};
 		case "add_lane": {
 			const lanes = [...definition.lanes];
@@ -261,25 +261,21 @@ function applyIntent(
 function DynamicsProgrammerSurface({
 	dynamic,
 	onMutate,
+	view,
+	onView,
 }: {
 	dynamic: DynamicObject;
 	onMutate(intent: DynamicUpdateIntent, mutationGroup?: string): Promise<void>;
+	view: DynamicEditorView;
+	onView(view: DynamicEditorView): void;
 }) {
-	const [view, setView] = useState<DynamicEditorView>("curves");
 	const [laneId, setLaneId] = useState(dynamic.body.lanes[0]?.id ?? "");
 	const lane =
 		dynamic.body.lanes.find((candidate) => candidate.id === laneId) ??
 		dynamic.body.lanes[0];
 	return (
 		<div className="parameter-controls">
-			<div className="family-tabs" aria-label="Parameter families">
-				{["Intensity", "Color", "Position", "Beam", "Focus"].map((family) => (
-					<Button key={family} disabled>
-						{family}
-					</Button>
-				))}
-				<Button active>Dynamics</Button>
-			</div>
+			<DynamicEditorTaskTabs task={view} onTask={onView} />
 			<div className="parameter-surfaces">
 				<div className="programmer-dynamics-toolbar">
 					<label>
@@ -306,17 +302,6 @@ function DynamicsProgrammerSurface({
 							))}
 						</select>
 					</label>
-					{(["curves", "phase", "speed"] as const).map((candidate) => (
-						<Button
-							key={candidate}
-							active={view === candidate}
-							onClick={() => setView(candidate)}
-						>
-							{candidate === "phase"
-								? "Phase Spread"
-								: candidate[0].toUpperCase() + candidate.slice(1)}
-						</Button>
-					))}
 				</div>
 				<div className="programmer-dynamics-editor-deck">
 					<DynamicEncoderDeck
@@ -344,6 +329,7 @@ function FullApplicationDynamicsMock() {
 	const [message, setMessage] = useState(
 		"Offline discussion mock · changes are kept in Storybook memory only",
 	);
+	const [view, setView] = useState<DynamicEditorView>("curves");
 	const storyRuntime = useMemo(
 		() => ({
 			...runtime,
@@ -425,6 +411,7 @@ function FullApplicationDynamicsMock() {
 								runtime={storyRuntime}
 								selection={runtime.instances[0].targets}
 								selectedGroupId="group-front-wash"
+								view={view}
 								onBack={() => setMessage("Back to Pool requested")}
 								onMutate={async (_object, intent, mutationGroup) =>
 									mutate(intent, mutationGroup)
@@ -458,6 +445,8 @@ function FullApplicationDynamicsMock() {
 							<DynamicsProgrammerSurface
 								dynamic={dynamic}
 								onMutate={mutate}
+								view={view}
+								onView={setView}
 							/>
 						}
 					/>

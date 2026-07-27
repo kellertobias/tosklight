@@ -4,8 +4,8 @@
 	height: 100%;
 	flex-direction: column;
 	background:
-		radial-gradient(circle at 78% 18%, rgb(42 207 255 / 8%), transparent 32rem),
-		var(--surface, #101318);
+		radial-gradient(circle at 78% 18%, rgb(42 207 255 / 4%), transparent 32rem),
+		#080b0f;
 	color: var(--text, #f2f5f7);
 }
 
@@ -18,35 +18,11 @@
 	min-width: max-content;
 }
 
-.dynamics-paging,
-.dynamics-paging label {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.35rem;
-}
-
-.dynamics-paging,
 .dynamics-window fieldset.button-group {
 	min-width: 0;
 	margin: 0;
 	padding: 0;
 	border: 0;
-}
-
-.dynamics-paging input {
-	width: 4.25rem;
-	min-height: 2rem;
-	border: 1px solid #34434e;
-	border-radius: 0.35rem;
-	background: #0c1116;
-	color: inherit;
-	text-align: center;
-}
-
-.dynamics-legend {
-	margin-left: auto;
-	color: #71dcf7;
-	font-size: 0.78rem;
 }
 
 .dynamics-error {
@@ -56,15 +32,7 @@
 	border-bottom: 1px solid #d7606e;
 }
 
-.dynamics-pool-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
-	gap: 0.55rem;
-	padding: 0.7rem;
-}
-
 .dynamic-pool-card {
-	min-height: 7.4rem;
 	--pool-card-accent: #4edcff;
 }
 
@@ -88,19 +56,21 @@
 
 .dynamics-editor-body {
 	display: grid;
-	grid-template-columns: minmax(11rem, 16rem) 1fr;
+	grid-template-columns: minmax(0, 1fr) minmax(15rem, 19rem);
 	min-height: 0;
 	flex: 1;
 }
 
 .dynamic-lane-rail {
+	grid-column: 2;
+	grid-row: 1;
 	display: flex;
 	flex-direction: column;
 	gap: 0.45rem;
 	padding: 0.65rem;
 	overflow: auto;
 	background: rgb(8 13 18 / 78%);
-	border-right: 1px solid rgb(255 255 255 / 8%);
+	border-left: 1px solid rgb(255 255 255 / 8%);
 }
 
 .dynamic-lane-rail > header {
@@ -111,27 +81,14 @@
 }
 
 .dynamic-object-metadata {
-	display: grid;
-	grid-template-columns: 1fr 4.5rem;
-	gap: 0.5rem;
-	margin: 0;
+	margin: 0 0 0.35rem;
 	padding: 0.65rem;
 	border: 1px solid #2b343d;
 	border-radius: 0.45rem;
 }
 
-.dynamic-object-metadata label:first-of-type {
-	grid-column: 1 / -1;
-}
-
-.dynamic-object-metadata label {
-	display: grid;
-	gap: 0.25rem;
-	font-size: 0.75rem;
-}
-
-.dynamic-object-metadata input {
-	min-width: 0;
+.dynamic-object-metadata h3 {
+	margin: 0 0 0.65rem;
 }
 
 .dynamic-lane-row {
@@ -204,9 +161,40 @@
 }
 
 .dynamic-workspace {
+	grid-column: 1;
+	grid-row: 1;
 	min-width: 0;
 	padding: 0.8rem;
 	overflow: auto;
+}
+
+.dynamic-lane-stack {
+	display: grid;
+	gap: 0.75rem;
+}
+
+.dynamic-lane-workspace-card {
+	padding: 0.7rem;
+	background: #0d1218;
+	border: 1px solid #25313b;
+	border-radius: 0.55rem;
+}
+
+.dynamic-lane-workspace-card.primary {
+	border-color: rgb(78 220 255 / 62%);
+	box-shadow: inset 3px 0 #4edcff;
+}
+
+.dynamic-create-form {
+	display: grid;
+	gap: 1rem;
+	padding: 1rem;
+}
+
+.dynamic-create-form footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 0.5rem;
 }
 
 .dynamic-control-row {
@@ -451,50 +439,6 @@
 	color: #f4ba62;
 }
 
-.dynamic-dialog-layer {
-	position: absolute;
-	inset: 0;
-	display: grid;
-	place-items: center;
-	padding: 1rem;
-	background: rgb(4 7 10 / 72%);
-	backdrop-filter: blur(8px);
-	z-index: 50;
-}
-
-.dynamic-dialog {
-	width: min(52rem, 94vw);
-	max-height: 85vh;
-	padding: 0.9rem;
-	overflow: auto;
-	background: #151b22;
-	border: 1px solid #3a4b57;
-	border-radius: 0.7rem;
-	box-shadow: 0 1.2rem 4rem rgb(0 0 0 / 60%);
-}
-
-.dynamic-dialog > header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-}
-
-.dynamic-dialog h2 {
-	margin: 0.15rem 0;
-}
-
-.dynamic-lane-chooser {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
-	gap: 0.45rem;
-}
-
-.dynamic-lane-chooser button {
-	display: grid;
-	min-height: 4rem;
-	text-align: left;
-}
-
 .dynamic-number-control {
 	display: flex;
 	align-items: center;
@@ -515,7 +459,18 @@
 
 @media (max-width: 900px) {
 	.dynamics-editor-body {
-		grid-template-columns: 10rem 1fr;
+		grid-template-columns: 1fr;
+	}
+
+	.dynamic-workspace,
+	.dynamic-lane-rail {
+		grid-column: 1;
+	}
+
+	.dynamic-lane-rail {
+		grid-row: 2;
+		border-top: 1px solid rgb(255 255 255 / 8%);
+		border-left: 0;
 	}
 
 	.dynamic-phase-view,

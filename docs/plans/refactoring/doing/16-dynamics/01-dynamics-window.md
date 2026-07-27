@@ -10,7 +10,8 @@ The production editor deliberately has no embedded fixture grid, fixture preview
 
 The Dynamics pane/window opens in Pool view and uses the accepted shared pool/window primitives:
 
-- integer slots 1–9999, sparse paging, stable UUID identity, name, presentation color, target summary, validation state, and running-instance count;
+- integer slots 1–9999 in the same scrollable 88-pixel shared `PoolGrid`/`PoolCard` geometry as Presets and Groups, with stable UUID identity, name, presentation color, target summary, validation state, and running-instance count;
+- no page selector, page legend, or Dynamics-only pool grid;
 - default Dynamic pool color cyan/light blue, with the shared object-type and per-item color rules;
 - empty slots remain visible and distinct from invalid or deleted objects;
 - moving/renumbering preserves UUID identity; copying creates a new UUID; deleting follows the snapshot rule in the runtime plan;
@@ -19,9 +20,10 @@ The Dynamics pane/window opens in Pool view and uses the accepted shared pool/wi
 
 Exact tile actions are:
 
-- ordinary tap/click on an empty tile opens the lane chooser; the Dynamic is created only after the first valid lane is selected;
+- ordinary tap/click on an empty tile opens the standard desk modal first; the first lane is chosen inside that modal and the Dynamic is created only after the first valid lane is selected;
 - ordinary tap/click on a populated tile toggles the matching Programmer Dynamic instance for the resolved target scope;
-- Shift-tap/Shift-click on a populated tile opens its editor;
+- right-click, touch hold, or Shift-tap/Shift-click on a populated tile opens its editor and suppresses the browser context menu;
+- an armed `DELETE` followed by a populated Dynamic tile deletes that Dynamic and clears the command only after the revisioned delete succeeds;
 - software uses latched Shift and attached hardware uses held Shift;
 - `[SET]` followed by a Dynamic tile and a Playback assigns that Dynamic to the Playback, so Set is not an edit gesture; and
 - armed Record/Store/Update modes keep their documented precedence instead of accidentally starting an instance.
@@ -78,13 +80,13 @@ For a targetless Dynamic:
 
 ## Editor structure
 
-The standalone `experiments/dynamics-editor` is the full-view baseline, except that production removes its mock fixture grid and preview playhead. The editor retains three title-bar task views:
+The standalone `experiments/dynamics-editor` is the full-view baseline, except that production removes its mock fixture grid and preview playhead. While the editor is open, the existing Programmer control section replaces its ordinary Intensity/Color/Position family row with three Dynamic editor tasks:
 
 1. **Curves** — scalar lane mode, sources, functions, keyframes, interpolation, Size, Width, and per-lane speed.
 2. **Phase Spread** — one shared target projection, phase expression, offset/span, Blocks, Repeats, Wings, spatial center, and ordering.
 3. **Speed** — fixed duration or Speed Group, beats per cycle, overall multiplier, activation policy, quantization, and transport status.
 
-The editor uses the normal six-slot ToskLight encoder surface. Slots never shift when a control is unavailable; an unsupported slot remains visible, numbered, and disabled. Software encoder gestures remain relative, the center **Set Value** path remains explicit absolute entry, and hardware/software fine/coarse semantics use the shared encoder contract.
+The editor uses the normal six-slot ToskLight encoder surface in the existing Programmer control section. The Dynamics pane never renders a second encoder row. Slots never shift when a control is unavailable; an unsupported slot remains visible, numbered, and disabled. Software encoder gestures remain relative, the center **Set Value** path remains explicit absolute entry, and hardware/software fine/coarse semantics use the shared encoder contract.
 
 Vertically stacked lanes support one primary lane and additive multi-selection:
 
@@ -226,3 +228,17 @@ Implementation first produces the complete working backend and frontend. The use
 - do not treat the experiment's mock geometry as a production acceptance oracle.
 
 After approval, add focused tests for empty/populated/Shift/Set tile gestures, navigation, lane selection, immediate edits, target controls, encoder mappings, validation, touch and hardware modes, and dirty-free window behavior. Update help/manual screenshots only from the accepted production state.
+
+### Review iteration 1 — rejected and incorporated
+
+The first Storybook review was rejected on 2026-07-27. The required corrections are now part of this plan and the production implementation:
+
+- Dynamics and Cuelists use the exact shared Preset/Group pool geometry;
+- Dynamics pagination and implementation-language legend are removed;
+- right-click opens edit, and armed Delete followed by a Dynamic tile deletes it;
+- creation starts with the standard modal, with first-lane selection inside it;
+- the pane-local encoder deck is removed and the existing Programmer section switches to Dynamic editor tasks and encoders;
+- Dynamic name, icon, and color use desk-native form controls in the right inspector;
+- the workspace is darker and shows all ordered lanes at once.
+
+This iteration is not visual acceptance. The revised full-application Storybook story must be reviewed again before final UI automation or screenshots are added.

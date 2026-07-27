@@ -9,6 +9,7 @@ import {
 	useReducer,
 } from "react";
 import { useControlSurfaceTarget } from "../features/controlSurfaceInteraction/useControlSurfaceTarget";
+import { DynamicEditorSessionProvider } from "../features/dynamics/DynamicEditorSessionContext";
 import { frontendPerformanceDiagnostics } from "../features/frontendWarmup/diagnostics";
 import type { AppState, BuiltInWindow } from "../types";
 import { type Action, appReducer, initialState } from "./appReducer";
@@ -112,7 +113,11 @@ export function AppProvider({ children }: PropsWithChildren) {
 		},
 	});
 	const value = useMemo(() => ({ state, dispatch }), [state]);
-	return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+	return (
+		<AppContext.Provider value={value}>
+			<DynamicEditorSessionProvider>{children}</DynamicEditorSessionProvider>
+		</AppContext.Provider>
+	);
 }
 
 function activeSetTarget(state: AppState) {

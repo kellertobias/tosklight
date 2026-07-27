@@ -61,10 +61,7 @@
 	flex: 1;
 	min-height: 0;
 	display: grid;
-	grid-template-columns: repeat(
-		var(--channel-columns, 10),
-		minmax(0, 1fr)
-	);
+	grid-template-columns: repeat(var(--channel-columns, 10), minmax(0, 1fr));
 	grid-template-rows: repeat(2, minmax(0, 1fr));
 	gap: 5px;
 	padding: 6px;
@@ -352,12 +349,6 @@
 	color: #fff;
 	background: #315b78;
 }
-.cuelist-pool-grid {
-	padding: 10px;
-	gap: 6px;
-	overflow: auto;
-	align-content: start;
-}
 .cuelist-pool-layout {
 	min-height: 0;
 	flex: 1;
@@ -377,13 +368,6 @@
 	justify-content: space-between;
 	gap: 8px;
 	align-items: center;
-}
-.cuelist-pool-grid button {
-	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	text-align: left;
-	gap: 3px;
 }
 .cuelist-pool-grid button.running:not(.pool-card) {
 	box-shadow: inset 0 0 0 2px #38b76b;

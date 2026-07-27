@@ -11,6 +11,7 @@ import type {
 } from "../../../api/generated/light-wire";
 import { useActiveShowId } from "../../../features/deskSnapshot/DeskSnapshotState";
 import { useDynamicsActions } from "../../../features/dynamics/DynamicsActionsContext";
+import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
 import type { ProgrammerDynamicValue } from "../../../features/programmerValues/contracts";
 import { useProgrammerValuesView } from "../../../features/programmerValues/ProgrammerValuesView";
 import { useDynamics } from "../../../features/showObjects/ShowObjectsState";
@@ -39,17 +40,20 @@ export function ProgrammerDynamicsSurface({
 	controller: ParameterController;
 }) {
 	const actions = useDynamicsActions();
+	const editor = useDynamicEditorSession();
 	const showId = useActiveShowId();
 	const definitions = useDynamics();
 	const programmer = useProgrammerValuesView(controller.active);
 	const [runtime, setRuntime] = useState(EMPTY_RUNTIME);
-	const [selectedControllerId, setSelectedControllerId] = useState<string | null>(
-		null,
-	);
+	const [selectedControllerId, setSelectedControllerId] = useState<
+		string | null
+	>(null);
 	const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
 	const [view, setView] = useState<"instance" | DynamicEditorView>("instance");
 	const [error, setError] = useState<string | null>(null);
-	const gesture = useRef<{ field: string; id: string; at: number } | null>(null);
+	const gesture = useRef<{ field: string; id: string; at: number } | null>(
+		null,
+	);
 	const refresh = useCallback(async () => {
 		if (!actions || !showId) return setRuntime(EMPTY_RUNTIME);
 		setRuntime(await actions.dynamics.runtime(showId));
@@ -82,18 +86,27 @@ export function ProgrammerDynamicsSurface({
 		choices[0] ??
 		null;
 	useEffect(() => {
-		if (
-			selected &&
-			selected.controller.controller_id !== selectedControllerId
-		)
+		if (selected && selected.controller.controller_id !== selectedControllerId)
 			setSelectedControllerId(selected.controller.controller_id);
 	}, [selected, selectedControllerId]);
 	const lanes = selected?.definition?.lanes ?? [];
+	const editorObject = editor.session
+		? definitions.find(
+				(definition) => definition.id === editor.session?.dynamicId,
+			)
+		: null;
+	const selectedObject =
+		editorObject ??
+		definitions.find(
+			(definition) => definition.id === selected?.instance.dynamic_id,
+		);
+	const resolvedLanes = editorObject?.body.lanes ?? lanes;
 	const selectedLane =
-		lanes.find((lane) => lane.id === selectedLaneId) ?? lanes[0] ?? null;
-	const selectedObject = definitions.find(
-		(definition) => definition.id === selected?.instance.dynamic_id,
-	);
+		resolvedLanes.find(
+			(lane) => lane.id === (editor.session?.primaryLaneId ?? selectedLaneId),
+		) ??
+		resolvedLanes[0] ??
+		null;
 	useEffect(() => {
 		if (selectedLane && selectedLane.id !== selectedLaneId)
 			setSelectedLaneId(selectedLane.id);
@@ -141,7 +154,8 @@ export function ProgrammerDynamicsSurface({
 		(delta: number) => {
 			if (!selected || choices.length < 2) return;
 			const current = choices.indexOf(selected);
-			const next = (current + Math.sign(delta) + choices.length) % choices.length;
+			const next =
+				(current + Math.sign(delta) + choices.length) % choices.length;
 			setSelectedControllerId(choices[next].controller.controller_id);
 			setSelectedLaneId(null);
 		},
@@ -257,6 +271,19 @@ export function ProgrammerDynamicsSurface({
 		update,
 	]);
 
+	if (editor.session && selectedObject)
+		return (
+			<div className="programmer-dynamics-editor-deck">
+				<DynamicEncoderDeck
+					view={editor.session.task}
+					lane={selectedLane ?? undefined}
+					dynamic={selectedObject.body}
+					onLaneChange={changeLane}
+					onMutate={mutateDefinition}
+				/>
+			</div>
+		);
+
 	if (!controller.selectedFixtureIds.length && !controller.selectedGroupId)
 		return (
 			<div className="parameter-empty">
@@ -279,7 +306,9 @@ export function ProgrammerDynamicsSurface({
 	const status = [
 		selected.controller.source,
 		selected.controller.winning ? "Winning" : "Hidden",
-		selected.controller.paused || selected.instance.paused ? "Paused" : "Active",
+		selected.controller.paused || selected.instance.paused
+			? "Paused"
+			: "Active",
 		selected.instance.pending ? "Pending" : null,
 	]
 		.filter(Boolean)
@@ -414,8 +443,7 @@ export function ProgrammerDynamicsSurface({
 				onStep={(delta) => cycleChoice(delta)}
 				onSet={(value) => {
 					const choice = choices[Math.round(value)];
-					if (choice)
-						setSelectedControllerId(choice.controller.controller_id);
+					if (choice) setSelectedControllerId(choice.controller.controller_id);
 				}}
 			/>
 			<TouchEncoder
@@ -440,10 +468,7 @@ export function ProgrammerDynamicsSurface({
 				display={`${Math.round(selected.controller.size * 100)}%`}
 				mode="Dynamics"
 				onStep={(delta) =>
-					void update(
-						"size",
-						clamp(selected.controller.size + delta, 0, 2),
-					)
+					void update("size", clamp(selected.controller.size + delta, 0, 2))
 				}
 				onSet={(value) => void update("size", clamp(value, 0, 2))}
 			/>
@@ -457,11 +482,7 @@ export function ProgrammerDynamicsSurface({
 				onStep={(delta) =>
 					void update(
 						"speed",
-						clamp(
-							selected.controller.speed_multiplier + delta,
-							0.0625,
-							16,
-						),
+						clamp(selected.controller.speed_multiplier + delta, 0.0625, 16),
 					)
 				}
 				onSet={(value) => void update("speed", clamp(value, 0.0625, 16))}
@@ -476,11 +497,7 @@ export function ProgrammerDynamicsSurface({
 				onStep={(delta) =>
 					void update(
 						"phase",
-						clamp(
-							selected.controller.phase_offset_degrees + delta,
-							-360,
-							360,
-						),
+						clamp(selected.controller.phase_offset_degrees + delta, -360, 360),
 					)
 				}
 				onSet={(value) => void update("phase", clamp(value, -360, 360))}
@@ -516,7 +533,7 @@ function dynamicChoices(
 						(definition) => definition.id === instance.dynamic_id,
 					) ?? null,
 			})),
-		)
+		);
 	const runningControllerIds = new Set(
 		running.map((choice) => choice.controller.controller_id),
 	);
@@ -524,10 +541,7 @@ function dynamicChoices(
 		string,
 		{
 			values: ProgrammerDynamicValue[];
-			on: Extract<
-				ProgrammerDynamicValue["value"],
-				{ type: "dynamic_on" }
-			>;
+			on: Extract<ProgrammerDynamicValue["value"], { type: "dynamic_on" }>;
 		}
 	>();
 	for (const value of stagedValues) {
@@ -591,11 +605,11 @@ function dynamicChoices(
 		},
 	);
 	return [...running, ...staged].sort(
-			(left, right) =>
-				Number(right.controller.winning) - Number(left.controller.winning) ||
-				left.instance.pool_number - right.instance.pool_number ||
-				left.controller.source.localeCompare(right.controller.source),
-		);
+		(left, right) =>
+			Number(right.controller.winning) - Number(left.controller.winning) ||
+			left.instance.pool_number - right.instance.pool_number ||
+			left.controller.source.localeCompare(right.controller.source),
+	);
 }
 
 function clamp(value: number, minimum: number, maximum: number) {

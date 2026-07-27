@@ -67,7 +67,7 @@ interface PoolSlotProps {
 }
 
 const CUELIST_POOL_KINDS = ["cue_list", "playback", "playback_page"] as const;
-const CUELIST_POOL_MINIMUM_CARD_WIDTH = 150;
+const CUELIST_POOL_MINIMUM_CARD_WIDTH = 88;
 
 function CuelistPoolSlot(props: PoolSlotProps) {
 	const { number, playback, runtimeMaster, usage } = props;
