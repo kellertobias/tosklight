@@ -360,6 +360,7 @@ function FullApplicationDynamicsMock() {
 					<GridDesktop id="dynamics-review" name="Dynamics Review">
 						<PaneView
 							maximized
+							showHeader={false}
 							pane={{
 								id: "dynamics-editor",
 								title: "Dynamics",

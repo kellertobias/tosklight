@@ -20,6 +20,7 @@ export interface PaneViewModel extends GridRect {
 
 export interface PaneViewProps {
   pane: PaneViewModel;
+  showHeader?: boolean;
   active?: boolean;
   maximized?: boolean;
   editing?: boolean;
@@ -38,6 +39,7 @@ export interface PaneViewProps {
 
 export function PaneView({
   pane,
+  showHeader = true,
   active = true,
   maximized = false,
   editing = false,
@@ -60,7 +62,7 @@ export function PaneView({
   };
   return (
     <article
-      className={`desk-pane ${maximized ? "maximized" : ""} ${editing ? "editing" : ""}`}
+      className={`desk-pane ${maximized ? "maximized" : ""} ${editing ? "editing" : ""} ${showHeader ? "" : "without-header"}`}
       role="region"
       aria-label={`${pane.title} pane`}
       aria-expanded={maximized}
@@ -76,7 +78,7 @@ export function PaneView({
       style={gridRectStyle(pane)}
       onPointerDown={(event) => event.currentTarget.focus()}
     >
-      <WindowHeader
+      {showHeader && <WindowHeader
         title={pane.title}
         info={info}
         toolbar={toolbar}
@@ -101,7 +103,7 @@ export function PaneView({
           onPointerUp: () => { drag.current = null; },
           onPointerCancel: () => { drag.current = null; },
         }}
-      />
+      />}
       <div className="pane-content">{children}</div>
       {!maximized && (
         <div

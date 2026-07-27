@@ -585,6 +585,10 @@
 	background: linear-gradient(180deg, #10151a, #0c1014);
 }
 
+.desk-pane.without-header > .pane-content {
+	height: 100%;
+}
+
 .empty-desk.ui-button {
 	grid-column: 1 / -1;
 	grid-row: 1 / -1;

@@ -250,6 +250,8 @@ Curves task. The production editor and the full-application story now share this
 composition:
 
 - Curves, Phase Spread, Speed, Add Lane, Back to Pool, and Settings are window-title actions.
+- The full-application story shows only that authoritative Dynamic title bar; its
+  action order is Add Lane, task tabs, Back to Pool, then Settings.
 - Window Settings owns Dynamic name, icon, and color.
 - Curves shows every lane as a compact horizontal attribute/mode/curve row.
 - Each lane has the desk checkbox for multi-edit selection and a desk action menu

@@ -530,6 +530,15 @@ export function DynamicEditor({
 					secondary: `${dynamic.body.lanes.length} ${dynamic.body.lanes.length === 1 ? "lane" : "lanes"}`,
 				}}
 				actions={[
+					view === "curves"
+						? [
+								{
+									id: "add-lane",
+									label: "+ Add Lane",
+									onClick: () => void addLane(),
+								},
+							]
+						: [],
 					[
 						{
 							id: "curves",
@@ -550,15 +559,6 @@ export function DynamicEditor({
 							onClick: () => changeView("speed"),
 						},
 					],
-					view === "curves"
-						? [
-								{
-									id: "add-lane",
-									label: "+ Add Lane",
-									onClick: () => void addLane(),
-								},
-							]
-						: [],
 					[{ id: "back", label: "← Back to Pool", onClick: onBack }],
 				]}
 				settings
