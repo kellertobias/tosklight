@@ -38,6 +38,48 @@ export interface FrontendPatchMutationDiagnostic {
 	actionToVisibleMs: number | null;
 }
 
+export interface FrontendStageVisualizationDiagnostic {
+	lane: "normal" | "preload";
+	startedAt: number;
+	receivedAt: number | null;
+	durationMs: number | null;
+	payloadBytes: number | null;
+	sourceGeneratedAt: string | null;
+	sourceAgeMs: number | null;
+	status: "running" | "ready" | "error";
+}
+
+export interface FrontendStageSceneBuildDiagnostic {
+	startedAt: number;
+	finishedAt: number;
+	durationMs: number;
+	fixtureCount: number;
+	objectCount: number;
+	geometryCount: number;
+	materialCount: number;
+}
+
+export interface FrontendStageRenderDiagnostic {
+	submittedAt: number;
+	durationMs: number;
+	calls: number;
+	triangles: number;
+	lines: number;
+	points: number;
+	geometries: number;
+	textures: number;
+}
+
+export interface FrontendStageDiagnostics {
+	visualizationRequests: readonly FrontendStageVisualizationDiagnostic[];
+	sceneBuilds: readonly FrontendStageSceneBuildDiagnostic[];
+	renders: readonly FrontendStageRenderDiagnostic[];
+	sceneDisposals: number;
+	rendererContextsCreated: number;
+	rendererContextsDisposed: number;
+	rafCallbacks: number;
+}
+
 export interface FrontendPerformanceSnapshot {
 	startedAt: number;
 	firstUsablePaintAt: number | null;
@@ -56,6 +98,7 @@ export interface FrontendPerformanceSnapshot {
 		p95Ms: number | null;
 		gateEnforced: false;
 	};
+	stage: FrontendStageDiagnostics;
 }
 
 type PerformanceWithMemory = Performance & {
@@ -71,6 +114,14 @@ class FrontendPerformanceDiagnostics {
 	private readonly longTasks: FrontendLongTaskDiagnostic[] = [];
 	private readonly eventLags: FrontendEventLagDiagnostic[] = [];
 	private readonly patchMutations: FrontendPatchMutationDiagnostic[] = [];
+	private readonly stageVisualizationRequests: FrontendStageVisualizationDiagnostic[] =
+		[];
+	private readonly stageSceneBuilds: FrontendStageSceneBuildDiagnostic[] = [];
+	private readonly stageRenders: FrontendStageRenderDiagnostic[] = [];
+	private stageSceneDisposals = 0;
+	private stageRendererContextsCreated = 0;
+	private stageRendererContextsDisposed = 0;
+	private stageRafCallbacks = 0;
 	private activeRequests = 0;
 	private maxSnapshotConcurrency = 0;
 	private longTaskObserver: PerformanceObserver | null = null;
@@ -219,6 +270,60 @@ class FrontendPerformanceDiagnostics {
 		};
 	}
 
+	beginStageVisualizationRequest(lane: "normal" | "preload") {
+		const sample: FrontendStageVisualizationDiagnostic = {
+			lane,
+			startedAt: now(),
+			receivedAt: null,
+			durationMs: null,
+			payloadBytes: null,
+			sourceGeneratedAt: null,
+			sourceAgeMs: null,
+			status: "running",
+		};
+		pushBounded(this.stageVisualizationRequests, sample, 2_048);
+		let finished = false;
+		return (result?: { generated_at: string }, error?: unknown) => {
+			if (finished) return;
+			finished = true;
+			const receivedAt = Date.now();
+			sample.receivedAt = receivedAt;
+			sample.durationMs = now() - sample.startedAt;
+			sample.status = error == null ? "ready" : "error";
+			if (!result) return;
+			sample.payloadBytes = serializedModelBytes(result);
+			sample.sourceGeneratedAt = result.generated_at;
+			const sourceAt = Date.parse(result.generated_at);
+			sample.sourceAgeMs = Number.isFinite(sourceAt)
+				? Math.max(0, receivedAt - sourceAt)
+				: null;
+		};
+	}
+
+	recordStageSceneBuild(sample: FrontendStageSceneBuildDiagnostic) {
+		pushBounded(this.stageSceneBuilds, sample, 1_024);
+	}
+
+	recordStageSceneDisposal() {
+		this.stageSceneDisposals++;
+	}
+
+	recordStageRendererCreated() {
+		this.stageRendererContextsCreated++;
+	}
+
+	recordStageRendererDisposed() {
+		this.stageRendererContextsDisposed++;
+	}
+
+	recordStageRafCallback() {
+		this.stageRafCallbacks++;
+	}
+
+	recordStageRender(sample: FrontendStageRenderDiagnostic) {
+		pushBounded(this.stageRenders, sample, 4_096);
+	}
+
 	snapshot(): FrontendPerformanceSnapshot {
 		const patchDurations = this.patchMutations
 			.flatMap(({ actionToVisibleMs }) =>
@@ -245,6 +350,19 @@ class FrontendPerformanceDiagnostics {
 				p50Ms: percentile(patchDurations, 50),
 				p95Ms: percentile(patchDurations, 95),
 				gateEnforced: false,
+			},
+			stage: {
+				visualizationRequests: this.stageVisualizationRequests.map(
+					(sample) => ({
+						...sample,
+					}),
+				),
+				sceneBuilds: this.stageSceneBuilds.map((sample) => ({ ...sample })),
+				renders: this.stageRenders.map((sample) => ({ ...sample })),
+				sceneDisposals: this.stageSceneDisposals,
+				rendererContextsCreated: this.stageRendererContextsCreated,
+				rendererContextsDisposed: this.stageRendererContextsDisposed,
+				rafCallbacks: this.stageRafCallbacks,
 			},
 		};
 	}
@@ -345,6 +463,11 @@ function percentile(sorted: readonly number[], value: number) {
 	if (!sorted.length) return null;
 	const rank = Math.ceil((value / 100) * sorted.length);
 	return sorted[Math.max(0, rank - 1)];
+}
+
+function pushBounded<T>(target: T[], value: T, maximum: number) {
+	target.push(value);
+	if (target.length > maximum) target.splice(0, target.length - maximum);
 }
 
 function mark(name: string) {

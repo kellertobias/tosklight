@@ -34,6 +34,7 @@ describe("HttpVisualizationRuntimeTransport", () => {
 		const headers = fetch.mock.calls[0]?.[1]?.headers as Headers;
 		expect(headers.get("authorization")).toBe("Bearer session-token");
 		expect(headers.get("x-light-desk-token")).toBe("desk-token");
+		expect(headers.get("x-tosk-show")).toBe(SHOW_ID);
 		expect(fetch.mock.calls[0]?.[0]).not.toContain("bootstrap");
 		expect(fetch.mock.calls[0]?.[0]).not.toContain("playbacks");
 	});
@@ -47,7 +48,9 @@ describe("HttpVisualizationRuntimeTransport", () => {
 		);
 		const transport = createTransport(fetch);
 
-		await expect(transport.loadSnapshot(scope, "preload")).resolves.toMatchObject({
+		await expect(
+			transport.loadSnapshot(scope, "preload"),
+		).resolves.toMatchObject({
 			preload: true,
 		});
 		expect(fetch.mock.calls[0]?.[0]).toBe(
@@ -77,10 +80,7 @@ describe("HttpVisualizationRuntimeTransport", () => {
 			),
 		).rejects.toBeInstanceOf(VisualizationRuntimeProtocolError);
 		await expect(
-			transport.loadSnapshot(
-				{ ...scope, authorityKey: "server-b" },
-				"normal",
-			),
+			transport.loadSnapshot({ ...scope, authorityKey: "server-b" }, "normal"),
 		).rejects.toBeInstanceOf(VisualizationRuntimeProtocolError);
 		expect(fetch).not.toHaveBeenCalled();
 	});
@@ -103,7 +103,10 @@ describe("HttpVisualizationRuntimeTransport", () => {
 
 describe("decodeVisualizationRuntimeSnapshot", () => {
 	it("decodes resolved and post-profile attribute values", () => {
-		const decoded = decodeVisualizationRuntimeSnapshot(snapshot(false), "normal");
+		const decoded = decodeVisualizationRuntimeSnapshot(
+			snapshot(false),
+			"normal",
+		);
 
 		expect(decoded.values).toEqual([
 			{
@@ -157,9 +160,17 @@ describe("decodeVisualizationRuntimeSnapshot", () => {
 		]);
 	});
 
+	it("tolerates unknown fields for forward-compatible Visualization payloads", () => {
+		expect(
+			decodeVisualizationRuntimeSnapshot(
+				{ ...snapshot(false), future_projection: { version: 3 } },
+				"normal",
+			),
+		).toMatchObject({ revision: 7, preload: false });
+	});
+
 	it.each([
 		["missing lane", without(snapshot(false), "preload")],
-		["unknown field", { ...snapshot(false), foreign_scope: "other" }],
 		["invalid master", { ...snapshot(false), grand_master: 1.1 }],
 		["invalid timestamp", { ...snapshot(false), generated_at: "later" }],
 		[

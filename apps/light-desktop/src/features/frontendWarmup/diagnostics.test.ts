@@ -97,4 +97,47 @@ describe("frontend performance diagnostics", () => {
 			performance.getEntriesByName("tosklight:patch:patch-1", "measure"),
 		).toHaveLength(1);
 	});
+
+	it("records Stage transport, scene, renderer, and lifecycle measurements", async () => {
+		const { frontendPerformanceDiagnostics: diagnostics } = await import(
+			"./diagnostics"
+		);
+		const finish = diagnostics.beginStageVisualizationRequest("normal");
+		finish({ generated_at: new Date().toISOString() });
+		diagnostics.recordStageSceneBuild({
+			startedAt: 1,
+			finishedAt: 3,
+			durationMs: 2,
+			fixtureCount: 49,
+			objectCount: 300,
+			geometryCount: 20,
+			materialCount: 12,
+		});
+		diagnostics.recordStageRendererCreated();
+		diagnostics.recordStageRafCallback();
+		diagnostics.recordStageRender({
+			submittedAt: 4,
+			durationMs: 1,
+			calls: 8,
+			triangles: 100,
+			lines: 4,
+			points: 0,
+			geometries: 20,
+			textures: 0,
+		});
+		diagnostics.recordStageSceneDisposal();
+		diagnostics.recordStageRendererDisposed();
+
+		expect(diagnostics.snapshot().stage).toMatchObject({
+			visualizationRequests: [
+				expect.objectContaining({ lane: "normal", status: "ready" }),
+			],
+			sceneBuilds: [expect.objectContaining({ fixtureCount: 49 })],
+			renders: [expect.objectContaining({ calls: 8 })],
+			sceneDisposals: 1,
+			rendererContextsCreated: 1,
+			rendererContextsDisposed: 1,
+			rafCallbacks: 1,
+		});
+	});
 });

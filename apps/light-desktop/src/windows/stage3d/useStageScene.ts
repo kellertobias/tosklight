@@ -10,6 +10,7 @@ import {
 import type * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { VisualizationSnapshot } from "../../api/types";
+import { frontendPerformanceDiagnostics } from "../../features/frontendWarmup/diagnostics";
 import {
 	buildStageScene,
 	disposeScene,
@@ -157,6 +158,7 @@ export function useStageScene({
 	}, [visualization]);
 
 	useEffect(() => {
+		const startedAt = performance.now();
 		const next = buildStageScene(
 			fixtures,
 			renderVisualization,
@@ -166,6 +168,34 @@ export function useStageScene({
 			showBeamGuides,
 			new Set(virtualHighlight),
 		);
+		let objectCount = 0;
+		let geometryCount = 0;
+		let materialCount = 0;
+		const geometries = new Set<THREE.BufferGeometry>();
+		const materials = new Set<THREE.Material>();
+		next.scene.traverse((object) => {
+			objectCount++;
+			const mesh = object as THREE.Mesh;
+			if (mesh.geometry) geometries.add(mesh.geometry);
+			const objectMaterials = Array.isArray(mesh.material)
+				? mesh.material
+				: mesh.material
+					? [mesh.material]
+					: [];
+			for (const material of objectMaterials) materials.add(material);
+		});
+		geometryCount = geometries.size;
+		materialCount = materials.size;
+		const finishedAt = performance.now();
+		frontendPerformanceDiagnostics.recordStageSceneBuild({
+			startedAt,
+			finishedAt,
+			durationMs: finishedAt - startedAt,
+			fixtureCount: fixtures.length,
+			objectCount,
+			geometryCount,
+			materialCount,
+		});
 		const previousScene = sceneRef.current;
 		const retained = retainFixtureModels(
 			fixtures,
@@ -183,7 +213,10 @@ export function useStageScene({
 		);
 		sceneRef.current = next.scene;
 		fixtureObjectsRef.current = next.fixtureObjects;
-		if (previousScene) disposeScene(previousScene);
+		if (previousScene) {
+			disposeScene(previousScene);
+			frontendPerformanceDiagnostics.recordStageSceneDisposal();
+		}
 		return cancelModels;
 	}, [
 		fixtures,

@@ -1,6 +1,7 @@
 import { type Dispatch, type MutableRefObject, useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { frontendPerformanceDiagnostics } from "../../features/frontendWarmup/diagnostics";
 import type { Action } from "../../state/appReducer";
 import { disposeScene } from "../stage3dScene";
 import { bindStagePointerInteraction } from "./pointerInteraction";
@@ -37,6 +38,7 @@ export function useStageRenderer({
 			antialias: true,
 			preserveDrawingBuffer: true,
 		});
+		frontendPerformanceDiagnostics.recordStageRendererCreated();
 		renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 		renderer.outputColorSpace = THREE.SRGBColorSpace;
 		container.replaceChildren(renderer.domElement);
@@ -74,9 +76,23 @@ export function useStageRenderer({
 		resize();
 		let frame = 0;
 		const animate = () => {
+			frontendPerformanceDiagnostics.recordStageRafCallback();
 			controls.update();
-			if (controller.sceneRef.current)
+			if (controller.sceneRef.current) {
+				const startedAt = performance.now();
 				renderer.render(controller.sceneRef.current, camera);
+				const submittedAt = performance.now();
+				frontendPerformanceDiagnostics.recordStageRender({
+					submittedAt,
+					durationMs: submittedAt - startedAt,
+					calls: renderer.info.render.calls,
+					triangles: renderer.info.render.triangles,
+					lines: renderer.info.render.lines,
+					points: renderer.info.render.points,
+					geometries: renderer.info.memory.geometries,
+					textures: renderer.info.memory.textures,
+				});
+			}
 			frame = requestAnimationFrame(animate);
 		};
 		animate();
@@ -95,6 +111,7 @@ export function useStageRenderer({
 			controlsRef.current = null;
 			renderer.forceContextLoss();
 			renderer.dispose();
+			frontendPerformanceDiagnostics.recordStageRendererDisposed();
 		};
 	}, [controller, dispatch, hostRef]);
 

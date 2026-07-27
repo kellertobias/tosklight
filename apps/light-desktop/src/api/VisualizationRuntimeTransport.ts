@@ -1,7 +1,4 @@
-import type {
-	AttributeValue,
-	VisualizationSnapshot,
-} from "./types";
+import { frontendPerformanceDiagnostics } from "../features/frontendWarmup/diagnostics";
 import type {
 	VisualizationRuntimeLane,
 	VisualizationRuntimeScope,
@@ -19,10 +16,12 @@ import {
 	integerAt,
 	nullable,
 	numberAt,
+	recordAt,
 	stringAt,
 } from "./playbackWirePrimitives";
 import { decodeAttributeValue } from "./programmerValuesWireProjection";
 import { programmingUuidAt } from "./programmingWireProjection";
+import type { AttributeValue, VisualizationSnapshot } from "./types";
 import { WireValidationError } from "./wireValidation";
 
 export interface HttpVisualizationRuntimeTransportOptions {
@@ -55,6 +54,8 @@ export class HttpVisualizationRuntimeTransport
 		lane: VisualizationRuntimeLane,
 	): Promise<VisualizationSnapshot> {
 		this.validateScope(scope);
+		const finishDiagnostic =
+			frontendPerformanceDiagnostics.beginStageVisualizationRequest(lane);
 		const query = lane === "preload" ? "?preload=true" : "";
 		let response: Response;
 		try {
@@ -63,12 +64,16 @@ export class HttpVisualizationRuntimeTransport
 				{ headers: this.headers() },
 			);
 		} catch (reason) {
+			finishDiagnostic(undefined, reason);
 			throw new VisualizationRuntimeHttpError(asError(reason).message, 0);
 		}
-		const value = await responseValue(response);
 		try {
-			return decodeVisualizationRuntimeSnapshot(value, lane);
+			const value = await responseValue(response);
+			const decoded = decodeVisualizationRuntimeSnapshot(value, lane);
+			finishDiagnostic(decoded);
+			return decoded;
 		} catch (reason) {
+			finishDiagnostic(undefined, reason);
 			if (reason instanceof VisualizationRuntimeProtocolError) throw reason;
 			throw new VisualizationRuntimeProtocolError(asError(reason).message);
 		}
@@ -94,6 +99,7 @@ export class HttpVisualizationRuntimeTransport
 	private headers() {
 		const headers = new Headers({
 			authorization: `Bearer ${this.options.sessionToken}`,
+			"x-tosk-show": this.options.showId,
 		});
 		if (this.options.deskBoundaryToken)
 			headers.set("x-light-desk-token", this.options.deskBoundaryToken);
@@ -105,16 +111,7 @@ export function decodeVisualizationRuntimeSnapshot(
 	value: unknown,
 	expectedLane: VisualizationRuntimeLane,
 ): VisualizationSnapshot {
-	const snapshot = exactRecordAt(value, "$", [
-		"revision",
-		"generated_at",
-		"grand_master",
-		"blackout",
-		"preload",
-		"values",
-		"dynamic_stack",
-		"profile_output_values",
-	]);
+	const snapshot = recordAt(value, "$");
 	const preload = booleanAt(snapshot.preload, "$.preload");
 	if (preload !== (expectedLane === "preload"))
 		throw new VisualizationRuntimeProtocolError(
@@ -146,28 +143,7 @@ function decodeDynamicStack(value: unknown, path: string) {
 }
 
 function decodeDynamicStackEntry(value: unknown, path: string) {
-	const entry = exactRecordAt(value, path, [
-		"fixture_id",
-		"attribute",
-		"entry_type",
-		"priority",
-		"changed_at_millis",
-		"source",
-		"dynamic_id",
-		"pool_number",
-		"name",
-		"runtime_instance_id",
-		"controller_id",
-		"lane_id",
-		"size",
-		"activation_mix",
-		"paused",
-		"hidden",
-		"pending",
-		"winning",
-		"value",
-		"resolved_value",
-	]);
+	const entry = recordAt(value, path);
 	return {
 		fixture_id: stringAt(entry.fixture_id, `${path}.fixture_id`),
 		attribute: stringAt(entry.attribute, `${path}.attribute`),
@@ -185,11 +161,7 @@ function decodeDynamicStackEntry(value: unknown, path: string) {
 		),
 		source: stringAt(entry.source, `${path}.source`),
 		dynamic_id: nullable(entry.dynamic_id, `${path}.dynamic_id`, stringAt),
-		pool_number: nullable(
-			entry.pool_number,
-			`${path}.pool_number`,
-			integerAt,
-		),
+		pool_number: nullable(entry.pool_number, `${path}.pool_number`, integerAt),
 		name: stringAt(entry.name, `${path}.name`),
 		runtime_instance_id: nullable(
 			entry.runtime_instance_id,
@@ -234,7 +206,10 @@ function signedIntegerAt(value: unknown, path: string) {
 	return integer;
 }
 
-function decodeVisualizationValue(value: unknown, path: string): {
+function decodeVisualizationValue(
+	value: unknown,
+	path: string,
+): {
 	fixture_id: string;
 	attribute: string;
 	value: AttributeValue;
