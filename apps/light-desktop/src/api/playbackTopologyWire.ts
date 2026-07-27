@@ -249,6 +249,11 @@ function encodeTarget(target: PlaybackDefinition["target"]) {
 				16,
 			),
 		};
+	if (target.type === "dynamic")
+		return {
+			type: target.type,
+			assignment: target.assignment,
+		};
 	return { type: target.type };
 }
 

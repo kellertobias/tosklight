@@ -68,7 +68,6 @@ function cueList(revision: number, name: string): ShowObject<"cue_list"> {
 					cue_only: false,
 					changes: [],
 					group_changes: [],
-					phasers: [],
 				},
 			],
 		},

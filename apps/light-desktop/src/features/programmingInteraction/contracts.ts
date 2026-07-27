@@ -6,7 +6,7 @@ export interface CommandChoiceOption {
 	command: string;
 }
 
-export interface PendingCommandChoice {
+export interface CueMoveCopyChoice {
 	type: "cue_move_copy";
 	choiceId: string;
 	showId: string;
@@ -16,6 +16,28 @@ export interface PendingCommandChoice {
 	options: readonly CommandChoiceOption[];
 	cancelLabel: string;
 }
+
+export interface DynamicInstanceChoiceOption {
+	controllerId: string;
+	label: string;
+	command: string;
+}
+
+export interface DynamicInstanceChoice {
+	type: "dynamic_instance";
+	choiceId: string;
+	showId: string;
+	showRevision: number;
+	dynamicId: string;
+	poolNumber: number;
+	command: string;
+	options: readonly DynamicInstanceChoiceOption[];
+	cancelLabel: string;
+}
+
+export type PendingCommandChoice =
+	| CueMoveCopyChoice
+	| DynamicInstanceChoice;
 
 export interface CommandLineProjection {
 	text: string;

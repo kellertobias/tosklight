@@ -36,7 +36,7 @@ const SHOW_A = "11111111-1111-4111-8111-111111111111";
 const SHOW_B = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const DESK_ID = "22222222-2222-4222-8222-222222222222";
 
-function cueList(id: string, name: string, dynamics = 0): CueList {
+function cueList(id: string, name: string): CueList {
 	return {
 		id,
 		name,
@@ -52,7 +52,6 @@ function cueList(id: string, name: string, dynamics = 0): CueList {
 				delay_millis: 0,
 				trigger: { type: "manual" },
 				changes: [],
-				phasers: Array.from({ length: dynamics }, () => ({})),
 			},
 		],
 	};
@@ -86,7 +85,7 @@ function showObject<K extends "cue_list" | "playback">(
 const OBJECTS = {
 	[SHOW_A]: {
 		cue_list: [
-			showObject("cue_list", "main", cueList("main", "Main Cuelist", 2)),
+			showObject("cue_list", "main", cueList("main", "Main Cuelist")),
 			showObject("cue_list", "virtual", cueList("virtual", "Virtual Cuelist")),
 		],
 		playback: [
@@ -396,7 +395,7 @@ describe("System Controls running Playback authority", () => {
 		expect(screen.getByTestId("sources")).toHaveTextContent(
 			"Main playback|Virtual Cuelist",
 		);
-		expect(screen.getByTestId("dynamics")).toHaveTextContent("2");
+		expect(screen.getByTestId("dynamics")).toHaveTextContent("0");
 	});
 
 	it("refuses release and exposes no stale rows while exact runtime is loading", async () => {

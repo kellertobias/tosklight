@@ -107,12 +107,15 @@ export interface FixtureHead {
 
 export type ChannelResolution = "u8" | "u16" | "u24" | "u32";
 export type ChannelBehavior = "controlled" | "static";
+export type CanonicalTransform = "identity" | "invert_normalized";
 
 export interface FixtureChannel {
 	id: string;
 	head_id: string;
 	split: number;
+	fixture_attribute: string;
 	attribute: string;
+	canonical_transform: CanonicalTransform;
 	resolution: ChannelResolution;
 	secondary_slots: number[];
 	default_raw: number;

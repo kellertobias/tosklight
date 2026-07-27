@@ -95,7 +95,6 @@ function decodeCue(value: unknown, path: string): Cue {
 			(change, index) =>
 				decodeCueChange(change, `${path}.group_changes[${index}]`, "group_id"),
 		),
-		phasers: arrayAt(cue.phasers ?? [], `${path}.phasers`),
 	} as Cue;
 }
 

@@ -4,7 +4,7 @@ import type {
 	ShowObjectKind,
 	ShowObjectsChange,
 } from "./contracts";
-import { ShowObjectEventWatermarks } from "./eventWatermarks";
+import type { ShowObjectEventWatermarks } from "./eventWatermarks";
 import { sortObjects, upsertCollection } from "./storeProjection";
 
 export interface AppliedShowObjectsChange {
@@ -46,6 +46,7 @@ export function applyAuthoritativeChange(
 				revision: objectChange.objectRevision,
 				updated_at: existing?.updated_at ?? "",
 				body: objectChange.body,
+				validationError: objectChange.validationError,
 			} as ShowObject);
 			sortObjects(collection);
 		}

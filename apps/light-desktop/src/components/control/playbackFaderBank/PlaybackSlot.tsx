@@ -174,6 +174,7 @@ function playbackKind(
 	target: PlaybackDefinition["target"]["type"] | undefined,
 ): PlaybackCardKind {
 	if (target === "cue_list") return "cue-list";
+	if (target === "dynamic") return "dynamic";
 	if (target === "group") return "group-master";
 	if (target === "speed_group") return "speed-group";
 	if (
@@ -216,6 +217,15 @@ function playbackSummary({
 			label: `${groupFixtureCount ?? 0} Fixture${groupFixtureCount === 1 ? "" : "s"}`,
 			detail: `${Math.round(value)}%`,
 		};
+	if (target === "dynamic" && projection?.target === "dynamic") {
+		const runtime = projection.runtime;
+		return {
+			label: runtime ? runtime.state.toUpperCase() : "Unavailable",
+			detail: runtime
+				? `Size ${Math.round(runtime.size * 100)}% · ${runtime.effective_speed_multiplier.toFixed(2)}× · ${runtime.supported_address_count}/${runtime.target_count * runtime.lane_count} addr`
+				: undefined,
+		};
+	}
 	if (target === "speed_group" && projection?.target === "speed_group") {
 		const runtime = projection.runtime;
 		return {

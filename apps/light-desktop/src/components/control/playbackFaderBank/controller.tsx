@@ -109,6 +109,7 @@ export function usePlaybackBankController({
 		runtimeProjections: projectionAuthority.projections,
 		playbackDesk,
 		commandLineActions,
+		commandLine,
 		cueRecording,
 		state,
 		dispatch,
@@ -122,6 +123,9 @@ export function usePlaybackBankController({
 		setConfiguration,
 		assignmentPending: state.cueListSetTarget != null,
 		selectionPending: /^SELECT\s*$/i.test(commandLine?.text ?? ""),
+		dynamicAssignmentPending: /^SET\s+DYNAMIC\s+\d+\s*$/i.test(
+			commandLine?.text ?? "",
+		),
 		slots,
 		rowTracks,
 		heldActions,
@@ -252,6 +256,11 @@ function projectionMatches(
 	if (target.type === "speed_group")
 		return (
 			projection.target === "speed_group" && projection.group === target.group
+		);
+	if (target.type === "dynamic")
+		return (
+			projection.target === "dynamic" &&
+			projection.dynamic_id === target.assignment.dynamic_id
 		);
 	return projection.target === target.type;
 }

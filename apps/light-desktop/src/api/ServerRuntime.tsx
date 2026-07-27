@@ -37,6 +37,7 @@ import { ServerProgrammingProviders } from "./ServerProgrammingProviders";
 import { ServerVisualizationRuntimeBoundary } from "./ServerVisualizationRuntimeBoundary";
 import { useServerFeatureBoundaries } from "./useServerFeatureBoundaries";
 import { DeskLoadingStateProvider } from "../features/deskLoading/DeskLoadingState";
+import { DynamicsActionsProvider } from "../features/dynamics/DynamicsActionsContext";
 
 export type {
 	CommandChoiceOption,
@@ -321,6 +322,13 @@ export function ServerRuntime({
 	};
 	const { highlightActions, programmerActions, dmxDiagnostics, soundToLightActions, shellStatusActions } =
 		useProviderActionSources(value);
+	const dynamicsActions = useMemo(
+		() => ({
+			dynamics: state.api.dynamics,
+			showObjects: state.api.showObjects,
+		}),
+		[state.api],
+	);
 	return (
 		<ServerConnectionOwner
 			state={state}
@@ -330,6 +338,7 @@ export function ServerRuntime({
 		<HighlightStateProvider store={state.highlightStore}>
 			<HighlightActionsProvider actions={highlightActions}>
 			<ProgrammerActionsProvider actions={programmerActions}>
+			<DynamicsActionsProvider actions={dynamicsActions}>
 			<ShellStatusActionsProvider actions={shellStatusActions}>
 			<DmxDiagnosticsProvider diagnostics={dmxDiagnostics}>
 			<ShowLifecycleProvider lifecycle={showLifecycle}>
@@ -416,6 +425,7 @@ export function ServerRuntime({
 			</ShowLifecycleProvider>
 			</DmxDiagnosticsProvider>
 			</ShellStatusActionsProvider>
+			</DynamicsActionsProvider>
 			</ProgrammerActionsProvider>
 			</HighlightActionsProvider>
 		</HighlightStateProvider>

@@ -11,6 +11,9 @@ import type {
 	CueMoveCopyChoice,
 	CueMoveCopyChoiceType,
 	CueTransferOperation,
+	DynamicInstanceChoice,
+	DynamicInstanceChoiceType,
+	PendingCommandChoice,
 } from "./generated/light-wire";
 
 const COMMAND_TARGETS = enumSet<CommandTarget>({ FIXTURE: true, GROUP: true });
@@ -34,6 +37,9 @@ const CHOICE_OPTION_IDS = enumSet<CommandChoiceOptionId>({
 	status: true,
 });
 const CHOICE_TYPES = enumSet<CueMoveCopyChoiceType>({ cue_move_copy: true });
+const DYNAMIC_CHOICE_TYPES = enumSet<DynamicInstanceChoiceType>({
+	dynamic_instance: true,
+});
 const CUE_TRANSFER_OPERATIONS = enumSet<CueTransferOperation>({
 	copy: true,
 	move: true,
@@ -159,6 +165,41 @@ function cueMoveCopyChoiceAt(
 	stringAt(choice.cancel_label, `${path}.cancel_label`);
 }
 
+function dynamicInstanceChoiceAt(
+	value: unknown,
+	path: string,
+): asserts value is DynamicInstanceChoice {
+	const choice = objectAt(value, path);
+	enumAt(choice.type, `${path}.type`, DYNAMIC_CHOICE_TYPES);
+	uuidAt(choice.choice_id, `${path}.choice_id`);
+	uuidAt(choice.show_id, `${path}.show_id`);
+	unsignedIntegerAt(choice.show_revision, `${path}.show_revision`);
+	uuidAt(choice.dynamic_id, `${path}.dynamic_id`);
+	unsignedIntegerAt(choice.pool_number, `${path}.pool_number`);
+	stringAt(choice.command, `${path}.command`);
+	if (!Array.isArray(choice.options))
+		invalid(`${path}.options`, "an array", choice.options);
+	choice.options.forEach((optionValue, index) => {
+		const option = objectAt(optionValue, `${path}.options[${index}]`);
+		uuidAt(option.controller_id, `${path}.options[${index}].controller_id`);
+		stringAt(option.label, `${path}.options[${index}].label`);
+		stringAt(option.command, `${path}.options[${index}].command`);
+	});
+	stringAt(choice.cancel_label, `${path}.cancel_label`);
+}
+
+function pendingCommandChoiceAt(
+	value: unknown,
+	path: string,
+): asserts value is PendingCommandChoice {
+	const choice = objectAt(value, path);
+	if (choice.type === "cue_move_copy") {
+		cueMoveCopyChoiceAt(value, path);
+		return;
+	}
+	dynamicInstanceChoiceAt(value, path);
+}
+
 function commandLineAt(
 	value: unknown,
 	path: string,
@@ -169,7 +210,7 @@ function commandLineAt(
 	booleanAt(commandLine.pristine, `${path}.pristine`);
 	unsignedIntegerAt(commandLine.revision, `${path}.revision`);
 	if (commandLine.pending_choice !== null) {
-		cueMoveCopyChoiceAt(commandLine.pending_choice, `${path}.pending_choice`);
+		pendingCommandChoiceAt(commandLine.pending_choice, `${path}.pending_choice`);
 	}
 }
 
@@ -188,7 +229,7 @@ function operationOutcomeAt(
 			optionalNullableStringAt(outcome, "warning", path);
 			break;
 		case "choice_required":
-			cueMoveCopyChoiceAt(outcome.pending_choice, `${path}.pending_choice`);
+			pendingCommandChoiceAt(outcome.pending_choice, `${path}.pending_choice`);
 			break;
 		case "rejected":
 			stringAt(outcome.error, `${path}.error`);

@@ -737,6 +737,21 @@
 	border: 1px solid var(--line2);
 	border-radius: 3px;
 }
+
+.cue-dynamics-marker {
+	display: inline-grid;
+	place-items: center;
+	margin-inline-start: 0.5rem;
+	min-width: 1.35rem;
+	height: 1.35rem;
+	border: 1px solid color-mix(in srgb, #4edcff 55%, transparent);
+	border-radius: 999px;
+	color: #4edcff;
+	font-size: 0.95rem;
+	font-weight: 800;
+	line-height: 1;
+	vertical-align: middle;
+}
 .quit-confirm-cover {
 	position: fixed;
 	z-index: 2000;

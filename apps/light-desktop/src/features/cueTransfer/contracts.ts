@@ -1,6 +1,6 @@
 import type {
 	CommandLineProjection,
-	PendingCommandChoice,
+	CueMoveCopyChoice,
 } from "../programmingInteraction/contracts";
 import type { ShowObject, ShowObjectBodies } from "../showObjects/contracts";
 
@@ -75,7 +75,7 @@ export class CueTransferTransportError extends Error {
 }
 
 export interface CueTransferCapability {
-	apply(choice: PendingCommandChoice, mode: CueTransferMode): Promise<boolean>;
+	apply(choice: CueMoveCopyChoice, mode: CueTransferMode): Promise<boolean>;
 }
 
 export interface CueTransferScope {

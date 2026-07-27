@@ -134,6 +134,12 @@ function fixtureSheetRow({
 				entry.attribute.startsWith("color."),
 		) ?? false;
 	const color = `rgb(${Math.round(red * 255)}, ${Math.round(green * 255)}, ${Math.round(blue * 255)})`;
+	const dynamicStack =
+		visualization?.dynamic_stack?.filter(
+			(entry) =>
+				entry.fixture_id === target.fixtureId &&
+				entry.entry_type !== "ordinary_static",
+		) ?? [];
 	return {
 		...base,
 		id: target.displayId,
@@ -198,6 +204,7 @@ function fixtureSheetRow({
 				group.runtime.master < 1,
 		),
 		positionLabel: hasPosition ? undefined : "—",
+		dynamicStack,
 	};
 }
 
@@ -217,6 +224,7 @@ function demoFixtureSheetRows() {
 		preloadColor: null,
 		preloadPan: null,
 		preloadTilt: null,
+		dynamicStack: [],
 	}));
 }
 
@@ -283,9 +291,14 @@ export function useFixtureSheetRows({
 	};
 }
 
-export type FixtureSheetRow =
+type OptionalDynamicStack<T> = T extends { dynamicStack: infer Stack }
+	? Omit<T, "dynamicStack"> & { dynamicStack?: Stack }
+	: T;
+
+export type FixtureSheetRow = OptionalDynamicStack<
 	| ReturnType<typeof fixtureSheetRow>
-	| ReturnType<typeof demoFixtureSheetRows>[number];
+	| ReturnType<typeof demoFixtureSheetRows>[number]
+>;
 
 export function useFixtureSheetVisualizations(
 	preloadActive: boolean,

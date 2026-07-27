@@ -3,6 +3,7 @@ import type {
 	PlaybackDefinition,
 	PlaybackPage,
 } from "./types";
+import type { PlaybackTopologyDynamicAssignment } from "./generated/light-wire";
 import {
 	arrayAt,
 	booleanAt,
@@ -33,6 +34,10 @@ const BUTTON_ACTIONS = [
 	"pause",
 	"blackout",
 	"pause_dynamics",
+	"dynamic_restart",
+	"dynamic_double_speed",
+	"dynamic_half_speed",
+	"dynamic_learn_speed",
 	"none",
 ] as const satisfies readonly PlaybackButtonAction[];
 
@@ -138,6 +143,7 @@ function decodeTarget(value: unknown, path: string) {
 		"cue_list",
 		"group",
 		"speed_group",
+		"dynamic",
 		"programmer_fade",
 		"cue_fade",
 		"grand_master",
@@ -156,7 +162,119 @@ function decodeTarget(value: unknown, path: string) {
 		};
 	if (type === "speed_group")
 		return { ...target, type, group: stringAt(target.group, `${path}.group`) };
+	if (type === "dynamic")
+		return {
+			type,
+			assignment: decodeDynamicAssignment(
+				target.assignment,
+				`${path}.assignment`,
+			),
+		};
 	return { ...target, type };
+}
+
+function decodeDynamicAssignment(
+	value: unknown,
+	path: string,
+): PlaybackTopologyDynamicAssignment {
+	const assignment = recordAt(value, path);
+	const dynamic = recordAt(assignment.dynamic, `${path}.dynamic`);
+	const fallback = recordAt(
+		dynamic.embedded_fallback,
+		`${path}.dynamic.embedded_fallback`,
+	);
+	const definition = recordAt(
+		fallback.definition,
+		`${path}.dynamic.embedded_fallback.definition`,
+	);
+	const targetScope =
+		assignment.target_scope == null
+			? null
+			: recordAt(assignment.target_scope, `${path}.target_scope`);
+	if (targetScope) {
+		const scopeType = enumAt(targetScope.type, `${path}.target_scope.type`, [
+			"live_group",
+			"frozen_targets",
+		]);
+		if (scopeType === "live_group")
+			stringAt(targetScope.group_id, `${path}.target_scope.group_id`);
+		else
+			arrayAt(targetScope.targets, `${path}.target_scope.targets`).forEach(
+				(target, index) =>
+					stringAt(target, `${path}.target_scope.targets[${index}]`),
+			);
+	}
+	const multiplier = recordAt(
+		assignment.local_speed_multiplier,
+		`${path}.local_speed_multiplier`,
+	);
+	integerAt(multiplier.numerator, `${path}.local_speed_multiplier.numerator`);
+	integerAt(
+		multiplier.denominator,
+		`${path}.local_speed_multiplier.denominator`,
+	);
+	return {
+		dynamic_id:
+			dynamic.dynamic_id == null
+				? null
+				: stringAt(dynamic.dynamic_id, `${path}.dynamic.dynamic_id`),
+		last_known_pool_number: positiveIntegerAt(
+			dynamic.last_known_pool_number,
+			`${path}.dynamic.last_known_pool_number`,
+			9_999,
+		),
+		embedded_fallback: definition,
+		revision: positiveIntegerAt(assignment.revision, `${path}.revision`, Number.MAX_SAFE_INTEGER),
+		target_scope: targetScope,
+		fader_mode: enumAt(assignment.fader_mode, `${path}.fader_mode`, [
+			"none",
+			"master",
+			"size",
+			"size_and_master",
+		]),
+		priority: integerAt(assignment.priority, `${path}.priority`),
+		activation_override:
+			assignment.activation_override == null
+				? null
+				: enumAt(
+						assignment.activation_override,
+						`${path}.activation_override`,
+						["start_now", "join_sync_now", "next_boundary"],
+					),
+		resume_policy: enumAt(assignment.resume_policy, `${path}.resume_policy`, [
+			"follow_dynamic",
+			"resume_frozen_phase",
+			"rejoin_synchronized_position",
+			"resume_on_next_boundary",
+		]),
+		local_speed_multiplier: {
+			numerator: multiplier.numerator as number,
+			denominator: multiplier.denominator as number,
+		},
+		learned_duration_millis:
+			assignment.learned_duration_millis == null
+				? null
+				: integerAt(
+						assignment.learned_duration_millis,
+						`${path}.learned_duration_millis`,
+					),
+		crossfade_non_intensity: booleanAt(
+			assignment.crossfade_non_intensity,
+			`${path}.crossfade_non_intensity`,
+		),
+		auto_off_at_zero: booleanAt(
+			assignment.auto_off_at_zero,
+			`${path}.auto_off_at_zero`,
+		),
+		auto_off_flash_release: booleanAt(
+			assignment.auto_off_flash_release,
+			`${path}.auto_off_flash_release`,
+		),
+		auto_off_full_control: booleanAt(
+			assignment.auto_off_full_control,
+			`${path}.auto_off_full_control`,
+		),
+	} as PlaybackTopologyDynamicAssignment;
 }
 
 function defaultButtons(
@@ -166,6 +284,8 @@ function defaultButtons(
 	if (target.type === "group")
 		return ["select", "select_dereferenced", "flash"];
 	if (target.type === "speed_group") return ["double", "half", "learn"];
+	if (target.type === "dynamic")
+		return ["off", "toggle", "dynamic_restart"];
 	if (target.type === "programmer_fade" || target.type === "cue_fade")
 		return ["double", "half", "off"];
 	return ["blackout", "pause_dynamics", "flash"];

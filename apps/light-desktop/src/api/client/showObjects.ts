@@ -1,6 +1,11 @@
 import type { PresetFamily } from "../../presetFamilies";
 import { ApiRequestError } from "../ApiRequestError";
 import type {
+	DynamicCreateActionRequest,
+	DynamicDeleteActionRequest,
+	DynamicPoolActionRequest,
+	DynamicUpdateActionRequest,
+	DynamicUpdateIntent,
 	OutputRoute,
 	OutputRouteAction,
 	OutputRouteActionOutcome,
@@ -20,14 +25,6 @@ interface PreloadStoreInput {
 	name?: string;
 	mode?: "merge" | "overwrite" | "add_missing_fixtures";
 	family?: PresetFamily;
-}
-
-interface DynamicRecordInput {
-	speed: number;
-	width: number;
-	direction: string;
-	fixtureIds: string[];
-	groupIds: string[];
 }
 
 interface PatchLayerSaveInput {
@@ -69,6 +66,89 @@ export class ShowObjectsApiClient {
 			{ headers: showScopeHeaders(showId) },
 		);
 		return snapshot.object as VersionedObject<T> | null;
+	}
+
+	createDynamic(
+		showId: string,
+		definition: import("../generated/light-wire").DynamicDefinitionProjection,
+	): Promise<ShowObjectActionOutcome> {
+		const request: DynamicCreateActionRequest = {
+			request_id: crypto.randomUUID(),
+			definition,
+		};
+		return this.dynamicAction("/api/v2/dynamics/create", showId, request);
+	}
+
+	moveDynamic(
+		showId: string,
+		id: string,
+		expectedRevision: number,
+		poolNumber: number,
+	): Promise<ShowObjectActionOutcome> {
+		const request: DynamicPoolActionRequest = {
+			request_id: crypto.randomUUID(),
+			expected_revision: expectedRevision,
+			pool_number: poolNumber,
+		};
+		return this.dynamicAction(
+			`/api/v2/dynamics/${encodeURIComponent(id)}/move`,
+			showId,
+			request,
+		);
+	}
+
+	copyDynamic(
+		showId: string,
+		id: string,
+		expectedRevision: number,
+		poolNumber: number,
+	): Promise<ShowObjectActionOutcome> {
+		const request: DynamicPoolActionRequest = {
+			request_id: crypto.randomUUID(),
+			expected_revision: expectedRevision,
+			pool_number: poolNumber,
+		};
+		return this.dynamicAction(
+			`/api/v2/dynamics/${encodeURIComponent(id)}/copy`,
+			showId,
+			request,
+		);
+	}
+
+	deleteDynamic(
+		showId: string,
+		id: string,
+		expectedRevision: number,
+	): Promise<ShowObjectActionOutcome> {
+		const request: DynamicDeleteActionRequest = {
+			request_id: crypto.randomUUID(),
+			expected_revision: expectedRevision,
+		};
+		return this.dynamicAction(
+			`/api/v2/dynamics/${encodeURIComponent(id)}/delete`,
+			showId,
+			request,
+		);
+	}
+
+	updateDynamic(
+		showId: string,
+		id: string,
+		expectedRevision: number,
+		intent: DynamicUpdateIntent,
+		mutationGroup?: string,
+	): Promise<ShowObjectActionOutcome> {
+		const request: DynamicUpdateActionRequest = {
+			request_id: crypto.randomUUID(),
+			expected_revision: expectedRevision,
+			mutation_group: mutationGroup ?? null,
+			intent,
+		};
+		return this.dynamicAction(
+			`/api/v2/dynamics/${encodeURIComponent(id)}/update`,
+			showId,
+			request,
+		);
 	}
 
 	saveOutputRoute(
@@ -145,27 +225,6 @@ export class ShowObjectsApiClient {
 		);
 	}
 
-	recordDynamic(
-		showId: string,
-		cueListId: string,
-		revision: number,
-		input: DynamicRecordInput,
-	): Promise<ShowObjectActionOutcome> {
-		return this.showObjectAction(
-			`/api/v2/cue-lists/${encodeURIComponent(cueListId)}/dynamics/record`,
-			showId,
-			{
-				type: "append",
-				expected_revision: revision,
-				speed: input.speed,
-				width: input.width,
-				direction: input.direction === "Reverse" ? "reverse" : "forward",
-				fixture_ids: input.fixtureIds,
-				group_ids: input.groupIds,
-			},
-		);
-	}
-
 	storePreload(
 		showId: string,
 		input: PreloadStoreInput,
@@ -215,13 +274,30 @@ export class ShowObjectsApiClient {
 			.then((outcome) => outcome as OutputRouteActionOutcome);
 	}
 
+	private dynamicAction(
+		path: string,
+		showId: string,
+		requestBody:
+			| DynamicCreateActionRequest
+			| DynamicPoolActionRequest
+			| DynamicDeleteActionRequest
+			| DynamicUpdateActionRequest,
+	): Promise<ShowObjectActionOutcome> {
+		const request = jsonRequest("POST", requestBody);
+		return this.transport
+			.request(path, {
+				...request,
+				headers: { ...request.headers, ...showScopeHeaders(showId) },
+			})
+			.then((outcome) => outcome as ShowObjectActionOutcome);
+	}
+
 	private showObjectAction(
 		path: string,
 		showId: string,
 		action:
 			| import("../generated/light-wire").UserLayoutAction
 			| import("../generated/light-wire").PatchLayerAction
-			| import("../generated/light-wire").DynamicRecordAction
 			| PreloadRecordAction,
 	): Promise<ShowObjectActionOutcome> {
 		const request = jsonRequest("POST", {

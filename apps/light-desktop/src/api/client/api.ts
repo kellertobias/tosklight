@@ -1,4 +1,5 @@
 import { DeskManagementApiClient } from "./deskManagement";
+import { DynamicsApiClient } from "./dynamics";
 import { FileApiClient } from "./files";
 import { FixtureApiClient } from "./fixtures";
 import { HelpApiClient } from "./help";
@@ -23,6 +24,7 @@ export function createLightApi(baseUrl?: string) {
 	return {
 		runtime,
 		desk: new DeskManagementApiClient(transport),
+		dynamics: new DynamicsApiClient(transport),
 		files: new FileApiClient(transport),
 		fixtures: new FixtureApiClient(transport),
 		help: new HelpApiClient(transport),

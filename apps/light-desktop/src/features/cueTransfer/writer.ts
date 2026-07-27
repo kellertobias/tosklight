@@ -86,6 +86,7 @@ export class CueTransferWriter implements CueTransferCapability {
 			programming.deskId !== this.options.scope.deskId ||
 			!commandLine ||
 			!pending ||
+			pending.type !== "cue_move_copy" ||
 			pending.choiceId !== choice.choiceId ||
 			pending.showRevision !== choice.showRevision ||
 			pending.operation !== choice.operation

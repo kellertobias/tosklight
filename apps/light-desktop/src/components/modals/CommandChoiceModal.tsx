@@ -15,13 +15,19 @@ export function CommandChoiceModal() {
 	}, [choice]);
 	if (!choice) return null;
 
-	const select = async (mode: "plain" | "status") => {
+	const selectCue = async (mode: "plain" | "status") => {
+		if (choice.type !== "cue_move_copy") return;
 		setExecuting(mode);
 		const succeeded = await transfer?.apply(choice, mode);
 		if (!succeeded) setExecuting(null);
 	};
+	const selectDynamic = async (controllerId: string, command: string) => {
+		if (choice.type !== "dynamic_instance") return;
+		setExecuting(controllerId);
+		const succeeded = await commandLine.execute(command);
+		if (!succeeded) setExecuting(null);
+	};
 
-	const operation = choice.operation === "copy" ? "Copy" : "Move";
 	const cancelLabel = choice.cancelLabel;
 	const cancel = () => {
 		void commandLine.cancelChoice();
@@ -33,25 +39,50 @@ export function CommandChoiceModal() {
 				className="nested-modal command-choice-modal"
 				role="dialog"
 				aria-modal="true"
-				aria-label={`Cue ${operation} choice`}
+				aria-label={
+					choice.type === "cue_move_copy"
+						? `Cue ${choice.operation === "copy" ? "Copy" : "Move"} choice`
+						: `Dynamic ${choice.poolNumber} instance choice`
+				}
 			>
-				<ModalTitleBar title={`Cue ${operation}`} />
+				<ModalTitleBar
+					title={
+						choice.type === "cue_move_copy"
+							? `Cue ${choice.operation === "copy" ? "Copy" : "Move"}`
+							: `Dynamic ${choice.poolNumber} · Choose Instance`
+					}
+				/>
 				<p>
-					Choose whether to transfer only the stored Cue delta or its complete
-					tracked status.
+					{choice.type === "cue_move_copy"
+						? "Choose whether to transfer only the stored Cue delta or its complete tracked status."
+						: "More than one running targetless instance matches this command. Choose the exact instance to control."}
 				</p>
 				<div className="command-choice-actions">
-					{choice.options.map((option) => (
-						<Button
-							key={option.id}
-							variant="primary"
-							loading={executing === option.id}
-							disabled={executing !== null}
-							onClick={() => void select(option.id)}
-						>
-							{option.label}
-						</Button>
-					))}
+					{choice.type === "cue_move_copy"
+						? choice.options.map((option) => (
+								<Button
+									key={option.id}
+									variant="primary"
+									loading={executing === option.id}
+									disabled={executing !== null}
+									onClick={() => void selectCue(option.id)}
+								>
+									{option.label}
+								</Button>
+							))
+						: choice.options.map((option) => (
+								<Button
+									key={option.controllerId}
+									variant="primary"
+									loading={executing === option.controllerId}
+									disabled={executing !== null}
+									onClick={() =>
+										void selectDynamic(option.controllerId, option.command)
+									}
+								>
+									{option.label}
+								</Button>
+							))}
 					<Button disabled={executing !== null} onClick={cancel}>
 						{cancelLabel}
 					</Button>

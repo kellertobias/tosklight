@@ -155,11 +155,21 @@ export interface AttributeDescriptor {
 		| "position"
 		| "color"
 		| "beam"
+		| "shapers"
 		| "focus"
 		| "control"
+		| "media"
 		| "custom";
 	value_type: "continuous" | "color" | "indexed" | "control";
 	default_unit: string | null;
+	display_unit?: string | null;
+	physical_unit?: string | null;
+	normalized_min?: number | null;
+	normalized_max?: number | null;
+	domain_min?: number | null;
+	domain_max?: number | null;
+	cyclic?: boolean;
+	recordable?: boolean;
 }
 
 export interface SessionResponse {

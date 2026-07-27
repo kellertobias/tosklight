@@ -6,6 +6,7 @@ import {
 } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import { formatNormalizedValue, parameterLabels } from "./model";
 import type { ParameterController } from "./useParameterController";
+import { ProgrammerDynamicsSurface } from "./ProgrammerDynamicsSurface";
 
 function attributeColor(attribute: string) {
 	return (
@@ -144,6 +145,8 @@ export function EncoderSurfaces({
 		controller.hardwareConnected,
 	);
 	const commandLineActions = useProgrammingCommandLineActions();
+	if (controller.dynamicsMode)
+		return <ProgrammerDynamicsSurface controller={controller} />;
 	if (!controller.selectedFixtureIds.length && !controller.selectedGroupId)
 		return (
 			<div className="parameter-empty">

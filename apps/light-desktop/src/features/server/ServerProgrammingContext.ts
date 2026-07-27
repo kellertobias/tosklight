@@ -25,9 +25,4 @@ export interface ServerProgrammingContext {
 		},
 		revision: number,
 	) => Promise<boolean>;
-	storeDynamic: (
-		speed: number,
-		width: number,
-		direction: string,
-	) => Promise<void>;
 }

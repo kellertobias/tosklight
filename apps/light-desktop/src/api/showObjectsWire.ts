@@ -55,6 +55,7 @@ function validateRelatedObjects(event: Record<string, unknown>) {
 }
 
 const SHOW_OBJECT_KINDS = [
+	"dynamic",
 	"group",
 	"preset",
 	"cue_list",
@@ -100,6 +101,26 @@ function decodeChange(
 	if (!deleted && body == null)
 		throw new WireValidationError(`${path}.body`, `${kind} body`, body);
 	const objectId = stringAt(change.object_id, `${path}.object_id`);
+	const decodedBody = deleted
+		? null
+		: decodeShowObjectBody(kind, body, `${path}.body`, objectId);
+	const validationError =
+		kind === "dynamic"
+			? change.validation_error == null
+				? decodedBody &&
+					typeof (
+						decodedBody as unknown as {
+							__validationError?: unknown;
+						}
+					).__validationError === "string"
+					? (
+							decodedBody as unknown as {
+								__validationError: string;
+							}
+						).__validationError
+					: null
+				: stringAt(change.validation_error, `${path}.validation_error`)
+			: null;
 	return {
 		kind,
 		objectId,
@@ -107,9 +128,8 @@ function decodeChange(
 			change.object_revision,
 			`${path}.object_revision`,
 		),
-		body: deleted
-			? null
-			: decodeShowObjectBody(kind, body, `${path}.body`, objectId),
+		body: decodedBody,
+		validationError,
 		deleted,
 	} as ShowObjectChange;
 }

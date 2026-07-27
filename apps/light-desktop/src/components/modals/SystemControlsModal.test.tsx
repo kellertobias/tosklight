@@ -77,14 +77,12 @@ function runningSource(
 				{
 					id: `${cueListId}-cue-1`,
 					number: playbackNumber == null ? 3 : 1,
-					phasers: options.dynamic ? [{}] : [],
 				} as RunningCueListSource["cue"],
 			],
 		} as RunningCueListSource["cueList"],
 		cue: {
 			id: `${cueListId}-cue-1`,
 			number: playbackNumber == null ? 3 : 1,
-			phasers: options.dynamic ? [{}] : [],
 		} as RunningCueListSource["cue"],
 	};
 }

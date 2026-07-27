@@ -1,6 +1,12 @@
 import type { ShowObject } from "./contracts";
 import type { ShowObjectsSnapshot } from "./store";
 
+export function selectDynamics(
+	snapshot: ShowObjectsSnapshot,
+): readonly ShowObject<"dynamic">[] {
+	return snapshot.dynamics;
+}
+
 export function selectPortableGroups(
 	snapshot: ShowObjectsSnapshot,
 ): readonly ShowObject<"group">[] {

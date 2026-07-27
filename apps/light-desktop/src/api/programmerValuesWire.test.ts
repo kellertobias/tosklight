@@ -29,6 +29,7 @@ function projection(userId = USER_ID, revision = 7) {
 			},
 		],
 		group_values: [],
+		dynamic_values: [],
 	};
 }
 
@@ -115,6 +116,39 @@ describe("Programmer values wire projection", () => {
 		).toEqual(value);
 	});
 
+	it("decodes retained Dynamic semantic values and rejects undeclared fields", () => {
+		const candidate = projection();
+		const dynamicValues = candidate.dynamic_values as unknown[];
+		dynamicValues.push({
+			fixture_id: FIXTURE_ID,
+			attribute: "intensity",
+			value: { type: "release" },
+			programmer_order: 10,
+			changed_at_millis: 1_234,
+		});
+		expect(
+			decodeProgrammerValuesSnapshot(
+				{ cursor: { sequence: 1 }, projection: candidate },
+				USER_ID,
+			).projection.dynamicValues,
+		).toEqual([
+			{
+				fixtureId: FIXTURE_ID,
+				attribute: "intensity",
+				value: { type: "release" },
+				programmerOrder: 10,
+				changedAtMillis: 1_234,
+			},
+		]);
+		(dynamicValues[0] as { value: { extra?: boolean } }).value.extra = true;
+		expect(() =>
+			decodeProgrammerValuesSnapshot(
+				{ cursor: { sequence: 1 }, projection: candidate },
+				USER_ID,
+			),
+		).toThrow(/declared wire field/);
+	});
+
 	it("rejects foreign users and invalid attribute values", () => {
 		expect(() =>
 			decodeProgrammerValuesSnapshot(
@@ -145,8 +179,9 @@ describe("Programmer values wire projection", () => {
 			/declared wire field/,
 		);
 		delete (snapshot as { extra?: boolean }).extra;
-		(snapshot.projection as ReturnType<typeof projection> & { extra?: boolean })
-			.extra = true;
+		(
+			snapshot.projection as ReturnType<typeof projection> & { extra?: boolean }
+		).extra = true;
 		expect(() => decodeProgrammerValuesSnapshot(snapshot, USER_ID)).toThrow(
 			/declared wire field/,
 		);
@@ -391,8 +426,9 @@ describe("Programmer values event wire boundary", () => {
 		).toThrow(/declared wire field/);
 
 		const envelopeExtra = valuesEvent();
-		(envelopeExtra.event as typeof envelopeExtra.event & { extra?: boolean })
-			.extra = true;
+		(
+			envelopeExtra.event as typeof envelopeExtra.event & { extra?: boolean }
+		).extra = true;
 		expect(() =>
 			decodeProgrammerValuesEventMessage(envelopeExtra, USER_ID),
 		).toThrow(/declared wire field/);

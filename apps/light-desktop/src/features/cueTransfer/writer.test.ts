@@ -78,7 +78,6 @@ function cueList(
 				cue_only: false,
 				changes: [],
 				group_changes: [],
-				phasers: [],
 			})),
 		},
 	};

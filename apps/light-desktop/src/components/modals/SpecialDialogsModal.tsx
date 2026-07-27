@@ -17,7 +17,6 @@ import {
 } from "./specialDialogs/beamShapers";
 import { ColorDialog, useColorDialog } from "./specialDialogs/color";
 import { ControlDialog } from "./specialDialogs/control";
-import { DynamicsDialog } from "./specialDialogs/dynamics";
 import { PositionDialog, usePositionDialog } from "./specialDialogs/position";
 
 export {
@@ -33,7 +32,6 @@ export function SpecialDialogsModal() {
 	const { state, dispatch } = useApp();
 	const programmerFadeMillis = useProgrammerFadeMillis() ?? undefined;
 	const [beamPage, setBeamPage] = useState(0);
-	const [dynamicSpeed, setDynamicSpeed] = useState(30);
 	const family = state.specialDialogFamily;
 	const selection = useProgrammingSelectionView(state.specialDialogsOpen);
 	const valueWrites = useProgrammerValuesMutationQueue(
@@ -122,14 +120,6 @@ export function SpecialDialogsModal() {
 						)}
 						{family === "Control" && (
 							<ControlDialog selectedFixtureIds={selectedFixtureIds} />
-						)}
-						{family === "Dynamics" && (
-							<DynamicsDialog
-								speed={dynamicSpeed}
-								setSpeed={setDynamicSpeed}
-								disabled={!valueWrites.canWrite}
-								apply={apply}
-							/>
 						)}
 					</div>
 					<ServerErrorNotice alert />

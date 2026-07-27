@@ -192,6 +192,7 @@ export function submitParameterAbsoluteIntent(
 	attribute: string,
 	value: AttributeValue,
 	requestId: () => string = () => crypto.randomUUID(),
+	undoGroup?: string | null,
 ) {
 	if (
 		!actions?.applyIntent ||
@@ -204,6 +205,7 @@ export function submitParameterAbsoluteIntent(
 		fixtureIds: projection.selectedFixtureIds,
 		attribute,
 		operation: { type: "absolute_set", value },
+		...(undoGroup ? { undoGroup } : {}),
 		timing: immediateParameterTiming(),
 	});
 }

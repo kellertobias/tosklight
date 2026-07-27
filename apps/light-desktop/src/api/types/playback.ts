@@ -25,7 +25,12 @@ export interface Cue {
 		fade_millis?: number;
 		delay_millis?: number;
 	}>;
-	phasers?: unknown[];
+	dynamic_changes?: Array<{
+		fixture_id: string;
+		attribute: string;
+		value: { type?: string; [key: string]: unknown };
+		automatic_restore?: boolean;
+	}>;
 }
 
 export type AttributeValue =
@@ -46,6 +51,33 @@ export interface VisualizationSnapshot {
 		fixture_id: string;
 		attribute: string;
 		value: AttributeValue;
+	}>;
+	dynamic_stack?: Array<{
+		fixture_id: string;
+		attribute: string;
+		entry_type:
+			| "ordinary_static"
+			| "dynamic"
+			| "fix_at"
+			| "dynamic_off"
+			| "static";
+		priority: number;
+		changed_at_millis: number;
+		source: string;
+		dynamic_id?: string | null;
+		pool_number?: number | null;
+		name: string;
+		runtime_instance_id?: string | null;
+		controller_id?: string | null;
+		lane_id?: string | null;
+		size?: number | null;
+		activation_mix?: number | null;
+		paused: boolean;
+		hidden: boolean;
+		pending: boolean;
+		winning: boolean;
+		value?: AttributeValue | null;
+		resolved_value?: AttributeValue | null;
 	}>;
 	/** Post-profile values projected through the same calibrated/channel/master path as DMX. */
 	profile_output_values?: Array<{
@@ -141,6 +173,10 @@ export type PlaybackButtonAction =
 	| "pause"
 	| "blackout"
 	| "pause_dynamics"
+	| "dynamic_restart"
+	| "dynamic_double_speed"
+	| "dynamic_half_speed"
+	| "dynamic_learn_speed"
 	| "none";
 
 export interface PlaybackDefinition {
@@ -150,6 +186,10 @@ export interface PlaybackDefinition {
 		| { type: "cue_list"; cue_list_id: string }
 		| { type: "group"; group_id: string }
 		| { type: "speed_group"; group: string }
+		| {
+				type: "dynamic";
+				assignment: import("../generated/light-wire").PlaybackTopologyDynamicAssignment;
+		  }
 		| { type: "programmer_fade" }
 		| { type: "cue_fade" }
 		| { type: "grand_master" };

@@ -10,6 +10,7 @@ export interface ShowObjectsSnapshot {
 	authorityGeneration: number;
 	showRevision: number | null;
 	eventSequence: number | null;
+	dynamics: readonly ShowObject<"dynamic">[];
 	groups: readonly ShowObject<"group">[];
 	presets: readonly ShowObject<"preset">[];
 	cueLists: readonly ShowObject<"cue_list">[];

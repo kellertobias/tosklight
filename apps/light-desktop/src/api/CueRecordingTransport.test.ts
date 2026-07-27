@@ -54,7 +54,6 @@ function changedOutcome() {
 							cue_only: true,
 							changes: [],
 							group_changes: [],
-							phasers: [],
 						},
 					],
 				},

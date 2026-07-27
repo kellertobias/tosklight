@@ -1,7 +1,6 @@
 import {
 	act,
 	cleanup,
-	fireEvent,
 	render,
 	screen,
 	waitFor,
@@ -181,37 +180,7 @@ describe("modal selection projections", () => {
 		);
 
 		await screen.findByText("2 fixtures selected");
-		fireEvent.click(screen.getByRole("button", { name: "Dynamic speed" }));
-		await waitFor(() =>
-			expect(mocks.mutationQueue.submitLatest).toHaveBeenCalledOnce(),
-		);
-		expect(mocks.mutationQueue.submitLatest).toHaveBeenCalledWith(
-			expect.any(String),
-			[
-				{
-					action: "set_fixture",
-					fixtureId: FIXTURE_2,
-					attribute: "dynamic.speed",
-					value: { kind: "normalized", value: 0.5 },
-					timing: {
-						fade: true,
-						fadeMillis: 3_000,
-						delayMillis: null,
-					},
-				},
-				{
-					action: "set_fixture",
-					fixtureId: FIXTURE_1,
-					attribute: "dynamic.speed",
-					value: { kind: "normalized", value: 0.5 },
-					timing: {
-						fade: true,
-						fadeMillis: 3_000,
-						delayMillis: null,
-					},
-				},
-			],
-		);
+		expect(mocks.mutationQueue.submitLatest).not.toHaveBeenCalled();
 		expect(mocks.selectionAccess).not.toHaveBeenCalled();
 	});
 

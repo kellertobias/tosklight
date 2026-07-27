@@ -1,3 +1,4 @@
+import type { DynamicDefinitionProjection } from "../../api/generated/light-wire";
 import type {
 	CueList,
 	PatchLayer,
@@ -10,6 +11,7 @@ import type {
 import type { StoredDeskLayout, StoredStageLayout } from "../server/contracts";
 
 export type ShowObjectKind =
+	| "dynamic"
 	| "group"
 	| "preset"
 	| "cue_list"
@@ -20,6 +22,7 @@ export type ShowObjectKind =
 	| "user_layout";
 
 export interface ShowObjectBodies {
+	dynamic: DynamicDefinitionProjection;
 	group: StoredGroup;
 	preset: StoredPreset;
 	cue_list: CueList;
@@ -31,13 +34,16 @@ export interface ShowObjectBodies {
 }
 
 export type ShowObject<K extends ShowObjectKind = ShowObjectKind> =
-	VersionedObject<ShowObjectBodies[K]>;
+	VersionedObject<ShowObjectBodies[K]> & {
+		validationError?: string | null;
+	};
 
 export interface ShowObjectChange<K extends ShowObjectKind = ShowObjectKind> {
 	kind: K;
 	objectId: string;
 	objectRevision: number;
 	body: ShowObjectBodies[K] | null;
+	validationError?: string | null;
 	deleted: boolean;
 }
 

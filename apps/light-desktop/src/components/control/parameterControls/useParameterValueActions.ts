@@ -31,7 +31,11 @@ export function useParameterValueActions(projection: ParameterProjection) {
 	const canWriteValues = projection.programmerValuesReady && actions !== null;
 	const submit = (mutations: ReturnType<typeof setParameterMutations>) =>
 		submitParameterMutations(canWriteValues ? actions : null, mutations);
-	const applyParameter = (attribute: string, level: number) => {
+	const applyParameter = (
+		attribute: string,
+		level: number,
+		undoGroup?: string | null,
+	) => {
 		if (
 			projection.programmerValuesRoute === "normal" &&
 			!projection.selectedGroupId &&
@@ -46,6 +50,8 @@ export function useParameterValueActions(projection: ParameterProjection) {
 						projection,
 						attribute,
 						{ kind: "normalized", value: level },
+						() => crypto.randomUUID(),
+						undoGroup,
 					) ?? Promise.resolve(null),
 			);
 		const mutations = setParameterMutations(

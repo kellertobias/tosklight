@@ -59,7 +59,6 @@ function wireOutcome() {
 							cue_only: false,
 							changes: [],
 							group_changes: [],
-							phasers: [],
 						},
 					],
 				},

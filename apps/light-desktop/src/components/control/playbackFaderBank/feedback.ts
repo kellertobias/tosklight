@@ -42,6 +42,10 @@ export function playbackButtonLabel(
 				select_contents: "SELECT CONTENTS",
 				select_dereferenced: "SELECT FIXTURES",
 				pause_dynamics: "PAUSE DYNAMICS",
+				dynamic_restart: "RESTART",
+				dynamic_double_speed: "DOUBLE SPEED",
+				dynamic_half_speed: "HALF SPEED",
+				dynamic_learn_speed: "LEARN SPEED",
 				none: "DISABLED",
 			} as Partial<Record<typeof action, string>>
 		)[action] ?? action.toUpperCase()
@@ -99,6 +103,10 @@ export function playbackFaderValue(
 				? centeredRelativePosition(runtime.speed_master_scale)
 				: Math.round(runtime.speed_master_scale * 100);
 	}
+	if (playback.target.type === "dynamic")
+		return projection?.target === "dynamic" && projection.runtime
+			? Math.round(projection.runtime.fader_value * 100)
+			: 0;
 	if (playback.target.type === "programmer_fade")
 		return projection?.target === "programmer_fade"
 			? projection.millis / 200
@@ -121,6 +129,8 @@ export function playbackFaderLabel(playback: PlaybackDefinition | null) {
 	if (playback.target.type === "group") return "Group master";
 	if (playback.target.type === "speed_group")
 		return `Speed Group ${playback.target.group}`;
+	if (playback.target.type === "dynamic")
+		return `Dynamic ${playback.target.assignment.last_known_pool_number} · ${playback.target.assignment.fader_mode.replaceAll("_", " + ")}`;
 	if (playback.target.type === "programmer_fade") return "Programmer Fade";
 	if (playback.target.type === "cue_fade") return "Cue Fade";
 	if (playback.target.type === "grand_master") return "Grand Master";
@@ -155,6 +165,22 @@ export function playbackFaderDisplay(
 		if (projection?.target !== "speed_group") return "Unavailable";
 		const runtime = projection.runtime;
 		return `${formatSpeedGroupBpm(runtime.effective_bpm)} BPM · ${runtime.paused ? "PAUSED" : runtime.source.replaceAll("_", " ").toUpperCase()}`;
+	}
+	if (playback.target.type === "dynamic") {
+		if (projection?.target !== "dynamic" || !projection.runtime)
+			return "Unavailable";
+		const runtime = projection.runtime;
+		const learned = runtime.learned_duration_millis
+			? ` · Learned ${(runtime.learned_duration_millis / 1_000).toFixed(2)}s`
+			: "";
+		const duration = runtime.effective_duration_millis
+			? ` · ${(runtime.effective_duration_millis / 1_000).toFixed(2)}s`
+			: "";
+		const warning = runtime.warning ? ` · ⚠ ${runtime.warning}` : "";
+		const identity = runtime.instance_id
+			? ` · I ${runtime.instance_id.slice(0, 8)} · C ${runtime.controller_id.slice(0, 8)}`
+			: ` · C ${runtime.controller_id.slice(0, 8)}`;
+		return `${runtime.state.toUpperCase()} · ${runtime.controller_status.toUpperCase()} · Size ${Math.round(runtime.size * 100)}% · Master ${Math.round(runtime.master * 100)}% · ${runtime.effective_speed_multiplier.toFixed(2)}× ${runtime.speed_source.replaceAll("_", " ")}${duration}${learned} · ${runtime.compatible_target_count}/${runtime.target_count} compatible targets · ${runtime.supported_address_count}/${runtime.target_count * runtime.lane_count} target/lane addresses · ${runtime.missing_target_count} missing · ${runtime.unpatched_target_count} unpatched${identity}${warning}`;
 	}
 	if (playback.target.type === "programmer_fade")
 		return projection?.target === "programmer_fade"

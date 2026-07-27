@@ -165,12 +165,7 @@ function deriveSources(
 		mappedSources,
 		virtualSources,
 		sources,
-		dynamics: sources.flatMap((running) =>
-			(running.cue?.phasers ?? []).map((_, index) => ({
-				source: running,
-				index,
-			})),
-		),
+		dynamics: [],
 	};
 }
 

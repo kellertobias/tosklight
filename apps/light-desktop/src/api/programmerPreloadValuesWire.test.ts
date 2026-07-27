@@ -40,6 +40,7 @@ function projection(userId = USER_ID, revision = 7) {
 				fade: false,
 			},
 		],
+		dynamic_values: [],
 	};
 }
 

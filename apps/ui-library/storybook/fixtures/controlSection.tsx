@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { ParameterFamily } from "../../../light-desktop/src/components/control/parameterControls/model";
 import { ParameterControlView } from "../../../light-desktop/src/components/control/parameterControls/ParameterControlView";
 import type { ParameterController } from "../../../light-desktop/src/components/control/parameterControls/useParameterController";
@@ -396,6 +396,8 @@ export interface CommandSectionFixtureProps {
 	previousEnabled?: boolean;
 	nextEnabled?: boolean;
 	preloadArmed?: boolean;
+	/** Optional production surface used by full-application discussion stories. */
+	programmer?: ReactNode;
 }
 
 function CommandSectionFixtureContent({
@@ -405,6 +407,7 @@ function CommandSectionFixtureContent({
 	previousEnabled = true,
 	nextEnabled = true,
 	preloadArmed = false,
+	programmer,
 }: CommandSectionFixtureProps) {
 	const [mode, setMode] = useState(initialMode);
 	return (
@@ -426,7 +429,7 @@ function CommandSectionFixtureContent({
 					}
 				/>
 			}
-			programmer={<ProgrammerSurface hardware={hardware} />}
+			programmer={programmer ?? <ProgrammerSurface hardware={hardware} />}
 			playbacks={<PlaybackSurface hardware={hardware} />}
 			programmerTools={
 				<ProgrammerToolsFixture

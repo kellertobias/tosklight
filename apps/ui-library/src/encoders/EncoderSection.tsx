@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { ModalNumberPresetConfig } from "../input/ModalNumberEditor";
+import type { HardwareEncoderDisplayHandle } from "./HardwareEncoderDisplay";
 import { HardwareEncoderDisplayView } from "./HardwareEncoderDisplay";
 import { TouchEncoder } from "./TouchEncoder";
 
@@ -46,6 +47,10 @@ export interface EncoderSectionCallbacks {
 	onAbsoluteChange?(id: string, value: number): void;
 	onRangeChange?(id: string, points: number[]): void;
 	onRelease?(id: string): void;
+	onHardwareDisplayRef?(
+		slot: number,
+		handle: HardwareEncoderDisplayHandle | null,
+	): void;
 }
 
 export interface EncoderSectionProps {
@@ -154,6 +159,7 @@ function EncoderItem({
 		);
 	return (
 		<HardwareEncoderDisplayView
+			ref={(handle) => callbacks.onHardwareDisplayRef?.(encoder.slot, handle)}
 			slot={encoder.slot}
 			target={
 				encoder.target

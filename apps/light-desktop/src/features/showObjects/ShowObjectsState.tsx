@@ -9,6 +9,7 @@ import {
 import type { ShowObject, ShowObjectKind } from "./contracts";
 import {
 	selectCueLists,
+	selectDynamics,
 	selectPlaybackPages,
 	selectPlaybacks,
 	selectPortableGroups,
@@ -18,6 +19,7 @@ import type { ShowObjectsSnapshot, ShowObjectsStore } from "./store";
 
 export {
 	selectCueLists,
+	selectDynamics,
 	selectPlaybackPages,
 	selectPlaybacks,
 	selectPortableGroups,
@@ -26,6 +28,12 @@ export {
 
 type GroupObject = ShowObject<"group">;
 type PresetObject = ShowObject<"preset">;
+
+export function useDynamics(
+	enabled = true,
+): readonly ShowObject<"dynamic">[] {
+	return useShowObjectsSelector(selectDynamics, shallowEqualArray, enabled);
+}
 
 export interface ShowObjectMutationState {
 	pending: boolean;

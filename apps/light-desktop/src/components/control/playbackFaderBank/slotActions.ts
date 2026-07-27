@@ -7,6 +7,7 @@ import type { Cue, PlaybackDefinition } from "../../../api/types";
 import type { VerticalTouchFaderAction } from "@tosklight/ui/faders";
 import {
 	isPlaybackControlTarget,
+	assignDynamicPlayback,
 	isPlaybackSetClickArmed,
 	openPlaybackConfiguration,
 	recordPlayback,
@@ -166,6 +167,12 @@ export function createSlotInterceptors(
 	const interceptClick = (event: ReactMouseEvent<HTMLElement>) => {
 		if (controller.state.storeArmed) {
 			void recordPlayback(controller, event, playback, slot);
+			return;
+		}
+		if (controller.dynamicAssignmentPending && playback) {
+			event.preventDefault();
+			event.stopPropagation();
+			void assignDynamicPlayback(controller, playback);
 			return;
 		}
 		if (!controller.hardware) {

@@ -33,7 +33,6 @@ function cueListBody() {
 					},
 				],
 				group_changes: [],
-				phasers: [],
 			},
 		],
 		future_field: { retained: true },

@@ -6,7 +6,11 @@ interface HardwareParameterActions {
 	relativeSteps: boolean;
 	programmerTarget(attribute: string): number | undefined;
 	programmerDiscreteTarget(attribute: string): string | undefined;
-	applyParameter(attribute: string, level: number): Promise<unknown>;
+	applyParameter(
+		attribute: string,
+		level: number,
+		undoGroup?: string | null,
+	): Promise<unknown>;
 	stepParameter(
 		attribute: string,
 		delta: number,
@@ -19,6 +23,14 @@ interface AccumulatedEncoderValue {
 	observedBase: number;
 	value: number;
 }
+
+interface EncoderUndoGroup {
+	key: string;
+	id: string;
+	lastSampleAt: number;
+}
+
+const ENCODER_UNDO_GROUP_IDLE_MILLIS = 250;
 
 function encoderDelta(value: string | undefined) {
 	if (value === "up") return 0.01;
@@ -60,6 +72,7 @@ export function useHardwareParameterEncoders(
 ) {
 	const latest = useRef({ projection, actions });
 	const accumulated = useRef<AccumulatedEncoderValue | null>(null);
+	const undoGroup = useRef<EncoderUndoGroup | null>(null);
 	latest.current = { projection, actions };
 	useEffect(() => {
 		if (!projection.active || !projection.hardwareConnected) return;
@@ -78,8 +91,22 @@ export function useHardwareParameterEncoders(
 				projection.discrete.get(attribute)
 			)
 				return;
+			const key = targetKey(projection, attribute);
+			const now = performance.now();
+			if (
+				!undoGroup.current ||
+				undoGroup.current.key !== key ||
+				now - undoGroup.current.lastSampleAt >
+					ENCODER_UNDO_GROUP_IDLE_MILLIS
+			)
+				undoGroup.current = {
+					key,
+					id: crypto.randomUUID(),
+					lastSampleAt: now,
+				};
+			else undoGroup.current.lastSampleAt = now;
 			if (actions.relativeSteps) {
-				void actions.stepParameter(attribute, delta);
+				void actions.stepParameter(attribute, delta, undoGroup.current.id);
 				return;
 			}
 			const base =
@@ -88,15 +115,20 @@ export function useHardwareParameterEncoders(
 				0;
 			accumulated.current = nextEncoderValue(
 				accumulated.current,
-				targetKey(projection, attribute),
+				key,
 				base,
 				delta,
 			);
-			void actions.applyParameter(attribute, accumulated.current.value);
+			void actions.applyParameter(
+				attribute,
+				accumulated.current.value,
+				undoGroup.current.id,
+			);
 		};
 		window.addEventListener("light:encoder-action", handleEncoder);
 		return () => {
 			accumulated.current = null;
+			undoGroup.current = null;
 			window.removeEventListener("light:encoder-action", handleEncoder);
 		};
 	}, [projection.active, projection.hardwareConnected]);

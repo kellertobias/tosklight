@@ -1,3 +1,4 @@
+import type { ProgrammingDynamicSemanticValue } from "../../api/generated/light-wire";
 import type { AttributeValue } from "../../api/types/playback";
 
 export interface ProgrammerValueTiming {
@@ -20,12 +21,21 @@ export interface ProgrammerGroupValue extends ProgrammerValueTiming {
 	programmerOrder: number;
 }
 
+export interface ProgrammerDynamicValue {
+	fixtureId: string;
+	attribute: string;
+	value: ProgrammingDynamicSemanticValue;
+	programmerOrder: number;
+	changedAtMillis: number;
+}
+
 /** Normal, recordable Programmer values owned by one user. */
 export interface ProgrammerValuesProjection {
 	userId: string;
 	revision: number;
 	fixtureValues: readonly ProgrammerFixtureValue[];
 	groupValues: readonly ProgrammerGroupValue[];
+	dynamicValues?: readonly ProgrammerDynamicValue[];
 }
 
 export interface ProgrammerValuesSnapshot {

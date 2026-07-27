@@ -74,6 +74,18 @@ export async function selectPlayback(
 	return true;
 }
 
+export async function assignDynamicPlayback(
+	controller: PlaybackBankController,
+	playback: PlaybackDefinition,
+) {
+	const command = controller.commandLineActions;
+	if (!command || !controller.dynamicAssignmentPending) return false;
+	const prefix = controller.commandLine?.text.trim();
+	if (!prefix) return false;
+	const outcome = await command.execute(`${prefix} PLAYBACK ${playback.number}`);
+	return outcome.executed;
+}
+
 export async function recordPlayback(
 	controller: PlaybackBankController,
 	event: ReactMouseEvent,
@@ -111,6 +123,10 @@ export async function activateHardwareCard(
 	if (!playback || isPlaybackControlTarget(event.target)) return;
 	event.preventDefault();
 	event.stopPropagation();
+	if (controller.dynamicAssignmentPending) {
+		await assignDynamicPlayback(controller, playback);
+		return;
+	}
 	if (isPlaybackSetClickArmed(controller)) {
 		openPlaybackConfiguration(controller, playback, slot);
 		return;

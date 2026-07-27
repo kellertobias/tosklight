@@ -5,14 +5,11 @@ import { reconcileShowObject } from "./showObjectMutations";
 
 export function createPreloadActions(
 	model: ServerController,
-): Pick<ServerCapabilities, "storePreload" | "storeDynamic"> {
+): Pick<ServerCapabilities, "storePreload"> {
 	const {
 		api,
 		setError,
 		bootstrap,
-		cueObjects,
-		selectedFixtures,
-		selectedGroupId,
 		refresh,
 	} = model;
 	return {
@@ -57,53 +54,6 @@ export function createPreloadActions(
 			} catch (reason) {
 				setError(reason instanceof Error ? reason.message : String(reason));
 				return false;
-			}
-		},
-		storeDynamic: async (speed, width, direction) => {
-			try {
-				if (!bootstrap?.active_show)
-					throw new Error("Open a show before storing a dynamic");
-				const target = cueObjects[0];
-				if (!target)
-					throw new Error("Create a Cuelist before storing a dynamic");
-				try {
-					await api.showObjects.recordDynamic(
-						bootstrap.active_show.id,
-						target.id,
-						target.revision,
-						{
-							speed,
-							width,
-							direction,
-							fixtureIds: selectedGroupId ? [] : selectedFixtures,
-							groupIds: selectedGroupId ? [selectedGroupId] : [],
-						},
-					);
-				} catch (reason) {
-					if (!(reason instanceof ApiRequestError) || reason.status !== 409)
-						throw reason;
-					const current = await api.showObjects.object(
-						bootstrap.active_show.id,
-						"cue_list",
-						target.id,
-					);
-					await api.showObjects.recordDynamic(
-						bootstrap.active_show.id,
-						target.id,
-						current.revision,
-						{
-							speed,
-							width,
-							direction,
-							fixtureIds: selectedGroupId ? [] : selectedFixtures,
-							groupIds: selectedGroupId ? [selectedGroupId] : [],
-						},
-					);
-				}
-				await refresh();
-				setError(null);
-			} catch (reason) {
-				setError(reason instanceof Error ? reason.message : String(reason));
 			}
 		},
 	};

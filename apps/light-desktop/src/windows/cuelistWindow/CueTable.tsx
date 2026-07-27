@@ -68,7 +68,18 @@ export function CueTable({
 									<td>
 										<b>{cue.number}</b>
 									</td>
-									<td>{cue.name || `Cue ${cue.number}`}</td>
+									<td>
+										{cue.name || `Cue ${cue.number}`}
+										{Boolean(cue.dynamic_changes?.length) && (
+											<small
+												className="cue-dynamics-marker"
+												title="Cue contains tracked Dynamic or FAT content"
+												aria-label="Contains Dynamics"
+											>
+												∿
+											</small>
+										)}
+									</td>
 									<td>{cueTriggerKind(cue).toUpperCase()}</td>
 									<td>
 										{(cue.fade_millis / 1000).toFixed(3).replace(/\.?0+$/, "")}{" "}

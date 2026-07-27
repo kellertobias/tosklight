@@ -51,7 +51,6 @@ function knownCue(cue: Cue) {
 		group_changes: (cue.group_changes ?? []).map((change) =>
 			knownGroupChange(change),
 		),
-		phasers: cue.phasers ?? [],
 	};
 }
 
@@ -117,6 +116,8 @@ function knownTarget(target: PlaybackDefinition["target"]) {
 		return { type: target.type, group_id: target.group_id };
 	if (target.type === "speed_group")
 		return { type: target.type, group: target.group };
+	if (target.type === "dynamic")
+		return { type: target.type, assignment: target.assignment };
 	return { type: target.type };
 }
 

@@ -1,9 +1,14 @@
-import type { AttributeValue } from "./types/playback";
 import type {
+	ProgrammerDynamicValue,
 	ProgrammerFixtureValue,
 	ProgrammerGroupValue,
 	ProgrammerValuesProjection,
 } from "../features/programmerValues/contracts";
+import type {
+	DynamicInstanceOverridesProjection,
+	DynamicReferenceProjection,
+	DynamicValueTimingProjection,
+} from "./generated/light-wire";
 import {
 	arrayAt,
 	booleanAt,
@@ -11,8 +16,10 @@ import {
 	exactRecordAt,
 	integerAt,
 	numberAt,
+	recordAt,
 	stringAt,
 } from "./playbackWirePrimitives";
+import type { AttributeValue } from "./types/playback";
 import { WireValidationError } from "./wireValidation";
 
 const UUID_PATTERN =
@@ -29,6 +36,7 @@ export function decodeProgrammerValuesProjection(
 		"revision",
 		"fixture_values",
 		"group_values",
+		"dynamic_values",
 	]);
 	const userId = programmerValuesUuidAt(projection.user_id, `${path}.user_id`);
 	assertExpectedUser(userId, expectedUserId, `${path}.user_id`);
@@ -44,13 +52,209 @@ export function decodeProgrammerValuesProjection(
 	).map((item, index) =>
 		decodeGroupValue(item, `${path}.group_values[${index}]`),
 	);
+	const dynamicValues = arrayAt(
+		projection.dynamic_values,
+		`${path}.dynamic_values`,
+	).map((item, index) =>
+		decodeDynamicValue(item, `${path}.dynamic_values[${index}]`),
+	);
 	assertUniqueAddresses(fixtureValues, groupValues, path);
 	return {
 		userId,
 		revision: integerAt(projection.revision, `${path}.revision`),
 		fixtureValues,
 		groupValues,
+		...(dynamicValues.length > 0 ? { dynamicValues } : {}),
 	};
+}
+
+function decodeDynamicValue(
+	value: unknown,
+	path: string,
+): ProgrammerDynamicValue {
+	const item = exactRecordAt(value, path, [
+		"fixture_id",
+		"attribute",
+		"value",
+		"programmer_order",
+		"changed_at_millis",
+	]);
+	return {
+		fixtureId: programmerValuesUuidAt(item.fixture_id, `${path}.fixture_id`),
+		attribute: stringAt(item.attribute, `${path}.attribute`),
+		value: decodeDynamicSemanticValue(item.value, `${path}.value`),
+		programmerOrder: integerAt(
+			item.programmer_order,
+			`${path}.programmer_order`,
+		),
+		changedAtMillis: integerAt(
+			item.changed_at_millis,
+			`${path}.changed_at_millis`,
+		),
+	};
+}
+
+function decodeDynamicSemanticValue(
+	value: unknown,
+	path: string,
+): ProgrammerDynamicValue["value"] {
+	const tagged = recordAt(value, path);
+	const type = enumAt(tagged.type, `${path}.type`, [
+		"static",
+		"dynamic_on",
+		"dynamic_off",
+		"fix_at",
+		"release",
+	]);
+	if (type === "release")
+		return exactRecordAt(value, path, ["type"]) as { type: "release" };
+	if (type === "static") {
+		const semantic = exactRecordAt(value, path, ["type", "value", "timing"]);
+		return {
+			type,
+			value: decodeAttributeValue(semantic.value, `${path}.value`),
+			timing: decodeDynamicTiming(semantic.timing, `${path}.timing`),
+		};
+	}
+	if (type === "fix_at") {
+		const semantic = exactRecordAt(value, path, ["type", "value", "timing"]);
+		return {
+			type,
+			value: numberAt(semantic.value, `${path}.value`),
+			timing: decodeDynamicTiming(semantic.timing, `${path}.timing`),
+		};
+	}
+	if (type === "dynamic_off") {
+		const semantic = exactRecordAt(value, path, [
+			"type",
+			"instance_link",
+			"timing",
+		]);
+		return {
+			type,
+			instance_link: programmerValuesUuidAt(
+				semantic.instance_link,
+				`${path}.instance_link`,
+			),
+			timing: decodeDynamicTiming(semantic.timing, `${path}.timing`),
+		};
+	}
+	const semantic = exactRecordAt(value, path, [
+		"type",
+		"instance_link",
+		"dynamic",
+		"lane_id",
+		"overrides",
+		"timing",
+	]);
+	return {
+		type,
+		instance_link: programmerValuesUuidAt(
+			semantic.instance_link,
+			`${path}.instance_link`,
+		),
+		dynamic: decodeDynamicReference(semantic.dynamic, `${path}.dynamic`),
+		lane_id: programmerValuesUuidAt(semantic.lane_id, `${path}.lane_id`),
+		overrides: decodeDynamicOverrides(semantic.overrides, `${path}.overrides`),
+		timing: decodeDynamicTiming(semantic.timing, `${path}.timing`),
+	};
+}
+
+function decodeDynamicTiming(
+	value: unknown,
+	path: string,
+): DynamicValueTimingProjection {
+	const timing = exactRecordAt(value, path, ["fade_millis", "delay_millis"]);
+	return {
+		fade_millis: optionalMillis(timing, "fade_millis", path),
+		delay_millis: optionalMillis(timing, "delay_millis", path),
+	};
+}
+
+function decodeDynamicReference(
+	value: unknown,
+	path: string,
+): DynamicReferenceProjection {
+	const reference = exactRecordAt(value, path, [
+		"dynamic_id",
+		"last_known_pool_number",
+		"embedded_fallback",
+	]);
+	const definition = exactRecordAt(
+		reference.embedded_fallback,
+		`${path}.embedded_fallback`,
+		[
+			"id",
+			"pool_number",
+			"revision",
+			"name",
+			"color",
+			"icon",
+			"target_binding",
+			"lanes",
+			"random_groups",
+			"phase",
+			"speed",
+			"overall_speed_multiplier",
+			"run_mode",
+			"default_activation",
+			"activation_boundary",
+		],
+	);
+	programmerValuesUuidAt(definition.id, `${path}.embedded_fallback.id`);
+	arrayAt(definition.lanes, `${path}.embedded_fallback.lanes`);
+	arrayAt(definition.random_groups, `${path}.embedded_fallback.random_groups`);
+	return {
+		dynamic_id:
+			reference.dynamic_id == null
+				? null
+				: programmerValuesUuidAt(reference.dynamic_id, `${path}.dynamic_id`),
+		last_known_pool_number: positiveIntegerAt(
+			reference.last_known_pool_number,
+			`${path}.last_known_pool_number`,
+		),
+		embedded_fallback: definition,
+	} as unknown as DynamicReferenceProjection;
+}
+
+function decodeDynamicOverrides(
+	value: unknown,
+	path: string,
+): DynamicInstanceOverridesProjection {
+	const overrides = exactRecordAt(value, path, [
+		"size",
+		"speed_multiplier",
+		"phase_offset_degrees",
+	]);
+	const multiplier = exactRecordAt(
+		overrides.speed_multiplier,
+		`${path}.speed_multiplier`,
+		["numerator", "denominator"],
+	);
+	const size = nonNegativeAt(overrides.size, `${path}.size`);
+	const numerator = positiveIntegerAt(
+		multiplier.numerator,
+		`${path}.speed_multiplier.numerator`,
+	);
+	const denominator = positiveIntegerAt(
+		multiplier.denominator,
+		`${path}.speed_multiplier.denominator`,
+	);
+	return {
+		size,
+		speed_multiplier: { numerator, denominator },
+		phase_offset_degrees: numberAt(
+			overrides.phase_offset_degrees,
+			`${path}.phase_offset_degrees`,
+		),
+	};
+}
+
+function positiveIntegerAt(value: unknown, path: string) {
+	const decoded = integerAt(value, path);
+	if (decoded <= 0)
+		throw new WireValidationError(path, "positive integer", value);
+	return decoded;
 }
 
 function decodeFixtureValue(
@@ -117,7 +321,10 @@ function optionalMillis(
 	return value == null ? null : integerAt(value, `${path}.${key}`);
 }
 
-export function decodeAttributeValue(value: unknown, path: string): AttributeValue {
+export function decodeAttributeValue(
+	value: unknown,
+	path: string,
+): AttributeValue {
 	const attribute = exactRecordAt(value, path, ["kind", "value"]);
 	const kind = enumAt(attribute.kind, `${path}.kind`, [
 		"normalized",

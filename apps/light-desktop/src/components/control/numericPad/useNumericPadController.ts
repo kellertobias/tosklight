@@ -141,6 +141,15 @@ function handleShiftedKey(
 		void command.replace(next, false);
 		return true;
 	}
+	if (key === "AT") {
+		const current = text.trim();
+		const next =
+			command.read().pristine || current === "FIXTURE" || current === "GROUP"
+				? "FixAT"
+				: `${current} FixAT`;
+		void command.replace(next, false);
+		return true;
+	}
 	if (key === "CLR" || key === "DEL") {
 		dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
 		return true;

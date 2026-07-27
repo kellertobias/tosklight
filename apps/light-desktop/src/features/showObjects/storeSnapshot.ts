@@ -7,6 +7,7 @@ import { projectCollection } from "./storeProjection";
 import type { PendingMutation, ShowObjectsSnapshot } from "./storeTypes";
 
 export const ALL_COLLECTIONS = new Set<ShowObjectKind>([
+	"dynamic",
 	"group",
 	"preset",
 	"cue_list",
@@ -21,6 +22,7 @@ const PROJECTED_COLLECTIONS: Record<
 	ShowObjectKind,
 	ReadonlySet<ShowObjectKind>
 > = {
+	dynamic: new Set(["dynamic"]),
 	group: new Set(["group"]),
 	preset: new Set(["preset"]),
 	cue_list: new Set(["cue_list"]),
@@ -33,6 +35,7 @@ const PROJECTED_COLLECTIONS: Record<
 
 export function emptyShowObjectCollections(): ShowObjectCollections {
 	return {
+		dynamic: [],
 		group: [],
 		preset: [],
 		cue_list: [],
@@ -50,6 +53,7 @@ export function initialShowObjectsSnapshot(): ShowObjectsSnapshot {
 		authorityGeneration: 0,
 		showRevision: null,
 		eventSequence: null,
+		dynamics: [],
 		groups: [],
 		presets: [],
 		cueLists: [],
@@ -80,6 +84,13 @@ export function createShowObjectsSnapshot(
 	const pendingOperations = projectKinds.size > 0 ? [...pending] : [];
 	return {
 		...previous,
+		dynamics: projectKinds.has("dynamic")
+			? (projectCollection(
+					"dynamic",
+					authoritative.dynamic,
+					pendingOperations,
+				) as ShowObject<"dynamic">[])
+			: previous.dynamics,
 		groups: projectKinds.has("group")
 			? (projectCollection(
 					"group",

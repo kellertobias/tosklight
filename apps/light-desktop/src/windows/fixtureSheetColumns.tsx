@@ -112,6 +112,7 @@ function dimmerColumn(): Column {
 				{fixture.preloadDimmer != null && (
 					<small className="preload-value">→ {fixture.preloadDimmer}%</small>
 				)}
+				<DynamicStackSummary fixture={fixture} attributes={["intensity"]} />
 			</SourceValue>
 		),
 	};
@@ -131,6 +132,7 @@ function colorColumn(): Column {
 						<FixtureColorDot color={fixture.preloadColor} /> Preload
 					</small>
 				)}
+				<DynamicStackSummary fixture={fixture} attributes={["color."]} prefix />
 			</SourceValue>
 		),
 	};
@@ -157,9 +159,47 @@ function positionColumn(): Column {
 						→ {fixture.preloadPan} / {fixture.preloadTilt}
 					</small>
 				)}
+				<DynamicStackSummary fixture={fixture} attributes={["pan", "tilt"]} />
 			</SourceValue>
 		),
 	};
+}
+
+function DynamicStackSummary({
+	fixture,
+	attributes,
+	prefix = false,
+}: {
+	fixture: FixtureSheetRow;
+	attributes: string[];
+	prefix?: boolean;
+}) {
+	const entries = (fixture.dynamicStack ?? []).filter((entry) =>
+		attributes.some((attribute) =>
+			prefix ? entry.attribute.startsWith(attribute) : entry.attribute === attribute,
+		),
+	);
+	if (!entries.length) return null;
+	const title = entries
+		.map((entry) => {
+			const state = [
+				entry.winning ? "winning" : null,
+				entry.pending ? "pending" : null,
+				entry.paused ? "paused" : null,
+				entry.hidden ? "hidden" : null,
+			]
+				.filter(Boolean)
+				.join(", ");
+			const size =
+				entry.size == null ? "" : ` · Size ${Math.round(entry.size * 100)}%`;
+			return `${entry.name} · ${entry.source}${size}${state ? ` · ${state}` : ""}`;
+		})
+		.join("\n");
+	return (
+		<small className="fixture-dynamic-stack" title={title}>
+			∿ {entries.length}
+		</small>
+	);
 }
 
 function valueColumn(id: "beam" | "focus", header: "Beam" | "Focus"): Column {

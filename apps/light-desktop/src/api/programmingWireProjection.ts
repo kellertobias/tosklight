@@ -49,8 +49,52 @@ function decodePendingChoice(
 	path: string,
 ): PendingCommandChoice {
 	const choice = recordAt(value, path);
+	const type = enumAt(choice.type, `${path}.type`, [
+		"cue_move_copy",
+		"dynamic_instance",
+	]);
+	if (type === "dynamic_instance") {
+		return {
+			type,
+			choiceId: programmingUuidAt(choice.choice_id, `${path}.choice_id`),
+			showId: programmingUuidAt(choice.show_id, `${path}.show_id`),
+			showRevision: integerAt(choice.show_revision, `${path}.show_revision`),
+			dynamicId: programmingUuidAt(choice.dynamic_id, `${path}.dynamic_id`),
+			poolNumber: positiveIntegerAt(
+				choice.pool_number,
+				`${path}.pool_number`,
+			),
+			command: plainProgrammingStringAt(choice.command, `${path}.command`),
+			options: arrayAt(choice.options, `${path}.options`).map(
+				(optionValue, index) => {
+					const option = recordAt(
+						optionValue,
+						`${path}.options[${index}]`,
+					);
+					return {
+						controllerId: programmingUuidAt(
+							option.controller_id,
+							`${path}.options[${index}].controller_id`,
+						),
+						label: plainProgrammingStringAt(
+							option.label,
+							`${path}.options[${index}].label`,
+						),
+						command: plainProgrammingStringAt(
+							option.command,
+							`${path}.options[${index}].command`,
+						),
+					};
+				},
+			),
+			cancelLabel: plainProgrammingStringAt(
+				choice.cancel_label,
+				`${path}.cancel_label`,
+			),
+		};
+	}
 	return {
-		type: enumAt(choice.type, `${path}.type`, ["cue_move_copy"]),
+		type,
 		choiceId: programmingUuidAt(choice.choice_id, `${path}.choice_id`),
 		showId: programmingUuidAt(choice.show_id, `${path}.show_id`),
 		showRevision: integerAt(choice.show_revision, `${path}.show_revision`),

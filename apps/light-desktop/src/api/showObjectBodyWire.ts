@@ -35,6 +35,8 @@ export function decodeShowObjectBody(
 	objectId?: string,
 ): ShowObjectBodies[ShowObjectKind] {
 	switch (kind) {
+		case "dynamic":
+			return decodeDynamic(value, path, objectId);
 		case "group":
 			return decodeRecordedGroupBody(value, objectId ?? "");
 		case "preset":
@@ -51,6 +53,69 @@ export function decodeShowObjectBody(
 			return decodeStageLayout(value, path);
 		case "user_layout":
 			return decodeUserLayout(value, path);
+	}
+}
+
+function decodeDynamic(
+	value: unknown,
+	path: string,
+	objectId?: string,
+): ShowObjectBodies["dynamic"] {
+	try {
+		const body = recordAt(value, path);
+		const id = stringAt(body.id, `${path}.id`);
+		if (objectId && id !== objectId)
+			throw new WireValidationError(`${path}.id`, objectId, id);
+		arrayAt(body.lanes, `${path}.lanes`);
+		arrayAt(body.random_groups, `${path}.random_groups`);
+		recordAt(body.target_binding, `${path}.target_binding`);
+		recordAt(body.phase, `${path}.phase`);
+		recordAt(body.speed, `${path}.speed`);
+		return body as unknown as ShowObjectBodies["dynamic"];
+	} catch (cause) {
+		const raw =
+			value && typeof value === "object" && !Array.isArray(value)
+				? (value as Record<string, unknown>)
+				: {};
+		const poolNumber =
+			typeof raw.pool_number === "number" &&
+			Number.isSafeInteger(raw.pool_number) &&
+			raw.pool_number >= 1 &&
+			raw.pool_number <= 9_999
+				? raw.pool_number
+				: 9_999;
+		const id =
+			typeof raw.id === "string" && raw.id ? raw.id : (objectId ?? "invalid");
+		const error = cause instanceof Error ? cause.message : String(cause);
+		return {
+			id,
+			pool_number: poolNumber,
+			revision: 0,
+			name:
+				typeof raw.name === "string" && raw.name
+					? raw.name
+					: `Invalid Dynamic ${poolNumber}`,
+			color: typeof raw.color === "string" ? raw.color : "#ef6c73",
+			icon: typeof raw.icon === "string" ? raw.icon : "⚠",
+			target_binding: { type: "targetless" },
+			lanes: [],
+			random_groups: [],
+			phase: {
+				ordering: { type: "selection" },
+				offset_degrees: 0,
+				span_degrees: 360,
+				block_size: 1,
+				repeats: 1,
+				wings: false,
+				anchors_degrees: [],
+			},
+			speed: { type: "fixed", duration_millis: 4_000 },
+			overall_speed_multiplier: { numerator: 1, denominator: 1 },
+			run_mode: "loop",
+			default_activation: "start_now",
+			activation_boundary: "beat",
+			__validationError: `Malformed Dynamic definition: ${error}`,
+		} as ShowObjectBodies["dynamic"];
 	}
 }
 

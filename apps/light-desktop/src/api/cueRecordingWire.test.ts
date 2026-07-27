@@ -56,7 +56,6 @@ function cueListBody(name = "Opening") {
 					},
 				],
 				group_changes: [],
-				phasers: [],
 			},
 		],
 	};

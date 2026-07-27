@@ -6,6 +6,35 @@ export type LegacyPlaybackRuntime = PlaybackSnapshot["active"][number];
 export function legacyPlaybackRuntime(
 	projection: PlaybackProjection | null | undefined,
 ): LegacyPlaybackRuntime | undefined {
+	if (projection?.target === "dynamic" && projection.runtime) {
+		const runtime = projection.runtime;
+		return {
+			playback_number: projection.playback_number,
+			cue_list_id: "",
+			cue_index: -1,
+			previous_index: null,
+			paused: runtime.paused,
+			activated_at: runtime.activated_at,
+			master: runtime.master,
+			fader_position: runtime.fader_value,
+			fader_pickup_required: false,
+			fader_pickup_target: null,
+			flash: runtime.flash,
+			transition_timing_bypassed: false,
+			manual_xfade_position: 0,
+			manual_xfade_direction: undefined,
+			manual_xfade_progress: 0,
+			temporary_active: false,
+			temporary_master: 0,
+			swap_active: false,
+			enabled: runtime.enabled,
+			current_cue_number: null,
+			loaded_cue_number: null,
+			normal_next_cue_number: null,
+			effective_next_cue_number: null,
+			effective_next_is_loaded: false,
+		};
+	}
 	if (projection?.target !== "cue_list" || !projection.runtime)
 		return undefined;
 	const runtime = projection.runtime;
@@ -42,5 +71,6 @@ export function runtimeMaster(projection: PlaybackProjection | undefined) {
 		return projection.runtime?.master ?? null;
 	if (projection?.target === "group") return projection.master;
 	if (projection?.target === "grand_master") return projection.runtime.level;
+	if (projection?.target === "dynamic") return projection.runtime?.master ?? null;
 	return null;
 }

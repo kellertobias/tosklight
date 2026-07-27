@@ -238,7 +238,6 @@ function cueList(revision: number, cueName: string): ShowObject<"cue_list"> {
 					cue_only: false,
 					changes: [],
 					group_changes: [],
-					phasers: [],
 				},
 			],
 		},
