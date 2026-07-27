@@ -11,10 +11,104 @@ const LEGACY_SPEED_GROUPS_BPM: [f64; 5] = [120.0, 90.0, 60.0, 30.0, 15.0];
 pub(super) fn collect(
     candidate: PortableShowCandidate<'_>,
 ) -> Result<Vec<ObjectUpdate>, ActionError> {
+    let presets = candidate
+        .objects_of_kind("preset")
+        .map(|object| {
+            serde_json::from_value::<Preset>(object.body().clone())
+                .map(|preset| (object.key().id().to_owned(), preset))
+                .map_err(|error| invalid_object(object, error))
+        })
+        .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
+    let groups = candidate
+        .objects_of_kind("group")
+        .map(|object| {
+            serde_json::from_value::<GroupDefinition>(object.body().clone())
+                .map(|mut group| {
+                    group.id = object.key().id().to_owned();
+                    (group.id.clone(), group)
+                })
+                .map_err(|error| invalid_object(object, error))
+        })
+        .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
     candidate
         .objects()
-        .filter_map(|object| migrate(object).transpose())
+        .filter_map(|object| {
+            if object.key().kind() == "dynamic" {
+                migrate_dynamic_fallbacks(object, &presets, &groups).transpose()
+            } else {
+                migrate(object).transpose()
+            }
+        })
         .collect()
+}
+
+fn migrate_dynamic_fallbacks(
+    object: PortableShowCandidateObject<'_>,
+    presets: &std::collections::HashMap<String, Preset>,
+    groups: &std::collections::HashMap<String, GroupDefinition>,
+) -> Result<Option<ObjectUpdate>, ActionError> {
+    let Ok(mut definition) =
+        serde_json::from_value::<light_dynamics::DynamicDefinition>(object.body().clone())
+    else {
+        // Invalid Dynamics remain portable, repairable show content. Compilation already skips
+        // them, so a best-effort fallback migration must not make the entire show unloadable.
+        return Ok(None);
+    };
+    super::super::objects::hydrate_dynamic_preset_fallbacks(&mut definition, presets, groups);
+    let canonical =
+        serde_json::to_value(definition).map_err(|error| invalid_object(object, error))?;
+    let mut migrated = object.body().clone();
+    copy_dynamic_fallbacks(&canonical, &mut migrated);
+    Ok((migrated != *object.body()).then(|| ObjectUpdate::from_object(object, migrated)))
+}
+
+fn copy_dynamic_fallbacks(canonical: &Value, migrated: &mut Value) {
+    let lane_count = canonical
+        .pointer("/lanes")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    for lane_index in 0..lane_count {
+        let point_count = canonical
+            .pointer(&format!("/lanes/{lane_index}/keyframes/points"))
+            .and_then(Value::as_array)
+            .map_or(0, Vec::len);
+        for point_index in 0..point_count {
+            copy_scalar_fallback(
+                canonical,
+                migrated,
+                &format!("/lanes/{lane_index}/keyframes/points/{point_index}/source"),
+            );
+        }
+        for path in [
+            format!("/lanes/{lane_index}/max_min/minimum"),
+            format!("/lanes/{lane_index}/max_min/maximum"),
+            format!("/lanes/{lane_index}/middle_amplitude/middle"),
+        ] {
+            copy_scalar_fallback(canonical, migrated, &path);
+        }
+    }
+    let group_count = canonical
+        .pointer("/random_groups")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    for group_index in 0..group_count {
+        for path in [
+            format!("/random_groups/{group_index}/low"),
+            format!("/random_groups/{group_index}/high"),
+        ] {
+            copy_scalar_fallback(canonical, migrated, &path);
+        }
+    }
+}
+
+fn copy_scalar_fallback(canonical: &Value, migrated: &mut Value, path: &str) {
+    let Some(fallbacks) = canonical.pointer(&format!("{path}/last_valid_by_target")) else {
+        return;
+    };
+    let Some(source) = migrated.pointer_mut(path).and_then(Value::as_object_mut) else {
+        return;
+    };
+    source.insert("last_valid_by_target".into(), fallbacks.clone());
 }
 
 pub(super) fn migrate(

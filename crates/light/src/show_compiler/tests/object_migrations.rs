@@ -257,3 +257,148 @@ fn dynamics_compile_preset_sources_into_per_target_sampler_fallbacks() {
         }]
     );
 }
+
+#[test]
+fn dynamics_persist_preset_fallbacks_losslessly_before_the_preset_is_deleted() {
+    let target = light_core::FixtureId::new();
+    let dynamic = light_dynamics::DynamicDefinition {
+        id: Uuid::new_v4(),
+        pool_number: 7,
+        revision: 1,
+        name: "Portable preset wave".into(),
+        color: None,
+        icon: None,
+        overall_speed_multiplier: light_dynamics::Rational::ONE,
+        target_binding: light_dynamics::DynamicTargetBinding::FrozenTargets {
+            targets: vec![target],
+        },
+        lanes: vec![light_dynamics::DynamicLane {
+            id: Uuid::new_v4(),
+            attribute: light_core::AttributeKey::intensity(),
+            mode: light_dynamics::DynamicLaneMode::Keyframes,
+            keyframes: light_dynamics::KeyframeConfiguration {
+                points: vec![
+                    light_dynamics::DynamicKeyframe {
+                        position: 0.0,
+                        source: light_dynamics::ScalarSource::Preset {
+                            preset_id: "1.1".into(),
+                            attribute: light_core::AttributeKey::intensity(),
+                            last_valid_by_target: Vec::new(),
+                        },
+                        interpolation: light_dynamics::ScalarInterpolation::Linear,
+                    },
+                    light_dynamics::DynamicKeyframe {
+                        position: 0.5,
+                        source: light_dynamics::ScalarSource::Value { value: 1.0 },
+                        interpolation: light_dynamics::ScalarInterpolation::Linear,
+                    },
+                ],
+                size: 1.0,
+            },
+            max_min: light_dynamics::MaxMinConfiguration {
+                minimum: light_dynamics::ScalarSource::Value { value: 0.0 },
+                maximum: light_dynamics::ScalarSource::Value { value: 1.0 },
+                function: light_dynamics::PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: light_dynamics::PwmShape::default(),
+            },
+            middle_amplitude: light_dynamics::MiddleAmplitudeConfiguration {
+                middle: light_dynamics::ScalarSource::Current,
+                amplitude: 0.5,
+                function: light_dynamics::PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: light_dynamics::PwmShape::default(),
+            },
+            speed_multiplier: light_dynamics::Rational::ONE,
+            width: 1.0,
+            random_group_id: None,
+        }],
+        random_groups: Vec::new(),
+        phase: light_dynamics::PhaseDistribution {
+            ordering: light_dynamics::PhaseOrdering::Selection,
+            offset_degrees: 0.0,
+            span_degrees: 360.0,
+            block_size: 1,
+            repeats: 1,
+            wings: false,
+            anchors_degrees: Vec::new(),
+        },
+        speed: light_dynamics::DynamicSpeed::Fixed {
+            duration_millis: 1_000,
+        },
+        run_mode: light_dynamics::DynamicRunMode::Loop,
+        default_activation: light_dynamics::ActivationPolicy::StartNow,
+        activation_boundary: light_dynamics::ActivationBoundary::Beat,
+    };
+    let mut dynamic_body = serde_json::to_value(dynamic).unwrap();
+    dynamic_body["future_dynamic"] = json!({"kept": true});
+    dynamic_body["lanes"][0]["keyframes"]["points"][0]["source"]["future_source"] =
+        json!({"kept": true});
+    let preset = json!({
+        "name": "Dim",
+        "family": "Intensity",
+        "number": 1,
+        "values": {
+            target.0.to_string(): {
+                "intensity": {"kind": "normalized", "value": 0.75}
+            }
+        }
+    });
+    let objects = vec![("dynamic", "7", dynamic_body), ("preset", "1.1", preset)];
+    let (store, document) = document_with_objects(&objects);
+    let mut transaction = document.transaction();
+    stage_candidate_migrations(&document, &mut transaction).unwrap();
+    let candidate = document.candidate(&transaction).unwrap();
+    let migrated_dynamic = candidate.object("dynamic", "7").unwrap().body().clone();
+
+    assert_eq!(migrated_dynamic["future_dynamic"], json!({"kept": true}));
+    assert_eq!(
+        migrated_dynamic["lanes"][0]["keyframes"]["points"][0]["source"]["future_source"],
+        json!({"kept": true})
+    );
+    assert_eq!(
+        migrated_dynamic["lanes"][0]["keyframes"]["points"][0]["source"]["last_valid_by_target"][0]
+            ["value"],
+        0.75
+    );
+    assert_eq!(
+        stored_body(&store, "dynamic", "7")["lanes"][0]["keyframes"]["points"][0]["source"]["last_valid_by_target"],
+        json!([]),
+        "staging the migration must remain side-effect free"
+    );
+
+    let fallback_only = vec![("dynamic", "7", migrated_dynamic.clone())];
+    let decoded: light_dynamics::DynamicDefinition =
+        serde_json::from_value(migrated_dynamic.clone()).unwrap();
+    light_dynamics::validate_definition(&decoded).unwrap();
+    let (_, fallback_document) = document_with_objects(&fallback_only);
+    let snapshot = compile_show_candidate(
+        fallback_document
+            .candidate(&fallback_document.transaction())
+            .unwrap(),
+    )
+    .unwrap();
+    let light_dynamics::ScalarSource::Preset {
+        last_valid_by_target,
+        ..
+    } = &snapshot.dynamics[0].lanes[0].keyframes.points[0].source
+    else {
+        panic!("expected Preset source")
+    };
+    assert_eq!(
+        last_valid_by_target,
+        &[light_dynamics::TargetScalarFallback {
+            target,
+            value: 0.75,
+        }]
+    );
+
+    let migrated_refs = [
+        ("dynamic", "7", migrated_dynamic),
+        ("preset", "1.1", objects[1].2.clone()),
+    ];
+    let (_, migrated_document) = document_with_objects(&migrated_refs);
+    let mut idempotent = migrated_document.transaction();
+    stage_candidate_migrations(&migrated_document, &mut idempotent).unwrap();
+    assert!(idempotent.is_empty());
+}

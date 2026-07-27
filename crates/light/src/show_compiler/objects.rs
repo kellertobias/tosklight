@@ -79,7 +79,7 @@ pub(super) fn decode_dynamics(
     Ok(dynamics)
 }
 
-fn hydrate_dynamic_preset_fallbacks(
+pub(super) fn hydrate_dynamic_preset_fallbacks(
     dynamic: &mut light_dynamics::DynamicDefinition,
     presets: &HashMap<String, Preset>,
     groups: &HashMap<String, GroupDefinition>,
