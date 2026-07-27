@@ -37,10 +37,16 @@ pub fn project_phase(
         | PhaseOrdering::RadialIn { center_x, center_z } => {
             let inward = matches!(distribution.ordering, PhaseOrdering::RadialIn { .. });
             ordered.sort_by(|left, right| {
-                let left_distance = distance(positions.get(&left.1), center_x, center_z);
-                let right_distance = distance(positions.get(&right.1), center_x, center_z);
-                let ordering = left_distance.total_cmp(&right_distance);
-                (if inward { ordering.reverse() } else { ordering })
+                let left_position = positions.get(&left.1);
+                let right_position = positions.get(&right.1);
+                let positioned_first = right_position.is_some().cmp(&left_position.is_some());
+                let ordering = distance(left_position, center_x, center_z).total_cmp(&distance(
+                    right_position,
+                    center_x,
+                    center_z,
+                ));
+                positioned_first
+                    .then(if inward { ordering.reverse() } else { ordering })
                     .then_with(|| left.0.cmp(&right.0))
             });
         }

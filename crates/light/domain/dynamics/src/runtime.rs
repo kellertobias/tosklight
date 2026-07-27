@@ -842,6 +842,21 @@ impl DynamicRuntime {
         let evaluator = DynamicEvaluator::new(&definition);
         let mut samples = Vec::new();
         let targets = instance.targets.clone();
+        let random_phase_by_target = matches!(
+            definition.phase.ordering,
+            crate::PhaseOrdering::RandomEachLoop { .. }
+        )
+        .then(|| {
+            project_phase(
+                &definition.phase,
+                &targets,
+                &HashMap::new(),
+                elapsed / cycle_duration_millis.max(1),
+            )
+            .into_iter()
+            .map(|phase| (phase.target, phase.degrees))
+            .collect::<HashMap<_, _>>()
+        });
         for controller in controllers {
             if controller.size == 0.0 {
                 continue;
@@ -857,7 +872,12 @@ impl DynamicRuntime {
                 });
             let activation_mix = transition_mix(transition, now_millis);
             for target in &targets {
-                let phase = instance.phase_by_target.get(target).copied().unwrap_or(0.0)
+                let phase = random_phase_by_target
+                    .as_ref()
+                    .and_then(|phases| phases.get(target))
+                    .or_else(|| instance.phase_by_target.get(target))
+                    .copied()
+                    .unwrap_or(0.0)
                     + controller.phase_offset_degrees;
                 for lane in &definition.lanes {
                     let random_envelope = lane.random_group_id.and_then(|group_id| {

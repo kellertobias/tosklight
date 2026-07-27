@@ -38,9 +38,11 @@ impl<'a> DynamicEvaluator<'a> {
     ) -> Option<f32> {
         let duration =
             (context.cycle_duration_millis as f64 / lane.speed_multiplier.factor()).max(1.0);
-        let position = ((context.elapsed_millis as f64 / duration)
+        let interval_position = ((context.elapsed_millis as f64 / duration)
             + f64::from(context.phase_degrees) / 360.0)
             .rem_euclid(1.0) as f32;
+        let width = lane.width.clamp(f32::EPSILON, 1.0);
+        let position = ((interval_position - (1.0 - width) * 0.5) / width).clamp(0.0, 1.0);
         let value = match lane.mode {
             DynamicLaneMode::Keyframes => self.keyframes(lane, position, context)?,
             DynamicLaneMode::MaxMin => self.max_min(lane, position, context)?,

@@ -330,6 +330,98 @@ fn explicit_multi_anchor_phase_and_spatial_ties_follow_the_operator_contract() {
 }
 
 #[test]
+fn radial_in_keeps_missing_stage_positions_after_positioned_targets() {
+    let targets = (0..4).map(|_| FixtureId::new()).collect::<Vec<_>>();
+    let mut distribution = definition(lane()).phase;
+    distribution.ordering = PhaseOrdering::RadialIn {
+        center_x: 0.0,
+        center_z: 0.0,
+    };
+    let positions = HashMap::from([
+        (targets[0], SpatialPosition { x: 1.0, z: 0.0 }),
+        (targets[1], SpatialPosition { x: 3.0, z: 0.0 }),
+    ]);
+
+    let phases = project_phase(&distribution, &targets, &positions, 0);
+
+    assert_eq!(phases[0].target, targets[1]);
+    assert_eq!(phases[1].target, targets[0]);
+    assert_eq!(
+        phases[2..]
+            .iter()
+            .map(|phase| phase.target)
+            .collect::<Vec<_>>(),
+        targets[2..],
+        "missing Stage positions remain appended in stored order"
+    );
+}
+
+#[test]
+fn lane_width_compresses_the_curve_without_stretching_its_value_range() {
+    let mut narrow = lane();
+    narrow.width = 0.5;
+    let definition = definition(narrow.clone());
+    let evaluator = DynamicEvaluator::new(&definition);
+    let target = FixtureId::new();
+    let sample = |elapsed| {
+        evaluator
+            .sample_lane(
+                &narrow,
+                DynamicEvaluationContext {
+                    instance_id: Uuid::nil(),
+                    target,
+                    elapsed_millis: elapsed,
+                    cycle_duration_millis: 1_000,
+                    phase_degrees: 0.0,
+                    output_interval_millis: 10,
+                    random_envelope: None,
+                    sources: &Sources { current: 0.0 },
+                },
+            )
+            .unwrap()
+    };
+
+    assert_eq!(sample(0), 0.0);
+    assert!((sample(500) - 1.0).abs() < 0.0001);
+    assert_eq!(sample(750), 0.0);
+}
+
+#[test]
+fn random_each_loop_reorders_targets_at_runtime_loop_boundaries() {
+    let targets = (0..6).map(|_| FixtureId::new()).collect::<Vec<_>>();
+    let mut dynamic = definition(lane());
+    dynamic.phase.ordering = PhaseOrdering::RandomEachLoop { seed: 73 };
+    let definition_id = dynamic.id;
+    let mut runtime = DynamicRuntime::default();
+    runtime.install_definitions([dynamic]).unwrap();
+    let instance = runtime
+        .start(DynamicStartRequest {
+            definition_id,
+            controller: controller(0, 1, false),
+            target_scope: DynamicTargetScope {
+                ordered_targets: targets.clone(),
+            },
+            stage_positions: HashMap::new(),
+            now_millis: 0,
+            activation_policy_override: None,
+            activation_delay_millis: 0,
+            activation_duration_millis: 0,
+            reuse_matching_targetless: false,
+        })
+        .unwrap();
+    let values = |runtime: &mut DynamicRuntime, now| {
+        runtime
+            .sample(instance, now, 1_000, 10, &Sources { current: 0.0 })
+            .unwrap()
+            .into_iter()
+            .map(|sample| (sample.target, sample.value))
+            .collect::<HashMap<_, _>>()
+    };
+
+    assert_ne!(values(&mut runtime, 0), values(&mut runtime, 1_000));
+}
+
+#[test]
 fn random_groups_are_repeatable_per_instance_and_independent_between_instances() {
     let mut lane = lane();
     lane.mode = DynamicLaneMode::Random;
