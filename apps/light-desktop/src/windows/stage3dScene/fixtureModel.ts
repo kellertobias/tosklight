@@ -81,7 +81,7 @@ function mountBoundPart(
 	wrapper.scale.setScalar(context.scale);
 	wrapper.add(part);
 	tagModel(wrapper, context.fixtureId, context.instanceId);
-	if (context.selected) addSelectionOutline(wrapper);
+	addSelectionOutline(wrapper, context.selected);
 	removeGeometryMarker(context.root, binding.id);
 	anchor.add(wrapper);
 	return true;
@@ -136,7 +136,7 @@ function mountWholeModel(
 	tagModel(model, fixture.fixture_id, instanceId);
 	model.scale.setScalar(scale);
 	centerModel(model);
-	if (selected) addSelectionOutline(model);
+	addSelectionOutline(model, selected);
 	const profileRoot = profileMode(fixture)?.geometry.nodes.find(
 		(node) => node.parent_id == null,
 	);

@@ -246,7 +246,7 @@ export function buildFixtureProfileGeometry(options: ProfileGeometryOptions) {
 	const nodes = createGeometryNodes(options);
 	mountNodeHierarchy(options.mode.geometry, nodes, root);
 	mountEmitters(options, nodes, root);
-	if (options.selected) addSelectionOutline(root);
+	addSelectionOutline(root, options.selected);
 	return root;
 }
 

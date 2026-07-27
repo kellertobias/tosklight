@@ -442,23 +442,53 @@ describe("emitter direction and Patch selection", () => {
 			).scene;
 
 		const lines = sceneFor("lines_only");
-		expect(lines.getObjectByName("beam-centerline")).toBeTruthy();
-		expect(lines.getObjectByName("beam-ground-footprint")).toBeTruthy();
-		expect(lines.getObjectByName("beam-volume")).toBeUndefined();
+		expect(lines.getObjectByName("beam-centerline")?.visible).toBe(true);
+		expect(lines.getObjectByName("beam-ground-footprint")?.visible).toBe(true);
+		expect(lines.getObjectByName("beam-volume")?.visible).toBe(false);
 		const combined = sceneFor("lines_and_beams");
-		expect(combined.getObjectByName("beam-centerline")).toBeTruthy();
-		expect(combined.getObjectByName("beam-ground-footprint")).toBeTruthy();
-		expect(combined.getObjectByName("beam-volume")).toBeTruthy();
+		expect(combined.getObjectByName("beam-centerline")?.visible).toBe(true);
+		expect(combined.getObjectByName("beam-ground-footprint")?.visible).toBe(true);
+		expect(combined.getObjectByName("beam-volume")?.visible).toBe(true);
 		const beams = sceneFor("beams");
-		expect(beams.getObjectByName("beam-centerline")).toBeUndefined();
-		expect(beams.getObjectByName("beam-ground-footprint")).toBeUndefined();
-		expect(beams.getObjectByName("beam-volume")).toBeTruthy();
+		expect(beams.getObjectByName("beam-centerline")?.visible).toBe(false);
+		expect(beams.getObjectByName("beam-ground-footprint")?.visible).toBe(false);
+		expect(beams.getObjectByName("beam-volume")?.visible).toBe(true);
 		const improved = sceneFor("improved_beams");
-		expect(improved.getObjectByName("beam-centerline")).toBeUndefined();
-		expect(improved.getObjectByName("beam-improved-volume")).toBeTruthy();
+		expect(improved.getObjectByName("beam-centerline")?.visible).toBe(false);
+		expect(improved.getObjectByName("beam-improved-volume")?.visible).toBe(
+			true,
+		);
+		expect(improved.getObjectByName("beam-volume")?.visible).toBe(false);
 		expect(
 			(improved.getObjectByName("beam-improved-volume") as THREE.Mesh).material,
 		).toBeInstanceOf(THREE.ShaderMaterial);
+		const retained = buildStageScene(
+			stageFixture,
+			null,
+			new Set(),
+			1,
+			true,
+			true,
+			new Set(),
+			"lines_only",
+		);
+		const retainedRoot = retained.fixtureObjects.values().next().value;
+		const retainedImproved = retained.scene.getObjectByName(
+			"beam-improved-volume",
+		);
+		applyStageVisualization(
+			stageFixture,
+			null,
+			retained.fixtureObjects,
+			true,
+			"improved_beams",
+		);
+		expect(retained.fixtureObjects.values().next().value).toBe(retainedRoot);
+		expect(
+			retained.scene.getObjectByName("beam-improved-volume"),
+		).toBe(retainedImproved);
+		expect(retainedImproved?.visible).toBe(true);
+		expect(retained.scene.getObjectByName("beam-volume")?.visible).toBe(false);
 
 		const withoutFloor = buildStageScene(
 			stageFixture,

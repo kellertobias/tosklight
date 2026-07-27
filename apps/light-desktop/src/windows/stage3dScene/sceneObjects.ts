@@ -9,15 +9,21 @@ function fixtureMaterial(selected: boolean) {
 	});
 }
 
-function addPlaceholderOutline(group: THREE.Group, mesh: THREE.Mesh) {
+function addPlaceholderOutline(
+	group: THREE.Group,
+	mesh: THREE.Mesh,
+	visible: boolean,
+) {
 	const outline = new THREE.LineSegments(
 		new THREE.EdgesGeometry(mesh.geometry),
 		new THREE.LineBasicMaterial({ color: 0x378eff }),
 	);
 	outline.position.copy(mesh.position);
 	outline.rotation.copy(mesh.rotation);
-	outline.scale.setScalar(1.035);
+	outline.userData.stageSelectionScale = 1.035;
+	outline.scale.setScalar(visible ? 1.035 : 1);
 	outline.name = "selection-outline";
+	outline.visible = visible;
 	group.add(outline);
 }
 
@@ -41,13 +47,12 @@ export function fixtureBody(selected: boolean) {
 	head.rotation.z = Math.PI / 2;
 	head.position.y = -0.52;
 	group.add(base, yoke, head);
-	if (selected) {
-		for (const mesh of [base, yoke, head]) addPlaceholderOutline(group, mesh);
-	}
+	for (const mesh of [base, yoke, head])
+		addPlaceholderOutline(group, mesh, selected);
 	return group;
 }
 
-export function addSelectionOutline(object: THREE.Object3D) {
+export function addSelectionOutline(object: THREE.Object3D, visible = true) {
 	object.traverse((child) => {
 		if (!(child instanceof THREE.Mesh)) return;
 		// Imported and procedural marker meshes may have no vertices.
@@ -57,8 +62,24 @@ export function addSelectionOutline(object: THREE.Object3D) {
 			new THREE.LineBasicMaterial({ color: 0x378eff }),
 		);
 		outline.name = "selection-outline";
-		outline.scale.setScalar(1.025);
+		outline.visible = visible;
+		outline.userData.stageSelectionScale = 1.025;
+		outline.scale.setScalar(visible ? 1.025 : 1);
 		child.add(outline);
+	});
+}
+
+export function setSelectionOutlineVisibility(
+	object: THREE.Object3D,
+	visible: boolean,
+) {
+	object.userData.stageSelected = visible;
+	object.traverse((child) => {
+		if (child.name !== "selection-outline") return;
+		child.visible = visible;
+		child.scale.setScalar(
+			visible ? Number(child.userData.stageSelectionScale) || 1.025 : 1,
+		);
 	});
 }
 

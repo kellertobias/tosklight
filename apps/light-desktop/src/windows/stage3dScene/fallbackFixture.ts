@@ -256,19 +256,15 @@ function addFallbackBeamVisuals(
 	const drawLines =
 		active &&
 		(renderQuality === "lines_only" || renderQuality === "lines_and_beams");
-	if (renderQuality !== "lines_only") {
-		const volume = createFallbackVolume(cone, state);
-		volume.visible = drawBeams;
-		beam.add(volume);
-	}
-	if (renderQuality === "lines_only" || renderQuality === "lines_and_beams") {
-		const visibleState = { ...state, intensity: Math.max(state.intensity, 1) };
-		const outline = createBeamOutline(cone, visibleState);
-		const center = createBeamCenter(visibleState);
-		outline.visible = drawLines;
-		center.visible = drawLines;
-		beam.add(outline, center);
-	}
+	const volume = createFallbackVolume(cone, state);
+	volume.visible = drawBeams;
+	beam.add(volume);
+	const visibleState = { ...state, intensity: Math.max(state.intensity, 1) };
+	const outline = createBeamOutline(cone, visibleState);
+	const center = createBeamCenter(visibleState);
+	outline.visible = drawLines;
+	center.visible = drawLines;
+	beam.add(outline, center);
 	const guide = createBeamCenter({ ...state, intensity: 0 });
 	guide.visible = !active && showBeamGuides;
 	beam.add(guide);
@@ -303,7 +299,7 @@ function fallbackBeamParent(
 		state.tilt,
 	);
 	model.object.name = "fixture-placeholder";
-	if (selected) addSelectionOutline(model.object);
+	addSelectionOutline(model.object, selected);
 	root.add(model.object);
 	return model.beamMount;
 }

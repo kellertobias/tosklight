@@ -253,43 +253,32 @@ function createEmitterSource(
 		(context.renderQuality === "lines_only" ||
 			context.renderQuality === "lines_and_beams") &&
 		active;
-	if (context.renderQuality !== "lines_only") {
-		if (context.renderQuality === "improved_beams") {
-			const improved = createImprovedBeamMesh(
-				cone,
-				color,
-				intensity,
-				metrics.focus,
-			);
-			improved.visible = drawBeams;
-			beam.add(improved);
-		} else {
-			const volume = createBeamMesh(cone, color, volumeOpacity, "beam-volume");
-			const core = createBeamMesh(
-				createConeGeometry(metrics.beamRadius, metrics.distance),
-				color,
-				intensity * (0.02 + metrics.focus * 0.045),
-				"beam-core",
-			);
-			volume.visible = drawBeams;
-			core.visible = drawBeams;
-			beam.add(volume, core);
-		}
-	}
-	if (
-		context.renderQuality === "lines_only" ||
-		context.renderQuality === "lines_and_beams"
-	) {
-		const outline = createBeamOutline(cone, color, Math.max(intensity, 1));
-		const center = createActiveCenterLine(
-			metrics.distance,
-			color,
-			Math.max(intensity, 1),
-		);
-		outline.visible = drawLines;
-		center.visible = drawLines;
-		beam.add(outline, center);
-	}
+	const volume = createBeamMesh(cone, color, volumeOpacity, "beam-volume");
+	const core = createBeamMesh(
+		createConeGeometry(metrics.beamRadius, metrics.distance),
+		color,
+		intensity * (0.02 + metrics.focus * 0.045),
+		"beam-core",
+	);
+	const improved = createImprovedBeamMesh(
+		cone,
+		color,
+		intensity,
+		metrics.focus,
+	);
+	volume.visible = drawBeams && context.renderQuality !== "improved_beams";
+	core.visible = drawBeams && context.renderQuality !== "improved_beams";
+	improved.visible = drawBeams && context.renderQuality === "improved_beams";
+	beam.add(volume, core, improved);
+	const outline = createBeamOutline(cone, color, Math.max(intensity, 1));
+	const center = createActiveCenterLine(
+		metrics.distance,
+		color,
+		Math.max(intensity, 1),
+	);
+	outline.visible = drawLines;
+	center.visible = drawLines;
+	beam.add(outline, center);
 	const guide = createInactiveBeamGuide(metrics.distance);
 	guide.visible = !active && context.showBeamGuides;
 	beam.add(guide);
@@ -370,7 +359,10 @@ function updateSourceBeam(
 			object.name === "beam-core" ||
 			object.name === "beam-improved-volume"
 		) {
-			object.visible = drawBeams;
+			object.visible =
+				drawBeams &&
+				(object.name === "beam-improved-volume") ===
+					(renderQuality === "improved_beams");
 			object.scale.x *= radiusScale;
 			object.scale.z *= radiusScale;
 			if (object instanceof THREE.Mesh) {

@@ -13,6 +13,7 @@ import {
 	updateFixtureProfileGeometry,
 } from "./profileGeometry";
 import type { Stage3dFixture, StageSceneContext } from "./types";
+import { setSelectionOutlineVisibility } from "./sceneObjects";
 
 function buildStageFixture(item: Stage3dFixture, context: StageSceneContext) {
 	const fixtureId = item.fixture.fixture_id;
@@ -185,8 +186,6 @@ function addGroundFootprints(
 	scene: THREE.Scene,
 	renderQuality: StageRenderQuality,
 ) {
-	if (renderQuality !== "lines_only" && renderQuality !== "lines_and_beams")
-		return;
 	scene.updateMatrixWorld(true);
 	const beams: THREE.Object3D[] = [];
 	scene.traverse((object) => {
@@ -208,6 +207,10 @@ function addGroundFootprints(
 		footprint.userData.stageBeamSource = beam.uuid;
 		scene.add(footprint);
 		updateGroundFootprint(footprint, beam);
+		footprint.visible =
+			footprint.visible &&
+			(renderQuality === "lines_only" ||
+				renderQuality === "lines_and_beams");
 	}
 }
 
@@ -246,6 +249,8 @@ export function applyStageVisualization(
 	showBeamGuides: boolean,
 	renderQuality: StageRenderQuality,
 	virtualHighlight: Set<string> = new Set(),
+	selected: Set<string> = new Set(),
+	showSelection = false,
 ) {
 	const context = createSceneContext(
 		snapshot,
@@ -259,6 +264,10 @@ export function applyStageVisualization(
 		const root = fixtureObjects.get(instanceId);
 		if (!root) continue;
 		const fixtureId = item.fixture.fixture_id;
+		setSelectionOutlineVisibility(
+			root,
+			showSelection && selected.has(fixtureId),
+		);
 		const attributes = context.byFixture.get(fixtureId) ?? new Map();
 		const mode = profileMode(item.fixture);
 		if (mode) {
@@ -290,7 +299,16 @@ export function applyStageVisualization(
 		}
 	}
 	const scene = fixtureObjects.values().next().value?.parent;
-	if (scene instanceof THREE.Scene) refreshGroundFootprints(scene);
+	if (scene instanceof THREE.Scene) {
+		refreshGroundFootprints(scene);
+		scene.traverse((object) => {
+			if (object.name === "beam-ground-footprint")
+				object.visible =
+					object.visible &&
+					(renderQuality === "lines_only" ||
+						renderQuality === "lines_and_beams");
+		});
+	}
 }
 
 export function disposeScene(scene: THREE.Scene) {

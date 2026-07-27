@@ -47,8 +47,10 @@ export function useStageRenderer({
 		cameraRef.current = camera;
 		controlsRef.current = controls;
 		let frame: number | null = null;
+		let contextLost = false;
 		const render = () => {
 			frame = null;
+			if (contextLost) return;
 			frontendPerformanceDiagnostics.recordStageRafCallback();
 			const controlsChanged = controls.update();
 			if (controller.sceneRef.current) {
@@ -70,8 +72,27 @@ export function useStageRenderer({
 				frame = requestAnimationFrame(render);
 		};
 		const requestRender = () => {
-			if (frame === null) frame = requestAnimationFrame(render);
+			if (!contextLost && frame === null) frame = requestAnimationFrame(render);
 		};
+		const handleContextLost = (event: Event) => {
+			event.preventDefault();
+			contextLost = true;
+			if (frame !== null) cancelAnimationFrame(frame);
+			frame = null;
+		};
+		const handleContextRestored = () => {
+			contextLost = false;
+			renderer.resetState();
+			requestRender();
+		};
+		renderer.domElement.addEventListener(
+			"webglcontextlost",
+			handleContextLost,
+		);
+		renderer.domElement.addEventListener(
+			"webglcontextrestored",
+			handleContextRestored,
+		);
 		const rememberCamera = () => {
 			cameraTargetRef.current.copy(controls.target);
 			requestRender();
@@ -114,6 +135,14 @@ export function useStageRenderer({
 			controls.removeEventListener("change", rememberCamera);
 			controls.removeEventListener("end", publishCamera);
 			unbindPointer();
+			renderer.domElement.removeEventListener(
+				"webglcontextlost",
+				handleContextLost,
+			);
+			renderer.domElement.removeEventListener(
+				"webglcontextrestored",
+				handleContextRestored,
+			);
 			const scene = controller.sceneRef.current;
 			controller.sceneRef.current = null;
 			controller.fixtureObjectsRef.current = new Map();

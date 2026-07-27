@@ -40,22 +40,13 @@ function retainFixtureModels(
 	fixtures: Stage3dFixture[],
 	previousObjects: Map<string, THREE.Object3D>,
 	nextObjects: Map<string, THREE.Object3D>,
-	selected: readonly string[],
-	showSelection: boolean,
 ) {
 	const retained = new Set<string>();
 	for (const item of fixtures) {
 		const instanceId = item.instanceId ?? item.fixture.fixture_id;
 		const previousRoot = previousObjects.get(instanceId);
 		const nextRoot = nextObjects.get(instanceId);
-		const selectedNow =
-			showSelection && selected.includes(item.fixture.fixture_id);
-		if (
-			!previousRoot ||
-			!nextRoot ||
-			Boolean(previousRoot.userData.stageSelected) !== selectedNow
-		)
-			continue;
+		if (!previousRoot || !nextRoot) continue;
 		const mounted = previousRoot.children.filter(
 			(child) =>
 				child.name === "fixture-model" ||
@@ -93,8 +84,7 @@ function loadFixtureModels(
 	fixtures: Stage3dFixture[],
 	fixtureObjects: Map<string, THREE.Object3D>,
 	retained: Set<string>,
-	selected: readonly string[],
-	showSelection: boolean,
+	isSelected: (fixtureId: string) => boolean,
 	modelCache: StageModelCache,
 ) {
 	let cancelled = false;
@@ -114,7 +104,7 @@ function loadFixtureModels(
 					root,
 					model,
 					item.fixture,
-					showSelection && selected.includes(item.fixture.fixture_id),
+					isSelected(item.fixture.fixture_id),
 				);
 			})
 			.catch(() => undefined);
@@ -154,10 +144,12 @@ export function useStageScene({
 	const callbacksRef = useRef(callbacks);
 	const invalidateRef = useRef<(() => void) | null>(null);
 	const modelCacheRef = useRef<StageModelCache | null>(null);
+	const selectionRef = useRef({ selected, showSelection });
 	const modelCache =
 		modelCacheRef.current ?? (modelCacheRef.current = new StageModelCache());
 	const [renderVisualization, setRenderVisualization] = useState(visualization);
 	callbacksRef.current = callbacks;
+	selectionRef.current = { selected, showSelection };
 
 	useEffect(() => {
 		latestVisualizationRef.current = visualization;
@@ -209,15 +201,14 @@ export function useStageScene({
 			fixtures,
 			fixtureObjectsRef.current,
 			next.fixtureObjects,
-			selected,
-			showSelection,
 		);
 		const cancelModels = loadFixtureModels(
 			fixtures,
 			next.fixtureObjects,
 			retained,
-			selected,
-			showSelection,
+			(fixtureId) =>
+				selectionRef.current.showSelection &&
+				selectionRef.current.selected.includes(fixtureId),
 			modelCache,
 		);
 		sceneRef.current = next.scene;
@@ -230,12 +221,7 @@ export function useStageScene({
 		return cancelModels;
 	}, [
 		fixtures,
-		selected,
-		virtualHighlight,
-		showSelection,
 		showFloorGrid,
-		showBeamGuides,
-		renderQuality,
 		environmentBrightness,
 		modelCache,
 	]);
@@ -257,6 +243,8 @@ export function useStageScene({
 			showBeamGuides,
 			renderQuality,
 			new Set(virtualHighlight),
+			new Set(selected),
+			showSelection,
 		);
 		invalidateRef.current?.();
 	}, [
@@ -264,6 +252,8 @@ export function useStageScene({
 		renderVisualization,
 		showBeamGuides,
 		renderQuality,
+		selected,
+		showSelection,
 		virtualHighlight,
 	]);
 
