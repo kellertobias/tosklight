@@ -272,6 +272,26 @@ Run both focused server targets with `cargo test -p light-headless --no-default-
 
 `PATCH-PLACEMENT-002` covers intentionally unpatched creation through Add Fixture. Choose **Empty** after a concrete placement preview, verify the footprint reservation disappears, switch back to **Address** and verify normal validation returns, then choose **Empty** again and bulk-add three fixtures. Every fixture must keep its requested number, stable identity, profile, mode, layer, and Stage/Fixture Sheet presence while the Show Patch row says **Unpatched** and no DMX slots are assigned. Restart the real server, reopen the show, and verify all three nullable split assignments and identities survive. Repatch one fixture through the typed Patch action and verify the identity and stored fixture number remain unchanged while output becomes addressable.
 
+## Stage visualization runtime coverage
+
+`STAGE-001` uses the Default Stage Show and two real Stage panes to prove the
+authoritative visualization path. The Live pane begins in 2D so Fixture 201 is
+selected through the visible Stage interaction, then switches to 3D beside a
+Follow Preload pane. A one-second Programmer Fade and moving-head Pan change
+produce deterministic output-boundary frames. The scenario verifies the
+midpoint and final DMX bytes, independent Live and Preload lane claims, all four
+Render quality choices, the strict engine-frame-to-settled-canvas timing report,
+and WebGL context recovery.
+
+The scenario then closes only the visualization WebSocket while leaving the
+desk and output paths running. Both Stage surfaces retain their last coherent
+scene and show the reconnecting state, a new intensity value still reaches DMX,
+and the visualization lanes recover from fresh authoritative snapshots. The
+attached `stage-visualization-timing.json` separates source-to-receive,
+projection-to-receive, scene-build, draw-call, resource, and
+source-to-settled-canvas evidence. Run it with
+`npm run test:e2e -- tests/66-semantic-stage-visualizer.spec.ts`.
+
 ## Matter playback bridge boundary coverage
 
 Matter uses stable explicit page/playback endpoints rather than an OSC subscriber's current page. Focused Rust tests cover endpoint derivation, empty and non-fader omission, On/Off and Level writes, tracking feedback, truthful commissioning status, pairing-identity persistence, and endpoint removal without renumbering surviving lights. The physical-desk Matter settings component tests cover the persisted enable toggle, running and failed status, zero exposed lights for empty slots, pairing code and QR payload presentation, copy action, and the separate count for assigned controls without a dimmable fader.
