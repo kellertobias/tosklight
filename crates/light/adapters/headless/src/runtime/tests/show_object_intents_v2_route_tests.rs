@@ -306,6 +306,257 @@ async fn dynamic_http_routes_use_runtime_instance_identity_and_project_authorita
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+#[tokio::test]
+async fn dynamic_runtime_is_show_scoped_and_restores_exactly_after_show_reload() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let definition = dynamic_definition_json(19);
+    let dynamic_id = definition["id"].as_str().unwrap().to_owned();
+    let dynamic_show_id = create_seeded_show(
+        &state,
+        &app,
+        &token,
+        "Dynamic runtime reload",
+        &[("dynamic", &dynamic_id, definition)],
+    )
+    .await;
+    let target = Uuid::new_v4();
+    let (status, started) = post_show_object_intent(
+        &app,
+        &token,
+        &dynamic_show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/start"),
+        serde_json::json!({
+            "targets": [target],
+            "timing": {}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    let instance_id = started["runtime_instance_id"].as_str().unwrap();
+    for (path, value) in [("size", 0.35), ("speed", 1.5), ("phase", 72.0)] {
+        let (status, outcome) = post_show_object_intent(
+            &app,
+            &token,
+            &dynamic_show_id,
+            &format!("/api/v2/dynamic-instances/{instance_id}/{path}"),
+            serde_json::json!({"value": value}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{outcome}");
+    }
+    let before_reload = state.output.dynamic_runtime_snapshot();
+    assert_eq!(before_reload.instances.len(), 1);
+
+    let empty_show = create_show(&app, &token, "Empty runtime scope").await;
+    let empty_show_id = empty_show["id"].as_str().unwrap();
+    let opened = app
+        .clone()
+        .oneshot(open_show_request(&token, empty_show_id))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
+    assert!(
+        state.output.dynamic_runtime_snapshot().instances.is_empty(),
+        "a show without persisted Dynamic runtime must not inherit another show's instances"
+    );
+
+    let reopened = app
+        .clone()
+        .oneshot(open_show_request(&token, &dynamic_show_id))
+        .await
+        .unwrap();
+    assert_eq!(reopened.status(), StatusCode::OK);
+    assert_eq!(
+        state.output.dynamic_runtime_snapshot(),
+        before_reload,
+        "show reload restores instance identity, controllers, epoch, and local overrides exactly"
+    );
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn deleting_a_dynamic_snapshots_cue_and_playback_references_without_old_slot_recapture() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let definition_json = dynamic_definition_json(31);
+    let definition: light_dynamics::DynamicDefinition =
+        serde_json::from_value(definition_json.clone()).unwrap();
+    let dynamic_id = definition.id;
+    let fallback = light_dynamics::DynamicDefinitionSnapshot {
+        definition: Box::new(definition.clone()),
+    };
+    let reference = light_dynamics::DynamicReference {
+        dynamic_id: Some(dynamic_id),
+        last_known_pool_number: definition.pool_number,
+        embedded_fallback: fallback.clone(),
+    };
+    let fixture = light_core::FixtureId::new();
+    let instance_link = Uuid::new_v4();
+    let mut cue_list = test_cue_list();
+    cue_list.cues[0].dynamic_changes = vec![light_playback::CueDynamicChange {
+        fixture_id: fixture,
+        attribute: light_core::AttributeKey::intensity(),
+        value: light_dynamics::DynamicSemanticValue::DynamicOn {
+            instance_link,
+            dynamic: reference.clone(),
+            lane_id: definition.lanes[0].id,
+            overrides: light_dynamics::DynamicInstanceOverrides {
+                size: 1.0,
+                speed_multiplier: light_dynamics::Rational::ONE,
+                phase_offset_degrees: 0.0,
+            },
+            timing: light_dynamics::DynamicValueTiming::default(),
+        },
+        automatic_restore: false,
+    }];
+    let playback_target = light_playback::PlaybackTarget::Dynamic {
+        assignment: light_playback::DynamicPlaybackAssignment {
+            dynamic: reference,
+            revision: 1,
+            target_scope: Some(light_playback::DynamicPlaybackTargetScope::FrozenTargets {
+                targets: vec![fixture],
+            }),
+            fader_mode: light_playback::DynamicPlaybackFaderMode::SizeAndMaster,
+            priority: 0,
+            activation_override: None,
+            resume_policy: light_playback::DynamicPlaybackResumePolicy::FollowDynamic,
+            local_speed_multiplier: light_dynamics::Rational::ONE,
+            learned_duration_millis: None,
+            crossfade_non_intensity: false,
+            auto_off_at_zero: false,
+            auto_off_flash_release: false,
+            auto_off_full_control: true,
+        },
+    };
+    let playback = light_playback::PlaybackDefinition {
+        number: 1,
+        name: "Deleted Dynamic reference".into(),
+        buttons: light_playback::PlaybackDefinition::default_buttons(&playback_target),
+        button_count: 3,
+        fader: light_playback::PlaybackFaderMode::Master,
+        has_fader: true,
+        go_activates: true,
+        auto_off: false,
+        xfade_millis: 0,
+        color: "#20c997".into(),
+        flash_release: light_playback::FlashReleaseMode::ReleaseAll,
+        protect_from_swap: false,
+        presentation_icon: None,
+        presentation_image: None,
+        target: playback_target,
+    };
+    let cue_list_id = cue_list.id.0.to_string();
+    let dynamic_id_text = dynamic_id.to_string();
+    let show_id = create_seeded_show(
+        &state,
+        &app,
+        &token,
+        "Dynamic deletion references",
+        &[
+            ("dynamic", &dynamic_id_text, definition_json),
+            (
+                "cue_list",
+                &cue_list_id,
+                serde_json::to_value(cue_list).unwrap(),
+            ),
+            ("playback", "1", serde_json::to_value(playback).unwrap()),
+        ],
+    )
+    .await;
+
+    let (status, deleted) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/delete"),
+        serde_json::json!({
+            "request_id": "delete-dynamic-with-references",
+            "expected_revision": 1
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{deleted}");
+
+    let entry = state
+        .installation
+        .show(light_core::ShowId(Uuid::parse_str(&show_id).unwrap()))
+        .unwrap()
+        .unwrap();
+    let store = ActiveShowRepository::open(&entry.path).unwrap();
+    let cue_body = store
+        .object_with_portable_revision("cue_list", &cue_list_id)
+        .unwrap()
+        .1
+        .unwrap()
+        .body;
+    let playback_body = store
+        .object_with_portable_revision("playback", "1")
+        .unwrap()
+        .1
+        .unwrap()
+        .body;
+    for stored_reference in [
+        &cue_body["cues"][0]["dynamic_changes"][0]["value"]["dynamic"],
+        &playback_body["target"]["assignment"]["dynamic"],
+    ] {
+        assert!(stored_reference["dynamic_id"].is_null());
+        assert_eq!(
+            stored_reference["embedded_fallback"]["definition"]["id"],
+            dynamic_id_text
+        );
+        assert_eq!(
+            stored_reference["embedded_fallback"]["definition"]["pool_number"],
+            31
+        );
+    }
+    assert!(
+        store
+            .object_with_portable_revision("dynamic", &dynamic_id_text)
+            .unwrap()
+            .1
+            .is_none()
+    );
+    drop(store);
+
+    let replacement = dynamic_definition_json(31);
+    let (status, created) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        "/api/v2/dynamics/create",
+        serde_json::json!({
+            "request_id": "replace-deleted-dynamic-slot",
+            "definition": replacement
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    assert_ne!(created["object"]["id"], dynamic_id_text);
+    assert_eq!(created["object"]["body"]["pool_number"], 31);
+
+    let store = ActiveShowRepository::open(&entry.path).unwrap();
+    let cue_body = store
+        .object_with_portable_revision("cue_list", &cue_list_id)
+        .unwrap()
+        .1
+        .unwrap()
+        .body;
+    let playback_body = store
+        .object_with_portable_revision("playback", "1")
+        .unwrap()
+        .1
+        .unwrap()
+        .body;
+    assert!(cue_body["cues"][0]["dynamic_changes"][0]["value"]["dynamic"]["dynamic_id"].is_null());
+    assert!(playback_body["target"]["assignment"]["dynamic"]["dynamic_id"].is_null());
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
 #[test]
 fn deleting_a_dynamic_snapshots_nested_references_without_touching_other_ids() {
     let deleted = Uuid::new_v4();

@@ -168,6 +168,202 @@ fn preload_dynamic_start_stays_projected_until_go_then_installs_and_persists_run
 }
 
 #[test]
+fn startup_load_restores_persisted_dynamic_runtime_and_programmer_identity() {
+    let clock = Arc::new(ManualClock::new(fixed_test_time()));
+    let (state, data_dir) = test_state_with_clock(clock);
+    let user = state.installation.users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "dynamic-restart".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id, user.id);
+    state.sessions.insert_session(session.clone());
+    let fixture = light_core::FixtureId::new();
+    state.programming.select(session.id, [fixture]);
+    let dynamic_id = Uuid::new_v4();
+    let definition = command_test_dynamic(dynamic_id, 7);
+    let show_path = data_dir.join("shows/dynamic-restart.show");
+    let store = light_show::ShowStore::create(&show_path, "Dynamic restart")
+        .unwrap()
+        .0;
+    store
+        .put_object(
+            "dynamic",
+            &dynamic_id.to_string(),
+            &serde_json::to_value(&definition).unwrap(),
+            0,
+        )
+        .unwrap();
+    let show = state
+        .installation
+        .upsert_show(
+            "Dynamic restart",
+            &show_path.display().to_string(),
+            false,
+        )
+        .unwrap();
+    store.set_identity(show.id, &show.name, None).unwrap();
+    state.installation.set_active_show(Some(show.id)).unwrap();
+    state.active_show.replace_current(Some(show.clone()));
+    let mut engine_snapshot = light_engine::EngineSnapshot::default();
+    engine_snapshot.dynamics = vec![definition].into();
+    state.output.replace_snapshot(engine_snapshot).unwrap();
+
+    let context = operator_action_context(&session, light_application::ActionSource::Http);
+    let started = state
+        .dynamics
+        .start(
+            &context,
+            light_application::DynamicStartCommand {
+                dynamic_id,
+                targets: vec![fixture],
+                overrides: light_dynamics::DynamicInstanceOverrides {
+                    size: 0.65,
+                    speed_multiplier: light_dynamics::Rational {
+                        numerator: 3,
+                        denominator: 2,
+                    },
+                    phase_offset_degrees: 45.0,
+                },
+                timing: light_dynamics::DynamicValueTiming {
+                    fade_millis: Some(400),
+                    delay_millis: Some(100),
+                },
+            },
+            &super::dynamics_adapter::ServerDynamicsPorts {
+                state: &state,
+                session: &session,
+            },
+        )
+        .unwrap();
+    let expected_runtime = state.output.dynamic_runtime_snapshot();
+    assert_eq!(expected_runtime.instances.len(), 1);
+    assert_eq!(
+        expected_runtime.instances[0].controllers[0].id,
+        started.controller_id
+    );
+    persist_programmer(&state, &session).unwrap();
+    persist_output_runtime(&state).unwrap();
+    drop(store);
+    drop(state);
+
+    let startup = super::startup_state::StartupState::load(startup_options::StartupOptions {
+        data_dir: data_dir.clone(),
+        fixture_package_dir: None,
+        bind: "127.0.0.1:0".parse().unwrap(),
+        test_bench: true,
+        osc_bind_override: None,
+        output_bind_override: None,
+    })
+    .unwrap();
+    assert_eq!(startup.engine.snapshot().dynamics.len(), 1);
+    let persisted_runtime = startup
+        .output_runtime
+        .dynamic_runtime
+        .clone()
+        .expect("startup loads the show-scoped Dynamic runtime checkpoint");
+    assert_eq!(persisted_runtime, expected_runtime);
+    let restored_programmer = startup
+        .programmers
+        .get(session.id)
+        .expect("the persisted Programmer is restored for reconciliation");
+    assert_eq!(restored_programmer.dynamic_values.len(), 1);
+    assert!(matches!(
+        &restored_programmer.dynamic_values[0].value,
+        light_dynamics::DynamicSemanticValue::DynamicOn {
+            instance_link,
+            overrides,
+            ..
+        } if instance_link == &started.controller_id
+            && (overrides.size - 0.65).abs() < f32::EPSILON
+            && (overrides.speed_multiplier.factor() - 1.5).abs() < f64::EPSILON
+            && (overrides.phase_offset_degrees - 45.0).abs() < f32::EPSILON
+    ));
+
+    let mut restored_runtime = light_dynamics::DynamicRuntime::default();
+    restored_runtime
+        .install_definitions(startup.engine.snapshot().dynamics.iter().cloned())
+        .unwrap();
+    restored_runtime.restore_snapshot(persisted_runtime).unwrap();
+    assert_eq!(restored_runtime.snapshot(), expected_runtime);
+
+    drop(startup);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn malformed_show_runtime_is_cleared_without_discarding_valid_dynamic_definitions() {
+    let (state, data_dir) = test_state();
+    let dynamic_id = Uuid::new_v4();
+    let definition = command_test_dynamic(dynamic_id, 8);
+    let fixture = light_core::FixtureId::new();
+    let mut engine_snapshot = light_engine::EngineSnapshot::default();
+    engine_snapshot.dynamics = vec![definition].into();
+    state.output.replace_snapshot(engine_snapshot).unwrap();
+    let show = state
+        .installation
+        .upsert_show(
+            "Malformed Dynamic runtime",
+            &data_dir
+                .join("shows/malformed-dynamic-runtime.show")
+                .display()
+                .to_string(),
+            false,
+        )
+        .unwrap();
+    state.active_show.replace_current(Some(show.clone()));
+    state
+        .output
+        .start_dynamic(light_dynamics::DynamicStartRequest {
+            definition_id: dynamic_id,
+            controller: light_dynamics::DynamicController {
+                id: Uuid::new_v4(),
+                source: light_dynamics::DynamicControllerSource::Programmer {
+                    programmer_id: Uuid::new_v4(),
+                },
+                priority: 0,
+                activated_at_millis: 1_000,
+                size: 1.0,
+                speed_multiplier: 1.0,
+                phase_offset_degrees: 0.0,
+                paused: false,
+            },
+            target_scope: light_dynamics::DynamicTargetScope {
+                ordered_targets: vec![fixture],
+            },
+            stage_positions: HashMap::new(),
+            now_millis: 1_000,
+            activation_delay_millis: 0,
+            activation_duration_millis: 0,
+            activation_policy_override: None,
+            reuse_matching_targetless: false,
+        })
+        .unwrap();
+    let mut malformed = state.output.dynamic_runtime_snapshot();
+    malformed.instances[0].controllers.clear();
+
+    restore_output_runtime_for_show(
+        &state,
+        show.id,
+        PersistedOutputRuntime {
+            dynamic_runtime: Some(malformed),
+            ..Default::default()
+        },
+    );
+
+    assert!(state.output.dynamic_runtime_snapshot().instances.is_empty());
+    assert_eq!(
+        state.output.snapshot().dynamics.len(),
+        1,
+        "runtime recovery must not discard the valid portable Dynamic definition"
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn websocket_dynamic_toggle_matches_the_authoritative_target_scope() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);

@@ -73,10 +73,13 @@ pub(super) fn restore_output_runtime_for_show(
             runtime.dynamic_playbacks.clone(),
         ))
         .expect("restoring validated Dynamic Playback state is infallible");
-    if let Some(snapshot) = runtime.dynamic_runtime.clone()
-        && let Err(error) = state.output.restore_dynamic_runtime_snapshot(snapshot)
-    {
+    let snapshot = runtime.dynamic_runtime.clone().unwrap_or_default();
+    if let Err(error) = state.output.restore_dynamic_runtime_snapshot(snapshot) {
         tracing::warn!(%error, "ignoring invalid persisted Dynamic runtime");
+        state
+            .output
+            .restore_dynamic_runtime_snapshot(Default::default())
+            .expect("an empty Dynamic runtime snapshot is always valid");
     }
     state.output.restore_runtime_control(&runtime);
     state.output.clear_runtime_replay();
