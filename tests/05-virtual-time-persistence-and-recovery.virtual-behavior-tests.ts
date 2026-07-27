@@ -15,7 +15,7 @@ import {
 } from "./support/catalog";
 
 export function registerVirtualBehaviorTest(): void {
-	test("TIME-003 @api @wire › chaser and phaser phase use virtual timestamps across incremental, speed, pause, and week jumps", async ({
+	test("TIME-003 @api @wire › chaser and Dynamic phase use virtual timestamps across incremental, speed, pause, and week jumps", async ({
 		api,
 		bench,
 	}) => {
@@ -65,7 +65,7 @@ export function registerVirtualBehaviorTest(): void {
 
 		await restartPlaybackRun(api, bench, showId, [2]);
 		await bench.tick(250);
-		const phaserDirect = await visualizationLevel(
+		const dynamicDirect = await visualizationLevel(
 			api,
 			fixtures[2],
 			"intensity",
@@ -73,10 +73,10 @@ export function registerVirtualBehaviorTest(): void {
 		await restartPlaybackRun(api, bench, showId, [2]);
 		for (let index = 0; index < 10; index += 1) await bench.tick(25);
 		expect(await visualizationLevel(api, fixtures[2], "intensity")).toBeCloseTo(
-			phaserDirect,
+			dynamicDirect,
 			6,
 		);
-		expect(phaserDirect).toBeCloseTo(0.5, 6);
+		expect(dynamicDirect).toBeCloseTo(0.5, 6);
 
 		await api.playbackNumberAction(3, "button", {
 			button: 3,
@@ -84,7 +84,7 @@ export function registerVirtualBehaviorTest(): void {
 		});
 		await bench.tick(1_000);
 		expect(await visualizationLevel(api, fixtures[2], "intensity")).toBeCloseTo(
-			phaserDirect,
+			dynamicDirect,
 			6,
 		);
 		await api.playbackNumberAction(3, "button", {

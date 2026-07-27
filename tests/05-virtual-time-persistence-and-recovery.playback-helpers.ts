@@ -86,7 +86,6 @@ export async function createMatterRestartCueList(
 				fade_millis: 0,
 				delay_millis: 0,
 				trigger: { type: "manual" },
-				phasers: [],
 			},
 		],
 	});
@@ -95,7 +94,7 @@ export async function createMatterRestartCueList(
 export async function installTimeCuelists(
 	api: ApiDriver,
 	chaserFixture: string,
-	phaserFixture: string,
+	dynamicFixture: string,
 ): Promise<string> {
 	const chaserId = crypto.randomUUID();
 	await putObject(api, "cue_list", chaserId, {
@@ -117,43 +116,69 @@ export async function installTimeCuelists(
 			cue(index + 1, chaserFixture, level),
 		),
 	});
-	const phaserId = crypto.randomUUID();
-	const phaserCue = cue(1, phaserFixture, 0);
-	phaserCue.phasers = [
-		{
-			fixture_ids: [phaserFixture],
-			group_ids: [],
-			attribute: "intensity",
-			phaser: {
-				mode: "absolute",
-				steps: [
-					{ position: 0, value: 0, curve_to_next: "linear" },
-					{ position: 0.5, value: 1, curve_to_next: "linear" },
-				],
-				cycles_per_minute: 60,
-				phase_start_degrees: 0,
-				phase_end_degrees: 0,
+	const dynamicId = crypto.randomUUID();
+	const value = (level: number) => ({ type: "value", value: level });
+	const pwm = {
+		attack: 0,
+		on: 0.5,
+		decay: 0,
+		off: 0.5,
+		attack_interpolation: "linear",
+		decay_interpolation: "linear",
+	};
+	const dynamic = {
+		id: dynamicId,
+		pool_number: 1,
+		revision: 1,
+		name: "Virtual Dynamic",
+		color: null,
+		icon: null,
+		target_binding: { type: "frozen_targets", targets: [dynamicFixture] },
+		lanes: [
+			{
+				id: crypto.randomUUID(),
+				attribute: "intensity",
+				mode: "keyframes",
+				keyframes: {
+					points: [
+						{ position: 0, source: value(0), interpolation: "linear" },
+						{ position: 0.5, source: value(1), interpolation: "linear" },
+					],
+					size: 1,
+				},
+				max_min: {
+					minimum: value(0),
+					maximum: value(1),
+					function: "sinus",
+					size: 1,
+					pwm,
+				},
+				middle_amplitude: {
+					middle: { type: "current" },
+					amplitude: 0.5,
+					function: "sinus",
+					size: 1,
+					pwm,
+				},
+				speed_multiplier: { numerator: 1, denominator: 1 },
 				width: 1,
+				random_group_id: null,
 			},
+		],
+		random_groups: [],
+		phase: {
+			ordering: { type: "selection" },
+			offset_degrees: 0,
+			span_degrees: 360,
+			block_size: 1,
+			repeats: 1,
+			wings: false,
+			anchors_degrees: [],
 		},
-	];
-	await putObject(api, "cue_list", phaserId, {
-		id: phaserId,
-		name: "Virtual Phaser",
-		priority: 1,
-		mode: "sequence",
-		looped: false,
-		chaser_step_millis: 1_000,
-		speed_group: null,
-		intensity_priority_mode: "htp",
-		wrap_mode: "off",
-		restart_mode: "first_cue",
-		force_cue_timing: false,
-		disable_cue_timing: true,
-		chaser_xfade_millis: 0,
-		speed_multiplier: 1,
-		cues: [phaserCue],
-	});
+		speed: { type: "fixed", duration_millis: 1_000 },
+		default_activation: "start_now",
+	};
+	await putObject(api, "dynamic", dynamicId, dynamic);
 	await putObject(
 		api,
 		"playback",
@@ -164,7 +189,42 @@ export async function installTimeCuelists(
 		api,
 		"playback",
 		"2",
-		playback(2, phaserId, "Virtual Phaser"),
+		{
+			number: 2,
+			name: "Virtual Dynamic",
+			target: {
+				type: "dynamic",
+				assignment: {
+					dynamic: {
+						dynamic_id: dynamicId,
+						last_known_pool_number: 1,
+						embedded_fallback: { definition: dynamic },
+					},
+					revision: 1,
+					target_scope: null,
+					fader_mode: "size_and_master",
+					priority: 1,
+					activation_override: null,
+					resume_policy: "follow_dynamic",
+					local_speed_multiplier: { numerator: 1, denominator: 1 },
+					learned_duration_millis: null,
+					crossfade_non_intensity: false,
+					auto_off_at_zero: false,
+					auto_off_flash_release: false,
+					auto_off_full_control: true,
+				},
+			},
+			buttons: ["off", "pause", "flash"],
+			button_count: 3,
+			fader: "master",
+			has_fader: true,
+			go_activates: true,
+			auto_off: true,
+			xfade_millis: 0,
+			color: "#20c997",
+			flash_release: "release_all",
+			protect_from_swap: false,
+		},
 	);
 	await putObject(api, "playback", "3", {
 		number: 3,
@@ -197,7 +257,7 @@ export async function restartPlaybackRun(
 	});
 	await api.request("POST", "/api/v2/test/clock/reset", undefined, false);
 	for (const number of numbers)
-		await api.playbackNumberAction(number, "go", {});
+		await api.playbackNumberAction(number, number === 2 ? "on" : "go", {});
 }
 
 export async function playbackRuntime(
@@ -291,7 +351,6 @@ export function cue(number: number, fixtureId: string, level: number): any {
 		fade_millis: 0,
 		delay_millis: 0,
 		trigger: { type: "manual" },
-		phasers: [],
 	};
 }
 

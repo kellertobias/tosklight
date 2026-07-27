@@ -172,7 +172,6 @@ export function fixtureCue(
 		fade_millis: options.fade_millis ?? 0,
 		delay_millis: options.delay_millis ?? 0,
 		trigger: options.trigger ?? { type: "manual" },
-		phasers: [],
 	};
 }
 
@@ -194,7 +193,6 @@ export function groupCue(
 		fade_millis: options.fade_millis ?? 0,
 		delay_millis: options.delay_millis ?? 0,
 		trigger: options.trigger ?? { type: "manual" },
-		phasers: [],
 	};
 }
 

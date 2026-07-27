@@ -4,7 +4,7 @@ import { loadCanonicalCopy, putObject } from "./support/catalog";
 test("PLAYBACK-COLOR-001 @ui › runtime strengthens configured color while selection stays separate", async ({ api, bench, desk, page }) => {
   await loadCanonicalCopy(api, bench, "playback-color-001", "default-stage");
   const cueListId = crypto.randomUUID();
-  await putObject(api, "cue_list", cueListId, { id: cueListId, name: "Color Test", priority: 0, mode: "sequence", looped: false, chaser_step_millis: 1000, speed_group: null, cues: [{ id: crypto.randomUUID(), number: 1, name: "On", changes: [], group_changes: [], fade_millis: 0, delay_millis: 0, trigger: { type: "manual" }, phasers: [] }] });
+  await putObject(api, "cue_list", cueListId, { id: cueListId, name: "Color Test", priority: 0, mode: "sequence", looped: false, chaser_step_millis: 1000, speed_group: null, cues: [{ id: crypto.randomUUID(), number: 1, name: "On", changes: [], group_changes: [], fade_millis: 0, delay_millis: 0, trigger: { type: "manual" } }] });
   await putObject(api, "playback", "41", { number: 41, name: "Color Test", target: { type: "cue_list", cue_list_id: cueListId }, buttons: ["go_minus", "go", "flash"], button_count: 3, fader: "master", has_fader: true, go_activates: true, auto_off: true, xfade_millis: 0, color: "#f6e58d", flash_release: "release_all", protect_from_swap: false });
   await putObject(api, "playback_page", "1", { number: 1, name: "Main", slots: { "1": 41 } });
   await desk.open(api.baseUrl);

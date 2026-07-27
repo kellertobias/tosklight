@@ -99,7 +99,6 @@ export async function createMatterAcceptanceCueList(
 				fade_millis: 0,
 				delay_millis: 0,
 				trigger: { type: "manual" },
-				phasers: [],
 			},
 		],
 	});

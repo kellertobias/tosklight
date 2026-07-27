@@ -303,7 +303,6 @@ export class BrowserMoveInBlack {
 			fade_millis: fadeMillis,
 			delay_millis: 0,
 			trigger: { type: "manual" as const },
-			phasers: [],
 		});
 		const body: CueList = {
 			id: cueListId,

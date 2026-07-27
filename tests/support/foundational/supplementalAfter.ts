@@ -68,7 +68,6 @@ async function createCuePlayback(api: ApiDriver, number: number) {
 				fade_millis: 0,
 				delay_millis: 0,
 				trigger: { type: "manual" },
-				phasers: [],
 				group_changes: [],
 			},
 		],

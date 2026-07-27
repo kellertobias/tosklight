@@ -118,7 +118,6 @@ async function installFadingCuelist(
           },
         ],
         group_changes: [],
-        phasers: [],
       },
     ],
   });

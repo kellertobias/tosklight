@@ -400,7 +400,6 @@ function cue(number: number, name: string, groupLevels: Array<[string, number]>)
     fade_millis: 1500,
     delay_millis: 0,
     trigger: { type: "manual" },
-    phasers: [],
     group_changes: groupLevels.map(([group_id, value]) => ({
       group_id,
       attribute: "intensity",

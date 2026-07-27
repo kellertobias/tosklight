@@ -996,7 +996,6 @@ async function installPlayback(api: ApiDriver): Promise<{ firstCueListId: string
         fade_millis: 0,
         delay_millis: 0,
         trigger: { type: "manual" },
-        phasers: [],
       })),
     });
   }

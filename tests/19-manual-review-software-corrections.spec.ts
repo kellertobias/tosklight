@@ -232,7 +232,6 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
           fade_millis: 1_500,
           delay_millis: 250,
           trigger: { type: "manual" },
-          phasers: [],
         },
       ],
     });

@@ -809,7 +809,6 @@ function cue(number: number, id: string, fixture: string, level: number, options
       },
     ],
     group_changes: [],
-    phasers: [],
   };
 }
 

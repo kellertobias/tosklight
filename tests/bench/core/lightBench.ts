@@ -2,7 +2,6 @@ import { spawn, type ChildProcess } from "node:child_process";
 import dgram from "node:dgram";
 import fs from "node:fs/promises";
 import net from "node:net";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ApiDriver, type Session } from "./api";
@@ -38,7 +37,8 @@ export class LightBench {
   sacn!: DmxReceiver;
 
   async start(workerIndex: number): Promise<void> {
-    this.dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `light-e2e-${workerIndex}-`));
+    await fs.mkdir(artifactPaths.tmp, { recursive: true });
+    this.dataDir = await fs.mkdtemp(path.join(artifactPaths.tmp, `light-e2e-${workerIndex}-`));
     const httpPort = await freeTcpPort();
     this.oscPort = await freeUdpPort();
     this.artnet = await DmxReceiver.bind();

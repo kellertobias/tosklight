@@ -389,11 +389,11 @@ function colorValues(red: number, green: number, blue: number) {
 function normalized(value: number) { return { kind: "normalized", value }; }
 
 function stateCue(number: number, name: string, changes: Array<[string, string, number]>) {
-  return { id: crypto.randomUUID(), number, name, cue_only: false, changes: changes.map(([fixture_id, attribute, value]) => ({ fixture_id, attribute, value: normalized(value), automatic_restore: false })), group_changes: [], fade_millis: 1_000, delay_millis: 0, trigger: { type: "manual" }, phasers: [] };
+  return { id: crypto.randomUUID(), number, name, cue_only: false, changes: changes.map(([fixture_id, attribute, value]) => ({ fixture_id, attribute, value: normalized(value), automatic_restore: false })), group_changes: [], fade_millis: 1_000, delay_millis: 0, trigger: { type: "manual" } };
 }
 
 function directCue(number: number, name: string, on: string[], off: string[]) {
-  return { id: crypto.randomUUID(), number, name, cue_only: false, changes: [...on.map((fixture_id) => ({ fixture_id, attribute: "intensity", value: normalized(1), automatic_restore: false })), ...off.map((fixture_id) => ({ fixture_id, attribute: "intensity", value: normalized(0), automatic_restore: false }))], group_changes: [], fade_millis: 0, delay_millis: 0, trigger: { type: "manual" }, phasers: [] };
+  return { id: crypto.randomUUID(), number, name, cue_only: false, changes: [...on.map((fixture_id) => ({ fixture_id, attribute: "intensity", value: normalized(1), automatic_restore: false })), ...off.map((fixture_id) => ({ fixture_id, attribute: "intensity", value: normalized(0), automatic_restore: false }))], group_changes: [], fade_millis: 0, delay_millis: 0, trigger: { type: "manual" } };
 }
 
 function colorCue(number: number, name: string, targets: string[], rgb: readonly [number, number, number]) {
@@ -402,7 +402,7 @@ function colorCue(number: number, name: string, targets: string[], rgb: readonly
     changes: targets.flatMap((fixture_id) => [
       ["color.red", rgb[0]], ["color.green", rgb[1]], ["color.blue", rgb[2]],
     ].map(([attribute, value]) => ({ fixture_id, attribute, value: normalized(value as number), automatic_restore: false }))),
-    group_changes: [], fade_millis: 0, delay_millis: 0, trigger: { type: "manual" }, phasers: [],
+    group_changes: [], fade_millis: 0, delay_millis: 0, trigger: { type: "manual" },
   };
 }
 

@@ -199,7 +199,6 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
       fade_millis: 0,
       delay_millis: 0,
       trigger: { type: "manual" },
-      phasers: [],
     };
     const withDarkChain = { ...initial.body, cues: [...initial.body.cues.slice(0, 2), extraDarkCue, initial.body.cues[2]] };
     await putObject(api, "cue_list", cueListId, withDarkChain, initial.revision);
@@ -251,7 +250,7 @@ async function installMibCuelist(api: any, enabledFixture: string, disabledFixtu
   const cueListId = crypto.randomUUID();
   const cue = (number: number, changes: any[], fade_millis = 0) => ({
     id: crypto.randomUUID(), number, name: `Cue ${number}`, changes, group_changes: [],
-    fade_millis, delay_millis: 0, trigger: { type: "manual" }, phasers: [],
+    fade_millis, delay_millis: 0, trigger: { type: "manual" },
   });
   const set = (fixture_id: string, attribute: string, value: number, fade_millis?: number) => ({
     fixture_id, attribute, value: { kind: "normalized", value }, automatic_restore: false,
@@ -316,7 +315,6 @@ async function installIntensityBlocker(api: any, fixtureId: string): Promise<str
       fade_millis: 0,
       delay_millis: 0,
       trigger: { type: "manual" },
-      phasers: [],
     }],
   });
   await putObject(api, "playback", "2", {

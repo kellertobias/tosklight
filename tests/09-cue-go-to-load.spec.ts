@@ -276,7 +276,6 @@ function cue(number: number, id: string, fixture: string, level: number) {
 		fade_millis: 3_000,
 		delay_millis: 0,
 		trigger: { type: "manual" },
-		phasers: [],
 		group_changes: [],
 		changes: [
 			{

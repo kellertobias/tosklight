@@ -12,7 +12,7 @@ test("CUELIST-LAYOUT-001 @ui › compact Cue settings stay inline while Cuelist 
     looped: false,
     chaser_step_millis: 1000,
     speed_group: null,
-    cues: [1, 2].map((number) => ({ id: crypto.randomUUID(), number, name: `Cue ${number}`, changes: [], group_changes: [], fade_millis: 0, delay_millis: 0, trigger: { type: "manual" }, phasers: [] })),
+    cues: [1, 2].map((number) => ({ id: crypto.randomUUID(), number, name: `Cue ${number}`, changes: [], group_changes: [], fade_millis: 0, delay_millis: 0, trigger: { type: "manual" } })),
   });
   await putObject(api, "playback", "1", { number: 1, name: "Layout Sequence", target: { type: "cue_list", cue_list_id: cueListId }, buttons: ["go_minus", "go", "flash"], button_count: 3, fader: "master", has_fader: true, go_activates: true, auto_off: true, xfade_millis: 0, color: "#20c997", flash_release: "release_all", protect_from_swap: false });
   await putObject(api, "playback_page", "1", { number: 1, name: "Main", slots: { "1": 1 } });

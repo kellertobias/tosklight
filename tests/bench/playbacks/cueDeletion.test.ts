@@ -373,7 +373,6 @@ function cue(id: string, number: number) {
 		trigger: { type: "manual" },
 		changes: [],
 		group_changes: [],
-		phasers: [],
 	};
 }
 

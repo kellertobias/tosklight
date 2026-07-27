@@ -162,7 +162,6 @@ export async function createCueList(
 			fade_millis: fadeMillis,
 			delay_millis: delayMillis,
 			trigger: { type: "manual" },
-			phasers: [],
 		})),
 	});
 	return id;
