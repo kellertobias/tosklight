@@ -76,6 +76,11 @@ fn fix_at_command_uses_first_class_fat_timing_and_the_final_contribution_path() 
         contribution.value,
         light_core::AttributeValue::Normalized(0.4)
     );
+    assert_eq!(
+        contribution.merge_mode,
+        light_core::MergeMode::Htp,
+        "a lone Intensity FAT must arbitrate like an ordinary static Programmer value"
+    );
 
     let _ = std::fs::remove_dir_all(data_dir);
 }

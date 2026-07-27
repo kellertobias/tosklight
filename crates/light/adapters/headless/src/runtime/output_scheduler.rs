@@ -403,6 +403,7 @@ fn dynamic_contributions_with_auto_off(
         changed_at_millis: u64,
         stable_order: u128,
         activation_mix: f32,
+        dynamic: bool,
     }
     let mut candidates = HashMap::<(FixtureId, AttributeKey), Vec<Candidate>>::new();
     let mut consider = |key: (FixtureId, AttributeKey), candidate: Candidate| {
@@ -443,6 +444,7 @@ fn dynamic_contributions_with_auto_off(
                 changed_at_millis: sample.activated_at_millis,
                 stable_order: sample.controller_id.as_u128(),
                 activation_mix: sample.activation_mix,
+                dynamic: true,
             },
         );
     }
@@ -472,6 +474,7 @@ fn dynamic_contributions_with_auto_off(
                     timing,
                     now_millis,
                 ),
+                dynamic: false,
             },
         );
     }
@@ -497,6 +500,7 @@ fn dynamic_contributions_with_auto_off(
                     timing,
                     now_millis,
                 ),
+                dynamic: false,
             },
         );
     }
@@ -513,6 +517,7 @@ fn dynamic_contributions_with_auto_off(
                         candidate.stable_order,
                     )
                 });
+                let has_dynamic = stack.iter().any(|candidate| candidate.dynamic);
                 let mut resolved = sources
                     .values
                     .get(&(fixture_id, attribute.clone()))
@@ -528,6 +533,11 @@ fn dynamic_contributions_with_auto_off(
                 let candidate = stack
                     .last()
                     .expect("one Dynamic/FAT candidate exists for every stack");
+                let merge_mode = if attribute.is_intensity() && !has_dynamic {
+                    MergeMode::Htp
+                } else {
+                    MergeMode::Ltp
+                };
                 ContributionSample::independent(TimedValue {
                     fixture_id,
                     attribute,
@@ -538,7 +548,7 @@ fn dynamic_contributions_with_auto_off(
                     )
                     .unwrap_or(now),
                     programmer_order: candidate.stable_order.min(u128::from(u64::MAX)) as u64,
-                    merge_mode: MergeMode::Ltp,
+                    merge_mode,
                     fade: false,
                     fade_millis: None,
                     delay_millis: None,
