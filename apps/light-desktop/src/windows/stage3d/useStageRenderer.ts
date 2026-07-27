@@ -36,10 +36,9 @@ export function useStageRenderer({
 		if (!container) return;
 		const renderer = new THREE.WebGLRenderer({
 			antialias: true,
-			preserveDrawingBuffer: true,
 		});
 		frontendPerformanceDiagnostics.recordStageRendererCreated();
-		renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+		renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
 		renderer.outputColorSpace = THREE.SRGBColorSpace;
 		container.replaceChildren(renderer.domElement);
 		const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
@@ -47,37 +46,11 @@ export function useStageRenderer({
 		controls.enableDamping = true;
 		cameraRef.current = camera;
 		controlsRef.current = controls;
-		const rememberCamera = () => cameraTargetRef.current.copy(controls.target);
-		const publishCamera = () => {
-			const offset = camera.position.clone().sub(controls.target);
-			dispatch({
-				type: "SET_STAGE_NAVIGATION",
-				zoom: 12 / Math.max(2, offset.length()),
-				orbitX: THREE.MathUtils.radToDeg(Math.atan2(offset.x, offset.z)),
-				orbitY:
-					THREE.MathUtils.radToDeg(Math.asin(offset.y / offset.length())) - 18,
-			});
-		};
-		controls.addEventListener("change", rememberCamera);
-		controls.addEventListener("end", publishCamera);
-		const unbindPointer = bindStagePointerInteraction(
-			renderer,
-			camera,
-			controller,
-		);
-		const resize = () => {
-			const { width, height } = container.getBoundingClientRect();
-			renderer.setSize(width, height, false);
-			camera.aspect = width / Math.max(height, 1);
-			camera.updateProjectionMatrix();
-		};
-		const observer = new ResizeObserver(resize);
-		observer.observe(container);
-		resize();
-		let frame = 0;
-		const animate = () => {
+		let frame: number | null = null;
+		const render = () => {
+			frame = null;
 			frontendPerformanceDiagnostics.recordStageRafCallback();
-			controls.update();
+			const controlsChanged = controls.update();
 			if (controller.sceneRef.current) {
 				const startedAt = performance.now();
 				renderer.render(controller.sceneRef.current, camera);
@@ -93,11 +66,49 @@ export function useStageRenderer({
 					textures: renderer.info.memory.textures,
 				});
 			}
-			frame = requestAnimationFrame(animate);
+			if (controlsChanged && frame === null)
+				frame = requestAnimationFrame(render);
 		};
-		animate();
+		const requestRender = () => {
+			if (frame === null) frame = requestAnimationFrame(render);
+		};
+		const rememberCamera = () => {
+			cameraTargetRef.current.copy(controls.target);
+			requestRender();
+		};
+		const publishCamera = () => {
+			const offset = camera.position.clone().sub(controls.target);
+			dispatch({
+				type: "SET_STAGE_NAVIGATION",
+				zoom: 12 / Math.max(2, offset.length()),
+				orbitX: THREE.MathUtils.radToDeg(Math.atan2(offset.x, offset.z)),
+				orbitY:
+					THREE.MathUtils.radToDeg(Math.asin(offset.y / offset.length())) - 18,
+			});
+		};
+		controls.addEventListener("change", rememberCamera);
+		controls.addEventListener("end", publishCamera);
+		controller.invalidateRef.current = requestRender;
+		const unbindPointer = bindStagePointerInteraction(
+			renderer,
+			camera,
+			controller,
+		);
+		const resize = () => {
+			const { width, height } = container.getBoundingClientRect();
+			renderer.setSize(width, height, false);
+			camera.aspect = width / Math.max(height, 1);
+			camera.updateProjectionMatrix();
+			requestRender();
+		};
+		const observer = new ResizeObserver(resize);
+		observer.observe(container);
+		resize();
+		requestRender();
 		return () => {
-			cancelAnimationFrame(frame);
+			if (frame !== null) cancelAnimationFrame(frame);
+			if (controller.invalidateRef.current === requestRender)
+				controller.invalidateRef.current = null;
 			observer.disconnect();
 			controls.dispose();
 			controls.removeEventListener("change", rememberCamera);
@@ -150,6 +161,8 @@ export function useStageCamera({
 			activeControls.target.copy(cameraTarget.current);
 		}
 		activeControls.update();
+		// OrbitControls emits "change" when this alters the camera, which invalidates
+		// the demand-driven renderer through the listener installed above.
 	}, [
 		camera,
 		cameraTarget,

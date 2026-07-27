@@ -111,7 +111,7 @@ function createFallbackVolume(
 	geometry: THREE.BufferGeometry,
 	state: FallbackRenderState,
 ) {
-	return new THREE.Mesh(
+	const volume = new THREE.Mesh(
 		geometry,
 		new THREE.MeshBasicMaterial({
 			color: state.color,
@@ -122,6 +122,8 @@ function createFallbackVolume(
 			blending: THREE.AdditiveBlending,
 		}),
 	);
+	volume.name = "beam-volume";
+	return volume;
 }
 
 function addBeamSource(beam: THREE.Group, state: FallbackRenderState) {
@@ -163,6 +165,7 @@ function createBeamOutline(
 		new THREE.EdgesGeometry(geometry, 28),
 		guideMaterial(state),
 	);
+	outline.name = "beam-outline";
 	if (state.intensity <= 0.001) outline.computeLineDistances();
 	return outline;
 }
@@ -253,12 +256,22 @@ function addFallbackBeamVisuals(
 	const drawLines =
 		active &&
 		(renderQuality === "lines_only" || renderQuality === "lines_and_beams");
-	if (drawBeams) beam.add(createFallbackVolume(cone, state));
-	if (drawLines) {
-		beam.add(createBeamOutline(cone, state));
-		beam.add(createBeamCenter(state));
+	if (renderQuality !== "lines_only") {
+		const volume = createFallbackVolume(cone, state);
+		volume.visible = drawBeams;
+		beam.add(volume);
 	}
-	if (!active && showBeamGuides) beam.add(createBeamCenter(state));
+	if (renderQuality === "lines_only" || renderQuality === "lines_and_beams") {
+		const visibleState = { ...state, intensity: Math.max(state.intensity, 1) };
+		const outline = createBeamOutline(cone, visibleState);
+		const center = createBeamCenter(visibleState);
+		outline.visible = drawLines;
+		center.visible = drawLines;
+		beam.add(outline, center);
+	}
+	const guide = createBeamCenter({ ...state, intensity: 0 });
+	guide.visible = !active && showBeamGuides;
+	beam.add(guide);
 	if (drawBeams) addGoboSpokes(beam, fixture, attributes, state);
 }
 
@@ -319,4 +332,87 @@ export function mountFallbackFixture(
 		beamAtRoot,
 	);
 	beamParent.add(beam);
+}
+
+function updateBuiltInSource(source: THREE.Mesh, state: FallbackRenderState) {
+	const level = THREE.MathUtils.clamp(state.intensity, 0, 1);
+	const visible = new THREE.Color(0x485158).lerp(
+		state.color
+			.clone()
+			.lerp(new THREE.Color(0xffffff), 0.82)
+			.multiplyScalar(2.98),
+		level,
+	);
+	const material = source.material as THREE.Material & {
+		color?: THREE.Color;
+	};
+	material.color?.copy(visible);
+	material.needsUpdate = true;
+	source.userData.active = level > 0.001;
+}
+
+export function updateFallbackFixture(
+	root: THREE.Object3D,
+	item: Stage3dFixture,
+	attributes: FixtureAttributeValues,
+	state: FallbackRenderState,
+	showBeamGuides: boolean,
+	renderQuality: StageRenderQuality,
+) {
+	const yoke = root.getObjectByName("centered-rotating-yoke");
+	if (yoke) yoke.rotation.y = state.pan;
+	const head = root.getObjectByName("tilting-head");
+	if (head) head.rotation.x = state.tilt;
+	const scannerPan = root.getObjectByName("scanner-pan");
+	if (scannerPan) scannerPan.rotation.y = state.pan;
+	const scannerTilt = root.getObjectByName("scanner-tilt");
+	if (scannerTilt) scannerTilt.rotation.x = Math.PI / 4 + state.tilt / 2;
+	const scannerBeam = root.getObjectByName("scanner-beam-mount");
+	if (scannerBeam) scannerBeam.rotation.x = Math.PI / 2 - state.tilt;
+	root.traverse((object) => {
+		if (
+			object.name.startsWith("light-emitting-surface") &&
+			object instanceof THREE.Mesh
+		)
+			updateBuiltInSource(object, state);
+	});
+	const beam = root.getObjectByName("fallback-beam");
+	if (!(beam instanceof THREE.Group)) return;
+	if (beam.parent === root) orientRootBeam(beam, state);
+	const previousRadius = Number(beam.userData.stageBeamRadius) || state.radius;
+	const radiusScale = state.radius / Math.max(previousRadius, 1e-6);
+	beam.userData.stageBeamActive = state.intensity > 0.001;
+	beam.userData.stageBeamColor = `#${state.color.getHexString()}`;
+	beam.userData.stageBeamRadius = state.radius;
+	const active = state.intensity > 0.001;
+	const drawBeams = active && renderQuality !== "lines_only";
+	const drawLines =
+		active &&
+		(renderQuality === "lines_only" || renderQuality === "lines_and_beams");
+	for (const object of beam.children) {
+		if (object.name === "beam-volume") {
+			object.visible = drawBeams;
+			object.scale.x *= radiusScale;
+			object.scale.z *= radiusScale;
+			if (object instanceof THREE.Mesh) {
+				const material = object.material as THREE.MeshBasicMaterial;
+				material.color.copy(state.color);
+				material.opacity = state.intensity * (0.035 + state.focus * 0.055);
+			}
+		}
+		if (object.name === "beam-outline" || object.name === "beam-centerline") {
+			object.visible = drawLines;
+			if (object.name === "beam-outline") {
+				object.scale.x *= radiusScale;
+				object.scale.z *= radiusScale;
+			}
+			const material = (object as THREE.Line)
+				.material as THREE.LineBasicMaterial;
+			material.color.copy(state.color);
+			material.opacity = 0.35 + state.intensity * 0.5;
+		}
+		if (object.name === "beam-direction-guide")
+			object.visible =
+				!active && fallbackEmitterIsDirectional(item.fixture) && showBeamGuides;
+	}
 }

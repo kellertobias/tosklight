@@ -13,7 +13,7 @@ import {
 	normalized,
 	resolvedColor,
 } from "./attributeValues";
-import { buildGeometryBeam } from "./emitterGeometry";
+import { buildGeometryBeam, updateGeometryBeam } from "./emitterGeometry";
 import { addSelectionOutline, millimetres } from "./sceneObjects";
 import type { FixtureAttributeValues, FixtureValuesById } from "./types";
 
@@ -248,6 +248,51 @@ export function buildFixtureProfileGeometry(options: ProfileGeometryOptions) {
 	mountEmitters(options, nodes, root);
 	if (options.selected) addSelectionOutline(root);
 	return root;
+}
+
+export function updateFixtureProfileGeometry(
+	root: THREE.Object3D,
+	options: ProfileGeometryOptions,
+) {
+	const relatedHeads = relatedHeadsByNode(options.mode.geometry);
+	for (const node of options.mode.geometry.nodes) {
+		const group = root.getObjectByName(`geometry-node:${node.id}`);
+		if (!(group instanceof THREE.Group)) continue;
+		const translation = millimetres(node.transform.translation);
+		const rotation = { ...node.transform.rotation_degrees };
+		applyNodeMotion(
+			node,
+			attributesForNode(options, relatedHeads.get(node.id) ?? new Set()),
+			translation,
+			rotation,
+		);
+		const pivot = millimetres(node.pivot);
+		group.position.copy(translation).add(pivot);
+		group.rotation.set(
+			THREE.MathUtils.degToRad(rotation.x),
+			THREE.MathUtils.degToRad(rotation.y),
+			THREE.MathUtils.degToRad(rotation.z),
+		);
+	}
+	for (const emitter of options.mode.geometry.emitters) {
+		const group = root.getObjectByName(`geometry-emitter:${emitter.id}`);
+		if (!(group instanceof THREE.Group)) continue;
+		const attributes = attributesForHead(
+			options.fixture,
+			options.mode,
+			emitter.head_id,
+			options.byFixture,
+		);
+		updateGeometryBeam(
+			group,
+			emitter,
+			attributes,
+			emitterIntensity(options, emitter, attributes),
+			resolvedColor(attributes.get("color"), attributes),
+			options.showBeamGuides,
+			options.renderQuality,
+		);
+	}
 }
 
 function previewFixture() {

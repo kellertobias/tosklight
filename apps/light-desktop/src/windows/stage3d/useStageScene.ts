@@ -13,6 +13,7 @@ import type { VisualizationSnapshot } from "../../api/types";
 import { frontendPerformanceDiagnostics } from "../../features/frontendWarmup/diagnostics";
 import type { StageRenderQuality } from "../../types";
 import {
+	applyStageVisualization,
 	buildStageScene,
 	disposeScene,
 	mountFixtureModel,
@@ -29,6 +30,7 @@ export type StageSceneController = {
 	latestVisualizationRef: MutableRefObject<VisualizationSnapshot | null>;
 	interactingRef: MutableRefObject<boolean>;
 	callbacksRef: MutableRefObject<Stage3dCallbacks>;
+	invalidateRef: MutableRefObject<(() => void) | null>;
 	setRenderVisualization: Dispatch<
 		SetStateAction<VisualizationSnapshot | null>
 	>;
@@ -152,6 +154,7 @@ export function useStageScene({
 	const latestVisualizationRef = useRef(visualization);
 	const interactingRef = useRef(false);
 	const callbacksRef = useRef(callbacks);
+	const invalidateRef = useRef<(() => void) | null>(null);
 	const [renderVisualization, setRenderVisualization] = useState(visualization);
 	callbacksRef.current = callbacks;
 
@@ -217,6 +220,7 @@ export function useStageScene({
 		);
 		sceneRef.current = next.scene;
 		fixtureObjectsRef.current = next.fixtureObjects;
+		invalidateRef.current?.();
 		if (previousScene) {
 			disposeScene(previousScene);
 			frontendPerformanceDiagnostics.recordStageSceneDisposal();
@@ -224,7 +228,6 @@ export function useStageScene({
 		return cancelModels;
 	}, [
 		fixtures,
-		renderVisualization,
 		selected,
 		virtualHighlight,
 		showSelection,
@@ -234,6 +237,25 @@ export function useStageScene({
 		environmentBrightness,
 	]);
 
+	useEffect(() => {
+		if (!sceneRef.current) return;
+		applyStageVisualization(
+			fixtures,
+			renderVisualization,
+			fixtureObjectsRef.current,
+			showBeamGuides,
+			renderQuality,
+			new Set(virtualHighlight),
+		);
+		invalidateRef.current?.();
+	}, [
+		fixtures,
+		renderVisualization,
+		showBeamGuides,
+		renderQuality,
+		virtualHighlight,
+	]);
+
 	return useMemo(
 		() => ({
 			sceneRef,
@@ -241,6 +263,7 @@ export function useStageScene({
 			latestVisualizationRef,
 			interactingRef,
 			callbacksRef,
+			invalidateRef,
 			setRenderVisualization,
 		}),
 		[],

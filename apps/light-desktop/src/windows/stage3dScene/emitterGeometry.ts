@@ -113,6 +113,7 @@ function createBeamMesh(
 		}),
 	);
 	mesh.name = name;
+	mesh.userData.stageBaseRadius = geometry.boundingSphere?.radius ?? 1;
 	return mesh;
 }
 
@@ -166,6 +167,10 @@ function createSourceSurface(context: EmitterSourceContext) {
 	);
 	source.name = "light-emitting-surface";
 	source.userData.active = context.intensity > 0.001;
+	source.userData.stageSourceRadius = Math.max(
+		0.012,
+		Math.min(0.08, radius / 18),
+	);
 	source.rotation.x = -Math.PI / 2;
 	return source;
 }
@@ -235,6 +240,7 @@ function createEmitterSource(
 	beam.userData.stageBeamColor = `#${color.getHexString()}`;
 	beam.userData.stageBeamRadius = metrics.radius;
 	beam.userData.stageBeamDistance = metrics.distance;
+	beam.userData.stageRenderQuality = context.renderQuality;
 	const cone = createConeGeometry(metrics.radius, metrics.distance);
 	const volumeOpacity =
 		intensity * (0.025 + (1 - emitter.feather) * 0.035 + metrics.focus * 0.04);
@@ -247,29 +253,187 @@ function createEmitterSource(
 		(context.renderQuality === "lines_only" ||
 			context.renderQuality === "lines_and_beams") &&
 		active;
-	if (drawBeams) {
+	if (context.renderQuality !== "lines_only") {
 		if (context.renderQuality === "improved_beams") {
-			beam.add(createImprovedBeamMesh(cone, color, intensity, metrics.focus));
-		} else {
-			beam.add(
-				createBeamMesh(cone, color, volumeOpacity, "beam-volume"),
-				createBeamMesh(
-					createConeGeometry(metrics.beamRadius, metrics.distance),
-					color,
-					intensity * (0.02 + metrics.focus * 0.045),
-					"beam-core",
-				),
+			const improved = createImprovedBeamMesh(
+				cone,
+				color,
+				intensity,
+				metrics.focus,
 			);
+			improved.visible = drawBeams;
+			beam.add(improved);
+		} else {
+			const volume = createBeamMesh(cone, color, volumeOpacity, "beam-volume");
+			const core = createBeamMesh(
+				createConeGeometry(metrics.beamRadius, metrics.distance),
+				color,
+				intensity * (0.02 + metrics.focus * 0.045),
+				"beam-core",
+			);
+			volume.visible = drawBeams;
+			core.visible = drawBeams;
+			beam.add(volume, core);
 		}
 	}
-	if (drawLines) {
-		beam.add(createBeamOutline(cone, color, intensity));
-		beam.add(createActiveCenterLine(metrics.distance, color, intensity));
+	if (
+		context.renderQuality === "lines_only" ||
+		context.renderQuality === "lines_and_beams"
+	) {
+		const outline = createBeamOutline(cone, color, Math.max(intensity, 1));
+		const center = createActiveCenterLine(
+			metrics.distance,
+			color,
+			Math.max(intensity, 1),
+		);
+		outline.visible = drawLines;
+		center.visible = drawLines;
+		beam.add(outline, center);
 	}
-	if (!active && context.showBeamGuides) {
-		beam.add(createInactiveBeamGuide(metrics.distance));
-	}
+	const guide = createInactiveBeamGuide(metrics.distance);
+	guide.visible = !active && context.showBeamGuides;
+	beam.add(guide);
 	return beam;
+}
+
+function setMaterialColor(
+	material: THREE.Material,
+	color: THREE.Color,
+	opacity: number,
+) {
+	const colored = material as THREE.Material & {
+		color?: THREE.Color;
+		opacity?: number;
+	};
+	colored.color?.copy(color);
+	if (typeof colored.opacity === "number") colored.opacity = opacity;
+	material.needsUpdate = true;
+}
+
+function updateSourceSurface(
+	source: THREE.Mesh,
+	color: THREE.Color,
+	intensity: number,
+	radius: number,
+) {
+	const active = intensity > 0.001;
+	if (source.userData.active !== active) {
+		for (const material of Array.isArray(source.material)
+			? source.material
+			: [source.material])
+			material.dispose();
+		source.material = emitterSurfaceMaterial(color, intensity);
+	}
+	source.userData.active = active;
+	const previousRadius = Number(source.userData.stageSourceRadius) || radius;
+	const nextRadius = Math.max(0.012, Math.min(0.08, radius / 18));
+	source.scale.setScalar(nextRadius / Math.max(previousRadius, 1e-6));
+	source.userData.stageSourceRadius = nextRadius;
+	if (active) {
+		setMaterialColor(
+			source.material as THREE.Material,
+			color.clone().lerp(new THREE.Color(0xffffff), 0.75).multiplyScalar(2.3),
+			1,
+		);
+	} else {
+		setMaterialColor(
+			source.material as THREE.Material,
+			new THREE.Color(0x56616a),
+			1,
+		);
+	}
+}
+
+function updateSourceBeam(
+	source: THREE.Object3D,
+	context: EmitterSourceContext,
+) {
+	const { intensity, color, metrics, renderQuality } = context;
+	const active = intensity > 0.001;
+	source.userData.stageBeamActive = active;
+	source.userData.stageBeamColor = `#${color.getHexString()}`;
+	const previousRadius =
+		Number(source.userData.stageBeamRadius) || metrics.radius;
+	const radiusScale = metrics.radius / Math.max(previousRadius, 1e-6);
+	source.userData.stageBeamRadius = metrics.radius;
+	source.userData.stageBeamDistance = metrics.distance;
+	const surface = source.getObjectByName("light-emitting-surface");
+	if (surface instanceof THREE.Mesh)
+		updateSourceSurface(surface, color, intensity, metrics.radius);
+	const drawBeams = active && renderQuality !== "lines_only";
+	const drawLines =
+		active &&
+		(renderQuality === "lines_only" || renderQuality === "lines_and_beams");
+	for (const object of source.children) {
+		if (
+			object.name === "beam-volume" ||
+			object.name === "beam-core" ||
+			object.name === "beam-improved-volume"
+		) {
+			object.visible = drawBeams;
+			object.scale.x *= radiusScale;
+			object.scale.z *= radiusScale;
+			if (object instanceof THREE.Mesh) {
+				if (object.material instanceof THREE.ShaderMaterial) {
+					object.material.uniforms.beamColor.value.copy(color);
+					object.material.uniforms.beamOpacity.value =
+						intensity * (0.045 + metrics.focus * 0.055);
+				} else {
+					setMaterialColor(
+						object.material as THREE.Material,
+						color,
+						object.name === "beam-core"
+							? intensity * (0.02 + metrics.focus * 0.045)
+							: intensity *
+									(0.025 +
+										(1 - context.emitter.feather) * 0.035 +
+										metrics.focus * 0.04),
+					);
+				}
+			}
+		}
+		if (object.name === "beam-outline" || object.name === "beam-centerline") {
+			object.visible = drawLines;
+			if (object.name === "beam-outline") {
+				object.scale.x *= radiusScale;
+				object.scale.z *= radiusScale;
+			}
+			const line = object as THREE.Line;
+			setMaterialColor(
+				line.material as THREE.Material,
+				color,
+				0.35 + intensity * 0.5,
+			);
+		}
+		if (object.name === "beam-direction-guide")
+			object.visible = !active && context.showBeamGuides;
+	}
+}
+
+export function updateGeometryBeam(
+	group: THREE.Group,
+	emitter: GeometryEmitter,
+	attributes: FixtureAttributeValues,
+	intensity: number,
+	color: THREE.Color,
+	showBeamGuides: boolean,
+	renderQuality: StageRenderQuality,
+) {
+	const metrics = resolveBeamMetrics(emitter, attributes);
+	group.userData.beamAngleDegrees = metrics.beamAngle;
+	group.userData.fieldAngleDegrees = metrics.fieldAngle;
+	group.userData.focus = metrics.focus;
+	group.userData.intensity = intensity;
+	group.userData.color = `#${color.getHexString()}`;
+	const context = {
+		emitter,
+		color,
+		intensity,
+		metrics,
+		showBeamGuides,
+		renderQuality,
+	};
+	for (const source of group.children) updateSourceBeam(source, context);
 }
 
 function createActiveCenterLine(

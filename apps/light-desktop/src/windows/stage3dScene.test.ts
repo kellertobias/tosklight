@@ -14,6 +14,7 @@ import {
 	movingLightTiltRadians,
 } from "./builtInStageModels";
 import {
+	applyStageVisualization,
 	buildStageScene,
 	cueVisualization,
 	fallbackEmitterIsDirectional,
@@ -30,6 +31,84 @@ const fixture = (device_type: string, name: string) =>
 	}) as PatchedFixture;
 
 describe("3D stage presentation and cue state", () => {
+	it("applies routine fallback values without replacing retained scene resources", () => {
+		const mover = fixture("moving wash", "A7 LED Wash");
+		const fixtures = [
+			{
+				fixture: mover,
+				index: 0,
+				position: {
+					x: 0,
+					y: 0,
+					z: 3,
+					rotationX: 0,
+					rotationY: 0,
+					rotationZ: 0,
+				},
+			},
+		];
+		const snapshot = (
+			intensity: number,
+			pan: number,
+			tilt: number,
+			zoom: number,
+		): VisualizationSnapshot => ({
+			revision: 1,
+			generated_at: "",
+			grand_master: 1,
+			blackout: false,
+			values: [
+				{
+					fixture_id: "fixture",
+					attribute: "intensity",
+					value: { kind: "normalized", value: intensity },
+				},
+				{
+					fixture_id: "fixture",
+					attribute: "pan",
+					value: { kind: "normalized", value: pan },
+				},
+				{
+					fixture_id: "fixture",
+					attribute: "tilt",
+					value: { kind: "normalized", value: tilt },
+				},
+				{
+					fixture_id: "fixture",
+					attribute: "zoom",
+					value: { kind: "normalized", value: zoom },
+				},
+			],
+		});
+		const built = buildStageScene(fixtures, snapshot(0.2, 0.25, 0.25, 0.2));
+		const scene = built.scene;
+		const root = built.fixtureObjects.get("fixture");
+		const yoke = scene.getObjectByName("centered-rotating-yoke");
+		const volume = scene.getObjectByName("beam-volume") as THREE.Mesh;
+		const material = volume.material as THREE.MeshBasicMaterial;
+		const geometry = volume.geometry;
+		const footprint = scene.getObjectByName("beam-ground-footprint");
+		const previousOpacity = material.opacity;
+
+		applyStageVisualization(
+			fixtures,
+			snapshot(0.8, 0.75, 0.75, 0.8),
+			built.fixtureObjects,
+			true,
+			"lines_and_beams",
+		);
+
+		expect(built.scene).toBe(scene);
+		expect(built.fixtureObjects.get("fixture")).toBe(root);
+		expect(scene.getObjectByName("centered-rotating-yoke")).toBe(yoke);
+		expect(scene.getObjectByName("beam-volume")).toBe(volume);
+		expect(volume.geometry).toBe(geometry);
+		expect(volume.material).toBe(material);
+		expect(scene.getObjectByName("beam-ground-footprint")).toBe(footprint);
+		expect(material.opacity).toBeGreaterThan(previousOpacity);
+		expect(yoke?.rotation.y).toBeCloseTo(Math.PI / 2);
+	});
+
 	it("can omit the floor plane and grid from the scene", () => {
 		const visible = buildStageScene([], null);
 		expect(visible.scene.getObjectByName("stage-floor")).toBeTruthy();
@@ -900,9 +979,12 @@ describe("built-in direction guides and external models", () => {
 			true,
 			false,
 		);
-		expect(
-			hidden.scene.getObjectByName("beam-direction-guide"),
-		).toBeUndefined();
+		const hiddenGuides: THREE.Object3D[] = [];
+		hidden.scene.traverse((object) => {
+			if (object.name === "beam-direction-guide") hiddenGuides.push(object);
+		});
+		expect(hiddenGuides).toHaveLength(3);
+		expect(hiddenGuides.every((guide) => !guide.visible)).toBe(true);
 	});
 
 	it("keeps an inactive emitter surface visible when an external fixture model is mounted", () => {

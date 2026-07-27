@@ -6,8 +6,12 @@ import {
 	createFixtureRoot,
 	fallbackRenderState,
 	mountFallbackFixture,
+	updateFallbackFixture,
 } from "./fallbackFixture";
-import { buildFixtureProfileGeometry } from "./profileGeometry";
+import {
+	buildFixtureProfileGeometry,
+	updateFixtureProfileGeometry,
+} from "./profileGeometry";
 import type { Stage3dFixture, StageSceneContext } from "./types";
 
 function buildStageFixture(item: Stage3dFixture, context: StageSceneContext) {
@@ -101,6 +105,82 @@ function createSceneContext(
 	};
 }
 
+function updateGroundFootprint(
+	footprint: THREE.LineLoop,
+	beam: THREE.Object3D,
+) {
+	const active = beam.userData.stageBeamActive === true;
+	footprint.visible = active;
+	if (!active) return;
+	const origin = beam.getWorldPosition(new THREE.Vector3());
+	const direction = new THREE.Vector3(0, -1, 0)
+		.applyQuaternion(beam.getWorldQuaternion(new THREE.Quaternion()))
+		.normalize();
+	if (direction.y >= -0.001) {
+		footprint.visible = false;
+		return;
+	}
+	const distanceToGround = -origin.y / direction.y;
+	if (distanceToGround <= 0) {
+		footprint.visible = false;
+		return;
+	}
+	const referenceRadius = Number(beam.userData.stageBeamRadius);
+	const referenceDistance = Number(beam.userData.stageBeamDistance);
+	if (
+		!Number.isFinite(referenceRadius) ||
+		!Number.isFinite(referenceDistance) ||
+		referenceDistance <= 0
+	) {
+		footprint.visible = false;
+		return;
+	}
+	const radius = (referenceRadius / referenceDistance) * distanceToGround;
+	const along = new THREE.Vector3(direction.x, 0, direction.z);
+	if (along.lengthSq() < 1e-8) along.set(0, 0, 1);
+	else along.normalize();
+	const across = new THREE.Vector3(-along.z, 0, along.x);
+	const center = origin.clone().addScaledVector(direction, distanceToGround);
+	center.y = 0.006;
+	const alongRadius = Math.min(
+		radius / Math.max(0.08, Math.abs(direction.y)),
+		radius * 12,
+	);
+	const position = footprint.geometry.getAttribute(
+		"position",
+	) as THREE.BufferAttribute;
+	for (let index = 0; index < 49; index++) {
+		const angle = (index / 48) * Math.PI * 2;
+		const point = center
+			.clone()
+			.addScaledVector(along, Math.cos(angle) * alongRadius)
+			.addScaledVector(across, Math.sin(angle) * radius);
+		position.setXYZ(index, point.x, point.y, point.z);
+	}
+	position.needsUpdate = true;
+	footprint.geometry.computeBoundingSphere();
+	(footprint.material as THREE.LineBasicMaterial).color.set(
+		String(beam.userData.stageBeamColor ?? "#ffffff"),
+	);
+}
+
+function refreshGroundFootprints(scene: THREE.Scene) {
+	scene.updateMatrixWorld(true);
+	const footprints = new Map<string, THREE.LineLoop>();
+	scene.traverse((object) => {
+		if (
+			object.name === "beam-ground-footprint" &&
+			object instanceof THREE.LineLoop
+		)
+			footprints.set(String(object.userData.stageBeamSource), object);
+	});
+	scene.traverse((beam) => {
+		if (beam.userData.stageDirectionalBeam !== true) return;
+		const footprint = footprints.get(beam.uuid);
+		if (footprint) updateGroundFootprint(footprint, beam);
+	});
+}
+
 function addGroundFootprints(
 	scene: THREE.Scene,
 	renderQuality: StageRenderQuality,
@@ -110,52 +190,16 @@ function addGroundFootprints(
 	scene.updateMatrixWorld(true);
 	const beams: THREE.Object3D[] = [];
 	scene.traverse((object) => {
-		if (
-			object.userData.stageDirectionalBeam === true &&
-			object.userData.stageBeamActive === true
-		)
-			beams.push(object);
+		if (object.userData.stageDirectionalBeam === true) beams.push(object);
 	});
 	for (const beam of beams) {
-		const origin = beam.getWorldPosition(new THREE.Vector3());
-		const direction = new THREE.Vector3(0, -1, 0)
-			.applyQuaternion(beam.getWorldQuaternion(new THREE.Quaternion()))
-			.normalize();
-		if (direction.y >= -0.001) continue;
-		const distanceToGround = -origin.y / direction.y;
-		if (distanceToGround <= 0) continue;
-		const referenceRadius = Number(beam.userData.stageBeamRadius);
-		const referenceDistance = Number(beam.userData.stageBeamDistance);
-		if (
-			!Number.isFinite(referenceRadius) ||
-			!Number.isFinite(referenceDistance) ||
-			referenceDistance <= 0
-		)
-			continue;
-		const radius = (referenceRadius / referenceDistance) * distanceToGround;
-		const along = new THREE.Vector3(direction.x, 0, direction.z);
-		if (along.lengthSq() < 1e-8) along.set(0, 0, 1);
-		else along.normalize();
-		const across = new THREE.Vector3(-along.z, 0, along.x);
-		const center = origin.clone().addScaledVector(direction, distanceToGround);
-		center.y = 0.006;
-		const alongRadius = Math.min(
-			radius / Math.max(0.08, Math.abs(direction.y)),
-			radius * 12,
-		);
-		const points = Array.from({ length: 49 }, (_, index) => {
-			const angle = (index / 48) * Math.PI * 2;
-			return center
-				.clone()
-				.addScaledVector(along, Math.cos(angle) * alongRadius)
-				.addScaledVector(across, Math.sin(angle) * radius);
-		});
 		const footprint = new THREE.LineLoop(
-			new THREE.BufferGeometry().setFromPoints(points),
+			new THREE.BufferGeometry().setAttribute(
+				"position",
+				new THREE.Float32BufferAttribute(49 * 3, 3),
+			),
 			new THREE.LineBasicMaterial({
-				color: new THREE.Color(
-					String(beam.userData.stageBeamColor ?? "#ffffff"),
-				),
+				color: 0xffffff,
 				transparent: true,
 				opacity: 0.62,
 			}),
@@ -163,6 +207,7 @@ function addGroundFootprints(
 		footprint.name = "beam-ground-footprint";
 		footprint.userData.stageBeamSource = beam.uuid;
 		scene.add(footprint);
+		updateGroundFootprint(footprint, beam);
 	}
 }
 
@@ -192,6 +237,60 @@ export function buildStageScene(
 	}
 	addGroundFootprints(scene, renderQuality);
 	return { scene, fixtureObjects };
+}
+
+export function applyStageVisualization(
+	fixtures: Stage3dFixture[],
+	snapshot: VisualizationSnapshot | null,
+	fixtureObjects: Map<string, THREE.Object3D>,
+	showBeamGuides: boolean,
+	renderQuality: StageRenderQuality,
+	virtualHighlight: Set<string> = new Set(),
+) {
+	const context = createSceneContext(
+		snapshot,
+		new Set(),
+		showBeamGuides,
+		virtualHighlight,
+		renderQuality,
+	);
+	for (const item of fixtures) {
+		const instanceId = item.instanceId ?? item.fixture.fixture_id;
+		const root = fixtureObjects.get(instanceId);
+		if (!root) continue;
+		const fixtureId = item.fixture.fixture_id;
+		const attributes = context.byFixture.get(fixtureId) ?? new Map();
+		const mode = profileMode(item.fixture);
+		if (mode) {
+			updateFixtureProfileGeometry(root, {
+				fixture: item.fixture,
+				mode,
+				byFixture: context.byFixture,
+				selected: false,
+				snapshot,
+				projectedOwners: context.projectedOwners,
+				showBeamGuides,
+				renderQuality,
+				virtualHighlight: virtualHighlight.has(fixtureId),
+			});
+		} else {
+			updateFallbackFixture(
+				root,
+				item,
+				attributes,
+				fallbackRenderState(
+					item,
+					attributes,
+					snapshot,
+					virtualHighlight.has(fixtureId),
+				),
+				showBeamGuides,
+				renderQuality,
+			);
+		}
+	}
+	const scene = fixtureObjects.values().next().value?.parent;
+	if (scene instanceof THREE.Scene) refreshGroundFootprints(scene);
 }
 
 export function disposeScene(scene: THREE.Scene) {
