@@ -8,7 +8,6 @@ import {
 	useState,
 } from "react";
 import type * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { VisualizationSnapshot } from "../../api/types";
 import { frontendPerformanceDiagnostics } from "../../features/frontendWarmup/diagnostics";
 import type { StageRenderQuality } from "../../types";
@@ -19,6 +18,7 @@ import {
 	mountFixtureModel,
 	type Stage3dFixture,
 } from "../stage3dScene";
+import { StageModelCache } from "./modelCache";
 
 export type Stage3dCallbacks = {
 	onSelect: (fixtureId: string, additive: boolean) => void;
@@ -95,6 +95,7 @@ function loadFixtureModels(
 	retained: Set<string>,
 	selected: readonly string[],
 	showSelection: boolean,
+	modelCache: StageModelCache,
 ) {
 	let cancelled = false;
 	for (const item of fixtures) {
@@ -102,22 +103,19 @@ function loadFixtureModels(
 		if (retained.has(instanceId)) continue;
 		const source = item.fixture.definition.model_asset;
 		if (!source) continue;
-		void fetch(source)
-			.then((response) => response.arrayBuffer())
-			.then((buffer) => {
+		void modelCache
+			.clone(source)
+			.then((model) => {
 				if (cancelled) return;
-				new GLTFLoader().parse(buffer, "", (gltf) => {
-					if (cancelled) return;
-					const root = fixtureObjects.get(instanceId);
-					if (!root) return;
-					root.getObjectByName("fixture-placeholder")?.removeFromParent();
-					mountFixtureModel(
-						root,
-						gltf.scene,
-						item.fixture,
-						showSelection && selected.includes(item.fixture.fixture_id),
-					);
-				});
+				const root = fixtureObjects.get(instanceId);
+				if (!root) return;
+				root.getObjectByName("fixture-placeholder")?.removeFromParent();
+				mountFixtureModel(
+					root,
+					model,
+					item.fixture,
+					showSelection && selected.includes(item.fixture.fixture_id),
+				);
 			})
 			.catch(() => undefined);
 	}
@@ -155,6 +153,9 @@ export function useStageScene({
 	const interactingRef = useRef(false);
 	const callbacksRef = useRef(callbacks);
 	const invalidateRef = useRef<(() => void) | null>(null);
+	const modelCacheRef = useRef<StageModelCache | null>(null);
+	const modelCache =
+		modelCacheRef.current ?? (modelCacheRef.current = new StageModelCache());
 	const [renderVisualization, setRenderVisualization] = useState(visualization);
 	callbacksRef.current = callbacks;
 
@@ -217,6 +218,7 @@ export function useStageScene({
 			retained,
 			selected,
 			showSelection,
+			modelCache,
 		);
 		sceneRef.current = next.scene;
 		fixtureObjectsRef.current = next.fixtureObjects;
@@ -235,7 +237,16 @@ export function useStageScene({
 		showBeamGuides,
 		renderQuality,
 		environmentBrightness,
+		modelCache,
 	]);
+
+	useEffect(
+		() => () => {
+			modelCacheRef.current?.dispose();
+			modelCacheRef.current = null;
+		},
+		[],
+	);
 
 	useEffect(() => {
 		if (!sceneRef.current) return;

@@ -296,12 +296,15 @@ export function applyStageVisualization(
 export function disposeScene(scene: THREE.Scene) {
 	scene.traverse((object) => {
 		const mesh = object as THREE.Mesh;
-		mesh.geometry?.dispose();
+		if (!mesh.geometry?.userData.stageSharedModelResource)
+			mesh.geometry?.dispose();
 		const materials = Array.isArray(mesh.material)
 			? mesh.material
 			: mesh.material
 				? [mesh.material]
 				: [];
-		for (const material of materials) material.dispose();
+		for (const material of materials) {
+			if (!material.userData.stageSharedModelResource) material.dispose();
+		}
 	});
 }
