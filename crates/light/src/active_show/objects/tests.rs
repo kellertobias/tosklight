@@ -7,11 +7,13 @@ use serde_json::{Value, json};
 
 const FIXTURE_ID: &str = "00000000-0000-0000-0000-000000000123";
 const CUE_LIST_ID: &str = "00000000-0000-0000-0000-000000000456";
+const DYNAMIC_ID: &str = "00000000-0000-0000-0000-000000000789";
 
 #[test]
 fn cue_list_update_normalizes_its_id_and_preserves_nested_cue_extensions() {
     let mut existing = cue_list("00000000-0000-0000-0000-000000000111");
     existing["cues"][0]["future_cue_metadata"] = json!({"owner": "newer-desk"});
+    existing["cues"][0]["phasers"] = json!([{"unsupported_prototype": true}]);
     let mut request = canonical_cue_list(&existing);
     request["name"] = json!("After");
 
@@ -28,6 +30,7 @@ fn cue_list_update_normalizes_its_id_and_preserves_nested_cue_extensions() {
         normalized["cues"][0]["future_cue_metadata"],
         json!({"owner": "newer-desk"})
     );
+    assert!(normalized["cues"][0].get("phasers").is_none());
 }
 
 #[test]
@@ -131,6 +134,28 @@ fn preset_update_does_not_resurrect_a_removed_known_map_entry() {
 }
 
 #[test]
+fn dynamic_update_forces_stable_storage_identity_validates_and_preserves_extensions() {
+    let mut existing = dynamic("00000000-0000-0000-0000-000000000111");
+    existing["future_definition"] = json!({"kept": true});
+    existing["lanes"][0]["future_lane"] = json!("kept");
+    let mut request = canonical_dynamic(&existing);
+    request["id"] = json!("00000000-0000-0000-0000-000000000222");
+    request["name"] = json!("After");
+
+    let normalized = normalize(
+        &existing,
+        ActiveShowObjectKind::Dynamic,
+        DYNAMIC_ID,
+        request,
+    );
+
+    assert_eq!(normalized["id"], DYNAMIC_ID);
+    assert_eq!(normalized["name"], "After");
+    assert_eq!(normalized["future_definition"]["kept"], true);
+    assert_eq!(normalized["lanes"][0]["future_lane"], "kept");
+}
+
+#[test]
 fn playback_update_forces_storage_number_and_preserves_target_extensions() {
     let existing = playback(4);
     let mut existing = serde_json::to_value(existing).unwrap();
@@ -221,6 +246,7 @@ fn layout_and_patch_families_preserve_the_complete_lossless_candidate() {
 fn every_active_show_family_decodes_to_its_discriminant_and_retains_extensions() {
     let families = [
         (ActiveShowObjectKind::CueList, cue_list(CUE_LIST_ID)),
+        (ActiveShowObjectKind::Dynamic, dynamic(DYNAMIC_ID)),
         (
             ActiveShowObjectKind::Group,
             json!({"id":"1","name":"Front","fixtures":[],"future_extension":{"kept":true}}),
@@ -328,6 +354,88 @@ fn canonical_playback_page(raw: &Value) -> Value {
         serde_json::from_value::<light_playback::PlaybackPage>(raw.clone()).unwrap(),
     )
     .unwrap()
+}
+
+fn canonical_dynamic(raw: &Value) -> Value {
+    serde_json::to_value(
+        serde_json::from_value::<light_dynamics::DynamicDefinition>(raw.clone()).unwrap(),
+    )
+    .unwrap()
+}
+
+fn dynamic(id: &str) -> Value {
+    json!({
+        "id": id,
+        "pool_number": 1,
+        "revision": 1,
+        "name": "Pulse",
+        "color": null,
+        "icon": null,
+        "target_binding": {"type": "targetless"},
+        "lanes": [{
+            "id": "00000000-0000-0000-0000-000000000790",
+            "attribute": "intensity",
+            "mode": "keyframes",
+            "keyframes": {
+                "points": [
+                    {
+                        "position": 0.0,
+                        "source": {"type": "value", "value": 0.0},
+                        "interpolation": "linear"
+                    },
+                    {
+                        "position": 0.5,
+                        "source": {"type": "value", "value": 1.0},
+                        "interpolation": "ease_in_out"
+                    }
+                ],
+                "size": 1.0
+            },
+            "max_min": {
+                "minimum": {"type": "value", "value": 0.0},
+                "maximum": {"type": "value", "value": 1.0},
+                "function": "sinus",
+                "size": 1.0,
+                "pwm": {
+                    "attack": 0.0,
+                    "on": 0.5,
+                    "decay": 0.0,
+                    "off": 0.5,
+                    "attack_interpolation": "linear",
+                    "decay_interpolation": "linear"
+                }
+            },
+            "middle_amplitude": {
+                "middle": {"type": "current"},
+                "amplitude": 0.5,
+                "function": "sinus",
+                "size": 1.0,
+                "pwm": {
+                    "attack": 0.0,
+                    "on": 0.5,
+                    "decay": 0.0,
+                    "off": 0.5,
+                    "attack_interpolation": "linear",
+                    "decay_interpolation": "linear"
+                }
+            },
+            "speed_multiplier": {"numerator": 1, "denominator": 1},
+            "width": 1.0,
+            "random_group_id": null
+        }],
+        "random_groups": [],
+        "phase": {
+            "ordering": {"type": "selection"},
+            "offset_degrees": 0.0,
+            "span_degrees": 360.0,
+            "block_size": 1,
+            "repeats": 1,
+            "wings": false,
+            "anchors_degrees": []
+        },
+        "speed": {"type": "fixed", "duration_millis": 1000},
+        "default_activation": "start_now"
+    })
 }
 
 fn playback(number: u16) -> light_playback::PlaybackDefinition {

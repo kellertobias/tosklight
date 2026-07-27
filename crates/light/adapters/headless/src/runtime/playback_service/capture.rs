@@ -15,10 +15,28 @@ impl ServerPlaybackPorts<'_> {
         let Some(session) = self.session else {
             return Ok(None);
         };
-        let temp = predicted_preload_temp_state(self.state, session.id, definition.number);
-        let pending = preload_capture_action_with_temp_state(definition, action_name, input, temp)
-            .map_err(api_action_error)?;
-        if !self.should_capture(session, pending, surface) {
+        let pending = if matches!(action_name, "master" | "fader")
+            && matches!(
+                definition.target,
+                light_playback::PlaybackTarget::Dynamic { .. }
+            ) {
+            input
+                .value
+                .filter(|value| value.is_finite() && (0.0..=1.0).contains(value))
+                .map(
+                    |value| light_programmer::PreloadPlaybackQueueAction::Fader {
+                        value_permyriad: (value * 10_000.0).round() as u16,
+                    },
+                )
+        } else {
+            let temp = predicted_preload_temp_state(self.state, session.id, definition.number);
+            preload_capture_action_with_temp_state(definition, action_name, input, temp)
+                .map_err(api_action_error)?
+                .map(light_programmer::PreloadPlaybackQueueAction::try_from)
+                .transpose()
+                .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error))?
+        };
+        if !self.should_capture(session, pending.as_ref(), surface) {
             return Ok(None);
         }
         let pending = pending.expect("capture requires a pending action");
@@ -29,7 +47,7 @@ impl ServerPlaybackPorts<'_> {
     fn should_capture(
         &self,
         session: &Session,
-        pending: Option<&str>,
+        pending: Option<&light_programmer::PreloadPlaybackQueueAction>,
         surface: PlaybackSurface,
     ) -> bool {
         self.state
@@ -45,12 +63,10 @@ impl ServerPlaybackPorts<'_> {
         context: &ActionContext,
         session: &Session,
         number: u16,
-        pending: &str,
+        pending: light_programmer::PreloadPlaybackQueueAction,
         surface: PlaybackSurface,
         page: Option<u8>,
     ) -> Result<(), ActionError> {
-        let action = light_programmer::PreloadPlaybackQueueAction::try_from(pending)
-            .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error))?;
         let queue_surface =
             light_programmer::PreloadPlaybackQueueSurface::try_from(surface_name(surface))
                 .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error))?;
@@ -60,7 +76,7 @@ impl ServerPlaybackPorts<'_> {
                 session.id,
                 number,
                 page,
-                action,
+                pending,
                 queue_surface,
                 Some(session.desk.id),
             );
@@ -70,7 +86,7 @@ impl ServerPlaybackPorts<'_> {
         emit(
             self.state,
             "programmer_changed",
-            serde_json::json!({"session_id":session.id,"user_id":session.user.id,"preload_playback_action":pending,"playback_number":number,"surface":surface_name(surface),"page":page,"changes":["preload_playback_queue"]}),
+            serde_json::json!({"session_id":session.id,"user_id":session.user.id,"preload_playback_action":pending.legacy_name(),"playback_number":number,"surface":surface_name(surface),"page":page,"changes":["preload_playback_queue"]}),
         );
         Ok(())
     }

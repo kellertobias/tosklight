@@ -1,7 +1,15 @@
 use crate::light_benchmark::arguments::{ProfileConfig, ProtocolSelection};
 use chrono::{TimeZone, Utc};
 use light_core::{
-    AttributeKey, AttributeValue, CueListId, FixtureId, ManualClock, SessionId, UserId,
+    AttributeKey, AttributeValue, CueListId, FixtureId, ManualClock, MergeMode, SessionId,
+    TimedValue, UserId,
+};
+use light_dynamics::{
+    ActivationBoundary, ActivationPolicy, DynamicDefinition, DynamicEvaluationContext,
+    DynamicEvaluator, DynamicKeyframe, DynamicLane, DynamicLaneMode, DynamicRandomGroup,
+    DynamicSpeed, DynamicTargetBinding, KeyframeConfiguration, MaxMinConfiguration,
+    MiddleAmplitudeConfiguration, PeriodicFunction, PhaseDistribution, PhaseOrdering, PwmShape,
+    Rational, ScalarInterpolation, ScalarSource, ScalarSourceResolver, SpeedGroup,
 };
 use light_engine::{
     ContributionBatch, ContributionSample, ContributionSourceId, Engine, EnginePlaybackCommand,
@@ -12,9 +20,9 @@ use light_fixture::{
 };
 use light_output::{DeliveryMode, OutputRoute};
 use light_playback::{
-    AttributePhaser, Cue, CueList, CueListMode, CueTrigger, FlashReleaseMode, GroupCueChange,
-    IntensityPriorityMode, Phaser, PhaserCurve, PhaserMode, PhaserStep, PlaybackButtonAction,
-    PlaybackDefinition, PlaybackFaderMode, PlaybackTarget, RestartMode, WrapMode,
+    Cue, CueList, CueListMode, CueTrigger, FlashReleaseMode, GroupCueChange, IntensityPriorityMode,
+    PlaybackButtonAction, PlaybackDefinition, PlaybackFaderMode, PlaybackTarget, RestartMode,
+    WrapMode,
 };
 use light_programmer::{GroupDefinition, ProgrammerRegistry};
 use serde::Serialize;
@@ -56,9 +64,10 @@ pub struct BenchmarkScenario {
     pub packet_count: usize,
     pub fixture_inventory: ScenarioFixtureInventory,
     pub(super) programmers: ProgrammerRegistry,
-    pub(super) phaser_attribute: AttributeKey,
-    pub(super) phaser_overlaps_static_or_programmer: bool,
+    pub(super) dynamic_attribute: AttributeKey,
+    pub(super) dynamic_overlaps_static_or_programmer: bool,
     pub(super) programmer_assignment_fraction: &'static str,
+    pub(super) dynamic: Option<BenchmarkDynamic>,
 }
 
 impl BenchmarkScenario {
@@ -125,6 +134,9 @@ impl BenchmarkScenario {
             session,
             programmer_assignments(&fixture_ids, fixture_footprint),
         );
+        let dynamic_attribute = AttributeKey::intensity();
+        let dynamic =
+            BenchmarkDynamic::for_attribute(&fixture_ids, dynamic_attribute.clone(), logical_start);
         Ok(Self {
             engine,
             clock,
@@ -148,14 +160,19 @@ impl BenchmarkScenario {
                 total_slots: fixture_count * usize::from(fixture_footprint),
             },
             programmers,
-            phaser_attribute: slot_attribute(animated_slot(fixture_footprint)),
-            phaser_overlaps_static_or_programmer: false,
+            dynamic_attribute,
+            dynamic_overlaps_static_or_programmer: false,
             programmer_assignment_fraction: "1/4 of mapped slots",
+            dynamic: Some(dynamic),
         })
     }
 
+    pub fn dynamic_batch(&self, at: chrono::DateTime<Utc>) -> Option<ContributionBatch> {
+        self.dynamic.as_ref().map(|dynamic| dynamic.sample(at))
+    }
+
     pub fn sampled_batches(&self, at: chrono::DateTime<Utc>) -> Vec<ContributionBatch> {
-        sampled_batches(&self.engine, &self.programmers, at, &self.phaser_attribute)
+        sampled_batches(&self.engine, &self.programmers, at, &self.dynamic_attribute)
     }
 }
 
@@ -163,7 +180,7 @@ fn sampled_batches(
     engine: &Engine,
     programmers: &ProgrammerRegistry,
     at: chrono::DateTime<Utc>,
-    phaser_attribute: &AttributeKey,
+    dynamic_attribute: &AttributeKey,
 ) -> Vec<ContributionBatch> {
     let mut buckets = (0..SAMPLED_BATCH_COUNT)
         .map(|_| Vec::new())
@@ -184,7 +201,7 @@ fn sampled_batches(
     for contribution in engine
         .playback_contributions_at(at)
         .into_iter()
-        .filter(|contribution| contribution.value.attribute != *phaser_attribute)
+        .filter(|contribution| contribution.value.attribute != *dynamic_attribute)
         .step_by(SAMPLED_ASSIGNMENT_DIVISOR)
     {
         buckets[index % SAMPLED_BATCH_COUNT].push(ContributionSample::replacing_playback(
@@ -215,7 +232,17 @@ fn packed_definition(footprint: u16) -> Result<light_fixture::FixtureDefinition,
                 id: fixed_uuid(0x43, u64::from(slot) + 1),
                 head_id,
                 split: 1,
-                attribute: slot_attribute(slot),
+                fixture_attribute: if slot == animated_slot(footprint) {
+                    AttributeKey::intensity()
+                } else {
+                    slot_attribute(slot)
+                },
+                attribute: if slot == animated_slot(footprint) {
+                    AttributeKey::intensity()
+                } else {
+                    slot_attribute(slot)
+                },
+                canonical_transform: light_fixture::CanonicalTransform::Identity,
                 resolution: ChannelResolution::U8,
                 secondary_slots: vec![],
                 default_raw: 1,
@@ -301,6 +328,7 @@ fn playback(fixture_footprint: u16) -> (CueList, PlaybackDefinition) {
         delay_millis: 0,
         trigger: CueTrigger::Manual,
         cue_only: false,
+        dynamic_changes: vec![],
         group_changes: static_slots(fixture_footprint)
             .map(|slot| GroupCueChange {
                 group_id: GROUP_ID.into(),
@@ -313,30 +341,6 @@ fn playback(fixture_footprint: u16) -> (CueList, PlaybackDefinition) {
                 delay_millis: None,
             })
             .collect(),
-        phasers: vec![AttributePhaser {
-            fixture_ids: vec![],
-            group_ids: vec![GROUP_ID.into()],
-            attribute: slot_attribute(animated_slot(fixture_footprint)),
-            phaser: Phaser {
-                mode: PhaserMode::Absolute,
-                steps: vec![
-                    PhaserStep {
-                        position: 0.0,
-                        value: 0.1,
-                        curve_to_next: PhaserCurve::Linear,
-                    },
-                    PhaserStep {
-                        position: 0.5,
-                        value: 0.9,
-                        curve_to_next: PhaserCurve::Linear,
-                    },
-                ],
-                cycles_per_minute: 600.0,
-                phase_start_degrees: 0.0,
-                phase_end_degrees: 360.0,
-                width: 1.0,
-            },
-        }],
     };
     let cue_list = CueList {
         id: cue_list_id,
@@ -378,6 +382,282 @@ fn playback(fixture_footprint: u16) -> (CueList, PlaybackDefinition) {
         presentation_image: None,
     };
     (cue_list, playback)
+}
+
+pub(super) struct BenchmarkDynamic {
+    definitions: Vec<DynamicDefinition>,
+    targets: Arc<[FixtureId]>,
+    phase_degrees: Arc<[f32]>,
+    instance_id: Uuid,
+    started_at: chrono::DateTime<Utc>,
+}
+
+impl BenchmarkDynamic {
+    pub(super) fn intensity(targets: &[FixtureId], started_at: chrono::DateTime<Utc>) -> Self {
+        Self::for_attribute(targets, AttributeKey::intensity(), started_at)
+    }
+
+    fn for_attribute(
+        targets: &[FixtureId],
+        attribute: AttributeKey,
+        started_at: chrono::DateTime<Utc>,
+    ) -> Self {
+        let lane = DynamicLane {
+            id: fixed_uuid(0x5a, 2),
+            attribute: attribute.clone(),
+            mode: DynamicLaneMode::Keyframes,
+            keyframes: KeyframeConfiguration {
+                points: vec![
+                    DynamicKeyframe {
+                        position: 0.0,
+                        source: ScalarSource::Value { value: 0.1 },
+                        interpolation: ScalarInterpolation::Linear,
+                    },
+                    DynamicKeyframe {
+                        position: 0.5,
+                        source: ScalarSource::Value { value: 0.9 },
+                        interpolation: ScalarInterpolation::Linear,
+                    },
+                ],
+                size: 1.0,
+            },
+            max_min: MaxMinConfiguration {
+                minimum: ScalarSource::Value { value: 0.1 },
+                maximum: ScalarSource::Value { value: 0.9 },
+                function: PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: PwmShape::default(),
+            },
+            middle_amplitude: MiddleAmplitudeConfiguration {
+                middle: ScalarSource::Current,
+                amplitude: 0.4,
+                function: PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: PwmShape::default(),
+            },
+            speed_multiplier: Rational::ONE,
+            width: 1.0,
+            random_group_id: None,
+        };
+        let definition = DynamicDefinition {
+            id: fixed_uuid(0x5a, 1),
+            pool_number: 1,
+            revision: 1,
+            name: "Benchmark keyframe Current/Preset wave".into(),
+            color: None,
+            icon: None,
+            target_binding: DynamicTargetBinding::FrozenTargets {
+                targets: targets.to_vec(),
+            },
+            lanes: vec![DynamicLane {
+                keyframes: KeyframeConfiguration {
+                    points: vec![
+                        DynamicKeyframe {
+                            position: 0.0,
+                            source: ScalarSource::Current,
+                            interpolation: ScalarInterpolation::Linear,
+                        },
+                        DynamicKeyframe {
+                            position: 0.5,
+                            source: ScalarSource::Preset {
+                                preset_id: "benchmark:1".into(),
+                                attribute,
+                                last_valid_by_target: Vec::new(),
+                            },
+                            interpolation: ScalarInterpolation::EaseInOut,
+                        },
+                    ],
+                    size: 1.0,
+                },
+                ..lane
+            }],
+            random_groups: vec![],
+            phase: PhaseDistribution {
+                ordering: PhaseOrdering::Selection,
+                offset_degrees: 0.0,
+                span_degrees: 360.0,
+                block_size: 1,
+                repeats: 1,
+                wings: false,
+                anchors_degrees: vec![],
+            },
+            speed: DynamicSpeed::Fixed {
+                duration_millis: 100,
+            },
+            overall_speed_multiplier: Rational::ONE,
+            run_mode: light_dynamics::DynamicRunMode::Loop,
+            default_activation: ActivationPolicy::StartNow,
+            activation_boundary: ActivationBoundary::Beat,
+        };
+        let mut pwm = definition.clone();
+        pwm.id = fixed_uuid(0x5a, 4);
+        pwm.pool_number = 2;
+        pwm.name = "Benchmark PWM Speed Group".into();
+        pwm.lanes[0].mode = DynamicLaneMode::MaxMin;
+        pwm.lanes[0].max_min.function = PeriodicFunction::Pwm;
+        pwm.lanes[0].max_min.pwm = PwmShape {
+            attack: 0.1,
+            on: 0.35,
+            decay: 0.15,
+            off: 0.4,
+            attack_interpolation: ScalarInterpolation::EaseIn,
+            decay_interpolation: ScalarInterpolation::EaseOut,
+        };
+        pwm.speed = DynamicSpeed::SpeedGroup {
+            group: SpeedGroup::A,
+            beats_per_cycle: Rational {
+                numerator: 2,
+                denominator: 1,
+            },
+        };
+        pwm.default_activation = ActivationPolicy::JoinSyncNow;
+        pwm.phase.ordering = PhaseOrdering::GridLinear {
+            angle_degrees: 45.0,
+        };
+
+        let mut middle = definition.clone();
+        middle.id = fixed_uuid(0x5a, 5);
+        middle.pool_number = 3;
+        middle.name = "Benchmark Current wet/dry wave".into();
+        middle.lanes[0].mode = DynamicLaneMode::MiddleAmplitude;
+        middle.lanes[0].middle_amplitude.middle = ScalarSource::Current;
+        middle.lanes[0].middle_amplitude.amplitude = 0.45;
+        middle.speed = DynamicSpeed::Fixed {
+            duration_millis: 180,
+        };
+        middle.phase.ordering = PhaseOrdering::RadialOut {
+            center_x: 0.5,
+            center_z: 0.5,
+        };
+
+        let random_group_id = fixed_uuid(0x5a, 6);
+        let mut random = definition.clone();
+        random.id = fixed_uuid(0x5a, 7);
+        random.pool_number = 4;
+        random.name = "Benchmark seeded Random pulses".into();
+        random.lanes[0].mode = DynamicLaneMode::Random;
+        random.lanes[0].random_group_id = Some(random_group_id);
+        random.random_groups = vec![DynamicRandomGroup {
+            id: random_group_id,
+            seed: 0x5a17,
+            low: ScalarSource::Value { value: 0.05 },
+            high: ScalarSource::Value { value: 0.95 },
+            decision_interval_millis: 80,
+            start_probability: 0.55,
+            mean_duration_millis: 160,
+            duration_spread_millis: 40,
+            attack_ratio: 0.15,
+            decay_ratio: 0.25,
+        }];
+        random.speed = DynamicSpeed::Fixed {
+            duration_millis: 640,
+        };
+        random.phase.ordering = PhaseOrdering::RandomEachLoop { seed: 0x5a18 };
+        let count = targets.len().max(1) as f32;
+        let phase_degrees = (0..targets.len())
+            .map(|index| index as f32 / count * 360.0)
+            .collect::<Vec<_>>();
+        Self {
+            definitions: vec![definition, pwm, middle, random],
+            targets: Arc::from(targets),
+            phase_degrees: Arc::from(phase_degrees),
+            instance_id: fixed_uuid(0x5a, 3),
+            started_at,
+        }
+    }
+
+    fn sample(&self, at: chrono::DateTime<Utc>) -> ContributionBatch {
+        let elapsed_millis = at
+            .signed_duration_since(self.started_at)
+            .num_milliseconds()
+            .max(0) as u64;
+        let mut samples = Vec::with_capacity(self.targets.len() * 2);
+        for (definition_index, definition) in self.definitions.iter().enumerate() {
+            let evaluator = DynamicEvaluator::new(definition);
+            let lane = &definition.lanes[0];
+            let cycle_duration_millis = match definition.speed {
+                DynamicSpeed::Fixed { duration_millis } => duration_millis,
+                DynamicSpeed::SpeedGroup {
+                    beats_per_cycle, ..
+                } => (beats_per_cycle.factor() * 500.0).round() as u64,
+            };
+            for (target_index, (target, phase_degrees)) in self
+                .targets
+                .iter()
+                .zip(self.phase_degrees.iter())
+                .enumerate()
+                .filter(|(target_index, _)| {
+                    definition_index == 0 || target_index % 4 == definition_index.saturating_sub(1)
+                })
+            {
+                let Some(mut value) = evaluator.sample_lane(
+                    lane,
+                    DynamicEvaluationContext {
+                        instance_id: Uuid::from_u128(
+                            self.instance_id.as_u128() + definition_index as u128,
+                        ),
+                        target: *target,
+                        elapsed_millis,
+                        cycle_duration_millis,
+                        phase_degrees: (*phase_degrees + definition_index as f32 * 45.0) % 360.0,
+                        output_interval_millis: 8,
+                        random_envelope: None,
+                        sources: &BenchmarkSources,
+                    },
+                ) else {
+                    continue;
+                };
+                if definition_index == 2 {
+                    let wet = ((elapsed_millis % 1_000) as f32 / 500.0 - 1.0).abs();
+                    value = 0.5 + (value - 0.5) * wet;
+                }
+                let controller_switch = if definition_index == 1 {
+                    ((elapsed_millis / 1_000) % 2) as i16
+                } else {
+                    0
+                };
+                samples.push(ContributionSample::independent(TimedValue {
+                    fixture_id: *target,
+                    attribute: lane.attribute.clone(),
+                    value: AttributeValue::Normalized(value),
+                    priority: 10 + definition_index as i16 + controller_switch,
+                    changed_at: at,
+                    programmer_order: definition_index as u64,
+                    merge_mode: MergeMode::Ltp,
+                    fade: false,
+                    fade_millis: None,
+                    delay_millis: None,
+                }));
+                if target_index % 16 == 0 {
+                    samples.push(ContributionSample::independent(TimedValue {
+                        fixture_id: *target,
+                        attribute: lane.attribute.clone(),
+                        value: AttributeValue::Normalized(0.65),
+                        priority: 20,
+                        changed_at: at,
+                        programmer_order: 20,
+                        merge_mode: MergeMode::Ltp,
+                        fade: false,
+                        fade_millis: None,
+                        delay_millis: None,
+                    }));
+                }
+            }
+        }
+        ContributionBatch::new(samples)
+    }
+}
+
+struct BenchmarkSources;
+
+impl ScalarSourceResolver for BenchmarkSources {
+    fn current(&self, _: FixtureId, _: &AttributeKey) -> Option<f32> {
+        Some(0.5)
+    }
+
+    fn preset(&self, preset_id: &str, _: FixtureId, _: &AttributeKey) -> Option<f32> {
+        (preset_id == "benchmark:1").then_some(0.72)
+    }
 }
 
 fn programmer_assignments(

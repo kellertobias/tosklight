@@ -2600,6 +2600,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "light-core",
+ "light-dynamics",
  "light-engine",
  "light-fixture",
  "light-mvr",
@@ -2649,6 +2650,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "light-dynamics"
+version = "0.1.0"
+dependencies = [
+ "light-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "light-engine"
 version = "0.1.0"
 dependencies = [
@@ -2656,6 +2668,7 @@ dependencies = [
  "chrono",
  "light-control",
  "light-core",
+ "light-dynamics",
  "light-fixture",
  "light-output",
  "light-playback",
@@ -2702,6 +2715,7 @@ dependencies = [
  "chrono",
  "light-application",
  "light-core",
+ "light-dynamics",
  "light-engine",
  "light-fixture",
  "light-headless-runtime",
@@ -2736,6 +2750,7 @@ dependencies = [
  "light-application",
  "light-control",
  "light-core",
+ "light-dynamics",
  "light-engine",
  "light-fixture",
  "light-media",
@@ -2803,6 +2818,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "light-core",
+ "light-dynamics",
  "serde",
  "serde_json",
  "uuid",
@@ -2814,6 +2830,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "light-core",
+ "light-dynamics",
  "parking_lot",
  "serde",
  "serde_json",

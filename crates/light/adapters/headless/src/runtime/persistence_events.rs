@@ -67,6 +67,17 @@ pub(super) fn restore_output_runtime_for_show(
             runtime.dynamics_paused_at,
         ))
         .expect("restoring dynamics pause state is infallible");
+    state
+        .output
+        .execute_playback(EnginePlaybackCommand::RestoreActiveDynamics(
+            runtime.dynamic_playbacks.clone(),
+        ))
+        .expect("restoring validated Dynamic Playback state is infallible");
+    if let Some(snapshot) = runtime.dynamic_runtime.clone()
+        && let Err(error) = state.output.restore_dynamic_runtime_snapshot(snapshot)
+    {
+        tracing::warn!(%error, "ignoring invalid persisted Dynamic runtime");
+    }
     state.output.restore_runtime_control(&runtime);
     state.output.clear_runtime_replay();
 }
@@ -100,6 +111,8 @@ pub(super) fn persist_output_runtime(state: &AppState) -> Result<(), ApiError> {
         grand_master: control.grand_master,
         blackout: control.blackout,
         dynamics_paused_at: state.output.playback_dynamics().paused_since,
+        dynamic_playbacks: state.output.active_dynamic_playbacks(),
+        dynamic_runtime: Some(state.output.dynamic_runtime_snapshot()),
         group_masters: state
             .output
             .snapshot()

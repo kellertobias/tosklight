@@ -30,7 +30,6 @@ async fn install_cue_navigation_show(
             "fade_millis": 0,
             "delay_millis": 0,
             "trigger": {"type":"manual"},
-            "phasers": [],
             "group_changes": [],
             "changes": [{
                 "fixture_id": fixture,

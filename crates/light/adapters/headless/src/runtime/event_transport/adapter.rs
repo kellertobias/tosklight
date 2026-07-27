@@ -256,6 +256,11 @@ fn wire_payload(
                     change: super::super::output_runtime_v2::wire_change(*change),
                 }
             }
+            application::OutputEvent::DynamicRuntimeChanged(change) => {
+                wire::EventPayload::DynamicRuntimeChanged {
+                    change: wire_dynamic_runtime_change(change),
+                }
+            }
             application::OutputEvent::HighlightChanged(change) => {
                 wire::EventPayload::HighlightChanged {
                     change: wire::HighlightChange {
@@ -317,6 +322,35 @@ fn wire_payload(
             }
         }
     })
+}
+
+fn wire_dynamic_runtime_change(
+    change: &application::DynamicRuntimeChange,
+) -> wire::DynamicRuntimeChange {
+    use application::DynamicRuntimeEventKind as App;
+    use wire::DynamicRuntimeEventKind as Wire;
+    wire::DynamicRuntimeChange {
+        kind: match change.kind {
+            App::InstanceStarted => Wire::InstanceStarted,
+            App::InstancePending => Wire::InstancePending,
+            App::InstanceActive => Wire::InstanceActive,
+            App::InstanceOff => Wire::InstanceOff,
+            App::InstanceRelease => Wire::InstanceRelease,
+            App::ControllerUpdated => Wire::ControllerUpdated,
+            App::ControllerWinnerChanged => Wire::ControllerWinnerChanged,
+            App::Paused => Wire::Paused,
+            App::Resumed => Wire::Resumed,
+            App::FailedDependency => Wire::FailedDependency,
+            App::PreloadCommitted => Wire::PreloadCommitted,
+            App::TransitionCompleted => Wire::TransitionCompleted,
+        },
+        dynamic_id: change.dynamic_id,
+        runtime_instance_id: change.runtime_instance_id,
+        controller_id: change.controller_id,
+        winning_controller_id: change.winning_controller_id,
+        occurred_at_millis: change.occurred_at_millis,
+        message: change.message.clone(),
+    }
 }
 
 fn wire_screen_notification(change: application::ScreenNotification) -> wire::ScreenNotification {
@@ -554,6 +588,22 @@ fn wire_show_object_change(change: &application::ActiveShowObjectChange) -> wire
     }
     match change.kind {
         application::ActiveShowObjectKind::CueList => variant!(CueList),
+        application::ActiveShowObjectKind::Dynamic => {
+            let body = change
+                .body
+                .as_ref()
+                .map(application::ActiveShowObjectBody::encode);
+            let validation_error = body
+                .as_ref()
+                .and_then(super::super::show_objects_v2::dynamic_validation_error);
+            wire::ShowObjectChange::Dynamic {
+                object_id: change.object_id.clone(),
+                object_revision: change.object_revision,
+                body,
+                validation_error,
+                deleted: change.deleted,
+            }
+        }
         application::ActiveShowObjectKind::Group => variant!(Group),
         application::ActiveShowObjectKind::PatchLayer => variant!(PatchLayer),
         application::ActiveShowObjectKind::Playback => variant!(Playback),

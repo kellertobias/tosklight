@@ -32,6 +32,12 @@ pub enum PlaybackTargetProjection {
         cue_list_id: CueListId,
         runtime: Option<Box<CueListRuntimeProjection>>,
     },
+    Dynamic {
+        dynamic_id: Option<Uuid>,
+        last_known_pool_number: u16,
+        embedded: bool,
+        runtime: Option<DynamicPlaybackRuntimeProjection>,
+    },
     Group {
         group_id: String,
         master: f32,
@@ -48,6 +54,51 @@ pub enum PlaybackTargetProjection {
     CueFade {
         millis: u64,
     },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DynamicPlaybackRuntimeState {
+    Off,
+    Zero,
+    Pending,
+    Active,
+    Paused,
+    Hidden,
+    Failed,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DynamicPlaybackControllerStatus {
+    Winning,
+    Losing,
+    Missing,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DynamicPlaybackSpeedSource {
+    Fixed,
+    SpeedGroup,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DynamicPlaybackRuntimeProjection {
+    pub active: light_playback::ActiveDynamicPlayback,
+    pub state: DynamicPlaybackRuntimeState,
+    pub instance_id: Option<Uuid>,
+    pub controller_id: Uuid,
+    pub winning_controller_id: Option<Uuid>,
+    pub controller_status: DynamicPlaybackControllerStatus,
+    pub target_count: usize,
+    pub compatible_target_count: usize,
+    pub missing_target_count: usize,
+    pub unpatched_target_count: usize,
+    pub lane_count: usize,
+    pub supported_address_count: usize,
+    pub skipped_address_count: usize,
+    pub speed_source: DynamicPlaybackSpeedSource,
+    pub effective_speed_multiplier: f32,
+    pub effective_duration_millis: Option<u64>,
+    pub warning: Option<String>,
 }
 
 impl PlaybackRuntimeProjection {

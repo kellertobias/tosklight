@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 mod capture_mode;
 mod cue_recording;
+mod dynamic_values;
 mod group_recording;
 mod groups_and_preload;
 mod normal_values_actions;

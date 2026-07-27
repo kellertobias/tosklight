@@ -37,6 +37,12 @@ pub enum PlaybackTargetProjection {
         cue_list_id: Uuid,
         runtime: Option<Box<CueListRuntimeProjection>>,
     },
+    Dynamic {
+        dynamic_id: Option<Uuid>,
+        last_known_pool_number: u16,
+        embedded: bool,
+        runtime: Option<DynamicPlaybackRuntimeProjection>,
+    },
     Group {
         group_id: String,
         master: f32,
@@ -57,6 +63,66 @@ pub enum PlaybackTargetProjection {
         #[ts(type = "number")]
         millis: u64,
     },
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicPlaybackRuntimeProjection {
+    pub playback_number: u16,
+    pub enabled: bool,
+    pub paused: bool,
+    pub flash: bool,
+    pub activated_at: String,
+    pub fader_value: f32,
+    pub size: f32,
+    pub master: f32,
+    pub local_speed_numerator: u32,
+    pub local_speed_denominator: u32,
+    #[ts(type = "number | null")]
+    pub learned_duration_millis: Option<u64>,
+    pub state: DynamicPlaybackRuntimeState,
+    pub instance_id: Option<Uuid>,
+    pub controller_id: Uuid,
+    pub winning_controller_id: Option<Uuid>,
+    pub controller_status: DynamicPlaybackControllerStatus,
+    pub target_count: usize,
+    pub compatible_target_count: usize,
+    pub missing_target_count: usize,
+    pub unpatched_target_count: usize,
+    pub lane_count: usize,
+    pub supported_address_count: usize,
+    pub skipped_address_count: usize,
+    pub speed_source: DynamicPlaybackSpeedSource,
+    pub effective_speed_multiplier: f32,
+    #[ts(type = "number | null")]
+    pub effective_duration_millis: Option<u64>,
+    pub warning: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicPlaybackRuntimeState {
+    Off,
+    Zero,
+    Pending,
+    Active,
+    Paused,
+    Hidden,
+    Failed,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicPlaybackControllerStatus {
+    Winning,
+    Losing,
+    Missing,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicPlaybackSpeedSource {
+    Fixed,
+    SpeedGroup,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

@@ -157,6 +157,52 @@ pub struct PlaybackRuntimeStatus {
     pub swap_active: bool,
 }
 
+/// Tracked Dynamic-layer value for one active Cuelist source.
+///
+/// The projection remains scalar and address-local. `instance_link` coordinates the lanes which
+/// share one runtime clock, while FAT/static values continue to arbitrate independently.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ActiveCueDynamicValue {
+    pub playback_number: Option<u16>,
+    pub cue_list_id: CueListId,
+    pub current_cue_id: Uuid,
+    pub priority: i16,
+    pub changed_at_millis: u64,
+    pub fixture_id: FixtureId,
+    pub attribute: AttributeKey,
+    pub value: light_dynamics::DynamicSemanticValue,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ActiveDynamicPlayback {
+    pub playback_number: u16,
+    pub enabled: bool,
+    pub paused: bool,
+    #[serde(default)]
+    pub flash: bool,
+    #[serde(default)]
+    pub flash_restore_off: bool,
+    pub activated_at: DateTime<Utc>,
+    #[serde(default = "default_master")]
+    pub fader_value: f32,
+    #[serde(default = "default_master")]
+    pub size: f32,
+    #[serde(default = "default_master")]
+    pub master: f32,
+    #[serde(default = "default_dynamic_speed_multiplier")]
+    pub local_speed_multiplier: light_dynamics::Rational,
+    #[serde(default)]
+    pub learned_duration_millis: Option<u64>,
+    #[serde(default)]
+    pub last_learn_tap_millis: Option<u64>,
+    #[serde(default)]
+    pub learn_intervals_millis: Vec<u64>,
+}
+
+const fn default_dynamic_speed_multiplier() -> light_dynamics::Rational {
+    light_dynamics::Rational::ONE
+}
+
 /// A Position-family value which an active Cuelist can safely preposition while its fixture is
 /// dark. The engine owns the resolved-dark clock and turns these look-ahead records into runtime
 /// contributions; Cue data is never modified.

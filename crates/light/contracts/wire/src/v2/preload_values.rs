@@ -1,6 +1,7 @@
 //! User-scoped pending Preload Programmer values and mutation contracts.
 
 use super::events::EventSnapshotCursor;
+use super::programming::ProgrammingDynamicValue;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -67,6 +68,7 @@ pub struct ProgrammingPreloadValuesProjection {
     pub revision: u64,
     pub fixture_values: Vec<ProgrammingPreloadFixtureValue>,
     pub group_values: Vec<ProgrammingPreloadGroupValue>,
+    pub dynamic_values: Vec<ProgrammingDynamicValue>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

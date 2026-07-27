@@ -13,6 +13,7 @@ pub(super) use rewrite::{IdentityMap, ProfileMap, rewrite_body};
 enum RegisteredObjectKind {
     Fixture,
     Group,
+    Dynamic,
     Preset,
     CueList,
     Playback,
@@ -30,6 +31,7 @@ impl RegisteredObjectKind {
         match kind {
             "fixture" | "patched_fixture" => Some(Self::Fixture),
             "group" => Some(Self::Group),
+            "dynamic" => Some(Self::Dynamic),
             "preset" => Some(Self::Preset),
             "cue_list" => Some(Self::CueList),
             "playback" => Some(Self::Playback),
@@ -39,7 +41,7 @@ impl RegisteredObjectKind {
             "route" => Some(Self::Route),
             // These exact shapes retain the early prototype fixtures while capability adapters can
             // supply descriptors for their finalized schemas.
-            "macro" | "dynamic" | "timecode" => Some(Self::DependencyList),
+            "macro" | "timecode" => Some(Self::DependencyList),
             "effect" => Some(Self::Effect),
             "managed_asset" => Some(Self::ManagedAsset),
             _ => None,
@@ -63,6 +65,9 @@ pub(super) fn registered_descriptor(
         RegisteredObjectKind::Fixture => fixtures::fixture_descriptor(object)?,
         RegisteredObjectKind::Group => {
             descriptors::group_descriptor(object, source_fixtures, target_fixtures)?
+        }
+        RegisteredObjectKind::Dynamic => {
+            descriptors::dynamic_descriptor(object, source_fixtures, target_fixtures)?
         }
         RegisteredObjectKind::Preset => {
             descriptors::preset_descriptor(object, source_fixtures, target_fixtures)?

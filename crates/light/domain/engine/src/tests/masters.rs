@@ -17,6 +17,8 @@ fn grand_master_and_blackout_affect_intensity() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![].into(),
+            dynamics: vec![].into(),
+            dynamic_stage_positions: Default::default(),
             playbacks: vec![].into(),
             playback_pages: vec![].into(),
             routes: vec![].into(),

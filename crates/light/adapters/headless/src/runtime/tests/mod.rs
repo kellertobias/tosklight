@@ -102,6 +102,8 @@ include!("cue_transfer_tests.rs");
 include!("update_command_tests.rs");
 include!("cue_selection_tests.rs");
 include!("osc_key_tests.rs");
+include!("dynamics_command_tests.rs");
+include!("dynamics_osc_tests.rs");
 include!("update_http_tests.rs");
 include!("http_support.rs");
 include!("fixture_profile_api_tests.rs");

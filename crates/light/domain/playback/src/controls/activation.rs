@@ -6,6 +6,9 @@ impl PlaybackEngine {
     }
 
     pub fn on_mutation(&mut self, number: u16) -> Result<PlaybackMutation<()>, String> {
+        if self.dynamic_assignment(number).is_some() {
+            return self.on_dynamic_mutation(number);
+        }
         let id = self.cue_list_for(number)?;
         let key = PlaybackKey::Number(number);
         let mut changed = false;
@@ -68,6 +71,9 @@ impl PlaybackEngine {
     }
 
     pub fn off_mutation(&mut self, number: u16) -> Result<PlaybackMutation<bool>, String> {
+        if self.dynamic_assignment(number).is_some() {
+            return self.off_dynamic_mutation(number);
+        }
         self.cue_list_for(number)?;
         let Some(playback) = self.active.get_mut(&PlaybackKey::Number(number)) else {
             return Ok(PlaybackMutation::new(false, PlaybackRuntimeEffect::None));
@@ -82,6 +88,9 @@ impl PlaybackEngine {
     }
 
     pub fn toggle_mutation(&mut self, number: u16) -> Result<PlaybackMutation<bool>, String> {
+        if self.dynamic_assignment(number).is_some() {
+            return self.toggle_dynamic_mutation(number);
+        }
         self.cue_list_for(number)?;
         if self
             .playback_runtime(number)
@@ -128,6 +137,9 @@ impl PlaybackEngine {
         value: f32,
         allow_faderless: bool,
     ) -> Result<PlaybackMutation<()>, String> {
+        if self.dynamic_assignment(number).is_some() {
+            return self.set_dynamic_fader_mutation(number, value);
+        }
         let mode = self.validate_master(number, value, allow_faderless)?;
         match mode {
             PlaybackFaderMode::Temp => return self.set_temp_fader_mutation(number, value),

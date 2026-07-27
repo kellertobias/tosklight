@@ -58,6 +58,24 @@ pub(super) fn queue_item(
             application::ProgrammingPreloadPlaybackAction::TemporaryOff => {
                 wire::ProgrammingPreloadPlaybackAction::TemporaryOff
             }
+            application::ProgrammingPreloadPlaybackAction::DynamicPause => {
+                wire::ProgrammingPreloadPlaybackAction::DynamicPause
+            }
+            application::ProgrammingPreloadPlaybackAction::DynamicRestart => {
+                wire::ProgrammingPreloadPlaybackAction::DynamicRestart
+            }
+            application::ProgrammingPreloadPlaybackAction::DynamicDoubleSpeed => {
+                wire::ProgrammingPreloadPlaybackAction::DynamicDoubleSpeed
+            }
+            application::ProgrammingPreloadPlaybackAction::DynamicHalfSpeed => {
+                wire::ProgrammingPreloadPlaybackAction::DynamicHalfSpeed
+            }
+            application::ProgrammingPreloadPlaybackAction::DynamicLearnSpeed => {
+                wire::ProgrammingPreloadPlaybackAction::DynamicLearnSpeed
+            }
+            application::ProgrammingPreloadPlaybackAction::Fader { value_permyriad } => {
+                wire::ProgrammingPreloadPlaybackAction::Fader { value_permyriad }
+            }
         },
         surface: match item.surface {
             application::ProgrammingPreloadPlaybackSurface::Physical => {

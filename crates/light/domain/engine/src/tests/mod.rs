@@ -121,7 +121,9 @@ fn schema_v2_fixture(
                 id: uuid::Uuid::new_v4(),
                 head_id,
                 split: 1,
+                fixture_attribute: AttributeKey((*attribute).into()),
                 attribute: AttributeKey((*attribute).into()),
+                canonical_transform: light_fixture::CanonicalTransform::Identity,
                 resolution: ChannelResolution::U8,
                 secondary_slots: vec![],
                 default_raw: 0,
@@ -325,6 +327,8 @@ fn mib_snapshot(fixtures: Vec<PatchedFixture>, fixture_ids: &[FixtureId]) -> Eng
     EngineSnapshot {
         fixtures: fixtures.into(),
         cue_lists: vec![cue_list].into(),
+        dynamics: vec![].into(),
+        dynamic_stage_positions: Default::default(),
         playbacks: vec![playback].into(),
         playback_pages: vec![].into(),
         routes: vec![].into(),

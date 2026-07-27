@@ -46,6 +46,24 @@ pub(super) fn preload_batch_commands(
                 light_programmer::PreloadPlaybackQueueAction::TemporaryOff => {
                     PlaybackBatchAction::SetTempButton(false)
                 }
+                light_programmer::PreloadPlaybackQueueAction::DynamicPause => {
+                    PlaybackBatchAction::TogglePause
+                }
+                light_programmer::PreloadPlaybackQueueAction::DynamicRestart => {
+                    PlaybackBatchAction::DynamicRestart
+                }
+                light_programmer::PreloadPlaybackQueueAction::DynamicDoubleSpeed => {
+                    PlaybackBatchAction::DynamicDoubleSpeed
+                }
+                light_programmer::PreloadPlaybackQueueAction::DynamicHalfSpeed => {
+                    PlaybackBatchAction::DynamicHalfSpeed
+                }
+                light_programmer::PreloadPlaybackQueueAction::DynamicLearnSpeed => {
+                    PlaybackBatchAction::DynamicLearnSpeed
+                }
+                light_programmer::PreloadPlaybackQueueAction::Fader { value_permyriad } => {
+                    PlaybackBatchAction::SetFader { value_permyriad }
+                }
             };
             Ok(PlaybackBatchCommand {
                 number: pending.playback_number,

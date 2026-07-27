@@ -138,6 +138,34 @@ fn learn_exits_sound_mode_and_averages_recent_taps() {
 }
 
 #[test]
+fn learn_starts_a_new_bucket_after_ten_seconds_at_normal_speeds() {
+    let mut speed = SpeedGroupController::new(100.0, SoundToLightConfig::default()).unwrap();
+    assert_eq!(speed.tap_learn(1_000), LearnResult::Armed);
+    assert_eq!(speed.tap_learn(1_600), LearnResult::Learned { bpm: 100.0 });
+    assert!(matches!(
+        speed.tap_learn(11_600),
+        LearnResult::Learned { .. }
+    ));
+
+    let current = speed.manual_bpm();
+    assert_eq!(speed.tap_learn(21_601), LearnResult::Armed);
+    assert_eq!(speed.manual_bpm(), current);
+    assert_eq!(speed.tap_learn(22_601), LearnResult::Learned { bpm: 60.0 });
+}
+
+#[test]
+fn learn_allows_up_to_thirty_seconds_once_the_calculated_speed_is_below_ten_bpm() {
+    let mut speed = SpeedGroupController::new(8.0, SoundToLightConfig::default()).unwrap();
+    assert_eq!(speed.tap_learn(1_000), LearnResult::Armed);
+    assert_eq!(speed.tap_learn(21_000), LearnResult::Learned { bpm: 3.0 });
+    assert_eq!(speed.tap_learn(51_000), LearnResult::Learned { bpm: 2.4 });
+
+    assert_eq!(speed.tap_learn(81_001), LearnResult::Armed);
+    assert_eq!(speed.manual_bpm(), 2.4);
+    assert_eq!(speed.tap_learn(91_001), LearnResult::Learned { bpm: 6.0 });
+}
+
+#[test]
 fn pause_freezes_phase_without_discarding_live_sound_rate() {
     let mut speed = SpeedGroupController::new(90.0, enabled_config()).unwrap();
     speed.observe_sound(SoundObservation::tempo(1_000, 120.0, 1.0));

@@ -210,6 +210,11 @@ pub(super) fn values_projection(
             .map(fixture_value)
             .collect(),
         group_values: projection.group_values.iter().map(group_value).collect(),
+        dynamic_values: projection
+            .dynamic_values
+            .iter()
+            .map(super::dynamics_wire::programming_value)
+            .collect(),
     }
 }
 
@@ -457,7 +462,7 @@ fn group_value(value: &light_programmer::ProgrammerGroupUpdate) -> wire::Program
     }
 }
 
-fn attribute_value(value: &AttributeValue) -> wire::ProgrammingAttributeValue {
+pub(super) fn attribute_value(value: &AttributeValue) -> wire::ProgrammingAttributeValue {
     match value {
         AttributeValue::Normalized(value) => wire::ProgrammingAttributeValue::Normalized(*value),
         AttributeValue::Spread(values) => wire::ProgrammingAttributeValue::Spread(values.clone()),

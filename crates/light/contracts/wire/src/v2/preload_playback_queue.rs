@@ -16,6 +16,12 @@ pub enum ProgrammingPreloadPlaybackAction {
     On,
     TemporaryOn,
     TemporaryOff,
+    DynamicPause,
+    DynamicRestart,
+    DynamicDoubleSpeed,
+    DynamicHalfSpeed,
+    DynamicLearnSpeed,
+    Fader { value_permyriad: u16 },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

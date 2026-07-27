@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use light_application::{
     ActionContext, ActionError, ActionErrorKind, AutomaticPlaybackProjection,
-    PlaybackDeskProjection, PlaybackRuntimeIdentity, PlaybackRuntimeProjection, PlaybackShowScope,
-    PlaybackTargetProjection,
+    DynamicPlaybackControllerStatus, DynamicPlaybackRuntimeProjection, DynamicPlaybackRuntimeState,
+    DynamicPlaybackSpeedSource, PlaybackDeskProjection, PlaybackRuntimeIdentity,
+    PlaybackRuntimeProjection, PlaybackShowScope, PlaybackTargetProjection,
 };
 use light_core::CueListId;
 use light_engine::EngineSnapshot;
@@ -267,6 +268,18 @@ fn project_playback(
                     .find(|status| status.playback.playback_number == Some(number)),
             ));
         }
+        PlaybackTarget::Dynamic { assignment } => PlaybackTargetProjection::Dynamic {
+            dynamic_id: assignment.dynamic.dynamic_id,
+            last_known_pool_number: assignment.dynamic.last_known_pool_number,
+            embedded: assignment.dynamic.dynamic_id.is_none(),
+            runtime: ports
+                .state
+                .output
+                .active_dynamic_playbacks()
+                .into_iter()
+                .find(|active| active.playback_number == number)
+                .map(|active| dynamic_runtime_projection(ports, snapshot, assignment, active)),
+        },
         PlaybackTarget::Group { group_id } => group_projection(ports, snapshot, group_id)?,
         PlaybackTarget::SpeedGroup { group } => speed_projection(ports, group)?,
         PlaybackTarget::GrandMaster => grand_master_projection(ports),
@@ -291,6 +304,223 @@ fn project_playback(
         playback_number: Some(number),
         target,
     })
+}
+
+fn dynamic_runtime_projection(
+    ports: &ServerPlaybackPorts<'_>,
+    snapshot: &EngineSnapshot,
+    assignment: &light_playback::DynamicPlaybackAssignment,
+    active: light_playback::ActiveDynamicPlayback,
+) -> DynamicPlaybackRuntimeProjection {
+    let runtime = ports.state.output.dynamic_runtime_snapshot();
+    let output_interval_millis =
+        1_000_u64.div_ceil(u64::from(ports.state.output.frame_rate_hz().max(1)));
+    dynamic_runtime_projection_from_snapshot(
+        snapshot,
+        assignment,
+        active,
+        &runtime,
+        output_interval_millis,
+    )
+}
+
+fn dynamic_runtime_projection_from_snapshot(
+    snapshot: &EngineSnapshot,
+    assignment: &light_playback::DynamicPlaybackAssignment,
+    active: light_playback::ActiveDynamicPlayback,
+    runtime: &light_dynamics::DynamicRuntimeSnapshot,
+    output_interval_millis: u64,
+) -> DynamicPlaybackRuntimeProjection {
+    let definition = assignment
+        .dynamic
+        .dynamic_id
+        .and_then(|id| snapshot.dynamics.iter().find(|dynamic| dynamic.id == id))
+        .unwrap_or(&assignment.dynamic.embedded_fallback.definition);
+    let controller_id = dynamic_playback_controller_id(active.playback_number);
+    let stored_instance = runtime.instances.iter().find(|instance| {
+        instance
+            .controllers
+            .iter()
+            .any(|controller| controller.id == controller_id)
+    });
+    let instance = stored_instance.filter(|instance| !instance.completed);
+    let winning_controller_id = instance.and_then(|instance| {
+        instance
+            .controllers
+            .iter()
+            .max_by_key(|controller| {
+                (
+                    controller.priority,
+                    controller.activated_at_millis,
+                    controller.id,
+                )
+            })
+            .map(|controller| controller.id)
+    });
+    let controller_status = match winning_controller_id {
+        Some(winner) if winner == controller_id => DynamicPlaybackControllerStatus::Winning,
+        Some(_) => DynamicPlaybackControllerStatus::Losing,
+        None => DynamicPlaybackControllerStatus::Missing,
+    };
+    let state = if !active.enabled || stored_instance.is_some_and(|instance| instance.completed) {
+        DynamicPlaybackRuntimeState::Off
+    } else if instance.is_none() {
+        DynamicPlaybackRuntimeState::Failed
+    } else if active.fader_value <= f32::EPSILON || active.master <= f32::EPSILON {
+        DynamicPlaybackRuntimeState::Zero
+    } else if instance.is_some_and(|instance| instance.pending_until_millis.is_some()) {
+        DynamicPlaybackRuntimeState::Pending
+    } else if active.paused
+        || instance.is_some_and(|instance| {
+            instance.paused_at_millis.is_some() || instance.speed_paused_at_millis.is_some()
+        })
+    {
+        DynamicPlaybackRuntimeState::Paused
+    } else if controller_status == DynamicPlaybackControllerStatus::Losing {
+        DynamicPlaybackRuntimeState::Hidden
+    } else {
+        DynamicPlaybackRuntimeState::Active
+    };
+    let effective_speed_multiplier = instance
+        .and_then(|instance| {
+            instance
+                .controllers
+                .iter()
+                .find(|controller| controller.id == controller_id)
+        })
+        .map_or_else(
+            || {
+                (active.local_speed_multiplier.factor()
+                    * definition.overall_speed_multiplier.factor()) as f32
+            },
+            |controller| {
+                (f64::from(controller.speed_multiplier)
+                    * definition.overall_speed_multiplier.factor()) as f32
+            },
+        );
+    let (speed_source, effective_duration_millis) = match definition.speed {
+        light_dynamics::DynamicSpeed::Fixed { duration_millis } => (
+            DynamicPlaybackSpeedSource::Fixed,
+            Some(
+                (duration_millis as f64 / f64::from(effective_speed_multiplier).max(f64::EPSILON))
+                    .round()
+                    .max(1.0) as u64,
+            ),
+        ),
+        light_dynamics::DynamicSpeed::SpeedGroup { .. } => {
+            (DynamicPlaybackSpeedSource::SpeedGroup, None)
+        }
+    };
+    let targets = instance.map_or(&[][..], |instance| instance.targets.as_slice());
+    let coverage = dynamic_target_lane_coverage(snapshot, definition, targets);
+    let mut warnings = Vec::new();
+    if state == DynamicPlaybackRuntimeState::Failed {
+        warnings.push(
+            "Dynamic Playback is enabled but its runtime instance could not be started".to_owned(),
+        );
+    }
+    if coverage.missing_target_count > 0 || coverage.skipped_address_count > 0 {
+        warnings.push(format!(
+            "{} of {} target/lane addresses run; {} skipped ({} missing targets, {} unpatched targets)",
+            coverage.supported_address_count,
+            coverage.total_address_count,
+            coverage.skipped_address_count,
+            coverage.missing_target_count,
+            coverage.unpatched_target_count,
+        ));
+    }
+    if let Some(aliasing) = effective_duration_millis.and_then(|cycle| {
+        light_dynamics::aliasing_warning(definition, cycle, output_interval_millis).map(|warning| {
+            format!(
+                "Aliasing: shortest segment is {} ms ({} output samples; at least 4 required)",
+                warning.shortest_segment_millis, warning.samples_per_segment,
+            )
+        })
+    }) {
+        warnings.push(aliasing);
+    }
+    let warning = (!warnings.is_empty()).then(|| warnings.join(" · "));
+    DynamicPlaybackRuntimeProjection {
+        active,
+        state,
+        instance_id: instance.map(|instance| instance.id),
+        controller_id,
+        winning_controller_id,
+        controller_status,
+        target_count: targets.len(),
+        compatible_target_count: coverage.compatible_target_count,
+        missing_target_count: coverage.missing_target_count,
+        unpatched_target_count: coverage.unpatched_target_count,
+        lane_count: definition.lanes.len(),
+        supported_address_count: coverage.supported_address_count,
+        skipped_address_count: coverage.skipped_address_count,
+        speed_source,
+        effective_speed_multiplier,
+        effective_duration_millis,
+        warning,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(in crate::runtime) struct DynamicTargetLaneCoverage {
+    pub(in crate::runtime) compatible_target_count: usize,
+    pub(in crate::runtime) missing_target_count: usize,
+    pub(in crate::runtime) unpatched_target_count: usize,
+    pub(in crate::runtime) supported_address_count: usize,
+    pub(in crate::runtime) skipped_address_count: usize,
+    pub(in crate::runtime) total_address_count: usize,
+}
+
+pub(in crate::runtime) fn dynamic_target_lane_coverage(
+    snapshot: &EngineSnapshot,
+    definition: &light_dynamics::DynamicDefinition,
+    targets: &[light_core::FixtureId],
+) -> DynamicTargetLaneCoverage {
+    let mut coverage = DynamicTargetLaneCoverage {
+        total_address_count: targets.len().saturating_mul(definition.lanes.len()),
+        ..DynamicTargetLaneCoverage::default()
+    };
+    for target in targets {
+        let Some(fixture) = snapshot
+            .fixtures
+            .iter()
+            .find(|fixture| fixture.fixture_id == *target)
+        else {
+            coverage.missing_target_count += 1;
+            coverage.skipped_address_count += definition.lanes.len();
+            continue;
+        };
+        let has_physical_patch = (fixture.universe.is_some() && fixture.address.is_some())
+            || fixture
+                .split_patches
+                .iter()
+                .any(|patch| patch.universe.is_some() && patch.address.is_some());
+        if !has_physical_patch {
+            coverage.unpatched_target_count += 1;
+        }
+        let supported = definition
+            .lanes
+            .iter()
+            .filter(|lane| {
+                fixture
+                    .definition
+                    .heads
+                    .iter()
+                    .flat_map(|head| &head.parameters)
+                    .any(|parameter| parameter.attribute == lane.attribute)
+            })
+            .count();
+        coverage.supported_address_count += supported;
+        coverage.skipped_address_count += definition.lanes.len().saturating_sub(supported);
+        if supported > 0 {
+            coverage.compatible_target_count += 1;
+        }
+    }
+    coverage
+}
+
+const fn dynamic_playback_controller_id(playback_number: u16) -> uuid::Uuid {
+    uuid::Uuid::from_u128(0x4459_4e41_4d49_432d_504c_4159_4241_434b ^ playback_number as u128)
 }
 
 fn show_scope(ports: &ServerPlaybackPorts<'_>, snapshot: &EngineSnapshot) -> PlaybackShowScope {

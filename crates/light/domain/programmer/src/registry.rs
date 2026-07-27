@@ -438,11 +438,14 @@ impl ProgrammerRegistry {
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
-        let normal_values_changed = !state.values.is_empty() || !state.group_values.is_empty();
+        let normal_values_changed = !state.values.is_empty()
+            || !state.group_values.is_empty()
+            || !state.dynamic_values.is_empty();
         state.checkpoint();
         state.values.clear();
         state.transient_values.clear();
         state.group_values.clear();
+        state.dynamic_values.clear();
         state.last_activity = self.clock.now();
         let user_id = state.user_id;
         drop(states);
@@ -478,10 +481,16 @@ impl ProgrammerRegistry {
         let Some(state) = self.states.write().remove(&key) else {
             return false;
         };
-        if !state.values.is_empty() || !state.group_values.is_empty() {
+        if !state.values.is_empty()
+            || !state.group_values.is_empty()
+            || !state.dynamic_values.is_empty()
+        {
             self.mark_normal_values_changed(state.user_id);
         }
-        if !state.preload_pending.is_empty() || !state.preload_group_pending.is_empty() {
+        if !state.preload_pending.is_empty()
+            || !state.preload_group_pending.is_empty()
+            || !state.preload_dynamic_pending.is_empty()
+        {
             self.mark_preload_values_changed(state.user_id);
         }
         if !state.preload_playback_pending.is_empty() {

@@ -18,7 +18,6 @@ pub(super) struct PlaybackFrame<'a> {
     pub(super) target_index: usize,
     pub(super) target_tracking_wrap: bool,
     pub(super) previous: PreviousState,
-    pub(super) effective_now: DateTime<Utc>,
     pub(super) elapsed: u64,
     pub(super) cue_fade_millis: u64,
 }
@@ -41,7 +40,7 @@ impl<'a> PlaybackFrame<'a> {
             playback.tracking_wrap && playback.manual_xfade_to_index.is_none();
         let previous = previous_state(playback);
         let cue = &cue_list.cues[target_index];
-        let effective_now = playback.paused_at.unwrap_or(context.dynamics_now);
+        let effective_now = playback.paused_at.unwrap_or(context.now);
         let elapsed = (effective_now - playback.activated_at)
             .num_milliseconds()
             .max(0) as u64;
@@ -57,7 +56,6 @@ impl<'a> PlaybackFrame<'a> {
             target_index,
             target_tracking_wrap,
             previous,
-            effective_now,
             elapsed,
             cue_fade_millis,
         }
@@ -89,19 +87,6 @@ impl<'a> PlaybackFrame<'a> {
             }
             PreviousState::Empty => None,
         }
-    }
-
-    pub(super) fn target_value_for(
-        &self,
-        fixture_id: FixtureId,
-        attribute: &AttributeKey,
-    ) -> Option<&AttributeValue> {
-        self.compiled.value(
-            fixture_id,
-            attribute,
-            self.target_index,
-            self.target_tracking_wrap,
-        )
     }
 
     pub(super) fn deleted_previous(&self) -> Option<&HashMap<AttributeAddress, AttributeValue>> {

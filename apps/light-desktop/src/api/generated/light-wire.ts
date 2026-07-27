@@ -21,17 +21,25 @@ export type CommandChoiceOption = { id: CommandChoiceOptionId, label: string, co
 
 export type CueMoveCopyChoice = { type: CueMoveCopyChoiceType, choice_id: string, show_id: string, show_revision: number, operation: CueTransferOperation, command: string, options: Array<CommandChoiceOption>, cancel_label: string, };
 
+export type DynamicInstanceChoiceType = "dynamic_instance";
+
+export type DynamicInstanceChoiceOption = { controller_id: string, label: string, command: string, };
+
+export type DynamicInstanceChoice = { type: DynamicInstanceChoiceType, choice_id: string, show_id: string, show_revision: number, dynamic_id: string, pool_number: number, command: string, options: Array<DynamicInstanceChoiceOption>, cancel_label: string, };
+
+export type PendingCommandChoice = CueMoveCopyChoice | DynamicInstanceChoice;
+
 export type ReplaceCommandLineRequest = { text: string, };
 
 export type CommandKeyRequest = { key: CommandKey, phase: CommandKeyPhase, request_id: string, };
 
 export type ExecuteCommandLineRequest = { command?: string | null, request_id: string, };
 
-export type CommandLineResponse = { text: string, target: CommandTarget, pristine: boolean, revision: number, pending_choice: CueMoveCopyChoice | null, };
+export type CommandLineResponse = { text: string, target: CommandTarget, pristine: boolean, revision: number, pending_choice: PendingCommandChoice | null, };
 
-export type CommandOperationOutcome = { "outcome": "accepted", action: CommandAcceptedAction, applied?: number | null, warning?: string | null, } | { "outcome": "choice_required", pending_choice: CueMoveCopyChoice, } | { "outcome": "rejected", error: string, };
+export type CommandOperationOutcome = { "outcome": "accepted", action: CommandAcceptedAction, applied?: number | null, warning?: string | null, } | { "outcome": "choice_required", pending_choice: PendingCommandChoice, } | { "outcome": "rejected", error: string, };
 
-export type CommandOperationResponse = { request_id: string, command_line: CommandLineResponse, } & ({ "outcome": "accepted", action: CommandAcceptedAction, applied?: number | null, warning?: string | null, } | { "outcome": "choice_required", pending_choice: CueMoveCopyChoice, } | { "outcome": "rejected", error: string, });
+export type CommandOperationResponse = { request_id: string, command_line: CommandLineResponse, } & ({ "outcome": "accepted", action: CommandAcceptedAction, applied?: number | null, warning?: string | null, } | { "outcome": "choice_required", pending_choice: PendingCommandChoice, } | { "outcome": "rejected", error: string, });
 
 export type CommandErrorResponse = { error: string, };
 
@@ -92,6 +100,97 @@ export type DeskUnlockMode = "button" | "pin";
 export type DeskUnlockRequest = { pin?: string | null, };
 
 export type UserCreateRequest = { request_id: string, name: string, enabled: boolean, };
+
+export type DynamicDefinitionProjection = { id: string, pool_number: number, revision: number, name: string, color?: string | null, icon?: string | null, target_binding: DynamicTargetBindingProjection, lanes: Array<DynamicLaneProjection>, random_groups: Array<DynamicRandomGroupProjection>, phase: DynamicPhaseDistributionProjection, speed: DynamicSpeedProjection, overall_speed_multiplier: DynamicRationalProjection, run_mode: DynamicRunModeProjection, default_activation: DynamicActivationPolicyProjection, activation_boundary: DynamicActivationBoundaryProjection, };
+
+export type DynamicTargetBindingProjection = { "type": "live_group", group_id: string, } | { "type": "frozen_targets", targets: Array<string>, } | { "type": "targetless" };
+
+export type DynamicLaneProjection = { id: string, attribute: string, mode: DynamicLaneModeProjection, keyframes: DynamicKeyframeConfigurationProjection, max_min: DynamicMaxMinConfigurationProjection, middle_amplitude: DynamicMiddleAmplitudeConfigurationProjection, speed_multiplier: DynamicRationalProjection, width: number, random_group_id?: string | null, };
+
+export type DynamicLaneModeProjection = "keyframes" | "max_min" | "middle_amplitude" | "random";
+
+export type DynamicKeyframeConfigurationProjection = { points: Array<DynamicKeyframeProjection>, size: number, };
+
+export type DynamicKeyframeProjection = { position: number, source: DynamicScalarSourceProjection, interpolation: DynamicScalarInterpolationProjection, };
+
+export type DynamicMaxMinConfigurationProjection = { minimum: DynamicScalarSourceProjection, maximum: DynamicScalarSourceProjection, function: DynamicPeriodicFunctionProjection, size: number, pwm: DynamicPwmShapeProjection, };
+
+export type DynamicMiddleAmplitudeConfigurationProjection = { middle: DynamicScalarSourceProjection, amplitude: number, function: DynamicPeriodicFunctionProjection, size: number, pwm: DynamicPwmShapeProjection, };
+
+export type DynamicScalarSourceProjection = { "type": "current" } | { "type": "value", value: number, } | { "type": "preset", preset_id: string, attribute: string, last_valid_by_target: Array<DynamicTargetScalarFallbackProjection>, };
+
+export type DynamicTargetScalarFallbackProjection = { target: string, value: number, };
+
+export type DynamicScalarInterpolationProjection = "linear" | "ease_in" | "ease_out" | "ease_in_out" | "hold" | "drop";
+
+export type DynamicPeriodicFunctionProjection = "sinus" | "cosinus" | "linear_up" | "linear_down" | "pwm";
+
+export type DynamicPwmShapeProjection = { attack: number, on: number, decay: number, off: number, attack_interpolation: DynamicScalarInterpolationProjection, decay_interpolation: DynamicScalarInterpolationProjection, };
+
+export type DynamicRandomGroupProjection = { id: string, seed: number, low: DynamicScalarSourceProjection, high: DynamicScalarSourceProjection, decision_interval_millis: number, start_probability: number, mean_duration_millis: number, duration_spread_millis: number, attack_ratio: number, decay_ratio: number, };
+
+export type DynamicPhaseDistributionProjection = { ordering: DynamicPhaseOrderingProjection, offset_degrees: number, span_degrees: number, block_size: number, repeats: number, wings: boolean, anchors_degrees: Array<number>, };
+
+export type DynamicPhaseOrderingProjection = { "type": "selection" } | { "type": "grid_linear", angle_degrees: number, } | { "type": "radial_out", center_x: number, center_z: number, } | { "type": "radial_in", center_x: number, center_z: number, } | { "type": "axial", center_x: number, center_z: number, } | { "type": "random_each_loop", seed: number, };
+
+export type DynamicSpeedProjection = { "type": "fixed", duration_millis: number, } | { "type": "speed_group", group: DynamicSpeedGroupProjection, beats_per_cycle: DynamicRationalProjection, };
+
+export type DynamicSpeedGroupProjection = "A" | "B" | "C" | "D" | "E";
+
+export type DynamicRationalProjection = { numerator: number, denominator: number, };
+
+export type DynamicRunModeProjection = "loop" | "one_shot";
+
+export type DynamicActivationPolicyProjection = "start_now" | "join_sync_now" | "next_boundary";
+
+export type DynamicActivationBoundaryProjection = "beat" | "bar";
+
+export type DynamicReferenceProjection = { dynamic_id?: string | null, last_known_pool_number: number, embedded_fallback: DynamicDefinitionProjection, };
+
+export type DynamicValueTimingProjection = { fade_millis?: number | null, delay_millis?: number | null, };
+
+export type DynamicInstanceOverridesProjection = { size: number, speed_multiplier: DynamicRationalProjection, phase_offset_degrees: number, };
+
+export type DynamicStartActionRequest = { request_id: string, targets: Array<string>, overrides: DynamicInstanceOverridesProjection, timing: DynamicValueTimingProjection, };
+
+export type DynamicOffActionRequest = { request_id: string, timing: DynamicValueTimingProjection, };
+
+export type DynamicControllerValueActionRequest = { request_id: string, value: number, undo_group?: string | null, };
+
+export type DynamicFixAtActionRequest = { request_id: string, targets: Array<string>, attribute: string, value: number, timing: DynamicValueTimingProjection, };
+
+export type DynamicInstanceActionOutcome = { request_id: string, runtime_instance_id: string, controller_id: string, targets: Array<string>, started: boolean, };
+
+export type DynamicControllerActionOutcome = { request_id: string, controller_id: string, changed: boolean, };
+
+export type DynamicRuntimeSnapshotProjection = { global_paused: boolean, instances: Array<DynamicRuntimeInstanceProjection>, definitions: Array<DynamicDefinitionStatusProjection>, };
+
+export type DynamicDefinitionStatusProjection = { dynamic_id: string, target_count: number, compatible_target_count: number, missing_target_count: number, unpatched_target_count: number, lane_count: number, supported_address_count: number, skipped_address_count: number, warning?: string | null, };
+
+export type DynamicRuntimeInstanceProjection = { instance_id: string, dynamic_id: string, pool_number: number, name: string, targets: Array<string>, pending: boolean, pending_until_millis: bigint | null, paused: boolean, speed_source: string, activation_boundary: DynamicActivationBoundaryProjection, effective_cycle_millis: bigint, effective_bpm: number | null, beat_phase: number | null, phase_advancing: boolean, aliasing_warning: string | null, controllers: Array<DynamicRuntimeControllerProjection>, };
+
+export type DynamicRuntimeControllerProjection = { controller_id: string, source: string, priority: number, size: number, speed_multiplier: number, phase_offset_degrees: number, paused: boolean, winning: boolean, releasing: boolean, activation_mix: number, };
+
+export type DynamicStartLiveActionRequest = { dynamic_id: string, request: DynamicStartActionRequest, };
+
+export type DynamicOffLiveActionRequest = { controller_id: string, request: DynamicOffActionRequest, };
+
+export type DynamicControllerLiveActionRequest = { controller_id: string, request: DynamicControllerValueActionRequest, };
+
+export type DynamicCreateActionRequest = { request_id: string,
+/**
+ * Complete candidate definition. The server owns UUID, revision, and atomic slot conflict
+ * validation; the first lane must already be present and valid.
+ */
+definition: unknown, };
+
+export type DynamicPoolActionRequest = { request_id: string, expected_revision: number, pool_number: number, };
+
+export type DynamicDeleteActionRequest = { request_id: string, expected_revision: number, };
+
+export type DynamicUpdateActionRequest = { request_id: string, expected_revision: number, mutation_group?: string | null, intent: DynamicUpdateIntent, };
+
+export type DynamicUpdateIntent = { "type": "set_name", name: string, } | { "type": "set_color", color: string | null, } | { "type": "set_icon", icon: string | null, } | { "type": "set_target_binding", target_binding: unknown, } | { "type": "add_lane", lane: unknown, index: number | null, } | { "type": "replace_lane", lane_id: string, lane: unknown, } | { "type": "delete_lane", lane_id: string, } | { "type": "move_lane", lane_id: string, index: number, } | { "type": "set_phase", phase: unknown, } | { "type": "set_speed", speed: unknown, } | { "type": "set_overall_speed_multiplier", multiplier: DynamicRationalProjection, } | { "type": "set_run_mode", run_mode: DynamicRunModeProjection, } | { "type": "set_activation", activation: unknown, } | { "type": "set_activation_boundary", boundary: DynamicActivationBoundaryProjection, } | { "type": "add_random_group", group: unknown, } | { "type": "replace_random_group", group_id: string, group: unknown, } | { "type": "delete_random_group", group_id: string, };
 
 export type EventCapability = "programmer" | "playback" | "show" | "desk" | "output" | "system";
 
@@ -171,13 +270,17 @@ export type ProgrammingFixtureValue = { fixture_id: string, attribute: string, v
 
 export type ProgrammingGroupValue = { group_id: string, attribute: string, value: ProgrammingAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
 
+export type ProgrammingDynamicSemanticValue = { "type": "static", value: ProgrammingAttributeValue, timing: DynamicValueTimingProjection, } | { "type": "dynamic_on", instance_link: string, dynamic: DynamicReferenceProjection, lane_id: string, overrides: DynamicInstanceOverridesProjection, timing: DynamicValueTimingProjection, } | { "type": "dynamic_off", instance_link: string, timing: DynamicValueTimingProjection, } | { "type": "fix_at", value: number, timing: DynamicValueTimingProjection, } | { "type": "release" };
+
+export type ProgrammingDynamicValue = { fixture_id: string, attribute: string, value: ProgrammingDynamicSemanticValue, programmer_order: number, changed_at_millis: number, };
+
 export type ProgrammingCaptureModeProjection = { user_id: string, revision: number, blind: boolean, preview: boolean, preload_capture_programmer: boolean, };
 
 export type ProgrammingCaptureModeChange = { projection: ProgrammingCaptureModeProjection, };
 
 export type ProgrammingCaptureModeSnapshot = { cursor: EventSnapshotCursor, projection: ProgrammingCaptureModeProjection, };
 
-export type ProgrammingValuesProjection = { user_id: string, revision: number, fixture_values: Array<ProgrammingFixtureValue>, group_values: Array<ProgrammingGroupValue>, };
+export type ProgrammingValuesProjection = { user_id: string, revision: number, fixture_values: Array<ProgrammingFixtureValue>, group_values: Array<ProgrammingGroupValue>, dynamic_values: Array<ProgrammingDynamicValue>, };
 
 export type ProgrammingValuesChange = { projection: ProgrammingValuesProjection, };
 
@@ -220,7 +323,7 @@ export type ProgrammingPreloadFixtureValue = { fixture_id: string, attribute: st
 
 export type ProgrammingPreloadGroupValue = { group_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, programmer_order: number, fade: boolean, fade_millis?: number | null, delay_millis?: number | null, };
 
-export type ProgrammingPreloadValuesProjection = { user_id: string, revision: number, fixture_values: Array<ProgrammingPreloadFixtureValue>, group_values: Array<ProgrammingPreloadGroupValue>, };
+export type ProgrammingPreloadValuesProjection = { user_id: string, revision: number, fixture_values: Array<ProgrammingPreloadFixtureValue>, group_values: Array<ProgrammingPreloadGroupValue>, dynamic_values: Array<ProgrammingDynamicValue>, };
 
 export type ProgrammingPreloadValuesChange = { projection: ProgrammingPreloadValuesProjection, };
 
@@ -242,7 +345,7 @@ export type ProgrammingPreloadValuesErrorKind = "invalid" | "unauthorized" | "fo
 
 export type ProgrammingPreloadValuesErrorResponse = { kind: ProgrammingPreloadValuesErrorKind, error: string, current_revision?: number | null, current_capture_mode_revision?: number | null, retryable: boolean, };
 
-export type ProgrammingPreloadPlaybackAction = "toggle" | "go" | "back" | "off" | "on" | "temporary_on" | "temporary_off";
+export type ProgrammingPreloadPlaybackAction = "toggle" | "go" | "back" | "off" | "on" | "temporary_on" | "temporary_off" | "dynamic_pause" | "dynamic_restart" | "dynamic_double_speed" | "dynamic_half_speed" | "dynamic_learn_speed" | { "fader": { value_permyriad: number, } };
 
 export type ProgrammingPreloadPlaybackSurface = "physical" | "virtual" | "osc" | "matter";
 
@@ -468,9 +571,9 @@ export type PlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "
 
 export type ResolvedPlaybackAddress = { "kind": "cue_list", cue_list_id: string, } | { "kind": "group", group_id: string, playback_number: number | null, } | { "kind": "playback", playback_number: number, page: number | null, slot: number | null, };
 
-export type PlaybackAction = { "type": "go", pressed: boolean, } | { "type": "back", pressed: boolean, } | { "type": "pause", pressed: boolean, } | { "type": "release" } | { "type": "on", pressed: boolean, } | { "type": "off", pressed: boolean, } | { "type": "toggle", pressed: boolean, } | { "type": "fast_forward", pressed: boolean, } | { "type": "fast_rewind", pressed: boolean, } | { "type": "flash", pressed: boolean, } | { "type": "temp", pressed: boolean, } | { "type": "swap", pressed: boolean, } | { "type": "select", pressed: boolean, } | { "type": "select_contents", pressed: boolean, } | { "type": "select_dereferenced", pressed: boolean, } | { "type": "learn", pressed: boolean, } | { "type": "double", pressed: boolean, } | { "type": "half", pressed: boolean, } | { "type": "blackout", pressed: boolean, } | { "type": "pause_dynamics", pressed: boolean, } | { "type": "none", pressed: boolean, } | { "type": "master", value: number, } | { "type": "go_to", cue_number: number, } | { "type": "load", cue_number: number, } | { "type": "crossfade", enabled: boolean, } | { "type": "temporary", enabled: boolean, pressed: boolean, } | { "type": "configured_button", number: number, pressed: boolean, };
+export type PlaybackAction = { "type": "go", pressed: boolean, } | { "type": "back", pressed: boolean, } | { "type": "pause", pressed: boolean, } | { "type": "release" } | { "type": "on", pressed: boolean, } | { "type": "off", pressed: boolean, } | { "type": "toggle", pressed: boolean, } | { "type": "fast_forward", pressed: boolean, } | { "type": "fast_rewind", pressed: boolean, } | { "type": "flash", pressed: boolean, } | { "type": "temp", pressed: boolean, } | { "type": "swap", pressed: boolean, } | { "type": "select", pressed: boolean, } | { "type": "select_contents", pressed: boolean, } | { "type": "select_dereferenced", pressed: boolean, } | { "type": "learn", pressed: boolean, } | { "type": "double", pressed: boolean, } | { "type": "half", pressed: boolean, } | { "type": "blackout", pressed: boolean, } | { "type": "pause_dynamics", pressed: boolean, } | { "type": "dynamic_restart", pressed: boolean, } | { "type": "dynamic_double_speed", pressed: boolean, } | { "type": "dynamic_half_speed", pressed: boolean, } | { "type": "dynamic_learn_speed", pressed: boolean, } | { "type": "none", pressed: boolean, } | { "type": "master", value: number, } | { "type": "go_to", cue_number: number, } | { "type": "load", cue_number: number, } | { "type": "crossfade", enabled: boolean, } | { "type": "temporary", enabled: boolean, pressed: boolean, } | { "type": "configured_button", number: number, pressed: boolean, };
 
-export type PendingPlaybackAction = "toggle" | "go" | "back" | "off" | "on" | "temporary_on" | "temporary_off";
+export type PendingPlaybackAction = "toggle" | "go" | "back" | "off" | "on" | "temporary_on" | "temporary_off" | "dynamic_pause" | "dynamic_restart" | "dynamic_double_speed" | "dynamic_half_speed" | "dynamic_learn_speed" | { "fader": { value_permyriad: number, } };
 
 export type PlaybackOutcome = { "status": "applied" } | { "status": "no_change" } | { "status": "captured", pending: PendingPlaybackAction, };
 
@@ -492,13 +595,21 @@ export type SoundStatus = { "status": "disabled" } | { "status": "active", detec
 
 export type CueListRuntimeProjection = { cue_index: number, previous_index: number | null, current: PlaybackCueReference | null, loaded: PlaybackCueReference | null, normal_next: PlaybackCueReference | null, effective_next: PlaybackCueReference | null, effective_next_is_loaded: boolean, paused: boolean, activated_at: string, master: number, fader_position: number, fader_pickup_required: boolean, fader_pickup_target: number | null, flash: boolean, temporary: boolean, temporary_active: boolean, temporary_master: number, swap_active: boolean, enabled: boolean, transition_timing_bypassed: boolean, manual_xfade_position: number, manual_xfade_direction: ManualXFadeDirection, manual_xfade_progress: number, };
 
+export type DynamicPlaybackRuntimeState = "off" | "zero" | "pending" | "active" | "paused" | "hidden" | "failed";
+
+export type DynamicPlaybackControllerStatus = "winning" | "losing" | "missing";
+
+export type DynamicPlaybackSpeedSource = "fixed" | "speed_group";
+
+export type DynamicPlaybackRuntimeProjection = { playback_number: number, enabled: boolean, paused: boolean, flash: boolean, activated_at: string, fader_value: number, size: number, master: number, local_speed_numerator: number, local_speed_denominator: number, learned_duration_millis: number | null, state: DynamicPlaybackRuntimeState, instance_id: string | null, controller_id: string, winning_controller_id: string | null, controller_status: DynamicPlaybackControllerStatus, target_count: number, compatible_target_count: number, missing_target_count: number, unpatched_target_count: number, lane_count: number, supported_address_count: number, skipped_address_count: number, speed_source: DynamicPlaybackSpeedSource, effective_speed_multiplier: number, effective_duration_millis: number | null, warning: string | null, };
+
 export type SpeedGroupRuntimeProjection = { manual_bpm: number, sound_bpm: number | null, effective_bpm: number, source: SpeedSource, sound_status: SoundStatus, paused: boolean, phase_advancing: boolean, speed_master_scale: number, sound_multiplier: number, source_available: boolean, usable_signal: boolean, input_level: number, selected_band_level: number, synchronized_with: number | null, phase_origin_millis: number, beat_phase: number, };
 
 export type GrandMasterRuntimeProjection = { level: number, effective_level: number, blackout: boolean, flash_active: boolean, dynamics_paused: boolean, };
 
-export type PlaybackTargetProjection = { "target": "missing" } | { "target": "cue_list", cue_list_id: string, runtime: CueListRuntimeProjection | null, } | { "target": "group", group_id: string, master: number, flash_level: number, } | { "target": "speed_group", group: string, runtime: SpeedGroupRuntimeProjection, } | { "target": "grand_master", runtime: GrandMasterRuntimeProjection, } | { "target": "programmer_fade", millis: number, } | { "target": "cue_fade", millis: number, };
+export type PlaybackTargetProjection = { "target": "missing" } | { "target": "cue_list", cue_list_id: string, runtime: CueListRuntimeProjection | null, } | { "target": "dynamic", dynamic_id: string | null, last_known_pool_number: number, embedded: boolean, runtime: DynamicPlaybackRuntimeProjection | null, } | { "target": "group", group_id: string, master: number, flash_level: number, } | { "target": "speed_group", group: string, runtime: SpeedGroupRuntimeProjection, } | { "target": "grand_master", runtime: GrandMasterRuntimeProjection, } | { "target": "programmer_fade", millis: number, } | { "target": "cue_fade", millis: number, };
 
-export type PlaybackRuntimeProjection = { scope: PlaybackShowScope, requested: PlaybackRuntimeIdentity, playback_number: number | null, } & ({ "target": "missing" } | { "target": "cue_list", cue_list_id: string, runtime: CueListRuntimeProjection | null, } | { "target": "group", group_id: string, master: number, flash_level: number, } | { "target": "speed_group", group: string, runtime: SpeedGroupRuntimeProjection, } | { "target": "grand_master", runtime: GrandMasterRuntimeProjection, } | { "target": "programmer_fade", millis: number, } | { "target": "cue_fade", millis: number, });
+export type PlaybackRuntimeProjection = { scope: PlaybackShowScope, requested: PlaybackRuntimeIdentity, playback_number: number | null, } & ({ "target": "missing" } | { "target": "cue_list", cue_list_id: string, runtime: CueListRuntimeProjection | null, } | { "target": "dynamic", dynamic_id: string | null, last_known_pool_number: number, embedded: boolean, runtime: DynamicPlaybackRuntimeProjection | null, } | { "target": "group", group_id: string, master: number, flash_level: number, } | { "target": "speed_group", group: string, runtime: SpeedGroupRuntimeProjection, } | { "target": "grand_master", runtime: GrandMasterRuntimeProjection, } | { "target": "programmer_fade", millis: number, } | { "target": "cue_fade", millis: number, });
 
 export type PlaybackDeskProjection = { scope: PlaybackShowScope, desk_id: string, active_page: number, selected_playback: number | null, };
 
@@ -531,6 +642,10 @@ samples: Array<PlaybackTelemetrySample>,
  * Playback numbers that stopped reporting since the previous tick (released/offline).
  */
 released: Array<number>, };
+
+export type DynamicRuntimeEventKind = "instance_started" | "instance_pending" | "instance_active" | "instance_off" | "instance_release" | "controller_updated" | "controller_winner_changed" | "paused" | "resumed" | "failed_dependency" | "preload_committed" | "transition_completed";
+
+export type DynamicRuntimeChange = { kind: DynamicRuntimeEventKind, dynamic_id: string | null, runtime_instance_id: string | null, controller_id: string | null, winning_controller_id: string | null, occurred_at_millis: number, message: string | null, };
 
 export type OutputRuntimeActionRequest = { request_id: string, expected_show_id: string, expected_revision: number, grand_master?: number | null, blackout?: boolean | null, };
 
@@ -598,9 +713,9 @@ export type OutputRuntimeChange = { projection: OutputRuntimeProjection, };
 
 export type OutputRuntimeSnapshot = { cursor: EventSnapshotCursor, projection: OutputRuntimeProjection, };
 
-export type ShowObjectKind = "cue_list" | "group" | "patch_layer" | "playback" | "playback_page" | "preset" | "stage_layout" | "user_layout";
+export type ShowObjectKind = "cue_list" | "dynamic" | "group" | "patch_layer" | "playback" | "playback_page" | "preset" | "stage_layout" | "user_layout";
 
-export type ShowObjectChange = { "kind": "cue_list", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "group", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "patch_layer", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "playback", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "playback_page", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "preset", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "stage_layout", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "user_layout", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, };
+export type ShowObjectChange = { "kind": "dynamic", object_id: string, object_revision: number, body: unknown | null, validation_error?: string | null, deleted: boolean, } | { "kind": "cue_list", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "group", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "patch_layer", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "playback", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "playback_page", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "preset", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "stage_layout", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, } | { "kind": "user_layout", object_id: string, object_revision: number, body: unknown | null, deleted: boolean, };
 
 export type ShowObjectsChange = { show_id: string, show_revision: number, changes: Array<ShowObjectChange>, };
 
@@ -652,7 +767,7 @@ export type UpdateWorkflowNotification = { "type": "armed", desk_id: string, arm
 
 export type OperatorNotification = { "type": "desk_action", revision: number, notification: DeskActionNotification, } | { "type": "file_input", revision: number, notification: FileInputNotification, } | { "type": "file_operation", revision: number, notification: FileOperationNotification, } | { "type": "group_configuration", revision: number, notification: GroupConfigurationNotification, } | { "type": "update_workflow", revision: number, notification: UpdateWorkflowNotification, } | { "type": "command_history_changed", revision: number, desk_id: string, };
 
-export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programmer_priority_changed", change: ProgrammerPriorityChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_preload_playback_queue_changed", change: ProgrammingPreloadPlaybackQueueChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "playback_telemetry_sampled", tick: PlaybackTelemetryTick, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "speed_groups_changed", change: SpeedGroupChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, } | { "type": "virtual_playback_exclusion_zones_changed", change: VirtualPlaybackExclusionZonesChange, } | { "type": "highlight_changed", change: HighlightChange, } | { "type": "server_configuration_changed", change: NotificationRevision, } | { "type": "screens_changed", change: ScreenNotification, } | { "type": "show_library_changed", change: ShowLibraryNotification, } | { "type": "fixture_library_changed", change: FixtureLibraryNotification, } | { "type": "media_changed", change: MediaNotification, } | { "type": "hardware_connection_changed", change: HardwareConnectionNotification, } | { "type": "operator_notification", notification: OperatorNotification, };
+export type EventPayload = { "type": "programming_interaction_changed", change: ProgrammingInteractionChange, } | { "type": "programmer_priority_changed", change: ProgrammerPriorityChange, } | { "type": "programming_values_changed", change: ProgrammingValuesChange, } | { "type": "programming_capture_mode_changed", change: ProgrammingCaptureModeChange, } | { "type": "programming_preload_values_changed", change: ProgrammingPreloadValuesChange, } | { "type": "programming_preload_playback_queue_changed", change: ProgrammingPreloadPlaybackQueueChange, } | { "type": "programming_lifecycle_changed", change: ProgrammingLifecycleChange, } | { "type": "playback_runtime_changed", change: PlaybackRuntimeChange, } | { "type": "playback_view_changed", projection: PlaybackDeskProjection, } | { "type": "playback_telemetry_sampled", tick: PlaybackTelemetryTick, } | { "type": "output_runtime_changed", change: OutputRuntimeChange, } | { "type": "dynamic_runtime_changed", change: DynamicRuntimeChange, } | { "type": "speed_groups_changed", change: SpeedGroupChange, } | { "type": "show_patch_changed", delta: PatchDelta, } | { "type": "output_route_changed", change: OutputRouteChange, } | { "type": "show_objects_changed", change: ShowObjectsChange, } | { "type": "selective_import_applied", change: SelectiveImportChange, } | { "type": "virtual_playback_exclusion_zones_changed", change: VirtualPlaybackExclusionZonesChange, } | { "type": "highlight_changed", change: HighlightChange, } | { "type": "server_configuration_changed", change: NotificationRevision, } | { "type": "screens_changed", change: ScreenNotification, } | { "type": "show_library_changed", change: ShowLibraryNotification, } | { "type": "fixture_library_changed", change: FixtureLibraryNotification, } | { "type": "media_changed", change: MediaNotification, } | { "type": "hardware_connection_changed", change: HardwareConnectionNotification, } | { "type": "operator_notification", notification: OperatorNotification, };
 
 export type EventEnvelope = { sequence: number, occurred_at: string, desk_id: string | null, class: EventClass, object: EventObject | null, related_objects?: Array<EventObject> | null, source: EventSource, correlation_id: string | null, delivery: EventDeliveryPolicy, payload: EventPayload, };
 
@@ -716,13 +831,21 @@ export type PlaybackRuntimeSnapshotRequest = { identities: Array<PlaybackRuntime
 
 export type PlaybackRuntimeSnapshot = { cursor: EventSnapshotCursor, desk: PlaybackDeskProjection, projections: Array<PlaybackRuntimeProjection>, };
 
-export type PlaybackTopologyTarget = { "type": "cue_list", cue_list_id: string, } | { "type": "group", group_id: string, } | { "type": "speed_group", group: string, } | { "type": "programmer_fade", } | { "type": "cue_fade", } | { "type": "grand_master", };
+export type PlaybackTopologyTarget = { "type": "cue_list", cue_list_id: string, } | { "type": "dynamic", assignment: PlaybackTopologyDynamicAssignment, } | { "type": "group", group_id: string, } | { "type": "speed_group", group: string, } | { "type": "programmer_fade", } | { "type": "cue_fade", } | { "type": "grand_master", };
 
-export type PlaybackTopologyButtonAction = "on" | "off" | "toggle" | "go" | "go_minus" | "fast_forward" | "fast_rewind" | "flash" | "temp" | "swap" | "select" | "select_contents" | "select_dereferenced" | "learn" | "double" | "half" | "pause" | "blackout" | "pause_dynamics" | "none";
+export type PlaybackTopologyButtonAction = "on" | "off" | "toggle" | "go" | "go_minus" | "fast_forward" | "fast_rewind" | "flash" | "temp" | "swap" | "select" | "select_contents" | "select_dereferenced" | "learn" | "double" | "half" | "pause" | "blackout" | "pause_dynamics" | "dynamic_restart" | "dynamic_double_speed" | "dynamic_half_speed" | "dynamic_learn_speed" | "none";
 
 export type PlaybackTopologyFaderMode = "master" | "temp" | "speed" | "x_fade" | "direct_bpm" | "centered_relative" | "learned_percentage";
 
 export type PlaybackTopologyFlashReleaseMode = "release_all" | "release_intensity_only";
+
+export type PlaybackTopologyDynamicAssignment = { dynamic_id?: string | null, last_known_pool_number: number, embedded_fallback: DynamicDefinitionProjection, revision: number, target_scope?: PlaybackTopologyDynamicTargetScope | null, fader_mode: PlaybackTopologyDynamicFaderMode, priority: number, activation_override?: DynamicActivationPolicyProjection | null, resume_policy: PlaybackTopologyDynamicResumePolicy, local_speed_multiplier: DynamicRationalProjection, learned_duration_millis?: number | null, crossfade_non_intensity: boolean, auto_off_at_zero: boolean, auto_off_flash_release: boolean, auto_off_full_control: boolean, };
+
+export type PlaybackTopologyDynamicTargetScope = { "type": "live_group", group_id: string, } | { "type": "frozen_targets", targets: Array<string>, };
+
+export type PlaybackTopologyDynamicFaderMode = "none" | "master" | "size" | "size_and_master";
+
+export type PlaybackTopologyDynamicResumePolicy = "follow_dynamic" | "resume_frozen_phase" | "rejoin_synchronized_position" | "resume_on_next_boundary";
 
 export type PlaybackTopologyPlaybackDefinition = { number: number, name: string, target: PlaybackTopologyTarget, buttons: [PlaybackTopologyButtonAction, PlaybackTopologyButtonAction, PlaybackTopologyButtonAction], button_count: number, fader: PlaybackTopologyFaderMode, has_fader: boolean, go_activates: boolean, auto_off: boolean, xfade_millis: number, color: string, flash_release: PlaybackTopologyFlashReleaseMode, protect_from_swap: boolean, presentation_icon?: string | null, presentation_image?: string | null, };
 
@@ -923,7 +1046,7 @@ export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, s
 
 export type RuntimeClientSummary = { client_id: string, name: string, connected: boolean, last_connected_at: string | null, desk: RuntimeControlDesk, can_remove: boolean, };
 
-export type RuntimeAttributeDescriptor = { id: string, label: string, family: string, value_type: string, default_unit: string | null, };
+export type RuntimeAttributeDescriptor = { id: string, label: string, family: string, value_type: string, default_unit: string | null, display_unit: string | null, physical_unit: string | null, normalized_min: number | null, normalized_max: number | null, domain_min: number | null, domain_max: number | null, cyclic: boolean, recordable: boolean, };
 
 export type RuntimeHighlightFixture = { fixture_id: string, name: string | null, number: number | null, };
 
@@ -1049,7 +1172,7 @@ export type MvrPreviewFixture = { uuid: string, name: string, gdtf_spec: string,
 
 export type MvrExportPreview = { fixtures: number, scenery: number, embedded_profiles: number, missing_profiles: Array<string>, omitted: Array<string>, warnings: Array<string>, };
 
-export type ShowObjectRecord = { kind: string, id: string, revision: number, updated_at: string, body: unknown, };
+export type ShowObjectRecord = { kind: string, id: string, revision: number, updated_at: string, body: unknown, validation_error?: string | null, };
 
 export type ShowObjectCollectionSnapshot = { show_id: string, show_revision: number, kind: string, objects: Array<ShowObjectRecord>, };
 
@@ -1074,12 +1197,6 @@ export type PatchLayerActionRequest = { request_id: string, action: PatchLayerAc
 export type PatchLayerAction = { "type": "save", expected_revision: number, layer: PatchLayerInput, };
 
 export type PatchLayerInput = { name: string, order: number, };
-
-export type DynamicRecordActionRequest = { request_id: string, action: DynamicRecordAction, };
-
-export type DynamicRecordAction = { "type": "append", expected_revision: number, speed: number, width: number, direction: DynamicDirection, fixture_ids: Array<string>, group_ids: Array<string>, };
-
-export type DynamicDirection = "forward" | "reverse";
 
 export type PreloadRecordActionRequest = { request_id: string, action: PreloadRecordAction, };
 
@@ -1161,6 +1278,6 @@ export type GeneratedFixturePreset = { address: PresetRecordingAddress, number: 
 
 export type GenerateFixturePresetsOutcome = { request_id: string, correlation_id: string, replayed: boolean, show_revision: number, event_sequence: number, created: Array<GeneratedFixturePreset>, };
 
-export type LiveAction = { "type": "programming_selection", "request": ProgrammingSelectionActionRequest } | { "type": "programming_values", "request": ProgrammingValuesActionRequest } | { "type": "programmer_capture_mode", "request": ProgrammerCaptureModeLiveActionRequest } | { "type": "programmer_priority", "request": ProgrammerPriorityActionRequest } | { "type": "programmer_preload_lifecycle", "request": ProgrammingPreloadLifecycleRequest } | { "type": "programmer_preload_values", "request": ProgrammingPreloadValuesActionRequest } | { "type": "preset_recall", "request": PresetRecallLiveActionRequest } | { "type": "playback", "request": PlaybackActionRequest } | { "type": "speed_group", "request": SpeedGroupActionRequest } | { "type": "output_runtime", "request": OutputRuntimeActionRequest } | { "type": "dmx_override", "request": DmxOverrideRequest } | { "type": "highlight", "request": HighlightActionRequest } | { "type": "patch_preview_highlight", "request": PatchPreviewHighlightRequest } | { "type": "command_line_replace", "request": CommandLineReplaceLiveActionRequest } | { "type": "command_line_set", "request": CommandLineSetLiveActionRequest } | { "type": "command_target", "request": CommandTargetLiveActionRequest } | { "type": "command_line_execute", "request": CommandLineExecuteLiveActionRequest } | { "type": "programmer_undo" } | { "type": "programming_align", "request": ProgrammingAlignLiveActionRequest } | { "type": "fixture_control", "request": FixtureControlLiveActionRequest };
+export type LiveAction = { "type": "programming_selection", "request": ProgrammingSelectionActionRequest } | { "type": "programming_values", "request": ProgrammingValuesActionRequest } | { "type": "programmer_capture_mode", "request": ProgrammerCaptureModeLiveActionRequest } | { "type": "programmer_priority", "request": ProgrammerPriorityActionRequest } | { "type": "programmer_preload_lifecycle", "request": ProgrammingPreloadLifecycleRequest } | { "type": "programmer_preload_values", "request": ProgrammingPreloadValuesActionRequest } | { "type": "preset_recall", "request": PresetRecallLiveActionRequest } | { "type": "playback", "request": PlaybackActionRequest } | { "type": "speed_group", "request": SpeedGroupActionRequest } | { "type": "output_runtime", "request": OutputRuntimeActionRequest } | { "type": "dmx_override", "request": DmxOverrideRequest } | { "type": "highlight", "request": HighlightActionRequest } | { "type": "patch_preview_highlight", "request": PatchPreviewHighlightRequest } | { "type": "command_line_replace", "request": CommandLineReplaceLiveActionRequest } | { "type": "command_line_set", "request": CommandLineSetLiveActionRequest } | { "type": "command_target", "request": CommandTargetLiveActionRequest } | { "type": "command_line_execute", "request": CommandLineExecuteLiveActionRequest } | { "type": "programmer_undo" } | { "type": "programming_align", "request": ProgrammingAlignLiveActionRequest } | { "type": "fixture_control", "request": FixtureControlLiveActionRequest } | { "type": "dynamic_toggle", "request": DynamicStartLiveActionRequest } | { "type": "dynamic_start", "request": DynamicStartLiveActionRequest } | { "type": "dynamic_off", "request": DynamicOffLiveActionRequest } | { "type": "dynamic_size", "request": DynamicControllerLiveActionRequest } | { "type": "dynamic_speed", "request": DynamicControllerLiveActionRequest } | { "type": "dynamic_phase", "request": DynamicControllerLiveActionRequest } | { "type": "dynamic_fix_at", "request": DynamicFixAtActionRequest };
 
 export type LiveActionFrame = { type: LiveActionMessageType, protocol_version: number, request_id: string, session_id: string, action: LiveAction, };

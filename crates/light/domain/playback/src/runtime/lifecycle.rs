@@ -120,6 +120,53 @@ impl PlaybackEngine {
         }
     }
 
+    pub fn restore_active_dynamics(
+        &mut self,
+        playbacks: impl IntoIterator<Item = ActiveDynamicPlayback>,
+    ) {
+        self.active_dynamics.clear();
+        for mut playback in playbacks {
+            if !self
+                .definitions
+                .get(&playback.playback_number)
+                .is_some_and(|definition| {
+                    matches!(definition.target, PlaybackTarget::Dynamic { .. })
+                })
+                || !playback.fader_value.is_finite()
+                || !playback.size.is_finite()
+                || !playback.master.is_finite()
+                || playback.local_speed_multiplier.denominator == 0
+            {
+                continue;
+            }
+            playback.fader_value = playback.fader_value.clamp(0.0, 1.0);
+            playback.size = playback.size.clamp(0.0, 1.0);
+            playback.master = playback.master.clamp(0.0, 1.0);
+            if !playback.enabled {
+                playback.flash = false;
+                playback.flash_restore_off = false;
+            }
+            self.active_dynamics
+                .insert(playback.playback_number, playback);
+        }
+    }
+
+    pub fn active_dynamics_for_snapshot(
+        &self,
+        next_definitions: &[PlaybackDefinition],
+    ) -> Vec<ActiveDynamicPlayback> {
+        self.active_dynamics
+            .values()
+            .filter(|active| {
+                next_definitions.iter().any(|definition| {
+                    definition.number == active.playback_number
+                        && matches!(definition.target, PlaybackTarget::Dynamic { .. })
+                })
+            })
+            .cloned()
+            .collect()
+    }
+
     pub fn active_for_snapshot(
         &self,
         next_lists: &[CueList],
@@ -186,6 +233,7 @@ impl PlaybackEngine {
                     cue_lists: self.cue_lists.clone(),
                     compiled_cue_lists: self.compiled_cue_lists.clone(),
                     active: HashMap::from([(*key, playback.clone())]),
+                    active_dynamics: HashMap::new(),
                     temporary: HashMap::new(),
                     swap_held: HashSet::new(),
                     dynamics_paused_at: None,

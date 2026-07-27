@@ -57,6 +57,10 @@ pub(super) fn programming_values_projection_retained_bytes(
         bytes = bytes
             .saturating_add(value.attribute.0.capacity() + attribute_value_bytes(&value.value));
     }
+    bytes = bytes.saturating_add(
+        projection.dynamic_values.capacity()
+            * std::mem::size_of::<light_dynamics::DynamicAddressValue>(),
+    );
     for value in &projection.group_values {
         bytes = bytes.saturating_add(
             value.group_id.capacity()
@@ -85,6 +89,9 @@ pub(super) fn preload_projection_retained_bytes(
     );
     bytes = bytes.saturating_add(
         projection.group_values.capacity() * size_of::<PreloadProgrammerGroupValue>(),
+    );
+    bytes = bytes.saturating_add(
+        projection.dynamic_values.capacity() * size_of::<light_dynamics::DynamicAddressValue>(),
     );
     for value in &projection.fixture_values {
         bytes = bytes

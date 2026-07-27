@@ -81,6 +81,7 @@ impl CompiledCueList {
             .contains_key(&(fixture_id, attribute.clone()))
     }
 
+    #[cfg(test)]
     pub(crate) fn value(
         &self,
         fixture_id: FixtureId,

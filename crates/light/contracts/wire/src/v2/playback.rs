@@ -96,6 +96,10 @@ pub enum PlaybackAction {
     Half { pressed: bool },
     Blackout { pressed: bool },
     PauseDynamics { pressed: bool },
+    DynamicRestart { pressed: bool },
+    DynamicDoubleSpeed { pressed: bool },
+    DynamicHalfSpeed { pressed: bool },
+    DynamicLearnSpeed { pressed: bool },
     None { pressed: bool },
     Master { value: f32 },
     GoTo { cue_number: f64 },
@@ -158,6 +162,12 @@ pub enum PendingPlaybackAction {
     On,
     TemporaryOn,
     TemporaryOff,
+    DynamicPause,
+    DynamicRestart,
+    DynamicDoubleSpeed,
+    DynamicHalfSpeed,
+    DynamicLearnSpeed,
+    Fader { value_permyriad: u16 },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

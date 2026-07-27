@@ -284,7 +284,7 @@ fn manual_xfade_uses_authoritative_alternating_progress_and_survives_restore() {
 }
 
 #[test]
-fn pause_dynamics_freezes_and_resumes_from_the_same_phase() {
+fn pause_dynamics_does_not_freeze_ordinary_cue_transitions() {
     let started = Utc::now();
     let clock = Arc::new(light_core::ManualClock::new(started));
     let fixture = FixtureId::new();
@@ -308,8 +308,200 @@ fn pause_dynamics_freezes_and_resumes_from_the_same_phase() {
     assert!((level(&engine) - 0.5).abs() < 0.001);
     engine.set_dynamics_paused(true);
     clock.advance_millis(500);
-    assert!((level(&engine) - 0.5).abs() < 0.001);
+    assert!((level(&engine) - 1.0).abs() < 0.001);
     engine.set_dynamics_paused(false);
     clock.advance_millis(250);
-    assert!((level(&engine) - 0.75).abs() < 0.001);
+    assert!((level(&engine) - 1.0).abs() < 0.001);
+}
+
+fn dynamic_playback_definition(
+    number: u16,
+    fader_mode: DynamicPlaybackFaderMode,
+    targetless: bool,
+) -> PlaybackDefinition {
+    let dynamic_id = Uuid::new_v4();
+    let definition = light_dynamics::DynamicDefinition {
+        id: dynamic_id,
+        pool_number: number,
+        revision: 1,
+        name: format!("Dynamic {number}"),
+        color: None,
+        icon: None,
+        overall_speed_multiplier: light_dynamics::Rational::ONE,
+        target_binding: if targetless {
+            light_dynamics::DynamicTargetBinding::Targetless
+        } else {
+            light_dynamics::DynamicTargetBinding::FrozenTargets {
+                targets: vec![FixtureId::new()],
+            }
+        },
+        lanes: Vec::new(),
+        random_groups: Vec::new(),
+        phase: light_dynamics::PhaseDistribution {
+            ordering: light_dynamics::PhaseOrdering::Selection,
+            offset_degrees: 0.0,
+            span_degrees: 360.0,
+            block_size: 1,
+            repeats: 1,
+            wings: false,
+            anchors_degrees: Vec::new(),
+        },
+        speed: light_dynamics::DynamicSpeed::Fixed {
+            duration_millis: 1_000,
+        },
+        run_mode: light_dynamics::DynamicRunMode::Loop,
+        default_activation: light_dynamics::ActivationPolicy::StartNow,
+        activation_boundary: light_dynamics::ActivationBoundary::Beat,
+    };
+    let target = PlaybackTarget::Dynamic {
+        assignment: DynamicPlaybackAssignment {
+            dynamic: light_dynamics::DynamicReference {
+                dynamic_id: Some(dynamic_id),
+                last_known_pool_number: number,
+                embedded_fallback: light_dynamics::DynamicDefinitionSnapshot {
+                    definition: Box::new(definition),
+                },
+            },
+            revision: 1,
+            target_scope: targetless.then(|| DynamicPlaybackTargetScope::FrozenTargets {
+                targets: vec![FixtureId::new()],
+            }),
+            fader_mode,
+            priority: 0,
+            activation_override: None,
+            resume_policy: DynamicPlaybackResumePolicy::FollowDynamic,
+            local_speed_multiplier: light_dynamics::Rational::ONE,
+            learned_duration_millis: None,
+            crossfade_non_intensity: false,
+            auto_off_at_zero: true,
+            auto_off_flash_release: true,
+            auto_off_full_control: true,
+        },
+    };
+    PlaybackDefinition {
+        number,
+        name: format!("Dynamic Playback {number}"),
+        buttons: PlaybackDefinition::default_buttons(&target),
+        button_count: 3,
+        fader: PlaybackFaderMode::Master,
+        has_fader: true,
+        go_activates: true,
+        auto_off: true,
+        xfade_millis: 0,
+        color: "#20c997".into(),
+        flash_release: FlashReleaseMode::default(),
+        protect_from_swap: false,
+        presentation_icon: None,
+        presentation_image: None,
+        target,
+    }
+}
+
+#[test]
+fn dynamic_playback_fader_pause_speed_flash_and_restore_are_authoritative() {
+    let started = Utc::now();
+    let clock = Arc::new(light_core::ManualClock::new(started));
+    let definition = dynamic_playback_definition(17, DynamicPlaybackFaderMode::SizeAndMaster, true);
+    let mut engine = PlaybackEngine::with_clock(clock.clone());
+    engine.register_definition(definition.clone()).unwrap();
+
+    engine.set_master(17, 0.5).unwrap();
+    let active = &engine.active_dynamic_playbacks()[0];
+    assert!(active.enabled);
+    assert_eq!(
+        (active.fader_value, active.size, active.master),
+        (0.5, 0.5, 0.5)
+    );
+
+    engine.toggle_dynamic_pause_mutation(17).unwrap();
+    assert!(engine.active_dynamic_playbacks()[0].paused);
+    engine.scale_dynamic_speed_mutation(17, true).unwrap();
+    assert_eq!(
+        engine.active_dynamic_playbacks()[0]
+            .local_speed_multiplier
+            .factor(),
+        2.0
+    );
+    clock.advance_millis(25);
+    engine.restart_dynamic_mutation(17).unwrap();
+    assert_eq!(
+        engine.active_dynamic_playbacks()[0].activated_at,
+        started + chrono::Duration::milliseconds(25)
+    );
+    assert!(!engine.active_dynamic_playbacks()[0].paused);
+
+    engine.off(17).unwrap();
+    engine.set_dynamic_flash_mutation(17, true).unwrap();
+    assert!(engine.active_dynamic_playbacks()[0].enabled);
+    assert!(engine.active_dynamic_playbacks()[0].flash);
+    engine.set_dynamic_flash_mutation(17, false).unwrap();
+    assert!(!engine.active_dynamic_playbacks()[0].enabled);
+    assert!(!engine.active_dynamic_playbacks()[0].flash);
+
+    engine.on(17).unwrap();
+    engine.set_master(17, 0.0).unwrap();
+    assert!(!engine.active_dynamic_playbacks()[0].enabled);
+
+    engine.on(17).unwrap();
+    engine.set_master(17, 0.4).unwrap();
+    let persisted = engine.active_dynamic_playbacks();
+    let mut restored = PlaybackEngine::with_clock(clock);
+    restored.register_definition(definition).unwrap();
+    restored.restore_active_dynamics(persisted.clone());
+    assert_eq!(restored.active_dynamic_playbacks(), persisted);
+}
+
+#[test]
+fn targetless_dynamic_playback_requires_an_explicit_assignment_scope() {
+    let mut definition = dynamic_playback_definition(18, DynamicPlaybackFaderMode::Master, true);
+    let PlaybackTarget::Dynamic { assignment } = &mut definition.target else {
+        unreachable!()
+    };
+    assignment.target_scope = None;
+
+    assert_eq!(
+        definition.validate().unwrap_err(),
+        "targetless Dynamic Playback assignments require an explicit target scope"
+    );
+}
+
+#[test]
+fn dynamic_playback_tap_learns_local_cycle_and_double_half_adjust_it() {
+    let started = Utc::now();
+    let clock = Arc::new(light_core::ManualClock::new(started));
+    let definition = dynamic_playback_definition(19, DynamicPlaybackFaderMode::Master, true);
+    let mut engine = PlaybackEngine::with_clock(clock.clone());
+    engine.register_definition(definition).unwrap();
+
+    assert_eq!(engine.tap_dynamic_speed_mutation(19).unwrap().value, None);
+    clock.advance_millis(800);
+    assert_eq!(
+        engine.tap_dynamic_speed_mutation(19).unwrap().value,
+        Some(800)
+    );
+    clock.advance_millis(1_000);
+    assert_eq!(
+        engine.tap_dynamic_speed_mutation(19).unwrap().value,
+        Some(900)
+    );
+    assert_eq!(
+        engine.active_dynamic_playbacks()[0].learned_duration_millis,
+        Some(900)
+    );
+
+    engine.scale_dynamic_speed_mutation(19, true).unwrap();
+    assert_eq!(
+        engine.active_dynamic_playbacks()[0].learned_duration_millis,
+        Some(450)
+    );
+    engine.scale_dynamic_speed_mutation(19, false).unwrap();
+    assert_eq!(
+        engine.active_dynamic_playbacks()[0].learned_duration_millis,
+        Some(900)
+    );
+    engine.clear_dynamic_learned_speed_mutation(19).unwrap();
+    assert_eq!(
+        engine.active_dynamic_playbacks()[0].learned_duration_millis,
+        None
+    );
 }

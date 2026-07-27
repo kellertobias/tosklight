@@ -239,7 +239,7 @@ async fn generate_fixture_presets(
     Ok(Json(outcome))
 }
 
-async fn run_http_programming_action<T>(
+pub(super) async fn run_http_programming_action<T>(
     state: AppState,
     session: Session,
     request_id: String,
@@ -283,6 +283,7 @@ fn action_api_error(message: String) -> ApiError {
     if normalized.contains("revision")
         || normalized.contains("locked")
         || normalized.contains("no longer active")
+        || normalized.contains("request_id was already used")
     {
         ApiError::conflict(message)
     } else if normalized.contains("changing") || normalized.contains("retry") {

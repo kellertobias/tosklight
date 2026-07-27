@@ -45,7 +45,13 @@ fn typed_choice_selection_resets_the_authoritative_command_once() {
         .command_line_state(scenario.session.id)
         .unwrap();
     assert_eq!(
-        authoritative.pending_choice.as_ref().unwrap().choice_id,
+        authoritative
+            .pending_choice
+            .as_ref()
+            .unwrap()
+            .cue_move_copy()
+            .unwrap()
+            .choice_id,
         serde_json::from_value::<Uuid>(pending["choice_id"].clone()).unwrap()
     );
     let before = scenario.state.events.latest_sequence();
@@ -165,7 +171,13 @@ fn verify_pending_cue_transfer_choice(
         .command_line_state(scenario.session.id)
         .unwrap();
     assert_eq!(
-        authoritative.pending_choice.as_ref().unwrap().command,
+        authoritative
+            .pending_choice
+            .as_ref()
+            .unwrap()
+            .cue_move_copy()
+            .unwrap()
+            .command,
         pending["command"].as_str().unwrap()
     );
     assert!(execute_programmer_command(

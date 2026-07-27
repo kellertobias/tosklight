@@ -16,6 +16,86 @@ pub(super) fn target_projection(
             cue_list_id: cue_list_id.0,
             runtime: runtime.as_deref().map(cue_list_runtime).map(Box::new),
         },
+        App::Dynamic {
+            dynamic_id,
+            last_known_pool_number,
+            embedded,
+            runtime,
+        } => wire::PlaybackTargetProjection::Dynamic {
+            dynamic_id: *dynamic_id,
+            last_known_pool_number: *last_known_pool_number,
+            embedded: *embedded,
+            runtime: runtime
+                .as_ref()
+                .map(|runtime| wire::DynamicPlaybackRuntimeProjection {
+                    playback_number: runtime.active.playback_number,
+                    enabled: runtime.active.enabled,
+                    paused: runtime.active.paused,
+                    flash: runtime.active.flash,
+                    activated_at: runtime.active.activated_at.to_rfc3339(),
+                    fader_value: runtime.active.fader_value,
+                    size: runtime.active.size,
+                    master: runtime.active.master,
+                    local_speed_numerator: runtime.active.local_speed_multiplier.numerator,
+                    local_speed_denominator: runtime.active.local_speed_multiplier.denominator,
+                    learned_duration_millis: runtime.active.learned_duration_millis,
+                    state: match runtime.state {
+                        application::DynamicPlaybackRuntimeState::Off => {
+                            wire::DynamicPlaybackRuntimeState::Off
+                        }
+                        application::DynamicPlaybackRuntimeState::Zero => {
+                            wire::DynamicPlaybackRuntimeState::Zero
+                        }
+                        application::DynamicPlaybackRuntimeState::Pending => {
+                            wire::DynamicPlaybackRuntimeState::Pending
+                        }
+                        application::DynamicPlaybackRuntimeState::Active => {
+                            wire::DynamicPlaybackRuntimeState::Active
+                        }
+                        application::DynamicPlaybackRuntimeState::Paused => {
+                            wire::DynamicPlaybackRuntimeState::Paused
+                        }
+                        application::DynamicPlaybackRuntimeState::Hidden => {
+                            wire::DynamicPlaybackRuntimeState::Hidden
+                        }
+                        application::DynamicPlaybackRuntimeState::Failed => {
+                            wire::DynamicPlaybackRuntimeState::Failed
+                        }
+                    },
+                    instance_id: runtime.instance_id,
+                    controller_id: runtime.controller_id,
+                    winning_controller_id: runtime.winning_controller_id,
+                    controller_status: match runtime.controller_status {
+                        application::DynamicPlaybackControllerStatus::Winning => {
+                            wire::DynamicPlaybackControllerStatus::Winning
+                        }
+                        application::DynamicPlaybackControllerStatus::Losing => {
+                            wire::DynamicPlaybackControllerStatus::Losing
+                        }
+                        application::DynamicPlaybackControllerStatus::Missing => {
+                            wire::DynamicPlaybackControllerStatus::Missing
+                        }
+                    },
+                    target_count: runtime.target_count,
+                    compatible_target_count: runtime.compatible_target_count,
+                    missing_target_count: runtime.missing_target_count,
+                    unpatched_target_count: runtime.unpatched_target_count,
+                    lane_count: runtime.lane_count,
+                    supported_address_count: runtime.supported_address_count,
+                    skipped_address_count: runtime.skipped_address_count,
+                    speed_source: match runtime.speed_source {
+                        application::DynamicPlaybackSpeedSource::Fixed => {
+                            wire::DynamicPlaybackSpeedSource::Fixed
+                        }
+                        application::DynamicPlaybackSpeedSource::SpeedGroup => {
+                            wire::DynamicPlaybackSpeedSource::SpeedGroup
+                        }
+                    },
+                    effective_speed_multiplier: runtime.effective_speed_multiplier,
+                    effective_duration_millis: runtime.effective_duration_millis,
+                    warning: runtime.warning.clone(),
+                }),
+        },
         App::Group {
             group_id,
             master,

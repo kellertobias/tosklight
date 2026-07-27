@@ -37,6 +37,8 @@ fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![].into(),
+            dynamics: vec![].into(),
+            dynamic_stage_positions: Default::default(),
             playbacks: vec![].into(),
             playback_pages: vec![].into(),
             routes: vec![].into(),
@@ -74,6 +76,8 @@ fn logical_head_programmer_value_renders_to_physical_patch() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![].into(),
+            dynamics: vec![].into(),
+            dynamic_stage_positions: Default::default(),
             playbacks: vec![].into(),
             playback_pages: vec![].into(),
             routes: vec![].into(),

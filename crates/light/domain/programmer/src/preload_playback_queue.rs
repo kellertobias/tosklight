@@ -20,6 +20,18 @@ pub enum PreloadPlaybackQueueAction {
     TemporaryOn,
     #[serde(rename = "temp-off", alias = "temporary_off")]
     TemporaryOff,
+    #[serde(rename = "dynamic-pause")]
+    DynamicPause,
+    #[serde(rename = "dynamic-restart")]
+    DynamicRestart,
+    #[serde(rename = "dynamic-double-speed")]
+    DynamicDoubleSpeed,
+    #[serde(rename = "dynamic-half-speed")]
+    DynamicHalfSpeed,
+    #[serde(rename = "dynamic-learn-speed")]
+    DynamicLearnSpeed,
+    #[serde(rename = "fader")]
+    Fader { value_permyriad: u16 },
 }
 
 impl PreloadPlaybackQueueAction {
@@ -32,6 +44,12 @@ impl PreloadPlaybackQueueAction {
             Self::On => "on",
             Self::TemporaryOn => "temp-on",
             Self::TemporaryOff => "temp-off",
+            Self::DynamicPause => "dynamic-pause",
+            Self::DynamicRestart => "dynamic-restart",
+            Self::DynamicDoubleSpeed => "dynamic-double-speed",
+            Self::DynamicHalfSpeed => "dynamic-half-speed",
+            Self::DynamicLearnSpeed => "dynamic-learn-speed",
+            Self::Fader { .. } => "fader",
         }
     }
 }
@@ -48,6 +66,11 @@ impl TryFrom<&str> for PreloadPlaybackQueueAction {
             "on" => Ok(Self::On),
             "temp-on" | "temporary_on" => Ok(Self::TemporaryOn),
             "temp-off" | "temporary_off" => Ok(Self::TemporaryOff),
+            "dynamic-pause" => Ok(Self::DynamicPause),
+            "dynamic-restart" => Ok(Self::DynamicRestart),
+            "dynamic-double-speed" => Ok(Self::DynamicDoubleSpeed),
+            "dynamic-half-speed" => Ok(Self::DynamicHalfSpeed),
+            "dynamic-learn-speed" => Ok(Self::DynamicLearnSpeed),
             value => Err(format!("unsupported queued Preload action {value}")),
         }
     }

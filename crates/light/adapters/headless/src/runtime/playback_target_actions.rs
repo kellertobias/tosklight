@@ -117,8 +117,11 @@ pub(super) fn apply_playback_master(
     if !value.is_finite() || !(0.0..=1.0).contains(&value) {
         return Err(ApiError::bad_request("playback master must be within 0-1"));
     }
-    if matches!(definition.target, PlaybackTarget::CueList { .. }) {
-        return if virtual_fader {
+    if matches!(
+        definition.target,
+        PlaybackTarget::CueList { .. } | PlaybackTarget::Dynamic { .. }
+    ) {
+        let mut outcome = if virtual_fader {
             execute_pool_with_exclusions(
                 state,
                 definition.number,
@@ -134,7 +137,13 @@ pub(super) fn apply_playback_master(
                 exclusion_zones,
                 activation_origin,
             )
-        };
+        }?;
+        if matches!(definition.target, PlaybackTarget::Dynamic { .. }) {
+            outcome.persistence = outcome
+                .persistence
+                .combine(PlaybackPersistencePlan::output_runtime());
+        }
+        return Ok(outcome);
     }
     apply_specialized_master(state, context, session, definition, input, value)
 }
@@ -188,6 +197,27 @@ pub(super) fn apply_direct_playback_action(
                 activation_origin,
             )?
         }
+        "dynamic-restart" => execute_pool_with_exclusions(
+            state,
+            definition.number,
+            PoolPlaybackAction::DynamicRestart,
+            exclusion_zones,
+            activation_origin,
+        )?,
+        "dynamic-double-speed" => execute_pool_with_exclusions(
+            state,
+            definition.number,
+            PoolPlaybackAction::DynamicDoubleSpeed,
+            exclusion_zones,
+            activation_origin,
+        )?,
+        "dynamic-half-speed" => execute_pool_with_exclusions(
+            state,
+            definition.number,
+            PoolPlaybackAction::DynamicHalfSpeed,
+            exclusion_zones,
+            activation_origin,
+        )?,
         _ => return Ok(None),
     };
     Ok(Some(outcome))
@@ -275,6 +305,44 @@ fn apply_cuelist_action(
     Ok(PlaybackTargetOutcome::changed(action != Action::Select))
 }
 
+fn apply_dynamic_action(
+    state: &AppState,
+    definition: &light_playback::PlaybackDefinition,
+    action: Action,
+    pressed: bool,
+    exclusion_zones: &[Vec<u16>],
+    activation_origin: Option<light_playback::PlaybackActivationOrigin>,
+) -> Result<PlaybackTargetOutcome, ApiError> {
+    let command = match action {
+        Action::On => PoolPlaybackAction::On,
+        Action::Off => PoolPlaybackAction::Off,
+        Action::Toggle => PoolPlaybackAction::Toggle,
+        Action::Pause => PoolPlaybackAction::TogglePause,
+        Action::Flash => PoolPlaybackAction::SetFlash(pressed),
+        Action::DynamicRestart => PoolPlaybackAction::DynamicRestart,
+        Action::DynamicDoubleSpeed => PoolPlaybackAction::DynamicDoubleSpeed,
+        Action::DynamicHalfSpeed => PoolPlaybackAction::DynamicHalfSpeed,
+        Action::DynamicLearnSpeed => PoolPlaybackAction::DynamicLearnSpeed,
+        Action::None => return Ok(PlaybackTargetOutcome::changed(false)),
+        _ => {
+            return Err(ApiError::bad_request(
+                "action is incompatible with a Dynamic playback",
+            ));
+        }
+    };
+    let mut outcome = execute_pool_with_exclusions(
+        state,
+        definition.number,
+        command,
+        exclusion_zones,
+        activation_origin,
+    )?;
+    outcome.persistence = outcome
+        .persistence
+        .combine(PlaybackPersistencePlan::output_runtime());
+    Ok(outcome)
+}
+
 pub(super) fn apply_playback_target_action(
     state: &AppState,
     context: &light_application::ActionContext,
@@ -292,6 +360,16 @@ pub(super) fn apply_playback_target_action(
             session,
             definition,
             *cue_list_id,
+            action,
+            pressed,
+            exclusion_zones,
+            activation_origin,
+        );
+    }
+    if matches!(definition.target, PlaybackTarget::Dynamic { .. }) {
+        return apply_dynamic_action(
+            state,
+            definition,
             action,
             pressed,
             exclusion_zones,

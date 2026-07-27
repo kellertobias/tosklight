@@ -215,6 +215,86 @@ impl Drop for TestRig {
     }
 }
 
+pub(super) fn dynamic_with_dependencies(id: Uuid, group_id: &str, preset_id: &str) -> Value {
+    json!({
+        "id": id,
+        "pool_number": 7,
+        "revision": 1,
+        "name": "Imported Dynamic",
+        "color": null,
+        "icon": null,
+        "target_binding": {"type": "live_group", "group_id": group_id},
+        "lanes": [{
+            "id": Uuid::new_v4(),
+            "attribute": "intensity",
+            "mode": "keyframes",
+            "keyframes": {
+                "points": [
+                    {
+                        "position": 0.0,
+                        "source": {
+                            "type": "preset",
+                            "preset_id": preset_id,
+                            "attribute": "intensity",
+                            "last_valid_by_target": []
+                        },
+                        "interpolation": "linear"
+                    },
+                    {
+                        "position": 0.5,
+                        "source": {"type": "value", "value": 1.0},
+                        "interpolation": "linear"
+                    }
+                ],
+                "size": 1.0
+            },
+            "max_min": {
+                "minimum": {"type": "value", "value": 0.0},
+                "maximum": {"type": "value", "value": 1.0},
+                "function": "sinus",
+                "size": 1.0,
+                "pwm": {
+                    "attack": 0.0,
+                    "on": 0.5,
+                    "decay": 0.0,
+                    "off": 0.5,
+                    "attack_interpolation": "linear",
+                    "decay_interpolation": "linear"
+                }
+            },
+            "middle_amplitude": {
+                "middle": {"type": "current"},
+                "amplitude": 0.5,
+                "function": "sinus",
+                "size": 1.0,
+                "pwm": {
+                    "attack": 0.0,
+                    "on": 0.5,
+                    "decay": 0.0,
+                    "off": 0.5,
+                    "attack_interpolation": "linear",
+                    "decay_interpolation": "linear"
+                }
+            },
+            "speed_multiplier": {"numerator": 1, "denominator": 1},
+            "width": 1.0,
+            "random_group_id": null
+        }],
+        "random_groups": [],
+        "phase": {
+            "ordering": {"type": "selection"},
+            "offset_degrees": 0.0,
+            "span_degrees": 360.0,
+            "block_size": 1,
+            "repeats": 1,
+            "wings": false,
+            "anchors_degrees": []
+        },
+        "speed": {"type": "fixed", "duration_millis": 1000},
+        "default_activation": "start_now"
+    })
+}
+
 pub(super) struct TestPorts {
     source_path: PathBuf,
     target_path: PathBuf,

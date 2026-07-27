@@ -20,7 +20,11 @@ async fn post_show_object_intent(
         .await
         .unwrap();
     let status = response.status();
-    (status, json(response).await)
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let body = serde_json::from_slice(&bytes).unwrap_or_else(
+        |_| serde_json::json!({"raw": String::from_utf8_lossy(&bytes).into_owned()}),
+    );
+    (status, body)
 }
 
 async fn create_seeded_show(
@@ -48,6 +52,366 @@ async fn create_seeded_show(
         .unwrap();
     assert_eq!(opened.status(), StatusCode::OK);
     show_id
+}
+
+#[tokio::test]
+async fn dynamic_object_intents_are_revisioned_atomic_and_replay_safe() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show_id = create_seeded_show(&state, &app, &token, "Dynamic intents", &[]).await;
+    let create = serde_json::json!({
+        "request_id": "dynamic-create-1",
+        "definition": dynamic_definition_json(17)
+    });
+    let (status, created) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        "/api/v2/dynamics/create",
+        create.clone(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    assert_eq!(created["object"]["kind"], "dynamic");
+    assert_eq!(created["object"]["revision"], 1);
+    assert_eq!(created["object"]["body"]["pool_number"], 17);
+    assert_eq!(
+        created["object"]["body"]["future_definition_field"],
+        "preserved"
+    );
+    let dynamic_id = created["object"]["id"].as_str().unwrap();
+
+    let (status, replayed) =
+        post_show_object_intent(&app, &token, &show_id, "/api/v2/dynamics/create", create).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(replayed["replayed"], true);
+    assert_eq!(replayed["object"]["id"], dynamic_id);
+
+    let (status, updated) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/update"),
+        serde_json::json!({
+            "request_id": "dynamic-update-1",
+            "expected_revision": 1,
+            "intent": {"type": "set_name", "name": "Color chase"},
+            "future_request_field": true
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    assert_eq!(updated["object"]["revision"], 2);
+    assert_eq!(updated["object"]["body"]["name"], "Color chase");
+    assert_eq!(
+        updated["object"]["body"]["future_definition_field"],
+        "preserved"
+    );
+
+    let (status, moved) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/move"),
+        serde_json::json!({
+            "request_id": "dynamic-move-1",
+            "expected_revision": 2,
+            "pool_number": 23
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{moved}");
+    assert_eq!(moved["object"]["body"]["pool_number"], 23);
+
+    let (status, copied) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/copy"),
+        serde_json::json!({
+            "request_id": "dynamic-copy-1",
+            "expected_revision": 3,
+            "pool_number": 24
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{copied}");
+    assert_ne!(copied["object"]["id"], dynamic_id);
+    assert_eq!(copied["object"]["body"]["pool_number"], 24);
+
+    let (status, deleted) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/delete"),
+        serde_json::json!({
+            "request_id": "dynamic-delete-1",
+            "expected_revision": 3
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{deleted}");
+    assert_eq!(deleted["object"]["id"], dynamic_id);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn dynamic_live_request_ids_replay_across_the_shared_application_service() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Dynamic live replay").await;
+    let show_id = show["id"].as_str().unwrap();
+    let opened = app
+        .clone()
+        .oneshot(open_show_request(&token, show_id))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
+    let fixture = Uuid::new_v4();
+    let mut snapshot = light_engine::EngineSnapshot::default();
+    snapshot.fixtures = vec![operational_fixture(light_core::FixtureId(fixture))].into();
+    state.output.replace_snapshot(snapshot).unwrap();
+    let request = serde_json::json!({
+        "request_id": "dynamic-live-replay-1",
+        "targets": [fixture],
+        "attribute": "intensity",
+        "value": 0.35,
+        "timing": {}
+    });
+    let (status, first) = post_show_object_intent(
+        &app,
+        &token,
+        show_id,
+        "/api/v2/programmer/values/fix-at",
+        request.clone(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    let (status, replayed) = post_show_object_intent(
+        &app,
+        &token,
+        show_id,
+        "/api/v2/programmer/values/fix-at",
+        request,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{replayed}");
+    assert_eq!(replayed, first);
+
+    let (status, conflict) = post_show_object_intent(
+        &app,
+        &token,
+        show_id,
+        "/api/v2/programmer/values/fix-at",
+        serde_json::json!({
+            "request_id": "dynamic-live-replay-1",
+            "targets": [fixture],
+            "attribute": "intensity",
+            "value": 0.75,
+            "timing": {}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert!(conflict["error"].as_str().unwrap().contains("request_id"));
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn dynamic_http_routes_use_runtime_instance_identity_and_project_authoritative_speed() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let definition = dynamic_definition_json(18);
+    let dynamic_id = definition["id"].as_str().unwrap().to_owned();
+    let show_id = create_seeded_show(
+        &state,
+        &app,
+        &token,
+        "Dynamic HTTP actions",
+        &[("dynamic", &dynamic_id, definition)],
+    )
+    .await;
+    let target = Uuid::new_v4();
+    let (status, started) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/start"),
+        serde_json::json!({
+            "request_id": "dynamic-http-start-1",
+            "targets": [target],
+            "timing": {}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    let instance_id = started["runtime_instance_id"].as_str().unwrap();
+    for (path, value) in [("size", 0.4), ("speed", 2.0), ("phase", 90.0)] {
+        let (status, outcome) = post_show_object_intent(
+            &app,
+            &token,
+            &show_id,
+            &format!("/api/v2/dynamic-instances/{instance_id}/{path}"),
+            serde_json::json!({
+                "request_id": format!("dynamic-http-{path}-1"),
+                "value": value
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{outcome}");
+        assert_eq!(outcome["changed"], true);
+    }
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/dynamics/runtime")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header("x-tosk-show", &show_id)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let runtime = json(response).await;
+    assert_eq!(runtime["instances"][0]["instance_id"], instance_id);
+    assert_eq!(runtime["instances"][0]["speed_source"], "Fixed");
+    assert_eq!(runtime["instances"][0]["effective_cycle_millis"], 500);
+    assert_eq!(runtime["instances"][0]["controllers"][0]["size"], 0.4);
+    assert_eq!(
+        runtime["instances"][0]["controllers"][0]["phase_offset_degrees"],
+        90.0
+    );
+
+    let (status, off) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamic-instances/{instance_id}/off"),
+        serde_json::json!({
+            "request_id": "dynamic-http-off-1",
+            "timing": {}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{off}");
+
+    for (request_id, expected_started) in [
+        ("dynamic-http-toggle-on", true),
+        ("dynamic-http-toggle-off", false),
+    ] {
+        let (status, toggled) = post_show_object_intent(
+            &app,
+            &token,
+            &show_id,
+            &format!("/api/v2/dynamics/{dynamic_id}/toggle"),
+            serde_json::json!({
+                "request_id": request_id,
+                "targets": [target],
+                "timing": {}
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{toggled}");
+        assert_eq!(toggled["started"], expected_started);
+    }
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn deleting_a_dynamic_snapshots_nested_references_without_touching_other_ids() {
+    let deleted = Uuid::new_v4();
+    let retained = Uuid::new_v4();
+    let fallback: light_dynamics::DynamicDefinitionSnapshot =
+        serde_json::from_value(serde_json::json!({
+            "definition": dynamic_definition_json(1)
+        }))
+        .unwrap();
+    let mut body = serde_json::json!({
+        "cues": [{
+            "dynamic_changes": [
+                {"value": {"dynamic_id": deleted, "embedded_fallback": fallback}},
+                {"value": {"dynamic_id": retained, "embedded_fallback": fallback}}
+            ]
+        }]
+    });
+    assert!(
+        super::super::show_object_intents_v2::snapshot_deleted_dynamic_references(
+            &mut body, deleted, &fallback
+        )
+    );
+    assert!(body["cues"][0]["dynamic_changes"][0]["value"]["dynamic_id"].is_null());
+    assert_eq!(
+        body["cues"][0]["dynamic_changes"][1]["value"]["dynamic_id"],
+        retained.to_string()
+    );
+}
+
+fn dynamic_definition_json(pool_number: u16) -> serde_json::Value {
+    serde_json::json!({
+        "id": Uuid::new_v4(),
+        "pool_number": pool_number,
+        "revision": 1,
+        "name": "Intensity wave",
+        "color": null,
+        "icon": null,
+        "target_binding": {"type": "targetless"},
+        "lanes": [{
+            "id": Uuid::new_v4(),
+            "attribute": "intensity",
+            "mode": "keyframes",
+            "keyframes": {
+                "points": [
+                    {"position": 0.0, "source": {"type": "value", "value": 0.0}, "interpolation": "linear"},
+                    {"position": 0.5, "source": {"type": "value", "value": 1.0}, "interpolation": "linear"}
+                ],
+                "size": 1.0
+            },
+            "max_min": {
+                "minimum": {"type": "value", "value": 0.0},
+                "maximum": {"type": "value", "value": 1.0},
+                "function": "sinus",
+                "size": 1.0,
+                "pwm": {
+                    "attack": 0.0, "on": 0.5, "decay": 0.0, "off": 0.5,
+                    "attack_interpolation": "linear", "decay_interpolation": "linear"
+                }
+            },
+            "middle_amplitude": {
+                "middle": {"type": "current"},
+                "amplitude": 0.5,
+                "function": "sinus",
+                "size": 1.0,
+                "pwm": {
+                    "attack": 0.0, "on": 0.5, "decay": 0.0, "off": 0.5,
+                    "attack_interpolation": "linear", "decay_interpolation": "linear"
+                }
+            },
+            "speed_multiplier": {"numerator": 1, "denominator": 1},
+            "width": 1.0,
+            "random_group_id": null
+        }],
+        "random_groups": [],
+        "phase": {
+            "ordering": {"type": "selection"},
+            "offset_degrees": 0.0,
+            "span_degrees": 360.0,
+            "block_size": 1,
+            "repeats": 1,
+            "wings": false,
+            "anchors_degrees": []
+        },
+        "speed": {"type": "fixed", "duration_millis": 1000},
+        "default_activation": "start_now",
+        "future_definition_field": "preserved"
+    })
 }
 
 #[tokio::test]
@@ -197,78 +561,6 @@ async fn layout_and_patch_intents_preserve_unknown_fields_and_replay_once() {
     .await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert!(stale["error"].as_str().unwrap().contains("revision"));
-
-    let _ = std::fs::remove_dir_all(data_dir);
-}
-
-#[tokio::test]
-async fn dynamic_intent_appends_to_the_existing_cue_without_replacing_it() {
-    let (state, data_dir) = test_state();
-    let app = router(state.clone());
-    let (token, _) = login(&app, "Operator").await;
-    let cue_list = test_cue_list();
-    let cue_list_id = cue_list.id.0.to_string();
-    let show_id = create_seeded_show(
-        &state,
-        &app,
-        &token,
-        "Typed dynamics",
-        &[(
-            "cue_list",
-            &cue_list_id,
-            serde_json::to_value(&cue_list).unwrap(),
-        )],
-    )
-    .await;
-    let fixture_id = Uuid::new_v4();
-    let action = serde_json::json!({
-        "request_id": "record-dynamic-1",
-        "action": {
-            "type": "append",
-            "expected_revision": 1,
-            "speed": 60,
-            "width": 25,
-            "direction": "reverse",
-            "fixture_ids": [fixture_id],
-            "group_ids": []
-        }
-    });
-
-    let (status, stored) = post_show_object_intent(
-        &app,
-        &token,
-        &show_id,
-        &format!("/api/v2/cue-lists/{cue_list_id}/dynamics/record"),
-        action.clone(),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(stored["object"]["revision"], 2);
-    assert_eq!(stored["object"]["body"]["name"], "Main");
-    let phaser = &stored["object"]["body"]["cues"][0]["phasers"][0];
-    assert_eq!(phaser["fixture_ids"][0], fixture_id.to_string());
-    assert_eq!(phaser["phaser"]["cycles_per_minute"], 60.0);
-    assert_eq!(phaser["phaser"]["phase_start_degrees"], 360.0);
-    assert_eq!(phaser["phaser"]["phase_end_degrees"], 0.0);
-    assert_eq!(phaser["phaser"]["width"], 0.25);
-
-    let (status, replayed) = post_show_object_intent(
-        &app,
-        &token,
-        &show_id,
-        &format!("/api/v2/cue-lists/{cue_list_id}/dynamics/record"),
-        action,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(replayed["replayed"], true);
-    assert_eq!(
-        replayed["object"]["body"]["cues"][0]["phasers"]
-            .as_array()
-            .unwrap()
-            .len(),
-        1
-    );
 
     let _ = std::fs::remove_dir_all(data_dir);
 }

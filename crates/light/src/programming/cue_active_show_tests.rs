@@ -484,6 +484,7 @@ impl ProgrammingCueActiveShowPorts for TestPorts {
 
 fn capture(level: f32) -> CueRecordingCapture {
     CueRecordingCapture {
+        dynamic_values: Vec::new(),
         source: CueRecordingCapturedSource::Normal,
         fixture_values: vec![CueRecordingFixtureValue {
             fixture_id: FixtureId(Uuid::from_u128(10)),
@@ -500,6 +501,7 @@ fn capture(level: f32) -> CueRecordingCapture {
 
 fn empty_capture() -> CueRecordingCapture {
     CueRecordingCapture {
+        dynamic_values: Vec::new(),
         source: CueRecordingCapturedSource::Normal,
         fixture_values: Vec::new(),
         group_values: Vec::new(),

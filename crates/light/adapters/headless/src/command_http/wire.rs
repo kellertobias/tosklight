@@ -5,8 +5,8 @@ use axum::{
 };
 use light_application::{
     CueMoveCopyChoice as ApplicationCueChoice, CueTransferOperation as ApplicationCueOperation,
-    ProgrammingAction, ProgrammingChoiceOptionId as ApplicationChoiceOptionId, ProgrammingOutcome,
-    ProgrammingResult,
+    PendingCommandChoice as ApplicationPendingChoice, ProgrammingAction,
+    ProgrammingChoiceOptionId as ApplicationChoiceOptionId, ProgrammingOutcome, ProgrammingResult,
 };
 use light_programmer::CommandLineState;
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
@@ -16,6 +16,8 @@ use light_wire::v2::command_line::{
     CommandKeyPhase as WireCommandKeyPhase, CommandLineResponse, CommandOperationOutcome,
     CommandOperationResponse, CommandTarget as WireCommandTarget, CueMoveCopyChoice,
     CueMoveCopyChoiceType as WireChoiceType, CueTransferOperation as WireCueOperation,
+    DynamicInstanceChoice, DynamicInstanceChoiceOption,
+    DynamicInstanceChoiceType as WireDynamicChoiceType, PendingCommandChoice,
 };
 use serde::Serialize;
 
@@ -73,7 +75,36 @@ fn wire_action(action: ProgrammingAction) -> CommandAcceptedAction {
     }
 }
 
-pub(crate) fn wire_choice(choice: ApplicationCueChoice) -> CueMoveCopyChoice {
+pub(crate) fn wire_choice(choice: ApplicationPendingChoice) -> PendingCommandChoice {
+    match choice {
+        ApplicationPendingChoice::CueMoveCopy(choice) => {
+            PendingCommandChoice::CueMoveCopy(wire_cue_choice(choice))
+        }
+        ApplicationPendingChoice::DynamicInstance(choice) => {
+            PendingCommandChoice::DynamicInstance(DynamicInstanceChoice {
+                choice_type: WireDynamicChoiceType::DynamicInstance,
+                choice_id: choice.choice_id,
+                show_id: choice.show_id,
+                show_revision: choice.show_revision,
+                dynamic_id: choice.dynamic_id,
+                pool_number: choice.pool_number,
+                command: choice.command,
+                options: choice
+                    .options
+                    .into_iter()
+                    .map(|option| DynamicInstanceChoiceOption {
+                        controller_id: option.controller_id,
+                        label: option.label,
+                        command: option.command,
+                    })
+                    .collect(),
+                cancel_label: choice.cancel_label,
+            })
+        }
+    }
+}
+
+pub(crate) fn wire_cue_choice(choice: ApplicationCueChoice) -> CueMoveCopyChoice {
     CueMoveCopyChoice {
         choice_type: WireChoiceType::CueMoveCopy,
         choice_id: choice.choice_id,

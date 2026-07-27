@@ -76,6 +76,66 @@ fn apply_commits_dependency_closure_once_and_preserves_unknown_extensions() {
 }
 
 #[test]
+fn apply_imports_dynamic_and_its_dependency_closure_as_one_valid_candidate() {
+    let rig = TestRig::new();
+    let dynamic_id = Uuid::new_v4();
+    rig.source_object(
+        "group",
+        "front",
+        serde_json::to_value(light_programmer::GroupDefinition {
+            id: "front".into(),
+            name: "Front".into(),
+            ..Default::default()
+        })
+        .unwrap(),
+    );
+    rig.source_object(
+        "preset",
+        "1.1",
+        json!({
+            "name": "Dim",
+            "family": "Intensity",
+            "number": 1,
+            "values": {},
+            "group_values": {}
+        }),
+    );
+    rig.source_object(
+        "dynamic",
+        &dynamic_id.to_string(),
+        dynamic_with_dependencies(dynamic_id, "front", "1.1"),
+    );
+    let preview = rig.preview(rig.request("dynamic", &dynamic_id.to_string()));
+
+    let result = rig.apply(&preview).unwrap();
+
+    assert!(result.changed);
+    let target = rig.target_document();
+    assert!(target.object("group", "front").is_some());
+    assert!(target.object("preset", "1.1").is_some());
+    let dynamic = target
+        .object("dynamic", &dynamic_id.to_string())
+        .expect("Dynamic is imported with its dependencies");
+    assert_eq!(
+        dynamic.body().pointer("/target_binding/group_id"),
+        Some(&json!("front"))
+    );
+    assert_eq!(
+        dynamic
+            .body()
+            .pointer("/lanes/0/keyframes/points/0/source/preset_id"),
+        Some(&json!("1.1"))
+    );
+    assert!(
+        rig.ports
+            .installed
+            .lock()
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.dynamics.len() == 1)
+    );
+}
+
+#[test]
 fn apply_rewrites_duplicate_identity_and_all_imported_references() {
     let rig = TestRig::new();
     rig.source_object("macro", "root", json!({"id":"root","macro_id":"child"}));

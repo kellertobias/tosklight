@@ -223,6 +223,7 @@
       "type": "string",
       "enum": [
         "cue_list",
+        "dynamic",
         "group",
         "patch_layer",
         "playback",

@@ -108,4 +108,21 @@ impl Engine {
     pub fn clear_programmer_transitions(&self) {
         self.programmer_transitions.lock().clear();
     }
+
+    /// Returns first-class Dynamic/FAT layers for final priority-then-LTP output arbitration.
+    pub fn dynamic_programmer_values(
+        &self,
+    ) -> Vec<(uuid::Uuid, i16, light_dynamics::DynamicAddressValue)> {
+        self.programmers
+            .active_for_sessions()
+            .into_iter()
+            .flat_map(|programmer| {
+                programmer
+                    .dynamic_values
+                    .into_iter()
+                    .chain(programmer.preload_dynamic_active)
+                    .map(move |value| (programmer.id.0, programmer.priority, value))
+            })
+            .collect()
+    }
 }

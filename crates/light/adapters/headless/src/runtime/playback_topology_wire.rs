@@ -216,6 +216,84 @@ fn application_target(
                 cue_list_id: CueListId(non_nil(cue_list_id, "playback.target.cue_list_id")?),
             }
         }
+        wire::PlaybackTopologyTarget::Dynamic { assignment } => {
+            let definition = serde_json::from_value::<light_dynamics::DynamicDefinition>(
+                serde_json::to_value(assignment.embedded_fallback)
+                    .map_err(|error| format!("Dynamic fallback is invalid: {error}"))?,
+            )
+            .map_err(|error| format!("Dynamic fallback is invalid: {error}"))?;
+            playback::PlaybackTarget::Dynamic {
+                assignment: playback::DynamicPlaybackAssignment {
+                    dynamic: light_dynamics::DynamicReference {
+                        dynamic_id: assignment.dynamic_id,
+                        last_known_pool_number: assignment.last_known_pool_number,
+                        embedded_fallback: light_dynamics::DynamicDefinitionSnapshot {
+                            definition: Box::new(definition),
+                        },
+                    },
+                    revision: assignment.revision,
+                    target_scope: assignment.target_scope.map(|scope| match scope {
+                        wire::PlaybackTopologyDynamicTargetScope::LiveGroup { group_id } => {
+                            playback::DynamicPlaybackTargetScope::LiveGroup { group_id }
+                        }
+                        wire::PlaybackTopologyDynamicTargetScope::FrozenTargets { targets } => {
+                            playback::DynamicPlaybackTargetScope::FrozenTargets {
+                                targets: targets.into_iter().map(light_core::FixtureId).collect(),
+                            }
+                        }
+                    }),
+                    fader_mode: match assignment.fader_mode {
+                        wire::PlaybackTopologyDynamicFaderMode::None => {
+                            playback::DynamicPlaybackFaderMode::None
+                        }
+                        wire::PlaybackTopologyDynamicFaderMode::Master => {
+                            playback::DynamicPlaybackFaderMode::Master
+                        }
+                        wire::PlaybackTopologyDynamicFaderMode::Size => {
+                            playback::DynamicPlaybackFaderMode::Size
+                        }
+                        wire::PlaybackTopologyDynamicFaderMode::SizeAndMaster => {
+                            playback::DynamicPlaybackFaderMode::SizeAndMaster
+                        }
+                    },
+                    priority: assignment.priority,
+                    activation_override: assignment.activation_override.map(|policy| match policy {
+                        light_wire::v2::dynamics::DynamicActivationPolicyProjection::StartNow => {
+                            light_dynamics::ActivationPolicy::StartNow
+                        }
+                        light_wire::v2::dynamics::DynamicActivationPolicyProjection::JoinSyncNow => {
+                            light_dynamics::ActivationPolicy::JoinSyncNow
+                        }
+                        light_wire::v2::dynamics::DynamicActivationPolicyProjection::NextBoundary => {
+                            light_dynamics::ActivationPolicy::NextBoundary
+                        }
+                    }),
+                    resume_policy: match assignment.resume_policy {
+                        wire::PlaybackTopologyDynamicResumePolicy::FollowDynamic => {
+                            playback::DynamicPlaybackResumePolicy::FollowDynamic
+                        }
+                        wire::PlaybackTopologyDynamicResumePolicy::ResumeFrozenPhase => {
+                            playback::DynamicPlaybackResumePolicy::ResumeFrozenPhase
+                        }
+                        wire::PlaybackTopologyDynamicResumePolicy::RejoinSynchronizedPosition => {
+                            playback::DynamicPlaybackResumePolicy::RejoinSynchronizedPosition
+                        }
+                        wire::PlaybackTopologyDynamicResumePolicy::ResumeOnNextBoundary => {
+                            playback::DynamicPlaybackResumePolicy::ResumeOnNextBoundary
+                        }
+                    },
+                    local_speed_multiplier: light_dynamics::Rational {
+                        numerator: assignment.local_speed_multiplier.numerator,
+                        denominator: assignment.local_speed_multiplier.denominator,
+                    },
+                    learned_duration_millis: assignment.learned_duration_millis,
+                    crossfade_non_intensity: assignment.crossfade_non_intensity,
+                    auto_off_at_zero: assignment.auto_off_at_zero,
+                    auto_off_flash_release: assignment.auto_off_flash_release,
+                    auto_off_full_control: assignment.auto_off_full_control,
+                },
+            }
+        }
         wire::PlaybackTopologyTarget::Group { group_id } => {
             playback::PlaybackTarget::Group { group_id }
         }
@@ -251,6 +329,10 @@ fn application_button(value: wire::PlaybackTopologyButtonAction) -> playback::Pl
         Input::Pause => Output::Pause,
         Input::Blackout => Output::Blackout,
         Input::PauseDynamics => Output::PauseDynamics,
+        Input::DynamicRestart => Output::DynamicRestart,
+        Input::DynamicDoubleSpeed => Output::DynamicDoubleSpeed,
+        Input::DynamicHalfSpeed => Output::DynamicHalfSpeed,
+        Input::DynamicLearnSpeed => Output::DynamicLearnSpeed,
         Input::None => Output::None,
     }
 }
@@ -336,6 +418,7 @@ fn wire_kind(
         Input::Playback => Ok(Output::Playback),
         Input::PlaybackPage => Ok(Output::PlaybackPage),
         Input::Group
+        | Input::Dynamic
         | Input::PatchLayer
         | Input::Preset
         | Input::StageLayout

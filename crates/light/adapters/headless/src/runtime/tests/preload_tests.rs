@@ -259,6 +259,49 @@ fn preload_capture_resolves_real_buttons_canonicalizes_temp_and_excludes_live_co
 }
 
 #[test]
+fn preload_batch_keeps_dynamic_controls_and_quantized_fader_in_operator_order() {
+    use light_programmer::PreloadPlaybackQueueAction as Action;
+    let pending = [
+        Action::DynamicPause,
+        Action::DynamicRestart,
+        Action::DynamicDoubleSpeed,
+        Action::DynamicHalfSpeed,
+        Action::DynamicLearnSpeed,
+        Action::Fader {
+            value_permyriad: 5_000,
+        },
+    ]
+    .into_iter()
+    .map(|action| light_programmer::PreloadPlaybackAction {
+        playback_number: 1,
+        origin_desk_id: None,
+        page: Some(2),
+        action,
+        surface: light_programmer::PreloadPlaybackQueueSurface::Virtual,
+    })
+    .collect::<Vec<_>>();
+
+    let commands = preload_batch_commands(&pending).unwrap();
+
+    assert_eq!(
+        commands
+            .iter()
+            .map(|command| command.action)
+            .collect::<Vec<_>>(),
+        vec![
+            light_engine::PlaybackBatchAction::TogglePause,
+            light_engine::PlaybackBatchAction::DynamicRestart,
+            light_engine::PlaybackBatchAction::DynamicDoubleSpeed,
+            light_engine::PlaybackBatchAction::DynamicHalfSpeed,
+            light_engine::PlaybackBatchAction::DynamicLearnSpeed,
+            light_engine::PlaybackBatchAction::SetFader {
+                value_permyriad: 5_000
+            },
+        ]
+    );
+}
+
+#[test]
 fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
     let (state, data_dir) = test_state();
     let user = state.installation.users().unwrap().remove(0);

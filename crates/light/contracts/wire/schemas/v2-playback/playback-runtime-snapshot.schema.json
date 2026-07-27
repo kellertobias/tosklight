@@ -165,6 +165,195 @@
         "manual_xfade_progress"
       ]
     },
+    "DynamicPlaybackControllerStatus": {
+      "type": "string",
+      "enum": [
+        "winning",
+        "losing",
+        "missing"
+      ]
+    },
+    "DynamicPlaybackRuntimeProjection": {
+      "type": "object",
+      "properties": {
+        "activated_at": {
+          "type": "string"
+        },
+        "compatible_target_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "controller_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "controller_status": {
+          "$ref": "#/$defs/DynamicPlaybackControllerStatus"
+        },
+        "effective_duration_millis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "effective_speed_multiplier": {
+          "type": "number",
+          "format": "float"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "fader_value": {
+          "type": "number",
+          "format": "float"
+        },
+        "flash": {
+          "type": "boolean"
+        },
+        "instance_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "lane_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "learned_duration_millis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "local_speed_denominator": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "local_speed_numerator": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "master": {
+          "type": "number",
+          "format": "float"
+        },
+        "missing_target_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "playback_number": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "size": {
+          "type": "number",
+          "format": "float"
+        },
+        "skipped_address_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "speed_source": {
+          "$ref": "#/$defs/DynamicPlaybackSpeedSource"
+        },
+        "state": {
+          "$ref": "#/$defs/DynamicPlaybackRuntimeState"
+        },
+        "supported_address_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "target_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "unpatched_target_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "warning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "winning_controller_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "playback_number",
+        "enabled",
+        "paused",
+        "flash",
+        "activated_at",
+        "fader_value",
+        "size",
+        "master",
+        "local_speed_numerator",
+        "local_speed_denominator",
+        "learned_duration_millis",
+        "state",
+        "instance_id",
+        "controller_id",
+        "winning_controller_id",
+        "controller_status",
+        "target_count",
+        "compatible_target_count",
+        "missing_target_count",
+        "unpatched_target_count",
+        "lane_count",
+        "supported_address_count",
+        "skipped_address_count",
+        "speed_source",
+        "effective_speed_multiplier",
+        "effective_duration_millis",
+        "warning"
+      ]
+    },
+    "DynamicPlaybackRuntimeState": {
+      "type": "string",
+      "enum": [
+        "off",
+        "zero",
+        "pending",
+        "active",
+        "paused",
+        "hidden",
+        "failed"
+      ]
+    },
+    "DynamicPlaybackSpeedSource": {
+      "type": "string",
+      "enum": [
+        "fixed",
+        "speed_group"
+      ]
+    },
     "EventSnapshotCursor": {
       "type": "object",
       "properties": {
@@ -382,6 +571,48 @@
           "required": [
             "target",
             "cue_list_id",
+            "runtime"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "dynamic_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            },
+            "embedded": {
+              "type": "boolean"
+            },
+            "last_known_pool_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "runtime": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/DynamicPlaybackRuntimeProjection"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "target": {
+              "type": "string",
+              "const": "dynamic"
+            }
+          },
+          "required": [
+            "target",
+            "dynamic_id",
+            "last_known_pool_number",
+            "embedded",
             "runtime"
           ]
         },

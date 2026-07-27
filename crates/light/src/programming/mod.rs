@@ -80,7 +80,8 @@ pub use lifecycle_projection::{
     ProgrammingLifecycleProjection, ProgrammingLifecycleSession, ProgrammingLifecycleSnapshot,
 };
 pub use light_programmer::{
-    CueMoveCopyChoice, CueTransferOperation, ProgrammingChoiceOption, ProgrammingChoiceOptionId,
+    CueMoveCopyChoice, CueTransferOperation, DynamicInstanceChoice, DynamicInstanceChoiceOption,
+    PendingCommandChoice, ProgrammingChoiceOption, ProgrammingChoiceOptionId,
 };
 pub use operation::{
     ProgrammingInteractionResult, ProgrammingSelectionRefreshEvent,

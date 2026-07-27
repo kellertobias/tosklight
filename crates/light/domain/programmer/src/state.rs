@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use light_core::{
     AttributeKey, AttributeValue, FixtureId, ProgrammerId, SessionId, TimedValue, UserId,
 };
+use light_dynamics::DynamicAddressValue;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -25,9 +26,12 @@ pub struct ProgrammerSnapshot {
     pub selected: Vec<FixtureId>,
     pub selection_expression: Option<SelectionExpression>,
     pub values: Vec<TimedValue>,
+    pub dynamic_values: Vec<DynamicAddressValue>,
     pub group_values: GroupProgrammerValues,
     pub preload_pending: Vec<TimedValue>,
     pub preload_active: Vec<TimedValue>,
+    pub preload_dynamic_pending: Vec<DynamicAddressValue>,
+    pub preload_dynamic_active: Vec<DynamicAddressValue>,
     pub preload_group_pending: GroupProgrammerValues,
     pub preload_group_active: GroupProgrammerValues,
     pub preload_playback_pending: Vec<PreloadPlaybackAction>,
@@ -48,6 +52,8 @@ pub struct ProgrammerState {
     #[serde(default)]
     pub selection_expression: Option<SelectionExpression>,
     pub values: Vec<TimedValue>,
+    #[serde(default)]
+    pub dynamic_values: Vec<DynamicAddressValue>,
     /// Runtime-only fixture-control overrides. These sit above normal programmer values while a
     /// momentary or timed action is active, but are never recorded, persisted, or added to Undo.
     #[serde(skip)]
@@ -58,6 +64,10 @@ pub struct ProgrammerState {
     pub preload_pending: Vec<TimedValue>,
     #[serde(default)]
     pub preload_active: Vec<TimedValue>,
+    #[serde(default)]
+    pub preload_dynamic_pending: Vec<DynamicAddressValue>,
+    #[serde(default)]
+    pub preload_dynamic_active: Vec<DynamicAddressValue>,
     #[serde(default)]
     pub preload_group_pending: GroupProgrammerValues,
     #[serde(default)]
@@ -164,6 +174,7 @@ impl ProgrammerState {
         ProgrammerUpdateContent {
             fixture_values,
             group_values,
+            dynamic_values: self.dynamic_values.clone(),
             selected_fixtures: selected_fixtures.to_vec(),
         }
     }
@@ -206,12 +217,15 @@ pub struct ProgrammerGroupUpdate {
 pub struct ProgrammerUpdateContent {
     pub fixture_values: Vec<ProgrammerFixtureUpdate>,
     pub group_values: Vec<ProgrammerGroupUpdate>,
+    pub dynamic_values: Vec<DynamicAddressValue>,
     pub selected_fixtures: Vec<FixtureId>,
 }
 
 impl ProgrammerUpdateContent {
     pub fn has_values(&self) -> bool {
-        !self.fixture_values.is_empty() || !self.group_values.is_empty()
+        !self.fixture_values.is_empty()
+            || !self.group_values.is_empty()
+            || !self.dynamic_values.is_empty()
     }
 
     pub fn has_selection(&self) -> bool {

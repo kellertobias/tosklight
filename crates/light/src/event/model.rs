@@ -110,6 +110,10 @@ impl EventObject {
     pub fn speed_groups() -> Self {
         Self::new(EventCapability::Playback, "speed-groups:manual")
     }
+
+    pub fn dynamic_runtime() -> Self {
+        Self::new(EventCapability::Output, "dynamics:runtime")
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -149,8 +153,36 @@ pub enum DeskEvent {
 #[derive(Clone, Debug, PartialEq)]
 pub enum OutputEvent {
     RuntimeChanged(OutputRuntimeChange),
+    DynamicRuntimeChanged(DynamicRuntimeChange),
     HighlightChanged(HighlightChange),
     MediaChanged(MediaNotification),
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum DynamicRuntimeEventKind {
+    InstanceStarted,
+    InstancePending,
+    InstanceActive,
+    InstanceOff,
+    InstanceRelease,
+    ControllerUpdated,
+    ControllerWinnerChanged,
+    Paused,
+    Resumed,
+    FailedDependency,
+    PreloadCommitted,
+    TransitionCompleted,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DynamicRuntimeChange {
+    pub kind: DynamicRuntimeEventKind,
+    pub dynamic_id: Option<Uuid>,
+    pub runtime_instance_id: Option<Uuid>,
+    pub controller_id: Option<Uuid>,
+    pub winning_controller_id: Option<Uuid>,
+    pub occurred_at_millis: u64,
+    pub message: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -504,6 +536,28 @@ impl EventDraft {
             correlation_id: None,
             delivery: DeliveryPolicy::Replaceable,
             payload: ApplicationEvent::Playback(PlaybackEvent::TelemetrySampled(tick)),
+        }
+    }
+
+    pub fn dynamic_runtime_changed(
+        context: Option<&ActionContext>,
+        change: DynamicRuntimeChange,
+    ) -> Self {
+        Self {
+            desk_id: context.map(|context| context.desk_id),
+            class: if change.kind == DynamicRuntimeEventKind::FailedDependency {
+                EventClass::Error
+            } else {
+                EventClass::Transition
+            },
+            object: Some(EventObject::dynamic_runtime()),
+            related_objects: Vec::new(),
+            source: context.map_or(EventSource::Runtime, |context| {
+                EventSource::Action(context.source)
+            }),
+            correlation_id: context.map(|context| context.correlation_id),
+            delivery: DeliveryPolicy::Lossless,
+            payload: ApplicationEvent::Output(OutputEvent::DynamicRuntimeChanged(change)),
         }
     }
 

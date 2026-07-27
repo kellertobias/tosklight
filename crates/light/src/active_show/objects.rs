@@ -7,6 +7,7 @@ use crate::{
     show_compiler::prepare_normalized_show_candidate_incremental,
 };
 use light_core::Revision;
+use light_dynamics::{DynamicDefinition, validate_definition};
 use light_playback::{CueList, PlaybackDefinition, PlaybackPage};
 use light_programmer::{GroupDefinition, Preset};
 use light_show::{LosslessBody, PortableShowDocument, PortableShowObject, PortableShowTransaction};
@@ -157,6 +158,12 @@ fn normalize_body(
             request,
         )
         .map(ActiveShowObjectBody::CueList),
+        ActiveShowObjectBody::Dynamic(request) => normalize_dynamic(
+            existing.and_then(ActiveShowObjectBody::dynamic),
+            mutation,
+            request,
+        )
+        .map(ActiveShowObjectBody::Dynamic),
         ActiveShowObjectBody::Group(request) => normalize_group(
             existing.and_then(ActiveShowObjectBody::group),
             mutation,
@@ -199,6 +206,19 @@ fn normalize_body(
     }
 }
 
+fn normalize_dynamic(
+    existing: Option<&LosslessBody<DynamicDefinition>>,
+    mutation: &ActiveShowObjectMutation,
+    request: &LosslessBody<DynamicDefinition>,
+) -> Result<LosslessBody<DynamicDefinition>, ActionError> {
+    let mut normalized = request.typed().clone();
+    let object_id = uuid::Uuid::parse_str(&mutation.object_id)
+        .map_err(|error| invalid(format!("invalid Dynamic storage id: {error}")))?;
+    normalized.id = object_id;
+    validate_definition(&normalized).map_err(invalid)?;
+    LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
+}
+
 fn normalize_cue_list(
     existing: Option<&LosslessBody<CueList>>,
     mutation: &ActiveShowObjectMutation,
@@ -213,6 +233,7 @@ fn normalize_cue_list(
     let mut merged =
         LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)?;
     merged.strip_zero_u64_echo("chaser_xfade_millis");
+    merged.strip_nested_array_object_key("cues", "phasers");
     Ok(merged)
 }
 

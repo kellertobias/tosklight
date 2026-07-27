@@ -47,6 +47,8 @@ mod cue_transfer_programming_ports;
 mod cue_transfer_routes;
 #[path = "command_http/cue_transfer_wire.rs"]
 mod cue_transfer_wire;
+#[path = "command_http/dynamics_wire.rs"]
+mod dynamics_wire;
 #[path = "command_http/events.rs"]
 mod events;
 #[path = "command_http/group_management_ports.rs"]

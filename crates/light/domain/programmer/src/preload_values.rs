@@ -3,6 +3,7 @@ use crate::fixture_value_batch::{
 };
 use crate::{GroupProgrammerValue, ProgrammerRegistry};
 use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId, TimedValue};
+use light_dynamics::DynamicAddressValue;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct PreloadProgrammerValueTiming {
@@ -61,6 +62,7 @@ pub struct PreloadProgrammerGroupValue {
 pub struct PreloadProgrammerValuesContent {
     pub fixture_values: Vec<PreloadProgrammerFixtureValue>,
     pub group_values: Vec<PreloadProgrammerGroupValue>,
+    pub dynamic_values: Vec<DynamicAddressValue>,
 }
 
 impl ProgrammerRegistry {
@@ -150,6 +152,7 @@ fn content(state: &crate::ProgrammerState) -> PreloadProgrammerValuesContent {
     PreloadProgrammerValuesContent {
         fixture_values,
         group_values,
+        dynamic_values: state.preload_dynamic_pending.clone(),
     }
 }
 

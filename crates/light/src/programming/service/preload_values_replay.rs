@@ -217,6 +217,7 @@ mod tests {
         spread_len: usize,
     ) -> ProgrammingPreloadValuesResult {
         let projection = ProgrammingPreloadValuesProjection {
+            dynamic_values: Vec::new(),
             user_id,
             revision: 1,
             fixture_values: Vec::new(),

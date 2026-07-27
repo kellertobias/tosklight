@@ -245,5 +245,25 @@ fn application_action(
                 pressed: false,
             }
         }
+        light_programmer::PreloadPlaybackQueueAction::DynamicPause => {
+            light_application::PlaybackAction::Pause { pressed: true }
+        }
+        light_programmer::PreloadPlaybackQueueAction::DynamicRestart => {
+            light_application::PlaybackAction::DynamicRestart { pressed: true }
+        }
+        light_programmer::PreloadPlaybackQueueAction::DynamicDoubleSpeed => {
+            light_application::PlaybackAction::DynamicDoubleSpeed { pressed: true }
+        }
+        light_programmer::PreloadPlaybackQueueAction::DynamicHalfSpeed => {
+            light_application::PlaybackAction::DynamicHalfSpeed { pressed: true }
+        }
+        light_programmer::PreloadPlaybackQueueAction::DynamicLearnSpeed => {
+            light_application::PlaybackAction::DynamicLearnSpeed { pressed: true }
+        }
+        light_programmer::PreloadPlaybackQueueAction::Fader { value_permyriad } => {
+            light_application::PlaybackAction::Master(light_application::PlaybackLevel::new(
+                f32::from(value_permyriad) / 10_000.0,
+            ))
+        }
     }
 }

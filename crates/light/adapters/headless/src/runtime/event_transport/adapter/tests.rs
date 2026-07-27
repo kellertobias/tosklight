@@ -466,6 +466,7 @@ fn programming_values_keep_user_scope_full_projection_and_action_identity() {
         &context,
         ProgrammingValuesChange {
             projection: ProgrammingValuesProjection {
+                dynamic_values: Vec::new(),
                 user_id,
                 revision: 7,
                 fixture_values: Vec::new(),
@@ -571,6 +572,33 @@ fn sequence_gaps_always_forward() {
     assert_eq!(gap.after_sequence, 1);
     assert_eq!(gap.oldest_available, 3);
     assert_eq!(gap.latest_sequence, 4);
+}
+
+#[test]
+fn dynamic_runtime_event_keeps_exact_instance_controller_and_failure_identity() {
+    let dynamic_id = Uuid::from_u128(21);
+    let instance_id = Uuid::from_u128(22);
+    let controller_id = Uuid::from_u128(23);
+    let winning_id = Uuid::from_u128(24);
+    let change = wire_dynamic_runtime_change(&application::DynamicRuntimeChange {
+        kind: application::DynamicRuntimeEventKind::FailedDependency,
+        dynamic_id: Some(dynamic_id),
+        runtime_instance_id: Some(instance_id),
+        controller_id: Some(controller_id),
+        winning_controller_id: Some(winning_id),
+        occurred_at_millis: 1_234,
+        message: Some("Preset dependency is missing".into()),
+    });
+    assert_eq!(change.kind, wire::DynamicRuntimeEventKind::FailedDependency);
+    assert_eq!(change.dynamic_id, Some(dynamic_id));
+    assert_eq!(change.runtime_instance_id, Some(instance_id));
+    assert_eq!(change.controller_id, Some(controller_id));
+    assert_eq!(change.winning_controller_id, Some(winning_id));
+    assert_eq!(change.occurred_at_millis, 1_234);
+    assert_eq!(
+        change.message.as_deref(),
+        Some("Preset dependency is missing")
+    );
 }
 
 fn context(source: ActionSource) -> ActionContext {

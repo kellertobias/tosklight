@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! Tracking cue lists, live playback state, phasers, and HTP/LTP arbitration.
+//! Tracking cue lists, live playback state, and HTP/LTP arbitration.
 
 mod arbitration;
 mod automatic;
@@ -11,7 +11,6 @@ mod cue_tracking;
 mod cue_transfer;
 mod engine;
 mod model;
-mod phaser;
 mod runtime;
 mod transition;
 
@@ -28,7 +27,6 @@ pub use cue_recording::{
 pub use cue_transfer::{CueTransferMode, transferred_cue};
 pub use engine::PlaybackEngine;
 pub use model::{cue::*, playback::*, runtime::*};
-pub use phaser::*;
 pub use runtime::PlaybackTelemetrySample;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};

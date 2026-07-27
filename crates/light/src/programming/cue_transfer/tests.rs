@@ -267,7 +267,12 @@ fn identical_request_replays_without_a_second_commit_or_event() {
         )
         .unwrap();
     let command_line = registry
-        .set_pending_command_choice(session, Some(choice.clone()))
+        .set_pending_command_choice(
+            session,
+            Some(light_programmer::PendingCommandChoice::CueMoveCopy(
+                choice.clone(),
+            )),
+        )
         .unwrap();
     let envelope = ActionEnvelope {
         context: context

@@ -18,11 +18,13 @@ use light_output::OutputHealth;
 use light_show::ShowEntry;
 use parking_lot::{Mutex, RwLock};
 use std::{
+    collections::HashMap,
     env,
     net::{SocketAddr, UdpSocket},
     sync::{Arc, atomic::AtomicU16},
 };
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 pub(super) async fn run() -> anyhow::Result<()> {
     initialize_tracing();
@@ -64,6 +66,8 @@ struct RuntimeResources {
     pub(super) playback_service: PlaybackService,
     pub(super) active_show: Arc<RwLock<Option<ShowEntry>>>,
     pub(super) activation: ActiveShowCoordinator,
+    pub(super) dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
+    pub(super) dynamic_auto_offs: Arc<Mutex<Vec<u16>>>,
 }
 
 impl RuntimeResources {
@@ -86,6 +90,32 @@ impl RuntimeResources {
         let playback_service = PlaybackService::new(events.clone());
         let active_show = Arc::new(RwLock::new(startup.persistent.active_show.clone()));
         let activation = ActiveShowCoordinator::new();
+        let dynamics = Arc::new(Mutex::new(light_dynamics::DynamicRuntime::default()));
+        let dynamic_auto_offs = Arc::new(Mutex::new(Vec::new()));
+        dynamics
+            .lock()
+            .install_definitions(startup.engine.snapshot().dynamics.iter().cloned())
+            .expect("validated startup snapshot contains valid Dynamic definitions");
+        let restored_dynamic_runtime =
+            persisted_runtime
+                .dynamic_runtime
+                .clone()
+                .is_some_and(
+                    |snapshot| match dynamics.lock().restore_snapshot(snapshot) {
+                        Ok(()) => true,
+                        Err(error) => {
+                            tracing::warn!(%error, "ignoring invalid persisted Dynamic runtime");
+                            false
+                        }
+                    },
+                );
+        if !restored_dynamic_runtime {
+            restore_programmer_dynamics(
+                &dynamics,
+                &startup.programmers,
+                startup.engine.snapshot().as_ref(),
+            );
+        }
         let scheduler = output_scheduler::start(output_scheduler::Config {
             bind_ip: configuration.output_bind_ip,
             engine: Arc::clone(&startup.engine),
@@ -100,6 +130,9 @@ impl RuntimeResources {
             ),
             active_show: ActiveShowProjection::new(Arc::clone(&active_show)),
             activation: activation.clone(),
+            dynamics: Arc::clone(&dynamics),
+            speed_groups: Arc::clone(&startup.speed_groups),
+            dynamic_auto_offs: Arc::clone(&dynamic_auto_offs),
             test_bench: startup.persistent.test_bench,
         })
         .await?;
@@ -116,7 +149,95 @@ impl RuntimeResources {
             playback_service,
             active_show,
             activation,
+            dynamics,
+            dynamic_auto_offs,
         })
+    }
+}
+
+fn restore_programmer_dynamics(
+    runtime: &Mutex<light_dynamics::DynamicRuntime>,
+    programmers: &light_programmer::ProgrammerRegistry,
+    snapshot: &light_engine::EngineSnapshot,
+) {
+    struct RestoredController {
+        definition: light_dynamics::DynamicDefinition,
+        overrides: light_dynamics::DynamicInstanceOverrides,
+        targets: Vec<light_core::FixtureId>,
+        activated_at_millis: u64,
+    }
+
+    let mut runtime = runtime.lock();
+    for programmer in programmers.active_for_sessions() {
+        let mut controllers = HashMap::<Uuid, RestoredController>::new();
+        for stored in &programmer.dynamic_values {
+            let light_dynamics::DynamicSemanticValue::DynamicOn {
+                instance_link,
+                dynamic,
+                overrides,
+                ..
+            } = &stored.value
+            else {
+                continue;
+            };
+            let fallback = dynamic.embedded_fallback.definition.as_ref().clone();
+            let entry = controllers
+                .entry(*instance_link)
+                .or_insert_with(|| RestoredController {
+                    definition: fallback,
+                    overrides: overrides.clone(),
+                    targets: Vec::new(),
+                    activated_at_millis: stored.changed_at_millis,
+                });
+            entry.activated_at_millis = entry.activated_at_millis.max(stored.changed_at_millis);
+            if !entry.targets.contains(&stored.fixture_id) {
+                entry.targets.push(stored.fixture_id);
+            }
+        }
+        for (controller_id, restored) in controllers {
+            if restored.targets.is_empty() {
+                continue;
+            }
+            if let Err(error) = runtime.install_fallback_definition(restored.definition.clone()) {
+                tracing::warn!(
+                    %controller_id,
+                    %error,
+                    "ignoring invalid persisted Dynamic fallback"
+                );
+                continue;
+            }
+            let result = runtime.start(light_dynamics::DynamicStartRequest {
+                definition_id: restored.definition.id,
+                controller: light_dynamics::DynamicController {
+                    id: controller_id,
+                    source: light_dynamics::DynamicControllerSource::Programmer {
+                        programmer_id: programmer.id.0,
+                    },
+                    priority: programmer.priority,
+                    activated_at_millis: restored.activated_at_millis,
+                    size: restored.overrides.size,
+                    speed_multiplier: restored.overrides.speed_multiplier.factor() as f32,
+                    phase_offset_degrees: restored.overrides.phase_offset_degrees,
+                    paused: false,
+                },
+                target_scope: light_dynamics::DynamicTargetScope {
+                    ordered_targets: restored.targets,
+                },
+                stage_positions: snapshot.dynamic_stage_positions.as_ref().clone(),
+                now_millis: restored.activated_at_millis,
+                activation_delay_millis: 0,
+                activation_duration_millis: 0,
+                activation_policy_override: None,
+                reuse_matching_targetless: true,
+            });
+            if let Err(error) = result {
+                tracing::warn!(
+                    %controller_id,
+                    %error,
+                    "ignoring invalid persisted Dynamic controller"
+                );
+            }
+        }
     }
 }
 
@@ -208,6 +329,7 @@ fn build_app_state(
             desk_token(),
         ),
         sessions: SessionResource::new(),
+        dynamics: light_application::DynamicsService::new(startup.programmers.clone()),
         programming: ProgrammingResource::new(startup.programmers, programming),
         playback: PlaybackResource::new(
             resources.playback_service.clone(),
@@ -227,6 +349,8 @@ fn build_app_state(
             output_sequences,
             startup.manual_clock,
             startup.speed_groups,
+            Arc::clone(&resources.dynamics),
+            Arc::clone(&resources.dynamic_auto_offs),
         ),
         active_show: ActiveShowResource::new(
             resources.activation.clone(),

@@ -194,6 +194,9 @@ pub enum EventPayload {
     OutputRuntimeChanged {
         change: OutputRuntimeChange,
     },
+    DynamicRuntimeChanged {
+        change: DynamicRuntimeChange,
+    },
     SpeedGroupsChanged {
         change: SpeedGroupChange,
     },
@@ -236,6 +239,35 @@ pub enum EventPayload {
     OperatorNotification {
         notification: OperatorNotification,
     },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicRuntimeEventKind {
+    InstanceStarted,
+    InstancePending,
+    InstanceActive,
+    InstanceOff,
+    InstanceRelease,
+    ControllerUpdated,
+    ControllerWinnerChanged,
+    Paused,
+    Resumed,
+    FailedDependency,
+    PreloadCommitted,
+    TransitionCompleted,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicRuntimeChange {
+    pub kind: DynamicRuntimeEventKind,
+    pub dynamic_id: Option<Uuid>,
+    pub runtime_instance_id: Option<Uuid>,
+    pub controller_id: Option<Uuid>,
+    pub winning_controller_id: Option<Uuid>,
+    #[ts(type = "number")]
+    pub occurred_at_millis: u64,
+    pub message: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -529,6 +561,17 @@ pub struct ShowObjectsChange {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ShowObjectChange {
+    Dynamic {
+        object_id: String,
+        #[ts(type = "number")]
+        object_revision: u64,
+        #[ts(type = "unknown | null")]
+        body: Option<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional = nullable)]
+        validation_error: Option<String>,
+        deleted: bool,
+    },
     CueList {
         object_id: String,
         #[ts(type = "number")]
@@ -599,6 +642,7 @@ pub enum ShowObjectChange {
 #[serde(rename_all = "snake_case")]
 pub enum ShowObjectKind {
     CueList,
+    Dynamic,
     Group,
     PatchLayer,
     Playback,

@@ -67,6 +67,18 @@ where
     pub fn strip_zero_u64_echo(&mut self, key: &str) {
         super::lossless_json::strip_zero_u64_echo(&mut self.raw, key);
     }
+
+    /// Removes one retired typed key from every object inside a named array while preserving all
+    /// unrelated unknown extensions.
+    pub fn strip_nested_array_object_key(&mut self, array: &str, key: &str) {
+        if let Some(items) = self.raw.get_mut(array).and_then(Value::as_array_mut) {
+            for item in items {
+                if let Some(item) = item.as_object_mut() {
+                    item.remove(key);
+                }
+            }
+        }
+    }
 }
 
 /// Codec-owned JSON retained for application fields whose schema is deliberately extensible and
@@ -126,5 +138,31 @@ mod tests {
 
         assert_eq!(body.typed().name, "Front");
         assert_eq!(body.encode()["future"]["kept"], true);
+    }
+
+    #[test]
+    fn targeted_nested_scrub_preserves_unrelated_extensions() {
+        #[derive(Clone, Debug, Deserialize, Serialize)]
+        struct Body {
+            cues: Vec<Cue>,
+        }
+        #[derive(Clone, Debug, Deserialize, Serialize)]
+        struct Cue {
+            name: String,
+        }
+        let mut body = LosslessBody::<Body>::decode(serde_json::json!({
+            "cues": [{
+                "name": "One",
+                "phasers": [{"prototype": true}],
+                "future": {"kept": true}
+            }],
+            "top_level_future": true
+        }))
+        .unwrap();
+        body.strip_nested_array_object_key("cues", "phasers");
+        let encoded = body.encode();
+        assert!(encoded["cues"][0].get("phasers").is_none());
+        assert_eq!(encoded["cues"][0]["future"]["kept"], true);
+        assert_eq!(encoded["top_level_future"], true);
     }
 }

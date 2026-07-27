@@ -129,3 +129,131 @@ fn defaults_are_raw_preserving_side_effect_free_and_compile_equivalent() {
         snapshot_without_revision(current_snapshot)
     );
 }
+
+#[test]
+fn dynamics_compile_preset_sources_into_per_target_sampler_fallbacks() {
+    let target = light_core::FixtureId::new();
+    let dynamic = light_dynamics::DynamicDefinition {
+        id: Uuid::new_v4(),
+        pool_number: 7,
+        revision: 1,
+        name: "Preset wave".into(),
+        color: None,
+        icon: None,
+        overall_speed_multiplier: light_dynamics::Rational::ONE,
+        target_binding: light_dynamics::DynamicTargetBinding::FrozenTargets {
+            targets: vec![target],
+        },
+        lanes: vec![light_dynamics::DynamicLane {
+            id: Uuid::new_v4(),
+            attribute: light_core::AttributeKey::intensity(),
+            mode: light_dynamics::DynamicLaneMode::Keyframes,
+            keyframes: light_dynamics::KeyframeConfiguration {
+                points: vec![
+                    light_dynamics::DynamicKeyframe {
+                        position: 0.0,
+                        source: light_dynamics::ScalarSource::Preset {
+                            preset_id: "1.1".into(),
+                            attribute: light_core::AttributeKey::intensity(),
+                            last_valid_by_target: Vec::new(),
+                        },
+                        interpolation: light_dynamics::ScalarInterpolation::Linear,
+                    },
+                    light_dynamics::DynamicKeyframe {
+                        position: 0.5,
+                        source: light_dynamics::ScalarSource::Value { value: 1.0 },
+                        interpolation: light_dynamics::ScalarInterpolation::Linear,
+                    },
+                ],
+                size: 1.0,
+            },
+            max_min: light_dynamics::MaxMinConfiguration {
+                minimum: light_dynamics::ScalarSource::Value { value: 0.0 },
+                maximum: light_dynamics::ScalarSource::Value { value: 1.0 },
+                function: light_dynamics::PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: light_dynamics::PwmShape::default(),
+            },
+            middle_amplitude: light_dynamics::MiddleAmplitudeConfiguration {
+                middle: light_dynamics::ScalarSource::Current,
+                amplitude: 0.5,
+                function: light_dynamics::PeriodicFunction::Sinus,
+                size: 1.0,
+                pwm: light_dynamics::PwmShape::default(),
+            },
+            speed_multiplier: light_dynamics::Rational::ONE,
+            width: 1.0,
+            random_group_id: None,
+        }],
+        random_groups: Vec::new(),
+        phase: light_dynamics::PhaseDistribution {
+            ordering: light_dynamics::PhaseOrdering::Selection,
+            offset_degrees: 0.0,
+            span_degrees: 360.0,
+            block_size: 1,
+            repeats: 1,
+            wings: false,
+            anchors_degrees: Vec::new(),
+        },
+        speed: light_dynamics::DynamicSpeed::Fixed {
+            duration_millis: 1_000,
+        },
+        run_mode: light_dynamics::DynamicRunMode::Loop,
+        default_activation: light_dynamics::ActivationPolicy::StartNow,
+        activation_boundary: light_dynamics::ActivationBoundary::Beat,
+    };
+    let objects = vec![
+        ("dynamic", "7", serde_json::to_value(dynamic).unwrap()),
+        (
+            "dynamic",
+            "broken",
+            json!({
+                "id": Uuid::new_v4(),
+                "pool_number": 8,
+                "revision": 1,
+                "name": "Needs repair",
+                "lanes": "not-an-array"
+            }),
+        ),
+        (
+            "preset",
+            "1.1",
+            json!({
+                "name": "Dim",
+                "family": "Intensity",
+                "number": 1,
+                "values": {
+                    target.0.to_string(): {
+                        "intensity": {"kind": "normalized", "value": 0.75}
+                    }
+                }
+            }),
+        ),
+    ];
+    let refs = objects
+        .iter()
+        .map(|(kind, id, body)| (*kind, *id, body.clone()))
+        .collect::<Vec<_>>();
+    let (_, document) = document_with_objects(&refs);
+    let snapshot =
+        compile_show_candidate(document.candidate(&document.transaction()).unwrap()).unwrap();
+    assert_eq!(
+        snapshot.dynamics.len(),
+        1,
+        "a malformed Dynamic remains repairable show content but is not runtime-installed"
+    );
+    let light_dynamics::ScalarSource::Preset {
+        last_valid_by_target,
+        ..
+    } = &snapshot.dynamics[0].lanes[0].keyframes.points[0].source
+    else {
+        panic!("expected Preset source")
+    };
+    assert_eq!(
+        last_valid_by_target,
+        &[light_dynamics::TargetScalarFallback {
+            target,
+            value: 0.75,
+        }]
+    );
+}

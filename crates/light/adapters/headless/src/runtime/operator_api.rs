@@ -185,9 +185,27 @@ pub(super) async fn visualization_snapshot(
     show.verify(&state)?;
     let snapshot = state.output.snapshot();
     let options = state.output.render_options();
-    let mut resolved = state.output.resolved_values();
+    let programmer = query
+        .preload
+        .then(|| state.programming.get(session.id))
+        .flatten();
+    let extra_dynamic_values = programmer
+        .as_ref()
+        .map(|programmer| {
+            programmer
+                .preload_dynamic_pending
+                .iter()
+                .cloned()
+                .map(|value| (programmer.id.0, programmer.priority, value))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let ordinary = state.output.resolved_values();
+    let (mut resolved, dynamic_runtime, dynamic_samples) = state
+        .output
+        .visualization_dynamic_projection(&extra_dynamic_values, query.preload);
     if query.preload
-        && let Some(programmer) = state.programming.get(session.id)
+        && let Some(programmer) = programmer
     {
         for value in programmer
             .preload_active
@@ -232,7 +250,7 @@ pub(super) async fn visualization_snapshot(
         })
         .collect::<Vec<_>>();
     let values = resolved
-        .into_iter()
+        .iter()
         .map(|((fixture_id, attribute), value)| {
             serde_json::json!({
                 "fixture_id": fixture_id,
@@ -241,6 +259,14 @@ pub(super) async fn visualization_snapshot(
             })
         })
         .collect::<Vec<_>>();
+    let dynamic_stack = dynamic_stack_projection(
+        &state,
+        &ordinary,
+        &resolved,
+        &dynamic_runtime,
+        &dynamic_samples,
+        &extra_dynamic_values,
+    );
     Ok(Json(serde_json::json!({
         "revision": snapshot.revision,
         "generated_at": chrono::Utc::now(),
@@ -248,6 +274,264 @@ pub(super) async fn visualization_snapshot(
         "blackout": options.blackout,
         "preload": query.preload,
         "values": values,
+        "dynamic_stack": dynamic_stack,
         "profile_output_values": profile_output_values,
     })))
+}
+
+#[derive(Serialize)]
+struct DynamicStackEntry {
+    fixture_id: Uuid,
+    attribute: String,
+    entry_type: &'static str,
+    priority: i16,
+    changed_at_millis: u64,
+    source: String,
+    dynamic_id: Option<Uuid>,
+    pool_number: Option<u16>,
+    name: String,
+    runtime_instance_id: Option<Uuid>,
+    controller_id: Option<Uuid>,
+    lane_id: Option<Uuid>,
+    size: Option<f32>,
+    activation_mix: Option<f32>,
+    paused: bool,
+    hidden: bool,
+    pending: bool,
+    winning: bool,
+    value: Option<light_core::AttributeValue>,
+    resolved_value: Option<light_core::AttributeValue>,
+}
+
+fn dynamic_stack_projection(
+    state: &AppState,
+    ordinary: &HashMap<
+        (light_core::FixtureId, light_core::AttributeKey),
+        light_core::AttributeValue,
+    >,
+    resolved: &HashMap<
+        (light_core::FixtureId, light_core::AttributeKey),
+        light_core::AttributeValue,
+    >,
+    runtime: &light_dynamics::DynamicRuntimeSnapshot,
+    samples: &[light_dynamics::DynamicRuntimeSample],
+    extra: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+) -> Vec<DynamicStackEntry> {
+    let now_millis =
+        u64::try_from(state.output.application_time().timestamp_millis()).unwrap_or_default();
+    let mut entries = Vec::new();
+    let dynamic_winners = samples
+        .iter()
+        .fold(
+            HashMap::<
+                (light_core::FixtureId, light_core::AttributeKey),
+                &light_dynamics::DynamicRuntimeSample,
+            >::new(),
+            |mut winners, sample| {
+                let key = (sample.target, sample.attribute.clone());
+                let replace = winners.get(&key).is_none_or(|winner| {
+                    (
+                        sample.priority,
+                        sample.activated_at_millis,
+                        sample.controller_id,
+                    ) > (
+                        winner.priority,
+                        winner.activated_at_millis,
+                        winner.controller_id,
+                    )
+                });
+                if replace {
+                    winners.insert(key, sample);
+                }
+                winners
+            },
+        )
+        .into_iter()
+        .map(|(key, sample)| (key, sample.controller_id))
+        .collect::<HashMap<_, _>>();
+    let samples = samples
+        .iter()
+        .map(|sample| {
+            (
+                (sample.controller_id, sample.target, sample.lane_id),
+                sample.value,
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    for instance in &runtime.instances {
+        let transitions = instance
+            .controller_transitions
+            .iter()
+            .map(|transition| (transition.controller_id, *transition))
+            .collect::<HashMap<_, _>>();
+        let pending = instance
+            .pending_until_millis
+            .is_some_and(|boundary| now_millis < boundary);
+        for controller in &instance.controllers {
+            let transition = transitions.get(&controller.id).copied().unwrap_or(
+                light_dynamics::DynamicControllerTransitionSnapshot {
+                    controller_id: controller.id,
+                    activation_started_at_millis: controller.activated_at_millis,
+                    ..Default::default()
+                },
+            );
+            let activation_mix =
+                super::dynamics_http::runtime_transition_mix(transition, now_millis);
+            for target in &instance.targets {
+                for lane in &instance.definition.lanes {
+                    let key = (*target, lane.attribute.clone());
+                    let winner = dynamic_winners.get(&key).copied();
+                    entries.push(DynamicStackEntry {
+                        fixture_id: target.0,
+                        attribute: lane.attribute.0.clone(),
+                        entry_type: "dynamic",
+                        priority: controller.priority,
+                        changed_at_millis: controller.activated_at_millis,
+                        source: super::dynamics_http::dynamic_source_label(&controller.source),
+                        dynamic_id: Some(instance.definition.id),
+                        pool_number: Some(instance.definition.pool_number),
+                        name: instance.definition.name.clone(),
+                        runtime_instance_id: Some(instance.id),
+                        controller_id: Some(controller.id),
+                        lane_id: Some(lane.id),
+                        size: Some(controller.size),
+                        activation_mix: Some(activation_mix),
+                        paused: runtime.global_paused
+                            || instance.paused_at_millis.is_some()
+                            || controller.paused,
+                        hidden: winner != Some(controller.id),
+                        pending,
+                        winning: winner == Some(controller.id),
+                        value: samples
+                            .get(&(controller.id, *target, lane.id))
+                            .copied()
+                            .map(light_core::AttributeValue::Normalized),
+                        resolved_value: resolved.get(&key).cloned(),
+                    });
+                    if let Some(value) = ordinary.get(&key)
+                        && !entries.iter().any(|entry| {
+                            entry.fixture_id == target.0
+                                && entry.attribute == lane.attribute.0
+                                && entry.entry_type == "ordinary_static"
+                        })
+                    {
+                        entries.push(DynamicStackEntry {
+                            fixture_id: target.0,
+                            attribute: lane.attribute.0.clone(),
+                            entry_type: "ordinary_static",
+                            priority: i16::MIN,
+                            changed_at_millis: 0,
+                            source: "Resolved ordinary stack".into(),
+                            dynamic_id: None,
+                            pool_number: None,
+                            name: "Static base".into(),
+                            runtime_instance_id: None,
+                            controller_id: None,
+                            lane_id: None,
+                            size: None,
+                            activation_mix: None,
+                            paused: false,
+                            hidden: true,
+                            pending: false,
+                            winning: false,
+                            value: Some(value.clone()),
+                            resolved_value: resolved.get(&key).cloned(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    for (programmer_id, priority, stored) in state
+        .output
+        .dynamic_programmer_values()
+        .into_iter()
+        .chain(extra.iter().cloned())
+    {
+        push_semantic_stack_entry(
+            &mut entries,
+            stored,
+            priority,
+            format!("Programmer {programmer_id}"),
+            resolved,
+        );
+    }
+    for stored in state.output.active_cue_dynamic_values() {
+        push_semantic_stack_entry(
+            &mut entries,
+            light_dynamics::DynamicAddressValue {
+                fixture_id: stored.fixture_id,
+                attribute: stored.attribute,
+                value: stored.value,
+                changed_at_millis: stored.changed_at_millis,
+                programmer_order: 0,
+            },
+            stored.priority,
+            format!("Cue {}", stored.current_cue_id),
+            resolved,
+        );
+    }
+    entries.sort_by(|left, right| {
+        left.fixture_id
+            .cmp(&right.fixture_id)
+            .then_with(|| left.attribute.cmp(&right.attribute))
+            .then_with(|| left.priority.cmp(&right.priority))
+            .then_with(|| left.changed_at_millis.cmp(&right.changed_at_millis))
+            .then_with(|| left.controller_id.cmp(&right.controller_id))
+    });
+    entries
+}
+
+fn push_semantic_stack_entry(
+    entries: &mut Vec<DynamicStackEntry>,
+    stored: light_dynamics::DynamicAddressValue,
+    priority: i16,
+    source: String,
+    resolved: &HashMap<
+        (light_core::FixtureId, light_core::AttributeKey),
+        light_core::AttributeValue,
+    >,
+) {
+    let key = (stored.fixture_id, stored.attribute.clone());
+    let (entry_type, name, instance, value) = match stored.value {
+        light_dynamics::DynamicSemanticValue::FixAt { value, .. } => (
+            "fix_at",
+            "FixAT".into(),
+            None,
+            Some(light_core::AttributeValue::Normalized(value)),
+        ),
+        light_dynamics::DynamicSemanticValue::DynamicOff { instance_link, .. } => (
+            "dynamic_off",
+            "Dynamic Off".into(),
+            Some(instance_link),
+            None,
+        ),
+        light_dynamics::DynamicSemanticValue::Static { value, .. } => {
+            ("static", "Static".into(), None, Some(value))
+        }
+        light_dynamics::DynamicSemanticValue::DynamicOn { .. }
+        | light_dynamics::DynamicSemanticValue::Release => return,
+    };
+    entries.push(DynamicStackEntry {
+        fixture_id: stored.fixture_id.0,
+        attribute: stored.attribute.0,
+        entry_type,
+        priority,
+        changed_at_millis: stored.changed_at_millis,
+        source,
+        dynamic_id: None,
+        pool_number: None,
+        name,
+        runtime_instance_id: instance,
+        controller_id: instance,
+        lane_id: None,
+        size: None,
+        activation_mix: None,
+        paused: false,
+        hidden: false,
+        pending: false,
+        winning: true,
+        value,
+        resolved_value: resolved.get(&key).cloned(),
+    });
 }

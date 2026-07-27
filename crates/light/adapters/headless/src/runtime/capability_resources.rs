@@ -830,6 +830,10 @@ impl ProgrammingResource {
         }
     }
 
+    pub(super) fn programmers(&self) -> ProgrammerRegistry {
+        self.programmers.clone()
+    }
+
     pub(super) fn record_command_history(&self, entry: CommandHistoryEntry, limit: usize) {
         let mut histories = self.command_history.lock();
         let history = histories.entry(entry.desk_id).or_default();
@@ -1183,7 +1187,7 @@ impl ProgrammingResource {
         &self,
         session_id: SessionId,
         final_text: Option<&str>,
-        pending_choice: Option<light_programmer::CueMoveCopyChoice>,
+        pending_choice: Option<light_programmer::PendingCommandChoice>,
     ) -> Option<light_programmer::CommandLineState> {
         self.programmers
             .complete_command_execution(session_id, final_text, pending_choice)
@@ -1828,6 +1832,10 @@ impl PlaybackRenderCapability {
         self.telemetry
             .completed_frame(engine, show_id, show_revision, at)
     }
+
+    pub(super) fn publish(&self, event: light_application::EventDraft) {
+        self.service.events().publish(event);
+    }
 }
 
 #[derive(Clone)]
@@ -2006,6 +2014,8 @@ pub(super) struct OutputResource {
     manual_clock: Option<Arc<ManualClock>>,
     test_clock_lock: Arc<tokio::sync::Mutex<()>>,
     speed_groups: Arc<Mutex<[SpeedGroupController; 5]>>,
+    dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
+    dynamic_auto_offs: Arc<Mutex<Vec<u16>>>,
     sound_capture_owners: Arc<Mutex<[Option<SoundCaptureOwner>; 5]>>,
     #[cfg(test)]
     runtime_persistence_attempts: Arc<AtomicU64>,
@@ -2096,6 +2106,8 @@ impl OutputResource {
         sequences: Arc<tokio::sync::Mutex<HashMap<(light_output::Protocol, u16), u8>>>,
         manual_clock: Option<Arc<ManualClock>>,
         speed_groups: Arc<Mutex<[SpeedGroupController; 5]>>,
+        dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
+        dynamic_auto_offs: Arc<Mutex<Vec<u16>>>,
     ) -> Self {
         Self {
             runtime_service,
@@ -2110,6 +2122,8 @@ impl OutputResource {
             manual_clock,
             test_clock_lock: Arc::default(),
             speed_groups,
+            dynamics,
+            dynamic_auto_offs,
             sound_capture_owners: Arc::new(Mutex::new([None; 5])),
             #[cfg(test)]
             runtime_persistence_attempts: Arc::new(AtomicU64::new(0)),
@@ -2133,8 +2147,70 @@ impl OutputResource {
         self.engine.snapshot()
     }
 
+    pub(super) fn start_dynamic(
+        &self,
+        request: light_dynamics::DynamicStartRequest,
+    ) -> Result<Uuid, light_dynamics::DynamicRuntimeError> {
+        self.dynamics.lock().start(request)
+    }
+
+    pub(super) fn dynamic_runtime_snapshot(&self) -> light_dynamics::DynamicRuntimeSnapshot {
+        self.dynamics.lock().snapshot()
+    }
+
+    pub(super) fn restore_dynamic_runtime_snapshot(
+        &self,
+        snapshot: light_dynamics::DynamicRuntimeSnapshot,
+    ) -> Result<(), light_dynamics::DynamicRuntimeError> {
+        self.dynamics.lock().restore_snapshot(snapshot)
+    }
+
+    pub(super) fn off_dynamic_controller(
+        &self,
+        controller_id: Uuid,
+        now_millis: u64,
+        release_delay_millis: u64,
+        release_duration_millis: u64,
+    ) -> Result<(Uuid, bool), light_dynamics::DynamicRuntimeError> {
+        self.dynamics.lock().off_controller_by_id(
+            controller_id,
+            now_millis,
+            release_delay_millis,
+            release_duration_millis,
+        )
+    }
+
+    pub(super) fn update_dynamic_controller(
+        &self,
+        controller_id: Uuid,
+        size: Option<f32>,
+        speed_multiplier: Option<f32>,
+        phase_offset_degrees: Option<f32>,
+    ) -> Result<(), light_dynamics::DynamicRuntimeError> {
+        self.dynamics.lock().update_controller(
+            controller_id,
+            size,
+            speed_multiplier,
+            phase_offset_degrees,
+        )
+    }
+
+    pub(super) fn is_dynamic_definition_running(&self, definition_id: Uuid) -> bool {
+        self.dynamics.lock().is_definition_running(definition_id)
+    }
+
+    pub(super) fn set_dynamic_definitions_pinned(&self, pinned: bool) {
+        self.dynamics.lock().set_definitions_pinned(pinned);
+    }
+
     pub(super) fn replace_snapshot(&self, snapshot: EngineSnapshot) -> Result<(), EngineError> {
-        self.engine.replace_snapshot(snapshot)
+        let definitions = snapshot.dynamics.iter().cloned().collect::<Vec<_>>();
+        self.engine.replace_snapshot(snapshot)?;
+        self.dynamics
+            .lock()
+            .install_definitions(definitions)
+            .expect("Engine validation and Dynamic validation stay equivalent");
+        Ok(())
     }
 
     pub(super) fn prepare_snapshot(
@@ -2145,7 +2221,17 @@ impl OutputResource {
     }
 
     pub(super) fn install_prepared_snapshot(&self, prepared: PreparedEngineSnapshot) {
+        let definitions = prepared
+            .snapshot()
+            .dynamics
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
         self.engine.install_prepared_snapshot(prepared);
+        self.dynamics
+            .lock()
+            .install_definitions(definitions)
+            .expect("prepared Engine snapshot contains valid Dynamic definitions");
     }
 
     pub(super) fn resolved_values(
@@ -2153,6 +2239,90 @@ impl OutputResource {
     ) -> HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>
     {
         self.engine.resolved_values()
+    }
+
+    pub(super) fn visualization_dynamic_values(
+        &self,
+        extra_programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+        projected: bool,
+    ) -> HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>
+    {
+        self.visualization_dynamic_projection(extra_programmer_values, projected)
+            .0
+    }
+
+    pub(super) fn visualization_dynamic_projection(
+        &self,
+        extra_programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+        _projected: bool,
+    ) -> (
+        HashMap<(light_core::FixtureId, light_core::AttributeKey), light_core::AttributeValue>,
+        light_dynamics::DynamicRuntimeSnapshot,
+        Vec<light_dynamics::DynamicRuntimeSample>,
+    ) {
+        // Visualization is observational. Sampling can retire completed release
+        // transitions, so always operate on a clone and leave the authoritative
+        // output scheduler responsible for mutating and publishing runtime state.
+        let snapshot = self.engine.snapshot();
+        let mut visualization_runtime = light_dynamics::DynamicRuntime::default();
+        visualization_runtime
+            .install_definitions(snapshot.dynamics.iter().cloned())
+            .expect("Engine snapshot contains validated Dynamic definitions");
+        visualization_runtime
+            .restore_snapshot(self.dynamics.lock().snapshot())
+            .expect("live Dynamic runtime snapshot remains restorable");
+        let visualization_runtime = Mutex::new(visualization_runtime);
+        let (sampled, runtime_samples) = output_scheduler::dynamic_projection(
+            &self.engine,
+            &visualization_runtime,
+            &self.speed_groups,
+            &self.rate,
+            extra_programmer_values,
+        );
+        let runtime_snapshot = visualization_runtime.lock().snapshot();
+        (
+            self.engine
+                .resolved_values_with_contribution_batches(&sampled),
+            runtime_snapshot,
+            runtime_samples,
+        )
+    }
+
+    pub(super) fn dynamic_programmer_values(
+        &self,
+    ) -> Vec<(Uuid, i16, light_dynamics::DynamicAddressValue)> {
+        self.engine.dynamic_programmer_values()
+    }
+
+    pub(super) fn active_cue_dynamic_values(&self) -> Vec<light_playback::ActiveCueDynamicValue> {
+        self.engine.active_cue_dynamic_values()
+    }
+
+    /// Reconciles typed Programmer, Cue, and Playback Dynamic state into the persisted runtime
+    /// without sending an output frame. Preload GO uses this inside the active-show exclusion
+    /// boundary so the committed Programmer layer and its runtime identity share one timestamp.
+    pub(super) fn reconcile_dynamic_runtime(&self) {
+        let _ = output_scheduler::dynamic_contributions(
+            &self.engine,
+            &self.dynamics,
+            &self.speed_groups,
+            &self.rate,
+            &[],
+            false,
+        );
+    }
+
+    pub(super) fn take_dynamic_auto_offs(&self) -> Vec<u16> {
+        std::mem::take(&mut *self.dynamic_auto_offs.lock())
+    }
+
+    pub(super) fn restore_dynamic_auto_offs(&self, numbers: impl IntoIterator<Item = u16>) {
+        let mut pending = self.dynamic_auto_offs.lock();
+        for number in numbers {
+            if !pending.contains(&number) {
+                pending.push(number);
+            }
+        }
     }
 
     pub(super) fn playback_runtime(&self) -> Vec<light_playback::ActivePlayback> {
@@ -2163,8 +2333,18 @@ impl OutputResource {
         self.engine.playback_runtime_status()
     }
 
+    pub(super) fn active_dynamic_playbacks(&self) -> Vec<light_playback::ActiveDynamicPlayback> {
+        self.engine.active_dynamic_playbacks()
+    }
+
     pub(super) fn playback_dynamics(&self) -> light_engine::PlaybackDynamicsProjection {
         self.engine.playback_dynamics()
+    }
+
+    pub(super) fn set_dynamic_runtime_paused(&self, paused: bool) {
+        let now_millis =
+            u64::try_from(self.engine.application_time().timestamp_millis()).unwrap_or_default();
+        self.dynamics.lock().set_global_paused(paused, now_millis);
     }
 
     pub(super) fn active_playbacks(&self) -> Vec<light_playback::ActivePlayback> {
@@ -2240,8 +2420,18 @@ impl OutputResource {
         &self,
         prepared: PreparedEngineSnapshot,
     ) {
+        let definitions = prepared
+            .snapshot()
+            .dynamics
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
         self.engine
             .install_prepared_snapshot_releasing_playback(prepared);
+        self.dynamics
+            .lock()
+            .install_definitions(definitions)
+            .expect("prepared Engine snapshot contains valid Dynamic definitions");
     }
 
     pub(super) fn validate_snapshot_for_runtime(
@@ -2316,7 +2506,33 @@ impl OutputResource {
         playback: &PlaybackRenderCapability,
         options: RenderOptions,
     ) -> Result<light_engine::RenderResult, EngineError> {
-        output_scheduler::render_with_playback_events(&self.engine, active_show, playback, options)
+        let sampled = output_scheduler::dynamic_contributions(
+            &self.engine,
+            &self.dynamics,
+            &self.speed_groups,
+            &self.rate,
+            &[],
+            true,
+        );
+        output_scheduler::render_with_playback_events(
+            &self.engine,
+            active_show,
+            playback,
+            options,
+            &sampled,
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn dynamic_contributions_for_test(&self) -> Vec<light_engine::ContributionBatch> {
+        output_scheduler::dynamic_contributions(
+            &self.engine,
+            &self.dynamics,
+            &self.speed_groups,
+            &self.rate,
+            &[],
+            false,
+        )
     }
 
     pub(super) fn frame_rate_hz(&self) -> u16 {
@@ -4369,6 +4585,8 @@ mod tests {
                 )
                 .unwrap()
             }))),
+            Arc::new(Mutex::new(light_dynamics::DynamicRuntime::default())),
+            Arc::new(Mutex::new(Vec::new())),
         );
 
         output.apply_runtime_control(Some(0.5), Some(true)).unwrap();

@@ -5,8 +5,8 @@ use crate::{
 use chrono::{DateTime, Utc};
 use light_core::CueListId;
 use light_playback::{
-    ActivePlayback, PlaybackContribution, PlaybackEngine, PlaybackMutation, PlaybackRuntimeEffect,
-    PlaybackRuntimeStatus,
+    ActiveDynamicPlayback, ActivePlayback, PlaybackContribution, PlaybackEngine, PlaybackMutation,
+    PlaybackRuntimeEffect, PlaybackRuntimeStatus,
 };
 use std::collections::HashSet;
 
@@ -25,6 +25,7 @@ pub enum EnginePlaybackCommand {
     },
     ReleasePoolBatch(Vec<u16>),
     RestoreActive(Vec<ActivePlayback>),
+    RestoreActiveDynamics(Vec<ActiveDynamicPlayback>),
     RestoreDynamicsPausedSince(Option<DateTime<Utc>>),
     SetDynamicsPaused(bool),
     ToggleDynamicsPaused,
@@ -61,6 +62,10 @@ pub enum PoolPlaybackAction {
     ToggleTemp,
     SetFlash(bool),
     SetSwap(bool),
+    DynamicRestart,
+    DynamicDoubleSpeed,
+    DynamicHalfSpeed,
+    DynamicLearnSpeed,
 }
 
 /// The exact consequence of one accepted Playback action.
@@ -182,6 +187,55 @@ impl Engine {
         self.generation.load().playback().read().runtime_status()
     }
 
+    pub fn active_dynamic_playbacks(&self) -> Vec<ActiveDynamicPlayback> {
+        self.generation
+            .load()
+            .playback()
+            .read()
+            .active_dynamic_playbacks()
+    }
+
+    /// Applies output-resolved full-control auto-off as one durable Playback mutation.
+    ///
+    /// The scheduler determines complete address coverage from authoritative contributions; the
+    /// engine only accepts exact currently-enabled Dynamic Playback numbers whose assignment has
+    /// the opt-out setting enabled.
+    pub fn auto_off_fully_controlled_dynamic_playbacks(
+        &self,
+        numbers: impl IntoIterator<Item = u16>,
+    ) -> Vec<u16> {
+        let generation = self.generation.load();
+        let mut playback = generation.playback().write();
+        let mut changed = Vec::new();
+        for number in numbers {
+            if !playback
+                .dynamic_assignment(number)
+                .is_some_and(|assignment| assignment.auto_off_full_control)
+                || !playback
+                    .active_dynamic_playbacks()
+                    .iter()
+                    .any(|active| active.playback_number == number && active.enabled)
+            {
+                continue;
+            }
+            if playback
+                .off_mutation(number)
+                .is_ok_and(|mutation| mutation.value)
+            {
+                changed.push(number);
+            }
+        }
+        changed
+    }
+
+    pub fn active_cue_dynamic_values(&self) -> Vec<light_playback::ActiveCueDynamicValue> {
+        self.generation
+            .load()
+            .playback()
+            .read()
+            .active_cue_dynamic_values()
+    }
+
     /// Volatile per-Playback telemetry rows derived from already-published runtime state.
     pub fn playback_telemetry_at(
         &self,
@@ -224,6 +278,10 @@ fn execute(
         ),
         EnginePlaybackCommand::RestoreActive(active) => {
             playback.restore_active(active);
+            Ok(EnginePlaybackOutcome::Applied)
+        }
+        EnginePlaybackCommand::RestoreActiveDynamics(active) => {
+            playback.restore_active_dynamics(active);
             Ok(EnginePlaybackOutcome::Applied)
         }
         EnginePlaybackCommand::RestoreDynamicsPausedSince(paused_at) => {
@@ -302,6 +360,9 @@ fn execute_pool(
         PoolPlaybackAction::Back => playback
             .back_playback(number)
             .map(|_| addressed_effect(PlaybackRuntimeEffect::Durable))?,
+        PoolPlaybackAction::Pause if playback.dynamic_assignment(number).is_some() => {
+            playback.toggle_dynamic_pause_mutation(number)?.into()
+        }
         PoolPlaybackAction::Pause => playback.pause_playback_mutation(number)?.into(),
         PoolPlaybackAction::TogglePause => toggle_pause(playback, number)?,
         PoolPlaybackAction::FastForward => playback
@@ -328,9 +389,23 @@ fn execute_pool(
         }
         PoolPlaybackAction::ToggleTemp => playback.toggle_temp_mutation(number)?.into(),
         PoolPlaybackAction::SetFlash(pressed) => {
-            playback.set_flash_mutation(number, pressed)?.into()
+            if playback.dynamic_assignment(number).is_some() {
+                playback.set_dynamic_flash_mutation(number, pressed)?.into()
+            } else {
+                playback.set_flash_mutation(number, pressed)?.into()
+            }
         }
         PoolPlaybackAction::SetSwap(pressed) => playback.set_swap_mutation(number, pressed)?.into(),
+        PoolPlaybackAction::DynamicRestart => playback.restart_dynamic_mutation(number)?.into(),
+        PoolPlaybackAction::DynamicDoubleSpeed => {
+            playback.scale_dynamic_speed_mutation(number, true)?.into()
+        }
+        PoolPlaybackAction::DynamicHalfSpeed => {
+            playback.scale_dynamic_speed_mutation(number, false)?.into()
+        }
+        PoolPlaybackAction::DynamicLearnSpeed => {
+            playback.tap_dynamic_speed_mutation(number)?.into()
+        }
     };
     Ok(EnginePlaybackOutcome::Changed(effects))
 }
@@ -339,6 +414,11 @@ fn toggle_pause(
     playback: &mut PlaybackEngine,
     number: u16,
 ) -> Result<EnginePlaybackEffect, String> {
+    if playback.dynamic_assignment(number).is_some() {
+        return playback
+            .toggle_dynamic_pause_mutation(number)
+            .map(EnginePlaybackEffect::from);
+    }
     let paused = playback
         .playback_runtime(number)
         .is_some_and(|runtime| runtime.paused);

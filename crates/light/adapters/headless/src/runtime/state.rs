@@ -5,6 +5,7 @@ pub(super) struct AppState {
     pub(super) installation: InstallationResource,
     pub(super) sessions: SessionResource,
     pub(super) programming: ProgrammingResource,
+    pub(super) dynamics: light_application::DynamicsService,
     pub(super) playback: PlaybackResource,
     pub(super) highlight: HighlightResource,
     pub(super) output: OutputResource,
@@ -148,6 +149,8 @@ pub(super) struct PersistedOutputRuntime {
     pub(super) grand_master: f32,
     pub(super) blackout: bool,
     pub(super) dynamics_paused_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub(super) dynamic_playbacks: Vec<light_playback::ActiveDynamicPlayback>,
+    pub(super) dynamic_runtime: Option<light_dynamics::DynamicRuntimeSnapshot>,
     pub(super) group_masters: HashMap<String, f32>,
 }
 
@@ -158,6 +161,8 @@ impl Default for PersistedOutputRuntime {
             grand_master: 1.0,
             blackout: false,
             dynamics_paused_at: None,
+            dynamic_playbacks: Vec::new(),
+            dynamic_runtime: None,
             group_masters: HashMap::new(),
         }
     }
@@ -171,6 +176,12 @@ impl PersistedOutputRuntime {
                 .group_masters
                 .values()
                 .all(|value| value.is_finite() && (0.0..=1.0).contains(value))
+            && self.dynamic_playbacks.iter().all(|playback| {
+                playback.fader_value.is_finite()
+                    && playback.size.is_finite()
+                    && playback.master.is_finite()
+                    && playback.local_speed_multiplier.denominator != 0
+            })
     }
 }
 impl OutputControl {

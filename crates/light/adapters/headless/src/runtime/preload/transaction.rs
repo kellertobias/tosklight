@@ -5,6 +5,10 @@ pub(super) fn commit_preload_transaction(
     session: &Session,
     context: light_application::ActionContext,
 ) -> Result<CommittedPreload, String> {
+    let dynamic_runtime_changed = state
+        .programming
+        .get(session.id)
+        .is_some_and(|programmer| !programmer.preload_dynamic_pending.is_empty());
     let preparation::PreparedPreloadCommit {
         pending,
         committed_at,
@@ -16,13 +20,44 @@ pub(super) fn commit_preload_transaction(
         context,
     } = preparation::prepare_preload_commit(state, session, context)?;
     let playback_runtime_changed = prepared_playback.effect().durable();
-    install_preload_commit(state, session, pending, committed_at, prepared_playback)?;
+    // The active-show coordinator excludes output ticks around this transaction. Publish the
+    // latest compiled Dynamic definitions before Programmer and Playback state become Live.
+    state.output.set_dynamic_definitions_pinned(false);
+    if let Err(error) =
+        install_preload_commit(state, session, pending, committed_at, prepared_playback)
+    {
+        state.output.set_dynamic_definitions_pinned(true);
+        return Err(error);
+    }
+    if dynamic_runtime_changed {
+        state.output.reconcile_dynamic_runtime();
+        state
+            .events
+            .publish(light_application::EventDraft::dynamic_runtime_changed(
+                Some(&context),
+                light_application::DynamicRuntimeChange {
+                    kind: light_application::DynamicRuntimeEventKind::PreloadCommitted,
+                    dynamic_id: None,
+                    runtime_instance_id: None,
+                    controller_id: None,
+                    winning_controller_id: None,
+                    occurred_at_millis: u64::try_from(committed_at.timestamp_millis())
+                        .unwrap_or_default(),
+                    message: None,
+                },
+            ));
+    }
     let changes =
         events::preload_change_events(state, &context, &identities, before, &staged_actions)?;
     events::emit_exclusions(state, session, &changes);
     let executed_projection = executed_preload_projection(&staged_actions);
     let executed = executed_preload_actions(staged_actions, committed_at, programmer_fade_millis);
-    let warnings = persist_preload_commit(state, session, playback_runtime_changed);
+    let warnings = persist_preload_commit(
+        state,
+        session,
+        playback_runtime_changed,
+        dynamic_runtime_changed,
+    );
     Ok(CommittedPreload {
         committed_at,
         programmer_fade_millis,
@@ -74,6 +109,12 @@ const fn application_queue_action(
         Domain::On => Application::On,
         Domain::TemporaryOn => Application::TemporaryOn,
         Domain::TemporaryOff => Application::TemporaryOff,
+        Domain::DynamicPause => Application::DynamicPause,
+        Domain::DynamicRestart => Application::DynamicRestart,
+        Domain::DynamicDoubleSpeed => Application::DynamicDoubleSpeed,
+        Domain::DynamicHalfSpeed => Application::DynamicHalfSpeed,
+        Domain::DynamicLearnSpeed => Application::DynamicLearnSpeed,
+        Domain::Fader { value_permyriad } => Application::Fader { value_permyriad },
     }
 }
 
@@ -142,6 +183,7 @@ fn persist_preload_commit(
     state: &AppState,
     session: &Session,
     active_playbacks_changed: bool,
+    dynamic_runtime_changed: bool,
 ) -> Vec<String> {
     let mut warnings = Vec::new();
     if let Err(error) = persist_programmer(state, session) {
@@ -157,6 +199,14 @@ fn persist_preload_commit(
             state,
             session,
             "active playbacks",
+            error,
+        ));
+    }
+    if dynamic_runtime_changed && let Err(error) = persist_output_runtime(state) {
+        warnings.push(record_preload_persistence_failure(
+            state,
+            session,
+            "Dynamic output runtime",
             error,
         ));
     }

@@ -61,31 +61,6 @@ pub(super) fn add_fixture_array_at(
     Ok(())
 }
 
-pub(super) fn add_direct_array_at(
-    body: &Value,
-    local_pointer: &str,
-    body_pointer: &str,
-    kind: &str,
-    descriptor: &mut ImportObjectDescriptor,
-) -> Result<(), String> {
-    let Some(values) = array_at(body, local_pointer) else {
-        return Ok(());
-    };
-    for (index, value) in values.iter().enumerate() {
-        let id = scalar_id(value)
-            .ok_or_else(|| format!("reference {body_pointer}/{index} is invalid"))?;
-        descriptor.references.push(direct_reference(
-            kind,
-            id,
-            value_location(
-                format!("{body_pointer}/{index}"),
-                ImportIdentityFormat::Full,
-            ),
-        ));
-    }
-    Ok(())
-}
-
 pub(super) fn add_fixture_map_keys(
     body: &Value,
     pointer: &str,

@@ -121,6 +121,7 @@ fn wire_kind(
         app::ActiveShowObjectKind::Preset => Ok(wire::ProgrammingUpdateObjectKind::Preset),
         app::ActiveShowObjectKind::Group => Ok(wire::ProgrammingUpdateObjectKind::Group),
         app::ActiveShowObjectKind::PatchLayer
+        | app::ActiveShowObjectKind::Dynamic
         | app::ActiveShowObjectKind::Playback
         | app::ActiveShowObjectKind::PlaybackPage
         | app::ActiveShowObjectKind::StageLayout

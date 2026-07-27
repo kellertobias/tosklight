@@ -15,6 +15,12 @@ pub enum PlaybackBatchAction {
     Off,
     On,
     SetTempButton(bool),
+    TogglePause,
+    DynamicRestart,
+    DynamicDoubleSpeed,
+    DynamicHalfSpeed,
+    DynamicLearnSpeed,
+    SetFader { value_permyriad: u16 },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -171,6 +177,27 @@ fn apply_action(
         PlaybackBatchAction::SetTempButton(active) => playback
             .set_temp_button_mutation(command.number, active)
             .map(EnginePlaybackEffect::from),
+        PlaybackBatchAction::TogglePause => playback
+            .toggle_dynamic_pause_mutation(command.number)
+            .map(EnginePlaybackEffect::from),
+        PlaybackBatchAction::DynamicRestart => playback
+            .restart_dynamic_mutation(command.number)
+            .map(EnginePlaybackEffect::from),
+        PlaybackBatchAction::DynamicDoubleSpeed => playback
+            .scale_dynamic_speed_mutation(command.number, true)
+            .map(EnginePlaybackEffect::from),
+        PlaybackBatchAction::DynamicHalfSpeed => playback
+            .scale_dynamic_speed_mutation(command.number, false)
+            .map(EnginePlaybackEffect::from),
+        PlaybackBatchAction::DynamicLearnSpeed => playback
+            .tap_dynamic_speed_mutation(command.number)
+            .map(EnginePlaybackEffect::from),
+        PlaybackBatchAction::SetFader { value_permyriad } if value_permyriad <= 10_000 => playback
+            .set_master_mutation(command.number, f32::from(value_permyriad) / 10_000.0)
+            .map(EnginePlaybackEffect::from),
+        PlaybackBatchAction::SetFader { .. } => {
+            Err("Preload Playback fader value must be within 0-10000".into())
+        }
     }
 }
 
@@ -191,5 +218,11 @@ const fn action_name(action: PlaybackBatchAction) -> &'static str {
         PlaybackBatchAction::On => "on",
         PlaybackBatchAction::SetTempButton(true) => "temp-on",
         PlaybackBatchAction::SetTempButton(false) => "temp-off",
+        PlaybackBatchAction::TogglePause => "dynamic-pause",
+        PlaybackBatchAction::DynamicRestart => "dynamic-restart",
+        PlaybackBatchAction::DynamicDoubleSpeed => "dynamic-double-speed",
+        PlaybackBatchAction::DynamicHalfSpeed => "dynamic-half-speed",
+        PlaybackBatchAction::DynamicLearnSpeed => "dynamic-learn-speed",
+        PlaybackBatchAction::SetFader { .. } => "fader",
     }
 }

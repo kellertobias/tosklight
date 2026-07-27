@@ -1,5 +1,6 @@
 use crate::{ActionContext, ApplicationCommand, CommandFamily};
 use light_core::{Revision, ShowId};
+use light_dynamics::DynamicDefinition;
 use light_output::OutputRoute;
 use light_playback::{CueList, PlaybackDefinition, PlaybackPage};
 use light_programmer::{GroupDefinition, Preset};
@@ -11,6 +12,7 @@ use std::collections::HashMap;
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ActiveShowObjectKind {
     CueList,
+    Dynamic,
     Group,
     PatchLayer,
     Playback,
@@ -26,6 +28,7 @@ pub enum ActiveShowObjectKind {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ActiveShowObjectBody {
     CueList(LosslessBody<CueList>),
+    Dynamic(LosslessBody<DynamicDefinition>),
     Group(LosslessBody<GroupDefinition>),
     PatchLayer(LosslessBody<PatchLayer>),
     Playback(LosslessBody<PlaybackDefinition>),
@@ -40,6 +43,7 @@ impl ActiveShowObjectBody {
         validate_family_shape(kind, &raw)?;
         Ok(match kind {
             ActiveShowObjectKind::CueList => Self::CueList(LosslessBody::decode(raw)?),
+            ActiveShowObjectKind::Dynamic => Self::Dynamic(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Group => Self::Group(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::PatchLayer => Self::PatchLayer(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Playback => Self::Playback(LosslessBody::decode(raw)?),
@@ -53,6 +57,7 @@ impl ActiveShowObjectBody {
     pub const fn kind(&self) -> ActiveShowObjectKind {
         match self {
             Self::CueList(_) => ActiveShowObjectKind::CueList,
+            Self::Dynamic(_) => ActiveShowObjectKind::Dynamic,
             Self::Group(_) => ActiveShowObjectKind::Group,
             Self::PatchLayer(_) => ActiveShowObjectKind::PatchLayer,
             Self::Playback(_) => ActiveShowObjectKind::Playback,
@@ -66,6 +71,7 @@ impl ActiveShowObjectBody {
     pub fn encode(&self) -> serde_json::Value {
         match self {
             Self::CueList(body) => body.encode(),
+            Self::Dynamic(body) => body.encode(),
             Self::Group(body) => body.encode(),
             Self::PatchLayer(body) => body.encode(),
             Self::Playback(body) => body.encode(),
@@ -79,6 +85,13 @@ impl ActiveShowObjectBody {
     pub(crate) fn cue_list(&self) -> Option<&LosslessBody<CueList>> {
         match self {
             Self::CueList(body) => Some(body),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn dynamic(&self) -> Option<&LosslessBody<DynamicDefinition>> {
+        match self {
+            Self::Dynamic(body) => Some(body),
             _ => None,
         }
     }
@@ -157,6 +170,17 @@ fn validate_family_shape(
     }
     let required: &[&str] = match kind {
         ActiveShowObjectKind::CueList => &["id", "name", "cues"],
+        ActiveShowObjectKind::Dynamic => &[
+            "id",
+            "pool_number",
+            "revision",
+            "name",
+            "target_binding",
+            "lanes",
+            "phase",
+            "speed",
+            "default_activation",
+        ],
         // Legacy/group recording clients omit `id`; normalization supplies the storage identity.
         ActiveShowObjectKind::Group => &["name", "fixtures"],
         ActiveShowObjectKind::PatchLayer => &["id", "name", "order"],
@@ -179,6 +203,7 @@ fn validate_family_shape(
 fn looks_like_other_family(object: &serde_json::Map<String, serde_json::Value>) -> bool {
     [
         &["id", "name", "cues"][..],
+        &["id", "pool_number", "revision", "target_binding", "lanes"],
         &["name", "fixtures"],
         &["name", "order"],
         &["number", "name", "target"],
@@ -253,6 +278,7 @@ impl ActiveShowObjectKind {
     pub fn from_storage_kind(kind: &str) -> Option<Self> {
         match kind {
             "cue_list" => Some(Self::CueList),
+            "dynamic" => Some(Self::Dynamic),
             "group" => Some(Self::Group),
             "patch_layer" => Some(Self::PatchLayer),
             "playback" => Some(Self::Playback),
@@ -267,6 +293,7 @@ impl ActiveShowObjectKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::CueList => "cue_list",
+            Self::Dynamic => "dynamic",
             Self::Group => "group",
             Self::PatchLayer => "patch_layer",
             Self::Playback => "playback",

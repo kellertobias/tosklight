@@ -103,9 +103,9 @@ pub struct ContributionSources {
     pub playback_group_cue_changes: bool,
     pub programmer_fixture_values: bool,
     pub static_group_programming: bool,
-    pub playback_attribute_phaser: bool,
-    pub phaser_attribute: String,
-    pub phaser_attribute_has_static_or_programmer_value: bool,
+    pub playback_attribute_dynamic: bool,
+    pub dynamic_attribute: String,
+    pub dynamic_attribute_has_static_or_programmer_value: bool,
     pub programmer_assignment_fraction: &'static str,
     pub sampled_replacement_diagnostic_batches: usize,
     pub sampled_replacement_diagnostic_samples: usize,
@@ -159,11 +159,11 @@ pub fn coverage(transport: Transport) -> MeasurementCoverage {
     MeasurementCoverage {
         contribution_sampling: CoverageItem {
             status: "measured_and_diagnostic",
-            note: "built-in Playback phaser sampling is included in every timed frame; external sampled replacement batches are measured separately",
+            note: "built-in Playback Dynamic sampling is included in every timed frame; external sampled replacement batches are measured separately",
         },
         arbitration: CoverageItem {
             status: "measured_combined",
-            note: "Group, Cue/Playback, Programmer, and phaser contributions are included in engine_render_combined",
+            note: "Group, Cue/Playback, Programmer, and Dynamic contributions are included in engine_render_combined",
         },
         fixture_projection: CoverageItem {
             status: "included_not_separately_instrumented",

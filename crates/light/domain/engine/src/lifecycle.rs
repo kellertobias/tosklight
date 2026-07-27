@@ -191,14 +191,16 @@ impl Engine {
         if !preserve_playback {
             return;
         }
-        let (active, dynamics_paused_at) = {
+        let (active, active_dynamics, dynamics_paused_at) = {
             let current = generation.playback().read();
             (
                 current.active_for_snapshot(&snapshot.cue_lists, self.clock.now()),
+                current.active_dynamics_for_snapshot(&snapshot.playbacks),
                 current.dynamics_paused_since(),
             )
         };
         playback.restore_active(active);
+        playback.restore_active_dynamics(active_dynamics);
         playback.restore_dynamics_paused_since(dynamics_paused_at);
     }
 
@@ -263,7 +265,6 @@ fn expand_group_references(source: &CueList, groups: &HashMap<String, GroupDefin
     let mut cue_list = source.clone();
     for cue in &mut cue_list.cues {
         expand_group_changes(cue, groups);
-        expand_group_phasers(cue, groups);
     }
     cue_list
 }
@@ -312,22 +313,6 @@ fn spread_group_value(
         .value
         .as_ref()
         .map(|value| value_for_ordered_position(value, index, count))
-}
-
-fn expand_group_phasers(cue: &mut Cue, groups: &HashMap<String, GroupDefinition>) {
-    for phaser in &mut cue.phasers {
-        let mut fixture_ids = phaser.fixture_ids.iter().copied().collect::<HashSet<_>>();
-        for group_id in &phaser.group_ids {
-            let Ok(fixtures) = resolve_group(group_id, groups) else {
-                continue;
-            };
-            for fixture_id in fixtures {
-                if fixture_ids.insert(fixture_id) {
-                    phaser.fixture_ids.push(fixture_id);
-                }
-            }
-        }
-    }
 }
 
 fn register_playback_definitions(

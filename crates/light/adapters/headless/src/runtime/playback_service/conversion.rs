@@ -29,6 +29,10 @@ pub(super) fn parse_action(
         "half" => PlaybackAction::Half { pressed },
         "blackout" => PlaybackAction::Blackout { pressed },
         "pause-dynamics" => PlaybackAction::PauseDynamics { pressed },
+        "dynamic-restart" => PlaybackAction::DynamicRestart { pressed },
+        "dynamic-double-speed" => PlaybackAction::DynamicDoubleSpeed { pressed },
+        "dynamic-half-speed" => PlaybackAction::DynamicHalfSpeed { pressed },
+        "dynamic-learn-speed" => PlaybackAction::DynamicLearnSpeed { pressed },
         "none" => PlaybackAction::None { pressed },
         "master" | "fader" => parse_master(input)?,
         "go-to" => parse_cue_number(input, true)?,
@@ -121,6 +125,10 @@ fn simple_action_name(action: PlaybackAction) -> &'static str {
         PlaybackAction::Half { .. } => "half",
         PlaybackAction::Blackout { .. } => "blackout",
         PlaybackAction::PauseDynamics { .. } => "pause-dynamics",
+        PlaybackAction::DynamicRestart { .. } => "dynamic-restart",
+        PlaybackAction::DynamicDoubleSpeed { .. } => "dynamic-double-speed",
+        PlaybackAction::DynamicHalfSpeed { .. } => "dynamic-half-speed",
+        PlaybackAction::DynamicLearnSpeed { .. } => "dynamic-learn-speed",
         PlaybackAction::None { .. } => "none",
         PlaybackAction::Crossfade { enabled: true } => "xfade-on",
         PlaybackAction::Crossfade { enabled: false } => "xfade-off",
@@ -153,16 +161,24 @@ pub(super) const fn activation_surface(
     }
 }
 
-pub(super) fn parse_pending(action: &str) -> PendingPlaybackAction {
+pub(super) fn parse_pending(
+    action: light_programmer::PreloadPlaybackQueueAction,
+) -> PendingPlaybackAction {
+    use light_programmer::PreloadPlaybackQueueAction as Queued;
     match action {
-        "toggle" => PendingPlaybackAction::Toggle,
-        "go" => PendingPlaybackAction::Go,
-        "go-minus" => PendingPlaybackAction::Back,
-        "off" => PendingPlaybackAction::Off,
-        "on" => PendingPlaybackAction::On,
-        "temp-on" => PendingPlaybackAction::TemporaryOn,
-        "temp-off" => PendingPlaybackAction::TemporaryOff,
-        _ => unreachable!("preload returned unsupported action"),
+        Queued::Toggle => PendingPlaybackAction::Toggle,
+        Queued::Go => PendingPlaybackAction::Go,
+        Queued::Back => PendingPlaybackAction::Back,
+        Queued::Off => PendingPlaybackAction::Off,
+        Queued::On => PendingPlaybackAction::On,
+        Queued::TemporaryOn => PendingPlaybackAction::TemporaryOn,
+        Queued::TemporaryOff => PendingPlaybackAction::TemporaryOff,
+        Queued::DynamicPause => PendingPlaybackAction::DynamicPause,
+        Queued::DynamicRestart => PendingPlaybackAction::DynamicRestart,
+        Queued::DynamicDoubleSpeed => PendingPlaybackAction::DynamicDoubleSpeed,
+        Queued::DynamicHalfSpeed => PendingPlaybackAction::DynamicHalfSpeed,
+        Queued::DynamicLearnSpeed => PendingPlaybackAction::DynamicLearnSpeed,
+        Queued::Fader { value_permyriad } => PendingPlaybackAction::Fader { value_permyriad },
     }
 }
 

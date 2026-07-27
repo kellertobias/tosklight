@@ -1,6 +1,7 @@
 use super::{ProgrammingPorts, ProgrammingService};
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use light_core::{SessionId, UserId};
+use light_dynamics::DynamicAddressValue;
 use light_programmer::{
     ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerRegistry, ProgrammerUpdateContent,
 };
@@ -24,6 +25,7 @@ pub struct ProgrammingValuesProjection {
     pub revision: u64,
     pub fixture_values: Vec<ProgrammerFixtureUpdate>,
     pub group_values: Vec<ProgrammerGroupUpdate>,
+    pub dynamic_values: Vec<DynamicAddressValue>,
 }
 
 /// One semantic normal-value transition. Events carry the full retained projection so a
@@ -44,6 +46,7 @@ pub struct ProgrammingValuesSnapshot {
 pub(super) struct ProgrammingValuesContent {
     pub(super) fixture_values: Vec<ProgrammerFixtureUpdate>,
     pub(super) group_values: Vec<ProgrammerGroupUpdate>,
+    pub(super) dynamic_values: Vec<DynamicAddressValue>,
 }
 
 impl ProgrammingValuesContent {
@@ -66,11 +69,13 @@ impl ProgrammingValuesContent {
         let ProgrammerUpdateContent {
             fixture_values,
             group_values,
+            dynamic_values,
             selected_fixtures: _,
         } = state.update_content();
         Ok(Self {
             fixture_values,
             group_values,
+            dynamic_values,
         })
     }
 
@@ -80,6 +85,7 @@ impl ProgrammingValuesContent {
             revision,
             fixture_values: self.fixture_values,
             group_values: self.group_values,
+            dynamic_values: self.dynamic_values,
         }
     }
 }

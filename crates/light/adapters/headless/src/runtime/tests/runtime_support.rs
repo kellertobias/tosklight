@@ -41,6 +41,7 @@ fn test_state_with_programmers(
         AppState {
             installation: InstallationResource::open_test_installation(data_dir.clone()).unwrap(),
             sessions: SessionResource::new(),
+            dynamics: light_application::DynamicsService::new(programmers.clone()),
             programming: ProgrammingResource::new(programmers, programming),
             playback: PlaybackResource::new(
                 PlaybackService::new(application_events.clone()),
@@ -70,6 +71,8 @@ fn test_state_with_programmers(
                     )
                     .unwrap()
                 }))),
+                Arc::new(Mutex::new(light_dynamics::DynamicRuntime::default())),
+                Arc::new(Mutex::new(Vec::new())),
             ),
             active_show: ActiveShowResource::new(
                 ActiveShowCoordinator::new(),

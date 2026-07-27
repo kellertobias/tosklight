@@ -17,6 +17,743 @@
     "action"
   ],
   "$defs": {
+    "DynamicActivationBoundaryProjection": {
+      "type": "string",
+      "enum": [
+        "beat",
+        "bar"
+      ]
+    },
+    "DynamicActivationPolicyProjection": {
+      "type": "string",
+      "enum": [
+        "start_now",
+        "join_sync_now",
+        "next_boundary"
+      ]
+    },
+    "DynamicDefinitionProjection": {
+      "type": "object",
+      "properties": {
+        "activation_boundary": {
+          "$ref": "#/$defs/DynamicActivationBoundaryProjection"
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "default_activation": {
+          "$ref": "#/$defs/DynamicActivationPolicyProjection"
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "lanes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DynamicLaneProjection"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "overall_speed_multiplier": {
+          "$ref": "#/$defs/DynamicRationalProjection"
+        },
+        "phase": {
+          "$ref": "#/$defs/DynamicPhaseDistributionProjection"
+        },
+        "pool_number": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "random_groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DynamicRandomGroupProjection"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "run_mode": {
+          "$ref": "#/$defs/DynamicRunModeProjection"
+        },
+        "speed": {
+          "$ref": "#/$defs/DynamicSpeedProjection"
+        },
+        "target_binding": {
+          "$ref": "#/$defs/DynamicTargetBindingProjection"
+        }
+      },
+      "required": [
+        "id",
+        "pool_number",
+        "revision",
+        "name",
+        "target_binding",
+        "lanes",
+        "random_groups",
+        "phase",
+        "speed",
+        "overall_speed_multiplier",
+        "run_mode",
+        "default_activation",
+        "activation_boundary"
+      ]
+    },
+    "DynamicKeyframeConfigurationProjection": {
+      "type": "object",
+      "properties": {
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DynamicKeyframeProjection"
+          }
+        },
+        "size": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "points",
+        "size"
+      ]
+    },
+    "DynamicKeyframeProjection": {
+      "type": "object",
+      "properties": {
+        "interpolation": {
+          "$ref": "#/$defs/DynamicScalarInterpolationProjection"
+        },
+        "position": {
+          "type": "number",
+          "format": "float"
+        },
+        "source": {
+          "$ref": "#/$defs/DynamicScalarSourceProjection"
+        }
+      },
+      "required": [
+        "position",
+        "source",
+        "interpolation"
+      ]
+    },
+    "DynamicLaneModeProjection": {
+      "type": "string",
+      "enum": [
+        "keyframes",
+        "max_min",
+        "middle_amplitude",
+        "random"
+      ]
+    },
+    "DynamicLaneProjection": {
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "keyframes": {
+          "$ref": "#/$defs/DynamicKeyframeConfigurationProjection"
+        },
+        "max_min": {
+          "$ref": "#/$defs/DynamicMaxMinConfigurationProjection"
+        },
+        "middle_amplitude": {
+          "$ref": "#/$defs/DynamicMiddleAmplitudeConfigurationProjection"
+        },
+        "mode": {
+          "$ref": "#/$defs/DynamicLaneModeProjection"
+        },
+        "random_group_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "speed_multiplier": {
+          "$ref": "#/$defs/DynamicRationalProjection"
+        },
+        "width": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "id",
+        "attribute",
+        "mode",
+        "keyframes",
+        "max_min",
+        "middle_amplitude",
+        "speed_multiplier",
+        "width"
+      ]
+    },
+    "DynamicMaxMinConfigurationProjection": {
+      "type": "object",
+      "properties": {
+        "function": {
+          "$ref": "#/$defs/DynamicPeriodicFunctionProjection"
+        },
+        "maximum": {
+          "$ref": "#/$defs/DynamicScalarSourceProjection"
+        },
+        "minimum": {
+          "$ref": "#/$defs/DynamicScalarSourceProjection"
+        },
+        "pwm": {
+          "$ref": "#/$defs/DynamicPwmShapeProjection"
+        },
+        "size": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "minimum",
+        "maximum",
+        "function",
+        "size",
+        "pwm"
+      ]
+    },
+    "DynamicMiddleAmplitudeConfigurationProjection": {
+      "type": "object",
+      "properties": {
+        "amplitude": {
+          "type": "number",
+          "format": "float"
+        },
+        "function": {
+          "$ref": "#/$defs/DynamicPeriodicFunctionProjection"
+        },
+        "middle": {
+          "$ref": "#/$defs/DynamicScalarSourceProjection"
+        },
+        "pwm": {
+          "$ref": "#/$defs/DynamicPwmShapeProjection"
+        },
+        "size": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "middle",
+        "amplitude",
+        "function",
+        "size",
+        "pwm"
+      ]
+    },
+    "DynamicPeriodicFunctionProjection": {
+      "type": "string",
+      "enum": [
+        "sinus",
+        "cosinus",
+        "linear_up",
+        "linear_down",
+        "pwm"
+      ]
+    },
+    "DynamicPhaseDistributionProjection": {
+      "type": "object",
+      "properties": {
+        "anchors_degrees": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          }
+        },
+        "block_size": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "offset_degrees": {
+          "type": "number",
+          "format": "float"
+        },
+        "ordering": {
+          "$ref": "#/$defs/DynamicPhaseOrderingProjection"
+        },
+        "repeats": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "span_degrees": {
+          "type": "number",
+          "format": "float"
+        },
+        "wings": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ordering",
+        "offset_degrees",
+        "span_degrees",
+        "block_size",
+        "repeats",
+        "wings",
+        "anchors_degrees"
+      ]
+    },
+    "DynamicPhaseOrderingProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "selection"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "angle_degrees": {
+              "type": "number",
+              "format": "float"
+            },
+            "type": {
+              "type": "string",
+              "const": "grid_linear"
+            }
+          },
+          "required": [
+            "type",
+            "angle_degrees"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "center_x": {
+              "type": "number",
+              "format": "float"
+            },
+            "center_z": {
+              "type": "number",
+              "format": "float"
+            },
+            "type": {
+              "type": "string",
+              "const": "radial_out"
+            }
+          },
+          "required": [
+            "type",
+            "center_x",
+            "center_z"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "center_x": {
+              "type": "number",
+              "format": "float"
+            },
+            "center_z": {
+              "type": "number",
+              "format": "float"
+            },
+            "type": {
+              "type": "string",
+              "const": "radial_in"
+            }
+          },
+          "required": [
+            "type",
+            "center_x",
+            "center_z"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "center_x": {
+              "type": "number",
+              "format": "float"
+            },
+            "center_z": {
+              "type": "number",
+              "format": "float"
+            },
+            "type": {
+              "type": "string",
+              "const": "axial"
+            }
+          },
+          "required": [
+            "type",
+            "center_x",
+            "center_z"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seed": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "random_each_loop"
+            }
+          },
+          "required": [
+            "type",
+            "seed"
+          ]
+        }
+      ]
+    },
+    "DynamicPwmShapeProjection": {
+      "type": "object",
+      "properties": {
+        "attack": {
+          "type": "number",
+          "format": "float"
+        },
+        "attack_interpolation": {
+          "$ref": "#/$defs/DynamicScalarInterpolationProjection"
+        },
+        "decay": {
+          "type": "number",
+          "format": "float"
+        },
+        "decay_interpolation": {
+          "$ref": "#/$defs/DynamicScalarInterpolationProjection"
+        },
+        "off": {
+          "type": "number",
+          "format": "float"
+        },
+        "on": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "attack",
+        "on",
+        "decay",
+        "off",
+        "attack_interpolation",
+        "decay_interpolation"
+      ]
+    },
+    "DynamicRandomGroupProjection": {
+      "type": "object",
+      "properties": {
+        "attack_ratio": {
+          "type": "number",
+          "format": "float"
+        },
+        "decay_ratio": {
+          "type": "number",
+          "format": "float"
+        },
+        "decision_interval_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "duration_spread_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "high": {
+          "$ref": "#/$defs/DynamicScalarSourceProjection"
+        },
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "low": {
+          "$ref": "#/$defs/DynamicScalarSourceProjection"
+        },
+        "mean_duration_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "seed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "start_probability": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "id",
+        "seed",
+        "low",
+        "high",
+        "decision_interval_millis",
+        "start_probability",
+        "mean_duration_millis",
+        "duration_spread_millis",
+        "attack_ratio",
+        "decay_ratio"
+      ]
+    },
+    "DynamicRationalProjection": {
+      "type": "object",
+      "properties": {
+        "denominator": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "numerator": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "numerator",
+        "denominator"
+      ]
+    },
+    "DynamicRunModeProjection": {
+      "type": "string",
+      "enum": [
+        "loop",
+        "one_shot"
+      ]
+    },
+    "DynamicScalarInterpolationProjection": {
+      "type": "string",
+      "enum": [
+        "linear",
+        "ease_in",
+        "ease_out",
+        "ease_in_out",
+        "hold",
+        "drop"
+      ]
+    },
+    "DynamicScalarSourceProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "current"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "value"
+            },
+            "value": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "attribute": {
+              "type": "string"
+            },
+            "last_valid_by_target": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/DynamicTargetScalarFallbackProjection"
+              }
+            },
+            "preset_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "preset"
+            }
+          },
+          "required": [
+            "type",
+            "preset_id",
+            "attribute",
+            "last_valid_by_target"
+          ]
+        }
+      ]
+    },
+    "DynamicSpeedGroupProjection": {
+      "type": "string",
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ]
+    },
+    "DynamicSpeedProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "duration_millis": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "fixed"
+            }
+          },
+          "required": [
+            "type",
+            "duration_millis"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "beats_per_cycle": {
+              "$ref": "#/$defs/DynamicRationalProjection"
+            },
+            "group": {
+              "$ref": "#/$defs/DynamicSpeedGroupProjection"
+            },
+            "type": {
+              "type": "string",
+              "const": "speed_group"
+            }
+          },
+          "required": [
+            "type",
+            "group",
+            "beats_per_cycle"
+          ]
+        }
+      ]
+    },
+    "DynamicTargetBindingProjection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "live_group"
+            }
+          },
+          "required": [
+            "type",
+            "group_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "targets": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "frozen_targets"
+            }
+          },
+          "required": [
+            "type",
+            "targets"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "targetless"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "DynamicTargetScalarFallbackProjection": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "value": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "target",
+        "value"
+      ]
+    },
     "PlaybackTopologyAction": {
       "oneOf": [
         {
@@ -296,7 +1033,163 @@
         "pause",
         "blackout",
         "pause_dynamics",
+        "dynamic_restart",
+        "dynamic_double_speed",
+        "dynamic_half_speed",
+        "dynamic_learn_speed",
         "none"
+      ]
+    },
+    "PlaybackTopologyDynamicAssignment": {
+      "type": "object",
+      "properties": {
+        "activation_override": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DynamicActivationPolicyProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "auto_off_at_zero": {
+          "type": "boolean"
+        },
+        "auto_off_flash_release": {
+          "type": "boolean"
+        },
+        "auto_off_full_control": {
+          "type": "boolean"
+        },
+        "crossfade_non_intensity": {
+          "type": "boolean"
+        },
+        "dynamic_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "embedded_fallback": {
+          "$ref": "#/$defs/DynamicDefinitionProjection"
+        },
+        "fader_mode": {
+          "$ref": "#/$defs/PlaybackTopologyDynamicFaderMode"
+        },
+        "last_known_pool_number": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "learned_duration_millis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "local_speed_multiplier": {
+          "$ref": "#/$defs/DynamicRationalProjection"
+        },
+        "priority": {
+          "type": "integer",
+          "format": "int16",
+          "maximum": 32767,
+          "minimum": -32768
+        },
+        "resume_policy": {
+          "$ref": "#/$defs/PlaybackTopologyDynamicResumePolicy"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "target_scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackTopologyDynamicTargetScope"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "last_known_pool_number",
+        "embedded_fallback",
+        "revision",
+        "fader_mode",
+        "priority",
+        "resume_policy",
+        "local_speed_multiplier",
+        "crossfade_non_intensity",
+        "auto_off_at_zero",
+        "auto_off_flash_release",
+        "auto_off_full_control"
+      ]
+    },
+    "PlaybackTopologyDynamicFaderMode": {
+      "type": "string",
+      "enum": [
+        "none",
+        "master",
+        "size",
+        "size_and_master"
+      ]
+    },
+    "PlaybackTopologyDynamicResumePolicy": {
+      "type": "string",
+      "enum": [
+        "follow_dynamic",
+        "resume_frozen_phase",
+        "rejoin_synchronized_position",
+        "resume_on_next_boundary"
+      ]
+    },
+    "PlaybackTopologyDynamicTargetScope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "live_group"
+            }
+          },
+          "required": [
+            "type",
+            "group_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "targets": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "frozen_targets"
+            }
+          },
+          "required": [
+            "type",
+            "targets"
+          ]
+        }
       ]
     },
     "PlaybackTopologyFaderMode": {
@@ -431,6 +1324,22 @@
           "required": [
             "type",
             "cue_list_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "assignment": {
+              "$ref": "#/$defs/PlaybackTopologyDynamicAssignment"
+            },
+            "type": {
+              "type": "string",
+              "const": "dynamic"
+            }
+          },
+          "required": [
+            "type",
+            "assignment"
           ]
         },
         {

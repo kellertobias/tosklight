@@ -4,15 +4,88 @@ pub const MAX_PLAYBACKS: u16 = 1_000;
 pub const MAX_PLAYBACK_PAGES: u8 = 127;
 pub const MAX_PAGE_SLOTS: u8 = 127;
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlaybackTarget {
-    CueList { cue_list_id: CueListId },
-    Group { group_id: String },
-    SpeedGroup { group: String },
+    CueList {
+        cue_list_id: CueListId,
+    },
+    Dynamic {
+        assignment: DynamicPlaybackAssignment,
+    },
+    Group {
+        group_id: String,
+    },
+    SpeedGroup {
+        group: String,
+    },
     ProgrammerFade,
     CueFade,
     GrandMaster,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DynamicPlaybackAssignment {
+    pub dynamic: light_dynamics::DynamicReference,
+    #[serde(default = "default_assignment_revision")]
+    pub revision: u64,
+    #[serde(default)]
+    pub target_scope: Option<DynamicPlaybackTargetScope>,
+    #[serde(default)]
+    pub fader_mode: DynamicPlaybackFaderMode,
+    #[serde(default)]
+    pub priority: i16,
+    #[serde(default)]
+    pub activation_override: Option<light_dynamics::ActivationPolicy>,
+    #[serde(default)]
+    pub resume_policy: DynamicPlaybackResumePolicy,
+    #[serde(default = "default_dynamic_speed_multiplier")]
+    pub local_speed_multiplier: light_dynamics::Rational,
+    #[serde(default)]
+    pub learned_duration_millis: Option<u64>,
+    #[serde(default)]
+    pub crossfade_non_intensity: bool,
+    #[serde(default)]
+    pub auto_off_at_zero: bool,
+    #[serde(default)]
+    pub auto_off_flash_release: bool,
+    #[serde(default = "default_true")]
+    pub auto_off_full_control: bool,
+}
+
+const fn default_assignment_revision() -> u64 {
+    1
+}
+
+const fn default_dynamic_speed_multiplier() -> light_dynamics::Rational {
+    light_dynamics::Rational::ONE
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DynamicPlaybackTargetScope {
+    LiveGroup { group_id: String },
+    FrozenTargets { targets: Vec<FixtureId> },
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicPlaybackFaderMode {
+    None,
+    Master,
+    Size,
+    #[default]
+    SizeAndMaster,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicPlaybackResumePolicy {
+    #[default]
+    FollowDynamic,
+    ResumeFrozenPhase,
+    RejoinSynchronizedPosition,
+    ResumeOnNextBoundary,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -37,6 +110,10 @@ pub enum PlaybackButtonAction {
     Pause,
     Blackout,
     PauseDynamics,
+    DynamicRestart,
+    DynamicDoubleSpeed,
+    DynamicHalfSpeed,
+    DynamicLearnSpeed,
     #[default]
     None,
 }
@@ -111,6 +188,11 @@ impl PlaybackDefinition {
                 PlaybackButtonAction::Go,
                 PlaybackButtonAction::Flash,
             ],
+            PlaybackTarget::Dynamic { .. } => [
+                PlaybackButtonAction::Off,
+                PlaybackButtonAction::Pause,
+                PlaybackButtonAction::Flash,
+            ],
             PlaybackTarget::Group { .. } => [
                 PlaybackButtonAction::Select,
                 PlaybackButtonAction::SelectDereferenced,
@@ -172,6 +254,19 @@ impl PlaybackDefinition {
                         | PlaybackButtonAction::SelectContents
                         | PlaybackButtonAction::None
                 ),
+                PlaybackTarget::Dynamic { .. } => matches!(
+                    action,
+                    PlaybackButtonAction::On
+                        | PlaybackButtonAction::Off
+                        | PlaybackButtonAction::Toggle
+                        | PlaybackButtonAction::Pause
+                        | PlaybackButtonAction::Flash
+                        | PlaybackButtonAction::DynamicRestart
+                        | PlaybackButtonAction::DynamicDoubleSpeed
+                        | PlaybackButtonAction::DynamicHalfSpeed
+                        | PlaybackButtonAction::DynamicLearnSpeed
+                        | PlaybackButtonAction::None
+                ),
                 PlaybackTarget::Group { .. } => matches!(
                     action,
                     PlaybackButtonAction::Select
@@ -208,6 +303,7 @@ impl PlaybackDefinition {
                 self.fader,
                 PlaybackFaderMode::Master | PlaybackFaderMode::Temp | PlaybackFaderMode::XFade
             ),
+            PlaybackTarget::Dynamic { .. } => self.fader == PlaybackFaderMode::Master,
             PlaybackTarget::SpeedGroup { .. } => matches!(
                 self.fader,
                 PlaybackFaderMode::DirectBpm
@@ -245,6 +341,32 @@ impl PlaybackDefinition {
             )
         {
             return Err("Speed Group must be A-E".into());
+        }
+        if let PlaybackTarget::Dynamic { assignment } = &self.target {
+            if assignment.revision == 0
+                || assignment.local_speed_multiplier.numerator == 0
+                || assignment.local_speed_multiplier.denominator == 0
+                || assignment.learned_duration_millis == Some(0)
+            {
+                return Err("Dynamic Playback assignment is invalid".into());
+            }
+            let definition = &assignment.dynamic.embedded_fallback.definition;
+            if matches!(
+                definition.target_binding,
+                light_dynamics::DynamicTargetBinding::Targetless
+            ) && assignment.target_scope.is_none()
+            {
+                return Err(
+                    "targetless Dynamic Playback assignments require an explicit target scope"
+                        .into(),
+                );
+            }
+            if let Some(DynamicPlaybackTargetScope::FrozenTargets { targets }) =
+                &assignment.target_scope
+                && targets.is_empty()
+            {
+                return Err("Dynamic Playback frozen target scope must not be empty".into());
+            }
         }
         let bytes = self.color.as_bytes();
         if bytes.len() != 7 || bytes[0] != b'#' || !bytes[1..].iter().all(u8::is_ascii_hexdigit) {

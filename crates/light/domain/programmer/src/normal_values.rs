@@ -116,13 +116,17 @@ impl ProgrammerRegistry {
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
-        if state.values.is_empty() && state.group_values.is_empty() {
+        if state.values.is_empty()
+            && state.group_values.is_empty()
+            && state.dynamic_values.is_empty()
+        {
             return false;
         }
         state.checkpoint();
         state.active_value_undo_group = None;
         state.values.clear();
         state.group_values.clear();
+        state.dynamic_values.clear();
         state.last_activity = self.clock.now();
         let user_id = state.user_id;
         drop(states);

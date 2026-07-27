@@ -40,6 +40,53 @@ fn preview_expands_dependencies_skips_identical_and_reports_conflicts() {
 }
 
 #[test]
+fn dynamic_preview_includes_exact_live_group_and_preset_dependencies() {
+    let rig = TestRig::new();
+    let dynamic_id = Uuid::new_v4();
+    rig.source_object(
+        "group",
+        "front",
+        serde_json::to_value(light_programmer::GroupDefinition {
+            id: "front".into(),
+            name: "Front".into(),
+            ..Default::default()
+        })
+        .unwrap(),
+    );
+    rig.source_object(
+        "preset",
+        "1.1",
+        json!({
+            "name": "Dim",
+            "family": "Intensity",
+            "number": 1,
+            "values": {},
+            "group_values": {}
+        }),
+    );
+    rig.source_object(
+        "dynamic",
+        &dynamic_id.to_string(),
+        dynamic_with_dependencies(dynamic_id, "front", "1.1"),
+    );
+
+    let preview = rig.preview(rig.request("dynamic", &dynamic_id.to_string()));
+
+    assert!(preview.can_apply(), "{:?}", preview.blockers);
+    assert_eq!(preview.dependencies.len(), 2);
+    assert!(preview.dependencies.iter().any(|dependency| {
+        dependency.owner == key("dynamic", &dynamic_id.to_string())
+            && dependency.dependency == key("group", "front")
+            && dependency.disposition == ImportDependencyDisposition::Included
+    }));
+    assert!(preview.dependencies.iter().any(|dependency| {
+        dependency.owner == key("dynamic", &dynamic_id.to_string())
+            && dependency.dependency == key("preset", "1.1")
+            && dependency.disposition == ImportDependencyDisposition::Included
+    }));
+}
+
+#[test]
 fn semantic_identity_is_a_noop_unless_duplicate_is_explicit() {
     let rig = TestRig::new();
     let body = json!({"id":"same","nested":{"b":2,"a":1}});

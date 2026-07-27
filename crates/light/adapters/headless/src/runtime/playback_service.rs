@@ -24,7 +24,7 @@ mod group;
 #[path = "playback_service/ports.rs"]
 mod ports;
 #[path = "playback_service/projection.rs"]
-mod projection;
+pub(super) mod projection;
 #[path = "playback_service/semantics.rs"]
 mod semantics;
 #[path = "playback_service/support.rs"]

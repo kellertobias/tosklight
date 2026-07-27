@@ -243,7 +243,9 @@ impl SpeedGroupController {
     }
 
     /// Learn is manual tap tempo. The first tap exits Sound mode immediately; two or more valid
-    /// intervals update the learned BPM using a rolling mean of the last four intervals.
+    /// intervals update the learned BPM using a rolling mean of the last four intervals. A gap
+    /// longer than ten seconds starts a new bucket, extended to thirty seconds while the current
+    /// calculated rate is below 10 BPM.
     pub fn tap_learn(&mut self, tapped_at_millis: u64) -> LearnResult {
         self.sound.enabled = false;
         self.clear_sound_runtime();
@@ -251,6 +253,15 @@ impl SpeedGroupController {
             return LearnResult::Armed;
         };
         let interval = tapped_at_millis.saturating_sub(previous);
+        let reset_after = if self.manual_bpm < SLOW_LEARN_THRESHOLD_BPM {
+            SLOW_LEARN_RESET_MILLIS
+        } else {
+            FAST_LEARN_RESET_MILLIS
+        };
+        if interval > reset_after {
+            self.learn_intervals.clear();
+            return LearnResult::Armed;
+        }
         if interval == 0 {
             self.learn_intervals.clear();
             return LearnResult::RejectedInterval;

@@ -116,7 +116,7 @@
         "pending_choice": {
           "anyOf": [
             {
-              "$ref": "#/$defs/CueMoveCopyChoice"
+              "$ref": "#/$defs/PendingCommandChoice"
             },
             {
               "type": "null"
@@ -282,6 +282,96 @@
         "source_cue_number",
         "destination_cue_id",
         "destination_cue_number"
+      ]
+    },
+    "DynamicInstanceChoice": {
+      "type": "object",
+      "properties": {
+        "cancel_label": {
+          "type": "string"
+        },
+        "choice_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "command": {
+          "type": "string"
+        },
+        "dynamic_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DynamicInstanceChoiceOption"
+          }
+        },
+        "pool_number": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "show_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "$ref": "#/$defs/DynamicInstanceChoiceType"
+        }
+      },
+      "required": [
+        "type",
+        "choice_id",
+        "show_id",
+        "show_revision",
+        "dynamic_id",
+        "pool_number",
+        "command",
+        "options",
+        "cancel_label"
+      ]
+    },
+    "DynamicInstanceChoiceOption": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "controller_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "controller_id",
+        "label",
+        "command"
+      ]
+    },
+    "DynamicInstanceChoiceType": {
+      "type": "string",
+      "enum": [
+        "dynamic_instance"
+      ]
+    },
+    "PendingCommandChoice": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CueMoveCopyChoice"
+        },
+        {
+          "$ref": "#/$defs/DynamicInstanceChoice"
+        }
       ]
     }
   }

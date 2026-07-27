@@ -1,5 +1,8 @@
 //! User-scoped, recordable Programmer value projections and repair snapshots.
 
+use super::dynamics::{
+    DynamicInstanceOverridesProjection, DynamicReferenceProjection, DynamicValueTimingProjection,
+};
 use super::events::EventSnapshotCursor;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -56,6 +59,42 @@ pub struct ProgrammingGroupValue {
     pub delay_millis: Option<u64>,
 }
 
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ProgrammingDynamicSemanticValue {
+    Static {
+        value: ProgrammingAttributeValue,
+        timing: DynamicValueTimingProjection,
+    },
+    DynamicOn {
+        instance_link: Uuid,
+        dynamic: DynamicReferenceProjection,
+        lane_id: Uuid,
+        overrides: DynamicInstanceOverridesProjection,
+        timing: DynamicValueTimingProjection,
+    },
+    DynamicOff {
+        instance_link: Uuid,
+        timing: DynamicValueTimingProjection,
+    },
+    FixAt {
+        value: f32,
+        timing: DynamicValueTimingProjection,
+    },
+    Release,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct ProgrammingDynamicValue {
+    pub fixture_id: Uuid,
+    pub attribute: String,
+    pub value: ProgrammingDynamicSemanticValue,
+    #[ts(type = "number")]
+    pub programmer_order: u64,
+    #[ts(type = "number")]
+    pub changed_at_millis: u64,
+}
+
 /// Full retained projection of one user's normal, recordable Programmer values.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingValuesProjection {
@@ -64,6 +103,7 @@ pub struct ProgrammingValuesProjection {
     pub revision: u64,
     pub fixture_values: Vec<ProgrammingFixtureValue>,
     pub group_values: Vec<ProgrammingGroupValue>,
+    pub dynamic_values: Vec<ProgrammingDynamicValue>,
 }
 
 /// Authoritative capture routing for one user's Programmer.

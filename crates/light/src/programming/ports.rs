@@ -1,4 +1,4 @@
-use super::{CueMoveCopyChoice, ExecutionPolicy, ProgrammingShowUndoTarget};
+use super::{ExecutionPolicy, PendingCommandChoice, ProgrammingShowUndoTarget};
 use crate::{ActionContext, ActionError};
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use light_programmer::GroupDefinition;
@@ -47,7 +47,7 @@ pub enum ProgrammingExecution {
         replayed: bool,
     },
     ChoiceRequired {
-        pending_choice: CueMoveCopyChoice,
+        pending_choice: PendingCommandChoice,
     },
     Rejected {
         error: String,

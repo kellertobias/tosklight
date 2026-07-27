@@ -354,6 +354,70 @@
             },
             "type": {
               "type": "string",
+              "const": "dynamic_restart"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "dynamic_double_speed"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "dynamic_half_speed"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "dynamic_learn_speed"
+            }
+          },
+          "required": [
+            "type",
+            "pressed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "pressed": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
               "const": "none"
             }
           },

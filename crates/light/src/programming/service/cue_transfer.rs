@@ -166,6 +166,12 @@ impl ProgrammingService {
                 "Cue transfer choice is no longer pending",
             )
         })?;
+        let pending = pending.cue_move_copy().ok_or_else(|| {
+            ActionError::new(
+                ActionErrorKind::Conflict,
+                "the pending command choice is not a Cue transfer",
+            )
+        })?;
         if pending.choice_id != request.choice_id || pending.show_id != request.show_id.0 {
             return Err(ActionError::new(
                 ActionErrorKind::Conflict,

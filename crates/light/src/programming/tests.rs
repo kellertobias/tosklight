@@ -38,7 +38,7 @@ impl ProgrammingPorts for TestPorts {
         }
         if command.starts_with("COPY SET") {
             return ProgrammingExecution::ChoiceRequired {
-                pending_choice: CueMoveCopyChoice {
+                pending_choice: PendingCommandChoice::CueMoveCopy(CueMoveCopyChoice {
                     choice_id: uuid::Uuid::from_u128(1),
                     show_id: uuid::Uuid::from_u128(2),
                     show_revision: 3,
@@ -50,7 +50,7 @@ impl ProgrammingPorts for TestPorts {
                         command: command.replacen("COPY", "COPY PLAIN", 1),
                     }],
                     cancel_label: "Cancel".into(),
-                },
+                }),
             };
         }
         programmers.update_command_line(session, |current| (String::new(), current.target, true));

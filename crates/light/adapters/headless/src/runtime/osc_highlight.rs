@@ -314,6 +314,30 @@ pub(super) fn handle_programmer_osc(
         handle_shifted_shortcut(state, &session, parts[1], action, source);
         return;
     }
+    if subscriber.shifted && action == "at" {
+        if let Some(source) = source {
+            state.integrations.clear_shift(source);
+        }
+        let current = state
+            .programming
+            .get(session.id)
+            .map(|programmer| programmer.command_line)
+            .unwrap_or_default();
+        let current = current.trim();
+        let next = if matches!(current, "" | "FIXTURE" | "GROUP") {
+            "FixAT".to_owned()
+        } else {
+            format!("{current} FixAT")
+        };
+        state.programming.set_command_line(session.id, next);
+        let _ = persist_programmer(state, &session);
+        emit(
+            state,
+            "desk_action",
+            serde_json::json!({"desk_alias":parts[1],"session_id":session.id,"action":"shift-at","source":"osc"}),
+        );
+        return;
+    }
     let handled = state.programming.run_desk_operation(session.desk.id, || {
         read_desk_lock(state, session.desk.id).locked
             || file_manager::route_osc_input(state, &session, action)

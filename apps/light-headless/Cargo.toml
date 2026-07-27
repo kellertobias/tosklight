@@ -15,6 +15,7 @@ anyhow.workspace = true
 chrono.workspace = true
 light-application.workspace = true
 light-core = { path = "../../crates/shared/core" }
+light-dynamics = { path = "../../crates/light/domain/dynamics" }
 light-engine = { path = "../../crates/light/domain/engine", default-features = false }
 light-fixture = { path = "../../crates/shared/fixture" }
 light-headless-runtime = { path = "../../crates/light/adapters/headless", default-features = false }

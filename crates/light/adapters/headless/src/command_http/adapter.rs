@@ -15,7 +15,7 @@ pub(crate) enum ExistingCommandOutcome {
         replayed: bool,
     },
     ChoiceRequired {
-        pending_choice: light_application::CueMoveCopyChoice,
+        pending_choice: light_application::PendingCommandChoice,
     },
     Rejected {
         error: String,
@@ -121,14 +121,20 @@ fn execute_with_policy(
     command: &str,
     context: &ActionContext,
     policy: ExistingCommandPolicy,
-) -> Result<usize, String> {
+) -> Result<super::super::ProgrammerCommandExecution, String> {
     match policy {
         ExistingCommandPolicy::Compatibility => {
             // Cross-user reconciliation must not run while one user's mutation gate is held.
-            let applied =
-                super::super::execute_programmer_command_from(state, session, command, context)?;
-            super::programming_ports::clear_command_line(&state.programming, session)?;
-            Ok(applied)
+            let outcome = super::super::execute_programmer_command_effect_from(
+                state, session, command, context,
+            )?;
+            if matches!(
+                &outcome,
+                super::super::ProgrammerCommandExecution::Applied(_)
+            ) {
+                super::programming_ports::clear_command_line(&state.programming, session)?;
+            }
+            Ok(outcome)
         }
         ExistingCommandPolicy::AtomicProgrammer => {
             state
@@ -146,15 +152,26 @@ fn execute_staged(
     command: &str,
     context: &ActionContext,
     staged_programmers: &ProgrammingResource,
-) -> Result<usize, String> {
+) -> Result<super::super::ProgrammerCommandExecution, String> {
     let mut staged_state = state.clone();
     staged_state.programming = staged_programmers.clone();
-    let applied =
-        super::super::execute_programmer_command_from(&staged_state, session, command, context)?;
-    staged_programmers
-        .update_command_line(session.id, |current| (String::new(), current.target, true))
-        .ok_or_else(|| "programmer command line does not exist".to_owned())?;
-    Ok(applied)
+    staged_state.dynamics =
+        light_application::DynamicsService::new(staged_programmers.programmers());
+    let outcome = super::super::execute_programmer_command_effect_from(
+        &staged_state,
+        session,
+        command,
+        context,
+    )?;
+    if matches!(
+        &outcome,
+        super::super::ProgrammerCommandExecution::Applied(_)
+    ) {
+        staged_programmers
+            .update_command_line(session.id, |current| (String::new(), current.target, true))
+            .ok_or_else(|| "programmer command line does not exist".to_owned())?;
+    }
+    Ok(outcome)
 }
 
 fn finish_existing_command(
@@ -163,10 +180,17 @@ fn finish_existing_command(
     command: &str,
     source: &str,
     request_id: Option<&str>,
-    result: Result<usize, String>,
+    result: Result<super::super::ProgrammerCommandExecution, String>,
 ) -> ExistingCommandOutcome {
     match result {
-        Ok(applied) => accepted_command(state, session, command, source, request_id, applied),
+        Ok(super::super::ProgrammerCommandExecution::Applied(applied)) => {
+            accepted_command(state, session, command, source, request_id, applied)
+        }
+        Ok(super::super::ProgrammerCommandExecution::ChoiceRequired(choice)) => {
+            ExistingCommandOutcome::ChoiceRequired {
+                pending_choice: light_application::PendingCommandChoice::DynamicInstance(choice),
+            }
+        }
         Err(error) => {
             super::super::record_command_history(
                 state, session, command, "rejected", &error, source, request_id,
@@ -200,6 +224,12 @@ fn accepted_command(
 }
 
 pub(super) fn compatibility_only_family(command: &str) -> Result<Option<&'static str>, String> {
+    if command
+        .split_whitespace()
+        .any(|token| token.eq_ignore_ascii_case("DYNAMIC"))
+    {
+        return Ok(Some("DYNAMIC"));
+    }
     if preset_record_address(command)?.is_some()
         || group_record_command(command)?.is_some()
         || super::cue_recording_command::parse(command)?.is_some()
@@ -220,6 +250,7 @@ pub(super) fn compatibility_only_family(command: &str) -> Result<Option<&'static
         "MOVE" | "MOV" => Some("MOVE"),
         "COPY" | "CPY" => Some("COPY"),
         "SET" => Some("SET"),
+        "DYNAMIC" => Some("DYNAMIC"),
         _ => None,
     })
 }

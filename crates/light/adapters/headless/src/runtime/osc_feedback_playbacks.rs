@@ -22,6 +22,13 @@ fn playback_level(
         light_playback::PlaybackTarget::CueList { .. } => running
             .map(|status| status.playback.fader_position)
             .unwrap_or(0.0),
+        light_playback::PlaybackTarget::Dynamic { .. } => state
+            .output
+            .active_dynamic_playbacks()
+            .into_iter()
+            .find(|playback| playback.playback_number == definition.number)
+            .map(|playback| playback.fader_value)
+            .unwrap_or(0.0),
         light_playback::PlaybackTarget::Group { group_id } => snapshot
             .groups
             .iter()

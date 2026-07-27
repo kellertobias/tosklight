@@ -22,6 +22,8 @@ fn hazardous_fixture_defaults_to_immediate_safe_on_control_loss() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![].into(),
+            dynamics: vec![].into(),
+            dynamic_stage_positions: Default::default(),
             playbacks: vec![].into(),
             playback_pages: vec![].into(),
             routes: vec![].into(),

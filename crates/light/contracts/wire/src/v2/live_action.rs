@@ -7,6 +7,10 @@ use uuid::Uuid;
 
 use super::{
     command_line::{CommandTarget, ProgrammingSelectionActionRequest},
+    dynamics::{
+        DynamicControllerLiveActionRequest, DynamicFixAtActionRequest, DynamicOffLiveActionRequest,
+        DynamicStartLiveActionRequest,
+    },
     output_control::{DmxOverrideRequest, HighlightActionRequest, PatchPreviewHighlightRequest},
     output_runtime::OutputRuntimeActionRequest,
     playback::PlaybackActionRequest,
@@ -57,6 +61,13 @@ pub enum LiveAction {
     ProgrammerUndo,
     ProgrammingAlign(ProgrammingAlignLiveActionRequest),
     FixtureControl(FixtureControlLiveActionRequest),
+    DynamicToggle(DynamicStartLiveActionRequest),
+    DynamicStart(DynamicStartLiveActionRequest),
+    DynamicOff(DynamicOffLiveActionRequest),
+    DynamicSize(DynamicControllerLiveActionRequest),
+    DynamicSpeed(DynamicControllerLiveActionRequest),
+    DynamicPhase(DynamicControllerLiveActionRequest),
+    DynamicFixAt(DynamicFixAtActionRequest),
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -269,6 +280,14 @@ impl LiveAction {
             | Self::ProgrammerUndo => None,
             Self::ProgrammingAlign(request) => Some(&request.request_id),
             Self::FixtureControl(request) => Some(&request.request_id),
+            Self::DynamicToggle(request) | Self::DynamicStart(request) => {
+                Some(&request.request.request_id)
+            }
+            Self::DynamicOff(request) => Some(&request.request.request_id),
+            Self::DynamicSize(request)
+            | Self::DynamicSpeed(request)
+            | Self::DynamicPhase(request) => Some(&request.request.request_id),
+            Self::DynamicFixAt(request) => Some(&request.request_id),
         }
     }
 }

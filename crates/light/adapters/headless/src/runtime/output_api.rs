@@ -151,6 +151,12 @@ pub(super) fn matter_playback_values(
                 .map(|number| (number, status))
         })
         .collect::<HashMap<_, _>>();
+    let dynamic_runtime = state
+        .output
+        .active_dynamic_playbacks()
+        .into_iter()
+        .map(|playback| (playback.playback_number, playback))
+        .collect::<HashMap<_, _>>();
     let now = application_millis(state);
     let speeds = state.output.speed_group_snapshots(now);
     let configuration = state.installation.configuration();
@@ -176,6 +182,12 @@ pub(super) fn matter_playback_values(
                             status.playback.master,
                             status.playback.enabled,
                         ),
+                    })
+                    .unwrap_or_default(),
+                PlaybackTarget::Dynamic { .. } => dynamic_runtime
+                    .get(&definition.number)
+                    .map(|playback| {
+                        matter::PlaybackValue::new(playback.fader_value, playback.enabled)
                     })
                     .unwrap_or_default(),
                 PlaybackTarget::Group { group_id } => snapshot

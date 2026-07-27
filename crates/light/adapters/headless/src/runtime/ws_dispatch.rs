@@ -1,6 +1,14 @@
 use super::*;
 use light_wire::v2::{
-    live_action::{LiveAction, LiveActionFrame},
+    dynamics::{
+        DynamicControllerActionOutcome, DynamicControllerLiveActionRequest,
+        DynamicFixAtActionRequest, DynamicInstanceActionOutcome, DynamicOffLiveActionRequest,
+        DynamicStartLiveActionRequest,
+    },
+    live_action::{
+        CommandLineReplaceLiveActionRequest, FixtureControlLiveActionRequest, LiveAction,
+        LiveActionFrame,
+    },
     preload_lifecycle::ProgrammingPreloadLifecycleAction,
 };
 
@@ -132,17 +140,7 @@ fn dispatch_action(
             ws_preset_recall_action(state, &action_request(request, context), context, ports)
         }),
         LiveAction::CommandLineReplace(request) => {
-            let request = WsActionRequest {
-                request_id: context.request_id.clone().unwrap_or_default(),
-                payload: serde_json::json!({
-                    "request_id":context.request_id,
-                    "expected_revision":request.expected_revision,
-                    "text":request.text,
-                }),
-            };
-            typed_programming(ws_programmer_command_line_replace(
-                state, &request, context, ports,
-            ))
+            dispatch_command_line_replace(state, request, context, ports)
         }
         LiveAction::Highlight(request) => run_interaction(state, session, context, || {
             ActionOutput::plain(ws_highlight_action(
@@ -196,23 +194,270 @@ fn dispatch_action(
             ))
         }),
         LiveAction::FixtureControl(request) => {
-            run_interaction(
+            dispatch_fixture_control(state, session, request, context)
+        }
+        LiveAction::DynamicToggle(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(dispatch_dynamic_toggle(state, session, context, request))
+        }),
+        LiveAction::DynamicStart(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(dispatch_dynamic_start(state, session, context, request))
+        }),
+        LiveAction::DynamicOff(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(dispatch_dynamic_off(state, session, context, request))
+        }),
+        LiveAction::DynamicSize(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(dispatch_dynamic_update(
                 state,
                 session,
                 context,
-                || match ws_programmer_control_action(
-                    state,
-                    session,
-                    &action_request(request, context),
-                ) {
-                    Ok(result) => ActionOutput {
-                        response: Ok(result.payload),
-                    },
-                    Err(error) => ActionOutput::plain(Err(error)),
-                },
-            )
-        }
+                request,
+                DynamicUpdateField::Size,
+            ))
+        }),
+        LiveAction::DynamicSpeed(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(dispatch_dynamic_update(
+                state,
+                session,
+                context,
+                request,
+                DynamicUpdateField::Speed,
+            ))
+        }),
+        LiveAction::DynamicPhase(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(dispatch_dynamic_update(
+                state,
+                session,
+                context,
+                request,
+                DynamicUpdateField::Phase,
+            ))
+        }),
+        LiveAction::DynamicFixAt(request) => run_interaction(state, session, context, || {
+            ActionOutput::plain(dispatch_dynamic_fix_at(state, session, context, request))
+        }),
     }
+}
+
+fn dispatch_dynamic_toggle(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    request: DynamicStartLiveActionRequest,
+) -> Result<serde_json::Value, String> {
+    dispatch_dynamic_start_with(state, session, context, request, true)
+}
+
+fn dispatch_dynamic_start(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    request: DynamicStartLiveActionRequest,
+) -> Result<serde_json::Value, String> {
+    dispatch_dynamic_start_with(state, session, context, request, false)
+}
+
+fn dispatch_dynamic_start_with(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    request: DynamicStartLiveActionRequest,
+    toggle: bool,
+) -> Result<serde_json::Value, String> {
+    let ports = super::dynamics_adapter::ServerDynamicsPorts { state, session };
+    let command = light_application::DynamicStartCommand {
+        dynamic_id: request.dynamic_id,
+        targets: request
+            .request
+            .targets
+            .into_iter()
+            .map(light_core::FixtureId)
+            .collect(),
+        overrides: dynamic_overrides(request.request.overrides),
+        timing: dynamic_timing(request.request.timing),
+    };
+    let result = if toggle {
+        state.dynamics.toggle(context, command, &ports)
+    } else {
+        state.dynamics.start(context, command, &ports)
+    }
+    .map_err(|error| error.message)?;
+    persist_programmer(state, session).map_err(|error| error.message)?;
+    persist_output_runtime(state).map_err(|error| error.message)?;
+    serde_json::to_value(DynamicInstanceActionOutcome {
+        request_id: request.request.request_id,
+        runtime_instance_id: result.runtime_instance_id,
+        controller_id: result.controller_id,
+        targets: result.targets.into_iter().map(|target| target.0).collect(),
+        started: result.started,
+    })
+    .map_err(|error| error.to_string())
+}
+
+fn dispatch_dynamic_off(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    request: DynamicOffLiveActionRequest,
+) -> Result<serde_json::Value, String> {
+    let ports = super::dynamics_adapter::ServerDynamicsPorts { state, session };
+    let result = state
+        .dynamics
+        .off(
+            context,
+            light_application::DynamicOffCommand {
+                controller_id: request.controller_id,
+                timing: dynamic_timing(request.request.timing),
+            },
+            &ports,
+        )
+        .map_err(|error| error.message)?;
+    persist_programmer(state, session).map_err(|error| error.message)?;
+    persist_output_runtime(state).map_err(|error| error.message)?;
+    serde_json::to_value(DynamicInstanceActionOutcome {
+        request_id: request.request.request_id,
+        runtime_instance_id: result.runtime_instance_id,
+        controller_id: result.controller_id,
+        targets: result.targets.into_iter().map(|target| target.0).collect(),
+        started: false,
+    })
+    .map_err(|error| error.to_string())
+}
+
+enum DynamicUpdateField {
+    Size,
+    Speed,
+    Phase,
+}
+
+fn dispatch_dynamic_update(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    request: DynamicControllerLiveActionRequest,
+    field: DynamicUpdateField,
+) -> Result<serde_json::Value, String> {
+    let ports = super::dynamics_adapter::ServerDynamicsPorts { state, session };
+    let (size, speed_multiplier, phase_offset_degrees) = match field {
+        DynamicUpdateField::Size => (Some(request.request.value), None, None),
+        DynamicUpdateField::Speed => (None, Some(request.request.value), None),
+        DynamicUpdateField::Phase => (None, None, Some(request.request.value)),
+    };
+    state
+        .dynamics
+        .update_controller(
+            context,
+            light_application::DynamicControllerUpdate {
+                controller_id: request.controller_id,
+                size,
+                speed_multiplier,
+                phase_offset_degrees,
+                undo_group: request.request.undo_group,
+            },
+            &ports,
+        )
+        .map_err(|error| error.message)?;
+    persist_programmer(state, session).map_err(|error| error.message)?;
+    persist_output_runtime(state).map_err(|error| error.message)?;
+    serde_json::to_value(DynamicControllerActionOutcome {
+        request_id: request.request.request_id,
+        controller_id: request.controller_id,
+        changed: true,
+    })
+    .map_err(|error| error.to_string())
+}
+
+fn dispatch_dynamic_fix_at(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    request: DynamicFixAtActionRequest,
+) -> Result<serde_json::Value, String> {
+    let ports = super::dynamics_adapter::ServerDynamicsPorts { state, session };
+    state
+        .dynamics
+        .fix_at(
+            context,
+            light_application::DynamicFixAtCommand {
+                targets: request
+                    .targets
+                    .into_iter()
+                    .map(light_core::FixtureId)
+                    .collect(),
+                attribute: light_core::AttributeKey(request.attribute),
+                value: request.value,
+                timing: dynamic_timing(request.timing),
+            },
+            &ports,
+        )
+        .map_err(|error| error.message)?;
+    persist_programmer(state, session).map_err(|error| error.message)?;
+    persist_output_runtime(state).map_err(|error| error.message)?;
+    serde_json::to_value(DynamicControllerActionOutcome {
+        request_id: request.request_id,
+        controller_id: uuid::Uuid::nil(),
+        changed: true,
+    })
+    .map_err(|error| error.to_string())
+}
+
+fn dynamic_overrides(
+    value: light_wire::v2::dynamics::DynamicInstanceOverridesProjection,
+) -> light_dynamics::DynamicInstanceOverrides {
+    light_dynamics::DynamicInstanceOverrides {
+        size: value.size,
+        speed_multiplier: light_dynamics::Rational {
+            numerator: value.speed_multiplier.numerator,
+            denominator: value.speed_multiplier.denominator,
+        },
+        phase_offset_degrees: value.phase_offset_degrees,
+    }
+}
+
+fn dynamic_timing(
+    value: light_wire::v2::dynamics::DynamicValueTimingProjection,
+) -> light_dynamics::DynamicValueTiming {
+    light_dynamics::DynamicValueTiming {
+        fade_millis: value.fade_millis,
+        delay_millis: value.delay_millis,
+    }
+}
+
+fn dispatch_command_line_replace(
+    state: &AppState,
+    request: CommandLineReplaceLiveActionRequest,
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+) -> ActionOutput {
+    let request = WsActionRequest {
+        request_id: context.request_id.clone().unwrap_or_default(),
+        payload: serde_json::json!({
+            "request_id":context.request_id,
+            "expected_revision":request.expected_revision,
+            "text":request.text,
+        }),
+    };
+    typed_programming(ws_programmer_command_line_replace(
+        state, &request, context, ports,
+    ))
+}
+
+fn dispatch_fixture_control(
+    state: &AppState,
+    session: &Session,
+    request: FixtureControlLiveActionRequest,
+    context: &light_application::ActionContext,
+) -> ActionOutput {
+    run_interaction(
+        state,
+        session,
+        context,
+        || match ws_programmer_control_action(state, session, &action_request(request, context)) {
+            Ok(result) => ActionOutput {
+                response: Ok(result.payload),
+            },
+            Err(error) => ActionOutput::plain(Err(error)),
+        },
+    )
 }
 
 fn action_request<T: serde::Serialize>(

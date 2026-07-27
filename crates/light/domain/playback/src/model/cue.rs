@@ -47,9 +47,20 @@ pub struct Cue {
     #[serde(default)]
     pub cue_only: bool,
     #[serde(default)]
-    pub phasers: Vec<AttributePhaser>,
-    #[serde(default)]
     pub group_changes: Vec<GroupCueChange>,
+    /// First-class Dynamic On/Off/FAT deltas. These track independently from ordinary static
+    /// values so a later AT updates Current without stopping or restarting a Dynamic.
+    #[serde(default)]
+    pub dynamic_changes: Vec<CueDynamicChange>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CueDynamicChange {
+    pub fixture_id: FixtureId,
+    pub attribute: AttributeKey,
+    pub value: light_dynamics::DynamicSemanticValue,
+    #[serde(default)]
+    pub automatic_restore: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -76,8 +87,8 @@ impl Cue {
             delay_millis: 0,
             trigger: CueTrigger::Manual,
             cue_only: false,
-            phasers: Vec::new(),
             group_changes: Vec::new(),
+            dynamic_changes: Vec::new(),
         }
     }
 }
@@ -191,8 +202,22 @@ pub(crate) fn cue_completion_millis(
             .unwrap_or(cue.delay_millis)
             .saturating_add(change.fade_millis.unwrap_or(cue_fade_millis))
     });
+    let dynamic_values = cue.dynamic_changes.iter().map(|change| {
+        let timing = match &change.value {
+            light_dynamics::DynamicSemanticValue::Static { timing, .. }
+            | light_dynamics::DynamicSemanticValue::DynamicOn { timing, .. }
+            | light_dynamics::DynamicSemanticValue::DynamicOff { timing, .. }
+            | light_dynamics::DynamicSemanticValue::FixAt { timing, .. } => *timing,
+            light_dynamics::DynamicSemanticValue::Release => Default::default(),
+        };
+        timing
+            .delay_millis
+            .unwrap_or(cue.delay_millis)
+            .saturating_add(timing.fade_millis.unwrap_or(cue_fade_millis))
+    });
     fixture_values
         .chain(group_values)
+        .chain(dynamic_values)
         .max()
         .unwrap_or_else(|| cue.delay_millis.saturating_add(cue_fade_millis))
 }
@@ -283,16 +308,6 @@ impl CueList {
                 if !addresses.insert(change.address()) {
                     return Err(format!(
                         "cue {} contains duplicate fixture attributes",
-                        cue.number
-                    ));
-                }
-            }
-            for attribute_phaser in &cue.phasers {
-                attribute_phaser.phaser.validate()?;
-                if attribute_phaser.fixture_ids.is_empty() && attribute_phaser.group_ids.is_empty()
-                {
-                    return Err(format!(
-                        "cue {} contains a phaser without fixtures",
                         cue.number
                     ));
                 }

@@ -214,6 +214,7 @@ fn cue_fixture_and_group_addresses_track_independently() {
     let list = cue_list(vec![first, cue(2.0, vec![])]);
     let target = target(&list, 1, Some(1));
     let programmer = ProgrammerUpdateContent {
+        dynamic_values: Vec::new(),
         fixture_values: vec![fixture_update(fixture, "intensity", 0.8, 1)],
         group_values: vec![ProgrammerGroupUpdate {
             group_id: "front".into(),

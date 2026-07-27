@@ -32,6 +32,12 @@ impl ProgrammingPreloadLifecyclePorts for ServerProgrammingPorts<'_> {
     }
 
     fn reconcile_preload_capture(&self, context: &ActionContext) {
+        let pinned = self
+            .state()
+            .programming
+            .capture_mode(self.session().id)
+            .is_some_and(|mode| mode.blind);
+        self.state().output.set_dynamic_definitions_pinned(pinned);
         <Self as ProgrammingPorts>::reconcile(
             self,
             context,
@@ -44,6 +50,14 @@ impl ProgrammingPreloadLifecyclePorts for ServerProgrammingPorts<'_> {
         context: &ActionContext,
         operation: &'static str,
     ) -> Option<String> {
+        match operation {
+            "preload.clear" => {
+                self.state().output.set_dynamic_definitions_pinned(false);
+                self.state().output.set_dynamic_definitions_pinned(true);
+            }
+            "preload.release" => self.state().output.set_dynamic_definitions_pinned(false),
+            _ => {}
+        }
         <Self as ProgrammingPorts>::persist(self, context, operation)
     }
 }

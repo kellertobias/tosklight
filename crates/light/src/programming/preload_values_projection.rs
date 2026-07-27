@@ -1,6 +1,7 @@
 use super::{ProgrammingPorts, ProgrammingService};
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use light_core::{SessionId, UserId};
+use light_dynamics::DynamicAddressValue;
 use light_programmer::{
     PreloadProgrammerFixtureValue, PreloadProgrammerGroupValue, PreloadProgrammerValuesContent,
     ProgrammerRegistry,
@@ -25,6 +26,7 @@ pub struct ProgrammingPreloadValuesProjection {
     pub revision: u64,
     pub fixture_values: Vec<PreloadProgrammerFixtureValue>,
     pub group_values: Vec<PreloadProgrammerGroupValue>,
+    pub dynamic_values: Vec<DynamicAddressValue>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -42,6 +44,7 @@ pub struct ProgrammingPreloadValuesSnapshot {
 pub(super) struct ProgrammingPreloadValuesContent {
     fixture_values: Vec<PreloadProgrammerFixtureValue>,
     group_values: Vec<PreloadProgrammerGroupValue>,
+    dynamic_values: Vec<DynamicAddressValue>,
 }
 
 impl ProgrammingPreloadValuesContent {
@@ -61,12 +64,14 @@ impl ProgrammingPreloadValuesContent {
         let PreloadProgrammerValuesContent {
             fixture_values,
             group_values,
+            dynamic_values,
         } = programmers
             .preload_pending_values(session)
             .ok_or_else(preload_values_unavailable)?;
         Ok(Self {
             fixture_values,
             group_values,
+            dynamic_values,
         })
     }
 
@@ -80,6 +85,7 @@ impl ProgrammingPreloadValuesContent {
             revision,
             fixture_values: self.fixture_values,
             group_values: self.group_values,
+            dynamic_values: self.dynamic_values,
         }
     }
 }

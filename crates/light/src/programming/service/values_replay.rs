@@ -205,6 +205,7 @@ mod tests {
         spread_len: usize,
     ) -> ProgrammingValuesResult {
         let projection = ProgrammingValuesProjection {
+            dynamic_values: Vec::new(),
             user_id,
             revision: 1,
             fixture_values: Vec::new(),

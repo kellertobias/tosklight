@@ -15,9 +15,9 @@ use light_fixture::{
 };
 use light_output::{DeliveryMode, OutputRoute};
 use light_playback::{
-    AttributePhaser, Cue, CueList, CueListMode, CueTrigger, FlashReleaseMode, GroupCueChange,
-    IntensityPriorityMode, Phaser, PhaserCurve, PhaserMode, PhaserStep, PlaybackButtonAction,
-    PlaybackDefinition, PlaybackFaderMode, PlaybackTarget, RestartMode, WrapMode,
+    Cue, CueList, CueListMode, CueTrigger, FlashReleaseMode, GroupCueChange, IntensityPriorityMode,
+    PlaybackButtonAction, PlaybackDefinition, PlaybackFaderMode, PlaybackTarget, RestartMode,
+    WrapMode,
 };
 use light_programmer::{GroupDefinition, ProgrammerRegistry};
 use std::{fs, net::SocketAddr, path::Path, sync::Arc};
@@ -294,9 +294,13 @@ pub fn build(
             total_slots,
         },
         programmers,
-        phaser_attribute: AttributeKey::intensity(),
-        phaser_overlaps_static_or_programmer: true,
+        dynamic_attribute: AttributeKey::intensity(),
+        dynamic_overlaps_static_or_programmer: true,
         programmer_assignment_fraction: "1/4 of physical fixtures",
+        dynamic: Some(super::scenario::BenchmarkDynamic::intensity(
+            &fixture_ids,
+            logical_start,
+        )),
     })
 }
 
@@ -397,12 +401,13 @@ fn demo_playback() -> (CueList, PlaybackDefinition) {
     let cue = Cue {
         id: fixed_uuid(0x84, 1),
         number: 1.0,
-        name: "Overlapping demo-show intensity and phaser".into(),
+        name: "Overlapping demo-show intensity and Dynamic".into(),
         changes: vec![],
         fade_millis: 0,
         delay_millis: 0,
         trigger: CueTrigger::Manual,
         cue_only: false,
+        dynamic_changes: vec![],
         group_changes: vec![GroupCueChange {
             group_id: GROUP_ID.into(),
             attribute: AttributeKey::intensity(),
@@ -410,30 +415,6 @@ fn demo_playback() -> (CueList, PlaybackDefinition) {
             automatic_restore: false,
             fade_millis: None,
             delay_millis: None,
-        }],
-        phasers: vec![AttributePhaser {
-            fixture_ids: vec![],
-            group_ids: vec![GROUP_ID.into()],
-            attribute: AttributeKey::intensity(),
-            phaser: Phaser {
-                mode: PhaserMode::Absolute,
-                steps: vec![
-                    PhaserStep {
-                        position: 0.0,
-                        value: 0.1,
-                        curve_to_next: PhaserCurve::Linear,
-                    },
-                    PhaserStep {
-                        position: 0.5,
-                        value: 0.9,
-                        curve_to_next: PhaserCurve::Linear,
-                    },
-                ],
-                cycles_per_minute: 600.0,
-                phase_start_degrees: 0.0,
-                phase_end_degrees: 360.0,
-                width: 1.0,
-            },
         }],
     };
     let cue_list = CueList {

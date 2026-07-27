@@ -47,6 +47,9 @@ pub fn prepare_normalized_show_candidate_incremental(
         match kind {
             "patched_fixture" => dirty.fixtures = true,
             "cue_list" => dirty.cue_lists = true,
+            "dynamic" => dirty.dynamics = true,
+            "preset" => dirty.presets = true,
+            "stage_layout" => dirty.stage_layouts = true,
             "playback" => dirty.playbacks = true,
             "playback_page" => dirty.playback_pages = true,
             "route" => dirty.routes = true,

@@ -225,10 +225,10 @@ fn run_scenario(
             playback_group_cue_changes: true,
             programmer_fixture_values: true,
             static_group_programming: true,
-            playback_attribute_phaser: true,
-            phaser_attribute: scenario.phaser_attribute.0.clone(),
-            phaser_attribute_has_static_or_programmer_value: scenario
-                .phaser_overlaps_static_or_programmer,
+            playback_attribute_dynamic: true,
+            dynamic_attribute: scenario.dynamic_attribute.0.clone(),
+            dynamic_attribute_has_static_or_programmer_value: scenario
+                .dynamic_overlaps_static_or_programmer,
             programmer_assignment_fraction: scenario.programmer_assignment_fraction,
             sampled_replacement_diagnostic_batches: diagnostic_batches.len(),
             sampled_replacement_diagnostic_samples: diagnostic_samples,
@@ -338,10 +338,14 @@ fn run_tick(
     scenario.clock.set(logical_time);
     let total_started = Instant::now();
     let render_started = Instant::now();
-    let rendered = scenario
-        .engine
-        .render(Default::default())
-        .map_err(|error| format!("render benchmark frame: {error}"))?;
+    let dynamic = scenario.dynamic_batch(logical_time);
+    let rendered = match dynamic.as_ref() {
+        Some(dynamic) => scenario
+            .engine
+            .render_with_contribution_batches(Default::default(), std::slice::from_ref(dynamic)),
+        None => scenario.engine.render(Default::default()),
+    }
+    .map_err(|error| format!("render benchmark frame: {error}"))?;
     let render = render_started.elapsed();
     let encode_started = Instant::now();
     let packets = encode_routes(

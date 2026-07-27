@@ -114,6 +114,14 @@ pub struct RuntimeAttributeDescriptor {
     pub family: String,
     pub value_type: String,
     pub default_unit: Option<String>,
+    pub display_unit: Option<String>,
+    pub physical_unit: Option<String>,
+    pub normalized_min: Option<f32>,
+    pub normalized_max: Option<f32>,
+    pub domain_min: Option<f32>,
+    pub domain_max: Option<f32>,
+    pub cyclic: bool,
+    pub recordable: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

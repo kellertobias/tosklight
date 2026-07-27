@@ -6,6 +6,9 @@ pub const MIN_SOUND_MULTIPLIER: f64 = 0.125;
 pub const MAX_SOUND_MULTIPLIER: f64 = 8.0;
 pub const MAX_SPEED_MASTER_SCALE: f64 = 4.0;
 pub(super) const MAX_LEARN_INTERVALS: usize = 4;
+pub(super) const FAST_LEARN_RESET_MILLIS: u64 = 10_000;
+pub(super) const SLOW_LEARN_RESET_MILLIS: u64 = 30_000;
+pub(super) const SLOW_LEARN_THRESHOLD_BPM: f64 = 10.0;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

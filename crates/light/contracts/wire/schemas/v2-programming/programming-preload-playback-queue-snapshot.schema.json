@@ -29,15 +29,47 @@
       ]
     },
     "ProgrammingPreloadPlaybackAction": {
-      "type": "string",
-      "enum": [
-        "toggle",
-        "go",
-        "back",
-        "off",
-        "on",
-        "temporary_on",
-        "temporary_off"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "toggle",
+            "go",
+            "back",
+            "off",
+            "on",
+            "temporary_on",
+            "temporary_off",
+            "dynamic_pause",
+            "dynamic_restart",
+            "dynamic_double_speed",
+            "dynamic_half_speed",
+            "dynamic_learn_speed"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fader": {
+              "type": "object",
+              "properties": {
+                "value_permyriad": {
+                  "type": "integer",
+                  "format": "uint16",
+                  "maximum": 65535,
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "value_permyriad"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "fader"
+          ]
+        }
       ]
     },
     "ProgrammingPreloadPlaybackQueueItem": {

@@ -117,31 +117,6 @@ fn priority_then_htp_resolution() {
 }
 
 #[test]
-fn phaser_interpolates_and_distributes_phase() {
-    let phaser = Phaser {
-        mode: PhaserMode::Absolute,
-        steps: vec![
-            PhaserStep {
-                position: 0.0,
-                value: 0.0,
-                curve_to_next: PhaserCurve::Linear,
-            },
-            PhaserStep {
-                position: 0.5,
-                value: 1.0,
-                curve_to_next: PhaserCurve::Linear,
-            },
-        ],
-        cycles_per_minute: 60.0,
-        phase_start_degrees: 0.0,
-        phase_end_degrees: 180.0,
-        width: 1.0,
-    };
-    assert!((phaser.sample(0.25, 0, 2) - 0.5).abs() < 0.001);
-    assert!((phaser.sample(0.0, 1, 2) - 1.0).abs() < 0.001);
-}
-
-#[test]
 fn fades_from_zero_and_between_tracked_states() {
     let fixture = FixtureId::new();
     let mut first = Cue::new(1.0);

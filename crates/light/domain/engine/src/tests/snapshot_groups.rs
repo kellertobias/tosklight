@@ -112,6 +112,8 @@ fn unpatched_group_member_keeps_programming_but_outputs_no_dmx() {
     let snapshot = |unpatched_fixture: PatchedFixture| EngineSnapshot {
         fixtures: vec![patched.clone(), unpatched_fixture].into(),
         cue_lists: vec![].into(),
+        dynamics: vec![].into(),
+        dynamic_stage_positions: Default::default(),
         playbacks: vec![].into(),
         playback_pages: vec![].into(),
         routes: vec![].into(),

@@ -1,7 +1,9 @@
 use crate::{ActionContext, ApplicationCommand, CommandFamily};
 use light_core::FixtureId;
 use light_programmer::command_line::{CommandKey, CommandKeyPhase};
-use light_programmer::{CommandLineState, CueMoveCopyChoice, ProgrammerSelection, SelectionRule};
+use light_programmer::{
+    CommandLineState, PendingCommandChoice, ProgrammerSelection, SelectionRule,
+};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ExecutionPolicy {
@@ -102,7 +104,7 @@ pub enum ProgrammingOutcome {
         warning: Option<String>,
     },
     ChoiceRequired {
-        pending_choice: CueMoveCopyChoice,
+        pending_choice: PendingCommandChoice,
     },
     Rejected {
         error: String,

@@ -9,6 +9,7 @@ members = [
   "crates/light/adapters/media",
   "crates/light/contracts/wire",
   "crates/light/domain/control",
+  "crates/light/domain/dynamics",
   "crates/light/domain/engine",
   "crates/light/domain/output",
   "crates/light/domain/playback",

@@ -5,6 +5,7 @@ mod capture_mode;
 mod command_choice;
 mod command_state;
 mod cue_recording;
+mod dynamic_values;
 mod fixture_value_batch;
 mod group_recording;
 mod groups;
@@ -29,7 +30,8 @@ pub mod command_line;
 
 pub use capture_mode::ProgrammerCaptureMode;
 pub use command_choice::{
-    CueMoveCopyChoice, CueTransferOperation, ProgrammingChoiceOption, ProgrammingChoiceOptionId,
+    CueMoveCopyChoice, CueTransferOperation, DynamicInstanceChoice, DynamicInstanceChoiceOption,
+    PendingCommandChoice, ProgrammingChoiceOption, ProgrammingChoiceOptionId,
 };
 pub use command_state::{
     CommandLineReplaceError, CommandLineState, CommandTarget, ProgrammerInteractionContextVersion,
@@ -39,6 +41,7 @@ pub use cue_recording::{
     CueRecordingCapture, CueRecordingCaptureError, CueRecordingCapturedSource,
     CueRecordingFixtureValue, CueRecordingGroupValue, CueRecordingSource,
 };
+pub use dynamic_values::DynamicProgrammerValueMutation;
 pub use group_recording::{GroupRecordingCapture, group_delete_blocker};
 pub use groups::{
     DerivedGroup, FrozenGroup, GroupDefinition, GroupProgrammerValue,

@@ -109,6 +109,11 @@ pub(super) fn projection_from_application(
             .map(fixture_value)
             .collect(),
         group_values: projection.group_values.iter().map(group_value).collect(),
+        dynamic_values: projection
+            .dynamic_values
+            .iter()
+            .map(super::dynamics_wire::programming_value)
+            .collect(),
     }
 }
 

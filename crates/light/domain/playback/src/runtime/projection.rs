@@ -1,6 +1,73 @@
 use crate::*;
 
 impl PlaybackEngine {
+    /// Folds the first-class Dynamic layer through each active Cuelist's current Cue.
+    ///
+    /// Dynamic tracking is deliberately independent from the compiled ordinary-value track.
+    /// Release removes only its matching scalar track; Dynamic Off remains tracked so a later
+    /// Cue-only restoration can deliberately reveal the previous state.
+    pub fn active_cue_dynamic_values(&self) -> Vec<ActiveCueDynamicValue> {
+        let mut projected = Vec::new();
+        for playback in self.active.values().filter(|playback| playback.enabled) {
+            let Some(cue_list) = self.cue_lists.get(&playback.cue_list_id) else {
+                continue;
+            };
+            let Some(current_index) = current_cue_index(playback, cue_list) else {
+                continue;
+            };
+            let mut tracked = Vec::<(
+                (FixtureId, AttributeKey, Option<Uuid>),
+                light_dynamics::DynamicSemanticValue,
+            )>::new();
+            for cue in cue_list.cues.iter().take(current_index + 1) {
+                for change in &cue.dynamic_changes {
+                    let instance_link = match &change.value {
+                        light_dynamics::DynamicSemanticValue::DynamicOn {
+                            instance_link, ..
+                        }
+                        | light_dynamics::DynamicSemanticValue::DynamicOff {
+                            instance_link, ..
+                        } => Some(*instance_link),
+                        light_dynamics::DynamicSemanticValue::Static { .. }
+                        | light_dynamics::DynamicSemanticValue::FixAt { .. }
+                        | light_dynamics::DynamicSemanticValue::Release => None,
+                    };
+                    let address = (change.fixture_id, change.attribute.clone(), instance_link);
+                    if matches!(change.value, light_dynamics::DynamicSemanticValue::Release) {
+                        tracked.retain(|(candidate, _)| candidate != &address);
+                    } else if let Some((_, value)) = tracked
+                        .iter_mut()
+                        .find(|(candidate, _)| candidate == &address)
+                    {
+                        *value = change.value.clone();
+                    } else {
+                        tracked.push((address, change.value.clone()));
+                    }
+                }
+            }
+            let current_cue = &cue_list.cues[current_index];
+            let changed_at_millis =
+                u64::try_from(playback.activated_at.timestamp_millis()).unwrap_or_default();
+            projected.extend(
+                tracked
+                    .into_iter()
+                    .map(
+                        |((fixture_id, attribute, _), value)| ActiveCueDynamicValue {
+                            playback_number: playback.playback_number,
+                            cue_list_id: cue_list.id,
+                            current_cue_id: current_cue.id,
+                            priority: cue_list.priority,
+                            changed_at_millis,
+                            fixture_id,
+                            attribute,
+                            value,
+                        },
+                    ),
+            );
+        }
+        projected
+    }
+
     pub fn runtime_status(&self) -> Vec<PlaybackRuntimeStatus> {
         let mut runtime = self.runtime();
         for ((number, _), temporary) in &self.temporary {

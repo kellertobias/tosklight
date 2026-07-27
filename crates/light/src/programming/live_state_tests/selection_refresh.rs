@@ -188,7 +188,7 @@ fn shared_interaction_refresh_publishes_pending_choice_invalidation_once_per_des
         assert!(registry.attach_command_context(session, SessionId(desk)));
         registry.set_pending_command_choice(
             session,
-            Some(CueMoveCopyChoice {
+            Some(PendingCommandChoice::CueMoveCopy(CueMoveCopyChoice {
                 choice_id: uuid::Uuid::from_u128(1),
                 show_id: uuid::Uuid::from_u128(2),
                 show_revision: 3,
@@ -196,7 +196,7 @@ fn shared_interaction_refresh_publishes_pending_choice_invalidation_once_per_des
                 command: "COPY SET 1 CUE 1 AT SET 2 CUE 2".into(),
                 options: Vec::new(),
                 cancel_label: "Cancel".into(),
-            }),
+            })),
         );
     }
     let events = EventBus::new(8);

@@ -78,6 +78,14 @@ pub(super) fn attribute(
         family: attribute_class(descriptor.family).into(),
         value_type: attribute_value_type(descriptor.value_type).into(),
         default_unit: descriptor.default_unit.map(str::to_owned),
+        display_unit: descriptor.display_unit.map(str::to_owned),
+        physical_unit: descriptor.physical_unit.map(str::to_owned),
+        normalized_min: descriptor.normalized_bounds.map(|bounds| bounds.min),
+        normalized_max: descriptor.normalized_bounds.map(|bounds| bounds.max),
+        domain_min: descriptor.domain_bounds.map(|bounds| bounds.min),
+        domain_max: descriptor.domain_bounds.map(|bounds| bounds.max),
+        cyclic: descriptor.cyclic,
+        recordable: descriptor.recordable,
     }
 }
 
@@ -116,8 +124,10 @@ const fn attribute_class(value: light_core::AttributeClass) -> &'static str {
         light_core::AttributeClass::Position => "position",
         light_core::AttributeClass::Color => "color",
         light_core::AttributeClass::Beam => "beam",
+        light_core::AttributeClass::Shapers => "shapers",
         light_core::AttributeClass::Focus => "focus",
         light_core::AttributeClass::Control => "control",
+        light_core::AttributeClass::Media => "media",
         light_core::AttributeClass::Custom => "custom",
     }
 }

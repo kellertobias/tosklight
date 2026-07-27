@@ -5,6 +5,7 @@ pub struct PlaybackEngine {
     pub(crate) cue_lists: HashMap<CueListId, CueList>,
     pub(crate) compiled_cue_lists: HashMap<CueListId, Arc<CompiledCueList>>,
     pub(crate) active: HashMap<PlaybackKey, ActivePlayback>,
+    pub(crate) active_dynamics: HashMap<u16, ActiveDynamicPlayback>,
     pub(crate) temporary: HashMap<(u16, TemporaryPlaybackKind), ActivePlayback>,
     pub(crate) swap_held: HashSet<u16>,
     pub(crate) dynamics_paused_at: Option<DateTime<Utc>>,
@@ -28,6 +29,7 @@ impl PlaybackEngine {
             cue_lists: HashMap::new(),
             compiled_cue_lists: HashMap::new(),
             active: HashMap::new(),
+            active_dynamics: HashMap::new(),
             temporary: HashMap::new(),
             swap_held: HashSet::new(),
             dynamics_paused_at: None,
@@ -96,23 +98,7 @@ impl PlaybackEngine {
         let now = self.clock.now();
         match (paused, self.dynamics_paused_at) {
             (true, None) => self.dynamics_paused_at = Some(now),
-            (false, Some(paused_at)) => {
-                let shift_timestamp = |timestamp: &mut DateTime<Utc>| {
-                    if *timestamp <= paused_at {
-                        *timestamp += now - paused_at;
-                    } else {
-                        *timestamp = now;
-                    }
-                };
-                for playback in self.active.values_mut().chain(self.temporary.values_mut()) {
-                    shift_timestamp(&mut playback.activated_at);
-                    if let Some(paused) = &mut playback.paused_at {
-                        shift_timestamp(paused);
-                    }
-                    if let Some(transition) = &mut playback.master_transition {
-                        shift_timestamp(&mut transition.started_at);
-                    }
-                }
+            (false, Some(_)) => {
                 self.dynamics_paused_at = None;
             }
             _ => {}

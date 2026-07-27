@@ -1,14 +1,13 @@
 use crate::*;
 
 mod attributes;
-mod phasers;
 mod state;
 
 use state::PlaybackFrame;
 
 struct ContributionContext<'a> {
     engine: &'a PlaybackEngine,
-    dynamics_now: DateTime<Utc>,
+    now: DateTime<Utc>,
     is_snap: &'a dyn Fn(FixtureId, &AttributeKey) -> bool,
 }
 
@@ -45,7 +44,7 @@ impl PlaybackEngine {
     ) -> Vec<PlaybackContribution> {
         ContributionContext {
             engine: self,
-            dynamics_now: self.dynamics_paused_at.unwrap_or(now),
+            now,
             is_snap: &is_snap,
         }
         .build()
@@ -97,7 +96,6 @@ impl ContributionContext<'_> {
             snap_sequence_master,
         );
         self.extend_attributes(values, &frame);
-        self.extend_phasers(values, &frame);
     }
 }
 

@@ -120,15 +120,17 @@ async fn active_show_install_clears_each_desk_pending_choice_once() {
         scenario.state.programming.complete_command_execution(
             session.id,
             Some(command),
-            Some(light_application::CueMoveCopyChoice {
-                choice_id: uuid::Uuid::from_u128(1),
-                show_id: uuid::Uuid::from_u128(2),
-                show_revision: 3,
-                operation: light_application::CueTransferOperation::Copy,
-                command: command.into(),
-                options: Vec::new(),
-                cancel_label: "Cancel".into(),
-            }),
+            Some(light_application::PendingCommandChoice::CueMoveCopy(
+                light_application::CueMoveCopyChoice {
+                    choice_id: uuid::Uuid::from_u128(1),
+                    show_id: uuid::Uuid::from_u128(2),
+                    show_revision: 3,
+                    operation: light_application::CueTransferOperation::Copy,
+                    command: command.into(),
+                    options: Vec::new(),
+                    cancel_label: "Cancel".into(),
+                },
+            )),
         );
     }
     let before = scenario.state.events.latest_sequence();

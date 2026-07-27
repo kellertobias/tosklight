@@ -1,4 +1,5 @@
 use super::*;
+use light_dynamics::{DynamicSemanticValue, DynamicValueTiming};
 
 fn fixture_change(fixture_id: FixtureId, attribute: &str, value: f32) -> CueChange {
     CueChange::set(
@@ -33,6 +34,18 @@ fn cue(number: f64, name: &str, changes: Vec<CueChange>) -> Cue {
     cue
 }
 
+fn fixed_at(fixture_id: FixtureId, value: f32) -> CueDynamicChange {
+    CueDynamicChange {
+        fixture_id,
+        attribute: AttributeKey::intensity(),
+        value: DynamicSemanticValue::FixAt {
+            value,
+            timing: DynamicValueTiming::default(),
+        },
+        automatic_restore: false,
+    }
+}
+
 fn cue_list(cues: Vec<Cue>) -> CueList {
     CueList {
         id: CueListId::new(),
@@ -51,26 +64,6 @@ fn cue_list(cues: Vec<Cue>) -> CueList {
         chaser_xfade_percent: Some(0),
         speed_multiplier: 1.0,
         cues,
-    }
-}
-
-fn phaser(fixture_id: FixtureId) -> AttributePhaser {
-    AttributePhaser {
-        fixture_ids: vec![fixture_id],
-        group_ids: vec![],
-        attribute: AttributeKey("pan".into()),
-        phaser: Phaser {
-            mode: PhaserMode::Absolute,
-            steps: vec![PhaserStep {
-                position: 0.0,
-                value: 0.5,
-                curve_to_next: PhaserCurve::Linear,
-            }],
-            cycles_per_minute: 60.0,
-            phase_start_degrees: 0.0,
-            phase_end_degrees: 0.0,
-            width: 1.0,
-        },
     }
 }
 
@@ -167,8 +160,6 @@ fn new_recording_and_playback_use_backend_canonical_defaults_and_explicit_zeroes
     assert_eq!(first.fade_millis, 0);
     assert_eq!(first.delay_millis, 0);
     assert_eq!(first.trigger, CueTrigger::Follow { delay_millis: 0 });
-    assert!(first.phasers.is_empty());
-
     let playback = PlaybackDefinition::new_cue_list(7, "Cuelist 7", cue_list_id);
     assert_eq!(
         playback.buttons,
@@ -183,7 +174,7 @@ fn new_recording_and_playback_use_backend_canonical_defaults_and_explicit_zeroes
 }
 
 #[test]
-fn overwrite_preserves_existing_identity_and_name_but_clears_phasers() {
+fn overwrite_preserves_existing_identity_and_name() {
     let fixture = FixtureId::new();
     let mut target = cue(2.5, "Keep", vec![fixture_change(fixture, "pan", 0.2)]);
     let target_id = target.id;
@@ -191,7 +182,6 @@ fn overwrite_preserves_existing_identity_and_name_but_clears_phasers() {
     target.delay_millis = 900;
     target.trigger = CueTrigger::Wait { delay_millis: 50 };
     target.cue_only = true;
-    target.phasers = vec![phaser(fixture)];
     let list = cue_list(vec![cue(1.0, "First", vec![]), target]);
 
     let plan = list
@@ -209,7 +199,6 @@ fn overwrite_preserves_existing_identity_and_name_but_clears_phasers() {
     assert_eq!(stored.delay_millis, 0);
     assert_eq!(stored.trigger, CueTrigger::Manual);
     assert!(!stored.cue_only);
-    assert!(stored.phasers.is_empty());
 
     let named_recording = plan
         .cue_list
@@ -253,7 +242,7 @@ fn missing_overwrite_inserts_in_decimal_numeric_order() {
 }
 
 #[test]
-fn merge_replaces_only_source_addresses_and_preserves_metadata_and_phasers() {
+fn merge_replaces_only_source_addresses_and_preserves_metadata() {
     let fixtures = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
     let mut target = cue(
         2.0,
@@ -265,9 +254,7 @@ fn merge_replaces_only_source_addresses_and_preserves_metadata_and_phasers() {
     );
     target.fade_millis = 2_000;
     target.cue_only = true;
-    target.phasers = vec![phaser(fixtures[0])];
     let target_id = target.id;
-    let phasers = target.phasers.clone();
     let list = cue_list(vec![cue(1.0, "First", vec![]), target]);
     let recorded = CueRecordingContent {
         changes: vec![
@@ -289,7 +276,6 @@ fn merge_replaces_only_source_addresses_and_preserves_metadata_and_phasers() {
     assert_eq!(stored.name, "Old");
     assert_eq!(stored.fade_millis, 2_000);
     assert!(stored.cue_only);
-    assert_eq!(stored.phasers, phasers);
     assert_eq!(stored.changes.len(), 3);
     assert_eq!(stored.changes[0].fixture_id, fixtures[0]);
     assert_eq!(stored.changes[1].fixture_id, fixtures[1]);
@@ -324,7 +310,7 @@ fn missing_explicit_merge_and_subtract_are_rejected() {
 #[test]
 fn subtract_is_sparse_and_empty_source_deletes_except_for_the_only_cue() {
     let fixtures = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
-    let mut target = cue(
+    let target = cue(
         2.0,
         "Target",
         vec![
@@ -332,7 +318,6 @@ fn subtract_is_sparse_and_empty_source_deletes_except_for_the_only_cue() {
             fixture_change(fixtures[1], "pan", 0.2),
         ],
     );
-    target.phasers = vec![phaser(fixtures[0])];
     let target_id = target.id;
     let list = cue_list(vec![cue(1.0, "First", vec![]), target]);
 
@@ -353,7 +338,6 @@ fn subtract_is_sparse_and_empty_source_deletes_except_for_the_only_cue() {
     assert!(subtracted.changed);
     assert_eq!(subtracted.cue_list.cues[1].changes.len(), 1);
     assert_eq!(subtracted.cue_list.cues[1].id, target_id);
-    assert_eq!(subtracted.cue_list.cues[1].phasers.len(), 1);
 
     let deleted = list
         .plan_recording(
@@ -413,10 +397,9 @@ fn unmatched_subtract_does_not_reorder_existing_automatic_restorations() {
 }
 
 #[test]
-fn merge_active_preserves_phasers_or_appends_when_no_cue_is_active() {
+fn merge_active_updates_the_active_cue_or_appends_when_no_cue_is_active() {
     let fixtures = [FixtureId::new(), FixtureId::new()];
-    let mut target = cue(1.0, "Active", vec![fixture_change(fixtures[0], "pan", 0.1)]);
-    target.phasers = vec![phaser(fixtures[0])];
+    let target = cue(1.0, "Active", vec![fixture_change(fixtures[0], "pan", 0.1)]);
     let target_id = target.id;
     let list = cue_list(vec![target]);
 
@@ -429,7 +412,6 @@ fn merge_active_preserves_phasers_or_appends_when_no_cue_is_active() {
         )
         .unwrap();
     assert_eq!(merged.cue_list.cues.len(), 1);
-    assert_eq!(merged.cue_list.cues[0].phasers.len(), 1);
 
     let appended = merged
         .cue_list
@@ -616,4 +598,36 @@ fn cue_only_restoration_is_regenerated_after_delete() {
     assert!(deleted.deleted);
     assert_eq!(deleted.cue_list.cues.len(), 2);
     assert!(deleted.cue_list.cues[1].changes.is_empty());
+}
+
+#[test]
+fn cue_only_dynamic_layer_restores_prior_fat_without_touching_static_tracking() {
+    let fixture = FixtureId::new();
+    let mut baseline = cue(
+        1.0,
+        "Baseline",
+        vec![fixture_change(fixture, "intensity", 0.3)],
+    );
+    baseline.dynamic_changes = vec![fixed_at(fixture, 0.4)];
+    let cue_only = cue(2.0, "Cue only", vec![]);
+    let following = cue(3.0, "Following", vec![]);
+    let list = cue_list(vec![baseline, cue_only, following]);
+    let recording = CueRecordingContent {
+        dynamic_changes: vec![fixed_at(fixture, 0.8)],
+        cue_only: true,
+        ..Default::default()
+    };
+
+    let plan = list
+        .plan_recording(recording, CueRecordOperation::Overwrite { cue_number: 2.0 })
+        .unwrap();
+
+    assert_eq!(plan.cue_list.cues[0].changes.len(), 1);
+    let restore = &plan.cue_list.cues[2].dynamic_changes;
+    assert_eq!(restore.len(), 1);
+    assert!(restore[0].automatic_restore);
+    assert!(matches!(
+        restore[0].value,
+        DynamicSemanticValue::FixAt { value: 0.4, .. }
+    ));
 }

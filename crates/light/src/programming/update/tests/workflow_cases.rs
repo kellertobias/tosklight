@@ -100,6 +100,7 @@ fn preview_preserves_global_programmer_order_across_fixture_and_group_values() {
     let list = cue_list(vec![cue(1.0, vec![])]);
     let target = target(&list, 0, Some(1));
     let programmer = ProgrammerUpdateContent {
+        dynamic_values: Vec::new(),
         fixture_values: vec![fixture_update(fixture, "intensity", 0.8, 2)],
         group_values: vec![ProgrammerGroupUpdate {
             group_id: "front".into(),

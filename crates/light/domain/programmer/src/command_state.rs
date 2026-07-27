@@ -1,4 +1,4 @@
-use crate::{CueMoveCopyChoice, ProgrammerCaptureMode, ProgrammerRegistry, ProgrammerSelection};
+use crate::{PendingCommandChoice, ProgrammerCaptureMode, ProgrammerRegistry, ProgrammerSelection};
 use light_core::SessionId;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -44,7 +44,7 @@ pub struct CommandLineState {
     pub pristine: bool,
     pub revision: u64,
     #[serde(skip)]
-    pub pending_choice: Option<Arc<CueMoveCopyChoice>>,
+    pub pending_choice: Option<Arc<PendingCommandChoice>>,
 }
 
 impl Default for CommandLineState {
@@ -300,7 +300,7 @@ impl ProgrammerRegistry {
     pub fn set_pending_command_choice(
         &self,
         session: SessionId,
-        pending_choice: Option<CueMoveCopyChoice>,
+        pending_choice: Option<PendingCommandChoice>,
     ) -> Option<CommandLineState> {
         self.complete_command_execution(session, None, pending_choice)
     }
@@ -310,7 +310,7 @@ impl ProgrammerRegistry {
         &self,
         session: SessionId,
         final_text: Option<&str>,
-        pending_choice: Option<CueMoveCopyChoice>,
+        pending_choice: Option<PendingCommandChoice>,
     ) -> Option<CommandLineState> {
         let mutation_gate = self.mutation_gate(session);
         let _mutation_guard = mutation_gate.lock();

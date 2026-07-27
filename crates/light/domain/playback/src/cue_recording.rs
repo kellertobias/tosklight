@@ -15,6 +15,7 @@ pub struct CueRecordingTiming {
 pub struct CueRecordingContent {
     pub changes: Vec<CueChange>,
     pub group_changes: Vec<GroupCueChange>,
+    pub dynamic_changes: Vec<CueDynamicChange>,
     pub timing: CueRecordingTiming,
     pub cue_only: bool,
     /// Names apply only when creating a Cue; recording never renames an existing Cue.
@@ -23,7 +24,7 @@ pub struct CueRecordingContent {
 
 impl CueRecordingContent {
     pub fn is_empty(&self) -> bool {
-        self.changes.is_empty() && self.group_changes.is_empty()
+        self.changes.is_empty() && self.group_changes.is_empty() && self.dynamic_changes.is_empty()
     }
 }
 
@@ -177,7 +178,7 @@ fn overwrite(
     let cue = &mut cue_list.cues[index];
     cue.changes = content.changes;
     cue.group_changes = content.group_changes;
-    cue.phasers.clear();
+    cue.dynamic_changes = content.dynamic_changes;
     cue.fade_millis = content.timing.fade_millis.unwrap_or(0);
     cue.delay_millis = 0;
     cue.trigger = trigger(content.timing.delay_millis);
@@ -216,6 +217,7 @@ fn merge_active(
 fn merge_at(cue: &mut Cue, content: CueRecordingContent) -> AppliedTarget {
     merge_fixture_changes(&mut cue.changes, content.changes);
     merge_group_changes(&mut cue.group_changes, content.group_changes);
+    merge_dynamic_changes(&mut cue.dynamic_changes, content.dynamic_changes);
     stored_target(cue, false)
 }
 
@@ -232,6 +234,7 @@ fn subtract(
     let cue = &mut cue_list.cues[index];
     subtract_fixture_changes(&mut cue.changes, &content.changes);
     subtract_group_changes(&mut cue.group_changes, &content.group_changes);
+    subtract_dynamic_changes(&mut cue.dynamic_changes, &content.dynamic_changes);
     Ok(stored_target(cue, false))
 }
 
@@ -253,6 +256,7 @@ fn new_cue(content: CueRecordingContent, cue_number: f64) -> Cue {
     cue.name = content.name.unwrap_or_default();
     cue.changes = content.changes;
     cue.group_changes = content.group_changes;
+    cue.dynamic_changes = content.dynamic_changes;
     cue.fade_millis = content.timing.fade_millis.unwrap_or(0);
     cue.trigger = trigger(content.timing.delay_millis);
     cue.cue_only = content.cue_only;
@@ -308,7 +312,21 @@ fn require_values(content: &CueRecordingContent) -> Result<(), CueRecordingPlanE
 
 fn validate_content(content: &CueRecordingContent) -> Result<(), CueRecordingPlanError> {
     validate_fixture_changes(&content.changes)?;
-    validate_group_changes(&content.group_changes)
+    validate_group_changes(&content.group_changes)?;
+    validate_dynamic_changes(&content.dynamic_changes)
+}
+
+fn validate_dynamic_changes(changes: &[CueDynamicChange]) -> Result<(), CueRecordingPlanError> {
+    let mut addresses = HashSet::new();
+    for change in changes {
+        if change.automatic_restore {
+            return Err(CueRecordingPlanError::SourceContainsAutomaticRestore);
+        }
+        if !addresses.insert(dynamic_change_key(change)) {
+            return Err(CueRecordingPlanError::DuplicateFixtureAddress);
+        }
+    }
+    Ok(())
 }
 
 fn validate_fixture_changes(changes: &[CueChange]) -> Result<(), CueRecordingPlanError> {
@@ -365,6 +383,15 @@ fn merge_group_changes(stored: &mut Vec<GroupCueChange>, incoming: Vec<GroupCueC
     stored.extend(incoming);
 }
 
+fn merge_dynamic_changes(stored: &mut Vec<CueDynamicChange>, incoming: Vec<CueDynamicChange>) {
+    let addresses = incoming
+        .iter()
+        .map(dynamic_change_key)
+        .collect::<HashSet<_>>();
+    stored.retain(|change| !addresses.contains(&dynamic_change_key(change)));
+    stored.extend(incoming);
+}
+
 fn subtract_fixture_changes(stored: &mut Vec<CueChange>, incoming: &[CueChange]) {
     let addresses = incoming
         .iter()
@@ -380,4 +407,25 @@ fn subtract_group_changes(stored: &mut Vec<GroupCueChange>, incoming: &[GroupCue
         .collect::<HashSet<_>>();
     stored
         .retain(|change| !addresses.contains(&(change.group_id.clone(), change.attribute.clone())));
+}
+
+fn subtract_dynamic_changes(stored: &mut Vec<CueDynamicChange>, incoming: &[CueDynamicChange]) {
+    let addresses = incoming
+        .iter()
+        .map(dynamic_change_key)
+        .collect::<HashSet<_>>();
+    stored.retain(|change| !addresses.contains(&dynamic_change_key(change)));
+}
+
+fn dynamic_change_key(change: &CueDynamicChange) -> (FixtureId, AttributeKey, Option<Uuid>) {
+    let instance_link = match &change.value {
+        light_dynamics::DynamicSemanticValue::DynamicOn { instance_link, .. }
+        | light_dynamics::DynamicSemanticValue::DynamicOff { instance_link, .. } => {
+            Some(*instance_link)
+        }
+        light_dynamics::DynamicSemanticValue::Static { .. }
+        | light_dynamics::DynamicSemanticValue::FixAt { .. }
+        | light_dynamics::DynamicSemanticValue::Release => None,
+    };
+    (change.fixture_id, change.attribute.clone(), instance_link)
 }

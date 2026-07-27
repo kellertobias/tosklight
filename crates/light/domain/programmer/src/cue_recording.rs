@@ -1,5 +1,6 @@
 use crate::{GroupProgrammerValue, ProgrammerRegistry, ProgrammerState};
 use light_core::{AttributeKey, AttributeValue, FixtureId, SessionId, TimedValue};
+use light_dynamics::DynamicAddressValue;
 use serde::Serialize;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -60,11 +61,14 @@ pub struct CueRecordingCapture {
     pub source: CueRecordingCapturedSource,
     pub fixture_values: Vec<CueRecordingFixtureValue>,
     pub group_values: Vec<CueRecordingGroupValue>,
+    pub dynamic_values: Vec<DynamicAddressValue>,
 }
 
 impl CueRecordingCapture {
     pub fn is_empty(&self) -> bool {
-        self.fixture_values.is_empty() && self.group_values.is_empty()
+        self.fixture_values.is_empty()
+            && self.group_values.is_empty()
+            && self.dynamic_values.is_empty()
     }
 
     pub fn used_active_preload_fallback(&self) -> bool {
@@ -95,11 +99,12 @@ impl ProgrammerRegistry {
 
 fn capture(state: &ProgrammerState, requested: CueRecordingSource) -> CueRecordingCapture {
     let source = captured_source(state, requested);
-    let (fixture_values, group_values) = source_values(state, source);
+    let (fixture_values, group_values, dynamic_values) = source_values(state, source);
     CueRecordingCapture {
         source,
         fixture_values: ordered_fixture_values(fixture_values),
         group_values: ordered_group_values(group_values),
+        dynamic_values: ordered_dynamic_values(dynamic_values),
     }
 }
 
@@ -123,11 +128,15 @@ fn captured_source(
 }
 
 fn has_pending_preload(state: &ProgrammerState) -> bool {
-    !state.preload_pending.is_empty() || has_group_values(&state.preload_group_pending)
+    !state.preload_pending.is_empty()
+        || !state.preload_dynamic_pending.is_empty()
+        || has_group_values(&state.preload_group_pending)
 }
 
 fn has_active_preload(state: &ProgrammerState) -> bool {
-    !state.preload_active.is_empty() || has_group_values(&state.preload_group_active)
+    !state.preload_active.is_empty()
+        || !state.preload_dynamic_active.is_empty()
+        || has_group_values(&state.preload_group_active)
 }
 
 fn has_group_values(values: &crate::groups::GroupProgrammerValues) -> bool {
@@ -137,16 +146,37 @@ fn has_group_values(values: &crate::groups::GroupProgrammerValues) -> bool {
 fn source_values(
     state: &ProgrammerState,
     source: CueRecordingCapturedSource,
-) -> (&[TimedValue], &crate::groups::GroupProgrammerValues) {
+) -> (
+    &[TimedValue],
+    &crate::groups::GroupProgrammerValues,
+    &[DynamicAddressValue],
+) {
     match source {
-        CueRecordingCapturedSource::Normal => (&state.values, &state.group_values),
-        CueRecordingCapturedSource::PendingPreload => {
-            (&state.preload_pending, &state.preload_group_pending)
+        CueRecordingCapturedSource::Normal => {
+            (&state.values, &state.group_values, &state.dynamic_values)
         }
-        CueRecordingCapturedSource::ActivePreload => {
-            (&state.preload_active, &state.preload_group_active)
-        }
+        CueRecordingCapturedSource::PendingPreload => (
+            &state.preload_pending,
+            &state.preload_group_pending,
+            &state.preload_dynamic_pending,
+        ),
+        CueRecordingCapturedSource::ActivePreload => (
+            &state.preload_active,
+            &state.preload_group_active,
+            &state.preload_dynamic_active,
+        ),
     }
+}
+
+fn ordered_dynamic_values(values: &[DynamicAddressValue]) -> Vec<DynamicAddressValue> {
+    let mut values = values.to_vec();
+    values.sort_by(|left, right| {
+        left.programmer_order
+            .cmp(&right.programmer_order)
+            .then_with(|| left.fixture_id.0.cmp(&right.fixture_id.0))
+            .then_with(|| left.attribute.cmp(&right.attribute))
+    });
+    values
 }
 
 fn ordered_fixture_values(values: &[TimedValue]) -> Vec<CueRecordingFixtureValue> {

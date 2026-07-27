@@ -51,7 +51,11 @@ impl ServerProgrammingPorts<'_> {
                 &self.state().active_show,
                 &ports,
             ) {
-            Ok(pending_choice) => ProgrammingExecution::ChoiceRequired { pending_choice },
+            Ok(pending_choice) => ProgrammingExecution::ChoiceRequired {
+                pending_choice: light_application::PendingCommandChoice::CueMoveCopy(
+                    pending_choice,
+                ),
+            },
             Err(error) => ProgrammingExecution::Rejected {
                 error: error.message,
             },
@@ -128,6 +132,9 @@ impl ServerProgrammingPorts<'_> {
         let Some(choice) = command.pending_choice else {
             return Ok(None);
         };
+        let choice = choice
+            .cue_move_copy()
+            .ok_or("the pending command choice is not a Cue transfer")?;
         let option = choice
             .options
             .iter()

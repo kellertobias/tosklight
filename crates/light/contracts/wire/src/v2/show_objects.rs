@@ -1,6 +1,11 @@
 //! Typed v2 active-show object snapshots and output-route mutation intents.
 
-use super::events::{OutputDeliveryMode, OutputProtocol, OutputRoute, OutputRouteChange};
+use super::{
+    dynamics::{
+        DynamicActivationBoundaryProjection, DynamicRationalProjection, DynamicRunModeProjection,
+    },
+    events::{OutputDeliveryMode, OutputProtocol, OutputRoute, OutputRouteChange},
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -15,6 +20,9 @@ pub struct ShowObjectRecord {
     pub updated_at: String,
     #[ts(type = "unknown")]
     pub body: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub validation_error: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -148,33 +156,6 @@ pub struct PatchLayerInput {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-pub struct DynamicRecordActionRequest {
-    pub request_id: String,
-    pub action: DynamicRecordAction,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum DynamicRecordAction {
-    Append {
-        #[ts(type = "number")]
-        expected_revision: u64,
-        speed: f64,
-        width: f64,
-        direction: DynamicDirection,
-        fixture_ids: Vec<Uuid>,
-        group_ids: Vec<String>,
-    },
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum DynamicDirection {
-    Forward,
-    Reverse,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PreloadRecordActionRequest {
     pub request_id: String,
     pub action: PreloadRecordAction,
@@ -229,6 +210,111 @@ pub struct ShowObjectActionOutcome {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(as = "Option<f64>", optional = nullable)]
     pub event_sequence: Option<u64>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicCreateActionRequest {
+    pub request_id: String,
+    /// Complete candidate definition. The server owns UUID, revision, and atomic slot conflict
+    /// validation; the first lane must already be present and valid.
+    #[ts(type = "unknown")]
+    pub definition: serde_json::Value,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicPoolActionRequest {
+    pub request_id: String,
+    #[ts(type = "number")]
+    pub expected_revision: u64,
+    pub pool_number: u16,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicDeleteActionRequest {
+    pub request_id: String,
+    #[ts(type = "number")]
+    pub expected_revision: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicUpdateActionRequest {
+    pub request_id: String,
+    #[ts(type = "number")]
+    pub expected_revision: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub mutation_group: Option<String>,
+    pub intent: DynamicUpdateIntent,
+}
+
+/// One deliberate editor mutation. Domain-shaped payloads remain JSON at the transport package
+/// boundary and are decoded and validated into `light-dynamics` types by the server adapter.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DynamicUpdateIntent {
+    SetName {
+        name: String,
+    },
+    SetColor {
+        color: Option<String>,
+    },
+    SetIcon {
+        icon: Option<String>,
+    },
+    SetTargetBinding {
+        #[ts(type = "unknown")]
+        target_binding: serde_json::Value,
+    },
+    AddLane {
+        #[ts(type = "unknown")]
+        lane: serde_json::Value,
+        index: Option<usize>,
+    },
+    ReplaceLane {
+        lane_id: Uuid,
+        #[ts(type = "unknown")]
+        lane: serde_json::Value,
+    },
+    DeleteLane {
+        lane_id: Uuid,
+    },
+    MoveLane {
+        lane_id: Uuid,
+        index: usize,
+    },
+    SetPhase {
+        #[ts(type = "unknown")]
+        phase: serde_json::Value,
+    },
+    SetSpeed {
+        #[ts(type = "unknown")]
+        speed: serde_json::Value,
+    },
+    SetOverallSpeedMultiplier {
+        multiplier: DynamicRationalProjection,
+    },
+    SetRunMode {
+        run_mode: DynamicRunModeProjection,
+    },
+    SetActivation {
+        #[ts(type = "unknown")]
+        activation: serde_json::Value,
+    },
+    SetActivationBoundary {
+        boundary: DynamicActivationBoundaryProjection,
+    },
+    AddRandomGroup {
+        #[ts(type = "unknown")]
+        group: serde_json::Value,
+    },
+    ReplaceRandomGroup {
+        group_id: Uuid,
+        #[ts(type = "unknown")]
+        group: serde_json::Value,
+    },
+    DeleteRandomGroup {
+        group_id: Uuid,
+    },
 }
 
 #[cfg(test)]

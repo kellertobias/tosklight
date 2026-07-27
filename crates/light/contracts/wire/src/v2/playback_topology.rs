@@ -1,6 +1,11 @@
 //! Strict portable Cuelist, Playback, and Page topology action DTOs.
 
-use super::events::ShowObjectKind;
+use super::{
+    dynamics::{
+        DynamicActivationPolicyProjection, DynamicDefinitionProjection, DynamicRationalProjection,
+    },
+    events::ShowObjectKind,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -144,15 +149,77 @@ pub struct PlaybackTopologyPlaybackDefinition {
     pub presentation_image: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlaybackTopologyTarget {
-    CueList { cue_list_id: Uuid },
-    Group { group_id: String },
-    SpeedGroup { group: String },
+    CueList {
+        cue_list_id: Uuid,
+    },
+    Dynamic {
+        assignment: PlaybackTopologyDynamicAssignment,
+    },
+    Group {
+        group_id: String,
+    },
+    SpeedGroup {
+        group: String,
+    },
     ProgrammerFade {},
     CueFade {},
     GrandMaster {},
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackTopologyDynamicAssignment {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub dynamic_id: Option<Uuid>,
+    pub last_known_pool_number: u16,
+    pub embedded_fallback: DynamicDefinitionProjection,
+    #[ts(type = "number")]
+    pub revision: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub target_scope: Option<PlaybackTopologyDynamicTargetScope>,
+    pub fader_mode: PlaybackTopologyDynamicFaderMode,
+    pub priority: i16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub activation_override: Option<DynamicActivationPolicyProjection>,
+    pub resume_policy: PlaybackTopologyDynamicResumePolicy,
+    pub local_speed_multiplier: DynamicRationalProjection,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable, type = "number | null")]
+    pub learned_duration_millis: Option<u64>,
+    pub crossfade_non_intensity: bool,
+    pub auto_off_at_zero: bool,
+    pub auto_off_flash_release: bool,
+    pub auto_off_full_control: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PlaybackTopologyDynamicTargetScope {
+    LiveGroup { group_id: String },
+    FrozenTargets { targets: Vec<Uuid> },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaybackTopologyDynamicFaderMode {
+    None,
+    Master,
+    Size,
+    SizeAndMaster,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaybackTopologyDynamicResumePolicy {
+    FollowDynamic,
+    ResumeFrozenPhase,
+    RejoinSynchronizedPosition,
+    ResumeOnNextBoundary,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -177,6 +244,10 @@ pub enum PlaybackTopologyButtonAction {
     Pause,
     Blackout,
     PauseDynamics,
+    DynamicRestart,
+    DynamicDoubleSpeed,
+    DynamicHalfSpeed,
+    DynamicLearnSpeed,
     None,
 }
 

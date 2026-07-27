@@ -23,6 +23,9 @@ use light_show::PortableShowCandidate;
 pub(crate) struct ShowCompileDirty {
     pub(crate) fixtures: bool,
     pub(crate) cue_lists: bool,
+    pub(crate) dynamics: bool,
+    pub(crate) presets: bool,
+    pub(crate) stage_layouts: bool,
     pub(crate) playbacks: bool,
     pub(crate) playback_pages: bool,
     pub(crate) routes: bool,
@@ -36,15 +39,19 @@ pub(crate) fn compile_show_candidate(
 ) -> Result<EngineSnapshot, ActionError> {
     let fixtures = patch::compile_patch(candidate)?;
     let cue_lists = objects::decode(candidate, "cue_list")?;
+    let groups = objects::decode_groups(candidate)?;
+    let dynamics = objects::decode_dynamics(candidate, &groups)?;
+    let dynamic_stage_positions = objects::decode_dynamic_stage_positions(candidate)?;
     let mut playbacks = objects::decode(candidate, "playback")?;
     let mut playback_pages = objects::decode(candidate, "playback_page")?;
     let routes = objects::decode(candidate, "route")?;
     let control_mappings = objects::decode(candidate, "control_mapping")?;
-    let groups = objects::decode_groups(candidate)?;
     objects::supply_playback_defaults(&cue_lists, &mut playbacks, &mut playback_pages);
     Ok(EngineSnapshot {
         fixtures: fixtures.into(),
         cue_lists: cue_lists.into(),
+        dynamics: dynamics.into(),
+        dynamic_stage_positions: dynamic_stage_positions.into(),
         playbacks: playbacks.into(),
         playback_pages: playback_pages.into(),
         routes: routes.into(),
@@ -73,6 +80,18 @@ fn compile_show_candidate_incremental(
 
     if dirty.cue_lists {
         snapshot.cue_lists = objects::decode(candidate, "cue_list")?.into();
+    }
+    if dirty.dynamics || dirty.presets || dirty.groups {
+        let groups = if dirty.groups {
+            objects::decode_groups(candidate)?
+        } else {
+            snapshot.groups.as_ref().clone()
+        };
+        snapshot.dynamics = objects::decode_dynamics(candidate, &groups)?.into();
+    }
+    if dirty.stage_layouts {
+        snapshot.dynamic_stage_positions =
+            objects::decode_dynamic_stage_positions(candidate)?.into();
     }
     if dirty.groups {
         snapshot.groups = objects::decode_groups(candidate)?.into();

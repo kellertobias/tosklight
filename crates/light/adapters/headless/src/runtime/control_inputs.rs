@@ -148,6 +148,7 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
         if !handle_subscription_osc(state, address, arguments, source.as_deref()) && !input_locked {
             handle_playback_osc(state, address, arguments, source.as_deref());
             handle_highlight_osc(state, address, arguments, source.as_deref());
+            handle_dynamics_osc(state, address, arguments, source.as_deref());
             handle_programmer_osc(state, address, arguments, source.as_deref());
             handle_timing_osc(state, address, arguments);
             handle_encoder_osc(state, address, arguments);

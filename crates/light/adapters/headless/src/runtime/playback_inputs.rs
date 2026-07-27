@@ -67,6 +67,10 @@ pub(super) fn requested_playback_button_action(
         "pause" => Action::Pause,
         "blackout" => Action::Blackout,
         "pause-dynamics" => Action::PauseDynamics,
+        "dynamic-restart" => Action::DynamicRestart,
+        "dynamic-double-speed" => Action::DynamicDoubleSpeed,
+        "dynamic-half-speed" => Action::DynamicHalfSpeed,
+        "dynamic-learn-speed" => Action::DynamicLearnSpeed,
         "none" => Action::None,
         "master" | "fader" | "go-to" | "load" | "xfade-on" | "xfade-off" => {
             return Ok(None);
@@ -112,6 +116,46 @@ pub(super) fn preload_capture_action_with_temp_state(
             Some(Action::Off) => Some("off"),
             Some(Action::On) => Some("on"),
             Some(Action::Temp) => Some(if temp_active { "temp-off" } else { "temp-on" }),
+            Some(Action::Pause)
+                if matches!(
+                    definition.target,
+                    light_playback::PlaybackTarget::Dynamic { .. }
+                ) =>
+            {
+                Some("dynamic-pause")
+            }
+            Some(Action::DynamicRestart)
+                if matches!(
+                    definition.target,
+                    light_playback::PlaybackTarget::Dynamic { .. }
+                ) =>
+            {
+                Some("dynamic-restart")
+            }
+            Some(Action::DynamicDoubleSpeed)
+                if matches!(
+                    definition.target,
+                    light_playback::PlaybackTarget::Dynamic { .. }
+                ) =>
+            {
+                Some("dynamic-double-speed")
+            }
+            Some(Action::DynamicHalfSpeed)
+                if matches!(
+                    definition.target,
+                    light_playback::PlaybackTarget::Dynamic { .. }
+                ) =>
+            {
+                Some("dynamic-half-speed")
+            }
+            Some(Action::DynamicLearnSpeed)
+                if matches!(
+                    definition.target,
+                    light_playback::PlaybackTarget::Dynamic { .. }
+                ) =>
+            {
+                Some("dynamic-learn-speed")
+            }
             _ => None,
         },
     )

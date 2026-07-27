@@ -21,7 +21,9 @@ pub(super) fn apply_specialized_master(
         PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => {
             apply_time_master_fader(state, definition, value).map(PlaybackTargetOutcome::changed)
         }
-        PlaybackTarget::CueList { .. } => unreachable!("Cuelist masters use the pool boundary"),
+        PlaybackTarget::CueList { .. } | PlaybackTarget::Dynamic { .. } => {
+            unreachable!("Cuelist and Dynamic masters use the pool boundary")
+        }
     }
 }
 
@@ -48,7 +50,9 @@ pub(super) fn apply_specialized_target_action(
         PlaybackTarget::ProgrammerFade | PlaybackTarget::CueFade => {
             apply_time_master_action(state, definition, action).map(PlaybackTargetOutcome::changed)
         }
-        PlaybackTarget::CueList { .. } => unreachable!("Cuelist actions use the pool boundary"),
+        PlaybackTarget::CueList { .. } | PlaybackTarget::Dynamic { .. } => {
+            unreachable!("Cuelist and Dynamic actions use the pool boundary")
+        }
     }
 }
 
@@ -149,10 +153,14 @@ fn apply_global_output(
 }
 
 fn toggle_dynamics(state: &AppState) -> Result<(), ApiError> {
-    state
+    let outcome = state
         .output
         .execute_playback(EnginePlaybackCommand::ToggleDynamicsPaused)
         .map_err(ApiError::bad_request)?;
+    let light_engine::EnginePlaybackOutcome::DynamicsPaused(paused) = outcome else {
+        unreachable!("ToggleDynamicsPaused returns the authoritative pause state");
+    };
+    state.output.set_dynamic_runtime_paused(paused);
     Ok(())
 }
 

@@ -235,13 +235,29 @@ fn materialize_collection(
 }
 
 pub(super) fn object_record(object: light_show::VersionedObject) -> wire::ShowObjectRecord {
+    let validation_error = if object.kind == "dynamic" {
+        dynamic_validation_error(&object.body)
+    } else {
+        None
+    };
     wire::ShowObjectRecord {
         kind: object.kind,
         id: object.id,
         revision: object.revision,
         updated_at: object.updated_at,
         body: object.body,
+        validation_error,
     }
+}
+
+pub(super) fn dynamic_validation_error(body: &serde_json::Value) -> Option<String> {
+    serde_json::from_value::<light_dynamics::DynamicDefinition>(body.clone())
+        .map_err(|error| format!("Malformed Dynamic definition: {error}"))
+        .and_then(|definition| {
+            light_dynamics::validate_definition(&definition)
+                .map_err(|error| format!("Invalid Dynamic definition: {error}"))
+        })
+        .err()
 }
 
 fn wire_route_change(
@@ -254,6 +270,37 @@ fn wire_route_change(
         object_revision: change.object_revision,
         route: change.route.as_ref().map(wire_route),
         deleted: change.deleted,
+    }
+}
+
+#[cfg(test)]
+mod validation_tests {
+    use super::object_record;
+
+    #[test]
+    fn malformed_dynamic_record_remains_visible_with_actionable_validation() {
+        let record = object_record(light_show::VersionedObject {
+            kind: "dynamic".into(),
+            id: "broken".into(),
+            body: serde_json::json!({
+                "id": uuid::Uuid::new_v4(),
+                "pool_number": 12,
+                "revision": 1,
+                "name": "Needs repair",
+                "lanes": "not-an-array"
+            }),
+            revision: 3,
+            updated_at: "2026-07-26T00:00:00Z".into(),
+        });
+
+        assert_eq!(record.id, "broken");
+        assert_eq!(record.body["name"], "Needs repair");
+        assert!(
+            record
+                .validation_error
+                .as_deref()
+                .is_some_and(|error| error.starts_with("Malformed Dynamic definition:"))
+        );
     }
 }
 

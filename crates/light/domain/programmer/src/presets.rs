@@ -66,22 +66,24 @@ impl PresetFamily {
             }
             Self::Position => attribute.is_position() || class == AttributeClass::Position,
             Self::Beam => {
-                matches!(class, AttributeClass::Beam | AttributeClass::Focus)
-                    || attribute.0.split('.').any(|part| {
-                        matches!(
-                            part,
-                            "beam"
-                                | "focus"
-                                | "zoom"
-                                | "iris"
-                                | "gobo"
-                                | "prism"
-                                | "frost"
-                                | "shaper"
-                                | "shutter"
-                                | "strobe"
-                        )
-                    })
+                matches!(
+                    class,
+                    AttributeClass::Beam | AttributeClass::Shapers | AttributeClass::Focus
+                ) || attribute.0.split('.').any(|part| {
+                    matches!(
+                        part,
+                        "beam"
+                            | "focus"
+                            | "zoom"
+                            | "iris"
+                            | "gobo"
+                            | "prism"
+                            | "frost"
+                            | "shaper"
+                            | "shutter"
+                            | "strobe"
+                    )
+                })
             }
         }
     }

@@ -164,6 +164,13 @@ fn runtime_projection_retained_bytes(projection: &crate::PlaybackRuntimeProjecti
             runtime: Some(runtime),
             ..
         } => size_of_val(runtime.as_ref()),
+        PlaybackTargetProjection::Dynamic { runtime, .. } => {
+            runtime.as_ref().map_or(0, |runtime| {
+                size_of_val(runtime)
+                    + runtime.warning.as_ref().map_or(0, String::capacity)
+                    + runtime.active.learn_intervals_millis.capacity() * size_of::<u64>()
+            })
+        }
         PlaybackTargetProjection::Group { group_id, .. } => group_id.capacity(),
         PlaybackTargetProjection::SpeedGroup { group, runtime } => {
             group.capacity() + size_of_val(runtime.as_ref())

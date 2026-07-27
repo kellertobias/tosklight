@@ -12,9 +12,12 @@ impl ProgrammerState {
             selected: self.selected.clone(),
             selection_expression: self.selection_expression.clone(),
             values: self.values.clone(),
+            dynamic_values: self.dynamic_values.clone(),
             group_values: self.group_values.clone(),
             preload_pending: self.preload_pending.clone(),
             preload_active: self.preload_active.clone(),
+            preload_dynamic_pending: self.preload_dynamic_pending.clone(),
+            preload_dynamic_active: self.preload_dynamic_active.clone(),
             preload_group_pending: self.preload_group_pending.clone(),
             preload_group_active: self.preload_group_active.clone(),
             preload_playback_pending: self.preload_playback_pending.clone(),
@@ -30,9 +33,12 @@ impl ProgrammerState {
         self.selected = snapshot.selected;
         self.selection_expression = snapshot.selection_expression;
         self.values = snapshot.values;
+        self.dynamic_values = snapshot.dynamic_values;
         self.group_values = snapshot.group_values;
         self.preload_pending = snapshot.preload_pending;
         self.preload_active = snapshot.preload_active;
+        self.preload_dynamic_pending = snapshot.preload_dynamic_pending;
+        self.preload_dynamic_active = snapshot.preload_dynamic_active;
         self.preload_group_pending = snapshot.preload_group_pending;
         self.preload_group_active = snapshot.preload_group_active;
         self.preload_playback_pending = snapshot.preload_playback_pending;
@@ -90,10 +96,12 @@ impl ProgrammerRegistry {
             let Some(previous) = state.undo.pop() else {
                 return false;
             };
-            let values_changed =
-                state.values != previous.values || state.group_values != previous.group_values;
+            let values_changed = state.values != previous.values
+                || state.group_values != previous.group_values
+                || state.dynamic_values != previous.dynamic_values;
             let preload_values_changed = state.preload_pending != previous.preload_pending
-                || state.preload_group_pending != previous.preload_group_pending;
+                || state.preload_group_pending != previous.preload_group_pending
+                || state.preload_dynamic_pending != previous.preload_dynamic_pending;
             let queue_changed = state.preload_playback_pending != previous.preload_playback_pending;
             state.redo.push(Arc::new(state.snapshot()));
             state.restore_snapshot(Arc::unwrap_or_clone(previous), self.clock.now());
@@ -137,10 +145,12 @@ impl ProgrammerRegistry {
             let Some(next) = state.redo.pop() else {
                 return false;
             };
-            let values_changed =
-                state.values != next.values || state.group_values != next.group_values;
+            let values_changed = state.values != next.values
+                || state.group_values != next.group_values
+                || state.dynamic_values != next.dynamic_values;
             let preload_values_changed = state.preload_pending != next.preload_pending
-                || state.preload_group_pending != next.preload_group_pending;
+                || state.preload_group_pending != next.preload_group_pending
+                || state.preload_dynamic_pending != next.preload_dynamic_pending;
             let queue_changed = state.preload_playback_pending != next.preload_playback_pending;
             state.undo.push(Arc::new(state.snapshot()));
             state.restore_snapshot(Arc::unwrap_or_clone(next), self.clock.now());

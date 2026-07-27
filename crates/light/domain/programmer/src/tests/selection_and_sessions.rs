@@ -335,11 +335,12 @@ fn pending_command_choices_are_revisioned_shared_by_desk_and_cleared_by_edits() 
         options: vec![],
         cancel_label: "Cancel".into(),
     };
+    let pending_choice = PendingCommandChoice::CueMoveCopy(choice.clone());
     let pending = registry
-        .set_pending_command_choice(first, Some(choice.clone()))
+        .set_pending_command_choice(first, Some(pending_choice.clone()))
         .unwrap();
     assert_eq!(pending.revision, edited.revision + 1);
-    assert_eq!(pending.pending_choice.as_deref(), Some(&choice));
+    assert_eq!(pending.pending_choice.as_deref(), Some(&pending_choice));
     assert_eq!(registry.command_line_state(peer).unwrap(), pending);
     assert!(
         registry
@@ -350,7 +351,7 @@ fn pending_command_choices_are_revisioned_shared_by_desk_and_cleared_by_edits() 
     );
 
     let repeated = registry
-        .set_pending_command_choice(peer, Some(choice))
+        .set_pending_command_choice(peer, Some(PendingCommandChoice::CueMoveCopy(choice)))
         .unwrap();
     assert_eq!(repeated.revision, pending.revision);
     assert!(

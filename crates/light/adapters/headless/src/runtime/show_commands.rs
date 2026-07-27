@@ -16,7 +16,6 @@ fn merge_recorded_cue(
         RecordOperation::Overwrite => {
             cue.changes = incoming.changes;
             cue.group_changes = incoming.group_changes;
-            cue.phasers = incoming.phasers;
             cue.fade_millis = incoming.fade_millis;
             cue.delay_millis = incoming.delay_millis;
             cue.trigger = incoming.trigger;

@@ -119,6 +119,10 @@ fn application_action(action: wire::PlaybackAction) -> Result<application::Playb
         Wire::Half { pressed } => App::Half { pressed },
         Wire::Blackout { pressed } => App::Blackout { pressed },
         Wire::PauseDynamics { pressed } => App::PauseDynamics { pressed },
+        Wire::DynamicRestart { pressed } => App::DynamicRestart { pressed },
+        Wire::DynamicDoubleSpeed { pressed } => App::DynamicDoubleSpeed { pressed },
+        Wire::DynamicHalfSpeed { pressed } => App::DynamicHalfSpeed { pressed },
+        Wire::DynamicLearnSpeed { pressed } => App::DynamicLearnSpeed { pressed },
         Wire::None { pressed } => App::None { pressed },
         Wire::Master { value } if value.is_finite() && (0.0..=1.0).contains(&value) => {
             App::Master(application::PlaybackLevel::new(value))
@@ -371,6 +375,24 @@ fn pending_action(action: application::PendingPlaybackAction) -> wire::PendingPl
         application::PendingPlaybackAction::TemporaryOn => wire::PendingPlaybackAction::TemporaryOn,
         application::PendingPlaybackAction::TemporaryOff => {
             wire::PendingPlaybackAction::TemporaryOff
+        }
+        application::PendingPlaybackAction::DynamicPause => {
+            wire::PendingPlaybackAction::DynamicPause
+        }
+        application::PendingPlaybackAction::DynamicRestart => {
+            wire::PendingPlaybackAction::DynamicRestart
+        }
+        application::PendingPlaybackAction::DynamicDoubleSpeed => {
+            wire::PendingPlaybackAction::DynamicDoubleSpeed
+        }
+        application::PendingPlaybackAction::DynamicHalfSpeed => {
+            wire::PendingPlaybackAction::DynamicHalfSpeed
+        }
+        application::PendingPlaybackAction::DynamicLearnSpeed => {
+            wire::PendingPlaybackAction::DynamicLearnSpeed
+        }
+        application::PendingPlaybackAction::Fader { value_permyriad } => {
+            wire::PendingPlaybackAction::Fader { value_permyriad }
         }
     }
 }

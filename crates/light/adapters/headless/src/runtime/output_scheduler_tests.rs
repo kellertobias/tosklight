@@ -1,5 +1,12 @@
 use super::*;
 use light_control::FrameRate;
+use light_core::{AttributeKey, FixtureId};
+use light_dynamics::{
+    DynamicController, DynamicControllerSource, DynamicInstanceSnapshot, DynamicRuntimeSample,
+    DynamicRuntimeSnapshot,
+};
+use light_programmer::ProgrammerRegistry;
+use uuid::Uuid;
 
 #[test]
 fn frame_selection_applies_overrides_and_reuses_held_frames() {
@@ -60,6 +67,300 @@ async fn scheduler_gate_closes_when_the_start_owner_is_dropped() {
     .expect("a dropped start owner must not leave the scheduler gated");
 
     assert!(!allowed);
+}
+
+#[test]
+fn dynamic_playback_full_control_requires_complete_persistent_coverage_and_honors_opt_out() {
+    let engine = Engine::new(ProgrammerRegistry::default());
+    let source_controller = Uuid::new_v4();
+    let covering_controller = Uuid::new_v4();
+    let first_target = FixtureId::new();
+    let second_target = FixtureId::new();
+    let source_samples = vec![
+        dynamic_sample(source_controller, first_target, "intensity", 10, 100),
+        dynamic_sample(source_controller, second_target, "pan", 10, 100),
+    ];
+    let persistent_cover = vec![
+        dynamic_sample(covering_controller, first_target, "intensity", 11, 101),
+        dynamic_sample(covering_controller, second_target, "pan", 11, 101),
+    ];
+    let runtime = runtime_with_controllers(vec![
+        dynamic_controller(
+            source_controller,
+            DynamicControllerSource::Playback { playback_number: 1 },
+            10,
+            100,
+        ),
+        dynamic_controller(
+            covering_controller,
+            DynamicControllerSource::Programmer {
+                programmer_id: Uuid::new_v4(),
+            },
+            11,
+            101,
+        ),
+    ]);
+    let default_on = HashMap::from([(source_controller, dynamic_playback_control(1, true, false))]);
+
+    let mut completely_covered = source_samples.clone();
+    completely_covered.extend(persistent_cover.clone());
+    assert_eq!(
+        fully_controlled_dynamic_playbacks(
+            &engine,
+            &completely_covered,
+            &default_on,
+            &runtime,
+            engine.application_time(),
+        ),
+        vec![1],
+        "the default-on setting turns the source off only after every address is covered",
+    );
+
+    let opt_out = HashMap::from([(source_controller, dynamic_playback_control(1, false, false))]);
+    assert!(
+        fully_controlled_dynamic_playbacks(
+            &engine,
+            &completely_covered,
+            &opt_out,
+            &runtime,
+            engine.application_time(),
+        )
+        .is_empty()
+    );
+
+    let mut partially_covered = source_samples.clone();
+    partially_covered.push(persistent_cover[0].clone());
+    assert!(
+        fully_controlled_dynamic_playbacks(
+            &engine,
+            &partially_covered,
+            &default_on,
+            &runtime,
+            engine.application_time(),
+        )
+        .is_empty()
+    );
+}
+
+#[test]
+fn temporary_dynamic_playback_coverage_never_triggers_full_control_auto_off() {
+    let engine = Engine::new(ProgrammerRegistry::default());
+    let source_controller = Uuid::new_v4();
+    let temporary_controller = Uuid::new_v4();
+    let target = FixtureId::new();
+    let samples = vec![
+        dynamic_sample(source_controller, target, "intensity", 10, 100),
+        dynamic_sample(temporary_controller, target, "intensity", 11, 101),
+    ];
+    let runtime = runtime_with_controllers(vec![
+        dynamic_controller(
+            source_controller,
+            DynamicControllerSource::Playback { playback_number: 1 },
+            10,
+            100,
+        ),
+        dynamic_controller(
+            temporary_controller,
+            DynamicControllerSource::Playback { playback_number: 2 },
+            11,
+            101,
+        ),
+    ]);
+    let controls = HashMap::from([
+        (source_controller, dynamic_playback_control(1, true, false)),
+        (
+            temporary_controller,
+            dynamic_playback_control(2, true, true),
+        ),
+    ]);
+
+    assert!(
+        fully_controlled_dynamic_playbacks(
+            &engine,
+            &samples,
+            &controls,
+            &runtime,
+            engine.application_time(),
+        )
+        .is_empty()
+    );
+}
+
+#[test]
+fn scheduler_emits_typed_dynamic_runtime_boundaries() {
+    let controller_id = Uuid::new_v4();
+    let controller = dynamic_controller(
+        controller_id,
+        DynamicControllerSource::Programmer {
+            programmer_id: Uuid::new_v4(),
+        },
+        10,
+        100,
+    );
+    let before_start = DynamicRuntimeSnapshot::default();
+    let after_start = runtime_with_controllers(vec![controller.clone()]);
+    assert_eq!(
+        dynamic_event_kinds(dynamic_transition_events(&before_start, &after_start, 100,)),
+        vec![
+            light_application::DynamicRuntimeEventKind::InstanceStarted,
+            light_application::DynamicRuntimeEventKind::InstanceActive,
+        ],
+    );
+
+    let mut before_pending = after_start.clone();
+    before_pending.instances[0].pending_until_millis = Some(200);
+    let mut after_active = before_pending.clone();
+    after_active.instances[0].pending_until_millis = None;
+    assert_eq!(
+        dynamic_event_kinds(dynamic_transition_events(
+            &before_pending,
+            &after_active,
+            200,
+        )),
+        vec![light_application::DynamicRuntimeEventKind::InstanceActive],
+    );
+
+    let mut before_release = after_active.clone();
+    before_release.instances[0].controller_transitions.push(
+        light_dynamics::DynamicControllerTransitionSnapshot {
+            controller_id,
+            release_started_at_millis: Some(200),
+            ..Default::default()
+        },
+    );
+    let mut after_release = before_release.clone();
+    after_release.instances[0].controllers.clear();
+    after_release.instances[0].controller_transitions.clear();
+    assert_eq!(
+        dynamic_event_kinds(dynamic_transition_events(
+            &before_release,
+            &after_release,
+            300,
+        )),
+        vec![light_application::DynamicRuntimeEventKind::TransitionCompleted],
+    );
+
+    let mut paused = after_active.clone();
+    paused.global_paused = true;
+    assert_eq!(
+        dynamic_event_kinds(dynamic_transition_events(&after_active, &paused, 400)),
+        vec![light_application::DynamicRuntimeEventKind::Paused],
+    );
+    assert_eq!(
+        dynamic_event_kinds(dynamic_transition_events(&paused, &after_active, 500)),
+        vec![light_application::DynamicRuntimeEventKind::Resumed],
+    );
+}
+
+fn dynamic_event_kinds(
+    events: Vec<light_application::EventDraft>,
+) -> Vec<light_application::DynamicRuntimeEventKind> {
+    events
+        .into_iter()
+        .filter_map(|event| match event.payload {
+            light_application::ApplicationEvent::Output(
+                light_application::OutputEvent::DynamicRuntimeChanged(change),
+            ) => Some(change.kind),
+            _ => None,
+        })
+        .collect()
+}
+
+fn dynamic_playback_control(
+    playback_number: u16,
+    auto_off_full_control: bool,
+    temporary_only: bool,
+) -> DynamicPlaybackControl {
+    DynamicPlaybackControl {
+        playback_number,
+        master: 1.0,
+        crossfade_non_intensity: false,
+        auto_off_full_control,
+        temporary_only,
+    }
+}
+
+fn dynamic_sample(
+    controller_id: Uuid,
+    target: FixtureId,
+    attribute: &str,
+    priority: i16,
+    activated_at_millis: u64,
+) -> DynamicRuntimeSample {
+    DynamicRuntimeSample {
+        instance_id: Uuid::new_v4(),
+        controller_id,
+        target,
+        lane_id: Uuid::new_v4(),
+        attribute: AttributeKey(attribute.into()),
+        value: 0.5,
+        priority,
+        activated_at_millis,
+        activation_mix: 1.0,
+    }
+}
+
+fn dynamic_controller(
+    id: Uuid,
+    source: DynamicControllerSource,
+    priority: i16,
+    activated_at_millis: u64,
+) -> DynamicController {
+    DynamicController {
+        id,
+        source,
+        priority,
+        activated_at_millis,
+        size: 1.0,
+        speed_multiplier: 1.0,
+        phase_offset_degrees: 0.0,
+        paused: false,
+    }
+}
+
+fn runtime_with_controllers(controllers: Vec<DynamicController>) -> DynamicRuntimeSnapshot {
+    DynamicRuntimeSnapshot {
+        global_paused: false,
+        instances: vec![DynamicInstanceSnapshot {
+            id: Uuid::new_v4(),
+            definition: serde_json::from_value(serde_json::json!({
+                "id": Uuid::new_v4(),
+                "pool_number": 1,
+                "revision": 1,
+                "name": "Coverage test",
+                "color": null,
+                "icon": null,
+                "target_binding": {"type": "targetless"},
+                "lanes": [],
+                "random_groups": [],
+                "phase": {
+                    "ordering": {"type": "selection"},
+                    "offset_degrees": 0.0,
+                    "span_degrees": 360.0,
+                    "block_size": 1,
+                    "repeats": 1,
+                    "wings": false,
+                    "anchors_degrees": []
+                },
+                "speed": {"type": "fixed", "duration_millis": 1000},
+                "default_activation": "start_now"
+            }))
+            .unwrap(),
+            targets: Vec::new(),
+            phase_by_target: Vec::new(),
+            controllers,
+            controller_transitions: Vec::new(),
+            started_at_millis: 0,
+            paused_at_millis: None,
+            paused_elapsed_millis: 0,
+            activation_policy: light_dynamics::ActivationPolicy::StartNow,
+            pending_until_millis: None,
+            speed_paused_at_millis: None,
+            speed_paused_elapsed_millis: 0,
+            random_streams: Vec::new(),
+            completed: false,
+        }],
+    }
 }
 
 fn frames_with_value(universe: Universe, value: u8) -> HashMap<Universe, DmxFrame> {

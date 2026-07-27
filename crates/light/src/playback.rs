@@ -27,11 +27,12 @@ pub use group_id::{MAX_PLAYBACK_GROUP_ID_BYTES, PlaybackGroupId, PlaybackGroupId
 pub use operation::{PlaybackOperation, PlaybackOperationResult, PlaybackUnitOfWork};
 pub use ports::PlaybackPorts;
 pub use projection::{
-    CueListRuntimeProjection, GrandMasterRuntimeProjection, MAX_PLAYBACK_SNAPSHOT_IDENTITIES,
-    ManualXFadeDirection, PlaybackCueReference, PlaybackDeskProjection, PlaybackRuntimeIdentity,
-    PlaybackRuntimeProjection, PlaybackRuntimeSnapshot, PlaybackShowScope,
-    PlaybackTargetProjection, SoundLossReason, SoundStatus, SpeedGroupRuntimeProjection,
-    SpeedSource,
+    CueListRuntimeProjection, DynamicPlaybackControllerStatus, DynamicPlaybackRuntimeProjection,
+    DynamicPlaybackRuntimeState, DynamicPlaybackSpeedSource, GrandMasterRuntimeProjection,
+    MAX_PLAYBACK_SNAPSHOT_IDENTITIES, ManualXFadeDirection, PlaybackCueReference,
+    PlaybackDeskProjection, PlaybackRuntimeIdentity, PlaybackRuntimeProjection,
+    PlaybackRuntimeSnapshot, PlaybackShowScope, PlaybackTargetProjection, SoundLossReason,
+    SoundStatus, SpeedGroupRuntimeProjection, SpeedSource,
 };
 pub use service::PlaybackService;
 pub use telemetry::{PlaybackTelemetryDeltas, PlaybackTelemetryTick, telemetry_frame_divider};

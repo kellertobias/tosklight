@@ -49,6 +49,11 @@ fn migrate_cue_list(object: PortableShowCandidateObject<'_>) -> Result<Value, Ac
         .get_mut("cues")
         .and_then(Value::as_array_mut)
         .ok_or_else(|| invalid_object(object, "cues must be an array"))?;
+    for cue in cues.iter_mut() {
+        if let Some(cue) = cue.as_object_mut() {
+            cue.remove("phasers");
+        }
+    }
     for index in missing_cue_ids {
         let cue = cues
             .get_mut(index)

@@ -105,7 +105,7 @@ into it rather than restating it.
 - WebSocket `/api/v2/events` publishes ordered filtered changes and accepts versioned, request-ID-bearing typed commands after subscription. REST remains the authoritative snapshot/recovery path after an event gap.
 - A session authenticates a device as a configured user. Selection, command line, programmer values, blind/preview/highlight modes, editing context, and bounded undo/redo history belong to that user and are shared across their connected devices. Disconnected programmers remain present until explicitly cleared and survive server restart. New desks create an `Operator` user, and new devices select it unless a different user was remembered locally.
 
-Show objects use the kinds `patched_fixture`, `cue_list`, and `route` for the live engine snapshot. Other kinds such as presets, groups, phasers, mappings, and user layouts use the same revisioned object store.
+Show objects use the kinds `patched_fixture`, `cue_list`, `dynamic`, and `route` for the live engine snapshot. Other kinds such as presets, groups, mappings, and user layouts use the same revisioned object store.
 
 ## Verification
 
@@ -132,7 +132,7 @@ The release-only benchmark emits JSON for the 32-universe/100 Hz hard floor, the
 64-universe/120 Hz target, and both 4- and 8-universe/40 Hz low-power profiles. Each universe is
 filled through the real Engine render, contribution arbitration, schema-v2 fixture projection, and
 selected production protocol encoder. The scenario overlaps Playback, Programmer, static Group,
-and phaser values; the phaser owns one mapped slot that has no static or Programmer value, and a
+and Dynamic values; the Dynamic owns one mapped slot that has no static or Programmer value, and a
 focused test proves consecutive logical ticks change that slot. Use `--protocol sacn` for the other
 production codec and `--transport loopback` for separately reported, safe local UDP `send_to`
 timing. Loopback is benchmark-owned and is not presented as production `NetworkOutput` socket
@@ -162,7 +162,7 @@ fixtures in three-channel RGB virtual-dimmer mode and 24 in four-channel RGBD mo
 not cross universe boundaries. The resulting 4,148-fixture show fills all 16,384 slots across 32
 universes.
 
-Every timed frame evaluates overlapping Group, Cue/Playback, phaser, and Programmer contributions
+Every timed frame evaluates overlapping Group, Cue/Playback, Dynamic, and Programmer contributions
 before both Art-Net and sACN encoding and UDP loopback delivery. The command schedules 125 Hz to
 prove operational headroom above the 100 Hz floor and also reports sampled replacement
 contributions as a separate render-only diagnostic. It retains JSON and stderr under
@@ -174,4 +174,4 @@ Dropped, deferred, and late frames remain explicit diagnostics.
 
 Implemented foundations include fixture-library JSON/SQLite interchange, multi-head patching, 8–32-bit DMX encoding, calibrated XYZ emitter mixing, virtual dimmers, sparse tracked cues and cue-only restoration, HTP/LTP priority resolution, attribute dynamics sampling, immutable engine snapshots, live Art-Net/sACN UDP output, ArtTimeCode/MTC/OSC parsing, explicit timecode source fallback, CITP/MSEX thumbnail and live-preview transport, portable show backups, durable session-isolated programmers, REST/WebSocket control, and the standalone operator page.
 
-The server includes native MIDI input, an Apple Network MIDI/RTP-MIDI transport subset, fade/follow/timecode playback, phasers in the render path, desk/input configuration, optional LAN boundary authentication, automatic retained backups, rollback transitions, and an operational responsive UI. USB DMX and DMX input intentionally remain extension points. Hardware-specific Raspberry Pi capacity still must be established by running the included benchmark on the target device.
+The server includes native MIDI input, an Apple Network MIDI/RTP-MIDI transport subset, fade/follow/timecode playback, Dynamics in the render path, desk/input configuration, optional LAN boundary authentication, automatic retained backups, rollback transitions, and an operational responsive UI. USB DMX and DMX input intentionally remain extension points. Hardware-specific Raspberry Pi capacity still must be established by running the included benchmark on the target device.

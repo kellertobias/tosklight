@@ -2,6 +2,7 @@
 
 use crate::runtime::{
     AppState, OwnedRuntimeTask, control_input_tasks, matter_bridge_sync, output_scheduler,
+    persist_output_runtime, playback_service,
 };
 use anyhow::Context;
 use tokio::task::JoinHandle;
@@ -99,6 +100,10 @@ impl CapabilitySupervisors {
         if let Some(receiver) = state.lifecycle.take_task_receiver() {
             runtime_tasks.spawn(drive_owned_tasks(runtime_tasks.cancellation(), receiver));
         }
+        runtime_tasks.spawn(persist_dynamic_auto_offs(
+            state.clone(),
+            runtime_tasks.cancellation(),
+        ));
 
         Self {
             root_cancellation,
@@ -129,6 +134,63 @@ impl CapabilitySupervisors {
         matter?;
         runtime_tasks?;
         Ok(())
+    }
+}
+
+async fn persist_dynamic_auto_offs(
+    state: AppState,
+    cancellation: CancellationToken,
+) -> anyhow::Result<()> {
+    let mut interval = tokio::time::interval(std::time::Duration::from_millis(100));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        tokio::select! {
+            _ = cancellation.cancelled() => return Ok(()),
+            _ = interval.tick() => {
+                let numbers = state.output.take_dynamic_auto_offs();
+                if numbers.is_empty() {
+                    continue;
+                }
+                publish_dynamic_auto_offs(&state, &numbers);
+                if let Err(error) = persist_output_runtime(&state) {
+                    state.output.restore_dynamic_auto_offs(numbers);
+                    tracing::error!(
+                        error = %error.message,
+                        "Dynamic Playback full-control auto-off persistence is pending"
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn publish_dynamic_auto_offs(state: &AppState, numbers: &[u16]) {
+    let context = light_application::ActionContext::system(
+        uuid::Uuid::nil(),
+        light_application::ActionSource::Scheduler,
+    );
+    let identities = numbers
+        .iter()
+        .copied()
+        .map(light_application::PlaybackRuntimeIdentity::Playback)
+        .collect::<Vec<_>>();
+    let Ok(projections) = playback_service::read_runtime_projections(state, &context, &identities)
+    else {
+        tracing::error!("failed to project Dynamic Playback full-control auto-off");
+        return;
+    };
+    for projection in projections {
+        state
+            .events
+            .publish(light_application::EventDraft::playback_runtime_changed(
+                None,
+                light_application::PlaybackRuntimeChange {
+                    projection,
+                    transition: None,
+                },
+                light_application::EventSource::Runtime,
+                None,
+            ));
     }
 }
 

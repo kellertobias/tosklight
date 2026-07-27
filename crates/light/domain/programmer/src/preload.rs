@@ -27,6 +27,7 @@ impl ProgrammerRegistry {
         let state = states.get(&self.key(session))?;
         Some(
             !state.preload_active.is_empty()
+                || !state.preload_dynamic_active.is_empty()
                 || !state.preload_group_active.is_empty()
                 || state.preload_playback_active,
         )
@@ -49,8 +50,9 @@ impl ProgrammerRegistry {
             let Some(state) = states.get_mut(&self.key(session)) else {
                 return false;
             };
-            let pending_values_changed =
-                !state.preload_pending.is_empty() || !state.preload_group_pending.is_empty();
+            let pending_values_changed = !state.preload_pending.is_empty()
+                || !state.preload_dynamic_pending.is_empty()
+                || !state.preload_group_pending.is_empty();
             state.checkpoint();
             for mut incoming in std::mem::take(&mut state.preload_pending) {
                 incoming.changed_at = committed_at;
@@ -69,6 +71,18 @@ impl ProgrammerRegistry {
                     .entry(group)
                     .or_default()
                     .extend(attributes);
+            }
+            let committed_at_millis =
+                u64::try_from(committed_at.timestamp_millis()).unwrap_or_default();
+            for mut incoming in std::mem::take(&mut state.preload_dynamic_pending) {
+                incoming.changed_at_millis = committed_at_millis;
+                let instance_link = dynamic_instance_link(&incoming.value);
+                state.preload_dynamic_active.retain(|stored| {
+                    stored.fixture_id != incoming.fixture_id
+                        || stored.attribute != incoming.attribute
+                        || dynamic_instance_link(&stored.value) != instance_link
+                });
+                state.preload_dynamic_active.push(incoming);
             }
             // Committed queued Playback activations keep the Preload scene releasable via
             // hold-to-release even when no attribute values were retained.
@@ -169,11 +183,13 @@ impl ProgrammerRegistry {
             let Some(state) = states.get_mut(&self.key(session)) else {
                 return false;
             };
-            let pending_values_changed =
-                !state.preload_pending.is_empty() || !state.preload_group_pending.is_empty();
+            let pending_values_changed = !state.preload_pending.is_empty()
+                || !state.preload_dynamic_pending.is_empty()
+                || !state.preload_group_pending.is_empty();
             let queue_changed = !state.preload_playback_pending.is_empty();
             state.checkpoint();
             state.preload_pending.clear();
+            state.preload_dynamic_pending.clear();
             state.preload_group_pending.clear();
             state.preload_playback_pending.clear();
             state.last_activity = self.clock.now();
@@ -194,12 +210,15 @@ impl ProgrammerRegistry {
         let Some(state) = states.get_mut(&self.key(session)) else {
             return false;
         };
-        let pending_values_changed =
-            !state.preload_pending.is_empty() || !state.preload_group_pending.is_empty();
+        let pending_values_changed = !state.preload_pending.is_empty()
+            || !state.preload_dynamic_pending.is_empty()
+            || !state.preload_group_pending.is_empty();
         let queue_changed = !state.preload_playback_pending.is_empty();
         let changed = state.blind
             || !state.preload_pending.is_empty()
             || !state.preload_active.is_empty()
+            || !state.preload_dynamic_pending.is_empty()
+            || !state.preload_dynamic_active.is_empty()
             || !state.preload_group_pending.is_empty()
             || !state.preload_group_active.is_empty()
             || !state.preload_playback_pending.is_empty()
@@ -210,6 +229,8 @@ impl ProgrammerRegistry {
         state.checkpoint();
         state.preload_pending.clear();
         state.preload_active.clear();
+        state.preload_dynamic_pending.clear();
+        state.preload_dynamic_active.clear();
         state.preload_group_pending.clear();
         state.preload_group_active.clear();
         state.preload_playback_pending.clear();
@@ -275,5 +296,17 @@ impl ProgrammerRegistry {
         state.preload_capture_programmer = capture_programmer;
         state.last_activity = self.clock.now();
         true
+    }
+}
+
+fn dynamic_instance_link(value: &light_dynamics::DynamicSemanticValue) -> Option<Uuid> {
+    match value {
+        light_dynamics::DynamicSemanticValue::DynamicOn { instance_link, .. }
+        | light_dynamics::DynamicSemanticValue::DynamicOff { instance_link, .. } => {
+            Some(*instance_link)
+        }
+        light_dynamics::DynamicSemanticValue::Static { .. }
+        | light_dynamics::DynamicSemanticValue::FixAt { .. }
+        | light_dynamics::DynamicSemanticValue::Release => None,
     }
 }

@@ -24,6 +24,7 @@ light-fixture = { path = "../../../shared/fixture" }
 light-output = { path = "../../domain/output" }
 light-playback = { path = "../../domain/playback" }
 light-programmer = { path = "../../domain/programmer" }
+light-dynamics = { path = "../../domain/dynamics" }
 light-show = { path = "../../../shared/show" }
 light-wire.workspace = true
 parking_lot.workspace = true

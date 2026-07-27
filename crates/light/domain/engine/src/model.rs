@@ -1,4 +1,5 @@
 use light_core::{AttributeKey, AttributeValue, FixtureId, Universe};
+use light_dynamics::{DynamicDefinition, validate_definition};
 use light_fixture::{PatchedFixture, validate_patch};
 use light_output::{DmxFrame, OutputRoute};
 use light_playback::{
@@ -13,6 +14,11 @@ use thiserror::Error;
 pub struct EngineSnapshot {
     pub fixtures: Arc<Vec<PatchedFixture>>,
     pub cue_lists: Arc<Vec<CueList>>,
+    #[serde(default)]
+    pub dynamics: Arc<Vec<DynamicDefinition>>,
+    /// Replaceable target-ordering input for Dynamics. Definitions do not persist a private grid.
+    #[serde(default)]
+    pub dynamic_stage_positions: Arc<HashMap<FixtureId, light_dynamics::SpatialPosition>>,
     #[serde(default)]
     pub playbacks: Arc<Vec<PlaybackDefinition>>,
     #[serde(default)]
@@ -37,6 +43,8 @@ impl EngineSnapshot {
             previous.is_none_or(|previous| !Arc::ptr_eq(&self.groups, &previous.groups));
         let cue_lists_changed =
             previous.is_none_or(|previous| !Arc::ptr_eq(&self.cue_lists, &previous.cue_lists));
+        let dynamics_changed =
+            previous.is_none_or(|previous| !Arc::ptr_eq(&self.dynamics, &previous.dynamics));
         let playbacks_changed =
             previous.is_none_or(|previous| !Arc::ptr_eq(&self.playbacks, &previous.playbacks));
         let pages_changed = previous
@@ -62,6 +70,29 @@ impl EngineSnapshot {
         }
         for cue_list in self.cue_lists.iter().filter(|_| cue_lists_changed) {
             cue_list.validate().map_err(EngineError::Invalid)?;
+        }
+        if dynamics_changed {
+            let mut ids = std::collections::HashSet::new();
+            let mut pool_numbers = std::collections::HashSet::new();
+            for dynamic in self.dynamics.iter() {
+                validate_definition(dynamic)
+                    .map_err(|error| EngineError::Invalid(error.to_string()))?;
+                if !ids.insert(dynamic.id) {
+                    return Err(EngineError::Invalid("duplicate Dynamic identity".into()));
+                }
+                if !pool_numbers.insert(dynamic.pool_number) {
+                    return Err(EngineError::Invalid("duplicate Dynamic pool number".into()));
+                }
+                if let light_dynamics::DynamicTargetBinding::LiveGroup { group_id } =
+                    &dynamic.target_binding
+                    && !groups.contains_key(group_id)
+                {
+                    return Err(EngineError::Invalid(format!(
+                        "Dynamic {} references a missing Group",
+                        dynamic.pool_number
+                    )));
+                }
+            }
         }
         let mut playback_numbers = std::collections::HashSet::new();
         let validate_playbacks = playbacks_changed || cue_lists_changed || groups_changed;

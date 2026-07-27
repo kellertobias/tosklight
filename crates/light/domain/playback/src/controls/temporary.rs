@@ -223,6 +223,25 @@ impl PlaybackEngine {
                 }
             }
             PlaybackButtonAction::Swap => self.set_swap(number, pressed),
+            PlaybackButtonAction::DynamicRestart => {
+                self.restart_dynamic_mutation(number).map(|_| ())
+            }
+            PlaybackButtonAction::DynamicDoubleSpeed => {
+                self.scale_dynamic_speed_mutation(number, true).map(|_| ())
+            }
+            PlaybackButtonAction::DynamicHalfSpeed => {
+                self.scale_dynamic_speed_mutation(number, false).map(|_| ())
+            }
+            PlaybackButtonAction::DynamicLearnSpeed => {
+                if pressed {
+                    self.tap_dynamic_speed_mutation(number).map(|_| ())
+                } else {
+                    Ok(())
+                }
+            }
+            PlaybackButtonAction::Pause if self.dynamic_assignment(number).is_some() => {
+                self.toggle_dynamic_pause_mutation(number).map(|_| ())
+            }
             PlaybackButtonAction::Select
             | PlaybackButtonAction::SelectContents
             | PlaybackButtonAction::SelectDereferenced

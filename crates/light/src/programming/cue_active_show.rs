@@ -92,6 +92,7 @@ fn projection_for_kind(
         ActiveShowObjectKind::Playback => result.projections.playback.as_ref(),
         ActiveShowObjectKind::PlaybackPage => result.projections.page.as_ref(),
         ActiveShowObjectKind::Group
+        | ActiveShowObjectKind::Dynamic
         | ActiveShowObjectKind::PatchLayer
         | ActiveShowObjectKind::Preset
         | ActiveShowObjectKind::StageLayout

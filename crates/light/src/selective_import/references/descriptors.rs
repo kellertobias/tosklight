@@ -1,10 +1,9 @@
 use super::{
     fixtures::{FixtureIdentityCatalog, top_level_profile_reference},
     locations::{
-        add_direct_array_at, add_direct_map_keys, add_direct_value, add_fixture_array,
-        add_fixture_array_at, add_fixture_map_keys, add_fixture_value,
-        add_optional_direct_reference, direct_reference, id_descriptor, key_only_descriptor,
-        primary_identity, scalar_id, value_location,
+        add_direct_map_keys, add_direct_value, add_fixture_array, add_fixture_array_at,
+        add_fixture_map_keys, add_fixture_value, add_optional_direct_reference, direct_reference,
+        id_descriptor, key_only_descriptor, primary_identity, scalar_id, value_location,
     },
 };
 use crate::selective_import::{ImportIdentityFormat, ImportObjectDescriptor};
@@ -25,6 +24,111 @@ pub(super) fn group_descriptor(
         add_optional_direct_reference(object.body(), pointer, "group", &mut descriptor)?;
     }
     Ok(descriptor)
+}
+
+pub(super) fn dynamic_descriptor(
+    object: &PortableShowObject,
+    source: &FixtureIdentityCatalog,
+    target: &FixtureIdentityCatalog,
+) -> Result<ImportObjectDescriptor, String> {
+    let mut descriptor = id_descriptor(object)?;
+    add_optional_direct_reference(
+        object.body(),
+        "/target_binding/group_id",
+        "group",
+        &mut descriptor,
+    )?;
+    add_fixture_array_at(
+        object.body(),
+        "/target_binding/targets",
+        "/target_binding/targets",
+        source,
+        target,
+        &mut descriptor,
+    )?;
+
+    if let Some(lanes) = object.body().pointer("/lanes").and_then(Value::as_array) {
+        for (lane_index, lane) in lanes.iter().enumerate() {
+            if let Some(points) = lane.pointer("/keyframes/points").and_then(Value::as_array) {
+                for point_index in 0..points.len() {
+                    add_dynamic_scalar_source(
+                        object.body(),
+                        &format!("/lanes/{lane_index}/keyframes/points/{point_index}/source"),
+                        source,
+                        target,
+                        &mut descriptor,
+                    )?;
+                }
+            }
+            for source_path in [
+                format!("/lanes/{lane_index}/max_min/minimum"),
+                format!("/lanes/{lane_index}/max_min/maximum"),
+                format!("/lanes/{lane_index}/middle_amplitude/middle"),
+            ] {
+                add_dynamic_scalar_source(
+                    object.body(),
+                    &source_path,
+                    source,
+                    target,
+                    &mut descriptor,
+                )?;
+            }
+        }
+    }
+    if let Some(groups) = object
+        .body()
+        .pointer("/random_groups")
+        .and_then(Value::as_array)
+    {
+        for group_index in 0..groups.len() {
+            for source_path in [
+                format!("/random_groups/{group_index}/low"),
+                format!("/random_groups/{group_index}/high"),
+            ] {
+                add_dynamic_scalar_source(
+                    object.body(),
+                    &source_path,
+                    source,
+                    target,
+                    &mut descriptor,
+                )?;
+            }
+        }
+    }
+    Ok(descriptor)
+}
+
+fn add_dynamic_scalar_source(
+    body: &Value,
+    pointer: &str,
+    source: &FixtureIdentityCatalog,
+    target: &FixtureIdentityCatalog,
+    descriptor: &mut ImportObjectDescriptor,
+) -> Result<(), String> {
+    if body
+        .pointer(pointer)
+        .and_then(|value| value.get("type"))
+        .and_then(Value::as_str)
+        != Some("preset")
+    {
+        return Ok(());
+    }
+    add_optional_direct_reference(body, &format!("{pointer}/preset_id"), "preset", descriptor)?;
+    let fallback_pointer = format!("{pointer}/last_valid_by_target");
+    let Some(fallbacks) = body.pointer(&fallback_pointer).and_then(Value::as_array) else {
+        return Ok(());
+    };
+    for (fallback_index, fallback) in fallbacks.iter().enumerate() {
+        add_fixture_value(
+            fallback,
+            "/target",
+            format!("{fallback_pointer}/{fallback_index}/target"),
+            source,
+            target,
+            descriptor,
+        )?;
+    }
+    Ok(())
 }
 
 pub(super) fn preset_descriptor(
@@ -82,29 +186,6 @@ pub(super) fn cue_list_descriptor(
                 change,
                 "/group_id",
                 format!("/cues/{cue_index}/group_changes/{change_index}/group_id"),
-                "group",
-                &mut descriptor,
-            )?;
-        }
-        for (phaser_index, phaser) in cue
-            .pointer("/phasers")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .enumerate()
-        {
-            add_fixture_array_at(
-                phaser,
-                "/fixture_ids",
-                &format!("/cues/{cue_index}/phasers/{phaser_index}/fixture_ids"),
-                source,
-                target,
-                &mut descriptor,
-            )?;
-            add_direct_array_at(
-                phaser,
-                "/group_ids",
-                &format!("/cues/{cue_index}/phasers/{phaser_index}/group_ids"),
                 "group",
                 &mut descriptor,
             )?;

@@ -6,6 +6,7 @@ use crate::v2::cue_deletion::*;
 use crate::v2::cue_recording::*;
 use crate::v2::cue_transfer::*;
 use crate::v2::desk_management::*;
+use crate::v2::dynamics::*;
 use crate::v2::events::*;
 use crate::v2::files::*;
 use crate::v2::fixture_library::*;
@@ -39,6 +40,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     let mut declarations = command_line(config);
     declarations.extend(control_desk_configuration(config));
     declarations.extend(desk_management(config));
+    declarations.extend(dynamics(config));
     declarations.extend(event_subscription(config));
     declarations.extend(files(config));
     declarations.extend(programming(config));
@@ -61,6 +63,54 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(interaction(config));
     declarations.extend(live_actions(config));
     declarations
+}
+
+fn dynamics(config: &Config) -> Vec<String> {
+    vec![
+        DynamicDefinitionProjection::decl(config),
+        DynamicTargetBindingProjection::decl(config),
+        DynamicLaneProjection::decl(config),
+        DynamicLaneModeProjection::decl(config),
+        DynamicKeyframeConfigurationProjection::decl(config),
+        DynamicKeyframeProjection::decl(config),
+        DynamicMaxMinConfigurationProjection::decl(config),
+        DynamicMiddleAmplitudeConfigurationProjection::decl(config),
+        DynamicScalarSourceProjection::decl(config),
+        DynamicTargetScalarFallbackProjection::decl(config),
+        DynamicScalarInterpolationProjection::decl(config),
+        DynamicPeriodicFunctionProjection::decl(config),
+        DynamicPwmShapeProjection::decl(config),
+        DynamicRandomGroupProjection::decl(config),
+        DynamicPhaseDistributionProjection::decl(config),
+        DynamicPhaseOrderingProjection::decl(config),
+        DynamicSpeedProjection::decl(config),
+        DynamicSpeedGroupProjection::decl(config),
+        DynamicRationalProjection::decl(config),
+        DynamicRunModeProjection::decl(config),
+        DynamicActivationPolicyProjection::decl(config),
+        DynamicActivationBoundaryProjection::decl(config),
+        DynamicReferenceProjection::decl(config),
+        DynamicValueTimingProjection::decl(config),
+        DynamicInstanceOverridesProjection::decl(config),
+        DynamicStartActionRequest::decl(config),
+        DynamicOffActionRequest::decl(config),
+        DynamicControllerValueActionRequest::decl(config),
+        DynamicFixAtActionRequest::decl(config),
+        DynamicInstanceActionOutcome::decl(config),
+        DynamicControllerActionOutcome::decl(config),
+        DynamicRuntimeSnapshotProjection::decl(config),
+        DynamicDefinitionStatusProjection::decl(config),
+        DynamicRuntimeInstanceProjection::decl(config),
+        DynamicRuntimeControllerProjection::decl(config),
+        DynamicStartLiveActionRequest::decl(config),
+        DynamicOffLiveActionRequest::decl(config),
+        DynamicControllerLiveActionRequest::decl(config),
+        DynamicCreateActionRequest::decl(config),
+        DynamicPoolActionRequest::decl(config),
+        DynamicDeleteActionRequest::decl(config),
+        DynamicUpdateActionRequest::decl(config),
+        DynamicUpdateIntent::decl(config),
+    ]
 }
 
 fn live_actions(config: &Config) -> Vec<String> {
@@ -214,9 +264,6 @@ fn show_library(config: &Config) -> Vec<String> {
         PatchLayerActionRequest::decl(config),
         PatchLayerAction::decl(config),
         PatchLayerInput::decl(config),
-        DynamicRecordActionRequest::decl(config),
-        DynamicRecordAction::decl(config),
-        DynamicDirection::decl(config),
         PreloadRecordActionRequest::decl(config),
         PreloadRecordAction::decl(config),
         PreloadPresetMode::decl(config),
@@ -333,6 +380,10 @@ fn command_line(config: &Config) -> Vec<String> {
         CommandHttpSource::decl(config),
         CommandChoiceOption::decl(config),
         CueMoveCopyChoice::decl(config),
+        DynamicInstanceChoiceType::decl(config),
+        DynamicInstanceChoiceOption::decl(config),
+        DynamicInstanceChoice::decl(config),
+        PendingCommandChoice::decl(config),
         ReplaceCommandLineRequest::decl(config),
         CommandKeyRequest::decl(config),
         ExecuteCommandLineRequest::decl(config),
@@ -379,6 +430,8 @@ fn programming(config: &Config) -> Vec<String> {
         ProgrammingAttributeValue::decl(config),
         ProgrammingFixtureValue::decl(config),
         ProgrammingGroupValue::decl(config),
+        ProgrammingDynamicSemanticValue::decl(config),
+        ProgrammingDynamicValue::decl(config),
         ProgrammingCaptureModeProjection::decl(config),
         ProgrammingCaptureModeChange::decl(config),
         ProgrammingCaptureModeSnapshot::decl(config),
@@ -503,6 +556,10 @@ fn playback_projection(config: &Config) -> Vec<String> {
         SpeedSource::decl(config),
         SoundStatus::decl(config),
         CueListRuntimeProjection::decl(config),
+        DynamicPlaybackRuntimeState::decl(config),
+        DynamicPlaybackControllerStatus::decl(config),
+        DynamicPlaybackSpeedSource::decl(config),
+        DynamicPlaybackRuntimeProjection::decl(config),
         SpeedGroupRuntimeProjection::decl(config),
         GrandMasterRuntimeProjection::decl(config),
         PlaybackTargetProjection::decl(config),
@@ -513,6 +570,8 @@ fn playback_projection(config: &Config) -> Vec<String> {
         PlaybackRuntimeChange::decl(config),
         PlaybackTelemetrySample::decl(config),
         PlaybackTelemetryTick::decl(config),
+        DynamicRuntimeEventKind::decl(config),
+        DynamicRuntimeChange::decl(config),
     ]
 }
 
@@ -580,6 +639,10 @@ fn playback_topology(config: &Config) -> Vec<String> {
         PlaybackTopologyButtonAction::decl(config),
         PlaybackTopologyFaderMode::decl(config),
         PlaybackTopologyFlashReleaseMode::decl(config),
+        PlaybackTopologyDynamicAssignment::decl(config),
+        PlaybackTopologyDynamicTargetScope::decl(config),
+        PlaybackTopologyDynamicFaderMode::decl(config),
+        PlaybackTopologyDynamicResumePolicy::decl(config),
         PlaybackTopologyPlaybackDefinition::decl(config),
         PlaybackTopologyAction::decl(config),
         PlaybackTopologyActionRequest::decl(config),

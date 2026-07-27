@@ -129,7 +129,7 @@ pub struct CommandLineResponse {
     pub pristine: bool,
     #[ts(type = "number")]
     pub revision: u64,
-    pub pending_choice: Option<CueMoveCopyChoice>,
+    pub pending_choice: Option<PendingCommandChoice>,
 }
 
 /// Complete response to a mutating command-line operation.
@@ -155,7 +155,7 @@ pub enum CommandOperationOutcome {
         warning: Option<String>,
     },
     ChoiceRequired {
-        pending_choice: CueMoveCopyChoice,
+        pending_choice: PendingCommandChoice,
     },
     Rejected {
         error: String,
@@ -227,6 +227,41 @@ pub struct CommandChoiceOption {
 pub enum CommandChoiceOptionId {
     Plain,
     Status,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(untagged)]
+pub enum PendingCommandChoice {
+    CueMoveCopy(CueMoveCopyChoice),
+    DynamicInstance(DynamicInstanceChoice),
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicInstanceChoice {
+    #[serde(rename = "type")]
+    pub choice_type: DynamicInstanceChoiceType,
+    pub choice_id: Uuid,
+    pub show_id: Uuid,
+    #[ts(type = "number")]
+    pub show_revision: u64,
+    pub dynamic_id: Uuid,
+    pub pool_number: u16,
+    pub command: String,
+    pub options: Vec<DynamicInstanceChoiceOption>,
+    pub cancel_label: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub enum DynamicInstanceChoiceType {
+    #[serde(rename = "dynamic_instance")]
+    DynamicInstance,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct DynamicInstanceChoiceOption {
+    pub controller_id: Uuid,
+    pub label: String,
+    pub command: String,
 }
 
 /// Source names currently emitted by the v2 HTTP command-line adapter.
@@ -366,11 +401,14 @@ mod tests {
         let CommandOperationOutcome::ChoiceRequired { pending_choice } = &response.outcome else {
             panic!("expected choice-required outcome");
         };
+        let PendingCommandChoice::CueMoveCopy(pending_choice) = pending_choice else {
+            panic!("expected Cue Move/Copy choice");
+        };
         assert_eq!(pending_choice.operation, CueTransferOperation::Copy);
         assert_eq!(pending_choice.options.len(), 2);
         assert_eq!(
             response.command_line.pending_choice.as_ref(),
-            Some(pending_choice)
+            Some(&PendingCommandChoice::CueMoveCopy(pending_choice.clone()))
         );
     }
 }

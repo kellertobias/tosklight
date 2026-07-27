@@ -13,6 +13,7 @@ arc-swap.workspace = true
 chrono.workspace = true
 light-core = { path = "../../../shared/core" }
 light-control = { path = "../control", default-features = false }
+light-dynamics = { path = "../dynamics" }
 light-fixture = { path = "../../../shared/fixture" }
 light-output = { path = "../output" }
 light-playback = { path = "../playback" }

@@ -4,8 +4,8 @@ use crate::{
 };
 use light_core::{CueListId, Revision, ShowId};
 use light_playback::{
-    CueChange, CueList, CueListRecordingPlan, CueRecordOperation, CueRecordingContent,
-    CueRecordingPlanError, CueRecordingTiming, GroupCueChange,
+    CueChange, CueDynamicChange, CueList, CueListRecordingPlan, CueRecordOperation,
+    CueRecordingContent, CueRecordingPlanError, CueRecordingTiming, GroupCueChange,
 };
 use light_programmer::{CueRecordingCapture, CueRecordingCapturedSource};
 use light_show::PortableShowRevision;
@@ -193,6 +193,17 @@ impl ProgrammingCueCommit {
                 .map(fixture_change)
                 .collect(),
             group_changes: self.capture.group_values.iter().map(group_change).collect(),
+            dynamic_changes: self
+                .capture
+                .dynamic_values
+                .iter()
+                .map(|value| CueDynamicChange {
+                    fixture_id: value.fixture_id,
+                    attribute: value.attribute.clone(),
+                    value: value.value.clone(),
+                    automatic_restore: false,
+                })
+                .collect(),
             timing: CueRecordingTiming {
                 fade_millis: self.request.timing.fade_millis,
                 delay_millis: self.request.timing.delay_millis,

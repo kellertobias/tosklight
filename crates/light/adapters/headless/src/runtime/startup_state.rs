@@ -428,6 +428,11 @@ fn apply_output_runtime(engine: &Engine, runtime: &PersistedOutputRuntime) {
             runtime.dynamics_paused_at,
         ))
         .expect("restoring dynamics pause state is infallible");
+    engine
+        .execute_playback(EnginePlaybackCommand::RestoreActiveDynamics(
+            runtime.dynamic_playbacks.clone(),
+        ))
+        .expect("restoring validated Dynamic Playback state is infallible");
 }
 
 fn apply_group_masters(engine: &Engine, runtime: &PersistedOutputRuntime) {

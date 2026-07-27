@@ -7,6 +7,7 @@ license-file.workspace = true
 [dependencies]
 chrono.workspace = true
 light-core = { path = "../shared/core" }
+light-dynamics = { path = "domain/dynamics" }
 light-engine = { path = "domain/engine", default-features = false }
 light-fixture = { path = "../shared/fixture" }
 light-mvr = { path = "../shared/mvr" }

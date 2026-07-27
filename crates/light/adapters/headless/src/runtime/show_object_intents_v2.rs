@@ -10,13 +10,369 @@ const REQUEST_CACHE_ENTRY_LIMIT: usize = 1_024;
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/v2/dynamics/create", post(dynamic_create_action))
+        .route("/api/v2/dynamics/{id}/move", post(dynamic_move_action))
+        .route("/api/v2/dynamics/{id}/copy", post(dynamic_copy_action))
+        .route("/api/v2/dynamics/{id}/delete", post(dynamic_delete_action))
+        .route("/api/v2/dynamics/{id}/update", post(dynamic_update_action))
         .route("/api/v2/user-layouts/{id}/update", post(user_layout_action))
         .route("/api/v2/patch/layers/{id}/update", post(patch_layer_action))
-        .route(
-            "/api/v2/cue-lists/{id}/dynamics/record",
-            post(dynamic_record_action),
-        )
         .route("/api/v2/preload/record", post(preload_record_action))
+}
+
+async fn dynamic_create_action(
+    State(state): State<AppState>,
+    context: ShowContext,
+    headers: HeaderMap,
+    TolerantJson(request): TolerantJson<wire::DynamicCreateActionRequest>,
+) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    validate_request_id(&request.request_id)?;
+    let show_id = context.resolve(&state)?;
+    let replay_action = ReplayAction::DynamicCreate(request.definition.clone());
+    let key = ReplayKey::new(&session, show_id, &request.request_id);
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object_intent(&key, &replay_action)
+        .await?
+    {
+        return Ok(Json(outcome));
+    }
+    let activation = state.active_show.acquire().await;
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object_intent(&key, &replay_action)
+        .await?
+    {
+        return Ok(Json(outcome));
+    }
+    let mut body = request.definition;
+    let mut definition = decode_dynamic(body.clone())?;
+    if definition.lanes.is_empty() {
+        return Err(ApiError::bad_request(
+            "a Dynamic is created only after its first valid lane is selected",
+        ));
+    }
+    ensure_dynamic_pool_slot_free(&state, show_id, definition.pool_number, None)?;
+    definition.id = Uuid::new_v4();
+    definition.revision = 1;
+    light_dynamics::validate_definition(&definition)
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let id = definition.id.to_string();
+    let object = body
+        .as_object_mut()
+        .ok_or_else(|| ApiError::bad_request("Dynamic definition must be an object"))?;
+    object.insert("id".into(), serde_json::Value::String(id.clone()));
+    object.insert("revision".into(), serde_json::Value::from(1));
+    let action = active_show_object_action(
+        operator_action_context(&session, light_application::ActionSource::Http)
+            .with_request_id(&request.request_id),
+        show_id,
+        vec![put_active_show_object(
+            light_application::ActiveShowObjectKind::Dynamic,
+            id.clone(),
+            0,
+            body,
+        )?],
+    );
+    let (result, _activation) =
+        run_active_show_object_action_async(&state, activation, action).await?;
+    let outcome = committed_outcome(
+        &state,
+        show_id,
+        "dynamic",
+        &id,
+        request.request_id,
+        Some(result.event_sequence),
+    )?;
+    emit_dynamic_object_event(&state, &outcome, "created");
+    state
+        .replay
+        .insert_show_object_intent(key, replay_action, outcome.clone())
+        .await;
+    Ok(Json(outcome))
+}
+
+async fn dynamic_move_action(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    context: ShowContext,
+    headers: HeaderMap,
+    TolerantJson(request): TolerantJson<wire::DynamicPoolActionRequest>,
+) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
+    dynamic_pool_action(state, id, context, headers, request, false).await
+}
+
+async fn dynamic_copy_action(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    context: ShowContext,
+    headers: HeaderMap,
+    TolerantJson(request): TolerantJson<wire::DynamicPoolActionRequest>,
+) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
+    dynamic_pool_action(state, id, context, headers, request, true).await
+}
+
+async fn dynamic_pool_action(
+    state: AppState,
+    id: Uuid,
+    context: ShowContext,
+    headers: HeaderMap,
+    request: wire::DynamicPoolActionRequest,
+    copy: bool,
+) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    validate_request_id(&request.request_id)?;
+    let show_id = context.resolve(&state)?;
+    let replay_action = if copy {
+        ReplayAction::DynamicCopy(id, request.clone())
+    } else {
+        ReplayAction::DynamicMove(id, request.clone())
+    };
+    let key = ReplayKey::new(&session, show_id, &request.request_id);
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object_intent(&key, &replay_action)
+        .await?
+    {
+        return Ok(Json(outcome));
+    }
+    let activation = state.active_show.acquire().await;
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object_intent(&key, &replay_action)
+        .await?
+    {
+        return Ok(Json(outcome));
+    }
+    ensure_dynamic_pool_slot_free(&state, show_id, request.pool_number, Some(id))?;
+    let raw_body = load_body(&state, show_id, "dynamic", &id.to_string())?;
+    let (object_revision, mut definition) = load_dynamic(&state, show_id, id)?;
+    if object_revision != request.expected_revision {
+        return Err(ApiError::conflict(format!(
+            "Dynamic revision conflict: expected {}, current {object_revision}",
+            request.expected_revision
+        )));
+    }
+    let (target_id, expected_revision) = if copy {
+        definition.id = Uuid::new_v4();
+        definition.name = format!("{} Copy", definition.name);
+        definition.revision = 1;
+        (definition.id, 0)
+    } else {
+        definition.revision = definition.revision.saturating_add(1);
+        (id, request.expected_revision)
+    };
+    definition.pool_number = request.pool_number;
+    let body = if copy {
+        let mut body = raw_body;
+        let object = body
+            .as_object_mut()
+            .ok_or_else(|| ApiError::internal("stored Dynamic is not an object"))?;
+        object.insert("id".into(), target_id.to_string().into());
+        object.insert("pool_number".into(), request.pool_number.into());
+        object.insert("revision".into(), 1.into());
+        object.insert("name".into(), definition.name.clone().into());
+        body
+    } else {
+        serde_json::to_value(definition).map_err(|error| ApiError::internal(error.to_string()))?
+    };
+    let action = active_show_object_action(
+        operator_action_context(&session, light_application::ActionSource::Http)
+            .with_request_id(&request.request_id),
+        show_id,
+        vec![put_active_show_object(
+            light_application::ActiveShowObjectKind::Dynamic,
+            target_id.to_string(),
+            expected_revision,
+            body,
+        )?],
+    );
+    let (result, _activation) =
+        run_active_show_object_action_async(&state, activation, action).await?;
+    let outcome = committed_outcome(
+        &state,
+        show_id,
+        "dynamic",
+        &target_id.to_string(),
+        request.request_id,
+        Some(result.event_sequence),
+    )?;
+    emit_dynamic_object_event(&state, &outcome, if copy { "copied" } else { "moved" });
+    state
+        .replay
+        .insert_show_object_intent(key, replay_action, outcome.clone())
+        .await;
+    Ok(Json(outcome))
+}
+
+async fn dynamic_update_action(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    context: ShowContext,
+    headers: HeaderMap,
+    TolerantJson(request): TolerantJson<wire::DynamicUpdateActionRequest>,
+) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    validate_request_id(&request.request_id)?;
+    let show_id = context.resolve(&state)?;
+    let replay_action = ReplayAction::DynamicUpdate(id, request.clone());
+    let key = ReplayKey::new(&session, show_id, &request.request_id);
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object_intent(&key, &replay_action)
+        .await?
+    {
+        return Ok(Json(outcome));
+    }
+    let activation = state.active_show.acquire().await;
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object_intent(&key, &replay_action)
+        .await?
+    {
+        return Ok(Json(outcome));
+    }
+    let (object_revision, mut definition) = load_dynamic(&state, show_id, id)?;
+    if object_revision != request.expected_revision {
+        return Err(ApiError::conflict(format!(
+            "Dynamic revision conflict: expected {}, current {object_revision}",
+            request.expected_revision
+        )));
+    }
+    if matches!(
+        request.intent,
+        wire::DynamicUpdateIntent::SetTargetBinding { .. }
+    ) && state.output.is_dynamic_definition_running(id)
+    {
+        return Err(ApiError::conflict(
+            "turn every running instance Off before changing Dynamic targets",
+        ));
+    }
+    apply_dynamic_update_intent(&mut definition, request.intent.clone())?;
+    definition.revision = definition.revision.saturating_add(1);
+    light_dynamics::validate_definition(&definition)
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let action = active_show_object_action(
+        operator_action_context(&session, light_application::ActionSource::Http)
+            .with_request_id(&request.request_id),
+        show_id,
+        vec![put_active_show_object(
+            light_application::ActiveShowObjectKind::Dynamic,
+            id.to_string(),
+            request.expected_revision,
+            serde_json::to_value(definition)
+                .map_err(|error| ApiError::internal(error.to_string()))?,
+        )?],
+    );
+    let (result, _activation) =
+        run_active_show_object_action_async(&state, activation, action).await?;
+    let outcome = committed_outcome(
+        &state,
+        show_id,
+        "dynamic",
+        &id.to_string(),
+        request.request_id,
+        Some(result.event_sequence),
+    )?;
+    emit_dynamic_object_event(&state, &outcome, "updated");
+    state
+        .replay
+        .insert_show_object_intent(key, replay_action, outcome.clone())
+        .await;
+    Ok(Json(outcome))
+}
+
+async fn dynamic_delete_action(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    context: ShowContext,
+    headers: HeaderMap,
+    TolerantJson(request): TolerantJson<wire::DynamicDeleteActionRequest>,
+) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    validate_request_id(&request.request_id)?;
+    let show_id = context.resolve(&state)?;
+    let replay_action = ReplayAction::DynamicDelete(id, request.clone());
+    let key = ReplayKey::new(&session, show_id, &request.request_id);
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object_intent(&key, &replay_action)
+        .await?
+    {
+        return Ok(Json(outcome));
+    }
+    let activation = state.active_show.acquire().await;
+    if let Some(outcome) = state
+        .replay
+        .lookup_show_object_intent(&key, &replay_action)
+        .await?
+    {
+        return Ok(Json(outcome));
+    }
+    let entry = active_entry(&state, show_id)?;
+    let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
+    let (show_revision, object) = store
+        .object_with_portable_revision("dynamic", &id.to_string())
+        .map_err(ApiError::store)?;
+    let object = object.ok_or_else(|| ApiError::not_found("Dynamic does not exist"))?;
+    if object.revision != request.expected_revision {
+        return Err(ApiError::conflict(format!(
+            "Dynamic revision conflict: expected {}, current {}",
+            request.expected_revision, object.revision
+        )));
+    }
+    let definition = decode_dynamic(object.body.clone())?;
+    let fallback = light_dynamics::DynamicDefinitionSnapshot {
+        definition: Box::new(definition.clone()),
+    };
+    let mut mutations = Vec::new();
+    for kind in ["cue_list", "playback"] {
+        let (_, objects) = store
+            .objects_with_portable_revision(kind)
+            .map_err(ApiError::store)?;
+        for mut referenced in objects {
+            if snapshot_deleted_dynamic_references(&mut referenced.body, id, &fallback) {
+                mutations.push(put_active_show_object(
+                    match kind {
+                        "cue_list" => light_application::ActiveShowObjectKind::CueList,
+                        "playback" => light_application::ActiveShowObjectKind::Playback,
+                        _ => unreachable!(),
+                    },
+                    referenced.id,
+                    referenced.revision,
+                    referenced.body,
+                )?);
+            }
+        }
+    }
+    mutations.push(delete_active_show_object(
+        light_application::ActiveShowObjectKind::Dynamic,
+        id.to_string(),
+        request.expected_revision,
+    ));
+    let action = active_show_object_action(
+        operator_action_context(&session, light_application::ActionSource::Http)
+            .with_request_id(&request.request_id),
+        show_id,
+        mutations,
+    );
+    let (result, _activation) =
+        run_active_show_object_action_async(&state, activation, action).await?;
+    let outcome = wire::ShowObjectActionOutcome {
+        request_id: request.request_id,
+        replayed: false,
+        show_id: show_id.0,
+        show_revision: show_revision.value().saturating_add(1),
+        object: object_record(object),
+        event_sequence: Some(result.event_sequence),
+    };
+    emit_dynamic_object_event(&state, &outcome, "deleted");
+    state
+        .replay
+        .insert_show_object_intent(key, replay_action, outcome.clone())
+        .await;
+    Ok(Json(outcome))
 }
 
 async fn user_layout_action(
@@ -181,88 +537,6 @@ async fn patch_layer_action(
     Ok(Json(outcome))
 }
 
-async fn dynamic_record_action(
-    State(state): State<AppState>,
-    Path(cue_list_id): Path<String>,
-    context: ShowContext,
-    headers: HeaderMap,
-    TolerantJson(request): TolerantJson<wire::DynamicRecordActionRequest>,
-) -> Result<Json<wire::ShowObjectActionOutcome>, ApiError> {
-    let session = authenticate(&state, &headers)?;
-    validate_request_id(&request.request_id)?;
-    let show_id = context.resolve(&state)?;
-    let replay_action = ReplayAction::Dynamic(request.action.clone());
-    let key = ReplayKey::new(&session, show_id, &request.request_id);
-    if let Some(outcome) = state
-        .replay
-        .lookup_show_object_intent(&key, &replay_action)
-        .await?
-    {
-        return Ok(Json(outcome));
-    }
-    let activation = state.active_show.acquire().await;
-    let wire::DynamicRecordAction::Append {
-        expected_revision,
-        speed,
-        width,
-        direction,
-        fixture_ids,
-        group_ids,
-    } = request.action;
-    if !speed.is_finite() || speed <= 0.0 {
-        return Err(ApiError::bad_request(
-            "dynamic speed must be finite and positive",
-        ));
-    }
-    if !width.is_finite() || !(0.0..=100.0).contains(&width) {
-        return Err(ApiError::bad_request(
-            "dynamic width must be finite and between 0 and 100",
-        ));
-    }
-    if fixture_ids.is_empty() && group_ids.is_empty() {
-        return Err(ApiError::bad_request(
-            "dynamic recording requires fixtures or groups",
-        ));
-    }
-    let mut body = load_existing_body(&state, show_id, "cue_list", &cue_list_id)?;
-    append_dynamic(&mut body, speed, width, direction, fixture_ids, group_ids)?;
-    let action = active_show_object_action(
-        operator_action_context(&session, light_application::ActionSource::Http),
-        show_id,
-        vec![put_active_show_object(
-            light_application::ActiveShowObjectKind::CueList,
-            cue_list_id.clone(),
-            expected_revision,
-            body,
-        )?],
-    );
-    let (result, _activation) =
-        run_active_show_object_action_async(&state, activation, action).await?;
-    emit(
-        &state,
-        "show_object_changed",
-        serde_json::json!({
-            "show_id": show_id,
-            "kind": "cue_list",
-            "id": cue_list_id,
-            "revision": result.changes[0].object_revision
-        }),
-    );
-    let outcome = committed_outcome(
-        &state,
-        show_id,
-        "cue_list",
-        &cue_list_id,
-        request.request_id,
-        Some(result.event_sequence),
-    )?;
-    state
-        .replay
-        .insert_show_object_intent(key, replay_action, outcome.clone())
-        .await;
-    Ok(Json(outcome))
-}
-
 async fn preload_record_action(
     State(state): State<AppState>,
     context: ShowContext,
@@ -365,48 +639,227 @@ fn preload_input(action: wire::PreloadRecordAction) -> (PreloadStoreInput, u64) 
     }
 }
 
-fn append_dynamic(
-    body: &mut serde_json::Value,
-    speed: f64,
-    width: f64,
-    direction: wire::DynamicDirection,
-    fixture_ids: Vec<Uuid>,
-    group_ids: Vec<String>,
+fn decode_dynamic(value: serde_json::Value) -> Result<light_dynamics::DynamicDefinition, ApiError> {
+    serde_json::from_value(value)
+        .map_err(|error| ApiError::bad_request(format!("invalid Dynamic definition: {error}")))
+}
+
+fn load_dynamic(
+    state: &AppState,
+    show_id: light_core::ShowId,
+    id: Uuid,
+) -> Result<(u64, light_dynamics::DynamicDefinition), ApiError> {
+    let entry = active_entry(state, show_id)?;
+    let (_, object) = ActiveShowRepository::open(&entry.path)
+        .map_err(ApiError::store)?
+        .object_with_portable_revision("dynamic", &id.to_string())
+        .map_err(ApiError::store)?;
+    let object = object.ok_or_else(|| ApiError::not_found("Dynamic does not exist"))?;
+    Ok((object.revision, decode_dynamic(object.body)?))
+}
+
+fn ensure_dynamic_pool_slot_free(
+    state: &AppState,
+    show_id: light_core::ShowId,
+    pool_number: u16,
+    except: Option<Uuid>,
 ) -> Result<(), ApiError> {
-    let cues = body
-        .get_mut("cues")
-        .and_then(serde_json::Value::as_array_mut)
-        .ok_or_else(|| ApiError::bad_request("the Cuelist needs at least one Cue"))?;
-    let cue = cues
-        .first_mut()
-        .and_then(serde_json::Value::as_object_mut)
-        .ok_or_else(|| ApiError::bad_request("the Cuelist needs at least one Cue"))?;
-    let phasers = cue
-        .entry("phasers")
-        .or_insert_with(|| serde_json::Value::Array(Vec::new()))
-        .as_array_mut()
-        .ok_or_else(|| ApiError::bad_request("Cue phasers must be an array"))?;
-    let (phase_start_degrees, phase_end_degrees) = match direction {
-        wire::DynamicDirection::Forward => (0, 360),
-        wire::DynamicDirection::Reverse => (360, 0),
-    };
-    phasers.push(serde_json::json!({
-        "fixture_ids": fixture_ids,
-        "group_ids": group_ids,
-        "attribute": "intensity",
-        "phaser": {
-            "mode": "relative",
-            "steps": [
-                {"position": 0, "value": 0, "curve_to_next": "sine"},
-                {"position": 0.5, "value": 1, "curve_to_next": "sine"}
-            ],
-            "cycles_per_minute": speed,
-            "phase_start_degrees": phase_start_degrees,
-            "phase_end_degrees": phase_end_degrees,
-            "width": width / 100.0
+    if !(1..=9_999).contains(&pool_number) {
+        return Err(ApiError::bad_request(
+            "Dynamic pool number must be between 1 and 9999",
+        ));
+    }
+    let entry = active_entry(state, show_id)?;
+    let (_, objects) = ActiveShowRepository::open(&entry.path)
+        .map_err(ApiError::store)?
+        .objects_with_portable_revision("dynamic")
+        .map_err(ApiError::store)?;
+    for object in objects {
+        let definition = decode_dynamic(object.body)?;
+        if definition.pool_number == pool_number && Some(definition.id) != except {
+            return Err(ApiError::conflict(format!(
+                "Dynamic pool slot {pool_number} is already occupied"
+            )));
         }
-    }));
+    }
     Ok(())
+}
+
+fn apply_dynamic_update_intent(
+    definition: &mut light_dynamics::DynamicDefinition,
+    intent: wire::DynamicUpdateIntent,
+) -> Result<(), ApiError> {
+    use wire::DynamicUpdateIntent;
+    match intent {
+        DynamicUpdateIntent::SetName { name } => {
+            if name.trim().is_empty() {
+                return Err(ApiError::bad_request("Dynamic name must not be empty"));
+            }
+            definition.name = name;
+        }
+        DynamicUpdateIntent::SetColor { color } => definition.color = color,
+        DynamicUpdateIntent::SetIcon { icon } => definition.icon = icon,
+        DynamicUpdateIntent::SetTargetBinding { target_binding } => {
+            definition.target_binding =
+                serde_json::from_value(target_binding).map_err(|error| {
+                    ApiError::bad_request(format!("invalid Dynamic target binding: {error}"))
+                })?;
+        }
+        DynamicUpdateIntent::AddLane { lane, index } => {
+            let lane = decode_dynamic_part("lane", lane)?;
+            let index = index.unwrap_or(definition.lanes.len());
+            if index > definition.lanes.len() {
+                return Err(ApiError::bad_request("Dynamic lane index is out of range"));
+            }
+            definition.lanes.insert(index, lane);
+        }
+        DynamicUpdateIntent::ReplaceLane { lane_id, lane } => {
+            let mut lane: light_dynamics::DynamicLane = decode_dynamic_part("lane", lane)?;
+            lane.id = lane_id;
+            let stored = definition
+                .lanes
+                .iter_mut()
+                .find(|candidate| candidate.id == lane_id)
+                .ok_or_else(|| ApiError::not_found("Dynamic lane does not exist"))?;
+            *stored = lane;
+        }
+        DynamicUpdateIntent::DeleteLane { lane_id } => {
+            let before = definition.lanes.len();
+            definition.lanes.retain(|lane| lane.id != lane_id);
+            if definition.lanes.len() == before {
+                return Err(ApiError::not_found("Dynamic lane does not exist"));
+            }
+        }
+        DynamicUpdateIntent::MoveLane { lane_id, index } => {
+            let Some(from) = definition.lanes.iter().position(|lane| lane.id == lane_id) else {
+                return Err(ApiError::not_found("Dynamic lane does not exist"));
+            };
+            if index >= definition.lanes.len() {
+                return Err(ApiError::bad_request("Dynamic lane index is out of range"));
+            }
+            let lane = definition.lanes.remove(from);
+            definition.lanes.insert(index, lane);
+        }
+        DynamicUpdateIntent::SetPhase { phase } => {
+            definition.phase = decode_dynamic_part("phase", phase)?;
+        }
+        DynamicUpdateIntent::SetSpeed { speed } => {
+            definition.speed = decode_dynamic_part("speed", speed)?;
+        }
+        DynamicUpdateIntent::SetOverallSpeedMultiplier { multiplier } => {
+            definition.overall_speed_multiplier = light_dynamics::Rational {
+                numerator: multiplier.numerator,
+                denominator: multiplier.denominator,
+            };
+        }
+        DynamicUpdateIntent::SetRunMode { run_mode } => {
+            definition.run_mode = match run_mode {
+                light_wire::v2::dynamics::DynamicRunModeProjection::Loop => {
+                    light_dynamics::DynamicRunMode::Loop
+                }
+                light_wire::v2::dynamics::DynamicRunModeProjection::OneShot => {
+                    light_dynamics::DynamicRunMode::OneShot
+                }
+            };
+        }
+        DynamicUpdateIntent::SetActivation { activation } => {
+            definition.default_activation = decode_dynamic_part("activation", activation)?;
+        }
+        DynamicUpdateIntent::SetActivationBoundary { boundary } => {
+            definition.activation_boundary = match boundary {
+                light_wire::v2::dynamics::DynamicActivationBoundaryProjection::Beat => {
+                    light_dynamics::ActivationBoundary::Beat
+                }
+                light_wire::v2::dynamics::DynamicActivationBoundaryProjection::Bar => {
+                    light_dynamics::ActivationBoundary::Bar
+                }
+            };
+        }
+        DynamicUpdateIntent::AddRandomGroup { group } => {
+            definition
+                .random_groups
+                .push(decode_dynamic_part("Random group", group)?);
+        }
+        DynamicUpdateIntent::ReplaceRandomGroup { group_id, group } => {
+            let mut group: light_dynamics::DynamicRandomGroup =
+                decode_dynamic_part("Random group", group)?;
+            group.id = group_id;
+            let stored = definition
+                .random_groups
+                .iter_mut()
+                .find(|candidate| candidate.id == group_id)
+                .ok_or_else(|| ApiError::not_found("Dynamic Random group does not exist"))?;
+            *stored = group;
+        }
+        DynamicUpdateIntent::DeleteRandomGroup { group_id } => {
+            let before = definition.random_groups.len();
+            definition
+                .random_groups
+                .retain(|group| group.id != group_id);
+            if definition.random_groups.len() == before {
+                return Err(ApiError::not_found("Dynamic Random group does not exist"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn decode_dynamic_part<T: serde::de::DeserializeOwned>(
+    label: &str,
+    value: serde_json::Value,
+) -> Result<T, ApiError> {
+    serde_json::from_value(value)
+        .map_err(|error| ApiError::bad_request(format!("invalid Dynamic {label}: {error}")))
+}
+
+pub(super) fn snapshot_deleted_dynamic_references(
+    value: &mut serde_json::Value,
+    dynamic_id: Uuid,
+    fallback: &light_dynamics::DynamicDefinitionSnapshot,
+) -> bool {
+    let mut changed = false;
+    match value {
+        serde_json::Value::Array(values) => {
+            for value in values {
+                changed |= snapshot_deleted_dynamic_references(value, dynamic_id, fallback);
+            }
+        }
+        serde_json::Value::Object(object) => {
+            let matches = object
+                .get("dynamic_id")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|value| value == dynamic_id.to_string());
+            if matches {
+                object.insert("dynamic_id".into(), serde_json::Value::Null);
+                if let Ok(fallback) = serde_json::to_value(fallback) {
+                    object.insert("embedded_fallback".into(), fallback);
+                }
+                changed = true;
+            }
+            for value in object.values_mut() {
+                changed |= snapshot_deleted_dynamic_references(value, dynamic_id, fallback);
+            }
+        }
+        _ => {}
+    }
+    changed
+}
+
+fn emit_dynamic_object_event(
+    state: &AppState,
+    outcome: &wire::ShowObjectActionOutcome,
+    operation: &str,
+) {
+    emit(
+        state,
+        "dynamic_object_changed",
+        serde_json::json!({
+            "show_id": outcome.show_id,
+            "dynamic_id": outcome.object.id,
+            "object_revision": outcome.object.revision,
+            "operation": operation,
+        }),
+    );
 }
 
 fn committed_outcome(
@@ -449,22 +902,6 @@ fn load_body(
         .map_or_else(|| serde_json::json!({}), |object| object.body))
 }
 
-fn load_existing_body(
-    state: &AppState,
-    show_id: light_core::ShowId,
-    kind: &str,
-    object_id: &str,
-) -> Result<serde_json::Value, ApiError> {
-    let entry = active_entry(state, show_id)?;
-    ActiveShowRepository::open(&entry.path)
-        .map_err(ApiError::store)?
-        .object_with_portable_revision(kind, object_id)
-        .map_err(ApiError::store)?
-        .1
-        .map(|object| object.body)
-        .ok_or_else(|| ApiError::not_found("show object"))
-}
-
 fn validate_printable_id(label: &str, value: &str) -> Result<(), ApiError> {
     if value.trim().is_empty() || value.len() > 128 || value.chars().any(char::is_control) {
         return Err(ApiError::bad_request(format!(
@@ -476,9 +913,13 @@ fn validate_printable_id(label: &str, value: &str) -> Result<(), ApiError> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum ReplayAction {
+    DynamicCreate(serde_json::Value),
+    DynamicMove(Uuid, wire::DynamicPoolActionRequest),
+    DynamicCopy(Uuid, wire::DynamicPoolActionRequest),
+    DynamicDelete(Uuid, wire::DynamicDeleteActionRequest),
+    DynamicUpdate(Uuid, wire::DynamicUpdateActionRequest),
     UserLayout(wire::UserLayoutAction),
     PatchLayer(wire::PatchLayerAction),
-    Dynamic(wire::DynamicRecordAction),
     Preload(wire::PreloadRecordAction),
 }
 

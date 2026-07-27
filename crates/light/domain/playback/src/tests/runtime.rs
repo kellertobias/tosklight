@@ -1,6 +1,53 @@
 use super::*;
 
 #[test]
+fn active_cue_dynamic_projection_tracks_fat_and_honors_release() {
+    let fixture = FixtureId::new();
+    let mut one = Cue::new(1.0);
+    one.dynamic_changes.push(CueDynamicChange {
+        fixture_id: fixture,
+        attribute: AttributeKey::intensity(),
+        value: light_dynamics::DynamicSemanticValue::FixAt {
+            value: 0.4,
+            timing: light_dynamics::DynamicValueTiming {
+                fade_millis: Some(200),
+                delay_millis: Some(50),
+            },
+        },
+        automatic_restore: false,
+    });
+    let two = Cue::new(2.0);
+    let mut three = Cue::new(3.0);
+    three.dynamic_changes.push(CueDynamicChange {
+        fixture_id: fixture,
+        attribute: AttributeKey::intensity(),
+        value: light_dynamics::DynamicSemanticValue::Release,
+        automatic_restore: false,
+    });
+    let cue_list = list(vec![one, two, three]);
+    let id = cue_list.id;
+    let started = Utc::now();
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine.go_at(id, started).unwrap();
+    let first = engine.active_cue_dynamic_values();
+    assert_eq!(first.len(), 1);
+    assert!(matches!(
+        first[0].value,
+        light_dynamics::DynamicSemanticValue::FixAt { value: 0.4, .. }
+    ));
+
+    engine
+        .go_at(id, started + ChronoDuration::milliseconds(1))
+        .unwrap();
+    assert_eq!(engine.active_cue_dynamic_values().len(), 1);
+    engine
+        .go_at(id, started + ChronoDuration::milliseconds(2))
+        .unwrap();
+    assert!(engine.active_cue_dynamic_values().is_empty());
+}
+
+#[test]
 fn ltp_intensity_can_select_a_newer_lower_value() {
     let fixture = FixtureId::new();
     let mut high = Cue::new(1.0);
@@ -142,49 +189,4 @@ fn loaded_feedback_tracks_stable_identity_through_renumber_and_deletion() {
     assert_eq!(status.playback.loaded_cue_id, None);
     assert!(!status.effective_next_is_loaded);
     assert_eq!(status.effective_next_cue_number, Some(1.0));
-}
-
-#[test]
-fn attribute_phaser_is_a_normal_playback_contribution() {
-    let fixture = FixtureId::new();
-    let mut cue = Cue::new(1.0);
-    cue.phasers.push(AttributePhaser {
-        fixture_ids: vec![fixture],
-        group_ids: vec![],
-        attribute: AttributeKey::intensity(),
-        phaser: Phaser {
-            mode: PhaserMode::Absolute,
-            steps: vec![
-                PhaserStep {
-                    position: 0.0,
-                    value: 0.0,
-                    curve_to_next: PhaserCurve::Linear,
-                },
-                PhaserStep {
-                    position: 0.5,
-                    value: 1.0,
-                    curve_to_next: PhaserCurve::Linear,
-                },
-            ],
-            cycles_per_minute: 60.0,
-            phase_start_degrees: 0.0,
-            phase_end_degrees: 0.0,
-            width: 1.0,
-        },
-    });
-    let cue_list = list(vec![cue]);
-    let id = cue_list.id;
-    let mut engine = PlaybackEngine::default();
-    engine.register(cue_list).unwrap();
-    let started = Utc::now();
-    engine.go_at(id, started).unwrap();
-    assert!(
-        (contribution_level(
-            &engine,
-            started + ChronoDuration::milliseconds(250),
-            fixture
-        ) - 0.5)
-            .abs()
-            < 0.01
-    );
 }

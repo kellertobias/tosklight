@@ -1,0 +1,17 @@
+[package]
+name = "light-dynamics"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[dependencies]
+light-core = { path = "../../../shared/core" }
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

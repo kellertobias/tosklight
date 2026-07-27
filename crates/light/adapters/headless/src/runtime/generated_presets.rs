@@ -18,8 +18,12 @@ pub(super) fn generated_profile_preset_family(
         light_core::AttributeClass::Intensity => "Intensity",
         light_core::AttributeClass::Position => "Position",
         light_core::AttributeClass::Color => "Color",
-        light_core::AttributeClass::Beam | light_core::AttributeClass::Focus => "Beam",
-        light_core::AttributeClass::Control | light_core::AttributeClass::Custom => "Mixed",
+        light_core::AttributeClass::Beam
+        | light_core::AttributeClass::Shapers
+        | light_core::AttributeClass::Focus => "Beam",
+        light_core::AttributeClass::Control
+        | light_core::AttributeClass::Media
+        | light_core::AttributeClass::Custom => "Mixed",
     }
 }
 

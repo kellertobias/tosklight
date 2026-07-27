@@ -24,6 +24,12 @@ pub enum ProgrammingPreloadPlaybackAction {
     On,
     TemporaryOn,
     TemporaryOff,
+    DynamicPause,
+    DynamicRestart,
+    DynamicDoubleSpeed,
+    DynamicHalfSpeed,
+    DynamicLearnSpeed,
+    Fader { value_permyriad: u16 },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -166,6 +172,24 @@ fn queue_item(action: &PreloadPlaybackAction) -> ProgrammingPreloadPlaybackQueue
             }
             PreloadPlaybackQueueAction::TemporaryOff => {
                 ProgrammingPreloadPlaybackAction::TemporaryOff
+            }
+            PreloadPlaybackQueueAction::DynamicPause => {
+                ProgrammingPreloadPlaybackAction::DynamicPause
+            }
+            PreloadPlaybackQueueAction::DynamicRestart => {
+                ProgrammingPreloadPlaybackAction::DynamicRestart
+            }
+            PreloadPlaybackQueueAction::DynamicDoubleSpeed => {
+                ProgrammingPreloadPlaybackAction::DynamicDoubleSpeed
+            }
+            PreloadPlaybackQueueAction::DynamicHalfSpeed => {
+                ProgrammingPreloadPlaybackAction::DynamicHalfSpeed
+            }
+            PreloadPlaybackQueueAction::DynamicLearnSpeed => {
+                ProgrammingPreloadPlaybackAction::DynamicLearnSpeed
+            }
+            PreloadPlaybackQueueAction::Fader { value_permyriad } => {
+                ProgrammingPreloadPlaybackAction::Fader { value_permyriad }
             }
         },
         surface: match action.surface {
