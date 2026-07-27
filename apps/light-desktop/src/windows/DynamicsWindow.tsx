@@ -1790,6 +1790,10 @@ export function DynamicEncoderDeck({
 							inputScale: 1,
 							fineStep: 1,
 							coarseStep: 1,
+							choices: encoderChoices("Wings", dynamic.phase.wings ? 1 : 0, [
+								{ label: "Off" },
+								{ label: "On" },
+							]),
 							apply: (value, group) =>
 								onMutate(
 									{
@@ -1820,6 +1824,8 @@ export function DynamicEncoderDeck({
 		fastStep: slot.coarseStep,
 		repeatSeconds: 0.08,
 		disabled: slot.disabled,
+		presets: slot.choices,
+		touchInteraction: slot.choices ? "choices" : undefined,
 	}));
 	const slotsRef = useRef(slots);
 	slotsRef.current = slots;
@@ -1940,7 +1946,33 @@ interface DynamicEncoderSlot {
 	fineStep: number;
 	coarseStep: number;
 	disabled?: boolean;
+	choices?: NonNullable<EncoderSectionItem["presets"]>;
 	apply(value: number, mutationGroup: string): Promise<void>;
+}
+
+function encoderChoices(
+	groupLabel: string,
+	selectedValue: number,
+	options: readonly {
+		label: string;
+		description?: string;
+		disabled?: boolean;
+	}[],
+): NonNullable<EncoderSectionItem["presets"]> {
+	return {
+		selectedValue: String(selectedValue),
+		groups: [
+			{
+				label: groupLabel,
+				options: options.map((option, index) => ({
+					value: String(index),
+					label: option.label,
+					description: option.description,
+					disabled: option.disabled,
+				})),
+			},
+		],
+	};
 }
 
 function curveEditorEncoderSlots(
@@ -2052,6 +2084,11 @@ function curveEditorEncoderSlots(
 				fineStep: 1,
 				coarseStep: 1,
 				disabled,
+				choices: encoderChoices(
+					"Curve method",
+					modeIndex,
+					modes.map((mode) => ({ label: modeLabel(mode) })),
+				),
 				apply: (value, group) =>
 					onLaneChange(
 						(item) => ({
@@ -2102,6 +2139,14 @@ function curveEditorEncoderSlots(
 				fineStep: 1,
 				coarseStep: 1,
 				disabled,
+				choices: encoderChoices(
+					"Keyframe",
+					resolvedIndex,
+					(lane?.keyframes.points ?? []).map((_, index) => ({
+						label: keyframeName(index),
+						description: `${index + 1}/${lane?.keyframes.points.length ?? 1}`,
+					})),
+				),
 				apply: async (value) =>
 					onKeyframeIndex(
 						wrappedIndex(value, lane?.keyframes.points.length ?? 1),
@@ -2165,6 +2210,18 @@ function curveEditorEncoderSlots(
 				fineStep: 1,
 				coarseStep: 1,
 				disabled,
+				choices: encoderChoices(
+					"Interpolation",
+					lane ? primaryInterpolationIndex(lane) : 0,
+					[
+						{ label: "Linear" },
+						{ label: "Ease in" },
+						{ label: "Ease out" },
+						{ label: "Ease in + out" },
+						{ label: "Hold" },
+						{ label: "Drop" },
+					],
+				),
 				apply: (value, group) =>
 					onLaneChange((item) => setPrimaryInterpolation(item, value), group),
 			},
@@ -2266,6 +2323,15 @@ function functionSelectionSlot(
 		inputScale: 1,
 		fineStep: 1,
 		coarseStep: 1,
+		choices: encoderChoices(
+			"Curve function",
+			periodicFunctionIndex(lane),
+			periodicFunctions.map((_, index) => ({
+				label:
+					["Sinus", "Cosinus", "Linear +", "Linear −", "PWM"][index] ??
+					"Function",
+			})),
+		),
 		apply: (value, group) =>
 			onLaneChange((item) => setLanePeriodicFunction(item, value), group),
 	};
@@ -2398,6 +2464,10 @@ function speedEncoderSlots(
 			inputScale: 1,
 			fineStep: 1,
 			coarseStep: 1,
+			choices: encoderChoices("Speed source", speedSource, [
+				{ label: "Fixed" },
+				...speedGroups.map((group) => ({ label: `Group ${group}` })),
+			]),
 			apply: (value, group) =>
 				onMutate(
 					{
@@ -2474,6 +2544,17 @@ function speedEncoderSlots(
 			inputScale: 1,
 			fineStep: 1,
 			coarseStep: 1,
+			choices: encoderChoices("Activation", activationIndex, [
+				{ label: "Start now" },
+				{
+					label: "Join sync now",
+					disabled: fixed,
+				},
+				{
+					label: "Next boundary",
+					disabled: fixed,
+				},
+			]),
 			apply: (value, group) =>
 				onMutate(
 					{
@@ -2500,6 +2581,14 @@ function speedEncoderSlots(
 			fineStep: 1,
 			coarseStep: 1,
 			disabled: dynamic.default_activation !== "next_boundary",
+			choices: encoderChoices(
+				"Boundary",
+				dynamic.activation_boundary === "bar" ? 1 : 0,
+				[
+					{ label: "Next beat" },
+					{ label: "Next bar", description: "Four beats" },
+				],
+			),
 			apply: (value, group) =>
 				onMutate(
 					{
@@ -2519,6 +2608,11 @@ function speedEncoderSlots(
 			inputScale: 1,
 			fineStep: 1,
 			coarseStep: 1,
+			choices: encoderChoices(
+				"Run mode",
+				dynamic.run_mode === "one_shot" ? 1 : 0,
+				[{ label: "Loop" }, { label: "One-shot" }],
+			),
 			apply: (value, group) =>
 				onMutate(
 					{

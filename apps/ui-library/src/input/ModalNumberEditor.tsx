@@ -44,6 +44,7 @@ export interface ModalNumberEditorProps {
 	beforeTitle?: ReactNode;
 	fader?: ModalNumberFaderConfig;
 	presets?: ModalNumberPresetConfig;
+	presetsOnly?: boolean;
 	unit?: ReactNode;
 	onRelease?(): void;
 	releaseLabel?: string;
@@ -106,13 +107,16 @@ export function ModalNumberEditor({
 	beforeTitle,
 	fader,
 	presets,
+	presetsOnly = false,
 	unit,
 	onRelease,
 	releaseLabel = "Release",
 }: ModalNumberEditorProps) {
 	const [initialValue] = useState(value);
 	const [caret, setCaret] = useState(value.length);
-	const [mode, setMode] = useState<"value" | "presets">("value");
+	const [mode, setMode] = useState<"value" | "presets">(
+		presetsOnly ? "presets" : "value",
+	);
 	const [pressedKey, setPressedKey] = useState<string | null>(null);
 	const [faderDirty, setFaderDirty] = useState(false);
 	const [confirmClose, setConfirmClose] = useState(false);
@@ -176,7 +180,7 @@ export function ModalNumberEditor({
 					actions={
 						<ModalNumberTitleActions
 							beforeTitle={beforeTitle}
-							hasPresets={hasPresets}
+							hasPresets={hasPresets && !presetsOnly}
 							mode={mode}
 							onModeChange={() =>
 								setMode((current) =>

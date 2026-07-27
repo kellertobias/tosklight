@@ -99,6 +99,48 @@ export const IndividualTouch: Story = {
 	},
 };
 
+export const IndividualTouchChoices: Story = {
+	render: ({ accentColor, disabled }) => {
+		const options = ["Loop", "One-shot"];
+		const [index, setIndex] = useState(0);
+		const selectIndex = (value: number) =>
+			setIndex(Math.max(0, Math.min(options.length - 1, Math.round(value))));
+		return (
+			<div style={{ width: 180, height: 420 }}>
+				<TouchEncoder
+					label="Enc 1 · Run mode"
+					slot={1}
+					attributeLabel="Run mode"
+					display={options[index]}
+					value={index}
+					minimum={0}
+					maximum={options.length - 1}
+					inputScale={1}
+					slowStep={1}
+					fastStep={1}
+					touchInteraction="choices"
+					presets={{
+						selectedValue: String(index),
+						groups: [
+							{
+								label: "Run mode",
+								options: options.map((label, value) => ({
+									value: String(value),
+									label,
+								})),
+							},
+						],
+					}}
+					accentColor={accentColor}
+					disabled={disabled}
+					onStep={(delta) => selectIndex(index + delta)}
+					onSet={selectIndex}
+				/>
+			</div>
+		);
+	},
+};
+
 export const IndividualTouchReleased: Story = {
 	render: ({ accentColor, disabled }) => (
 		<div style={{ width: 180, height: 420 }}>

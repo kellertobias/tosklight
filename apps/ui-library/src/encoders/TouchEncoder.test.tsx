@@ -268,6 +268,60 @@ describe("TouchEncoder", () => {
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
 
+	it("offers a background-free chevron surface and direct preset chooser for discrete values", () => {
+		const { onSet, onStep } = renderEncoder({
+			display: "Loop",
+			value: 0,
+			inputScale: 1,
+			slowStep: 1,
+			fastStep: 1,
+			touchInteraction: "choices",
+			presets: {
+				selectedValue: "0",
+				groups: [
+					{
+						label: "Run mode",
+						options: [
+							{ value: "0", label: "Loop" },
+							{ value: "1", label: "One-shot" },
+						],
+					},
+				],
+			},
+		});
+		const encoder = screen.getByRole("group", { name: "Enc 1 · Pan" });
+		expect(encoder).toHaveClass("choice-encoder");
+		expect(
+			encoder.querySelector(".touch-encoder-ridges"),
+		).not.toBeInTheDocument();
+		expect(
+			encoder.querySelector(".touch-encoder-legend"),
+		).not.toBeInTheDocument();
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Next Enc 1 · Pan value" }),
+		);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Previous Enc 1 · Pan value" }),
+		);
+		expect(onStep).toHaveBeenNthCalledWith(1, 1);
+		expect(onStep).toHaveBeenNthCalledWith(2, -1);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
+		);
+		expect(
+			screen.getByRole("button", { name: "One-shot" }),
+		).toBeInTheDocument();
+		expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Show value input" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "One-shot" }));
+		expect(onSet).toHaveBeenCalledWith(1);
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+	});
+
 	it("shows indexed values as constrained instead of applying a normalized step", () => {
 		const { onStep } = renderEncoder({ indexed: true, display: "Gobo 3" });
 		expect(screen.getByText("Gobo 3")).toBeInTheDocument();

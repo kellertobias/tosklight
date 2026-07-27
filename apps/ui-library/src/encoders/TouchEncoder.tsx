@@ -18,6 +18,8 @@ export const TOUCH_ENCODER_DRAG_DEAD_ZONE_PX = 8;
 export const TOUCH_ENCODER_FINE_STEP = 0.001;
 export const TOUCH_ENCODER_COARSE_STEP = 0.01;
 
+export type TouchEncoderInteraction = "continuous" | "choices";
+
 export interface TouchEncoderProps {
 	label: string;
 	slot?: number;
@@ -38,6 +40,7 @@ export interface TouchEncoderProps {
 	indexed?: boolean;
 	canRelease?: boolean;
 	presets?: ModalNumberPresetConfig;
+	touchInteraction?: TouchEncoderInteraction;
 	onStep(delta: number, undoGroup?: string | null): void;
 	onSet(value: number): void;
 	onSetRange?(points: number[]): void;
@@ -113,6 +116,8 @@ function TouchEncoderSurface({
 	label,
 	onStep,
 	onSet,
+	choiceMode,
+	hasChoices,
 	slot,
 	slowStep,
 }: {
@@ -123,6 +128,8 @@ function TouchEncoderSurface({
 	label: string;
 	onStep(delta: number): void;
 	onSet(): void;
+	choiceMode: boolean;
+	hasChoices: boolean;
 	slot?: number;
 	slowStep: number;
 }) {
@@ -135,17 +142,33 @@ function TouchEncoderSurface({
 					{slot !== undefined && <small>Enc {slot}</small>}
 				</header>
 			)}
-			<span className="touch-encoder-ridges" aria-hidden="true" />
-			<div
-				className="touch-encoder-tap-zone touch-encoder-tap-positive"
-				aria-hidden="true"
-				onClick={() => onStep(slowStep)}
-			/>
+			{choiceMode ? (
+				<button
+					type="button"
+					className="touch-encoder-choice-step touch-encoder-tap-positive"
+					aria-label={`Next ${label} value`}
+					disabled={disabled}
+					onClick={() => onStep(slowStep)}
+				>
+					<svg viewBox="0 0 24 14" aria-hidden="true">
+						<path d="m4 11 8-8 8 8" />
+					</svg>
+				</button>
+			) : (
+				<>
+					<span className="touch-encoder-ridges" aria-hidden="true" />
+					<div
+						className="touch-encoder-tap-zone touch-encoder-tap-positive"
+						aria-hidden="true"
+						onClick={() => onStep(slowStep)}
+					/>
+				</>
+			)}
 			<button
 				type="button"
 				className={`touch-encoder-value ${range ? "range-value" : ""}`.trim()}
 				aria-label={`Set ${label} value`}
-				disabled={disabled || indexed}
+				disabled={disabled || indexed || (choiceMode && !hasChoices)}
 				onClick={onSet}
 			>
 				{range ? (
@@ -158,18 +181,34 @@ function TouchEncoderSurface({
 					display
 				)}
 			</button>
-			<div
-				className="touch-encoder-tap-zone touch-encoder-tap-negative"
-				aria-hidden="true"
-				onClick={() => onStep(-slowStep)}
-			/>
-			<div className="touch-encoder-legend" aria-hidden="true">
-				<span>Increase</span>
-				<i>•••</i>
-				<strong>Set</strong>
-				<i>•••</i>
-				<span>Decrease</span>
-			</div>
+			{choiceMode ? (
+				<button
+					type="button"
+					className="touch-encoder-choice-step touch-encoder-tap-negative"
+					aria-label={`Previous ${label} value`}
+					disabled={disabled}
+					onClick={() => onStep(-slowStep)}
+				>
+					<svg viewBox="0 0 24 14" aria-hidden="true">
+						<path d="m4 3 8 8 8-8" />
+					</svg>
+				</button>
+			) : (
+				<>
+					<div
+						className="touch-encoder-tap-zone touch-encoder-tap-negative"
+						aria-hidden="true"
+						onClick={() => onStep(-slowStep)}
+					/>
+					<div className="touch-encoder-legend" aria-hidden="true">
+						<span>Increase</span>
+						<i>•••</i>
+						<strong>Set</strong>
+						<i>•••</i>
+						<span>Decrease</span>
+					</div>
+				</>
+			)}
 		</div>
 	);
 }
@@ -180,6 +219,7 @@ function TouchEncoderEditor({
 	allowThrough,
 	canRelease,
 	presets,
+	presetsOnly,
 	onInput,
 	onSubmit,
 	onClose,
@@ -190,6 +230,7 @@ function TouchEncoderEditor({
 	allowThrough: boolean;
 	canRelease: boolean;
 	presets?: ModalNumberPresetConfig;
+	presetsOnly: boolean;
 	onInput(value: string): void;
 	onSubmit(value?: string): void;
 	onClose(): void;
@@ -206,6 +247,7 @@ function TouchEncoderEditor({
 			onClose={onClose}
 			allowThrough={allowThrough}
 			presets={presets}
+			presetsOnly={presetsOnly}
 			onRelease={canRelease ? onRelease : undefined}
 		/>
 	);
@@ -218,10 +260,12 @@ function useTouchEncoderInteraction({
 	onStep,
 	repeatSeconds,
 	slowStep,
+	continuous,
 }: Pick<TouchEncoderProps, "disabled" | "indexed" | "onStep"> & {
 	fastStep: number;
 	repeatSeconds: number;
 	slowStep: number;
+	continuous: boolean;
 }) {
 	const [motion, setMotion] = useState<EncoderMotion | null>(null);
 	const drag = useRef<DragState | null>(null);
@@ -248,7 +292,7 @@ function useTouchEncoderInteraction({
 		);
 	};
 	const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-		if (disabled || indexed || event.button !== 0) return;
+		if (!continuous || disabled || indexed || event.button !== 0) return;
 		drag.current = {
 			pointerId: event.pointerId,
 			startY: event.clientY,
@@ -339,6 +383,7 @@ export function TouchEncoder({
 	indexed = false,
 	canRelease = false,
 	presets,
+	touchInteraction = "continuous",
 	onStep,
 	onSet,
 	onSetRange,
@@ -346,8 +391,14 @@ export function TouchEncoder({
 }: TouchEncoderProps) {
 	const [editing, setEditing] = useState(false);
 	const [inputValue, setInputValue] = useState("");
+	const choiceMode = touchInteraction === "choices";
+	const hasChoices = Boolean(
+		presets?.groups.some((group) => group.options.length),
+	);
+	const unavailable = disabled || indexed || (choiceMode && !hasChoices);
 	const interaction = useTouchEncoderInteraction({
-		disabled,
+		continuous: !choiceMode,
+		disabled: unavailable,
 		fastStep,
 		indexed,
 		onStep,
@@ -360,7 +411,7 @@ export function TouchEncoder({
 	const renderedValue = display ?? formatValue?.(value) ?? String(value);
 	const clamp = (next: number) => Math.max(minimum, Math.min(maximum, next));
 	const openEditor = () => {
-		if (!interaction.canActivate()) return;
+		if (unavailable || !interaction.canActivate()) return;
 		setInputValue(String(Number((value * resolvedInputScale).toFixed(4))));
 		setEditing(true);
 	};
@@ -399,8 +450,8 @@ export function TouchEncoder({
 			<section
 				ref={encoderRef}
 				role="group"
-				tabIndex={disabled || indexed ? -1 : 0}
-				className={`touch-encoder ${disabled ? "disabled" : ""} ${indexed ? "indexed" : ""}`}
+				tabIndex={unavailable ? -1 : 0}
+				className={`touch-encoder ${choiceMode ? "choice-encoder" : ""} ${disabled ? "disabled" : ""} ${indexed ? "indexed" : ""}`}
 				data-motion={interaction.motion?.direction}
 				style={
 					{
@@ -412,7 +463,7 @@ export function TouchEncoder({
 				}
 				aria-label={label}
 				aria-describedby={instructionsId}
-				aria-disabled={disabled || indexed}
+				aria-disabled={unavailable}
 				onPointerDown={interaction.onPointerDown}
 				onPointerMove={interaction.onPointerMove}
 				onPointerUp={interaction.finishPointer}
@@ -422,8 +473,10 @@ export function TouchEncoder({
 			>
 				<TouchEncoderSurface
 					attributeLabel={attributeLabel}
-					disabled={disabled}
+					disabled={unavailable}
 					display={renderedValue}
+					choiceMode={choiceMode}
+					hasChoices={hasChoices}
 					indexed={indexed}
 					label={label}
 					onStep={interaction.step}
@@ -432,9 +485,9 @@ export function TouchEncoder({
 					slowStep={slowStep}
 				/>
 				<span id={instructionsId} className="visually-hidden">
-					The upper third increases the value and the lower third decreases it.
-					Drag vertically to accelerate linearly. Tap the full-width center
-					third or press Enter for absolute entry.
+					{choiceMode
+						? "Tap the upper chevron for the next value or the lower chevron for the previous value. Tap the center or press Enter to choose from the available options."
+						: "The upper third increases the value and the lower third decreases it. Drag vertically to accelerate linearly. Tap the full-width center third or press Enter for absolute entry."}
 				</span>
 			</section>
 			{editing && (
@@ -444,6 +497,7 @@ export function TouchEncoder({
 					allowThrough={Boolean(onSetRange)}
 					canRelease={canRelease}
 					presets={presets}
+					presetsOnly={choiceMode}
 					onInput={setInputValue}
 					onSubmit={submit}
 					onClose={() => setEditing(false)}

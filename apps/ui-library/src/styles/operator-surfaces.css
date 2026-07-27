@@ -264,6 +264,10 @@
 	outline-offset: 2px;
 }
 
+.touch-encoder-value:not(:disabled):active {
+	transform: translateY(-50%);
+}
+
 .touch-encoder-value:disabled {
 	cursor: default;
 }
@@ -332,6 +336,70 @@
 	letter-spacing: 0.16em;
 	line-height: 1;
 	writing-mode: vertical-rl;
+}
+
+.touch-encoder.choice-encoder .touch-encoder-surface {
+	background: transparent;
+	cursor: default;
+}
+
+.touch-encoder-choice-step {
+	position: absolute;
+	z-index: 2;
+	left: 0;
+	width: 100%;
+	height: 33.3333%;
+	display: grid;
+	place-items: center;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: color-mix(in srgb, var(--encoder-color) 72%, #d7e3e8);
+	cursor: pointer;
+}
+
+.touch-encoder-choice-step.touch-encoder-tap-positive::after,
+.touch-encoder-choice-step.touch-encoder-tap-negative::before {
+	position: absolute;
+	right: 20px;
+	left: 12px;
+	height: 2px;
+	background: linear-gradient(
+		to right,
+		transparent,
+		color-mix(in srgb, var(--encoder-color) 62%, var(--muted)) 14%,
+		color-mix(in srgb, var(--encoder-color) 62%, var(--muted)) 86%,
+		transparent
+	);
+	content: "";
+	opacity: 0.38;
+	pointer-events: none;
+}
+
+.touch-encoder-choice-step.touch-encoder-tap-positive::after {
+	bottom: -1px;
+}
+
+.touch-encoder-choice-step.touch-encoder-tap-negative::before {
+	top: -1px;
+}
+
+.touch-encoder-choice-step svg {
+	width: 28px;
+	height: 18px;
+	overflow: visible;
+	fill: none;
+	stroke: currentcolor;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	stroke-width: 2;
+}
+
+.touch-encoder-choice-step:hover:not(:disabled),
+.touch-encoder-choice-step:focus-visible {
+	background: color-mix(in srgb, var(--encoder-color) 12%, transparent);
+	color: var(--cyan);
 }
 
 .touch-encoder:focus-visible {

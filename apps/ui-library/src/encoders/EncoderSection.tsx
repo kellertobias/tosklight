@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { ModalNumberPresetConfig } from "../input/ModalNumberEditor";
 import type { HardwareEncoderDisplayHandle } from "./HardwareEncoderDisplay";
 import { HardwareEncoderDisplayView } from "./HardwareEncoderDisplay";
-import { TouchEncoder } from "./TouchEncoder";
+import { TouchEncoder, type TouchEncoderInteraction } from "./TouchEncoder";
 
 export type EncoderSectionSurface = "touch" | "hardware";
 
@@ -33,6 +33,7 @@ export interface EncoderSectionItem {
 	indexed?: boolean;
 	canRelease?: boolean;
 	presets?: ModalNumberPresetConfig;
+	touchInteraction?: TouchEncoderInteraction;
 }
 
 export interface EncoderSectionModel {
@@ -148,6 +149,7 @@ function EncoderItem({
 				indexed={encoder.indexed}
 				canRelease={encoder.canRelease}
 				presets={encoder.presets}
+				touchInteraction={encoder.touchInteraction}
 				onStep={(delta, undoGroup) =>
 					callbacks.onRelativeChange?.(encoder.id, delta, undoGroup)
 				}
