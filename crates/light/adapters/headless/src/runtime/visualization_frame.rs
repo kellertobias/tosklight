@@ -3,7 +3,13 @@
 use arc_swap::ArcSwapOption;
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use light_engine::{RenderOptions, RenderResult};
-use light_wire::v2::visualization::{VisualizationLane, VisualizationLaneSnapshot};
+use light_wire::v2::{
+    preload_values::ProgrammingPreloadAttributeValue,
+    visualization::{
+        VisualizationLane, VisualizationLaneDelta, VisualizationLaneSnapshot, VisualizationValue,
+        VisualizationValueKey,
+    },
+};
 use std::{
     collections::HashMap,
     sync::{
@@ -20,9 +26,11 @@ pub(super) enum VisualizationProjectionKey {
     Preload(Uuid),
 }
 
-struct CachedProjection {
-    source_sequence: u64,
-    snapshot: Arc<VisualizationLaneSnapshot>,
+pub(super) struct ProjectedVisualizationFrame {
+    pub(super) source_sequence: u64,
+    pub(super) previous_source_sequence: Option<u64>,
+    pub(super) snapshot: Arc<VisualizationLaneSnapshot>,
+    pub(super) delta: Arc<VisualizationLaneDelta>,
 }
 
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
@@ -52,7 +60,8 @@ pub(super) struct PublishedVisualizationFrame {
 pub(super) struct VisualizationFrameHub {
     next_sequence: AtomicU64,
     latest: ArcSwapOption<PublishedVisualizationFrame>,
-    projections: parking_lot::Mutex<HashMap<VisualizationProjectionKey, CachedProjection>>,
+    projections:
+        parking_lot::Mutex<HashMap<VisualizationProjectionKey, Arc<ProjectedVisualizationFrame>>>,
     normal_subscribers: AtomicU64,
     preload_subscribers: AtomicU64,
     projection_count: AtomicU64,
@@ -84,13 +93,13 @@ impl VisualizationFrameHub {
         key: VisualizationProjectionKey,
         source: &PublishedVisualizationFrame,
         build: impl FnOnce() -> Result<VisualizationLaneSnapshot, super::ApiError>,
-    ) -> Result<Arc<VisualizationLaneSnapshot>, super::ApiError> {
+    ) -> Result<Arc<ProjectedVisualizationFrame>, super::ApiError> {
         let mut projections = self.projections.lock();
         if let Some(cached) = projections
             .get(&key)
             .filter(|cached| cached.source_sequence == source.sequence)
         {
-            return Ok(Arc::clone(&cached.snapshot));
+            return Ok(Arc::clone(cached));
         }
         if let Some(previous) = projections.get(&key) {
             self.skipped_source_frames.fetch_add(
@@ -103,6 +112,11 @@ impl VisualizationFrameHub {
         }
         let started = Instant::now();
         let snapshot = Arc::new(build()?);
+        let previous = projections.get(&key);
+        let delta = Arc::new(lane_delta(
+            previous.map(|projection| projection.snapshot.as_ref()),
+            &snapshot,
+        ));
         self.projection_count.fetch_add(1, Ordering::Relaxed);
         self.projection_micros
             .store(duration_micros(started.elapsed()), Ordering::Relaxed);
@@ -121,14 +135,14 @@ impl VisualizationFrameHub {
                 .min(u128::from(u64::MAX)) as u64,
             Ordering::Relaxed,
         );
-        projections.insert(
-            key,
-            CachedProjection {
-                source_sequence: source.sequence,
-                snapshot: Arc::clone(&snapshot),
-            },
-        );
-        Ok(snapshot)
+        let projection = Arc::new(ProjectedVisualizationFrame {
+            source_sequence: source.sequence,
+            previous_source_sequence: previous.map(|projection| projection.source_sequence),
+            snapshot: Arc::clone(&snapshot),
+            delta,
+        });
+        projections.insert(key, Arc::clone(&projection));
+        Ok(projection)
     }
 
     pub(super) fn change_subscribers(&self, lane: VisualizationLane, delta: i8) {
@@ -154,6 +168,75 @@ impl VisualizationFrameHub {
             skipped_source_frames: self.skipped_source_frames.load(Ordering::Relaxed),
         }
     }
+}
+
+fn lane_delta(
+    previous: Option<&VisualizationLaneSnapshot>,
+    current: &VisualizationLaneSnapshot,
+) -> VisualizationLaneDelta {
+    let previous_values = previous.map(|snapshot| value_index(&snapshot.values));
+    let previous_profile = previous.map(|snapshot| value_index(&snapshot.profile_output_values));
+    VisualizationLaneDelta {
+        revision: current.revision,
+        generated_at: current.generated_at.clone(),
+        grand_master: current.grand_master,
+        blackout: current.blackout,
+        preload: current.preload,
+        values: changed_values(previous_values.as_ref(), &current.values),
+        removed_values: removed_values(previous_values.as_ref(), &current.values),
+        dynamic_stack: current.dynamic_stack.clone(),
+        profile_output_values: changed_values(
+            previous_profile.as_ref(),
+            &current.profile_output_values,
+        ),
+        removed_profile_output_values: removed_values(
+            previous_profile.as_ref(),
+            &current.profile_output_values,
+        ),
+    }
+}
+
+fn value_index(
+    values: &[VisualizationValue],
+) -> HashMap<(Uuid, String), &ProgrammingPreloadAttributeValue> {
+    values
+        .iter()
+        .map(|value| ((value.fixture_id, value.attribute.clone()), &value.value))
+        .collect()
+}
+
+fn changed_values(
+    previous: Option<&HashMap<(Uuid, String), &ProgrammingPreloadAttributeValue>>,
+    current: &[VisualizationValue],
+) -> Vec<VisualizationValue> {
+    current
+        .iter()
+        .filter(|value| {
+            previous.is_none_or(|previous| {
+                previous.get(&(value.fixture_id, value.attribute.clone())) != Some(&&value.value)
+            })
+        })
+        .cloned()
+        .collect()
+}
+
+fn removed_values(
+    previous: Option<&HashMap<(Uuid, String), &ProgrammingPreloadAttributeValue>>,
+    current: &[VisualizationValue],
+) -> Vec<VisualizationValueKey> {
+    let current = current
+        .iter()
+        .map(|value| (value.fixture_id, value.attribute.as_str()))
+        .collect::<std::collections::HashSet<_>>();
+    previous
+        .into_iter()
+        .flat_map(HashMap::keys)
+        .filter(|(fixture_id, attribute)| !current.contains(&(*fixture_id, attribute.as_str())))
+        .map(|(fixture_id, attribute)| VisualizationValueKey {
+            fixture_id: *fixture_id,
+            attribute: attribute.clone(),
+        })
+        .collect()
 }
 
 fn duration_micros(duration: Duration) -> u64 {
@@ -220,6 +303,7 @@ mod tests {
             .unwrap();
 
         assert!(Arc::ptr_eq(&first, &second));
+        assert!(first.previous_source_sequence.is_none());
         assert_eq!(builds.load(AtomicOrdering::Relaxed), 1);
         assert_eq!(hub.metrics().projections, 1);
     }

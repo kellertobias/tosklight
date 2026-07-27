@@ -135,6 +135,10 @@ class WebSocketVisualizationRuntimeStream
 	private reconnectDelay = 250;
 	private stopped = false;
 	private lastSequence = 0;
+	private snapshots: Record<
+		VisualizationRuntimeLane,
+		VisualizationSnapshot | null
+	> = { normal: null, preload: null };
 
 	constructor(
 		private readonly baseUrl: string,
@@ -182,6 +186,7 @@ class WebSocketVisualizationRuntimeStream
 		socket.addEventListener("open", () => {
 			this.reconnectDelay = 250;
 			this.lastSequence = 0;
+			this.snapshots = { normal: null, preload: null };
 			this.sendSubscription();
 		});
 		socket.addEventListener("message", (event) => this.receive(event.data));
@@ -223,12 +228,46 @@ class WebSocketVisualizationRuntimeStream
 					message.snapshot,
 					lane,
 				);
+				this.snapshots[lane] = snapshot;
+				this.observer.snapshot(lane, snapshot);
+				return;
+			}
+			if (type === "delta") {
+				const lane = enumAt(message.lane, "$.lane", ["normal", "preload"]);
+				const sequence = integerAt(message.sequence, "$.sequence");
+				if (this.lastSequence && sequence !== this.lastSequence + 1) {
+					this.lastSequence = sequence;
+					this.send({ type: "resynchronize", lane });
+					return;
+				}
+				this.lastSequence = sequence;
+				const current = this.snapshots[lane];
+				if (!current) {
+					this.send({ type: "resynchronize", lane });
+					return;
+				}
+				const snapshot = applyVisualizationDelta(
+					current,
+					message.delta,
+					lane,
+				);
+				this.snapshots[lane] = snapshot;
 				this.observer.snapshot(lane, snapshot);
 				return;
 			}
 			if (type === "structural_invalidation") {
-				for (const lane of this.claims)
+				for (const lane of this.claims) {
+					this.snapshots[lane] = null;
 					this.send({ type: "resynchronize", lane });
+				}
+				return;
+			}
+			if (type === "heartbeat") {
+				const sequence = integerAt(message.sequence, "$.sequence");
+				if (this.lastSequence && sequence !== this.lastSequence + 1)
+					for (const lane of this.claims)
+						this.send({ type: "resynchronize", lane });
+				this.lastSequence = sequence;
 				return;
 			}
 			if (type === "error")
@@ -269,6 +308,86 @@ class WebSocketVisualizationRuntimeStream
 		this.socket = null;
 		socket?.close();
 	}
+}
+
+function applyVisualizationDelta(
+	current: VisualizationSnapshot,
+	value: unknown,
+	lane: VisualizationRuntimeLane,
+): VisualizationSnapshot {
+	const delta = recordAt(value, "$.delta");
+	const preload = booleanAt(delta.preload, "$.delta.preload");
+	if (preload !== (lane === "preload"))
+		throw new VisualizationRuntimeProtocolError(
+			"Visualization delta belongs to a different lane",
+		);
+	return {
+		revision: integerAt(delta.revision, "$.delta.revision"),
+		generated_at: timestampAt(delta.generated_at, "$.delta.generated_at"),
+		grand_master: normalizedAt(
+			delta.grand_master,
+			"$.delta.grand_master",
+		),
+		blackout: booleanAt(delta.blackout, "$.delta.blackout"),
+		preload,
+		values: mergeVisualizationValues(
+			current.values,
+			decodeValues(delta.values, "$.delta.values"),
+			decodeRemovedValueKeys(
+				delta.removed_values,
+				"$.delta.removed_values",
+			),
+		),
+		dynamic_stack: decodeDynamicStack(
+			delta.dynamic_stack,
+			"$.delta.dynamic_stack",
+		),
+		profile_output_values: mergeVisualizationValues(
+			current.profile_output_values ?? [],
+			decodeValues(
+				delta.profile_output_values,
+				"$.delta.profile_output_values",
+			),
+			decodeRemovedValueKeys(
+				delta.removed_profile_output_values,
+				"$.delta.removed_profile_output_values",
+			),
+		),
+	};
+}
+
+function decodeRemovedValueKeys(value: unknown, path: string) {
+	return arrayAt(value, path).map((entry, index) => {
+		const key = exactRecordAt(entry, `${path}[${index}]`, [
+			"fixture_id",
+			"attribute",
+		]);
+		return `${stringAt(key.fixture_id, `${path}[${index}].fixture_id`)}\u0000${stringAt(
+			key.attribute,
+			`${path}[${index}].attribute`,
+		)}`;
+	});
+}
+
+function mergeVisualizationValues(
+	current: VisualizationSnapshot["values"],
+	upserts: VisualizationSnapshot["values"],
+	removed: readonly string[],
+) {
+	const values = new Map(
+		current.map((value) => [
+			`${value.fixture_id}\u0000${value.attribute}`,
+			value,
+		]),
+	);
+	for (const key of removed) values.delete(key);
+	for (const value of upserts)
+		values.set(`${value.fixture_id}\u0000${value.attribute}`, value);
+	return [...values.values()].sort(
+		(left, right) =>
+			left.fixture_id.localeCompare(right.fixture_id) ||
+			left.attribute.localeCompare(right.attribute),
+	);
 }
 
 export function decodeVisualizationRuntimeSnapshot(

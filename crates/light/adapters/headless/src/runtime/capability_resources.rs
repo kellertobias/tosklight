@@ -2158,7 +2158,7 @@ impl OutputResource {
         source: &super::visualization_frame::PublishedVisualizationFrame,
         build: impl FnOnce()
             -> Result<light_wire::v2::visualization::VisualizationLaneSnapshot, ApiError>,
-    ) -> Result<Arc<light_wire::v2::visualization::VisualizationLaneSnapshot>, ApiError> {
+    ) -> Result<Arc<super::visualization_frame::ProjectedVisualizationFrame>, ApiError> {
         self.visualization_frames.projection(key, source, build)
     }
 

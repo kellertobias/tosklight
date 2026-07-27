@@ -72,9 +72,11 @@ fn visualization(config: &Config) -> Vec<String> {
         VisualizationLane::decl(config),
         VisualizationClientMessage::decl(config),
         VisualizationValue::decl(config),
+        VisualizationValueKey::decl(config),
         VisualizationStackEntryType::decl(config),
         VisualizationDynamicStackEntry::decl(config),
         VisualizationLaneSnapshot::decl(config),
+        VisualizationLaneDelta::decl(config),
         VisualizationServerMessage::decl(config),
     ]
 }

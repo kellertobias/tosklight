@@ -138,6 +138,42 @@ describe("HttpVisualizationRuntimeTransport", () => {
 			expect.objectContaining({ revision: 7, preload: false }),
 		);
 		expect(observer.error).not.toHaveBeenCalled();
+		socket?.message({
+			type: "delta",
+			lane: "normal",
+			sequence: 2,
+			source_frame: 8,
+			source_timestamp: "2026-07-21T09:00:00.100Z",
+			published_at: "2026-07-21T09:00:00.101Z",
+			delta: {
+				revision: 7,
+				generated_at: "2026-07-21T09:00:00.100Z",
+				grand_master: 0.8,
+				blackout: false,
+				preload: false,
+				values: [
+					{
+						fixture_id: "fixture-1",
+						attribute: "intensity",
+						value: { kind: "normalized", value: 0.75 },
+					},
+				],
+				removed_values: [],
+				dynamic_stack: [],
+				profile_output_values: [],
+				removed_profile_output_values: [],
+			},
+		});
+		expect(observer.snapshot).toHaveBeenLastCalledWith(
+			"normal",
+			expect.objectContaining({
+				values: [
+					expect.objectContaining({
+						value: { kind: "normalized", value: 0.75 },
+					}),
+				],
+			}),
+		);
 		stream.close();
 	});
 

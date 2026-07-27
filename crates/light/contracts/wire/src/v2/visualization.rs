@@ -38,6 +38,12 @@ pub struct VisualizationValue {
     pub value: ProgrammingPreloadAttributeValue,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct VisualizationValueKey {
+    pub fixture_id: Uuid,
+    pub attribute: String,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum VisualizationStackEntryType {
@@ -88,6 +94,21 @@ pub struct VisualizationLaneSnapshot {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct VisualizationLaneDelta {
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub generated_at: String,
+    pub grand_master: f32,
+    pub blackout: bool,
+    pub preload: bool,
+    pub values: Vec<VisualizationValue>,
+    pub removed_values: Vec<VisualizationValueKey>,
+    pub dynamic_stack: Vec<VisualizationDynamicStackEntry>,
+    pub profile_output_values: Vec<VisualizationValue>,
+    pub removed_profile_output_values: Vec<VisualizationValueKey>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VisualizationServerMessage {
     Hello {
@@ -104,6 +125,16 @@ pub enum VisualizationServerMessage {
         source_timestamp: String,
         published_at: String,
         snapshot: VisualizationLaneSnapshot,
+    },
+    Delta {
+        lane: VisualizationLane,
+        #[ts(type = "number")]
+        sequence: u64,
+        #[ts(type = "number")]
+        source_frame: u64,
+        source_timestamp: String,
+        published_at: String,
+        delta: VisualizationLaneDelta,
     },
     Heartbeat {
         #[ts(type = "number")]

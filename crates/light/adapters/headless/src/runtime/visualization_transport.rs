@@ -21,7 +21,10 @@ use light_wire::v2::{
     },
 };
 use serde::Serialize;
-use std::{collections::HashSet, time::Duration};
+use std::{
+    collections::HashSet,
+    time::{Duration, Instant},
+};
 
 struct SubscriptionClaims {
     output: super::OutputResource,
@@ -99,6 +102,9 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
     let mut outgoing_sequence = 0_u64;
     let mut last_normal_source = 0_u64;
     let mut last_preload_source = 0_u64;
+    let mut last_normal_revision = 0_u64;
+    let mut last_preload_revision = 0_u64;
+    let mut last_heartbeat = Instant::now();
 
     loop {
         tokio::select! {
@@ -154,13 +160,31 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
             }
             _ = interval.tick(), if !subscribed.lanes.is_empty() => {
                 let Some(source) = state.output.latest_visualization_frame() else { continue };
+                let mut sent_frame = false;
                 for lane in [VisualizationLane::Normal, VisualizationLane::Preload] {
                     if !subscribed.lanes.contains(&lane) { continue; }
                     let previous = match lane {
                         VisualizationLane::Normal => &mut last_normal_source,
                         VisualizationLane::Preload => &mut last_preload_source,
                     };
+                    let previous_revision = match lane {
+                        VisualizationLane::Normal => &mut last_normal_revision,
+                        VisualizationLane::Preload => &mut last_preload_revision,
+                    };
                     if *previous == source.sequence { continue; }
+                    if *previous_revision != 0 && *previous_revision != source.show_revision {
+                        if !send(
+                            &mut socket,
+                            &VisualizationServerMessage::StructuralInvalidation {
+                                revision: source.show_revision,
+                            },
+                        )
+                        .await
+                        {
+                            return;
+                        }
+                        *previous = 0;
+                    }
                     let key = match lane {
                         VisualizationLane::Normal => super::visualization_frame::VisualizationProjectionKey::Normal,
                         VisualizationLane::Preload => super::visualization_frame::VisualizationProjectionKey::Preload(session.id.0),
@@ -180,17 +204,43 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
                     };
                     outgoing_sequence += 1;
                     let published_at = chrono::Utc::now().to_rfc3339();
-                    let response = VisualizationServerMessage::Snapshot {
-                        lane,
-                        sequence: outgoing_sequence,
-                        source_frame: source.sequence,
-                        source_timestamp: chrono::DateTime::<chrono::Utc>::from(source.generated_at)
-                            .to_rfc3339(),
-                        published_at,
-                        snapshot: snapshot.as_ref().clone(),
+                    let source_timestamp =
+                        chrono::DateTime::<chrono::Utc>::from(source.generated_at).to_rfc3339();
+                    let response = if *previous != 0
+                        && snapshot.previous_source_sequence == Some(*previous)
+                    {
+                        VisualizationServerMessage::Delta {
+                            lane,
+                            sequence: outgoing_sequence,
+                            source_frame: source.sequence,
+                            source_timestamp,
+                            published_at,
+                            delta: snapshot.delta.as_ref().clone(),
+                        }
+                    } else {
+                        VisualizationServerMessage::Snapshot {
+                            lane,
+                            sequence: outgoing_sequence,
+                            source_frame: source.sequence,
+                            source_timestamp,
+                            published_at,
+                            snapshot: snapshot.snapshot.as_ref().clone(),
+                        }
                     };
                     if !send(&mut socket, &response).await { return; }
                     *previous = source.sequence;
+                    *previous_revision = source.show_revision;
+                    sent_frame = true;
+                    last_heartbeat = Instant::now();
+                }
+                if !sent_frame && last_heartbeat.elapsed() >= Duration::from_secs(2) {
+                    outgoing_sequence += 1;
+                    let heartbeat = VisualizationServerMessage::Heartbeat {
+                        sequence: outgoing_sequence,
+                        published_at: chrono::Utc::now().to_rfc3339(),
+                    };
+                    if !send(&mut socket, &heartbeat).await { return; }
+                    last_heartbeat = Instant::now();
                 }
             }
         }
