@@ -70,8 +70,24 @@ export interface FrontendStageRenderDiagnostic {
 	textures: number;
 }
 
+export interface FrontendStageFrameDiagnostic {
+	lane: "normal" | "preload";
+	sourceFrame: number | null;
+	sourceGeneratedAt: string;
+	publishedAt: string | null;
+	receivedAt: number;
+	firstAppliedAt: number | null;
+	settledAppliedAt: number | null;
+	firstCanvasSubmittedAt: number | null;
+	settledCanvasSubmittedAt: number | null;
+	sourceToReceiveMs: number | null;
+	projectionToReceiveMs: number | null;
+	sourceToSettledCanvasMs: number | null;
+}
+
 export interface FrontendStageDiagnostics {
 	visualizationRequests: readonly FrontendStageVisualizationDiagnostic[];
+	frames: readonly FrontendStageFrameDiagnostic[];
 	sceneBuilds: readonly FrontendStageSceneBuildDiagnostic[];
 	renders: readonly FrontendStageRenderDiagnostic[];
 	sceneDisposals: number;
@@ -116,6 +132,7 @@ class FrontendPerformanceDiagnostics {
 	private readonly patchMutations: FrontendPatchMutationDiagnostic[] = [];
 	private readonly stageVisualizationRequests: FrontendStageVisualizationDiagnostic[] =
 		[];
+	private readonly stageFrames: FrontendStageFrameDiagnostic[] = [];
 	private readonly stageSceneBuilds: FrontendStageSceneBuildDiagnostic[] = [];
 	private readonly stageRenders: FrontendStageRenderDiagnostic[] = [];
 	private stageSceneDisposals = 0;
@@ -304,6 +321,73 @@ class FrontendPerformanceDiagnostics {
 		pushBounded(this.stageSceneBuilds, sample, 1_024);
 	}
 
+	recordStageFrameReceived({
+		lane,
+		sourceFrame = null,
+		sourceGeneratedAt,
+		publishedAt = null,
+	}: {
+		lane: "normal" | "preload";
+		sourceFrame?: number | null;
+		sourceGeneratedAt: string;
+		publishedAt?: string | null;
+	}) {
+		const receivedAt = Date.now();
+		const sourceAt = Date.parse(sourceGeneratedAt);
+		const projectionAt =
+			publishedAt === null ? Number.NaN : Date.parse(publishedAt);
+		pushBounded(
+			this.stageFrames,
+			{
+				lane,
+				sourceFrame,
+				sourceGeneratedAt,
+				publishedAt,
+				receivedAt,
+				firstAppliedAt: null,
+				settledAppliedAt: null,
+				firstCanvasSubmittedAt: null,
+				settledCanvasSubmittedAt: null,
+				sourceToReceiveMs: Number.isFinite(sourceAt)
+					? Math.max(0, receivedAt - sourceAt)
+					: null,
+				projectionToReceiveMs: Number.isFinite(projectionAt)
+					? Math.max(0, receivedAt - projectionAt)
+					: null,
+				sourceToSettledCanvasMs: null,
+			},
+			4_096,
+		);
+	}
+
+	recordStageFrameApplied(
+		sourceGeneratedAt: string | undefined,
+		settled: boolean,
+	) {
+		const sample = this.latestStageFrame(sourceGeneratedAt);
+		if (!sample) return;
+		const appliedAt = Date.now();
+		sample.firstAppliedAt ??= appliedAt;
+		if (settled) sample.settledAppliedAt ??= appliedAt;
+	}
+
+	recordStageFrameCanvasSubmitted(
+		sourceGeneratedAt: string | undefined,
+		settled: boolean,
+	) {
+		const sample = this.latestStageFrame(sourceGeneratedAt);
+		if (!sample) return;
+		const submittedAt = Date.now();
+		sample.firstCanvasSubmittedAt ??= submittedAt;
+		if (settled && sample.settledCanvasSubmittedAt === null) {
+			sample.settledCanvasSubmittedAt = submittedAt;
+			const sourceAt = Date.parse(sample.sourceGeneratedAt);
+			sample.sourceToSettledCanvasMs = Number.isFinite(sourceAt)
+				? Math.max(0, submittedAt - sourceAt)
+				: null;
+		}
+	}
+
 	recordStageSceneDisposal() {
 		this.stageSceneDisposals++;
 	}
@@ -357,6 +441,7 @@ class FrontendPerformanceDiagnostics {
 						...sample,
 					}),
 				),
+				frames: this.stageFrames.map((sample) => ({ ...sample })),
 				sceneBuilds: this.stageSceneBuilds.map((sample) => ({ ...sample })),
 				renders: this.stageRenders.map((sample) => ({ ...sample })),
 				sceneDisposals: this.stageSceneDisposals,
@@ -383,6 +468,15 @@ class FrontendPerformanceDiagnostics {
 				"mark",
 			).length ?? 0) > 0
 		);
+	}
+
+	private latestStageFrame(sourceGeneratedAt: string | undefined) {
+		if (!sourceGeneratedAt) return undefined;
+		for (let index = this.stageFrames.length - 1; index >= 0; index--) {
+			const sample = this.stageFrames[index];
+			if (sample?.sourceGeneratedAt === sourceGeneratedAt) return sample;
+		}
+		return undefined;
 	}
 
 	private observeLongTasks() {

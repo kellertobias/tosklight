@@ -131,7 +131,8 @@ class WebSocketVisualizationRuntimeStream
 	private socket: WebSocket | null = null;
 	private claims = new Set<VisualizationRuntimeLane>();
 	private maxRateHz = 10;
-	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null =
+		null;
 	private reconnectDelay = 250;
 	private stopped = false;
 	private lastSequence = 0;
@@ -147,10 +148,7 @@ class WebSocketVisualizationRuntimeStream
 		private readonly WebSocketImplementation: typeof globalThis.WebSocket,
 	) {}
 
-	updateClaims(
-		lanes: readonly VisualizationRuntimeLane[],
-		maxRateHz: number,
-	) {
+	updateClaims(lanes: readonly VisualizationRuntimeLane[], maxRateHz: number) {
 		const removed = [...this.claims].filter((lane) => !lanes.includes(lane));
 		this.claims = new Set(lanes);
 		this.maxRateHz = Math.max(1, Math.min(10, Math.floor(maxRateHz)));
@@ -221,6 +219,12 @@ class WebSocketVisualizationRuntimeStream
 			if (type === "snapshot") {
 				const lane = enumAt(message.lane, "$.lane", ["normal", "preload"]);
 				const sequence = integerAt(message.sequence, "$.sequence");
+				const sourceFrame = integerAt(message.source_frame, "$.source_frame");
+				const sourceGeneratedAt = timestampAt(
+					message.source_timestamp,
+					"$.source_timestamp",
+				);
+				const publishedAt = timestampAt(message.published_at, "$.published_at");
 				if (this.lastSequence && sequence !== this.lastSequence + 1)
 					this.send({ type: "resynchronize", lane });
 				this.lastSequence = sequence;
@@ -229,12 +233,24 @@ class WebSocketVisualizationRuntimeStream
 					lane,
 				);
 				this.snapshots[lane] = snapshot;
+				frontendPerformanceDiagnostics.recordStageFrameReceived({
+					lane,
+					sourceFrame,
+					sourceGeneratedAt,
+					publishedAt,
+				});
 				this.observer.snapshot(lane, snapshot);
 				return;
 			}
 			if (type === "delta") {
 				const lane = enumAt(message.lane, "$.lane", ["normal", "preload"]);
 				const sequence = integerAt(message.sequence, "$.sequence");
+				const sourceFrame = integerAt(message.source_frame, "$.source_frame");
+				const sourceGeneratedAt = timestampAt(
+					message.source_timestamp,
+					"$.source_timestamp",
+				);
+				const publishedAt = timestampAt(message.published_at, "$.published_at");
 				if (this.lastSequence && sequence !== this.lastSequence + 1) {
 					this.lastSequence = sequence;
 					this.send({ type: "resynchronize", lane });
@@ -246,12 +262,14 @@ class WebSocketVisualizationRuntimeStream
 					this.send({ type: "resynchronize", lane });
 					return;
 				}
-				const snapshot = applyVisualizationDelta(
-					current,
-					message.delta,
-					lane,
-				);
+				const snapshot = applyVisualizationDelta(current, message.delta, lane);
 				this.snapshots[lane] = snapshot;
+				frontendPerformanceDiagnostics.recordStageFrameReceived({
+					lane,
+					sourceFrame,
+					sourceGeneratedAt,
+					publishedAt,
+				});
 				this.observer.snapshot(lane, snapshot);
 				return;
 			}
@@ -294,7 +312,8 @@ class WebSocketVisualizationRuntimeStream
 	}
 
 	private scheduleReconnect() {
-		if (this.stopped || !this.claims.size || this.reconnectTimer !== null) return;
+		if (this.stopped || !this.claims.size || this.reconnectTimer !== null)
+			return;
 		const delay = this.reconnectDelay;
 		this.reconnectDelay = Math.min(this.reconnectDelay * 2, 2_000);
 		this.reconnectTimer = globalThis.setTimeout(() => {
@@ -324,19 +343,13 @@ function applyVisualizationDelta(
 	return {
 		revision: integerAt(delta.revision, "$.delta.revision"),
 		generated_at: timestampAt(delta.generated_at, "$.delta.generated_at"),
-		grand_master: normalizedAt(
-			delta.grand_master,
-			"$.delta.grand_master",
-		),
+		grand_master: normalizedAt(delta.grand_master, "$.delta.grand_master"),
 		blackout: booleanAt(delta.blackout, "$.delta.blackout"),
 		preload,
 		values: mergeVisualizationValues(
 			current.values,
 			decodeValues(delta.values, "$.delta.values"),
-			decodeRemovedValueKeys(
-				delta.removed_values,
-				"$.delta.removed_values",
-			),
+			decodeRemovedValueKeys(delta.removed_values, "$.delta.removed_values"),
 		),
 		dynamic_stack: decodeDynamicStack(
 			delta.dynamic_stack,

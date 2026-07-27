@@ -103,7 +103,16 @@ describe("frontend performance diagnostics", () => {
 			"./diagnostics"
 		);
 		const finish = diagnostics.beginStageVisualizationRequest("normal");
-		finish({ generated_at: new Date().toISOString() });
+		const generatedAt = new Date().toISOString();
+		finish({ generated_at: generatedAt });
+		diagnostics.recordStageFrameReceived({
+			lane: "normal",
+			sourceFrame: 42,
+			sourceGeneratedAt: generatedAt,
+			publishedAt: generatedAt,
+		});
+		diagnostics.recordStageFrameApplied(generatedAt, true);
+		diagnostics.recordStageFrameCanvasSubmitted(generatedAt, true);
 		diagnostics.recordStageSceneBuild({
 			startedAt: 1,
 			finishedAt: 3,
@@ -131,6 +140,15 @@ describe("frontend performance diagnostics", () => {
 		expect(diagnostics.snapshot().stage).toMatchObject({
 			visualizationRequests: [
 				expect.objectContaining({ lane: "normal", status: "ready" }),
+			],
+			frames: [
+				expect.objectContaining({
+					lane: "normal",
+					sourceFrame: 42,
+					firstAppliedAt: expect.any(Number),
+					settledCanvasSubmittedAt: expect.any(Number),
+					sourceToSettledCanvasMs: expect.any(Number),
+				}),
 			],
 			sceneBuilds: [expect.objectContaining({ fixtureCount: 49 })],
 			renders: [expect.objectContaining({ calls: 8 })],

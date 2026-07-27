@@ -67,6 +67,10 @@ export function useStageRenderer({
 					geometries: renderer.info.memory.geometries,
 					textures: renderer.info.memory.textures,
 				});
+				frontendPerformanceDiagnostics.recordStageFrameCanvasSubmitted(
+					controller.displayedVisualizationRef.current?.generated_at,
+					controller.visualizationSettledRef.current,
+				);
 			}
 			if (controlsChanged && frame === null)
 				frame = requestAnimationFrame(render);
@@ -85,10 +89,7 @@ export function useStageRenderer({
 			renderer.resetState();
 			requestRender();
 		};
-		renderer.domElement.addEventListener(
-			"webglcontextlost",
-			handleContextLost,
-		);
+		renderer.domElement.addEventListener("webglcontextlost", handleContextLost);
 		renderer.domElement.addEventListener(
 			"webglcontextrestored",
 			handleContextRestored,

@@ -35,6 +35,8 @@ export type StageSceneController = {
 	interactingRef: MutableRefObject<boolean>;
 	callbacksRef: MutableRefObject<Stage3dCallbacks>;
 	invalidateRef: MutableRefObject<(() => void) | null>;
+	displayedVisualizationRef: MutableRefObject<VisualizationSnapshot | null>;
+	visualizationSettledRef: MutableRefObject<boolean>;
 	setRenderVisualization: Dispatch<
 		SetStateAction<VisualizationSnapshot | null>
 	>;
@@ -150,6 +152,7 @@ export function useStageScene({
 	const modelCacheRef = useRef<StageModelCache | null>(null);
 	const selectionRef = useRef({ selected, showSelection });
 	const displayedVisualizationRef = useRef(visualization);
+	const visualizationSettledRef = useRef(true);
 	if (!modelCacheRef.current) modelCacheRef.current = new StageModelCache();
 	const modelCache = modelCacheRef.current;
 	const [renderVisualization, setRenderVisualization] = useState(visualization);
@@ -239,8 +242,12 @@ export function useStageScene({
 		const target = renderVisualization;
 		const from = displayedVisualizationRef.current;
 		let frame: number | null = null;
-		const apply = (snapshot: VisualizationSnapshot | null) => {
+		const apply = (
+			snapshot: VisualizationSnapshot | null,
+			settled: boolean,
+		) => {
 			displayedVisualizationRef.current = snapshot;
+			visualizationSettledRef.current = settled;
 			applyStageVisualization(
 				fixtures,
 				snapshot,
@@ -251,10 +258,14 @@ export function useStageScene({
 				new Set(selected),
 				showSelection,
 			);
+			frontendPerformanceDiagnostics.recordStageFrameApplied(
+				snapshot?.generated_at,
+				settled,
+			);
 			invalidateRef.current?.();
 		};
 		if (!from || !target) {
-			apply(target);
+			apply(target, true);
 			return;
 		}
 		const startedAt = performance.now();
@@ -263,7 +274,10 @@ export function useStageScene({
 				1,
 				Math.max(0, (now - startedAt) / STAGE_INTERPOLATION_MILLIS),
 			);
-			apply(interpolateVisualizationSnapshot(from, target, progress));
+			apply(
+				interpolateVisualizationSnapshot(from, target, progress),
+				progress >= 1,
+			);
 			if (progress < 1) frame = requestAnimationFrame(step);
 		};
 		frame = requestAnimationFrame(step);
@@ -288,6 +302,8 @@ export function useStageScene({
 			interactingRef,
 			callbacksRef,
 			invalidateRef,
+			displayedVisualizationRef,
+			visualizationSettledRef,
 			setRenderVisualization,
 		}),
 		[],
