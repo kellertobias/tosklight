@@ -275,13 +275,18 @@ function DynamicsProgrammerSurface({
 		dynamic.body.lanes[0];
 	return (
 		<div className="parameter-controls">
-			<DynamicEditorTaskTabs task={view} onTask={onView} />
+			<DynamicEditorTaskTabs
+				task={view}
+				onTask={onView}
+				dynamic={dynamic.body}
+				laneId={lane?.id}
+				onLane={setLaneId}
+			/>
 			<div className="parameter-surfaces">
 				<DynamicDefinitionEncoderSurface
 					dynamic={dynamic.body}
 					lane={lane ?? null}
 					view={view}
-					onLane={setLaneId}
 					onLaneChange={async (change, mutationGroup) => {
 						if (!lane) return;
 						const next = change(lane);

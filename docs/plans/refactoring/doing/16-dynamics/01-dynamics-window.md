@@ -265,3 +265,18 @@ composition:
 This remains a visual-review checkpoint, not acceptance. Do not add the final
 Dynamics UI automation or refresh the acceptance screenshot until the user
 accepts this Curves composition.
+
+### Review iteration 3 — Curves composer and Programmer row, awaiting review
+
+The next Curves-only review moved target selection into Window Settings and
+removed the object-management footer. The lane editor is now the **Curve
+Composer**: Key-frames, Max/min, and Middle/amplitude are two-line method
+buttons at the left; keyframe cards or supported function buttons occupy the
+middle; and Add keyframe appears at the right only for Key-frames. Random is
+presented as a supported function for both value methods rather than as a
+fourth method.
+
+The Programmer task row now owns the lane selector at its right edge. Encoder
+page position belongs in the active task label, using `Curves (1/2)` only when
+the task has more than one page; no `1/1` label is shown. This remains pending
+visual acceptance.

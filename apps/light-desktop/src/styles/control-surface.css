@@ -54,64 +54,6 @@
 	grid-template-columns: repeat(6, minmax(0, 1fr));
 	grid-template-rows: minmax(0, 1fr);
 }
-.parameter-surfaces:has(.programmer-dynamics-toolbar) {
-	padding-top: 37px;
-}
-.programmer-dynamics-toolbar {
-	position: absolute;
-	inset: 0 0 auto;
-	height: 32px;
-	display: flex;
-	gap: 5px;
-	align-items: stretch;
-	justify-content: flex-end;
-}
-.programmer-dynamics-toolbar .ui-button {
-	height: 32px;
-	min-height: 32px;
-}
-.programmer-dynamics-toolbar .ui-button {
-	flex: 0 0 auto;
-}
-.programmer-dynamics-toolbar .ui-button.active {
-	border-color: var(--cyan);
-	color: var(--cyan);
-}
-.programmer-dynamics-page {
-	display: grid;
-	place-items: center;
-	margin-right: auto;
-	padding: 0 10px;
-	color: #a8b4be;
-	background: #0c1117;
-	border: 1px solid #303c46;
-	border-radius: 6px;
-	font-size: 0.72rem;
-}
-.programmer-dynamics-lane-picker {
-	position: relative;
-	min-width: 150px;
-}
-.programmer-dynamics-lane-picker > .ui-button {
-	width: 100%;
-	justify-content: space-between;
-}
-.programmer-dynamics-menu {
-	position: absolute;
-	z-index: 40;
-	right: 0;
-	bottom: calc(100% + 4px);
-	display: grid;
-	min-width: 180px;
-	padding: 4px;
-	background: #111820;
-	border: 1px solid #3b4a57;
-	border-radius: 6px;
-	box-shadow: 0 8px 24px rgb(0 0 0 / 55%);
-}
-.programmer-dynamics-menu .ui-button {
-	justify-content: flex-start;
-}
 .programmer-dynamics-editor-deck {
 	grid-column: 1 / -1;
 	min-width: 0;

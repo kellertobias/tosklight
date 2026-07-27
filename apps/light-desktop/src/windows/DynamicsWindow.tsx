@@ -24,7 +24,14 @@ import {
 	WindowScrollArea,
 	WindowSettings,
 } from "@tosklight/ui/window-kit";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { ApiRequestError } from "../api/ApiRequestError";
 import { createLightApi } from "../api/client/api";
 import type {
@@ -453,9 +460,6 @@ export function DynamicEditor({
 	onViewChange,
 	onBack,
 	onMutate,
-	onDelete,
-	onMove,
-	onCopy,
 }: DynamicEditorProps) {
 	const { state: appState, dispatch } = useApp();
 	const {
@@ -471,9 +475,6 @@ export function DynamicEditor({
 	);
 	const [selectedLanes, setSelectedLanes] = useState<Set<string>>(
 		new Set(primaryLane ? [primaryLane] : []),
-	);
-	const [destinationPoolNumber, setDestinationPoolNumber] = useState(
-		dynamic.body.pool_number,
 	);
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	const lane =
@@ -606,6 +607,66 @@ export function DynamicEditor({
 								</FormLayout>
 							),
 						},
+						{
+							id: "targets",
+							label: "Targets",
+							content: (
+								<section className="dynamic-target-settings">
+									<strong>{targetSummary(dynamic.body)}</strong>
+									{status && <small>{coverageSummary(status)}</small>}
+									{status?.warning && (
+										<small className="dynamics-warning">{status.warning}</small>
+									)}
+									<div>
+										<Button
+											disabled={running || selection.length === 0}
+											title={
+												running
+													? "Turn every running instance Off before changing targets"
+													: selection.length === 0
+														? "Select a Group or fixtures first"
+														: undefined
+											}
+											onClick={() =>
+												onMutate(dynamic, {
+													type: "set_target_binding",
+													target_binding: selectedGroupId
+														? {
+																type: "live_group",
+																group_id: selectedGroupId,
+															}
+														: {
+																type: "frozen_targets",
+																targets: [...selection],
+															},
+												})
+											}
+										>
+											Take Selection
+										</Button>
+										<Button
+											disabled={
+												running ||
+												dynamic.body.target_binding.type === "targetless"
+											}
+											title={
+												running
+													? "Turn every running instance Off before changing targets"
+													: undefined
+											}
+											onClick={() =>
+												onMutate(dynamic, {
+													type: "set_target_binding",
+													target_binding: { type: "targetless" },
+												})
+											}
+										>
+											Clear Selection
+										</Button>
+									</div>
+								</section>
+							),
+						},
 					]}
 				/>
 			)}
@@ -640,85 +701,6 @@ export function DynamicEditor({
 					)}
 				</main>
 			</div>
-			<footer className="dynamic-editor-footer">
-				<div>
-					<strong>{targetSummary(dynamic.body)}</strong>
-					<small>
-						{status ? `${coverageSummary(status)} · ` : ""}
-						Revision {dynamic.revision} · edits apply immediately
-					</small>
-					{status?.warning && (
-						<small className="dynamics-warning">{status.warning}</small>
-					)}
-				</div>
-				<Button
-					disabled={running || selection.length === 0}
-					title={
-						running
-							? "Turn every running instance Off before changing targets"
-							: selection.length === 0
-								? "Select a Group or fixtures first"
-								: undefined
-					}
-					onClick={() =>
-						onMutate(dynamic, {
-							type: "set_target_binding",
-							target_binding: selectedGroupId
-								? { type: "live_group", group_id: selectedGroupId }
-								: { type: "frozen_targets", targets: [...selection] },
-						})
-					}
-				>
-					Take Selection
-				</Button>
-				<Button
-					disabled={
-						running || dynamic.body.target_binding.type === "targetless"
-					}
-					title={
-						running
-							? "Turn every running instance Off before changing targets"
-							: undefined
-					}
-					onClick={() =>
-						onMutate(dynamic, {
-							type: "set_target_binding",
-							target_binding: { type: "targetless" },
-						})
-					}
-				>
-					Clear Selection
-				</Button>
-				<label className="dynamic-pool-destination">
-					Pool
-					<input
-						type="number"
-						min={1}
-						max={9_999}
-						value={destinationPoolNumber}
-						onChange={(event) =>
-							setDestinationPoolNumber(
-								Math.max(1, Math.min(9_999, Number(event.target.value) || 1)),
-							)
-						}
-					/>
-				</label>
-				<Button
-					disabled={destinationPoolNumber === dynamic.body.pool_number}
-					onClick={() => onMove(destinationPoolNumber)}
-				>
-					Move
-				</Button>
-				<Button
-					disabled={destinationPoolNumber === dynamic.body.pool_number}
-					onClick={() => onCopy(destinationPoolNumber)}
-				>
-					Copy
-				</Button>
-				<Button className="danger" onClick={onDelete}>
-					Delete Dynamic
-				</Button>
-			</footer>
 		</section>
 	);
 }
@@ -747,6 +729,9 @@ function CurvesView({
 	): Promise<void>;
 }) {
 	const [menuLaneId, setMenuLaneId] = useState<string | null>(null);
+	const [randomMethod, setRandomMethod] = useState<
+		"max_min" | "middle_amplitude"
+	>("max_min");
 	const setMode = async (mode: DynamicLaneModeProjection) => {
 		if (mode !== "random") {
 			await onReplace({ ...lane, mode });
@@ -767,6 +752,41 @@ function CurvesView({
 		dynamic.body.random_groups.find(
 			(group) => group.id === lane.random_group_id,
 		) ?? null;
+	const displayedMethod = lane.mode === "random" ? randomMethod : lane.mode;
+	const chooseMethod = (mode: "keyframes" | "max_min" | "middle_amplitude") => {
+		if (lane.mode === "random" && mode !== "keyframes") {
+			setRandomMethod(mode);
+			return;
+		}
+		void setMode(mode);
+	};
+	const chooseFunction = (
+		functionName: DynamicPeriodicFunctionProjection | "random",
+	) => {
+		if (functionName === "random") {
+			if (displayedMethod !== "keyframes") setRandomMethod(displayedMethod);
+			void setMode("random");
+			return;
+		}
+		const method =
+			displayedMethod === "middle_amplitude" ? "middle_amplitude" : "max_min";
+		void onReplace(
+			method === "middle_amplitude"
+				? {
+						...lane,
+						mode: method,
+						middle_amplitude: {
+							...lane.middle_amplitude,
+							function: functionName,
+						},
+					}
+				: {
+						...lane,
+						mode: method,
+						max_min: { ...lane.max_min, function: functionName },
+					},
+		);
+	};
 	return (
 		<div className="dynamic-curves-view">
 			<div className="dynamic-lane-overview-list" aria-label="Dynamic lanes">
@@ -916,70 +936,77 @@ function CurvesView({
 					);
 				})}
 			</div>
-			<section className="dynamic-lane-bottom-editor">
-				<header>
-					<div>
-						<small>Editing</small>
-						<strong>
-							{attributes.find((item) => item.id === lane.attribute)?.label ??
-								lane.attribute}
-						</strong>
-					</div>
-					<fieldset className="button-group" aria-label="Lane mode">
+			<section
+				className="dynamic-lane-bottom-editor"
+				aria-label="Curve Composer"
+			>
+				<aside className="dynamic-curve-methods">
+					<strong>Curve Composer</strong>
+					<fieldset className="button-group" aria-label="Curve method">
 						<Button
-							className={lane.mode === "keyframes" ? "active" : ""}
-							onClick={() => void setMode("keyframes")}
+							className={displayedMethod === "keyframes" ? "active" : ""}
+							onClick={() => chooseMethod("keyframes")}
 						>
-							Keyframes
+							<span>Key-</span>
+							<span>frames</span>
 						</Button>
 						<Button
-							className={lane.mode === "max_min" ? "active" : ""}
-							onClick={() => void setMode("max_min")}
+							className={displayedMethod === "max_min" ? "active" : ""}
+							onClick={() => chooseMethod("max_min")}
 						>
-							Max / min
+							<span>Max /</span>
+							<span>min</span>
 						</Button>
 						<Button
-							className={lane.mode === "middle_amplitude" ? "active" : ""}
-							onClick={() => void setMode("middle_amplitude")}
+							className={displayedMethod === "middle_amplitude" ? "active" : ""}
+							onClick={() => chooseMethod("middle_amplitude")}
 						>
-							Middle / amplitude
-						</Button>
-						<Button
-							className={lane.mode === "random" ? "active" : ""}
-							onClick={() => void setMode("random")}
-						>
-							Random
+							<span>Middle /</span>
+							<span>amplitude</span>
 						</Button>
 					</fieldset>
-				</header>
-				{lane.mode === "keyframes" ? (
-					<KeyframeControls
-						lane={lane}
-						presets={presets}
-						onReplace={onReplace}
-					/>
-				) : lane.mode === "random" && randomGroup ? (
-					<RandomControls
-						lane={lane}
-						group={randomGroup}
-						groups={dynamic.body.random_groups}
-						presets={presets}
-						onReplaceLane={onReplace}
-						onReplaceGroup={(group) =>
-							onMutate(dynamic, {
-								type: "replace_random_group",
-								group_id: group.id,
-								group,
-							})
-						}
-					/>
-				) : (
-					<FunctionControls
-						lane={lane}
-						presets={presets}
-						onReplace={onReplace}
-					/>
-				)}
+				</aside>
+				<div className="dynamic-curve-method-editor">
+					{lane.mode === "keyframes" ? (
+						<KeyframeControls
+							lane={lane}
+							presets={presets}
+							onReplace={onReplace}
+						/>
+					) : lane.mode === "random" && randomGroup ? (
+						<RandomControls
+							lane={lane}
+							group={randomGroup}
+							groups={dynamic.body.random_groups}
+							presets={presets}
+							onReplaceLane={onReplace}
+							onReplaceGroup={(group) =>
+								onMutate(dynamic, {
+									type: "replace_random_group",
+									group_id: group.id,
+									group,
+								})
+							}
+							functions={
+								<FunctionButtons value="random" onChange={chooseFunction} />
+							}
+						/>
+					) : (
+						<FunctionControls
+							lane={lane}
+							presets={presets}
+							onReplace={onReplace}
+							onRandom={() => chooseFunction("random")}
+						/>
+					)}
+				</div>
+				<div className="dynamic-curve-method-action">
+					{lane.mode === "keyframes" && (
+						<Button onClick={() => void onReplace(addKeyframeToLane(lane))}>
+							+ Add keyframe
+						</Button>
+					)}
+				</div>
 			</section>
 		</div>
 	);
@@ -1085,25 +1112,55 @@ function KeyframeControls({
 					)}
 				</article>
 			))}
-			<Button
-				onClick={() => {
-					const points = [...lane.keyframes.points];
-					const position = largestKeyframeGapMidpoint(points);
-					points.push({
-						position,
-						source: sourceCurrent,
-						interpolation: "ease_in_out",
-					});
-					points.sort((left, right) => left.position - right.position);
-					void onReplace({
-						...lane,
-						keyframes: { ...lane.keyframes, points },
-					});
-				}}
-			>
-				+ Add keyframe
-			</Button>
 		</section>
+	);
+}
+
+function addKeyframeToLane(lane: DynamicLaneProjection): DynamicLaneProjection {
+	const points = [...lane.keyframes.points];
+	const position = largestKeyframeGapMidpoint(points);
+	points.push({
+		position,
+		source: sourceCurrent,
+		interpolation: "ease_in_out",
+	});
+	points.sort((left, right) => left.position - right.position);
+	return {
+		...lane,
+		keyframes: { ...lane.keyframes, points },
+	};
+}
+
+function FunctionButtons({
+	value,
+	onChange,
+}: {
+	value: DynamicPeriodicFunctionProjection | "random";
+	onChange(value: DynamicPeriodicFunctionProjection | "random"): void;
+}) {
+	const options: readonly {
+		value: DynamicPeriodicFunctionProjection | "random";
+		label: string;
+	}[] = [
+		{ value: "sinus", label: "Sinus" },
+		{ value: "cosinus", label: "Cosinus" },
+		{ value: "linear_up", label: "Linear +" },
+		{ value: "linear_down", label: "Linear −" },
+		{ value: "pwm", label: "PWM" },
+		{ value: "random", label: "Random" },
+	];
+	return (
+		<fieldset className="dynamic-function-buttons" aria-label="Curve function">
+			{options.map((option) => (
+				<Button
+					key={option.value}
+					className={value === option.value ? "active" : ""}
+					onClick={() => onChange(option.value)}
+				>
+					{option.label}
+				</Button>
+			))}
+		</fieldset>
 	);
 }
 
@@ -1111,26 +1168,24 @@ function FunctionControls({
 	lane,
 	presets,
 	onReplace,
+	onRandom,
 }: {
 	lane: DynamicLaneProjection;
 	presets: readonly PresetObject[];
 	onReplace(next: DynamicLaneProjection): Promise<void>;
+	onRandom(): void;
 }) {
 	const config =
 		lane.mode === "middle_amplitude" ? lane.middle_amplitude : lane.max_min;
 	return (
 		<section className="dynamic-function-controls">
-			<SelectField
-				label="Function"
+			<FunctionButtons
 				value={config.function}
-				options={[
-					{ value: "sinus", label: "Sinus" },
-					{ value: "cosinus", label: "Cosinus" },
-					{ value: "linear_up", label: "Linear +" },
-					{ value: "linear_down", label: "Linear −" },
-					{ value: "pwm", label: "PWM" },
-				]}
-				onChange={(functionName: DynamicPeriodicFunctionProjection) => {
+				onChange={(functionName) => {
+					if (functionName === "random") {
+						onRandom();
+						return;
+					}
 					onReplace(
 						lane.mode === "middle_amplitude"
 							? {
@@ -1242,6 +1297,7 @@ function RandomControls({
 	presets,
 	onReplaceLane,
 	onReplaceGroup,
+	functions,
 }: {
 	lane: DynamicLaneProjection;
 	group: DynamicRandomGroupProjection;
@@ -1249,11 +1305,13 @@ function RandomControls({
 	presets: readonly PresetObject[];
 	onReplaceLane(next: DynamicLaneProjection): Promise<void>;
 	onReplaceGroup(next: DynamicRandomGroupProjection): Promise<void>;
+	functions: ReactNode;
 }) {
 	const update = (patch: Partial<DynamicRandomGroupProjection>) =>
 		void onReplaceGroup({ ...group, ...patch });
 	return (
 		<section className="dynamic-function-controls dynamic-random-controls">
+			{functions}
 			<SelectField
 				label="Random group"
 				value={group.id}

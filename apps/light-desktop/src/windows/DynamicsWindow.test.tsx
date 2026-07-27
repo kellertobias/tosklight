@@ -125,12 +125,17 @@ describe("DynamicsWindow", () => {
 		).toBeInTheDocument();
 		expect(
 			screen.getAllByText("Intensity", { selector: "strong" }),
-		).toHaveLength(2);
+		).toHaveLength(1);
 		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 		expect(
 			screen.getByRole("dialog", { name: "Dynamic Settings" }),
 		).toBeInTheDocument();
 		expect(screen.getByLabelText("Name")).toHaveValue("Pulse");
+		expect(screen.queryByRole("button", { name: "Take Selection" })).toBeNull();
+		fireEvent.click(screen.getByRole("tab", { name: "Targets" }));
+		expect(
+			screen.getByRole("button", { name: "Take Selection" }),
+		).toBeInTheDocument();
 	});
 
 	it("opens the standard creation modal before choosing the first lane", () => {

@@ -1,4 +1,5 @@
 import { Button } from "@tosklight/ui";
+import { useState } from "react";
 import {
 	alignModes,
 	compactFamilyLabels,
@@ -10,6 +11,8 @@ import {
 import type { ParameterController } from "./useParameterController";
 import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
 import type { DynamicEditorTask } from "../../../features/dynamics/DynamicEditorSessionContext";
+import { useDynamics } from "../../../features/showObjects/ShowObjectsState";
+import type { DynamicDefinitionProjection } from "../../../api/generated/light-wire";
 
 function FamilyLabel({ full, compact }: { full: string; compact: string }) {
 	return (
@@ -130,26 +133,116 @@ export function ParameterFamilyTabs({
 export function DynamicEditorTaskTabs({
 	task,
 	onTask,
+	dynamic: controlledDynamic,
+	laneId: controlledLaneId,
+	onLane,
+	page = 1,
+	pageCount = 1,
 }: {
 	task?: DynamicEditorTask;
 	onTask?(task: DynamicEditorTask): void;
+	dynamic?: DynamicDefinitionProjection;
+	laneId?: string | null;
+	onLane?(id: string): void;
+	page?: number;
+	pageCount?: number;
 } = {}) {
 	const editor = useDynamicEditorSession();
 	const activeTask = task ?? editor.session?.task;
 	if (!activeTask) return null;
+	if (controlledDynamic)
+		return (
+			<DynamicEditorTaskTabsView
+				activeTask={activeTask}
+				onTask={(next) =>
+					onTask ? onTask(next) : editor.update({ task: next })
+				}
+				dynamic={controlledDynamic}
+				laneId={controlledLaneId}
+				onLane={(id) =>
+					onLane ? onLane(id) : editor.update({ primaryLaneId: id })
+				}
+				page={page}
+				pageCount={pageCount}
+			/>
+		);
+	return (
+		<ConnectedDynamicEditorTaskTabs
+			activeTask={activeTask}
+			onTask={(next) => (onTask ? onTask(next) : editor.update({ task: next }))}
+			page={page}
+			pageCount={pageCount}
+		/>
+	);
+}
+
+function ConnectedDynamicEditorTaskTabs({
+	activeTask,
+	onTask,
+	page,
+	pageCount,
+}: {
+	activeTask: DynamicEditorTask;
+	onTask(task: DynamicEditorTask): void;
+	page: number;
+	pageCount: number;
+}) {
+	const editor = useDynamicEditorSession();
+	const dynamics = useDynamics();
+	const dynamic = dynamics.find(
+		(candidate) => candidate.id === editor.session?.dynamicId,
+	)?.body;
+	return (
+		<DynamicEditorTaskTabsView
+			activeTask={activeTask}
+			onTask={onTask}
+			dynamic={dynamic}
+			laneId={editor.session?.primaryLaneId}
+			onLane={(id) => editor.update({ primaryLaneId: id })}
+			page={page}
+			pageCount={pageCount}
+		/>
+	);
+}
+
+function DynamicEditorTaskTabsView({
+	activeTask,
+	onTask,
+	dynamic,
+	laneId,
+	onLane,
+	page,
+	pageCount,
+}: {
+	activeTask: DynamicEditorTask;
+	onTask(task: DynamicEditorTask): void;
+	dynamic?: DynamicDefinitionProjection;
+	laneId?: string | null;
+	onLane(id: string): void;
+	page: number;
+	pageCount: number;
+}) {
+	const [laneMenuOpen, setLaneMenuOpen] = useState(false);
+	const lane =
+		dynamic?.lanes.find((candidate) => candidate.id === laneId) ??
+		dynamic?.lanes[0];
 	return (
 		<div className="family-tabs dynamics-editor-family-tabs">
 			{(["curves", "phase", "speed"] as const).map((task) => {
-				const label =
+				const baseLabel =
 					task === "phase"
 						? "Phase Spread"
 						: task[0].toUpperCase() + task.slice(1);
+				const label =
+					task === activeTask && pageCount > 1
+						? `${baseLabel} (${page}/${pageCount})`
+						: baseLabel;
 				return (
 					<Button
 						key={task}
 						aria-label={label}
 						className={activeTask === task ? "active" : ""}
-						onClick={() => (onTask ? onTask(task) : editor.update({ task }))}
+						onClick={() => onTask(task)}
 					>
 						<FamilyLabel
 							full={label}
@@ -157,13 +250,45 @@ export function DynamicEditorTaskTabs({
 								task === "phase"
 									? "Phase"
 									: task === "curves"
-										? "Curves"
+										? pageCount > 1
+											? `Curves (${page}/${pageCount})`
+											: "Curves"
 										: "Speed"
 							}
 						/>
 					</Button>
 				);
 			})}
+			<span className="family-spacer" />
+			{dynamic && lane && (
+				<div className="dynamic-editor-lane-picker">
+					<Button
+						aria-haspopup="menu"
+						aria-expanded={laneMenuOpen}
+						onClick={() => setLaneMenuOpen((current) => !current)}
+					>
+						{lane.attribute} ▾
+					</Button>
+					{laneMenuOpen && (
+						<div role="menu" aria-label="Dynamic lane">
+							{dynamic.lanes.map((candidate) => (
+								<Button
+									key={candidate.id}
+									role="menuitemradio"
+									aria-checked={candidate.id === lane.id}
+									className={candidate.id === lane.id ? "active" : ""}
+									onClick={() => {
+										onLane(candidate.id);
+										setLaneMenuOpen(false);
+									}}
+								>
+									{candidate.attribute}
+								</Button>
+							))}
+						</div>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }

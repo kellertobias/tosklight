@@ -196,28 +196,71 @@
 }
 
 .dynamic-lane-bottom-editor {
+	display: grid;
+	grid-template-columns: 8.5rem minmax(0, 1fr) auto;
+	align-items: stretch;
+	gap: 0.55rem;
 	padding: 0.55rem;
 	background: #0d1218;
 	border: 1px solid #25313b;
 	border-radius: 0.45rem;
 }
 
-.dynamic-lane-bottom-editor > header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 0.7rem;
-	margin-bottom: 0.5rem;
-}
-
-.dynamic-lane-bottom-editor > header > div {
+.dynamic-curve-methods {
 	display: grid;
+	align-content: start;
+	gap: 0.35rem;
+	padding-right: 0.55rem;
+	border-right: 1px solid #25313b;
 }
 
-.dynamic-lane-bottom-editor > header small {
-	color: #85929d;
+.dynamic-curve-methods > strong {
+	color: #8fa0ad;
 	font-size: 0.68rem;
 	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.dynamic-curve-methods .button-group {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 0.3rem;
+}
+
+.dynamic-curve-methods .ui-button {
+	display: flex;
+	min-height: 2.7rem;
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: center;
+	line-height: 1.05;
+}
+
+.dynamic-curve-method-editor {
+	min-width: 0;
+}
+
+.dynamic-curve-method-editor > .dynamic-source-cards,
+.dynamic-curve-method-editor > .dynamic-function-controls {
+	margin-top: 0;
+}
+
+.dynamic-curve-method-action {
+	display: flex;
+	align-items: flex-start;
+	min-width: 8.5rem;
+	padding-left: 0.55rem;
+	border-left: 1px solid #25313b;
+}
+
+.dynamic-function-buttons {
+	grid-column: 1 / -1;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	margin: 0;
+	padding: 0;
+	border: 0;
 }
 
 .dynamic-create-form {
@@ -442,46 +485,22 @@
 	min-height: 7.5rem;
 }
 
-.dynamic-editor-footer {
-	display: flex;
-	align-items: center;
-	gap: 0.45rem;
-	padding: 0.45rem 0.65rem;
-	background: #11161c;
-	border-top: 1px solid #29323a;
-}
-
-.dynamic-pool-destination {
-	display: flex;
-	align-items: center;
-	gap: 0.35rem;
-}
-
-.dynamic-pool-destination input {
-	width: 5.5rem;
-}
-
-.dynamic-editor-footer > div {
+.dynamic-target-settings {
 	display: grid;
-	margin-right: auto;
+	gap: 0.55rem;
 }
 
-.dynamic-editor-footer small {
+.dynamic-target-settings small {
 	color: #87939d;
 }
 
-.dynamic-editor-footer .dynamics-warning {
+.dynamic-target-settings .dynamics-warning {
 	color: #f4ba62;
 }
 
-.dynamic-number-control {
+.dynamic-target-settings > div {
 	display: flex;
-	align-items: center;
-	gap: 0.25rem;
-}
-
-.dynamic-number-control input {
-	width: 100%;
+	gap: 0.4rem;
 }
 
 .dynamic-settings-grid label.dynamic-check {

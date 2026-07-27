@@ -38,14 +38,12 @@ export function DynamicDefinitionEncoderSurface({
 	dynamic,
 	lane,
 	view,
-	onLane,
 	onLaneChange,
 	onMutate,
 }: {
 	dynamic: DynamicDefinitionProjection;
 	lane: DynamicDefinitionProjection["lanes"][number] | null;
 	view: DynamicEditorView;
-	onLane(id: string): void;
 	onLaneChange(
 		change: (
 			lane: DynamicDefinitionProjection["lanes"][number],
@@ -54,55 +52,16 @@ export function DynamicDefinitionEncoderSurface({
 	): Promise<void>;
 	onMutate(intent: DynamicUpdateIntent, mutationGroup?: string): Promise<void>;
 }) {
-	const [menuOpen, setMenuOpen] = useState(false);
-	const label =
-		view === "phase" ? "Phase Spread" : view[0].toUpperCase() + view.slice(1);
 	return (
-		<>
-			<div className="programmer-dynamics-toolbar">
-				<span className="programmer-dynamics-page">{label} 1 of 1</span>
-				<div className="programmer-dynamics-lane-picker">
-					<Button
-						aria-haspopup="menu"
-						aria-expanded={menuOpen}
-						onClick={() => setMenuOpen((current) => !current)}
-					>
-						{lane?.attribute ?? "Choose lane"} ▾
-					</Button>
-					{menuOpen && (
-						<div
-							className="programmer-dynamics-menu"
-							role="menu"
-							aria-label="Dynamic lane"
-						>
-							{dynamic.lanes.map((candidate) => (
-								<Button
-									key={candidate.id}
-									role="menuitemradio"
-									aria-checked={candidate.id === lane?.id}
-									className={candidate.id === lane?.id ? "active" : ""}
-									onClick={() => {
-										onLane(candidate.id);
-										setMenuOpen(false);
-									}}
-								>
-									{candidate.attribute}
-								</Button>
-							))}
-						</div>
-					)}
-				</div>
-			</div>
-			<div className="programmer-dynamics-editor-deck">
-				<DynamicEncoderDeck
-					view={view}
-					lane={lane ?? undefined}
-					dynamic={dynamic}
-					onLaneChange={onLaneChange}
-					onMutate={onMutate}
-				/>
-			</div>
-		</>
+		<div className="programmer-dynamics-editor-deck">
+			<DynamicEncoderDeck
+				view={view}
+				lane={lane ?? undefined}
+				dynamic={dynamic}
+				onLaneChange={onLaneChange}
+				onMutate={onMutate}
+			/>
+		</div>
 	);
 }
 
@@ -349,10 +308,6 @@ export function ProgrammerDynamicsSurface({
 				dynamic={selectedObject.body}
 				lane={selectedLane}
 				view={editor.session.task}
-				onLane={(id) => {
-					setSelectedLaneId(id);
-					editor.update({ primaryLaneId: id });
-				}}
 				onLaneChange={changeLane}
 				onMutate={mutateDefinition}
 			/>
