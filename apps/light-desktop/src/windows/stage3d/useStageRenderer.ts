@@ -70,6 +70,9 @@ export function useStageRenderer({
 				frontendPerformanceDiagnostics.recordStageFrameCanvasSubmitted(
 					controller.displayedVisualizationRef.current?.generated_at,
 					controller.visualizationSettledRef.current,
+					controller.displayedVisualizationRef.current?.preload
+						? "preload"
+						: "normal",
 				);
 			}
 			if (controlsChanged && frame === null)

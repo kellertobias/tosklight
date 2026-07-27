@@ -197,6 +197,12 @@ class WebSocketVisualizationRuntimeStream
 		);
 		socket.addEventListener("close", () => {
 			if (this.socket === socket) this.socket = null;
+			if (!this.stopped && this.claims.size)
+				this.observer.error(
+					new VisualizationRuntimeProtocolError(
+						"Visualization stream closed; reconnecting",
+					),
+				);
 			this.scheduleReconnect();
 		});
 	}

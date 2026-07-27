@@ -22,7 +22,10 @@ export function Stage3dView({
 	selection: StageSelectionModel;
 }) {
 	return (
-		<div className="stage-canvas stage-canvas-3d">
+		<div
+			className="stage-canvas stage-canvas-3d"
+			data-stage-render-quality={options.renderQuality}
+		>
 			<Stage3dCanvas
 				fixtures={fixtures}
 				visualization={visualization}

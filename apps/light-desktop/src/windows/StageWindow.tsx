@@ -32,6 +32,8 @@ export function StageWindow(props: StageWindowProps) {
 						: "unavailable"
 					: stage.visualizationStatus
 			}
+			data-visualization-lane={options.followPreload ? "preload" : "live"}
+			data-visualization-revision={stage.visualization?.revision}
 		>
 			{!props.compact && (
 				<StageHeader

@@ -363,8 +363,9 @@ class FrontendPerformanceDiagnostics {
 	recordStageFrameApplied(
 		sourceGeneratedAt: string | undefined,
 		settled: boolean,
+		lane?: "normal" | "preload",
 	) {
-		const sample = this.latestStageFrame(sourceGeneratedAt);
+		const sample = this.latestStageFrame(sourceGeneratedAt, lane);
 		if (!sample) return;
 		const appliedAt = Date.now();
 		sample.firstAppliedAt ??= appliedAt;
@@ -374,8 +375,9 @@ class FrontendPerformanceDiagnostics {
 	recordStageFrameCanvasSubmitted(
 		sourceGeneratedAt: string | undefined,
 		settled: boolean,
+		lane?: "normal" | "preload",
 	) {
-		const sample = this.latestStageFrame(sourceGeneratedAt);
+		const sample = this.latestStageFrame(sourceGeneratedAt, lane);
 		if (!sample) return;
 		const submittedAt = Date.now();
 		sample.firstCanvasSubmittedAt ??= submittedAt;
@@ -470,11 +472,18 @@ class FrontendPerformanceDiagnostics {
 		);
 	}
 
-	private latestStageFrame(sourceGeneratedAt: string | undefined) {
+	private latestStageFrame(
+		sourceGeneratedAt: string | undefined,
+		lane?: "normal" | "preload",
+	) {
 		if (!sourceGeneratedAt) return undefined;
 		for (let index = this.stageFrames.length - 1; index >= 0; index--) {
 			const sample = this.stageFrames[index];
-			if (sample?.sourceGeneratedAt === sourceGeneratedAt) return sample;
+			if (
+				sample?.sourceGeneratedAt === sourceGeneratedAt &&
+				(lane === undefined || sample.lane === lane)
+			)
+				return sample;
 		}
 		return undefined;
 	}

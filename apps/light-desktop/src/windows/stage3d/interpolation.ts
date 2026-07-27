@@ -2,6 +2,15 @@ import type { AttributeValue, VisualizationSnapshot } from "../../api/types";
 
 export const STAGE_INTERPOLATION_MILLIS = 100;
 
+export function remainingStageInterpolationMillis(
+	generatedAt: string,
+	now = Date.now(),
+) {
+	const sourceAt = Date.parse(generatedAt);
+	const sourceAge = Number.isFinite(sourceAt) ? Math.max(0, now - sourceAt) : 0;
+	return Math.max(0, STAGE_INTERPOLATION_MILLIS - sourceAge);
+}
+
 export function interpolateVisualizationSnapshot(
 	from: VisualizationSnapshot,
 	to: VisualizationSnapshot,

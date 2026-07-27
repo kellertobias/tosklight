@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { VisualizationSnapshot } from "../../api/types";
-import { interpolateVisualizationSnapshot } from "./interpolation";
+import {
+	interpolateVisualizationSnapshot,
+	remainingStageInterpolationMillis,
+} from "./interpolation";
 
 describe("interpolateVisualizationSnapshot", () => {
 	it("moves continuous values toward but never beyond the authoritative sample", () => {
@@ -45,6 +48,16 @@ describe("interpolateVisualizationSnapshot", () => {
 		const to = snapshot(2, true, [normalized("intensity", 0)]);
 
 		expect(interpolateVisualizationSnapshot(from, to, 0)).toBe(to);
+	});
+
+	it("uses only the portion of the publication window left after transport", () => {
+		const now = Date.parse("2026-07-27T00:00:00.100Z");
+		expect(
+			remainingStageInterpolationMillis("2026-07-27T00:00:00.040Z", now),
+		).toBe(40);
+		expect(
+			remainingStageInterpolationMillis("2026-07-27T00:00:00.000Z", now),
+		).toBe(0);
 	});
 });
 

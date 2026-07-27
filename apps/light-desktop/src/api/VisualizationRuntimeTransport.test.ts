@@ -174,6 +174,12 @@ describe("HttpVisualizationRuntimeTransport", () => {
 				],
 			}),
 		);
+		socket?.close();
+		expect(observer.error).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: "Visualization stream closed; reconnecting",
+			}),
+		);
 		stream.close();
 	});
 

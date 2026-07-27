@@ -20,7 +20,7 @@ import {
 } from "../stage3dScene";
 import {
 	interpolateVisualizationSnapshot,
-	STAGE_INTERPOLATION_MILLIS,
+	remainingStageInterpolationMillis,
 } from "./interpolation";
 import { StageModelCache } from "./modelCache";
 
@@ -261,6 +261,7 @@ export function useStageScene({
 			frontendPerformanceDiagnostics.recordStageFrameApplied(
 				snapshot?.generated_at,
 				settled,
+				snapshot?.preload ? "preload" : "normal",
 			);
 			invalidateRef.current?.();
 		};
@@ -268,11 +269,18 @@ export function useStageScene({
 			apply(target, true);
 			return;
 		}
+		const interpolationMillis = remainingStageInterpolationMillis(
+			target.generated_at,
+		);
+		if (interpolationMillis === 0) {
+			apply(target, true);
+			return;
+		}
 		const startedAt = performance.now();
 		const step = (now: number) => {
 			const progress = Math.min(
 				1,
-				Math.max(0, (now - startedAt) / STAGE_INTERPOLATION_MILLIS),
+				Math.max(0, (now - startedAt) / interpolationMillis),
 			);
 			apply(
 				interpolateVisualizationSnapshot(from, target, progress),

@@ -111,8 +111,14 @@ describe("frontend performance diagnostics", () => {
 			sourceGeneratedAt: generatedAt,
 			publishedAt: generatedAt,
 		});
-		diagnostics.recordStageFrameApplied(generatedAt, true);
-		diagnostics.recordStageFrameCanvasSubmitted(generatedAt, true);
+		diagnostics.recordStageFrameReceived({
+			lane: "preload",
+			sourceFrame: 42,
+			sourceGeneratedAt: generatedAt,
+			publishedAt: generatedAt,
+		});
+		diagnostics.recordStageFrameApplied(generatedAt, true, "normal");
+		diagnostics.recordStageFrameCanvasSubmitted(generatedAt, true, "normal");
 		diagnostics.recordStageSceneBuild({
 			startedAt: 1,
 			finishedAt: 3,
@@ -148,6 +154,11 @@ describe("frontend performance diagnostics", () => {
 					firstAppliedAt: expect.any(Number),
 					settledCanvasSubmittedAt: expect.any(Number),
 					sourceToSettledCanvasMs: expect.any(Number),
+				}),
+				expect.objectContaining({
+					lane: "preload",
+					firstAppliedAt: null,
+					settledCanvasSubmittedAt: null,
 				}),
 			],
 			sceneBuilds: [expect.objectContaining({ fixtureCount: 49 })],
