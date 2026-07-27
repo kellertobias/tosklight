@@ -17,6 +17,7 @@ const ACTUAL_ROOT = path.join(
 	".artifacts/test/help-screenshots/storybook",
 );
 const UPDATE = process.env.UPDATE_HELP_SCREENSHOTS === "1";
+const TARGET_FILE = process.env.HELP_SCREENSHOT_FILE;
 
 interface ScreenshotInteraction {
 	action: "click" | "fill" | "press";
@@ -87,7 +88,9 @@ test("captures the complete help screenshot manifest from truthful sources", asy
 		globalThis.Date = FixedDate as DateConstructor;
 	});
 
-	for (const entry of manifest.entries) {
+	for (const entry of manifest.entries.filter(
+		(candidate) => !TARGET_FILE || candidate.file === TARGET_FILE,
+	)) {
 		validateEntry(entry, storyIds);
 		const expectedPath = path.join(SCREENSHOT_ROOT, entry.file);
 		const expected = await fs.readFile(expectedPath);
@@ -166,6 +169,12 @@ test("captures the complete help screenshot manifest from truthful sources", asy
 		page.off("console", onConsole);
 		page.off("pageerror", onPageError);
 		page.off("request", onRequest);
+	}
+	if (TARGET_FILE) {
+		expect(
+			declared,
+			`HELP_SCREENSHOT_FILE does not name a manifest entry: ${TARGET_FILE}`,
+		).toContain(TARGET_FILE);
 	}
 	expect(
 		screenshotDiffs,

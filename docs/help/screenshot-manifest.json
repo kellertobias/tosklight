@@ -99,7 +99,7 @@
 		{
 			"file": "panes/dynamics.png",
 			"source": "storybook",
-			"storyId": "tosklight-windows-dynamics--future-feature-empty-state",
+			"storyId": "tosklight-windows-dynamics--full-application-discussion",
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",

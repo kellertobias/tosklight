@@ -107,19 +107,28 @@ scope; an explicit selection must match that scope exactly. Shift-click a popula
 the production editor. With Set armed, touching a Dynamic and then a Playback assigns that Dynamic
 to the Playback instead of starting it.
 
-The pool uses sparse pages covering numbers 1-9999. Empty positions remain available for future
-Dynamics without renumbering existing show data. A populated tile reports its name and number; its
-running state comes from the authoritative runtime rather than a browser-side animation.
+The pool uses the same square tile surface and sizing controls as the Preset and Group pools.
+Empty positions remain available for future Dynamics without renumbering existing show data. A
+populated tile reports its name and number; its running state comes from the authoritative runtime
+rather than a browser-side animation. Press **Delete**, then a populated tile, to delete it.
 
 The editor separates **Curves**, **Phase Spread**, and **Speed**. Curves contain scalar lanes for
-fixture attributes. Phase Spread controls ordered target projection, Offset/Span, Blocks, Repeats,
-Wings, and spatial ordering. Speed uses a fixed duration, Speed Group, or supported sound source.
+fixture attributes. Click one lane to edit it, or Shift-click additional lanes for a shared edit.
+The lane menu changes the attribute or deletes that lane. The bottom composer switches between
+Keyframes, Max/Min, and Middle/Amplitude while the normal Programmer encoder surface becomes the
+Dynamics encoder surface; pressing an encoder-group tab advances its additional pages when present.
+Phase Spread controls ordered target projection, Offset/Span, Blocks, Repeats, Wings, and spatial
+ordering. Speed uses either fixed BPM or one authoritative Speed Group, with multiplier, run mode,
+activation, and boundary controls. **One-shot** runs one complete effective cycle and then stops.
 The editor contains no private fixture preview or browser-side evaluator: open a Stage pane and
 choose Live or **Follow Preload** for authoritative visualization.
 
 **Take Selection** stores the current target scope. One selected live Group remains a live Group
 binding; any other selection becomes an exact frozen ordered target list. **Clear Selection**
 returns the Dynamic to targetless operation. Both actions are disabled while any instance of that
-Dynamic is running, so an active definition cannot silently retarget.
+Dynamic is running, so an active definition cannot silently retarget. These controls are available
+in Dynamic Settings and in the Phase Spread workspace.
 
 **Pane configuration:** only the common size and removal controls.
+
+![Dynamics editor](../assets/screenshots/panes/dynamics.png)

@@ -8,8 +8,8 @@ Those common grid and removal controls work the same way for every pane and are 
 
 The following pages document every operator choice currently offered by **Open Window**. They
 include a settings screenshot only when that pane adds settings beyond the common controls above.
-The Dynamics production UI is documented in text while its replacement screenshot waits for the
-required explicit visual-review checkpoint.
+The Dynamics reference uses the production full-application story accepted during the Dynamics
+visual-review checkpoint.
 
 - [Programming and visualization panes](01-programming-and-visualization.md)
 - [Cue and playback panes](02-cues-and-playbacks.md)

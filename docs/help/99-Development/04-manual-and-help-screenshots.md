@@ -39,10 +39,8 @@ from that run go only to `.artifacts/test/help-screenshots/live-app` and cannot 
 reviewed documentation files.
 
 Dynamics pool/editor screenshots are refreshed only after an explicit user review of the production
-UI. This prevents component tests and pixel references from freezing an unaccepted interaction or
-layout. Until that checkpoint is complete, keep the existing Dynamics image and manifest ownership
-unchanged; documentation text may describe the implemented operator contract without presenting an
-unreviewed replacement image.
+UI. The reviewed full-application story now owns that deterministic screenshot; future interaction
+or layout changes require the same visual-review checkpoint before its baseline is refreshed.
 
 ## Refresh icon contact sheets
 
