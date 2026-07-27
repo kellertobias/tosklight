@@ -84,7 +84,9 @@ function channelsFromDefinition(
 			id: uuid(),
 			head_id: heads[headIndex].id,
 			split: 1,
+			fixture_attribute: parameter.attribute,
 			attribute: parameter.attribute,
+			canonical_transform: "identity",
 			resolution,
 			secondary_slots: parameter.components
 				.slice(1)

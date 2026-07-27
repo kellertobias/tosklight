@@ -248,7 +248,7 @@ fn legacy_migration_derives_invert_aware_full_white_and_open_wheel_highlight() {
 }
 
 #[test]
-fn authored_schema_v2_highlight_raw_is_not_rederived() {
+fn authored_profile_highlight_raw_is_not_rederived() {
     let mut profile = FixtureProfile::blank();
     profile.manufacturer = "Test".into();
     profile.name = "Authored Highlight".into();
@@ -266,6 +266,43 @@ fn authored_schema_v2_highlight_raw_is_not_rederived() {
     assert_eq!(
         definition.profile_snapshot.unwrap().modes[0].channels[0].highlight_raw,
         73
+    );
+}
+
+#[test]
+fn schema_v2_channels_migrate_to_explicit_identity_mappings() {
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Test".into();
+    profile.name = "Legacy mapping".into();
+    let mode = &mut profile.modes[0];
+    mode.channels = vec![channel(mode.heads[0].id, ChannelResolution::U8, vec![])];
+    let mut value = serde_json::to_value(&profile).unwrap();
+    value["schema_version"] = serde_json::json!(2);
+    value["modes"][0]["channels"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("fixture_attribute");
+    value["modes"][0]["channels"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("canonical_transform");
+
+    let migrated: FixtureProfile = serde_json::from_value(value).unwrap();
+    assert_eq!(migrated.schema_version, FIXTURE_PROFILE_SCHEMA_VERSION);
+    let channel = &migrated.modes[0].channels[0];
+    assert_eq!(channel.fixture_attribute, channel.attribute);
+    assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
+    migrated.validate().unwrap();
+
+    let canonical = serde_json::to_value(migrated).unwrap();
+    assert_eq!(canonical["schema_version"], FIXTURE_PROFILE_SCHEMA_VERSION);
+    assert_eq!(
+        canonical["modes"][0]["channels"][0]["fixture_attribute"],
+        canonical["modes"][0]["channels"][0]["attribute"]
+    );
+    assert_eq!(
+        canonical["modes"][0]["channels"][0]["canonical_transform"],
+        "identity"
     );
 }
 

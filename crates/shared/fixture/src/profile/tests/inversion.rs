@@ -239,3 +239,65 @@ fn typed_control_action_owns_its_exact_channel_without_losing_function_precision
         Some(&action_attribute)
     );
 }
+
+#[test]
+fn fixture_facing_cmy_can_map_to_inverted_canonical_rgb_without_reinterpreting_exact_raw() {
+    let head_id = Uuid::new_v4();
+    let mut cyan = channel(head_id, ChannelResolution::U8, vec![]);
+    cyan.fixture_attribute = AttributeKey("color.cyan".into());
+    cyan.attribute = AttributeKey("color.red".into());
+    cyan.canonical_transform = CanonicalTransform::InvertNormalized;
+    cyan.functions = vec![ChannelFunction::continuous(
+        "Cyan filtration",
+        AttributeKey("color.red".into()),
+        255,
+    )];
+    let mode = FixtureMode {
+        id: Uuid::new_v4(),
+        name: "CMY".into(),
+        notes: String::new(),
+        splits: vec![FixtureSplit {
+            number: 1,
+            footprint: 1,
+        }],
+        heads: vec![FixtureHead {
+            id: head_id,
+            name: "Main".into(),
+            master_shared: true,
+        }],
+        channels: vec![cyan.clone()],
+        color_systems: vec![],
+        control_actions: vec![],
+        geometry: GeometryGraph::default(),
+    };
+    mode.validate().unwrap();
+
+    for (value, expected) in [(1.0, 0), (0.25, 191), (0.0, 255)] {
+        assert_eq!(
+            mode.resolve_channel_raw(
+                &cyan,
+                &HashMap::from([(
+                    AttributeKey("color.red".into()),
+                    AttributeValue::Normalized(value),
+                )]),
+                false,
+                None,
+                ChannelScales::default(),
+            ),
+            expected
+        );
+    }
+    assert_eq!(
+        mode.resolve_channel_raw(
+            &cyan,
+            &HashMap::from([(
+                AttributeKey("color.red".into()),
+                AttributeValue::RawDmxExact(37),
+            )]),
+            false,
+            None,
+            ChannelScales::default(),
+        ),
+        37
+    );
+}

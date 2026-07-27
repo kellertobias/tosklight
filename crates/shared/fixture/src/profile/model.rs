@@ -4,7 +4,7 @@ use light_core::FixtureId;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub const FIXTURE_PROFILE_SCHEMA_VERSION: u16 = 2;
+pub const FIXTURE_PROFILE_SCHEMA_VERSION: u16 = 3;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -22,7 +22,7 @@ pub enum ModelUnits {
     Metres,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct FixtureProfile {
     pub schema_version: u16,
     pub id: FixtureId,
@@ -54,6 +54,74 @@ pub struct FixtureProfile {
     pub signal_loss_policy: SignalLossPolicy,
     #[serde(default)]
     pub reserved_source: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct FixtureProfileCanonical {
+    schema_version: u16,
+    id: FixtureId,
+    revision: u32,
+    manufacturer: String,
+    name: String,
+    short_name: String,
+    fixture_type: String,
+    #[serde(default)]
+    patch_policy: PatchPolicy,
+    #[serde(default)]
+    notes: String,
+    #[serde(default)]
+    photograph_asset: Option<String>,
+    #[serde(default)]
+    stage_icon_asset: Option<String>,
+    #[serde(default)]
+    model_asset: Option<String>,
+    #[serde(default)]
+    model_units: ModelUnits,
+    #[serde(default)]
+    physical: ProfilePhysicalProperties,
+    modes: Vec<FixtureMode>,
+    #[serde(default)]
+    hazardous: bool,
+    #[serde(default)]
+    direct_control_protocols: Vec<DirectControlProtocol>,
+    #[serde(default)]
+    signal_loss_policy: SignalLossPolicy,
+    #[serde(default)]
+    reserved_source: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for FixtureProfile {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let canonical = FixtureProfileCanonical::deserialize(deserializer)?;
+        Ok(Self {
+            schema_version: if canonical.schema_version == 2 {
+                FIXTURE_PROFILE_SCHEMA_VERSION
+            } else {
+                canonical.schema_version
+            },
+            id: canonical.id,
+            revision: canonical.revision,
+            manufacturer: canonical.manufacturer,
+            name: canonical.name,
+            short_name: canonical.short_name,
+            fixture_type: canonical.fixture_type,
+            patch_policy: canonical.patch_policy,
+            notes: canonical.notes,
+            photograph_asset: canonical.photograph_asset,
+            stage_icon_asset: canonical.stage_icon_asset,
+            model_asset: canonical.model_asset,
+            model_units: canonical.model_units,
+            physical: canonical.physical,
+            modes: canonical.modes,
+            hazardous: canonical.hazardous,
+            direct_control_protocols: canonical.direct_control_protocols,
+            signal_loss_policy: canonical.signal_loss_policy,
+            reserved_source: canonical.reserved_source,
+        })
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

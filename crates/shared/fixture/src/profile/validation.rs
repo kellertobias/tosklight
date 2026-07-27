@@ -1,7 +1,8 @@
 use super::color_model::valid_measured_xyz;
 use super::{
-    ChannelFunctionBehavior, ColorSystem, ControlActionKind, FIXTURE_PROFILE_SCHEMA_VERSION,
-    FixtureChannel, FixtureMode, FixtureProfile, PatchPolicy, ProfileError,
+    CanonicalTransform, ChannelFunctionBehavior, ColorSystem, ControlActionKind,
+    FIXTURE_PROFILE_SCHEMA_VERSION, FixtureChannel, FixtureMode, FixtureProfile, PatchPolicy,
+    ProfileError,
 };
 use std::collections::{BTreeMap, HashSet};
 use uuid::Uuid;
@@ -286,11 +287,23 @@ impl FixtureMode {
 impl FixtureChannel {
     pub fn validate(&self) -> Result<(), ProfileError> {
         let max = self.resolution.max_raw();
-        if self.attribute.0.trim().is_empty() || self.default_raw > max || self.highlight_raw > max
+        if self.fixture_attribute.0.trim().is_empty()
+            || self.attribute.0.trim().is_empty()
+            || self.default_raw > max
+            || self.highlight_raw > max
         {
             return Err(ProfileError::Invalid(
                 "channel attribute or raw values are invalid".into(),
             ));
+        }
+        if self.canonical_transform == CanonicalTransform::InvertNormalized {
+            let descriptor = light_core::attribute_descriptor(&self.attribute);
+            if descriptor.normalized_bounds.is_none() || !descriptor.recordable {
+                return Err(ProfileError::Invalid(
+                    "normalized inversion requires a recordable continuous canonical attribute"
+                        .into(),
+                ));
+            }
         }
         if self
             .physical_min

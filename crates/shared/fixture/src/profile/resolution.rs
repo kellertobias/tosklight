@@ -1,6 +1,6 @@
 use super::{
-    ChannelBehavior, ChannelFunction, ChannelFunctionBehavior, ChannelScales, FixtureChannel,
-    FixtureMode, ProfileError,
+    CanonicalTransform, ChannelBehavior, ChannelFunction, ChannelFunctionBehavior, ChannelScales,
+    FixtureChannel, FixtureMode, ProfileError,
 };
 use light_core::{AttributeKey, AttributeValue};
 use std::collections::{BTreeSet, HashMap};
@@ -90,15 +90,15 @@ impl FixtureMode {
                 .iter()
                 .enumerate()
                 .filter_map(|(index, function)| {
-                    function_value(function, values)
+                    function_value(function, values, channel.canonical_transform)
                         .map(|raw| (function.priority, std::cmp::Reverse(index), raw))
                 })
                 .max_by_key(|(priority, order, _)| (*priority, *order))
                 .map(|(_, _, raw)| raw)
                 .or_else(|| {
-                    values
-                        .get(&channel.attribute)
-                        .and_then(|value| mapped_raw(value, 0, max))
+                    values.get(&channel.attribute).and_then(|value| {
+                        mapped_canonical_raw(value, 0, max, channel.canonical_transform)
+                    })
                 })
                 .unwrap_or(ResolvedChannelRaw::Exact(channel.default_raw))
         };
@@ -124,7 +124,9 @@ impl FixtureMode {
                     .functions
                     .iter()
                     .enumerate()
-                    .filter(|(_, function)| function_value(function, values).is_some())
+                    .filter(|(_, function)| {
+                        function_value(function, values, channel.canonical_transform).is_some()
+                    })
                     .max_by_key(|(index, function)| (function.priority, std::cmp::Reverse(*index)))
                     .map(|(_, function)| &function.attribute)
             })
@@ -271,11 +273,12 @@ pub(super) enum ResolvedChannelRaw {
 pub(super) fn function_value(
     function: &ChannelFunction,
     values: &HashMap<AttributeKey, AttributeValue>,
+    transform: CanonicalTransform,
 ) -> Option<ResolvedChannelRaw> {
     let value = values.get(&function.attribute)?;
     match (&function.behavior, value) {
         (ChannelFunctionBehavior::Continuous { .. }, value) => {
-            mapped_raw(value, function.dmx_from, function.dmx_to)
+            mapped_canonical_raw(value, function.dmx_from, function.dmx_to, transform)
         }
         (
             ChannelFunctionBehavior::Fixed {
@@ -299,6 +302,20 @@ pub(super) fn function_value(
             Some(ResolvedChannelRaw::Exact(function.dmx_to))
         }
         _ => None,
+    }
+}
+
+pub(super) fn mapped_canonical_raw(
+    value: &AttributeValue,
+    from: u32,
+    to: u32,
+    transform: CanonicalTransform,
+) -> Option<ResolvedChannelRaw> {
+    match (transform, value) {
+        (CanonicalTransform::InvertNormalized, AttributeValue::Normalized(value)) => {
+            mapped_raw(&AttributeValue::Normalized(1.0 - value), from, to)
+        }
+        _ => mapped_raw(value, from, to),
     }
 }
 

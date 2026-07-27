@@ -1,8 +1,8 @@
 use super::super::{ResolvedFixtureProfileRevision, fixture_profile_content_digest};
 use crate::{
-    ChannelBehavior, ChannelResolution, DirectControlEndpoint, DirectControlProtocol,
-    FixtureChannel, FixtureHead, FixtureLocation, FixtureProfile, FixtureVector,
-    MultiPatchInstance, PatchedFixture, PatchedHead, SplitPatch,
+    CanonicalTransform, ChannelBehavior, ChannelResolution, DirectControlEndpoint,
+    DirectControlProtocol, FixtureChannel, FixtureHead, FixtureLocation, FixtureProfile,
+    FixtureVector, MultiPatchInstance, PatchedFixture, PatchedHead, SplitPatch,
 };
 use light_core::{AttributeKey, FixtureId};
 use serde_json::Value;
@@ -27,7 +27,9 @@ pub(super) fn profile() -> FixtureProfile {
         id: Uuid::new_v4(),
         head_id: primary_head,
         split: 1,
+        fixture_attribute: AttributeKey("intensity".into()),
         attribute: AttributeKey("intensity".into()),
+        canonical_transform: CanonicalTransform::Identity,
         resolution: ChannelResolution::U8,
         secondary_slots: vec![],
         default_raw: 0,

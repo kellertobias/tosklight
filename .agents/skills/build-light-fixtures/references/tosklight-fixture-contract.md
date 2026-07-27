@@ -17,7 +17,7 @@ The wrapper is:
 }
 ```
 
-The profile is schema v2 and must have `reserved_source: null` or omit catalog ownership. Optional assets are relative paths under `assets/`: photograph and stage icon in PNG/JPEG/WebP, and a self-contained GLB 2.0 model. Imports preserve the stable profile ID. Changed content for the same manufacturer/name becomes a new local revision; an ID collision with a different family is invalid.
+The profile is schema v3 and must have `reserved_source: null` or omit catalog ownership. Schema-v2 profiles migrate to explicit identity mappings when read. Optional assets are relative paths under `assets/`: photograph and stage icon in PNG/JPEG/WebP, and a self-contained GLB 2.0 model. Imports preserve the stable profile ID. Changed content for the same manufacturer/name becomes a new local revision; an ID collision with a different family is invalid.
 
 Startup reads the same archives through `FixtureLibrary::load_fixture_package_directory`. Package updates apply only while the last package-installed revision is current. A later operator revision is preserved. Patched shows remain insulated by their embedded profile snapshot.
 
@@ -28,7 +28,7 @@ Startup reads the same archives through `FixtureLibrary::load_fixture_package_di
 - `FixtureSplit.number` is an independently patchable address block.
 - `FixtureChannel.head_id` selects its logical head and `FixtureChannel.split` selects its patch block. One head may own channels in several splits. Row order derives primary slots per split; `secondary_slots` reserves fine and higher bytes.
 - U8 has zero secondary slots, U16 one, U24 two, and U32 three.
-- A physical channel has one default semantic attribute and non-overlapping channel functions. Function arbitration uses configured priority.
+- A physical channel retains a fixture-facing attribute, maps it to one canonical semantic attribute with an explicit normalized transform, and has non-overlapping channel functions. Function arbitration uses configured priority.
 - Multi-cell emitters need separate logical heads when independently programmable. Fixture-wide dimmer, shutter, macro, and movement controls stay on the master/shared head.
 - A mode geometry graph may be empty when the packaged GLB or a broad device-type fallback supplies the Stage representation.
 

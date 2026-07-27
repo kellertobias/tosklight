@@ -9,20 +9,65 @@ pub enum AttributeClass {
     Position,
     Color,
     Beam,
+    Shapers,
     Focus,
     Control,
+    Media,
     Custom,
 }
 
 /// Canonical metadata shared by fixture profiles and programmer surfaces. The stable `id` is
 /// persisted; labels and default units may evolve without rewriting show data.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct AttributeDescriptor {
     pub id: &'static str,
     pub label: &'static str,
     pub family: AttributeClass,
     pub value_type: AttributeValueType,
+    /// Retained compatibility field for existing clients. New code should prefer `display_unit`.
     pub default_unit: Option<&'static str>,
+    pub display_unit: Option<&'static str>,
+    pub physical_unit: Option<&'static str>,
+    /// Canonical normalized bounds before a fixture channel maps the value into its authored
+    /// physical domain. `None` means the attribute is not a scalar Dynamics lane.
+    pub normalized_bounds: Option<AttributeBounds>,
+    /// Optional canonical physical/display domain. Fixture-authored physical ranges remain
+    /// authoritative when this is `None`.
+    pub domain_bounds: Option<AttributeBounds>,
+    /// Cyclic scalar attributes wrap at their canonical bounds rather than clamping.
+    pub cyclic: bool,
+    /// Transient control actions are deliberately excluded from Programmer/Cue recording and
+    /// Dynamics lanes.
+    pub recordable: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct AttributeBounds {
+    pub min: f32,
+    pub max: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ResolvedAttributeDescriptor<'a> {
+    pub id: &'a str,
+    pub label: &'a str,
+    pub family: AttributeClass,
+    pub value_type: AttributeValueType,
+    pub display_unit: Option<&'a str>,
+    pub physical_unit: Option<&'a str>,
+    pub normalized_bounds: Option<AttributeBounds>,
+    pub domain_bounds: Option<AttributeBounds>,
+    pub cyclic: bool,
+    pub recordable: bool,
+    pub built_in: bool,
+}
+
+impl ResolvedAttributeDescriptor<'_> {
+    pub const fn supports_dynamics(self) -> bool {
+        matches!(self.value_type, AttributeValueType::Continuous)
+            && self.recordable
+            && self.normalized_bounds.is_some()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -214,31 +259,67 @@ const fn descriptor(
     value_type: AttributeValueType,
     default_unit: Option<&'static str>,
 ) -> AttributeDescriptor {
+    let normalized_bounds = match value_type {
+        AttributeValueType::Continuous => Some(AttributeBounds { min: 0.0, max: 1.0 }),
+        AttributeValueType::Color | AttributeValueType::Indexed | AttributeValueType::Control => {
+            None
+        }
+    };
     AttributeDescriptor {
         id,
         label,
         family,
         value_type,
         default_unit,
+        display_unit: default_unit,
+        physical_unit: default_unit,
+        normalized_bounds,
+        domain_bounds: None,
+        cyclic: false,
+        recordable: !matches!(value_type, AttributeValueType::Control),
     }
 }
 
-pub fn attribute_descriptor(key: &AttributeKey) -> AttributeDescriptor {
+pub fn attribute_descriptor<'a>(key: &'a AttributeKey) -> ResolvedAttributeDescriptor<'a> {
     ATTRIBUTE_REGISTRY
         .iter()
-        .copied()
         .find(|descriptor| descriptor.id == key.0)
-        .unwrap_or_else(custom_descriptor)
+        .map(resolved_descriptor)
+        .unwrap_or_else(|| custom_descriptor(key))
 }
 
-const fn custom_descriptor() -> AttributeDescriptor {
-    descriptor(
-        "custom",
-        "Custom",
-        AttributeClass::Custom,
-        AttributeValueType::Continuous,
-        None,
-    )
+const fn resolved_descriptor(
+    descriptor: &'static AttributeDescriptor,
+) -> ResolvedAttributeDescriptor<'static> {
+    ResolvedAttributeDescriptor {
+        id: descriptor.id,
+        label: descriptor.label,
+        family: descriptor.family,
+        value_type: descriptor.value_type,
+        display_unit: descriptor.display_unit,
+        physical_unit: descriptor.physical_unit,
+        normalized_bounds: descriptor.normalized_bounds,
+        domain_bounds: descriptor.domain_bounds,
+        cyclic: descriptor.cyclic,
+        recordable: descriptor.recordable,
+        built_in: true,
+    }
+}
+
+fn custom_descriptor(key: &AttributeKey) -> ResolvedAttributeDescriptor<'_> {
+    ResolvedAttributeDescriptor {
+        id: &key.0,
+        label: &key.0,
+        family: AttributeClass::Custom,
+        value_type: AttributeValueType::Continuous,
+        display_unit: None,
+        physical_unit: None,
+        normalized_bounds: None,
+        domain_bounds: None,
+        cyclic: false,
+        recordable: false,
+        built_in: false,
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -637,5 +718,42 @@ mod spread_tests {
         assert_eq!(first, resolve_spread(&[0.2, 0.9, 0.1], 8));
         assert!(first.iter().all(|value| value.is_finite()));
         assert_eq!(spread_position(&[0.2, 0.9, 0.1], 0, 8), first[0]);
+    }
+}
+
+#[cfg(test)]
+mod attribute_registry_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn built_in_ids_are_unique_and_only_recordable_continuous_values_are_scalar_lanes() {
+        let mut ids = HashSet::new();
+        for descriptor in ATTRIBUTE_REGISTRY {
+            assert!(ids.insert(descriptor.id), "duplicate {}", descriptor.id);
+            assert!(!descriptor.id.trim().is_empty());
+            assert_eq!(descriptor.default_unit, descriptor.display_unit);
+            if descriptor.normalized_bounds.is_some() {
+                assert_eq!(descriptor.value_type, AttributeValueType::Continuous);
+                assert!(descriptor.recordable);
+            }
+            if let Some(bounds) = descriptor.normalized_bounds {
+                assert!(bounds.min.is_finite());
+                assert!(bounds.max.is_finite());
+                assert!(bounds.min < bounds.max);
+            }
+        }
+    }
+
+    #[test]
+    fn unknown_identity_is_retained_but_is_not_assumed_safe_for_dynamics() {
+        let key = AttributeKey("vendor.custom.zoomish".into());
+        let descriptor = attribute_descriptor(&key);
+        assert_eq!(descriptor.id, key.0);
+        assert_eq!(descriptor.label, key.0);
+        assert_eq!(descriptor.family, AttributeClass::Custom);
+        assert!(!descriptor.built_in);
+        assert!(!descriptor.recordable);
+        assert_eq!(descriptor.normalized_bounds, None);
     }
 }

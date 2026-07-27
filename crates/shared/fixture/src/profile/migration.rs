@@ -168,7 +168,9 @@ impl FixtureMode {
                     )),
                     head_id: heads[head_index].id,
                     split: 1,
+                    fixture_attribute: attribute.clone(),
                     attribute: attribute.clone(),
+                    canonical_transform: super::CanonicalTransform::Identity,
                     resolution,
                     secondary_slots: parameter
                         .components

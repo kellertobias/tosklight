@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
-    ChannelResolution, EmitterLayout, FixtureProfile, FixtureSplit, ModelUnits, PatchPolicy,
+    CanonicalTransform, ChannelResolution, EmitterLayout, FIXTURE_PROFILE_SCHEMA_VERSION,
+    FixtureProfile, FixtureSplit, ModelUnits, PatchPolicy,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use std::fs;
@@ -305,6 +306,40 @@ fn generic_led_packages_keep_only_operator_useful_channel_orders() {
                 assert_eq!(intensity, Some(0));
             } else {
                 assert_eq!(intensity, Some(mode.channels.len() - 1));
+            }
+        }
+    }
+}
+
+#[test]
+fn shipped_generic_cmy_retains_fixture_identity_and_maps_into_canonical_rgb() {
+    let profile = shipped_profile("generic--cmy-led.toskfixture");
+    assert_eq!(profile.schema_version, FIXTURE_PROFILE_SCHEMA_VERSION);
+    assert_eq!(profile.modes.len(), 18);
+    for mode in &profile.modes {
+        for channel in &mode.channels {
+            let expected = match channel.fixture_attribute.0.as_str() {
+                "color.cyan" => Some("color.red"),
+                "color.magenta" => Some("color.green"),
+                "color.yellow" => Some("color.blue"),
+                _ => None,
+            };
+            if let Some(expected) = expected {
+                assert_eq!(channel.attribute.0, expected);
+                assert_eq!(
+                    channel.canonical_transform,
+                    CanonicalTransform::InvertNormalized
+                );
+                assert!(channel.functions.iter().all(|function| {
+                    function.attribute == channel.attribute
+                        || !matches!(
+                            function.behavior,
+                            crate::ChannelFunctionBehavior::Continuous { .. }
+                        )
+                }));
+            } else {
+                assert_eq!(channel.fixture_attribute, channel.attribute);
+                assert_eq!(channel.canonical_transform, CanonicalTransform::Identity);
             }
         }
     }

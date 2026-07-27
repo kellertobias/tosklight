@@ -1,6 +1,6 @@
 use super::{
     ChannelBehavior, ChannelScales, FixtureMode, ProfileError,
-    resolution::{ResolvedChannelRaw, function_value, mapped_raw, scale_channel_raw},
+    resolution::{ResolvedChannelRaw, function_value, mapped_canonical_raw, scale_channel_raw},
 };
 use light_core::{AttributeKey, AttributeValue};
 use std::collections::HashMap;
@@ -96,7 +96,10 @@ impl BoundFixtureModeResolution<'_> {
             .functions_by_priority
             .iter()
             .filter_map(|index| channel.functions.get(*index))
-            .find_map(|function| function_value(function, values).map(|raw| (function, raw)));
+            .find_map(|function| {
+                function_value(function, values, channel.canonical_transform)
+                    .map(|raw| (function, raw))
+            });
         let control_value = values.get(&compiled.control_attribute);
         let attribute_value = values.get(&channel.attribute);
         let active_attribute = if channel.behavior == ChannelBehavior::Static {
@@ -142,7 +145,14 @@ fn resolved_raw(
     }
     function_raw
         .or_else(|| {
-            attribute_value.and_then(|value| mapped_raw(value, 0, channel.resolution.max_raw()))
+            attribute_value.and_then(|value| {
+                mapped_canonical_raw(
+                    value,
+                    0,
+                    channel.resolution.max_raw(),
+                    channel.canonical_transform,
+                )
+            })
         })
         .unwrap_or(ResolvedChannelRaw::Exact(channel.default_raw))
 }

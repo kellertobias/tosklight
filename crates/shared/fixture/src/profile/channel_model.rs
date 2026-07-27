@@ -41,13 +41,26 @@ pub enum ChannelBehavior {
     Static,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CanonicalTransform {
+    #[default]
+    Identity,
+    InvertNormalized,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FixtureChannel {
     pub id: Uuid,
     pub head_id: Uuid,
     /// Independently patchable address block containing this physical channel.
     pub split: u16,
+    /// Fixture-package/manufacturer identity retained for editing and transfer.
+    pub fixture_attribute: AttributeKey,
+    /// Canonical Programmer/Cue/Dynamics identity used by the engine.
     pub attribute: AttributeKey,
+    #[serde(default)]
+    pub canonical_transform: CanonicalTransform,
     pub resolution: ChannelResolution,
     /// Explicit 1-based component slots after the derived primary slot.
     #[serde(default)]
@@ -126,19 +139,25 @@ impl<'de> Deserialize<'de> for FixtureMode {
                     continue;
                 };
                 if channel.contains_key("split") {
-                    continue;
+                    // Keep processing schema additions below.
+                } else {
+                    let split = channel
+                        .get("head_id")
+                        .and_then(serde_json::Value::as_str)
+                        .and_then(|head_id| legacy_head_splits.get(head_id))
+                        .copied()
+                        .ok_or_else(|| {
+                            <D::Error as serde::de::Error>::custom(
+                                "channel without split does not reference a legacy head split",
+                            )
+                        })?;
+                    channel.insert("split".into(), serde_json::Value::from(split));
                 }
-                let split = channel
-                    .get("head_id")
-                    .and_then(serde_json::Value::as_str)
-                    .and_then(|head_id| legacy_head_splits.get(head_id))
-                    .copied()
-                    .ok_or_else(|| {
-                        <D::Error as serde::de::Error>::custom(
-                            "channel without split does not reference a legacy head split",
-                        )
-                    })?;
-                channel.insert("split".into(), serde_json::Value::from(split));
+                if !channel.contains_key("fixture_attribute")
+                    && let Some(attribute) = channel.get("attribute").cloned()
+                {
+                    channel.insert("fixture_attribute".into(), attribute);
+                }
             }
         }
         let canonical: FixtureModeCanonical =
