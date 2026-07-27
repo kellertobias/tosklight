@@ -39,7 +39,7 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 | 12 | [Typed active-show object contracts](finished/12-typed-active-show-object-contracts.md) | Completed typed active-show object contracts. |
 | 13 | [Capability-owned application state](finished/13-capability-owned-application-state.md) | Completed capability-owned application state. |
 | 14 | [Modular desktop host](finished/14-modular-desktop-host.md) | Completed thin Tauri composition root and cohesive host modules. |
-| 16 | [Dynamics](doing/16-dynamics/README.md) | Currently owned; implementation and Storybook review surface are awaiting the required user visual-acceptance checkpoint. |
+| 16 | [Dynamics](finished/16-dynamics/README.md) | Completed scalar Dynamics runtime, persistence, Programmer/Cue/Preload, Playback, transport, reviewed UI, compatibility removal, and acceptance evidence. |
 | 17 | [Efficient built-in Stage visualizer](pending/14-efficient-built-in-stage-visualizer.md) | Immediately after Dynamics; add isolated visualization telemetry, retained rendering, and the four Stage render qualities without slowing engine or DMX output. |
 | 18 | [Dedicated Virtual Playbacks and exclusion zones](pending/15-virtual-playbacks-and-exclusion-zones.md) | Final current queue item; replace page-slot aliases with Virtual Playbacks 1001–9998 and rebuild exclusion zones on the new identity. |
 
@@ -71,9 +71,8 @@ The frontend lane was handed back after its owner:
 The directory move is the machine-readable signal that plan 02 and the frontend contracts it owns
 are stable. That signal is now present.
 
-The current execution order is Dynamics, the built-in Stage visualizer, and Dedicated
-Virtual Playbacks. The Stage plan starts only after Dynamics is complete. Before claiming
-each new plan, query the large Codex usage window with the Tosken Raider MCP
+The current execution order is the built-in Stage visualizer, then Dedicated Virtual Playbacks.
+Before claiming each new plan, query the large Codex usage window with the Tosken Raider MCP
 `get_remaining_usage` tool. Do not start another plan when the remaining large-window allowance is
 below 30%; finish and commit an already claimed coherent plan before stopping.
 

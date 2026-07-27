@@ -264,3 +264,33 @@ Backend/API/output tests written with implementation cover:
 - exact virtual-time resolved/DMX output during activation, fader moves, pause/resume, controller fallback, auto-off, and release.
 
 After UI acceptance, add exact production interaction tests for SET assignment, Playback Configuration choices, default layout, software/hardware/virtual faders and buttons, feedback labels/colors, touch targets, and modal geometry.
+
+## Result
+
+### Changes
+
+- Added stable Dynamic Playback assignments with embedded fallbacks, explicit target scopes,
+  fader modes, priority, activation/resume overrides, local speed, learned duration, and auto-off
+  settings.
+- Implemented On/Off/Toggle/Restart, Pause/Resume, Flash, Double/Half, Tap/Learn, fader start and
+  zero auto-off, persistent full-control auto-off, and runtime persistence.
+- Added current-page, explicit-page, and pool-number action routing across typed WebSocket and
+  plain fire-and-forget HTTP URLs, plus OSC and authoritative runtime feedback.
+- Aligned the production Playback configuration defaults with server defaults.
+
+### Verification
+
+- Dynamic Playback/Cue runtime focused tests: 6 passed.
+- Full-control coverage, temporary negative control, runtime event, projection, current/explicit
+  addressing, HTTP, OSC, and restart tests passed.
+- Desktop playback/Dynamics defaults and reviewed software/hardware encoder automation passed.
+
+### Limitations
+
+- Physical fader pickup was not exercised on attached hardware in this local run; the shared
+  hardware routing and pickup contracts remain unchanged and are covered by their existing tests.
+
+### Commit
+
+`fix(dynamics): align playback control defaults`, `feat(dynamics): add plain playback action URLs`,
+and the authoritative runtime foundation commit.

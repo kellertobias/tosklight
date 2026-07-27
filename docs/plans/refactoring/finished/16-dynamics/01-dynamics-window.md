@@ -321,11 +321,9 @@ preview, and exposes **Take Selection** and **Clear Selection** without removing
 them from Window Settings. The full-application story shares the editor's
 selected keyframe with the production Programmer encoder surface.
 
-This remains a visual-review checkpoint. Final Dynamics UI automation, pixel
-snapshots, and help screenshots remain blocked until the user explicitly
-accepts the production composition.
+This checkpoint was superseded by the accepted seventh review iteration.
 
-### Review iteration 7 — reusable encoder pages and transport preview, awaiting review
+### Review iteration 7 — reusable encoder pages and transport preview, accepted
 
 Encoder group navigation is now a shared UI component rather than
 Dynamics-only tab behavior. A group declares its page count and encoder models;
@@ -350,6 +348,35 @@ Tempo target. Run mode, Activation, and Boundary include short operator-facing
 descriptions. The full-application story follows Storybook's software/hardware
 toolbar mode and renders the corresponding production encoder surface.
 
-This remains a visual-review checkpoint. Final Dynamics UI automation, pixel
-snapshots, and help screenshots remain blocked until the user explicitly
-accepts the production composition.
+The user completed the iterative review and directed implementation to continue.
+
+## Result
+
+### Changes
+
+- The production Dynamics pool uses the shared pool component and supports normal, Shift, context
+  edit, Set, and Delete-mode gestures.
+- The editor uses one title bar with Add Lane, Curves/Phase Spread/Speed, Preview/Stop, Settings,
+  and Back to Pool in the reviewed order. Settings owns name, icon, color, and target selection.
+- Curves renders compact horizontal lanes, shared dropdown actions, attribute modal, round orange
+  keyframes, repeat boundaries, playhead, pinned composer, and shared paged Programmer encoders.
+- Phase Spread and Speed use desk-native controls, visualization, scrolling, beat grid, Tap Tempo,
+  explanatory copy, Loop/One-shot, and software/hardware encoder surfaces.
+
+### Verification
+
+- User visual review completed against the production full-application Storybook story.
+- Ten focused desktop tests cover pool/editor/Delete, lane and Shift selection, Change Attribute,
+  encoder paging, and software/hardware encoder rendering.
+- Desktop typecheck, targeted help screenshot verification, marketing screenshot verification, and
+  the PDF/HTML manual build passed.
+
+### Limitations
+
+- The story remains a discussion fixture, but it renders exported production components and the
+  same application composition rather than a Storybook-only lookalike.
+
+### Commit
+
+`test(dynamics): automate reviewed editor interactions` plus the preceding reviewed Dynamics UI
+commits.

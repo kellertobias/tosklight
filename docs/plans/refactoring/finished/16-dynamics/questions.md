@@ -25,3 +25,8 @@ Implementation may proceed while this document remains empty. If a new blocking 
 ## Open questions
 
 None.
+
+## Result
+
+No blocking question emerged during implementation or visual review. The settled decisions were
+implemented in the numbered plans, including the later-requested Loop/One-shot run-mode choice.

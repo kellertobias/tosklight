@@ -211,3 +211,33 @@ Stage shows only authoritative Live or Preload resolved output. The Dynamics edi
 Backend/API coverage written with implementation proves target resolution, toggling, independent instances, singleton reuse, Dynamic Off, FAT, priority, Current, activation/release fades, recording, tracking, Cue-only, Update, Clear, undo grouping, command grammar, HTTP/WS/OSC mapping, and authoritative Fixture Sheet/Stage projections.
 
 After UI acceptance, add exact operator coverage for empty/populated/Shift/Set tile gestures, encoder instance choice, Off, FAT shortcut separation, six-slot mapping, software/hardware parity, Cue icon, Fixture Sheet stack, and Stage Live/Preload behavior.
+
+## Result
+
+### Changes
+
+- Added first-class Dynamic On, Dynamic Off, FAT, Current, timing, instance links, and typed
+  Programmer/Cue/Preload values without hiding them inside ordinary attribute JSON.
+- Unified pool gestures, command grammar, HTTP, ordered WebSocket, OSC, software controls, and
+  attached-hardware encoder models behind authoritative application services.
+- Preserved Dynamic and FAT values through Record, Update, Cue-only, tracking, Clear, undo,
+  selective import, save/reload, and restart.
+- Added reusable encoder-group pages and production software/hardware Dynamics surfaces.
+
+### Verification
+
+- Programmer/Preload focused tests: 2 passed.
+- Application update, import, and fallback migration tests: 8 passed.
+- Headless command, HTTP/WS, OSC, projection, restart, and malformed-runtime tests passed.
+- Desktop pool/editor and encoder automation: 10 passed; desktop typecheck passed.
+
+### Limitations
+
+- Detailed attached physical-device testing remains represented by the shared hardware view,
+  control-routing tests, and authoritative feedback contracts; no physical console was connected
+  during this local run.
+
+### Commit
+
+`fix(dynamics): preserve values through cue update`, `fix(dynamics): make live HTTP actions fire
+and forget`, and the associated Dynamics Programmer/UI commits.

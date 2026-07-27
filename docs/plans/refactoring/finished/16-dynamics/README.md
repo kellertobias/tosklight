@@ -5,17 +5,12 @@ This is chunk 16 of the overall refactoring effort.
 
 ## Status
 
-**DOING.** The product, data, runtime, persistence, control-surface, playback, migration, and acceptance decisions for the first complete Dynamics release are settled in this folder.
+**FINISHED.** The first complete Dynamics release is implemented and verified.
 
-The implementation checkpoint is now committed. The plan remains in `doing/` until the required
-user visual review, post-acceptance UI automation/screenshots, remaining acceptance gates, and
-`## Result` records are complete.
-
-The first two visual reviews on 2026-07-27 were rejected. Their pool geometry, modal,
-context-menu, Delete-command, Programmer encoder ownership, window-title actions/settings,
-desk-form, dark-workspace, compact all-lanes overview, and shared Curves editor corrections
-have been incorporated. A further Curves review is required before Phase Spread and Speed
-polish continues; no accepted Dynamics screenshot baseline exists yet.
+The user reviewed the production full-application Storybook composition through seven iterations
+on 2026-07-27. The accepted direction is shared by the real application, and its post-review UI
+automation, help screenshot, marketing screenshot, manual, and backend acceptance gates are
+complete.
 
 ## Committed implementation checkpoint
 
@@ -117,3 +112,48 @@ The feature is complete only when:
 - Stage, Fixture Sheet, running-source feedback, UI, command line, HTTP/WebSocket, OSC, and attached hardware agree;
 - malformed definitions, missing targets, missing Preset values, unsupported attributes, deleted references, and stale revisions fail visibly and never retarget silently; and
 - the user has accepted the production UI before its detailed automation and screenshots are frozen.
+
+## Result
+
+### Changes
+
+- Delivered scalar-lane Dynamic definitions, target binding, Random/PWM/keyframe/function modes,
+  phase distribution, fixed and Speed Group clocks, Loop and One-shot run modes, deterministic
+  runtime instances, synchronized resume transitions, and deletion-safe embedded fallbacks.
+- Integrated Dynamic On, Dynamic Off, FAT, Current, Record/Update/Cue-only/tracking, Preload,
+  selective import, restart persistence, Dynamic Playback assignment, full-control auto-off,
+  command line, HTTP, ordered WebSocket, OSC, runtime feedback, resolved output, and DMX.
+- Rebuilt the production pool/editor around shared window, pool, dropdown, form, modal, and encoder
+  components. The real application and full-application story use the same implementation in
+  software and hardware modes.
+- Removed legacy Phaser runtime behavior and regenerated the canonical shows without Phaser data.
+- Published the reviewed help and marketing screenshots and updated both generated manuals.
+
+### Verification
+
+- Dynamics domain: 26 tests passed.
+- Focused application/import/update migration: 8 tests passed.
+- Programmer/Preload: 2 tests passed; Dynamic Playback/Cue runtime: 6 tests passed.
+- Headless route/startup coverage passed for exact restart restoration, malformed-runtime recovery,
+  deletion reference continuity, HTTP/WS/OSC actions, and authoritative projections.
+- Reviewed desktop automation: 10 tests passed; desktop typecheck passed.
+- `npm run manual` passed: 143-page PDF and 40-page offline HTML manual.
+- Release benchmark on the local macOS reference passed the required 32-universe/100 Hz floor at
+  100.05 Hz with no missed windows, and both 4- and 8-universe/40 Hz profiles passed.
+- All three canonical SQLite shows contain zero object bodies with legacy Phaser data.
+
+### Limitations
+
+- The 64-universe/120 Hz target was measured, not met, on this local reference machine: 58.34 Hz
+  over the five-second release run. It remains target evidence rather than the required floor.
+- The benchmark explicitly does not measure allocation rate, frontend projection, or asynchronous
+  Sound-to-Light analysis. Those exclusions are reported by the benchmark and do not weaken the
+  passing 32-universe hard floor.
+- Unrelated concurrent worktree changes were preserved and excluded from Dynamics commits.
+
+### Commits
+
+- `b3c59791` — authoritative Dynamics runtime and cross-surface foundation.
+- `10ac34f0` through `bdfe3da3` — reviewed production UI, reusable encoders, and screenshot.
+- `84d0ea43` through `d7d32055` — runtime, persistence, Programmer/Cue/Preload, transport,
+  playback, documentation, UI automation, and compatibility completion.

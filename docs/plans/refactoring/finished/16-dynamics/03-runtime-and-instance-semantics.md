@@ -416,3 +416,39 @@ Write deterministic backend tests with implementation, before UI acceptance:
 - resolved output and decoded DMX at exact manual-clock timestamps, plus the performance matrix.
 
 After the user's UI acceptance checkpoint, add the pool/editor/encoder and cross-surface UI scenarios described in the other plans, then update help/manual screenshots.
+
+## Result
+
+### Changes
+
+- Implemented validated scalar definitions, target-bound singletons, targetless independent
+  instances, controller stacks, priority/LTP/FAT arbitration, activation/release mix, One-shot,
+  fixed and synchronized clocks, deterministic Random streams, and spatial phase distribution.
+- Corrected lane-width evaluation, inward missing-position ordering, Random-each-loop hashing,
+  Intensity FAT HTP behavior, synchronized resume crossfades, and show-scoped runtime restoration.
+- Persisted Preset sampler fallbacks losslessly, preserved unknown fields, recovered malformed
+  runtime safely, and removed legacy Phaser behavior and stored fields.
+- Added exact deletion fallback continuity for Cue and Playback references and prevented pool-slot
+  recapture.
+
+### Verification
+
+- `cargo test -p light-dynamics` — 26 passed.
+- Focused application migration/import/update — 8 passed.
+- Focused restart, malformed runtime, deletion, command, OSC, output arbitration, and exact
+  virtual-time tests passed.
+- Release performance matrix: required 32 universes at 100 Hz passed with no missed windows; 4 and
+  8 universes at 40 Hz passed; 64 universes at 120 Hz was measured at 58.34 Hz.
+- Canonical SQLite show audit found zero remaining Phaser object fields.
+
+### Limitations
+
+- The 64-universe rate is an unmet target on this machine, not the required 32-universe floor.
+- Allocation rate is not instrumented. Runtime definitions and dependencies are installed before
+  sampling, while further buffer reuse would require a broader sampling API redesign.
+
+### Commit
+
+`fix(dynamics): align runtime phase and lane sampling`, `fix(dynamics): persist preset sampler
+fallbacks`, `fix(dynamics): transition synchronized resume`, and `fix(dynamics): isolate persisted
+runtime by show`.
