@@ -1,4 +1,5 @@
 use light_core::AttributeValue;
+use light_dynamics::{DynamicAddressValue, DynamicSemanticValue, DynamicValueTiming};
 use light_programmer::{
     Preset, ProgrammerFixtureUpdate, ProgrammerGroupUpdate, ProgrammerUpdateContent,
 };
@@ -9,6 +10,7 @@ use super::model::UpdateAddress;
 pub(super) enum IncomingValue<'a> {
     Fixture(&'a ProgrammerFixtureUpdate),
     Group(&'a ProgrammerGroupUpdate),
+    Dynamic(&'a DynamicAddressValue),
 }
 
 impl IncomingValue<'_> {
@@ -16,6 +18,7 @@ impl IncomingValue<'_> {
         match self {
             Self::Fixture(value) => value.programmer_order,
             Self::Group(value) => value.programmer_order,
+            Self::Dynamic(value) => value.programmer_order,
         }
     }
 
@@ -29,13 +32,26 @@ impl IncomingValue<'_> {
                 group_id: value.group_id.clone(),
                 attribute: value.attribute.clone(),
             },
+            Self::Dynamic(value) => UpdateAddress::DynamicAttribute {
+                fixture_id: value.fixture_id,
+                attribute: value.attribute.clone(),
+                instance_link: dynamic_instance_link(&value.value),
+            },
         }
     }
 
-    pub(super) fn value(&self) -> &AttributeValue {
+    pub(super) fn ordinary_value(&self) -> Option<&AttributeValue> {
         match self {
-            Self::Fixture(value) => &value.value,
-            Self::Group(value) => &value.value,
+            Self::Fixture(value) => Some(&value.value),
+            Self::Group(value) => Some(&value.value),
+            Self::Dynamic(_) => None,
+        }
+    }
+
+    pub(super) fn dynamic_value(&self) -> Option<&DynamicSemanticValue> {
+        match self {
+            Self::Dynamic(value) => Some(&value.value),
+            Self::Fixture(_) | Self::Group(_) => None,
         }
     }
 
@@ -43,6 +59,7 @@ impl IncomingValue<'_> {
         match self {
             Self::Fixture(value) => value.fade_millis,
             Self::Group(value) => value.fade_millis,
+            Self::Dynamic(value) => dynamic_timing(&value.value).fade_millis,
         }
     }
 
@@ -50,6 +67,7 @@ impl IncomingValue<'_> {
         match self {
             Self::Fixture(value) => value.delay_millis,
             Self::Group(value) => value.delay_millis,
+            Self::Dynamic(value) => dynamic_timing(&value.value).delay_millis,
         }
     }
 }
@@ -60,6 +78,7 @@ pub(super) fn incoming_values(content: &ProgrammerUpdateContent) -> Vec<Incoming
         .iter()
         .map(IncomingValue::Fixture)
         .chain(content.group_values.iter().map(IncomingValue::Group))
+        .chain(content.dynamic_values.iter().map(IncomingValue::Dynamic))
         .collect::<Vec<_>>();
     values.sort_by_key(IncomingValue::programmer_order);
     values
@@ -76,7 +95,27 @@ pub(super) fn incoming_preset_values<'a>(
             | UpdateAddress::GroupAttribute { ref attribute, .. } => {
                 preset.family.accepts(attribute)
             }
-            UpdateAddress::GroupMembership { .. } => false,
+            UpdateAddress::DynamicAttribute { .. } | UpdateAddress::GroupMembership { .. } => false,
         })
         .collect()
+}
+
+fn dynamic_instance_link(value: &DynamicSemanticValue) -> Option<uuid::Uuid> {
+    match value {
+        DynamicSemanticValue::DynamicOn { instance_link, .. }
+        | DynamicSemanticValue::DynamicOff { instance_link, .. } => Some(*instance_link),
+        DynamicSemanticValue::Static { .. }
+        | DynamicSemanticValue::FixAt { .. }
+        | DynamicSemanticValue::Release => None,
+    }
+}
+
+fn dynamic_timing(value: &DynamicSemanticValue) -> DynamicValueTiming {
+    match value {
+        DynamicSemanticValue::Static { timing, .. }
+        | DynamicSemanticValue::DynamicOn { timing, .. }
+        | DynamicSemanticValue::DynamicOff { timing, .. }
+        | DynamicSemanticValue::FixAt { timing, .. } => *timing,
+        DynamicSemanticValue::Release => DynamicValueTiming::default(),
+    }
 }

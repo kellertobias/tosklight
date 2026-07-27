@@ -39,7 +39,7 @@ fn preset_preview_item(
     let address = incoming.address();
     let existing = stored_value(preset, &address);
     let outcome = match (mode, existing) {
-        (_, Some(value)) if value == incoming.value() => {
+        (_, Some(value)) if Some(value) == incoming.ordinary_value() => {
             UpdateItemOutcome::Unchanged { source: None }
         }
         (_, Some(_)) => UpdateItemOutcome::UpdateExisting,
@@ -67,7 +67,7 @@ fn stored_value<'a>(preset: &'a Preset, address: &UpdateAddress) -> Option<&'a A
             .group_values
             .get(group_id)
             .and_then(|attributes| attributes.get(attribute)),
-        UpdateAddress::GroupMembership { .. } => None,
+        UpdateAddress::DynamicAttribute { .. } | UpdateAddress::GroupMembership { .. } => None,
     }
 }
 
@@ -87,6 +87,7 @@ fn write_preset_value(preset: &mut Preset, incoming: IncomingValue<'_>) {
                 .or_default()
                 .insert(value.attribute.clone(), value.value.clone());
         }
+        IncomingValue::Dynamic(_) => {}
     }
 }
 

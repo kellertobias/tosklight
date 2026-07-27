@@ -58,6 +58,17 @@ fn dynamic_tracks_are_independent_atomic_and_undoable() {
     assert_eq!(state.dynamic_values.len(), 3);
     assert_eq!(state.undo.len(), 1);
     assert_eq!(registry.normal_values_generation(session), Some(1));
+    let update = registry.capture_update_values(session).unwrap();
+    assert_eq!(
+        update
+            .values
+            .iter()
+            .filter(|value| matches!(value, ProgrammerUpdateValue::Dynamic(_)))
+            .count(),
+        3,
+        "Shift+Record Update must retain Dynamic and FAT values"
+    );
+    assert_eq!(update.content().dynamic_values.len(), 3);
 
     assert!(!registry.apply_dynamic_values(session, &mutations, None));
     assert_eq!(registry.get(session).unwrap().undo.len(), 1);

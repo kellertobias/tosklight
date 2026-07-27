@@ -172,6 +172,11 @@ pub enum UpdateAddress {
         group_id: String,
         attribute: AttributeKey,
     },
+    DynamicAttribute {
+        fixture_id: FixtureId,
+        attribute: AttributeKey,
+        instance_link: Option<Uuid>,
+    },
     GroupMembership {
         fixture_id: FixtureId,
     },

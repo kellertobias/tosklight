@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
 use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId};
+use light_dynamics::{DynamicAddressValue, DynamicSemanticValue, DynamicValueTiming};
 use light_playback::{
-    Cue, CueChange, CueList, CueListMode, GroupCueChange, IntensityPriorityMode, RestartMode,
-    WrapMode,
+    Cue, CueChange, CueDynamicChange, CueList, CueListMode, GroupCueChange, IntensityPriorityMode,
+    RestartMode, WrapMode,
 };
 use light_programmer::{
     GroupDefinition, Preset, ProgrammerFixtureUpdate, ProgrammerGroupUpdate,

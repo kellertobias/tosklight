@@ -3,6 +3,7 @@ use crate::{
     SelectionExpression, SelectionReference,
 };
 use light_core::{FixtureId, SessionId, UserId};
+use light_dynamics::DynamicAddressValue;
 use serde::Serialize;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -12,6 +13,7 @@ use std::collections::BTreeSet;
 pub enum ProgrammerUpdateValue {
     Fixture(ProgrammerFixtureUpdate),
     Group(ProgrammerGroupUpdate),
+    Dynamic(DynamicAddressValue),
 }
 
 impl ProgrammerUpdateValue {
@@ -19,6 +21,7 @@ impl ProgrammerUpdateValue {
         match self {
             Self::Fixture(value) => value.programmer_order,
             Self::Group(value) => value.programmer_order,
+            Self::Dynamic(value) => value.programmer_order,
         }
     }
 }
@@ -37,6 +40,7 @@ impl ProgrammerUpdateValuesCapture {
             match value {
                 ProgrammerUpdateValue::Fixture(value) => content.fixture_values.push(value.clone()),
                 ProgrammerUpdateValue::Group(value) => content.group_values.push(value.clone()),
+                ProgrammerUpdateValue::Dynamic(value) => content.dynamic_values.push(value.clone()),
             }
         }
         content
@@ -48,6 +52,7 @@ impl ProgrammerUpdateValuesCapture {
             match value {
                 ProgrammerUpdateValue::Fixture(value) => content.fixture_values.push(value),
                 ProgrammerUpdateValue::Group(value) => content.group_values.push(value),
+                ProgrammerUpdateValue::Dynamic(value) => content.dynamic_values.push(value),
             }
         }
         content
@@ -98,6 +103,12 @@ impl ProgrammerRegistry {
                     .group_values
                     .into_iter()
                     .map(ProgrammerUpdateValue::Group),
+            )
+            .chain(
+                content
+                    .dynamic_values
+                    .into_iter()
+                    .map(ProgrammerUpdateValue::Dynamic),
             )
             .collect::<Vec<_>>();
         values.sort_by(compare_values);
@@ -175,6 +186,12 @@ fn update_values(content: ProgrammerUpdateContent) -> Vec<ProgrammerUpdateValue>
                 .into_iter()
                 .map(ProgrammerUpdateValue::Group),
         )
+        .chain(
+            content
+                .dynamic_values
+                .into_iter()
+                .map(ProgrammerUpdateValue::Dynamic),
+        )
         .collect()
 }
 
@@ -186,7 +203,7 @@ fn referenced_groups(
         .iter()
         .filter_map(|value| match value {
             ProgrammerUpdateValue::Group(value) => Some(value.group_id.clone()),
-            ProgrammerUpdateValue::Fixture(_) => None,
+            ProgrammerUpdateValue::Fixture(_) | ProgrammerUpdateValue::Dynamic(_) => None,
         })
         .collect::<BTreeSet<_>>();
     collect_expression_groups(expression, &mut ids);
@@ -231,7 +248,14 @@ fn compare_identity(left: &ProgrammerUpdateValue, right: &ProgrammerUpdateValue)
             .group_id
             .cmp(&right.group_id)
             .then_with(|| left.attribute.cmp(&right.attribute)),
-        (ProgrammerUpdateValue::Fixture(_), ProgrammerUpdateValue::Group(_)) => Ordering::Less,
-        (ProgrammerUpdateValue::Group(_), ProgrammerUpdateValue::Fixture(_)) => Ordering::Greater,
+        (ProgrammerUpdateValue::Dynamic(left), ProgrammerUpdateValue::Dynamic(right)) => left
+            .fixture_id
+            .0
+            .cmp(&right.fixture_id.0)
+            .then_with(|| left.attribute.cmp(&right.attribute)),
+        (ProgrammerUpdateValue::Fixture(_), _) => Ordering::Less,
+        (_, ProgrammerUpdateValue::Fixture(_)) => Ordering::Greater,
+        (ProgrammerUpdateValue::Group(_), ProgrammerUpdateValue::Dynamic(_)) => Ordering::Less,
+        (ProgrammerUpdateValue::Dynamic(_), ProgrammerUpdateValue::Group(_)) => Ordering::Greater,
     }
 }

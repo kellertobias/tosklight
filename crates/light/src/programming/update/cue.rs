@@ -1,6 +1,6 @@
 mod analysis;
 
-use light_playback::{Cue, CueChange, CueList, GroupCueChange};
+use light_playback::{Cue, CueChange, CueDynamicChange, CueList, GroupCueChange};
 use light_programmer::ProgrammerUpdateContent;
 
 use self::analysis::{analyse_cue_list, cue_outcome, cue_source};
@@ -114,8 +114,44 @@ fn write_cue_event(
                 return Err(missing_source("Group"));
             }
         }
+        IncomingValue::Dynamic(value) => {
+            let address = incoming.address();
+            let existing = cue
+                .dynamic_changes
+                .iter_mut()
+                .find(|change| dynamic_address(change) == address);
+            if let Some(change) = existing {
+                change.value = value.value.clone();
+                change.automatic_restore = false;
+            } else if append_if_missing {
+                cue.dynamic_changes.push(CueDynamicChange {
+                    fixture_id: value.fixture_id,
+                    attribute: value.attribute.clone(),
+                    value: value.value.clone(),
+                    automatic_restore: false,
+                });
+            } else {
+                return Err(missing_source("Dynamic"));
+            }
+        }
     }
     Ok(())
+}
+
+fn dynamic_address(change: &CueDynamicChange) -> super::model::UpdateAddress {
+    use light_dynamics::DynamicSemanticValue;
+    let instance_link = match &change.value {
+        DynamicSemanticValue::DynamicOn { instance_link, .. }
+        | DynamicSemanticValue::DynamicOff { instance_link, .. } => Some(*instance_link),
+        DynamicSemanticValue::Static { .. }
+        | DynamicSemanticValue::FixAt { .. }
+        | DynamicSemanticValue::Release => None,
+    };
+    super::model::UpdateAddress::DynamicAttribute {
+        fixture_id: change.fixture_id,
+        attribute: change.attribute.clone(),
+        instance_link,
+    }
 }
 
 fn missing_source(kind: &str) -> UpdateError {

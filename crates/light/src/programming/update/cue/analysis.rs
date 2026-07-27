@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use light_playback::{CueChange, CueList, GroupCueChange};
+use light_playback::{CueChange, CueDynamicChange, CueList, GroupCueChange};
 
 use super::super::incoming::IncomingValue;
 use super::super::model::{
@@ -11,6 +11,7 @@ use super::super::model::{
 enum CueEventKind {
     Fixture,
     Group,
+    Dynamic,
 }
 
 #[derive(Clone, Debug)]
@@ -39,6 +40,23 @@ fn group_address(change: &GroupCueChange) -> UpdateAddress {
     UpdateAddress::GroupAttribute {
         group_id: change.group_id.clone(),
         attribute: change.attribute.clone(),
+    }
+}
+
+fn dynamic_address(change: &CueDynamicChange) -> UpdateAddress {
+    let instance_link = match &change.value {
+        light_dynamics::DynamicSemanticValue::DynamicOn { instance_link, .. }
+        | light_dynamics::DynamicSemanticValue::DynamicOff { instance_link, .. } => {
+            Some(*instance_link)
+        }
+        light_dynamics::DynamicSemanticValue::Static { .. }
+        | light_dynamics::DynamicSemanticValue::FixAt { .. }
+        | light_dynamics::DynamicSemanticValue::Release => None,
+    };
+    UpdateAddress::DynamicAttribute {
+        fixture_id: change.fixture_id,
+        attribute: change.attribute.clone(),
+        instance_link,
     }
 }
 
@@ -73,6 +91,20 @@ pub(super) fn analyse_cue_list(cue_list: &CueList, current_index: usize) -> CueA
                     change_index,
                     kind: CueEventKind::Group,
                     has_value: change.value.is_some(),
+                },
+                current_index,
+                change.automatic_restore,
+            );
+        }
+        for (change_index, change) in cue.dynamic_changes.iter().enumerate() {
+            record_event(
+                &mut analysis,
+                dynamic_address(change),
+                CueEventLocation {
+                    cue_index,
+                    change_index,
+                    kind: CueEventKind::Dynamic,
+                    has_value: true,
                 },
                 current_index,
                 change.automatic_restore,
@@ -122,17 +154,21 @@ fn event_matches(
     match location.kind {
         CueEventKind::Fixture => {
             let change = &cue_list.cues[location.cue_index].changes[location.change_index];
-            change.value.as_ref() == Some(incoming.value())
+            change.value.as_ref() == incoming.ordinary_value()
                 && !change.automatic_restore
                 && change.fade_millis == incoming.fade_millis()
                 && change.delay_millis == incoming.delay_millis()
         }
         CueEventKind::Group => {
             let change = &cue_list.cues[location.cue_index].group_changes[location.change_index];
-            change.value.as_ref() == Some(incoming.value())
+            change.value.as_ref() == incoming.ordinary_value()
                 && !change.automatic_restore
                 && change.fade_millis == incoming.fade_millis()
                 && change.delay_millis == incoming.delay_millis()
+        }
+        CueEventKind::Dynamic => {
+            let change = &cue_list.cues[location.cue_index].dynamic_changes[location.change_index];
+            Some(&change.value) == incoming.dynamic_value() && !change.automatic_restore
         }
     }
 }

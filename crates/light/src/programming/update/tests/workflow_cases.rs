@@ -128,6 +128,61 @@ fn preview_preserves_global_programmer_order_across_fixture_and_group_values() {
 }
 
 #[test]
+fn cue_update_preserves_first_class_dynamic_and_fix_at_values() {
+    let fixture = fixture(1);
+    let mut first = cue(1.0, vec![]);
+    first.dynamic_changes.push(CueDynamicChange {
+        fixture_id: fixture,
+        attribute: attribute("intensity"),
+        value: DynamicSemanticValue::FixAt {
+            value: 0.2,
+            timing: DynamicValueTiming::default(),
+        },
+        automatic_restore: false,
+    });
+    let list = cue_list(vec![first]);
+    let target = target(&list, 0, Some(1));
+    let programmer = ProgrammerUpdateContent {
+        dynamic_values: vec![DynamicAddressValue {
+            fixture_id: fixture,
+            attribute: attribute("intensity"),
+            value: DynamicSemanticValue::FixAt {
+                value: 0.8,
+                timing: DynamicValueTiming {
+                    fade_millis: Some(250),
+                    delay_millis: Some(25),
+                },
+            },
+            programmer_order: 1,
+            changed_at_millis: 10,
+        }],
+        ..Default::default()
+    };
+
+    let plan = plan_cue_update(
+        &list,
+        3,
+        3,
+        &target,
+        CueUpdateMode::ExistingOnly,
+        &programmer,
+    )
+    .unwrap();
+    let updated = planned_cue_list(plan);
+
+    assert!(matches!(
+        updated.cues[0].dynamic_changes[0].value,
+        DynamicSemanticValue::FixAt {
+            value: 0.8,
+            timing: DynamicValueTiming {
+                fade_millis: Some(250),
+                delay_millis: Some(25)
+            }
+        }
+    ));
+}
+
+#[test]
 fn eligible_menu_filter_excludes_no_ops_but_show_all_keeps_them_distinguishable() {
     let fixture = fixture(1);
     let preset = Preset {
