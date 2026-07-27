@@ -84,11 +84,11 @@ def verify(site: Path, archive: Path) -> None:
         "Search the manual",
         "Quick Start",
         "Pane Reference",
+        "Dynamics pane is the numbered pool",
         "Desk Setup",
         "Show File Setup",
         "The Programmer",
         "Running a Show",
-        "Dynamics is a future feature.",
     ]
     missing = [text for text in required if text not in source]
     if missing:
@@ -102,9 +102,6 @@ def verify(site: Path, archive: Path) -> None:
             fail(f"unsafe image path: {image}")
         if not (site / image).is_file():
             fail(f"missing HTML manual image: {image}")
-    dynamics = re.search(r'<section class="future-feature">.*?</section>', source, re.DOTALL)
-    if not dynamics or "<img " in dynamics.group(0):
-        fail("Dynamics must be a text-only future-feature page")
     if not all(marker in source for marker in ('desk-key-number', 'desk-key-clear', 'desk-key-record', 'keyboard-key')):
         fail("HTML manual keycap variants are incomplete")
     if not archive.is_file() or archive.stat().st_size < 100_000:

@@ -289,14 +289,7 @@ class StoryParser:
             lines.append(self.lines[self.index].strip()[1:].strip())
             self.index += 1
         text = " ".join(lines)
-        if re.sub(r"[*_]", "", text).strip().lower() == "dynamics is a future feature.":
-            self.story.extend([
-                PageBreak(),
-                Spacer(1, 88 * mm),
-                paragraph("Dynamics is a future feature.", "ManualFutureFeature", self.page, self.bookmarks),
-            ])
-        else:
-            self.story.append(paragraph(text, "ManualQuote", self.page, self.bookmarks))
+        self.story.append(paragraph(text, "ManualQuote", self.page, self.bookmarks))
         return True
 
     def body_paragraph(self) -> None:

@@ -36,7 +36,6 @@ def verify(path: Path) -> None:
         "The Programmer",
         "Running a Show",
         "Development and Future Features",
-        "Dynamics is a future feature.",
         "Index",
     ]
     missing = [title for title in required if title not in full_text]
@@ -45,6 +44,8 @@ def verify(path: Path) -> None:
     positions = [full_text.index(title) for title in required]
     if positions != sorted(positions):
         fail("manual sections are not in the required order")
+    if "Dynamics pane is the numbered pool" not in full_text:
+        fail("manual text is missing: Dynamics pane is the numbered pool")
     if not reader.outline:
         fail("manual has no PDF outline/bookmarks")
     image_count = 0

@@ -126,12 +126,6 @@ def render_page(md: MarkdownIt, page: SourcePage, bookmarks: dict[str, str], sit
     tokens = md.parse(page.markdown)
     rewrite_tokens(page, tokens, bookmarks, site, copied_images)
     rendered = decorate_inline_html(md.renderer.render(tokens, md.options, {}))
-    if "Dynamics is a future feature." in page.markdown:
-        rendered = re.sub(
-            r'(<h2 id="[^"]+-dynamics">Dynamics</h2>\s*<blockquote>\s*<p><strong>Dynamics is a future feature\.</strong></p>\s*</blockquote>)',
-            r'<section class="future-feature">\1</section>',
-            rendered,
-        )
     return f'<article class="manual-page" data-page="{page.bookmark}" aria-labelledby="{page.bookmark}">{rendered}</article>'
 
 
