@@ -64,19 +64,11 @@
 	display: flex;
 	gap: 5px;
 	align-items: stretch;
+	justify-content: flex-end;
 }
-.programmer-dynamics-toolbar label {
-	min-width: 0;
-	flex: 1 1 180px;
-}
-.programmer-dynamics-toolbar select,
 .programmer-dynamics-toolbar .ui-button {
 	height: 32px;
 	min-height: 32px;
-}
-.programmer-dynamics-toolbar select {
-	width: 100%;
-	min-width: 0;
 }
 .programmer-dynamics-toolbar .ui-button {
 	flex: 0 0 auto;
@@ -84,6 +76,41 @@
 .programmer-dynamics-toolbar .ui-button.active {
 	border-color: var(--cyan);
 	color: var(--cyan);
+}
+.programmer-dynamics-page {
+	display: grid;
+	place-items: center;
+	margin-right: auto;
+	padding: 0 10px;
+	color: #a8b4be;
+	background: #0c1117;
+	border: 1px solid #303c46;
+	border-radius: 6px;
+	font-size: 0.72rem;
+}
+.programmer-dynamics-lane-picker {
+	position: relative;
+	min-width: 150px;
+}
+.programmer-dynamics-lane-picker > .ui-button {
+	width: 100%;
+	justify-content: space-between;
+}
+.programmer-dynamics-menu {
+	position: absolute;
+	z-index: 40;
+	right: 0;
+	bottom: calc(100% + 4px);
+	display: grid;
+	min-width: 180px;
+	padding: 4px;
+	background: #111820;
+	border: 1px solid #3b4a57;
+	border-radius: 6px;
+	box-shadow: 0 8px 24px rgb(0 0 0 / 55%);
+}
+.programmer-dynamics-menu .ui-button {
+	justify-content: flex-start;
 }
 .programmer-dynamics-editor-deck {
 	grid-column: 1 / -1;
@@ -389,13 +416,18 @@
 	padding: 3px;
 	border-radius: 4px;
 }
-.playback-fader-bank article:not(.playback-card) > .vertical-touch-fader:before {
+.playback-fader-bank
+	article:not(.playback-card)
+	> .vertical-touch-fader:before {
 	inset: 3px;
 }
 .playback-fader-bank article:not(.playback-card) > .vertical-touch-fader span {
 	font-size: 9px;
 }
-.playback-fader-bank article:not(.playback-card) > .vertical-touch-fader strong {
+.playback-fader-bank
+	article:not(.playback-card)
+	> .vertical-touch-fader
+	strong {
 	font-size: 17px;
 }
 .control-section:not(.hardware-connected)
@@ -410,7 +442,9 @@
 	text-align: left;
 }
 .control-section:not(.hardware-connected)
-	.vertical-touch-fader-stack:not(.playback-card > .vertical-touch-fader-stack) {
+	.vertical-touch-fader-stack:not(
+		.playback-card > .vertical-touch-fader-stack
+	) {
 	border: 0;
 	background: transparent;
 	overflow: visible;
@@ -942,11 +976,7 @@
 }
 .pool-cell.empty:not(.pool-card) {
 	border: 1px dashed
-		color-mix(
-			in srgb,
-			var(--pool-card-color, #56616a) 42%,
-			var(--line2)
-		) !important;
+		color-mix(in srgb, var(--pool-card-color, #56616a) 42%, var(--line2)) !important;
 	background: color-mix(
 		in srgb,
 		var(--pool-card-color, #56616a) 8%,
@@ -1770,10 +1800,7 @@ button.large-danger:disabled {
 	position: relative;
 	box-sizing: border-box;
 	display: grid;
-	grid-template-columns: repeat(
-		var(--dmx-grid-columns, 16),
-		minmax(0, 1fr)
-	);
+	grid-template-columns: repeat(var(--dmx-grid-columns, 16), minmax(0, 1fr));
 	grid-auto-rows: 46px;
 	gap: 2px;
 	width: 100%;

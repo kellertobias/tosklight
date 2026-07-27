@@ -242,3 +242,24 @@ The first Storybook review was rejected on 2026-07-27. The required corrections 
 - the workspace is darker and shows all ordered lanes at once.
 
 This iteration is not visual acceptance. The revised full-application Storybook story must be reviewed again before final UI automation or screenshots are added.
+
+### Review iteration 2 — Curves hierarchy rebuilt, awaiting review
+
+The second Storybook review on 2026-07-27 narrowed the visual checkpoint to the
+Curves task. The production editor and the full-application story now share this
+composition:
+
+- Curves, Phase Spread, Speed, Add Lane, Back to Pool, and Settings are window-title actions.
+- Window Settings owns Dynamic name, icon, and color.
+- Curves shows every lane as a compact horizontal attribute/mode/curve row.
+- Each lane has the desk checkbox for multi-edit selection and a desk action menu
+  for attribute, order, duplication, and deletion.
+- The active lane has one shared Keyframes / Max-min / Middle-amplitude / Random
+  editor below the lane rows.
+- The Programmer owns the same task switch, a desk lane menu, a visible encoder
+  page indicator, and the six production Dynamic encoders without a duplicate
+  encoder-section heading.
+
+This remains a visual-review checkpoint, not acceptance. Do not add the final
+Dynamics UI automation or refresh the acceptance screenshot until the user
+accepts this Curves composition.

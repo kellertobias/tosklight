@@ -18,12 +18,12 @@ import type {
 import type { ShowObject } from "../features/showObjects/contracts";
 import { AppShellView } from "../components/shell/AppShell";
 import { LeftDock } from "../components/shell/LeftDock";
+import { DynamicDefinitionEncoderSurface } from "../components/control/parameterControls/ProgrammerDynamicsSurface";
 import { DynamicEditorTaskTabs } from "../components/control/parameterControls/ParameterFamilyTabs";
 import {
 	createDefaultDynamicDefinition,
 	createDefaultDynamicLane,
 	DynamicEditor,
-	DynamicEncoderDeck,
 	type DynamicEditorView,
 } from "./DynamicsWindow";
 
@@ -277,48 +277,21 @@ function DynamicsProgrammerSurface({
 		<div className="parameter-controls">
 			<DynamicEditorTaskTabs task={view} onTask={onView} />
 			<div className="parameter-surfaces">
-				<div className="programmer-dynamics-toolbar">
-					<label>
-						<span className="sr-only">Dynamic instance</span>
-						<select aria-label="Dynamic instance" defaultValue={dynamic.id}>
-							<option value={dynamic.id}>
-								Dynamic {dynamic.body.pool_number} · {dynamic.body.name} ·
-								Programmer
-							</option>
-						</select>
-					</label>
-					<label>
-						<span className="sr-only">Dynamic lane</span>
-						<select
-							aria-label="Dynamic lane"
-							value={lane?.id ?? ""}
-							onChange={(event) => setLaneId(event.target.value)}
-						>
-							{dynamic.body.lanes.map((candidate) => (
-								<option key={candidate.id} value={candidate.id}>
-									{attributes.find((item) => item.id === candidate.attribute)
-										?.label ?? candidate.attribute}
-								</option>
-							))}
-						</select>
-					</label>
-				</div>
-				<div className="programmer-dynamics-editor-deck">
-					<DynamicEncoderDeck
-						view={view}
-						lane={lane}
-						dynamic={dynamic.body}
-						onLaneChange={async (change, mutationGroup) => {
-							if (!lane) return;
-							const next = change(lane);
-							await onMutate(
-								{ type: "replace_lane", lane_id: next.id, lane: next },
-								mutationGroup,
-							);
-						}}
-						onMutate={onMutate}
-					/>
-				</div>
+				<DynamicDefinitionEncoderSurface
+					dynamic={dynamic.body}
+					lane={lane ?? null}
+					view={view}
+					onLane={setLaneId}
+					onLaneChange={async (change, mutationGroup) => {
+						if (!lane) return;
+						const next = change(lane);
+						await onMutate(
+							{ type: "replace_lane", lane_id: next.id, lane: next },
+							mutationGroup,
+						);
+					}}
+					onMutate={onMutate}
+				/>
 			</div>
 		</div>
 	);
@@ -412,6 +385,7 @@ function FullApplicationDynamicsMock() {
 								selection={runtime.instances[0].targets}
 								selectedGroupId="group-front-wash"
 								view={view}
+								onViewChange={setView}
 								onBack={() => setMessage("Back to Pool requested")}
 								onMutate={async (_object, intent, mutationGroup) =>
 									mutate(intent, mutationGroup)

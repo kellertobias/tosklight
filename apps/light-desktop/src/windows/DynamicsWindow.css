@@ -55,134 +55,169 @@
 }
 
 .dynamics-editor-body {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(15rem, 19rem);
 	min-height: 0;
 	flex: 1;
-}
-
-.dynamic-lane-rail {
-	grid-column: 2;
-	grid-row: 1;
-	display: flex;
-	flex-direction: column;
-	gap: 0.45rem;
-	padding: 0.65rem;
 	overflow: auto;
-	background: rgb(8 13 18 / 78%);
-	border-left: 1px solid rgb(255 255 255 / 8%);
-}
-
-.dynamic-lane-rail > header {
-	display: flex;
-	justify-content: space-between;
-	align-items: baseline;
-	color: #aab5be;
-}
-
-.dynamic-object-metadata {
-	margin: 0 0 0.35rem;
-	padding: 0.65rem;
-	border: 1px solid #2b343d;
-	border-radius: 0.45rem;
-}
-
-.dynamic-object-metadata h3 {
-	margin: 0 0 0.65rem;
-}
-
-.dynamic-lane-row {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
-	gap: 0.3rem;
-}
-
-.dynamic-lane-row > button:first-child {
-	display: grid;
-	grid-template-columns: 1.8rem 1fr;
-	gap: 0.15rem 0.45rem;
-	min-height: 4.25rem;
-	padding: 0.55rem;
-	text-align: left;
-	color: inherit;
-	background: #171d24;
-	border: 1px solid #2b343d;
-	border-radius: 0.45rem;
-}
-
-.dynamic-lane-row > button:first-child span {
-	grid-row: span 2;
-	display: grid;
-	place-items: center;
-	color: #4edcff;
-	font-size: 1.1rem;
-}
-
-.dynamic-lane-row > button:first-child small {
-	color: #8d9aa5;
-}
-
-.dynamic-lane-row > button:first-child.selected {
-	border-color: rgb(78 220 255 / 58%);
-}
-
-.dynamic-lane-row > button:first-child.primary {
-	background: linear-gradient(135deg, rgb(78 220 255 / 19%), #171d24 65%);
-	box-shadow: inset 3px 0 #4edcff;
-}
-
-.dynamic-lane-order {
-	display: grid;
-	gap: 0.25rem;
-}
-
-.dynamic-lane-order button {
-	min-width: 2.35rem;
-	min-height: 2rem;
-	color: #c6d1d9;
-	background: #171d24;
-	border: 1px solid #2b343d;
-	border-radius: 0.35rem;
-}
-
-.dynamic-lane-order button:disabled {
-	opacity: 0.35;
-}
-
-.dynamic-lane-actions {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 0.35rem;
-	margin-top: auto;
-}
-
-.dynamic-lane-actions > :first-child {
-	grid-column: span 2;
 }
 
 .dynamic-workspace {
-	grid-column: 1;
-	grid-row: 1;
 	min-width: 0;
+	min-height: 100%;
 	padding: 0.8rem;
-	overflow: auto;
 }
 
-.dynamic-lane-stack {
+.dynamic-curves-view {
 	display: grid;
-	gap: 0.75rem;
+	grid-template-rows: minmax(0, 1fr) auto;
+	gap: 0.6rem;
+	min-height: 100%;
 }
 
-.dynamic-lane-workspace-card {
-	padding: 0.7rem;
+.dynamic-lane-overview-list {
+	display: grid;
+	align-content: start;
+	gap: 0.35rem;
+	min-height: 0;
+}
+
+.dynamic-lane-overview {
+	position: relative;
+	display: grid;
+	grid-template-columns: 8.5rem minmax(12rem, 1fr) auto;
+	align-items: stretch;
+	min-height: 4.3rem;
+	overflow: visible;
 	background: #0d1218;
 	border: 1px solid #25313b;
-	border-radius: 0.55rem;
+	border-radius: 0.4rem;
 }
 
-.dynamic-lane-workspace-card.primary {
+.dynamic-lane-overview.selected {
+	border-color: rgb(78 220 255 / 38%);
+}
+
+.dynamic-lane-overview.primary {
 	border-color: rgb(78 220 255 / 62%);
 	box-shadow: inset 3px 0 #4edcff;
+}
+
+.dynamic-lane-identity {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 0.1rem;
+	padding: 0.45rem 0.65rem;
+	border-right: 1px solid #25313b;
+}
+
+.dynamic-lane-identity small,
+.dynamic-lane-identity span {
+	color: #85929d;
+	font-size: 0.68rem;
+}
+
+.dynamic-lane-curve {
+	min-width: 0;
+	padding: 0.25rem 0.6rem;
+	background: linear-gradient(180deg, #111820, #0c1117);
+}
+
+.dynamic-lane-curve svg {
+	display: block;
+	width: 100%;
+	height: 3.7rem;
+}
+
+.dynamic-lane-curve .grid,
+.dynamic-curve-canvas .grid {
+	stroke: rgb(255 255 255 / 8%);
+	stroke-width: 1;
+	fill: none;
+}
+
+.dynamic-lane-curve .curve,
+.dynamic-curve-canvas .curve {
+	stroke: #4edcff;
+	stroke-width: 8;
+	fill: none;
+	vector-effect: non-scaling-stroke;
+}
+
+.dynamic-lane-row-actions {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0.4rem;
+	border-left: 1px solid #25313b;
+}
+
+.dynamic-lane-row-actions .ui-form-field {
+	margin: 0;
+}
+
+.dynamic-lane-row-actions .ui-form-field > label,
+.dynamic-lane-row-actions .ui-check-state {
+	display: none;
+}
+
+.dynamic-lane-menu {
+	position: absolute;
+	z-index: 30;
+	top: calc(100% - 0.2rem);
+	right: 0.35rem;
+	display: grid;
+	min-width: 11rem;
+	max-height: 18rem;
+	padding: 0.35rem;
+	overflow: auto;
+	background: #111820;
+	border: 1px solid #3b4a57;
+	border-radius: 0.4rem;
+	box-shadow: 0 0.7rem 1.8rem rgb(0 0 0 / 55%);
+}
+
+.dynamic-lane-menu > strong {
+	padding: 0.35rem 0.5rem;
+	color: #8796a2;
+	font-size: 0.68rem;
+	text-transform: uppercase;
+}
+
+.dynamic-lane-menu hr {
+	width: 100%;
+	margin: 0.3rem 0;
+	border: 0;
+	border-top: 1px solid #2a3741;
+}
+
+.dynamic-lane-menu .ui-button {
+	justify-content: flex-start;
+}
+
+.dynamic-lane-bottom-editor {
+	padding: 0.55rem;
+	background: #0d1218;
+	border: 1px solid #25313b;
+	border-radius: 0.45rem;
+}
+
+.dynamic-lane-bottom-editor > header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.7rem;
+	margin-bottom: 0.5rem;
+}
+
+.dynamic-lane-bottom-editor > header > div {
+	display: grid;
+}
+
+.dynamic-lane-bottom-editor > header small {
+	color: #85929d;
+	font-size: 0.68rem;
+	text-transform: uppercase;
 }
 
 .dynamic-create-form {

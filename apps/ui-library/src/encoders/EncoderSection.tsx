@@ -58,6 +58,7 @@ export interface EncoderSectionProps {
 	surface: EncoderSectionSurface;
 	callbacks?: EncoderSectionCallbacks;
 	className?: string;
+	showHeader?: boolean;
 }
 
 function clamped(value: number, minimum = 0, maximum = 1) {
@@ -69,24 +70,30 @@ export function EncoderSection({
 	surface,
 	callbacks = {},
 	className = "",
+	showHeader = true,
 }: EncoderSectionProps) {
 	return (
 		<section
 			className={`encoder-section ${surface}-encoder-section ${className}`.trim()}
-			aria-labelledby={`encoder-section-${model.id}`}
+			aria-label={
+				!showHeader && typeof model.label === "string" ? model.label : undefined
+			}
+			aria-labelledby={showHeader ? `encoder-section-${model.id}` : undefined}
 			data-encoder-family={model.id}
 			data-encoder-surface={surface}
 			style={{
 				minWidth: 0,
 				minHeight: 0,
 				display: "grid",
-				gridTemplateRows: "auto minmax(0, 1fr)",
+				gridTemplateRows: showHeader ? "auto minmax(0, 1fr)" : "minmax(0, 1fr)",
 			}}
 		>
-			<header className="encoder-section-header">
-				<strong id={`encoder-section-${model.id}`}>{model.label}</strong>
-				{model.description != null && <small>{model.description}</small>}
-			</header>
+			{showHeader && (
+				<header className="encoder-section-header">
+					<strong id={`encoder-section-${model.id}`}>{model.label}</strong>
+					{model.description != null && <small>{model.description}</small>}
+				</header>
+			)}
 			<div
 				className="encoder-section-items"
 				style={

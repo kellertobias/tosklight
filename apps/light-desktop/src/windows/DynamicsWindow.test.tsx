@@ -120,10 +120,17 @@ describe("DynamicsWindow", () => {
 
 		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
 
-		expect(screen.getByText("Dynamic settings")).toBeInTheDocument();
 		expect(
-			screen.getByText("Intensity", { selector: "strong" }),
+			screen.getByRole("button", { name: /Back to Pool/ }),
 		).toBeInTheDocument();
+		expect(
+			screen.getAllByText("Intensity", { selector: "strong" }),
+		).toHaveLength(2);
+		fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+		expect(
+			screen.getByRole("dialog", { name: "Dynamic Settings" }),
+		).toBeInTheDocument();
+		expect(screen.getByLabelText("Name")).toHaveValue("Pulse");
 	});
 
 	it("opens the standard creation modal before choosing the first lane", () => {

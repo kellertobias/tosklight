@@ -11,10 +11,11 @@ The implementation checkpoint is now committed. The plan remains in `doing/` unt
 user visual review, post-acceptance UI automation/screenshots, remaining acceptance gates, and
 `## Result` records are complete.
 
-The first visual review on 2026-07-27 was rejected. Its pool geometry, modal, context-menu,
-Delete-command, Programmer encoder ownership, desk-form, dark-workspace, and all-lanes
-corrections have been incorporated. A second visual review is still required; no accepted
-Dynamics screenshot baseline exists yet.
+The first two visual reviews on 2026-07-27 were rejected. Their pool geometry, modal,
+context-menu, Delete-command, Programmer encoder ownership, window-title actions/settings,
+desk-form, dark-workspace, compact all-lanes overview, and shared Curves editor corrections
+have been incorporated. A further Curves review is required before Phase Spread and Speed
+polish continues; no accepted Dynamics screenshot baseline exists yet.
 
 ## Committed implementation checkpoint
 

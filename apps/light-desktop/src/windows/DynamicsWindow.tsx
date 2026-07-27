@@ -1,8 +1,10 @@
 import {
 	Button,
+	CheckboxField,
 	ColorPickerField,
 	FormLayout,
 	IconPickerField,
+	NumberField,
 	SelectField,
 	TextField,
 } from "@tosklight/ui";
@@ -17,7 +19,11 @@ import {
 	PoolGrid,
 	type PoolSlotViewModel,
 } from "@tosklight/ui/pools";
-import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
+import {
+	WindowHeader,
+	WindowScrollArea,
+	WindowSettings,
+} from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiRequestError } from "../api/ApiRequestError";
 import { createLightApi } from "../api/client/api";
@@ -416,6 +422,7 @@ export interface DynamicEditorProps {
 	selection: readonly string[];
 	selectedGroupId: string | null;
 	view?: DynamicEditorView;
+	onViewChange?(view: DynamicEditorView): void;
 	onBack(): void;
 	onMutate(
 		dynamic: DynamicObject,
@@ -443,6 +450,7 @@ export function DynamicEditor({
 	selection,
 	selectedGroupId,
 	view: controlledView,
+	onViewChange,
 	onBack,
 	onMutate,
 	onDelete,
@@ -467,6 +475,7 @@ export function DynamicEditor({
 	const [destinationPoolNumber, setDestinationPoolNumber] = useState(
 		dynamic.body.pool_number,
 	);
+	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	const lane =
 		dynamic.body.lanes.find((candidate) => candidate.id === primaryLane) ??
 		dynamic.body.lanes[0];
@@ -491,6 +500,16 @@ export function DynamicEditor({
 	};
 	const running = runningCount(runtime, dynamic.id) > 0;
 	const status = definitionStatus(runtime, dynamic.id);
+	const changeView = (next: DynamicEditorView) => {
+		onViewChange?.(next);
+		if (!onViewChange) updateEditor({ task: next });
+	};
+	const addLane = () =>
+		onMutate(dynamic, {
+			type: "add_lane",
+			lane: createDefaultDynamicLane(attributes[0]?.id ?? "intensity"),
+			index: null,
+		});
 	useEffect(() => {
 		openEditor({
 			dynamicId: dynamic.id,
@@ -504,176 +523,110 @@ export function DynamicEditor({
 			className={`dynamics-window dynamics-editor ${compact ? "compact" : ""}`}
 			aria-busy={busy}
 		>
-			<header className="window-toolbar dynamics-toolbar">
-				<Button onClick={onBack}>← Back to Pool</Button>
-				<h1>
-					{dynamic.body.name} <small>Dynamic {dynamic.body.pool_number}</small>
-				</h1>
-			</header>
+			<WindowHeader
+				title={`Dynamic ${dynamic.body.pool_number}`}
+				info={{
+					primary: dynamic.body.name,
+					secondary: `${dynamic.body.lanes.length} ${dynamic.body.lanes.length === 1 ? "lane" : "lanes"}`,
+				}}
+				actions={[
+					[
+						{
+							id: "curves",
+							label: "Curves",
+							active: view === "curves",
+							onClick: () => changeView("curves"),
+						},
+						{
+							id: "phase",
+							label: "Phase Spread",
+							active: view === "phase",
+							onClick: () => changeView("phase"),
+						},
+						{
+							id: "speed",
+							label: "Speed",
+							active: view === "speed",
+							onClick: () => changeView("speed"),
+						},
+					],
+					view === "curves"
+						? [
+								{
+									id: "add-lane",
+									label: "+ Add Lane",
+									onClick: () => void addLane(),
+								},
+							]
+						: [],
+					[{ id: "back", label: "← Back to Pool", onClick: onBack }],
+				]}
+				settings
+				onSettings={(anchor) =>
+					setSettingsAnchor(anchor.getBoundingClientRect())
+				}
+			/>
+			{settingsAnchor && (
+				<WindowSettings
+					modal={false}
+					anchor={settingsAnchor}
+					title="Dynamic Settings"
+					onClose={() => setSettingsAnchor(null)}
+					tabs={[
+						{
+							id: "general",
+							label: "General",
+							content: (
+								<FormLayout labelPlacement="side">
+									<TextField
+										key={`name-${dynamic.revision}`}
+										label="Name"
+										defaultValue={dynamic.body.name}
+										maxLength={128}
+										onBlur={(event) => {
+											const name = event.target.value.trim();
+											if (name && name !== dynamic.body.name)
+												void onMutate(dynamic, { type: "set_name", name });
+										}}
+									/>
+									<IconPickerField
+										label="Icon"
+										value={dynamic.body.icon ?? "∿"}
+										onChange={(icon) =>
+											void onMutate(dynamic, { type: "set_icon", icon })
+										}
+									/>
+									<ColorPickerField
+										label="Color"
+										value={dynamic.body.color ?? "#4edcff"}
+										onChange={(color) =>
+											void onMutate(dynamic, { type: "set_color", color })
+										}
+									/>
+								</FormLayout>
+							),
+						},
+					]}
+				/>
+			)}
 			{error && (
 				<p className="dynamics-error" role="alert">
 					{error}
 				</p>
 			)}
 			<div className="dynamics-editor-body">
-				<aside className="dynamic-lane-rail">
-					<section className="dynamic-object-metadata">
-						<h3>Dynamic settings</h3>
-						<FormLayout labelPlacement="side">
-							<TextField
-								key={`name-${dynamic.revision}`}
-								label="Name"
-								defaultValue={dynamic.body.name}
-								maxLength={128}
-								onBlur={(event) => {
-									const name = event.target.value.trim();
-									if (name && name !== dynamic.body.name)
-										void onMutate(dynamic, { type: "set_name", name });
-								}}
-							/>
-							<IconPickerField
-								label="Icon"
-								value={dynamic.body.icon ?? "∿"}
-								onChange={(icon) =>
-									void onMutate(dynamic, { type: "set_icon", icon })
-								}
-							/>
-							<ColorPickerField
-								label="Color"
-								value={dynamic.body.color ?? "#4edcff"}
-								onChange={(color) =>
-									void onMutate(dynamic, { type: "set_color", color })
-								}
-							/>
-						</FormLayout>
-					</section>
-					<header>
-						<b>Lanes</b>
-						<small>{selectedLanes.size} selected</small>
-					</header>
-					{dynamic.body.lanes.map((candidate, index) => (
-						<div key={candidate.id} className="dynamic-lane-row">
-							<button
-								type="button"
-								className={`${candidate.id === primaryLane ? "primary" : ""} ${selectedLanes.has(candidate.id) ? "selected" : ""}`}
-								onClick={(event) =>
-									selectLane(
-										candidate.id,
-										event.shiftKey || appState.shiftArmed,
-									)
-								}
-							>
-								<span>{index + 1}</span>
-								<strong>
-									{attributes.find((item) => item.id === candidate.attribute)
-										?.label ?? candidate.attribute}
-								</strong>
-								<small>{modeLabel(candidate.mode)}</small>
-							</button>
-							<span className="dynamic-lane-order">
-								<button
-									type="button"
-									disabled={index === 0}
-									aria-label={`Move ${candidate.attribute} lane up`}
-									onClick={(event) => {
-										event.stopPropagation();
-										void onMutate(dynamic, {
-											type: "move_lane",
-											lane_id: candidate.id,
-											index: index - 1,
-										});
-									}}
-								>
-									↑
-								</button>
-								<button
-									type="button"
-									disabled={index === dynamic.body.lanes.length - 1}
-									aria-label={`Move ${candidate.attribute} lane down`}
-									onClick={(event) => {
-										event.stopPropagation();
-										void onMutate(dynamic, {
-											type: "move_lane",
-											lane_id: candidate.id,
-											index: index + 1,
-										});
-									}}
-								>
-									↓
-								</button>
-							</span>
-						</div>
-					))}
-					<div className="dynamic-lane-actions">
-						<Button
-							onClick={() =>
-								onMutate(dynamic, {
-									type: "add_lane",
-									lane: createDefaultDynamicLane(
-										attributes[0]?.id ?? "intensity",
-									),
-									index: null,
-								})
-							}
-						>
-							+ Add Lane
-						</Button>
-						<Button
-							disabled={!lane}
-							onClick={() =>
-								lane &&
-								onMutate(dynamic, {
-									type: "add_lane",
-									lane: { ...lane, id: crypto.randomUUID() },
-									index: null,
-								})
-							}
-						>
-							Duplicate
-						</Button>
-						<Button
-							disabled={dynamic.body.lanes.length <= 1 || !lane}
-							onClick={() =>
-								lane &&
-								onMutate(dynamic, {
-									type: "delete_lane",
-									lane_id: lane.id,
-								})
-							}
-						>
-							Delete
-						</Button>
-					</div>
-				</aside>
 				<main className="dynamic-workspace">
-					{view === "curves" && (
-						<div className="dynamic-lane-stack">
-							{dynamic.body.lanes.map((candidate) => (
-								<section
-									key={candidate.id}
-									className={`dynamic-lane-workspace-card ${candidate.id === primaryLane ? "primary" : ""}`}
-									onPointerDown={() => selectLane(candidate.id, false)}
-								>
-									<CurvesView
-										lane={candidate}
-										attributes={attributes}
-										presets={presets}
-										randomGroups={dynamic.body.random_groups}
-										onReplace={replaceLane}
-										onAddRandomGroup={(group) =>
-											onMutate(dynamic, { type: "add_random_group", group })
-										}
-										onReplaceRandomGroup={(group) =>
-											onMutate(dynamic, {
-												type: "replace_random_group",
-												group_id: group.id,
-												group,
-											})
-										}
-									/>
-								</section>
-							))}
-						</div>
+					{view === "curves" && lane && (
+						<CurvesView
+							dynamic={dynamic}
+							lane={lane}
+							selectedLanes={selectedLanes}
+							attributes={attributes}
+							presets={presets}
+							onSelect={selectLane}
+							onReplace={replaceLane}
+							onMutate={onMutate}
+						/>
 					)}
 					{view === "phase" && (
 						<PhaseView dynamic={dynamic} onMutate={onMutate} />
@@ -771,115 +724,263 @@ export function DynamicEditor({
 }
 
 function CurvesView({
+	dynamic,
 	lane,
+	selectedLanes,
 	attributes,
 	presets,
-	randomGroups,
+	onSelect,
 	onReplace,
-	onAddRandomGroup,
-	onReplaceRandomGroup,
+	onMutate,
 }: {
+	dynamic: DynamicObject;
 	lane: DynamicLaneProjection;
+	selectedLanes: ReadonlySet<string>;
 	attributes: readonly { id: string; label: string; family: string }[];
 	presets: readonly PresetObject[];
-	randomGroups: readonly DynamicRandomGroupProjection[];
+	onSelect(id: string, additive: boolean): void;
 	onReplace(next: DynamicLaneProjection): Promise<void>;
-	onAddRandomGroup(group: DynamicRandomGroupProjection): Promise<void>;
-	onReplaceRandomGroup(group: DynamicRandomGroupProjection): Promise<void>;
+	onMutate(
+		dynamic: DynamicObject,
+		intent: DynamicUpdateIntent,
+		mutationGroup?: string,
+	): Promise<void>;
 }) {
+	const [menuLaneId, setMenuLaneId] = useState<string | null>(null);
 	const setMode = async (mode: DynamicLaneModeProjection) => {
 		if (mode !== "random") {
 			await onReplace({ ...lane, mode });
 			return;
 		}
 		let groupId = lane.random_group_id;
-		if (!groupId || !randomGroups.some((group) => group.id === groupId)) {
+		if (
+			!groupId ||
+			!dynamic.body.random_groups.some((group) => group.id === groupId)
+		) {
 			const group = defaultRandomGroup();
-			await onAddRandomGroup(group);
+			await onMutate(dynamic, { type: "add_random_group", group });
 			groupId = group.id;
 		}
 		await onReplace({ ...lane, mode, random_group_id: groupId });
 	};
 	const randomGroup =
-		randomGroups.find((group) => group.id === lane.random_group_id) ?? null;
+		dynamic.body.random_groups.find(
+			(group) => group.id === lane.random_group_id,
+		) ?? null;
 	return (
 		<div className="dynamic-curves-view">
-			<header className="dynamic-control-row">
-				<label>
-					Attribute
-					<select
-						value={lane.attribute}
-						onChange={(event) =>
-							onReplace({ ...lane, attribute: event.target.value })
-						}
-					>
-						{attributes.map((attribute) => (
-							<option key={attribute.id} value={attribute.id}>
-								{attribute.family} · {attribute.label}
-							</option>
-						))}
-					</select>
-				</label>
-				<fieldset className="button-group" aria-label="Lane mode">
-					<Button
-						className={lane.mode === "keyframes" ? "active" : ""}
-						onClick={() => void setMode("keyframes")}
-					>
-						Keyframes
-					</Button>
-					<Button
-						className={lane.mode === "max_min" ? "active" : ""}
-						onClick={() => void setMode("max_min")}
-					>
-						Max / min
-					</Button>
-					<Button
-						className={lane.mode === "middle_amplitude" ? "active" : ""}
-						onClick={() => void setMode("middle_amplitude")}
-					>
-						Middle / amplitude
-					</Button>
-					<Button
-						className={lane.mode === "random" ? "active" : ""}
-						onClick={() => void setMode("random")}
-					>
-						Random
-					</Button>
-				</fieldset>
-			</header>
-			<div className="dynamic-curve-canvas">
-				<svg
-					viewBox="0 0 1000 260"
-					role="img"
-					aria-label={modeLabel(lane.mode)}
-				>
-					<title>{modeLabel(lane.mode)}</title>
-					<path
-						className="grid"
-						d="M0 65H1000M0 130H1000M0 195H1000M250 0V260M500 0V260M750 0V260"
-					/>
-					<path className="curve" d={curvePath(lane)} />
-				</svg>
-				<span>0%</span>
-				<span>25%</span>
-				<span>50%</span>
-				<span>75%</span>
-				<span>100%</span>
+			<div className="dynamic-lane-overview-list" aria-label="Dynamic lanes">
+				{dynamic.body.lanes.map((candidate, index) => {
+					const attribute =
+						attributes.find((item) => item.id === candidate.attribute) ?? null;
+					const selected = selectedLanes.has(candidate.id);
+					return (
+						<article
+							key={candidate.id}
+							className={`dynamic-lane-overview ${candidate.id === lane.id ? "primary" : ""} ${selected ? "selected" : ""}`}
+							onClick={() => onSelect(candidate.id, false)}
+						>
+							<div className="dynamic-lane-identity">
+								<small>Lane {index + 1}</small>
+								<strong>{attribute?.label ?? candidate.attribute}</strong>
+								<span>{modeLabel(candidate.mode)}</span>
+							</div>
+							<div className="dynamic-lane-curve">
+								<svg
+									viewBox="0 0 1000 260"
+									role="img"
+									aria-label={`${attribute?.label ?? candidate.attribute}: ${modeLabel(candidate.mode)}`}
+								>
+									<title>{modeLabel(candidate.mode)}</title>
+									<path
+										className="grid"
+										d="M0 65H1000M0 130H1000M0 195H1000M250 0V260M500 0V260M750 0V260"
+									/>
+									<path className="curve" d={curvePath(candidate)} />
+								</svg>
+							</div>
+							<div
+								className="dynamic-lane-row-actions"
+								onClick={(event) => event.stopPropagation()}
+							>
+								<CheckboxField
+									label={
+										<span className="sr-only">
+											Select {attribute?.label ?? candidate.attribute} lane
+										</span>
+									}
+									checked={selected}
+									onChange={() => onSelect(candidate.id, true)}
+								/>
+								<Button
+									aria-haspopup="menu"
+									aria-expanded={menuLaneId === candidate.id}
+									onClick={() =>
+										setMenuLaneId((current) =>
+											current === candidate.id ? null : candidate.id,
+										)
+									}
+								>
+									Lane ▾
+								</Button>
+								{menuLaneId === candidate.id && (
+									<div
+										className="dynamic-lane-menu"
+										role="menu"
+										aria-label={`${attribute?.label ?? candidate.attribute} lane actions`}
+									>
+										<strong>Attribute</strong>
+										{attributes.map((item) => (
+											<Button
+												key={item.id}
+												role="menuitemradio"
+												aria-checked={candidate.attribute === item.id}
+												className={
+													candidate.attribute === item.id ? "active" : ""
+												}
+												onClick={() => {
+													setMenuLaneId(null);
+													void onMutate(dynamic, {
+														type: "replace_lane",
+														lane_id: candidate.id,
+														lane: { ...candidate, attribute: item.id },
+													});
+												}}
+											>
+												{item.label}
+											</Button>
+										))}
+										<hr />
+										<Button
+											role="menuitem"
+											disabled={index === 0}
+											onClick={() => {
+												setMenuLaneId(null);
+												void onMutate(dynamic, {
+													type: "move_lane",
+													lane_id: candidate.id,
+													index: index - 1,
+												});
+											}}
+										>
+											Move left
+										</Button>
+										<Button
+											role="menuitem"
+											disabled={index === dynamic.body.lanes.length - 1}
+											onClick={() => {
+												setMenuLaneId(null);
+												void onMutate(dynamic, {
+													type: "move_lane",
+													lane_id: candidate.id,
+													index: index + 1,
+												});
+											}}
+										>
+											Move right
+										</Button>
+										<Button
+											role="menuitem"
+											onClick={() => {
+												setMenuLaneId(null);
+												void onMutate(dynamic, {
+													type: "add_lane",
+													lane: {
+														...candidate,
+														id: crypto.randomUUID(),
+													},
+													index: index + 1,
+												});
+											}}
+										>
+											Duplicate lane
+										</Button>
+										<Button
+											role="menuitem"
+											className="danger"
+											disabled={dynamic.body.lanes.length <= 1}
+											onClick={() => {
+												setMenuLaneId(null);
+												void onMutate(dynamic, {
+													type: "delete_lane",
+													lane_id: candidate.id,
+												});
+											}}
+										>
+											Delete lane
+										</Button>
+									</div>
+								)}
+							</div>
+						</article>
+					);
+				})}
 			</div>
-			{lane.mode === "keyframes" ? (
-				<KeyframeControls lane={lane} presets={presets} onReplace={onReplace} />
-			) : lane.mode === "random" && randomGroup ? (
-				<RandomControls
-					lane={lane}
-					group={randomGroup}
-					groups={randomGroups}
-					presets={presets}
-					onReplaceLane={onReplace}
-					onReplaceGroup={onReplaceRandomGroup}
-				/>
-			) : (
-				<FunctionControls lane={lane} presets={presets} onReplace={onReplace} />
-			)}
+			<section className="dynamic-lane-bottom-editor">
+				<header>
+					<div>
+						<small>Editing</small>
+						<strong>
+							{attributes.find((item) => item.id === lane.attribute)?.label ??
+								lane.attribute}
+						</strong>
+					</div>
+					<fieldset className="button-group" aria-label="Lane mode">
+						<Button
+							className={lane.mode === "keyframes" ? "active" : ""}
+							onClick={() => void setMode("keyframes")}
+						>
+							Keyframes
+						</Button>
+						<Button
+							className={lane.mode === "max_min" ? "active" : ""}
+							onClick={() => void setMode("max_min")}
+						>
+							Max / min
+						</Button>
+						<Button
+							className={lane.mode === "middle_amplitude" ? "active" : ""}
+							onClick={() => void setMode("middle_amplitude")}
+						>
+							Middle / amplitude
+						</Button>
+						<Button
+							className={lane.mode === "random" ? "active" : ""}
+							onClick={() => void setMode("random")}
+						>
+							Random
+						</Button>
+					</fieldset>
+				</header>
+				{lane.mode === "keyframes" ? (
+					<KeyframeControls
+						lane={lane}
+						presets={presets}
+						onReplace={onReplace}
+					/>
+				) : lane.mode === "random" && randomGroup ? (
+					<RandomControls
+						lane={lane}
+						group={randomGroup}
+						groups={dynamic.body.random_groups}
+						presets={presets}
+						onReplaceLane={onReplace}
+						onReplaceGroup={(group) =>
+							onMutate(dynamic, {
+								type: "replace_random_group",
+								group_id: group.id,
+								group,
+							})
+						}
+					/>
+				) : (
+					<FunctionControls
+						lane={lane}
+						presets={presets}
+						onReplace={onReplace}
+					/>
+				)}
+			</section>
 		</div>
 	);
 }
@@ -904,18 +1005,14 @@ function KeyframeControls({
 						{index === 0 ? (
 							<span>0% / 100%</span>
 						) : (
-							<input
-								aria-label={`Point ${index + 1} position`}
-								type="number"
+							<NumberField
+								label={`Point ${index + 1} position`}
 								min={1}
 								max={99}
 								value={Math.round(point.position * 100)}
-								onChange={(event) => {
-									const position = clamp(
-										Number(event.target.value) / 100,
-										0.01,
-										0.99,
-									);
+								unit="%"
+								onValueChange={(value) => {
+									const position = clamp(Number(value) / 100, 0.01, 0.99);
 									const points = lane.keyframes.points
 										.map((candidate, target) =>
 											target === index ? { ...candidate, position } : candidate,
@@ -943,15 +1040,23 @@ function KeyframeControls({
 							});
 						}}
 					/>
-					<select
+					<SelectField
+						label="Interpolation"
 						value={point.interpolation}
-						onChange={(event) => {
+						options={[
+							{ value: "linear", label: "Linear" },
+							{ value: "ease_in", label: "Ease in" },
+							{ value: "ease_out", label: "Ease out" },
+							{ value: "ease_in_out", label: "Ease in + out" },
+							{ value: "hold", label: "Hold" },
+							{ value: "drop", label: "Drop" },
+						]}
+						onChange={(interpolation) => {
 							const points = lane.keyframes.points.map((candidate, target) =>
 								target === index
 									? {
 											...candidate,
-											interpolation: event.target
-												.value as typeof candidate.interpolation,
+											interpolation,
 										}
 									: candidate,
 							);
@@ -960,14 +1065,7 @@ function KeyframeControls({
 								keyframes: { ...lane.keyframes, points },
 							});
 						}}
-					>
-						<option value="linear">Linear</option>
-						<option value="ease_in">Ease in</option>
-						<option value="ease_out">Ease out</option>
-						<option value="ease_in_out">Ease in + out</option>
-						<option value="hold">Hold</option>
-						<option value="drop">Drop</option>
-					</select>
+					/>
 					{index > 0 && lane.keyframes.points.length > 2 && (
 						<Button
 							onClick={() =>
@@ -1022,36 +1120,33 @@ function FunctionControls({
 		lane.mode === "middle_amplitude" ? lane.middle_amplitude : lane.max_min;
 	return (
 		<section className="dynamic-function-controls">
-			<label>
-				Function
-				<select
-					value={config.function}
-					onChange={(event) => {
-						const functionName = event.target
-							.value as DynamicPeriodicFunctionProjection;
-						onReplace(
-							lane.mode === "middle_amplitude"
-								? {
-										...lane,
-										middle_amplitude: {
-											...lane.middle_amplitude,
-											function: functionName,
-										},
-									}
-								: {
-										...lane,
-										max_min: { ...lane.max_min, function: functionName },
+			<SelectField
+				label="Function"
+				value={config.function}
+				options={[
+					{ value: "sinus", label: "Sinus" },
+					{ value: "cosinus", label: "Cosinus" },
+					{ value: "linear_up", label: "Linear +" },
+					{ value: "linear_down", label: "Linear −" },
+					{ value: "pwm", label: "PWM" },
+				]}
+				onChange={(functionName: DynamicPeriodicFunctionProjection) => {
+					onReplace(
+						lane.mode === "middle_amplitude"
+							? {
+									...lane,
+									middle_amplitude: {
+										...lane.middle_amplitude,
+										function: functionName,
 									},
-						);
-					}}
-				>
-					<option value="sinus">Sinus</option>
-					<option value="cosinus">Cosinus</option>
-					<option value="linear_up">Linear +</option>
-					<option value="linear_down">Linear −</option>
-					<option value="pwm">PWM</option>
-				</select>
-			</label>
+								}
+							: {
+									...lane,
+									max_min: { ...lane.max_min, function: functionName },
+								},
+					);
+				}}
+			/>
 			{lane.mode === "middle_amplitude" ? (
 				<>
 					<ScalarSourceControl
@@ -1159,24 +1254,17 @@ function RandomControls({
 		void onReplaceGroup({ ...group, ...patch });
 	return (
 		<section className="dynamic-function-controls dynamic-random-controls">
-			<label>
-				Random group
-				<select
-					value={group.id}
-					onChange={(event) =>
-						void onReplaceLane({
-							...lane,
-							random_group_id: event.target.value,
-						})
-					}
-				>
-					{groups.map((candidate, index) => (
-						<option key={candidate.id} value={candidate.id}>
-							Group {index + 1}
-						</option>
-					))}
-				</select>
-			</label>
+			<SelectField
+				label="Random group"
+				value={group.id}
+				options={groups.map((candidate, index) => ({
+					value: candidate.id,
+					label: `Group ${index + 1}`,
+				}))}
+				onChange={(random_group_id) =>
+					void onReplaceLane({ ...lane, random_group_id })
+				}
+			/>
 			<ScalarSourceControl
 				label="Low"
 				source={group.low}
@@ -2017,6 +2105,7 @@ export function DynamicEncoderDeck({
 	return (
 		<div className="dynamic-encoder-deck">
 			<EncoderSection
+				showHeader={false}
 				model={{
 					id: `dynamics-${view}`,
 					label: `${view === "curves" ? "Curves" : view === "phase" ? "Phase Spread" : "Speed"} encoders`,
@@ -2364,15 +2453,24 @@ function ScalarSourceControl({
 		),
 	);
 	return (
-		<label>
-			{label}
-			<select
+		<div className="dynamic-scalar-source-control">
+			<SelectField
+				label={label}
 				value={source.type}
-				onChange={(event) =>
+				options={[
+					{ value: "current", label: "Current" },
+					{ value: "value", label: "Value" },
+					{
+						value: "preset",
+						label: "Preset",
+						disabled: matchingPresets.length === 0,
+					},
+				]}
+				onChange={(type) =>
 					onChange?.(
-						event.target.value === "current"
+						type === "current"
 							? sourceCurrent
-							: event.target.value === "value"
+							: type === "value"
 								? sourceZero
 								: {
 										type: "preset",
@@ -2382,52 +2480,46 @@ function ScalarSourceControl({
 									},
 					)
 				}
-			>
-				<option value="current">Current</option>
-				<option value="value">Value</option>
-				<option value="preset" disabled={matchingPresets.length === 0}>
-					Preset
-				</option>
-			</select>
+			/>
 			{source.type === "value" && (
-				<input
-					type="number"
+				<NumberField
+					label={`${label} value`}
 					min={0}
 					max={1}
 					step={0.01}
+					allowDecimal
 					value={source.value}
-					onChange={(event) =>
+					onValueChange={(value) =>
 						onChange?.({
 							type: "value",
-							value: Number(event.target.value),
+							value: Number(value),
 						})
 					}
 				/>
 			)}
 			{source.type === "preset" && (
-				<select
-					aria-label={`${label} Preset`}
+				<SelectField
+					label={`${label} Preset`}
 					value={source.preset_id}
-					onChange={(event) =>
+					options={
+						matchingPresets.length === 0
+							? [{ value: "", label: "No matching Preset", disabled: true }]
+							: matchingPresets.map((preset) => ({
+									value: preset.id,
+									label: `${preset.body.number} · ${preset.body.name}`,
+								}))
+					}
+					onChange={(preset_id) =>
 						onChange?.({
 							type: "preset",
-							preset_id: event.target.value,
+							preset_id,
 							attribute,
 							last_valid_by_target: source.last_valid_by_target,
 						})
 					}
-				>
-					{matchingPresets.length === 0 && (
-						<option value="">No matching Preset</option>
-					)}
-					{matchingPresets.map((preset) => (
-						<option key={preset.id} value={preset.id}>
-							{preset.body.number} · {preset.body.name}
-						</option>
-					))}
-				</select>
+				/>
 			)}
-		</label>
+		</div>
 	);
 }
 
@@ -2443,18 +2535,14 @@ function NumberControl({
 	onChange?(value: number): void;
 }) {
 	return (
-		<label>
-			{label}
-			<span className="dynamic-number-control">
-				<input
-					type="number"
-					value={value}
-					onChange={(event) => onChange?.(Number(event.target.value))}
-					disabled={!onChange}
-				/>
-				{suffix && <small>{suffix}</small>}
-			</span>
-		</label>
+		<NumberField
+			label={label}
+			value={value}
+			allowDecimal
+			unit={suffix}
+			onValueChange={(next) => onChange?.(Number(next))}
+			disabled={!onChange}
+		/>
 	);
 }
 
