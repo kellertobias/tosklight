@@ -40,6 +40,68 @@ async fn v2_playback_overview_is_authenticated_and_keeps_desk_scope() {
 }
 
 #[tokio::test]
+async fn plain_playback_urls_are_fire_and_forget_and_keep_page_addressing_distinct() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+    let mut snapshot = (*state.output.snapshot()).clone();
+    snapshot.playback_pages = vec![light_playback::PlaybackPage {
+        number: 1,
+        name: "Main".into(),
+        slots: std::collections::HashMap::from([(1, 1)]),
+    }]
+    .into();
+    state.output.replace_snapshot(snapshot).unwrap();
+    let show_id = active_show_id(&state);
+
+    let call = |path: &str| {
+        Request::get(path)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header("x-tosk-show", show_id.to_string())
+            .body(Body::empty())
+            .unwrap()
+    };
+    let numbered = app
+        .clone()
+        .oneshot(call("/api/v2/playbacks/1/on"))
+        .await
+        .unwrap();
+    assert_eq!(numbered.status(), StatusCode::OK);
+    assert_eq!(
+        numbered.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store"
+    );
+    let numbered = json(numbered).await;
+    assert!(numbered.get("request_id").is_none());
+    assert!(numbered.get("replayed").is_none());
+
+    let current = json(
+        app.clone()
+            .oneshot(call("/api/v2/playbacks/current/1/off"))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(current["requested"]["kind"], "current_page");
+    assert_eq!(current["resolved"]["playback_number"], 1);
+
+    let explicit = json(
+        app.clone()
+            .oneshot(call("/api/v2/playbacks/pages/1/1/on"))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(explicit["requested"]["kind"], "explicit_page");
+    assert_eq!(explicit["resolved"]["page"], 1);
+    assert_eq!(explicit["resolved"]["slot"], 1);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_context_headers_default_to_the_single_or_main_control_desk() {
     let (single_state, single_data_dir) = test_state();
     let single_app = router(single_state.clone());

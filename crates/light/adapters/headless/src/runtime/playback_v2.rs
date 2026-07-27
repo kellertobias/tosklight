@@ -15,8 +15,8 @@ use super::{
 use crate::tolerant_json::TolerantJson;
 use axum::{
     Json, Router,
-    extract::{State, rejection::JsonRejection},
-    http::{HeaderMap, StatusCode},
+    extract::{Path, State, rejection::JsonRejection},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
@@ -28,8 +28,212 @@ use light_wire::v2::playback::{
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v2/playback-actions", post(playback_action))
+        .route(
+            "/api/v2/playbacks/{number}/{action}",
+            get(numbered_plain_action).post(numbered_plain_value_action),
+        )
+        .route(
+            "/api/v2/playbacks/current/{slot}/{action}",
+            get(current_page_plain_action).post(current_page_plain_value_action),
+        )
+        .route(
+            "/api/v2/playbacks/pages/{page}/{slot}/{action}",
+            get(explicit_page_plain_action).post(explicit_page_plain_value_action),
+        )
         .route("/api/v2/playback-runtime/snapshot", post(playback_snapshot))
         .route("/api/v2/playback-overview", get(playback_overview))
+}
+
+#[derive(serde::Deserialize)]
+struct PlainPlaybackValueRequest {
+    value: f32,
+}
+
+async fn numbered_plain_action(
+    State(state): State<AppState>,
+    Path((number, action)): Path<(u16, String)>,
+    show: ShowContext,
+    desk: DeskContext,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, PlaybackHttpError> {
+    execute_plain_action(
+        state,
+        show,
+        desk,
+        headers,
+        light_application::PlaybackAddress::Pool(number),
+        plain_button_action(&action)?,
+    )
+    .await
+}
+
+async fn current_page_plain_action(
+    State(state): State<AppState>,
+    Path((slot, action)): Path<(u8, String)>,
+    show: ShowContext,
+    desk: DeskContext,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, PlaybackHttpError> {
+    execute_plain_action(
+        state,
+        show,
+        desk,
+        headers,
+        light_application::PlaybackAddress::CurrentPage { slot },
+        plain_button_action(&action)?,
+    )
+    .await
+}
+
+async fn explicit_page_plain_action(
+    State(state): State<AppState>,
+    Path((page, slot, action)): Path<(u8, u8, String)>,
+    show: ShowContext,
+    desk: DeskContext,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, PlaybackHttpError> {
+    execute_plain_action(
+        state,
+        show,
+        desk,
+        headers,
+        light_application::PlaybackAddress::ExplicitPage { page, slot },
+        plain_button_action(&action)?,
+    )
+    .await
+}
+
+async fn numbered_plain_value_action(
+    State(state): State<AppState>,
+    Path((number, action)): Path<(u16, String)>,
+    show: ShowContext,
+    desk: DeskContext,
+    headers: HeaderMap,
+    TolerantJson(request): TolerantJson<PlainPlaybackValueRequest>,
+) -> Result<impl IntoResponse, PlaybackHttpError> {
+    execute_plain_action(
+        state,
+        show,
+        desk,
+        headers,
+        light_application::PlaybackAddress::Pool(number),
+        plain_value_action(&action, request.value)?,
+    )
+    .await
+}
+
+async fn current_page_plain_value_action(
+    State(state): State<AppState>,
+    Path((slot, action)): Path<(u8, String)>,
+    show: ShowContext,
+    desk: DeskContext,
+    headers: HeaderMap,
+    TolerantJson(request): TolerantJson<PlainPlaybackValueRequest>,
+) -> Result<impl IntoResponse, PlaybackHttpError> {
+    execute_plain_action(
+        state,
+        show,
+        desk,
+        headers,
+        light_application::PlaybackAddress::CurrentPage { slot },
+        plain_value_action(&action, request.value)?,
+    )
+    .await
+}
+
+async fn explicit_page_plain_value_action(
+    State(state): State<AppState>,
+    Path((page, slot, action)): Path<(u8, u8, String)>,
+    show: ShowContext,
+    desk: DeskContext,
+    headers: HeaderMap,
+    TolerantJson(request): TolerantJson<PlainPlaybackValueRequest>,
+) -> Result<impl IntoResponse, PlaybackHttpError> {
+    execute_plain_action(
+        state,
+        show,
+        desk,
+        headers,
+        light_application::PlaybackAddress::ExplicitPage { page, slot },
+        plain_value_action(&action, request.value)?,
+    )
+    .await
+}
+
+async fn execute_plain_action(
+    state: AppState,
+    show: ShowContext,
+    desk: DeskContext,
+    headers: HeaderMap,
+    address: light_application::PlaybackAddress,
+    action: light_application::PlaybackAction,
+) -> Result<impl IntoResponse, PlaybackHttpError> {
+    let session = session_for_desk(&state, &headers, &desk).map_err(PlaybackHttpError::api)?;
+    let _activation = state.active_show.acquire().await;
+    show.verify(&state).map_err(PlaybackHttpError::api)?;
+    let context = http_context(&session);
+    let playback_context = context.clone();
+    let result = run_programming_interaction(
+        &state,
+        &session,
+        &context,
+        "http",
+        ProgrammingLockPolicy::RequireUnlocked,
+        || {
+            playback_service::execute(
+                &state,
+                Some(&session),
+                Some(&session.desk),
+                playback_context,
+                light_application::PlaybackCommand {
+                    address,
+                    action,
+                    surface: light_application::PlaybackSurface::Physical,
+                },
+            )
+        },
+    )
+    .map_err(PlaybackHttpError::api)?
+    .output
+    .map_err(PlaybackHttpError::api)?;
+    let mut body = serde_json::to_value(wire::action_outcome(result))
+        .map_err(|error| PlaybackHttpError::invalid(error.to_string()))?;
+    if let Some(body) = body.as_object_mut() {
+        body.remove("request_id");
+        body.remove("replayed");
+    }
+    Ok(([(header::CACHE_CONTROL, "no-store")], Json(body)))
+}
+
+fn plain_button_action(
+    action: &str,
+) -> Result<light_application::PlaybackAction, PlaybackHttpError> {
+    use light_application::PlaybackAction;
+    Ok(match action {
+        "on" => PlaybackAction::On { pressed: true },
+        "off" => PlaybackAction::Off { pressed: true },
+        "toggle" => PlaybackAction::Toggle { pressed: true },
+        "pause" => PlaybackAction::Pause { pressed: true },
+        "dynamic-restart" => PlaybackAction::DynamicRestart { pressed: true },
+        "dynamic-double-speed" => PlaybackAction::DynamicDoubleSpeed { pressed: true },
+        "dynamic-half-speed" => PlaybackAction::DynamicHalfSpeed { pressed: true },
+        "dynamic-learn-speed" => PlaybackAction::DynamicLearnSpeed { pressed: true },
+        _ => return Err(PlaybackHttpError::invalid("unknown plain Playback action")),
+    })
+}
+
+fn plain_value_action(
+    action: &str,
+    value: f32,
+) -> Result<light_application::PlaybackAction, PlaybackHttpError> {
+    if action != "master" || !value.is_finite() || !(0.0..=1.0).contains(&value) {
+        return Err(PlaybackHttpError::invalid(
+            "master value must be finite and within 0-1",
+        ));
+    }
+    Ok(light_application::PlaybackAction::Master(
+        light_application::PlaybackLevel::new(value),
+    ))
 }
 
 async fn playback_action(
