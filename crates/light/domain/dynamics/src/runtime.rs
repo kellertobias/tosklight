@@ -122,6 +122,31 @@ pub struct DynamicInstanceSnapshot {
     pub random_streams: Vec<DynamicRandomStreamSnapshot>,
     #[serde(default)]
     pub completed: bool,
+    #[serde(default)]
+    pub synchronized_hold_elapsed_millis: Option<u64>,
+    #[serde(default)]
+    pub last_synchronized_elapsed_millis: Option<u64>,
+    #[serde(default)]
+    pub synchronized_resume_transition: Option<DynamicSynchronizedResumeTransitionSnapshot>,
+    #[serde(default)]
+    pub last_sample_values: Vec<DynamicHeldSampleSnapshot>,
+    #[serde(default)]
+    pub synchronized_hold_values: Vec<DynamicHeldSampleSnapshot>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub struct DynamicSynchronizedResumeTransitionSnapshot {
+    pub started_at_millis: u64,
+    pub duration_millis: u64,
+    pub held_elapsed_millis: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct DynamicHeldSampleSnapshot {
+    pub controller_id: Uuid,
+    pub target: FixtureId,
+    pub lane_id: Uuid,
+    pub value: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -175,6 +200,11 @@ struct DynamicInstance {
     speed_paused_elapsed_millis: u64,
     random_streams: HashMap<(Uuid, FixtureId), RandomStreamState>,
     completed: bool,
+    synchronized_hold_elapsed_millis: Option<u64>,
+    last_synchronized_elapsed_millis: Option<u64>,
+    synchronized_resume_transition: Option<DynamicSynchronizedResumeTransitionSnapshot>,
+    last_sample_values: HashMap<(Uuid, FixtureId, Uuid), f32>,
+    synchronized_hold_values: HashMap<(Uuid, FixtureId, Uuid), f32>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -225,6 +255,9 @@ impl DynamicRuntime {
                     })
                     .collect::<Vec<_>>();
                 random_streams.sort_by_key(|stream| (stream.group_id, stream.target.0));
+                let last_sample_values = sample_values_snapshot(&instance.last_sample_values);
+                let synchronized_hold_values =
+                    sample_values_snapshot(&instance.synchronized_hold_values);
                 DynamicInstanceSnapshot {
                     id: instance.id,
                     definition: instance.definition.as_ref().clone(),
@@ -241,6 +274,11 @@ impl DynamicRuntime {
                     speed_paused_elapsed_millis: instance.speed_paused_elapsed_millis,
                     random_streams,
                     completed: instance.completed,
+                    synchronized_hold_elapsed_millis: instance.synchronized_hold_elapsed_millis,
+                    last_synchronized_elapsed_millis: instance.last_synchronized_elapsed_millis,
+                    synchronized_resume_transition: instance.synchronized_resume_transition,
+                    last_sample_values,
+                    synchronized_hold_values,
                 }
             })
             .collect::<Vec<_>>();
@@ -266,9 +304,15 @@ impl DynamicRuntime {
                     .phase_by_target
                     .iter()
                     .any(|(_, phase)| !phase.is_finite())
+                || stored
+                    .last_sample_values
+                    .iter()
+                    .chain(&stored.synchronized_hold_values)
+                    .any(|sample| !sample.value.is_finite())
             {
                 return Err(DynamicRuntimeError::InvalidSnapshot(
-                    "instances require targets, controllers, and finite phase values".into(),
+                    "instances require targets, controllers, and finite phase and sample values"
+                        .into(),
                 ));
             }
             for controller in &stored.controllers {
@@ -356,6 +400,13 @@ impl DynamicRuntime {
                     speed_paused_elapsed_millis: stored.speed_paused_elapsed_millis,
                     random_streams,
                     completed: stored.completed,
+                    synchronized_hold_elapsed_millis: stored.synchronized_hold_elapsed_millis,
+                    last_synchronized_elapsed_millis: stored.last_synchronized_elapsed_millis,
+                    synchronized_resume_transition: stored.synchronized_resume_transition,
+                    last_sample_values: sample_values_from_snapshot(stored.last_sample_values),
+                    synchronized_hold_values: sample_values_from_snapshot(
+                        stored.synchronized_hold_values,
+                    ),
                 },
             );
         }
@@ -460,6 +511,11 @@ impl DynamicRuntime {
                 instance.speed_paused_at_millis = None;
                 instance.speed_paused_elapsed_millis = 0;
                 instance.random_streams.clear();
+                instance.synchronized_hold_elapsed_millis = None;
+                instance.last_synchronized_elapsed_millis = None;
+                instance.synchronized_resume_transition = None;
+                instance.last_sample_values.clear();
+                instance.synchronized_hold_values.clear();
                 instance
                     .controllers
                     .retain(|_, controller| controller.source != request.controller.source);
@@ -525,6 +581,11 @@ impl DynamicRuntime {
             speed_paused_elapsed_millis: 0,
             random_streams: HashMap::new(),
             completed: false,
+            synchronized_hold_elapsed_millis: None,
+            last_synchronized_elapsed_millis: None,
+            synchronized_resume_transition: None,
+            last_sample_values: HashMap::new(),
+            synchronized_hold_values: HashMap::new(),
         };
         if bound {
             self.bound_instances
@@ -609,14 +670,15 @@ impl DynamicRuntime {
             .paused;
         self.set_controller_paused(instance_id, controller_id, paused, now_millis)?;
         if was_paused && !paused {
+            let instance = self
+                .instances
+                .get_mut(&instance_id)
+                .ok_or(DynamicRuntimeError::MissingInstance)?;
             if let Some(policy) = resume_policy {
-                let instance = self
-                    .instances
-                    .get_mut(&instance_id)
-                    .ok_or(DynamicRuntimeError::MissingInstance)?;
                 instance.activation_policy = policy;
                 instance.pending_until_millis = None;
             }
+            schedule_synchronized_resume(instance, now_millis);
         }
         Ok(())
     }
@@ -628,7 +690,11 @@ impl DynamicRuntime {
         }
         self.global_paused = paused;
         for instance in self.instances.values_mut() {
+            let was_paused = instance.paused_at_millis.is_some();
             reconcile_pause(instance, paused, now_millis);
+            if was_paused && !paused && instance.paused_at_millis.is_none() {
+                schedule_synchronized_resume(instance, now_millis);
+            }
         }
     }
 
@@ -773,10 +839,23 @@ impl DynamicRuntime {
             .paused_at_millis
             .or(instance.speed_paused_at_millis)
             .unwrap_or(now_millis);
-        let elapsed = match (instance.activation_policy, transport) {
-            (crate::ActivationPolicy::JoinSyncNow, Some(transport)) => transport
+        let synchronized_elapsed = transport.map(|transport| {
+            transport
                 .phase_reference_millis
-                .saturating_sub(transport.phase_origin_millis),
+                .saturating_sub(transport.phase_origin_millis)
+        });
+        let elapsed = match (instance.activation_policy, transport) {
+            (crate::ActivationPolicy::JoinSyncNow, Some(_)) => {
+                let live_elapsed = synchronized_elapsed.unwrap_or_default();
+                if instance.paused_at_millis.is_some() {
+                    *instance
+                        .synchronized_hold_elapsed_millis
+                        .get_or_insert(live_elapsed)
+                } else {
+                    instance.last_synchronized_elapsed_millis = Some(live_elapsed);
+                    live_elapsed
+                }
+            }
             (crate::ActivationPolicy::NextBoundary, Some(transport)) => {
                 if !transport.phase_advancing {
                     return Ok((Vec::new(), false));
@@ -842,6 +921,15 @@ impl DynamicRuntime {
         let evaluator = DynamicEvaluator::new(&definition);
         let mut samples = Vec::new();
         let targets = instance.targets.clone();
+        let synchronized_resume_mix = instance.synchronized_resume_transition.map(|transition| {
+            if transition.duration_millis == 0 {
+                1.0
+            } else {
+                (now_millis.saturating_sub(transition.started_at_millis) as f32
+                    / transition.duration_millis as f32)
+                    .clamp(0.0, 1.0)
+            }
+        });
         let random_phase_by_target = matches!(
             definition.phase.ordering,
             crate::PhaseOrdering::RandomEachLoop { .. }
@@ -919,6 +1007,23 @@ impl DynamicRuntime {
                     let value = sources
                         .current(*target, &lane.attribute)
                         .map_or(value, |base| base + (value - base) * controller.size);
+                    let sample_key = (controller.id, *target, lane.id);
+                    let value = if instance.paused_at_millis.is_some()
+                        && instance.activation_policy == crate::ActivationPolicy::JoinSyncNow
+                    {
+                        *instance
+                            .synchronized_hold_values
+                            .entry(sample_key)
+                            .or_insert(value)
+                    } else if let Some(resume_mix) = synchronized_resume_mix {
+                        instance
+                            .synchronized_hold_values
+                            .get(&sample_key)
+                            .map_or(value, |held| held + (value - held) * resume_mix)
+                    } else {
+                        value
+                    };
+                    instance.last_sample_values.insert(sample_key, value);
                     samples.push(DynamicRuntimeSample {
                         instance_id,
                         controller_id: controller.id,
@@ -932,6 +1037,11 @@ impl DynamicRuntime {
                     });
                 }
             }
+        }
+        if synchronized_resume_mix.is_some_and(|mix| mix >= 1.0) {
+            instance.synchronized_resume_transition = None;
+            instance.synchronized_hold_elapsed_millis = None;
+            instance.synchronized_hold_values.clear();
         }
         Ok((samples, false))
     }
@@ -1014,6 +1124,38 @@ impl DynamicRuntime {
             .values()
             .any(|instance| instance.definition.id == definition_id)
     }
+}
+
+fn sample_values_snapshot(
+    values: &HashMap<(Uuid, FixtureId, Uuid), f32>,
+) -> Vec<DynamicHeldSampleSnapshot> {
+    let mut values = values
+        .iter()
+        .map(
+            |((controller_id, target, lane_id), value)| DynamicHeldSampleSnapshot {
+                controller_id: *controller_id,
+                target: *target,
+                lane_id: *lane_id,
+                value: *value,
+            },
+        )
+        .collect::<Vec<_>>();
+    values.sort_by_key(|sample| (sample.controller_id, sample.target.0, sample.lane_id));
+    values
+}
+
+fn sample_values_from_snapshot(
+    values: Vec<DynamicHeldSampleSnapshot>,
+) -> HashMap<(Uuid, FixtureId, Uuid), f32> {
+    values
+        .into_iter()
+        .map(|sample| {
+            (
+                (sample.controller_id, sample.target, sample.lane_id),
+                sample.value,
+            )
+        })
+        .collect()
 }
 
 fn random_group_speed_factor(definition: &DynamicDefinition, group_id: Uuid) -> f64 {
@@ -1181,11 +1323,50 @@ fn winning_controller(instance: &DynamicInstance) -> Option<&DynamicController> 
     })
 }
 
+fn schedule_synchronized_resume(instance: &mut DynamicInstance, now_millis: u64) {
+    if instance.activation_policy != crate::ActivationPolicy::JoinSyncNow {
+        instance.synchronized_hold_elapsed_millis = None;
+        instance.synchronized_resume_transition = None;
+        instance.synchronized_hold_values.clear();
+        return;
+    }
+    let Some(held_elapsed_millis) = instance.synchronized_hold_elapsed_millis else {
+        return;
+    };
+    let duration_millis = winning_controller(instance)
+        .and_then(|controller| instance.controller_transitions.get(&controller.id))
+        .map_or(0, |transition| transition.activation_duration_millis);
+    if duration_millis == 0 {
+        instance.synchronized_hold_elapsed_millis = None;
+        instance.synchronized_resume_transition = None;
+        instance.synchronized_hold_values.clear();
+        return;
+    }
+    instance.synchronized_resume_transition = Some(DynamicSynchronizedResumeTransitionSnapshot {
+        started_at_millis: now_millis,
+        duration_millis,
+        held_elapsed_millis,
+    });
+}
+
 fn reconcile_pause(instance: &mut DynamicInstance, global_paused: bool, now_millis: u64) {
     let paused =
         global_paused || winning_controller(instance).is_some_and(|controller| controller.paused);
     match (paused, instance.paused_at_millis) {
-        (true, None) => instance.paused_at_millis = Some(now_millis),
+        (true, None) => {
+            instance.paused_at_millis = Some(now_millis);
+            instance.synchronized_resume_transition = None;
+            if instance.activation_policy == crate::ActivationPolicy::JoinSyncNow {
+                instance.synchronized_hold_elapsed_millis =
+                    instance.last_synchronized_elapsed_millis;
+                instance
+                    .synchronized_hold_values
+                    .clone_from(&instance.last_sample_values);
+            } else {
+                instance.synchronized_hold_elapsed_millis = None;
+                instance.synchronized_hold_values.clear();
+            }
+        }
         (false, Some(paused_at)) => {
             instance.paused_elapsed_millis = instance
                 .paused_elapsed_millis

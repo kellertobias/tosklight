@@ -204,10 +204,10 @@ fn anchor_phase(anchors: &[f32], index: usize, count: usize) -> f32 {
 }
 
 fn deterministic_key(seed: u64, loop_index: u64, target: FixtureId) -> u64 {
-    let mut value = seed ^ loop_index.rotate_left(17);
-    for byte in target.0.as_bytes() {
-        value ^= u64::from(*byte);
-        value = value.wrapping_mul(0x100_0000_01b3);
-    }
-    value
+    let target = target.0.as_u128();
+    let folded_target = target as u64 ^ (target >> 64) as u64;
+    let mut value = seed ^ folded_target ^ loop_index.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    value ^ (value >> 31)
 }

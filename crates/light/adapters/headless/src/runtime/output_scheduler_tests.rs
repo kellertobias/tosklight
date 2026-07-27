@@ -359,6 +359,11 @@ fn runtime_with_controllers(controllers: Vec<DynamicController>) -> DynamicRunti
             speed_paused_elapsed_millis: 0,
             random_streams: Vec::new(),
             completed: false,
+            synchronized_hold_elapsed_millis: None,
+            last_synchronized_elapsed_millis: None,
+            synchronized_resume_transition: None,
+            last_sample_values: Vec::new(),
+            synchronized_hold_values: Vec::new(),
         }],
     }
 }
