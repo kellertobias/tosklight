@@ -18,6 +18,7 @@ user visual review, post-acceptance UI automation/screenshots, remaining accepta
   HTTP/WebSocket/OSC, benchmark, and legacy Phaser removal.
 - `160c4ee0` — production Dynamics pool/editor, live controls, encoders, and Storybook review
   surface.
+- `0627f37a` — legacy Phaser acceptance-fixture replacement and exact Dynamic virtual-time coverage.
 
 ## Product model
 
