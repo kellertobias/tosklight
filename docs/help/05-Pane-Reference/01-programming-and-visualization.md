@@ -81,7 +81,20 @@ Only the full Stage window exposes **Select fixtures** and **Navigate**. A Stage
 
 Positions are edited in **Show Patch**: physical patch and multi-patch placement provides every fixture's location and rotation, with **Preview Stage** for visual feedback while patching. Add a truss, platform, curtain, or other scenery object from the **Venue** manufacturer in **Show Patch**; these visual-only fixtures receive `0.x` fixture IDs and no DMX address.
 
-The full Stage settings also control the 2D/3D view, Group shortcuts, selection visibility, 3D beam direction guides, the 3D floor grid, and environment brightness. **Beam direction guides** shows a dotted off-state aim line for every emitter configured as directional, including fixed conventional fixtures; broad strobes and Sunstrip-style emitters have no guide. Turn **Floor grid** off when the neutral base plane and its reference lines should not be rendered. A Stage pane stores its own beam-guide choice in that pane's settings.
+The full Stage settings also control the 2D/3D view, Group shortcuts, selection visibility, 3D beam direction guides, the 3D floor grid, environment brightness, and **Render quality**. A Stage pane stores its own settings independently, so a Live pane and a **Follow Preload** pane can use different views and qualities.
+
+**Render quality** has four operational choices:
+
+- **Lines only** draws each active directional source as a center line and a ground-footprint outline without a beam volume.
+- **Lines + beams** adds the normal beam volume to those aiming lines and is the default for new and older layouts.
+- **Beams** shows the normal beam volume without the active center line or footprint.
+- **Improved beams** uses a feathered beam edge while keeping the embedded Stage within its bounded live-desk rendering budget.
+
+The footprint shows where the authored field angle intersects the ground reference. It becomes elliptical when a beam strikes at an angle and stays visible when **Floor grid** is off. A beam aimed parallel to or away from the ground has a center line but no invented footprint.
+
+**Beam direction guides** is separate from Render quality. It shows a dotted off-state aim line for every emitter configured as directional, including fixed conventional fixtures; broad strobes and Sunstrip-style emitters have no guide. Turn **Floor grid** off when the neutral base plane and its reference lines should not be rendered.
+
+Stage receives authoritative Live and Preload output from the engine. The desk sends current values at a bounded cadence and the view moves smoothly between samples without predicting past the newest value. A disconnected view freezes its last coherent state and reconnects without blocking Programmer, Playback, command handling, or physical output. The built-in view is intended for selection, aiming, and show preparation; realistic materials, haze, photometric rendering, and richer shadow or occlusion work belong to the separate Viz application.
 
 ![Stage pane](../assets/screenshots/panes/stage.png)
 
