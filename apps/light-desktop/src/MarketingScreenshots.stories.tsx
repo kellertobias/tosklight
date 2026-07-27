@@ -28,6 +28,7 @@ import { SourceLegend } from "./components/shared/SourceLegend";
 import { type Channel, ChannelsWindowView } from "./windows/ChannelsWindow";
 import { MarketingCuesWindow } from "./windows/CuelistWindow.stories";
 import { DmxWindowView } from "./windows/DmxWindow";
+import { MarketingDynamicsApplication } from "./windows/DynamicsWindow.stories";
 import { DEFAULT_FIXTURE_SHEET_COLUMNS } from "./windows/FixtureSheetSettings";
 import { FixtureSheetWindowView } from "./windows/FixtureSheetWindow";
 import { fixtureSheetColumns } from "./windows/fixtureSheetColumns";
@@ -373,4 +374,8 @@ export const DmxWindow: Story = {
 			<MarketingDmxWindow />
 		</ApplicationStateHarness>
 	),
+};
+
+export const DynamicsView: Story = {
+	render: () => <MarketingDynamicsApplication />,
 };

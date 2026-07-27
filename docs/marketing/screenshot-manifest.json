@@ -145,6 +145,16 @@
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
+		},
+		{
+			"file": "dynamics.png",
+			"title": "Dynamics",
+			"caption": "A multi-lane Dynamic with keyframes, normalized cycle previews, and the production touch encoder deck.",
+			"storyId": "tosklight-marketing--dynamics-view",
+			"viewport": { "width": 1600, "height": 920 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
 		}
 	]
 }

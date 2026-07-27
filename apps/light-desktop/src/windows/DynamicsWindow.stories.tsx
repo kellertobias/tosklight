@@ -331,10 +331,18 @@ function DynamicsProgrammerSurface({
 	);
 }
 
-function FullApplicationDynamicsMock({ hardware }: { hardware: boolean }) {
+function FullApplicationDynamicsMock({
+	hardware,
+	marketing = false,
+}: {
+	hardware: boolean;
+	marketing?: boolean;
+}) {
 	const [dynamic, setDynamic] = useState(createStoryDynamic);
 	const [message, setMessage] = useState(
-		"Offline discussion mock · changes are kept in Storybook memory only",
+		marketing
+			? "12 fixtures · Speed Group A · 120 BPM"
+			: "Offline discussion mock · changes are kept in Storybook memory only",
 	);
 	const [view, setView] = useState<DynamicEditorView>("curves");
 	const storyRuntime = useMemo(
@@ -390,12 +398,16 @@ function FullApplicationDynamicsMock({ hardware }: { hardware: boolean }) {
 				dock={
 					<LeftDock
 						presentation={{
-							showIdentity: "Dynamics UI Review",
+							showIdentity: marketing ? "Demo Show" : "Dynamics UI Review",
 							showIndicator: {
-								label: "Offline mock",
-								detail: "No headless server is connected",
-								className: "show-status-warning",
-								connected: false,
+								label: marketing ? "Demo show" : "Offline mock",
+								detail: marketing
+									? "Deterministic marketing presentation."
+									: "No headless server is connected",
+								className: marketing
+									? "show-status-connected"
+									: "show-status-warning",
+								connected: marketing,
 							},
 							clock: <span>12:00</span>,
 						}}
@@ -416,7 +428,9 @@ function FullApplicationDynamicsMock({ hardware }: { hardware: boolean }) {
 								height: 18,
 							}}
 							info={{
-								primary: "Offline discussion surface",
+								primary: marketing
+									? "Dynamic 201 · Ocean Sweep"
+									: "Offline discussion surface",
 								secondary: message,
 							}}
 						>
@@ -476,6 +490,10 @@ function FullApplicationDynamicsMock({ hardware }: { hardware: boolean }) {
 			/>
 		</ApplicationStateHarness>
 	);
+}
+
+export function MarketingDynamicsApplication() {
+	return <FullApplicationDynamicsMock hardware={false} marketing />;
 }
 
 export const FullApplicationDiscussion: Story = {
