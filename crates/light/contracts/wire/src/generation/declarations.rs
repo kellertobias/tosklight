@@ -304,6 +304,8 @@ fn runtime(config: &Config) -> Vec<String> {
         RuntimeBootstrapHighlightState::decl(config),
         RuntimeBootstrapSnapshot::decl(config),
         RuntimeReadinessSnapshot::decl(config),
+        RuntimeVisualizationDiagnostics::decl(config),
+        RuntimeDiagnosticsSnapshot::decl(config),
     ]
 }
 

@@ -23,6 +23,44 @@ use light_wire::v2::{
 use serde::Serialize;
 use std::{collections::HashSet, time::Duration};
 
+struct SubscriptionClaims {
+    output: super::OutputResource,
+    lanes: HashSet<VisualizationLane>,
+}
+
+impl SubscriptionClaims {
+    fn new(output: super::OutputResource) -> Self {
+        Self {
+            output,
+            lanes: HashSet::new(),
+        }
+    }
+
+    fn subscribe(&mut self, lanes: impl IntoIterator<Item = VisualizationLane>) {
+        for lane in lanes {
+            if self.lanes.insert(lane) {
+                self.output.change_visualization_subscribers(lane, 1);
+            }
+        }
+    }
+
+    fn unsubscribe(&mut self, lanes: impl IntoIterator<Item = VisualizationLane>) {
+        for lane in lanes {
+            if self.lanes.remove(&lane) {
+                self.output.change_visualization_subscribers(lane, -1);
+            }
+        }
+    }
+}
+
+impl Drop for SubscriptionClaims {
+    fn drop(&mut self) {
+        for lane in self.lanes.drain() {
+            self.output.change_visualization_subscribers(lane, -1);
+        }
+    }
+}
+
 pub(super) fn router() -> Router<AppState> {
     Router::new().route("/api/v2/visualization/stream", get(stream))
 }
@@ -55,7 +93,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
         return;
     }
 
-    let mut subscribed = HashSet::new();
+    let mut subscribed = SubscriptionClaims::new(state.output.clone());
     let mut interval = tokio::time::interval(Duration::from_millis(100));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut outgoing_sequence = 0_u64;
@@ -91,7 +129,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
                                     if !send(&mut socket, &response).await { return; }
                                     continue;
                                 }
-                                subscribed.extend(lanes);
+                                subscribed.subscribe(lanes);
                                 let millis = 1_000_u64 / u64::from(max_rate_hz);
                                 interval = tokio::time::interval(Duration::from_millis(millis));
                                 interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -99,7 +137,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
                                 last_preload_source = 0;
                             }
                             VisualizationClientMessage::Unsubscribe { lanes } => {
-                                for lane in lanes { subscribed.remove(&lane); }
+                                subscribed.unsubscribe(lanes);
                             }
                             VisualizationClientMessage::Resynchronize { lane } => match lane {
                                 VisualizationLane::Normal => last_normal_source = 0,
@@ -114,16 +152,22 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
                     _ => {}
                 }
             }
-            _ = interval.tick(), if !subscribed.is_empty() => {
+            _ = interval.tick(), if !subscribed.lanes.is_empty() => {
                 let Some(source) = state.output.latest_visualization_frame() else { continue };
                 for lane in [VisualizationLane::Normal, VisualizationLane::Preload] {
-                    if !subscribed.contains(&lane) { continue; }
+                    if !subscribed.lanes.contains(&lane) { continue; }
                     let previous = match lane {
                         VisualizationLane::Normal => &mut last_normal_source,
                         VisualizationLane::Preload => &mut last_preload_source,
                     };
                     if *previous == source.sequence { continue; }
-                    let snapshot = match lane_snapshot(&state, &session, lane, &source) {
+                    let key = match lane {
+                        VisualizationLane::Normal => super::visualization_frame::VisualizationProjectionKey::Normal,
+                        VisualizationLane::Preload => super::visualization_frame::VisualizationProjectionKey::Preload(session.id.0),
+                    };
+                    let snapshot = match state.output.visualization_projection(key, &source, || {
+                        lane_snapshot(&state, &session, lane, &source)
+                    }) {
                         Ok(snapshot) => snapshot,
                         Err(error) => {
                             let response = VisualizationServerMessage::Error {
@@ -143,7 +187,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
                         source_timestamp: chrono::DateTime::<chrono::Utc>::from(source.generated_at)
                             .to_rfc3339(),
                         published_at,
-                        snapshot,
+                        snapshot: snapshot.as_ref().clone(),
                     };
                     if !send(&mut socket, &response).await { return; }
                     *previous = source.sequence;

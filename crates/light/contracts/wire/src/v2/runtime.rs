@@ -186,6 +186,24 @@ pub struct RuntimeReadinessSnapshot {
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
+pub struct RuntimeVisualizationDiagnostics {
+    #[ts(type = "number")]
+    pub normal_subscribers: u64,
+    #[ts(type = "number")]
+    pub preload_subscribers: u64,
+    #[ts(type = "number")]
+    pub projections: u64,
+    #[ts(type = "number")]
+    pub projection_micros: u64,
+    #[ts(type = "number")]
+    pub payload_bytes: u64,
+    #[ts(type = "number")]
+    pub source_age_millis: u64,
+    #[ts(type = "number")]
+    pub skipped_source_frames: u64,
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeDiagnosticsSnapshot {
     pub output: RuntimeOutputHealth,
     pub output_bind_ip: String,
@@ -204,6 +222,7 @@ pub struct RuntimeDiagnosticsSnapshot {
     pub media_servers: serde_json::Value,
     #[ts(type = "number")]
     pub snapshot_revision: u64,
+    pub visualization: RuntimeVisualizationDiagnostics,
 }
 
 #[cfg(test)]

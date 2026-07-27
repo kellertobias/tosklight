@@ -2152,6 +2152,28 @@ impl OutputResource {
         self.visualization_frames.latest()
     }
 
+    pub(super) fn visualization_projection(
+        &self,
+        key: super::visualization_frame::VisualizationProjectionKey,
+        source: &super::visualization_frame::PublishedVisualizationFrame,
+        build: impl FnOnce()
+            -> Result<light_wire::v2::visualization::VisualizationLaneSnapshot, ApiError>,
+    ) -> Result<Arc<light_wire::v2::visualization::VisualizationLaneSnapshot>, ApiError> {
+        self.visualization_frames.projection(key, source, build)
+    }
+
+    pub(super) fn change_visualization_subscribers(
+        &self,
+        lane: light_wire::v2::visualization::VisualizationLane,
+        delta: i8,
+    ) {
+        self.visualization_frames.change_subscribers(lane, delta);
+    }
+
+    pub(super) fn visualization_metrics(&self) -> super::visualization_frame::VisualizationMetrics {
+        self.visualization_frames.metrics()
+    }
+
     pub(super) fn snapshot(&self) -> Arc<EngineSnapshot> {
         self.engine.snapshot()
     }

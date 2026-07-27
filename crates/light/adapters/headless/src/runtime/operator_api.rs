@@ -58,6 +58,7 @@ pub(super) async fn diagnostics(
     let route_send_errors = state.output.route_send_errors();
     let output_routes = NetworkOutput::route_diagnostics(&state.output.snapshot().routes);
     let output_bind_ip = state.installation.configuration().output_bind_ip;
+    let visualization = state.output.visualization_metrics();
     Ok(Json(wire::RuntimeDiagnosticsSnapshot {
         output: runtime_wire::output_health(state.output.health_snapshot()),
         output_bind_ip: output_bind_ip.to_string(),
@@ -75,6 +76,15 @@ pub(super) async fn diagnostics(
         media_servers: serde_json::to_value(state.media.statuses())
             .map_err(|error| ApiError::internal(error.to_string()))?,
         snapshot_revision: state.output.snapshot().revision,
+        visualization: wire::RuntimeVisualizationDiagnostics {
+            normal_subscribers: visualization.normal_subscribers,
+            preload_subscribers: visualization.preload_subscribers,
+            projections: visualization.projections,
+            projection_micros: visualization.projection_micros,
+            payload_bytes: visualization.payload_bytes,
+            source_age_millis: visualization.source_age_millis,
+            skipped_source_frames: visualization.skipped_source_frames,
+        },
     }))
 }
 pub(super) async fn bootstrap_v2(
