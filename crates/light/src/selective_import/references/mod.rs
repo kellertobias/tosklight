@@ -75,7 +75,9 @@ pub(super) fn registered_descriptor(
         RegisteredObjectKind::CueList => {
             descriptors::cue_list_descriptor(object, source_fixtures, target_fixtures)?
         }
-        RegisteredObjectKind::Playback => descriptors::playback_descriptor(object)?,
+        RegisteredObjectKind::Playback => {
+            descriptors::playback_descriptor(object, source_fixtures, target_fixtures)?
+        }
         RegisteredObjectKind::PlaybackPage => descriptors::playback_page_descriptor(object)?,
         RegisteredObjectKind::StageLayout => {
             descriptors::stage_layout_descriptor(object, source_fixtures, target_fixtures)?

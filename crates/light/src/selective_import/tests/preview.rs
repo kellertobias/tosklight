@@ -87,6 +87,134 @@ fn dynamic_preview_includes_exact_live_group_and_preset_dependencies() {
 }
 
 #[test]
+fn cue_dynamic_values_include_referenced_dynamic_and_embedded_fallback_dependencies() {
+    let rig = TestRig::new();
+    let fixture_id = Uuid::new_v4();
+    let dynamic_id = Uuid::new_v4();
+    rig.source_object(
+        "group",
+        "front",
+        json!({"id":"front","name":"Front","fixtures":[]}),
+    );
+    rig.source_object(
+        "preset",
+        "1.1",
+        json!({"name":"Dim","family":"Intensity","number":1,"values":{},"group_values":{}}),
+    );
+    rig.source_object(
+        "dynamic",
+        &dynamic_id.to_string(),
+        dynamic_with_dependencies(dynamic_id, "front", "1.1"),
+    );
+    let fallback = dynamic_with_dependencies(Uuid::new_v4(), "front", "1.1");
+    rig.source_object(
+        "cue_list",
+        "cues",
+        json!({
+            "id": "cues",
+            "cues": [{
+                "dynamic_changes": [{
+                    "fixture_id": fixture_id,
+                    "attribute": "intensity",
+                    "value": {
+                        "type": "dynamic_on",
+                        "instance_link": Uuid::new_v4(),
+                        "dynamic": {
+                            "dynamic_id": dynamic_id,
+                            "last_known_pool_number": 7,
+                            "embedded_fallback": {"definition": fallback}
+                        },
+                        "lane_id": Uuid::new_v4(),
+                        "overrides": {
+                            "size": 1.0,
+                            "speed_multiplier": {"numerator":1,"denominator":1},
+                            "phase_offset_degrees": 0.0
+                        },
+                        "timing": {}
+                    }
+                }]
+            }]
+        }),
+    );
+
+    let preview = rig.preview(rig.request("cue_list", "cues"));
+
+    for dependency in [
+        key("dynamic", &dynamic_id.to_string()),
+        key("group", "front"),
+        key("preset", "1.1"),
+    ] {
+        assert!(
+            preview
+                .dependencies
+                .iter()
+                .any(|candidate| candidate.dependency == dependency),
+            "missing nested Dynamic dependency {dependency:?}"
+        );
+    }
+}
+
+#[test]
+fn dynamic_playback_includes_dynamic_scope_and_fallback_dependencies() {
+    let rig = TestRig::new();
+    let fixture_id = Uuid::new_v4();
+    let dynamic_id = Uuid::new_v4();
+    rig.source_object(
+        "group",
+        "front",
+        json!({"id":"front","name":"Front","fixtures":[]}),
+    );
+    rig.source_object(
+        "preset",
+        "1.1",
+        json!({"name":"Dim","family":"Intensity","number":1,"values":{},"group_values":{}}),
+    );
+    rig.source_object(
+        "dynamic",
+        &dynamic_id.to_string(),
+        dynamic_with_dependencies(dynamic_id, "front", "1.1"),
+    );
+    let fallback = dynamic_with_dependencies(Uuid::new_v4(), "front", "1.1");
+    rig.source_object(
+        "playback",
+        "1",
+        json!({
+            "number": 1,
+            "target": {
+                "type": "dynamic",
+                "assignment": {
+                    "dynamic": {
+                        "dynamic_id": dynamic_id,
+                        "last_known_pool_number": 7,
+                        "embedded_fallback": {"definition": fallback}
+                    },
+                    "target_scope": {
+                        "type": "frozen_targets",
+                        "targets": [fixture_id]
+                    }
+                }
+            }
+        }),
+    );
+
+    let preview = rig.preview(rig.request("playback", "1"));
+
+    for dependency in [
+        key("dynamic", &dynamic_id.to_string()),
+        key("group", "front"),
+        key("preset", "1.1"),
+    ] {
+        assert!(
+            preview
+                .dependencies
+                .iter()
+                .any(|candidate| candidate.dependency == dependency),
+            "missing Dynamic Playback dependency {dependency:?}"
+        );
+    }
+}
+
+#[test]
 fn semantic_identity_is_a_noop_unless_duplicate_is_explicit() {
     let rig = TestRig::new();
     let body = json!({"id":"same","nested":{"b":2,"a":1}});

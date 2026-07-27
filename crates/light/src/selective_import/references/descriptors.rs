@@ -32,70 +32,73 @@ pub(super) fn dynamic_descriptor(
     target: &FixtureIdentityCatalog,
 ) -> Result<ImportObjectDescriptor, String> {
     let mut descriptor = id_descriptor(object)?;
+    add_dynamic_definition_references(object.body(), "", source, target, &mut descriptor)?;
+    Ok(descriptor)
+}
+
+fn add_dynamic_definition_references(
+    body: &Value,
+    prefix: &str,
+    source: &FixtureIdentityCatalog,
+    target: &FixtureIdentityCatalog,
+    descriptor: &mut ImportObjectDescriptor,
+) -> Result<(), String> {
     add_optional_direct_reference(
-        object.body(),
-        "/target_binding/group_id",
+        body,
+        &format!("{prefix}/target_binding/group_id"),
         "group",
-        &mut descriptor,
+        descriptor,
     )?;
     add_fixture_array_at(
-        object.body(),
-        "/target_binding/targets",
-        "/target_binding/targets",
+        body,
+        &format!("{prefix}/target_binding/targets"),
+        &format!("{prefix}/target_binding/targets"),
         source,
         target,
-        &mut descriptor,
+        descriptor,
     )?;
 
-    if let Some(lanes) = object.body().pointer("/lanes").and_then(Value::as_array) {
+    if let Some(lanes) = body
+        .pointer(&format!("{prefix}/lanes"))
+        .and_then(Value::as_array)
+    {
         for (lane_index, lane) in lanes.iter().enumerate() {
             if let Some(points) = lane.pointer("/keyframes/points").and_then(Value::as_array) {
                 for point_index in 0..points.len() {
                     add_dynamic_scalar_source(
-                        object.body(),
-                        &format!("/lanes/{lane_index}/keyframes/points/{point_index}/source"),
+                        body,
+                        &format!(
+                            "{prefix}/lanes/{lane_index}/keyframes/points/{point_index}/source"
+                        ),
                         source,
                         target,
-                        &mut descriptor,
+                        descriptor,
                     )?;
                 }
             }
             for source_path in [
-                format!("/lanes/{lane_index}/max_min/minimum"),
-                format!("/lanes/{lane_index}/max_min/maximum"),
-                format!("/lanes/{lane_index}/middle_amplitude/middle"),
+                format!("{prefix}/lanes/{lane_index}/max_min/minimum"),
+                format!("{prefix}/lanes/{lane_index}/max_min/maximum"),
+                format!("{prefix}/lanes/{lane_index}/middle_amplitude/middle"),
             ] {
-                add_dynamic_scalar_source(
-                    object.body(),
-                    &source_path,
-                    source,
-                    target,
-                    &mut descriptor,
-                )?;
+                add_dynamic_scalar_source(body, &source_path, source, target, descriptor)?;
             }
         }
     }
-    if let Some(groups) = object
-        .body()
-        .pointer("/random_groups")
+    if let Some(groups) = body
+        .pointer(&format!("{prefix}/random_groups"))
         .and_then(Value::as_array)
     {
         for group_index in 0..groups.len() {
             for source_path in [
-                format!("/random_groups/{group_index}/low"),
-                format!("/random_groups/{group_index}/high"),
+                format!("{prefix}/random_groups/{group_index}/low"),
+                format!("{prefix}/random_groups/{group_index}/high"),
             ] {
-                add_dynamic_scalar_source(
-                    object.body(),
-                    &source_path,
-                    source,
-                    target,
-                    &mut descriptor,
-                )?;
+                add_dynamic_scalar_source(body, &source_path, source, target, descriptor)?;
             }
         }
     }
-    Ok(descriptor)
+    Ok(())
 }
 
 fn add_dynamic_scalar_source(
@@ -190,12 +193,46 @@ pub(super) fn cue_list_descriptor(
                 &mut descriptor,
             )?;
         }
+        for (change_index, change) in cue
+            .pointer("/dynamic_changes")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            let prefix = format!("/cues/{cue_index}/dynamic_changes/{change_index}");
+            add_fixture_value(
+                change,
+                "/fixture_id",
+                format!("{prefix}/fixture_id"),
+                source,
+                target,
+                &mut descriptor,
+            )?;
+            if change.pointer("/value/type").and_then(Value::as_str) == Some("dynamic_on") {
+                add_optional_direct_reference(
+                    object.body(),
+                    &format!("{prefix}/value/dynamic/dynamic_id"),
+                    "dynamic",
+                    &mut descriptor,
+                )?;
+                add_dynamic_definition_references(
+                    object.body(),
+                    &format!("{prefix}/value/dynamic/embedded_fallback/definition"),
+                    source,
+                    target,
+                    &mut descriptor,
+                )?;
+            }
+        }
     }
     Ok(descriptor)
 }
 
 pub(super) fn playback_descriptor(
     object: &PortableShowObject,
+    source: &FixtureIdentityCatalog,
+    target: &FixtureIdentityCatalog,
 ) -> Result<ImportObjectDescriptor, String> {
     let mut descriptor = ImportObjectDescriptor {
         identities: vec![primary_identity(
@@ -222,6 +259,35 @@ pub(super) fn playback_descriptor(
             "group",
             &mut descriptor,
         )?,
+        Some("dynamic") => {
+            add_optional_direct_reference(
+                object.body(),
+                "/target/assignment/dynamic/dynamic_id",
+                "dynamic",
+                &mut descriptor,
+            )?;
+            add_dynamic_definition_references(
+                object.body(),
+                "/target/assignment/dynamic/embedded_fallback/definition",
+                source,
+                target,
+                &mut descriptor,
+            )?;
+            add_optional_direct_reference(
+                object.body(),
+                "/target/assignment/target_scope/group_id",
+                "group",
+                &mut descriptor,
+            )?;
+            add_fixture_array_at(
+                object.body(),
+                "/target/assignment/target_scope/targets",
+                "/target/assignment/target_scope/targets",
+                source,
+                target,
+                &mut descriptor,
+            )?;
+        }
         _ => {}
     }
     Ok(descriptor)
