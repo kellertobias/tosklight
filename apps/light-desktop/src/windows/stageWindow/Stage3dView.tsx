@@ -31,6 +31,7 @@ export function Stage3dView({
 				showSelection={options.showSelection}
 				showFloorGrid={options.showFloorGrid}
 				showBeamGuides={options.showBeamGuides}
+				renderQuality={options.renderQuality}
 				environmentBrightness={options.environmentBrightness}
 				camera3d={camera3d}
 				onSelect={(fixtureId, additive) => {

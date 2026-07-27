@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { VisualizationSnapshot } from "../../api/types";
+import type { StageRenderQuality } from "../../types";
 import { profileMode, valuesByFixture } from "./attributeValues";
 import {
 	createFixtureRoot,
@@ -24,6 +25,7 @@ function buildStageFixture(item: Stage3dFixture, context: StageSceneContext) {
 				snapshot: context.snapshot,
 				projectedOwners: context.projectedOwners,
 				showBeamGuides: context.showBeamGuides,
+				renderQuality: context.renderQuality,
 				virtualHighlight: context.virtualHighlight.has(fixtureId),
 			})
 		: null;
@@ -42,6 +44,7 @@ function buildStageFixture(item: Stage3dFixture, context: StageSceneContext) {
 			),
 			selected,
 			context.showBeamGuides,
+			context.renderQuality,
 		);
 	}
 	return { root, instanceId };
@@ -83,6 +86,7 @@ function createSceneContext(
 	selected: Set<string>,
 	showBeamGuides: boolean,
 	virtualHighlight: Set<string>,
+	renderQuality: StageRenderQuality,
 ): StageSceneContext {
 	return {
 		snapshot,
@@ -93,7 +97,73 @@ function createSceneContext(
 		),
 		showBeamGuides,
 		virtualHighlight,
+		renderQuality,
 	};
+}
+
+function addGroundFootprints(
+	scene: THREE.Scene,
+	renderQuality: StageRenderQuality,
+) {
+	if (renderQuality !== "lines_only" && renderQuality !== "lines_and_beams")
+		return;
+	scene.updateMatrixWorld(true);
+	const beams: THREE.Object3D[] = [];
+	scene.traverse((object) => {
+		if (
+			object.userData.stageDirectionalBeam === true &&
+			object.userData.stageBeamActive === true
+		)
+			beams.push(object);
+	});
+	for (const beam of beams) {
+		const origin = beam.getWorldPosition(new THREE.Vector3());
+		const direction = new THREE.Vector3(0, -1, 0)
+			.applyQuaternion(beam.getWorldQuaternion(new THREE.Quaternion()))
+			.normalize();
+		if (direction.y >= -0.001) continue;
+		const distanceToGround = -origin.y / direction.y;
+		if (distanceToGround <= 0) continue;
+		const referenceRadius = Number(beam.userData.stageBeamRadius);
+		const referenceDistance = Number(beam.userData.stageBeamDistance);
+		if (
+			!Number.isFinite(referenceRadius) ||
+			!Number.isFinite(referenceDistance) ||
+			referenceDistance <= 0
+		)
+			continue;
+		const radius = (referenceRadius / referenceDistance) * distanceToGround;
+		const along = new THREE.Vector3(direction.x, 0, direction.z);
+		if (along.lengthSq() < 1e-8) along.set(0, 0, 1);
+		else along.normalize();
+		const across = new THREE.Vector3(-along.z, 0, along.x);
+		const center = origin.clone().addScaledVector(direction, distanceToGround);
+		center.y = 0.006;
+		const alongRadius = Math.min(
+			radius / Math.max(0.08, Math.abs(direction.y)),
+			radius * 12,
+		);
+		const points = Array.from({ length: 49 }, (_, index) => {
+			const angle = (index / 48) * Math.PI * 2;
+			return center
+				.clone()
+				.addScaledVector(along, Math.cos(angle) * alongRadius)
+				.addScaledVector(across, Math.sin(angle) * radius);
+		});
+		const footprint = new THREE.LineLoop(
+			new THREE.BufferGeometry().setFromPoints(points),
+			new THREE.LineBasicMaterial({
+				color: new THREE.Color(
+					String(beam.userData.stageBeamColor ?? "#ffffff"),
+				),
+				transparent: true,
+				opacity: 0.62,
+			}),
+		);
+		footprint.name = "beam-ground-footprint";
+		footprint.userData.stageBeamSource = beam.uuid;
+		scene.add(footprint);
+	}
 }
 
 export function buildStageScene(
@@ -104,6 +174,7 @@ export function buildStageScene(
 	showFloorGrid = true,
 	showBeamGuides = true,
 	virtualHighlight: Set<string> = new Set(),
+	renderQuality: StageRenderQuality = "lines_and_beams",
 ) {
 	const scene = createStageEnvironment(environmentBrightness, showFloorGrid);
 	const context = createSceneContext(
@@ -111,6 +182,7 @@ export function buildStageScene(
 		selected,
 		showBeamGuides,
 		virtualHighlight,
+		renderQuality,
 	);
 	const fixtureObjects = new Map<string, THREE.Object3D>();
 	for (const item of fixtures) {
@@ -118,6 +190,7 @@ export function buildStageScene(
 		scene.add(root);
 		fixtureObjects.set(instanceId, root);
 	}
+	addGroundFootprints(scene, renderQuality);
 	return { scene, fixtureObjects };
 }
 

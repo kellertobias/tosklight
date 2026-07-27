@@ -1,3 +1,5 @@
+import { Button } from "@tosklight/ui";
+import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
 import {
 	type PointerEvent as ReactPointerEvent,
 	useEffect,
@@ -5,18 +7,16 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type { WindowProps } from "./windowTypes";
-import { Button } from "@tosklight/ui";
 import { FixturePatchSetupContent } from "../components/setup/FixturePatchSetup";
-import { PatchFeatureBoundary } from "../features/patch/PatchFeatureBoundary";
 import { MediaServerSetup } from "../components/setup/MediaServerSetup";
-import { WindowHeader, WindowScrollArea } from "@tosklight/ui/window-kit";
-import { StageWindow } from "./StageWindow";
 import { usePatchPreviewHighlightDmx } from "../features/configuration/ConfigurationState";
 import { useHighlightActions } from "../features/highlight/HighlightState";
-import { useDesktopBridge } from "../platform/desktop";
 import { usePatch } from "../features/patch/PatchContext";
+import { PatchFeatureBoundary } from "../features/patch/PatchFeatureBoundary";
 import { useProgrammingSelectionView } from "../features/programmingInteraction/ProgrammingInteractionView";
+import { useDesktopBridge } from "../platform/desktop";
+import { StageWindow } from "./StageWindow";
+import type { WindowProps } from "./windowTypes";
 
 export function PatchWindow({ active = true }: WindowProps) {
 	const [tab, setTab] = useState<"fixtures" | "media">("fixtures");
@@ -55,7 +55,8 @@ function PatchWindowContent({
 	const selection = useProgrammingSelectionView(dmxPreview);
 	useEffect(() => {
 		if (highlightActions)
-			setPatchPreviewHighlight.current = highlightActions.setPatchPreviewHighlight;
+			setPatchPreviewHighlight.current =
+				highlightActions.setPatchPreviewHighlight;
 	}, [highlightActions]);
 	useEffect(() => {
 		void setPatchPreviewHighlight.current(
@@ -153,6 +154,7 @@ function PatchWindowContent({
 						stageView={tauri ? "3d" : "2d"}
 						showGroupShortcuts={false}
 						followPreload={false}
+						stageRenderQuality="lines_and_beams"
 						showSelection={false}
 						showFloorGrid
 						showBeamGuides

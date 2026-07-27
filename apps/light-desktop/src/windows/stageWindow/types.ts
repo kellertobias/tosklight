@@ -1,6 +1,6 @@
-import type { StagePosition3d } from "../../features/server/contracts";
 import type { PatchedFixture } from "../../api/types";
-import type { StageMode, StageView } from "../../types";
+import type { StagePosition3d } from "../../features/server/contracts";
+import type { StageMode, StageRenderQuality, StageView } from "../../types";
 import type { WindowProps } from "../windowTypes";
 
 export interface StageWindowProps extends WindowProps {
@@ -26,6 +26,7 @@ export interface StageOptionsModel {
 	showSelection: boolean;
 	showFloorGrid: boolean;
 	showBeamGuides: boolean;
+	renderQuality: StageRenderQuality;
 	environmentBrightness: number;
 }
 

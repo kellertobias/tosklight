@@ -33,6 +33,7 @@ export function reduceWorkspace(
 				stageShowSelection: action.showSelection ?? state.stageShowSelection,
 				stageShowFloorGrid: action.showFloorGrid ?? state.stageShowFloorGrid,
 				stageShowBeamGuides: action.showBeamGuides ?? state.stageShowBeamGuides,
+				stageRenderQuality: action.renderQuality ?? state.stageRenderQuality,
 				stageEnvironmentBrightness: clamp(
 					action.environmentBrightness ?? state.stageEnvironmentBrightness,
 					0,
@@ -114,15 +115,15 @@ export function reduceWorkspace(
 					kind === "help"
 						? "Help"
 						: kind === "virtual_playbacks"
-								? "Virtual Playbacks"
-								: kind === "file_manager"
-									? "File Manager"
-									: kind === "text_editor"
-										? "Text Editor"
-										: cueListWindowTitle(
-												kind[0].toUpperCase() + kind.slice(1),
-												kind,
-											),
+							? "Virtual Playbacks"
+							: kind === "file_manager"
+								? "File Manager"
+								: kind === "text_editor"
+									? "Text Editor"
+									: cueListWindowTitle(
+											kind[0].toUpperCase() + kind.slice(1),
+											kind,
+										),
 				...(kind === "virtual_playbacks"
 					? {
 							virtualPlaybackRows: 2,

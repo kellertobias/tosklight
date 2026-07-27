@@ -5,6 +5,7 @@ import type {
 	PatchedFixture,
 	VisualizationSnapshot,
 } from "../../api/types";
+import type { StageRenderQuality } from "../../types";
 import {
 	attributesForHead,
 	channelDefault,
@@ -28,6 +29,7 @@ export type ProfileGeometryOptions = {
 	snapshot: VisualizationSnapshot | null;
 	projectedOwners: Set<string>;
 	showBeamGuides: boolean;
+	renderQuality: StageRenderQuality;
 	virtualHighlight?: boolean;
 };
 
@@ -198,8 +200,10 @@ function emitterIntensity(
 	);
 	const owner = headOwnerId(options.fixture, options.mode, emitter.head_id);
 	if (options.projectedOwners.has(owner)) return resolved;
-	return (options.snapshot?.blackout ? 0 : resolved) *
-		(options.snapshot?.grand_master ?? 1);
+	return (
+		(options.snapshot?.blackout ? 0 : resolved) *
+		(options.snapshot?.grand_master ?? 1)
+	);
 }
 
 function mountEmitter(
@@ -220,6 +224,7 @@ function mountEmitter(
 		emitterIntensity(options, emitter, attributes),
 		resolvedColor(attributes.get("color"), attributes),
 		options.showBeamGuides,
+		options.renderQuality,
 	);
 	(nodes.get(emitter.node_id)?.anchor ?? root).add(beam);
 }
@@ -264,6 +269,7 @@ export function buildFixtureProfileGeometryPreview(mode: FixtureMode) {
 			snapshot: null,
 			projectedOwners: new Set(),
 			showBeamGuides: true,
+			renderQuality: "lines_and_beams",
 		}) ?? new THREE.Group()
 	);
 }

@@ -206,6 +206,7 @@ function ProductDemoSurface() {
 					stageView="3d"
 					showGroupShortcuts={false}
 					followPreload={false}
+					stageRenderQuality="lines_and_beams"
 					showSelection={false}
 					showFloorGrid={false}
 					showBeamGuides={state.builtIn === "patch"}

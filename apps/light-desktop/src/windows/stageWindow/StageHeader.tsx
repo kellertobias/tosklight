@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
 	FormLayout,
 	HorizontalFaderField,
@@ -6,6 +5,7 @@ import {
 	SwitchField,
 } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
+import { useState } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
 import type { StageOptionsModel } from "./types";
@@ -89,6 +89,28 @@ function StageSettings({
 										showBeamGuides: event.target.checked,
 									})
 								}
+							/>
+							<MultiValueToggleField
+								label="Render quality"
+								value={options.renderQuality}
+								onChange={(renderQuality) =>
+									dispatch({
+										type: "SET_STAGE_OPTIONS",
+										renderQuality,
+									})
+								}
+								options={[
+									{ value: "lines_only", label: "Lines only" },
+									{
+										value: "lines_and_beams",
+										label: "Lines + beams",
+									},
+									{ value: "beams", label: "Beams" },
+									{
+										value: "improved_beams",
+										label: "Improved beams",
+									},
+								]}
 							/>
 							<HorizontalFaderField
 								label="Environment brightness"

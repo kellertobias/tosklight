@@ -8,6 +8,7 @@ export function useStageOptions({
 	stageView,
 	followPreload: paneFollowPreload,
 	showBeamGuides: forcedShowBeamGuides,
+	stageRenderQuality: forcedRenderQuality,
 	showSelection: forcedShowSelection,
 	showFloorGrid: forcedShowFloorGrid,
 	environmentBrightness: forcedEnvironmentBrightness,
@@ -36,6 +37,7 @@ export function useStageOptions({
 		showSelection: forcedShowSelection ?? state.stageShowSelection,
 		showFloorGrid: forcedShowFloorGrid ?? state.stageShowFloorGrid,
 		showBeamGuides: forcedShowBeamGuides ?? state.stageShowBeamGuides,
+		renderQuality: forcedRenderQuality ?? state.stageRenderQuality,
 		environmentBrightness:
 			forcedEnvironmentBrightness ?? state.stageEnvironmentBrightness,
 	};

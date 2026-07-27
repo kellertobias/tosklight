@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { VisualizationSnapshot } from "../api/types";
 import { useApp } from "../state/AppContext";
+import type { StageRenderQuality } from "../types";
 import {
 	type StageCamera,
 	useStageCamera,
@@ -22,6 +23,7 @@ interface Props {
 	showSelection: boolean;
 	showFloorGrid: boolean;
 	showBeamGuides: boolean;
+	renderQuality: StageRenderQuality;
 	environmentBrightness: number;
 	camera3d?: StageCamera;
 	onSelect: (fixtureId: string, additive: boolean) => void;
@@ -35,6 +37,7 @@ export function Stage3dCanvas({
 	showSelection,
 	showFloorGrid,
 	showBeamGuides,
+	renderQuality,
 	environmentBrightness,
 	camera3d,
 	onSelect,
@@ -54,6 +57,7 @@ export function Stage3dCanvas({
 		showSelection,
 		showFloorGrid,
 		showBeamGuides,
+		renderQuality,
 		environmentBrightness,
 		callbacks: { onSelect },
 	});
@@ -81,6 +85,7 @@ export function Stage3dCanvas({
 			data-environment-brightness={environmentBrightness}
 			data-floor-grid={showFloorGrid ? "on" : "off"}
 			data-beam-guides={showBeamGuides ? "on" : "off"}
+			data-render-quality={renderQuality}
 			ref={hostRef}
 		/>
 	);

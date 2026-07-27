@@ -1,10 +1,10 @@
 import { ServerRuntime } from "./api/ServerRuntime";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
+import { ConnectionState } from "./components/shell/ConnectionState";
+import { DeskLoadingOverlay } from "./components/shell/DeskLoadingOverlay";
 import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 import { AppProvider } from "./state/AppContext";
 import { StageWindow } from "./windows/StageWindow";
-import { ConnectionState } from "./components/shell/ConnectionState";
-import { DeskLoadingOverlay } from "./components/shell/DeskLoadingOverlay";
 
 /**
  * Dedicated view-only 3D stage window opened from the Show Patch (long-press "Preview Stage").
@@ -22,6 +22,7 @@ export function StageViewApp() {
 							stageView="3d"
 							showGroupShortcuts={false}
 							followPreload={false}
+							stageRenderQuality="lines_and_beams"
 							showSelection
 							showFloorGrid
 							showBeamGuides

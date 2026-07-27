@@ -8,6 +8,17 @@ import {
 	normalizeFixtureSheetIncludedHeads,
 } from "../reducerHelpers";
 
+function normalizeStageRenderQuality(
+	value: unknown,
+): AppState["stageRenderQuality"] {
+	return value === "lines_only" ||
+		value === "lines_and_beams" ||
+		value === "beams" ||
+		value === "improved_beams"
+		? value
+		: "lines_and_beams";
+}
+
 export function nextDesktopId(desks: readonly { id: string }[]): string {
 	let suffix = desks.length + 1;
 	while (desks.some((desk) => desk.id === `desk-${suffix}`)) suffix += 1;
@@ -48,6 +59,9 @@ export function reduceHydration(
 					action.windowSettings?.stageMode === "navigate"
 						? action.windowSettings.stageMode
 						: state.stageMode,
+				stageRenderQuality: normalizeStageRenderQuality(
+					action.windowSettings?.stageRenderQuality,
+				),
 				builtIn:
 					action.windowSettings?.builtIn == null
 						? (action.windowSettings?.builtIn ?? state.builtIn)
@@ -66,30 +80,37 @@ export function reduceHydration(
 					panes: desk.panes
 						.filter((pane) => !isRetiredDevelopmentWindow(pane.kind))
 						.map((pane) => {
-						const kind = cueListWindowKind(pane.kind);
-						const migrated = {
-							...pane,
-							kind,
-							title: cueListWindowTitle(pane.title, kind),
-						};
-						if (pane.kind !== "presets") return migrated;
-						const legacyDefault =
-							pane.title === "All Presets" ||
-							(pane.id === "presets" &&
-								pane.title === "Color & Position Presets");
-						return {
-							...migrated,
-							title: legacyDefault ? "Mixed Presets" : pane.title,
-							presetFamily: legacyDefault
-								? "Mixed"
-								: normalizePresetFamily(
-										pane.presetFamily,
-										normalizePresetFamily(
-											action.windowSettings?.presetFamily,
-											state.presetFamily,
+							const kind = cueListWindowKind(pane.kind);
+							const migrated = {
+								...pane,
+								kind,
+								title: cueListWindowTitle(pane.title, kind),
+								...(kind === "stage"
+									? {
+											stageRenderQuality: normalizeStageRenderQuality(
+												pane.stageRenderQuality,
+											),
+										}
+									: {}),
+							};
+							if (pane.kind !== "presets") return migrated;
+							const legacyDefault =
+								pane.title === "All Presets" ||
+								(pane.id === "presets" &&
+									pane.title === "Color & Position Presets");
+							return {
+								...migrated,
+								title: legacyDefault ? "Mixed Presets" : pane.title,
+								presetFamily: legacyDefault
+									? "Mixed"
+									: normalizePresetFamily(
+											pane.presetFamily,
+											normalizePresetFamily(
+												action.windowSettings?.presetFamily,
+												state.presetFamily,
+											),
 										),
-									),
-						};
+							};
 						}),
 				})),
 				activeDeskId: action.desks.some(

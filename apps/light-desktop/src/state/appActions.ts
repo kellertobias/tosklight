@@ -27,8 +27,12 @@ export type Action =
 	| {
 			type: "SET_PANE_STAGE_OPTION";
 			id: string;
-			option: "stageView" | "followPreload" | "showBeamGuides";
-			value: AppState["stageView"] | boolean;
+			option:
+				| "stageView"
+				| "followPreload"
+				| "showBeamGuides"
+				| "stageRenderQuality";
+			value: AppState["stageView"] | AppState["stageRenderQuality"] | boolean;
 	  }
 	| {
 			type: "SET_PANE_PRESET_FAMILY";
@@ -87,6 +91,7 @@ export type Action =
 			showSelection?: boolean;
 			showFloorGrid?: boolean;
 			showBeamGuides?: boolean;
+			renderQuality?: AppState["stageRenderQuality"];
 			environmentBrightness?: number;
 	  }
 	| { type: "SET_DMX_DOT_SIZE"; value: AppState["dmxDotSize"] }

@@ -11,6 +11,7 @@ import type * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { VisualizationSnapshot } from "../../api/types";
 import { frontendPerformanceDiagnostics } from "../../features/frontendWarmup/diagnostics";
+import type { StageRenderQuality } from "../../types";
 import {
 	buildStageScene,
 	disposeScene,
@@ -131,6 +132,7 @@ export function useStageScene({
 	showSelection,
 	showFloorGrid,
 	showBeamGuides,
+	renderQuality,
 	environmentBrightness,
 	callbacks,
 }: {
@@ -141,6 +143,7 @@ export function useStageScene({
 	showSelection: boolean;
 	showFloorGrid: boolean;
 	showBeamGuides: boolean;
+	renderQuality: StageRenderQuality;
 	environmentBrightness: number;
 	callbacks: Stage3dCallbacks;
 }): StageSceneController {
@@ -167,6 +170,7 @@ export function useStageScene({
 			showFloorGrid,
 			showBeamGuides,
 			new Set(virtualHighlight),
+			renderQuality,
 		);
 		let objectCount = 0;
 		let geometryCount = 0;
@@ -226,6 +230,7 @@ export function useStageScene({
 		showSelection,
 		showFloorGrid,
 		showBeamGuides,
+		renderQuality,
 		environmentBrightness,
 	]);
 

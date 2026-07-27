@@ -33,6 +33,11 @@ export type DockMode = "desks" | "builtins";
 export type ValueSource = "programmer" | "playback" | "default";
 export type StageMode = "select" | "navigate";
 export type StageView = "2d" | "3d";
+export type StageRenderQuality =
+	| "lines_only"
+	| "lines_and_beams"
+	| "beams"
+	| "improved_beams";
 export type DmxDotSize = "small" | "large";
 export type TextEditorMode = "plain" | "markdown" | "split";
 
@@ -61,6 +66,7 @@ export interface PaneModel extends GridRect {
 	stageView?: StageView;
 	followPreload?: boolean;
 	showBeamGuides?: boolean;
+	stageRenderQuality?: StageRenderQuality;
 	presetFamily?: AppState["presetFamily"];
 	presetPoolColors?: boolean;
 	virtualPlaybackRows?: number;
@@ -187,6 +193,7 @@ export interface AppState {
 	stageShowSelection: boolean;
 	stageShowFloorGrid: boolean;
 	stageShowBeamGuides: boolean;
+	stageRenderQuality: StageRenderQuality;
 	stageEnvironmentBrightness: number;
 	dmxDotSize: DmxDotSize;
 	fixtureSheetOrder: FixtureSheetOrder;
@@ -236,6 +243,7 @@ export interface WindowSettings {
 	stageShowSelection: boolean;
 	stageShowFloorGrid: boolean;
 	stageShowBeamGuides: boolean;
+	stageRenderQuality: StageRenderQuality;
 	stageEnvironmentBrightness: number;
 	dmxDotSize: DmxDotSize;
 	fixtureSheetOrder: FixtureSheetOrder;

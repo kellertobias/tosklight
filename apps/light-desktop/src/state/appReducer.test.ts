@@ -248,12 +248,14 @@ describe("appReducer Stage and Development pane settings", () => {
 			showSelection: false,
 			showFloorGrid: false,
 			showBeamGuides: false,
+			renderQuality: "beams",
 			environmentBrightness: 3,
 		});
 		expect(hidden.stageGroupsVisible).toBe(false);
 		expect(hidden.stageShowSelection).toBe(false);
 		expect(hidden.stageShowFloorGrid).toBe(false);
 		expect(hidden.stageShowBeamGuides).toBe(false);
+		expect(hidden.stageRenderQuality).toBe("beams");
 		expect(hidden.stageEnvironmentBrightness).toBe(2);
 		expect(
 			appReducer(hidden, {
@@ -276,6 +278,21 @@ describe("appReducer Stage and Development pane settings", () => {
 				?.panes.find((pane) => pane.id === "stage")?.showBeamGuides,
 		).toBe(false);
 		expect(updated.stageShowBeamGuides).toBe(true);
+	});
+
+	it("stores Render quality independently on each Stage pane", () => {
+		const updated = appReducer(initialState, {
+			type: "SET_PANE_STAGE_OPTION",
+			id: "stage",
+			option: "stageRenderQuality",
+			value: "lines_only",
+		});
+		expect(
+			updated.desks
+				.find((desk) => desk.id === updated.activeDeskId)
+				?.panes.find((pane) => pane.id === "stage")?.stageRenderQuality,
+		).toBe("lines_only");
+		expect(updated.stageRenderQuality).toBe("lines_and_beams");
 	});
 
 	it("drops retired Development panes from persisted layouts", () => {
@@ -584,6 +601,7 @@ describe("appReducer built-in window settings hydration", () => {
 		expect(legacy.stageView).toBe(initialState.stageView);
 		expect(legacy.stageShowFloorGrid).toBe(true);
 		expect(legacy.stageShowBeamGuides).toBe(true);
+		expect(legacy.stageRenderQuality).toBe("lines_and_beams");
 		expect(legacy.fixtureSheetColumns).toEqual(
 			initialState.fixtureSheetColumns,
 		);
@@ -597,6 +615,16 @@ describe("appReducer built-in window settings hydration", () => {
 			windowSettings: { fixtureSheetIncludedHeads: "no-master-heads" },
 		});
 		expect(current.fixtureSheetIncludedHeads).toBe("no-master-heads");
+
+		const futureQuality = appReducer(initialState, {
+			type: "HYDRATE_LAYOUT",
+			desks: initialState.desks,
+			activeDeskId: initialState.activeDeskId,
+			windowSettings: {
+				stageRenderQuality: "future-quality" as never,
+			},
+		});
+		expect(futureQuality.stageRenderQuality).toBe("lines_and_beams");
 
 		const oldPatchDetail = appReducer(initialState, {
 			type: "HYDRATE_LAYOUT",

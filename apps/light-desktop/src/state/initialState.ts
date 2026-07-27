@@ -56,6 +56,7 @@ export const initialState: AppState = {
 	stageShowSelection: true,
 	stageShowFloorGrid: true,
 	stageShowBeamGuides: true,
+	stageRenderQuality: "lines_and_beams",
 	stageEnvironmentBrightness: 1,
 	dmxDotSize:
 		typeof globalThis.matchMedia === "function" &&

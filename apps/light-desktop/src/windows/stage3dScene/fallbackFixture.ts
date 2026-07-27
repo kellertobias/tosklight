@@ -4,6 +4,7 @@ import type {
 	PatchedFixture,
 	VisualizationSnapshot,
 } from "../../api/types";
+import type { StageRenderQuality } from "../../types";
 import {
 	createBuiltInFixtureModel,
 	movingLightTiltRadians,
@@ -71,21 +72,15 @@ export function fallbackRenderState(
 	snapshot: VisualizationSnapshot | null,
 	virtualHighlight: boolean,
 ): FallbackRenderState {
-	const pan = (fixtureParameter(item, attributes, "pan", 0.5) - 0.5) *
-		Math.PI *
-		2;
+	const pan =
+		(fixtureParameter(item, attributes, "pan", 0.5) - 0.5) * Math.PI * 2;
 	const tilt = movingLightTiltRadians(
 		fixtureParameter(item, attributes, "tilt", 0.5),
 	);
 	const zoom = fixtureParameter(item, attributes, "zoom", 0.35);
 	const distance = 7;
 	return {
-		intensity: fallbackIntensity(
-			item,
-			attributes,
-			snapshot,
-			virtualHighlight,
-		),
+		intensity: fallbackIntensity(item, attributes, snapshot, virtualHighlight),
 		pan,
 		tilt,
 		focus: fixtureParameter(item, attributes, "focus", 0.65),
@@ -234,6 +229,7 @@ function addFallbackBeamVisuals(
 	attributes: FixtureAttributeValues,
 	state: FallbackRenderState,
 	showBeamGuides: boolean,
+	renderQuality: StageRenderQuality,
 	beamAtRoot: boolean,
 ) {
 	const cone = new THREE.ConeGeometry(
@@ -246,12 +242,24 @@ function addFallbackBeamVisuals(
 	cone.translate(0, -state.distance / 2, 0);
 	if (beamAtRoot) addBeamSource(beam, state);
 	const active = state.intensity > 0.001;
-	const showGuide =
-		active || (fallbackEmitterIsDirectional(fixture) && showBeamGuides);
-	beam.add(createFallbackVolume(cone, state));
-	if (showGuide) beam.add(createBeamOutline(cone, state));
-	if (showGuide) beam.add(createBeamCenter(state));
-	addGoboSpokes(beam, fixture, attributes, state);
+	const directional = fallbackEmitterIsDirectional(fixture);
+	beam.userData.stageDirectionalBeam = directional;
+	beam.userData.stageBeamActive = active;
+	beam.userData.stageBeamColor = `#${state.color.getHexString()}`;
+	beam.userData.stageBeamRadius = state.radius;
+	beam.userData.stageBeamDistance = state.distance;
+	if (!directional) return;
+	const drawBeams = active && renderQuality !== "lines_only";
+	const drawLines =
+		active &&
+		(renderQuality === "lines_only" || renderQuality === "lines_and_beams");
+	if (drawBeams) beam.add(createFallbackVolume(cone, state));
+	if (drawLines) {
+		beam.add(createBeamOutline(cone, state));
+		beam.add(createBeamCenter(state));
+	}
+	if (!active && showBeamGuides) beam.add(createBeamCenter(state));
+	if (drawBeams) addGoboSpokes(beam, fixture, attributes, state);
 }
 
 function orientRootBeam(beam: THREE.Group, state: FallbackRenderState) {
@@ -294,9 +302,11 @@ export function mountFallbackFixture(
 	state: FallbackRenderState,
 	selected: boolean,
 	showBeamGuides: boolean,
+	renderQuality: StageRenderQuality,
 ) {
 	const beamParent = fallbackBeamParent(root, item, state, selected);
 	const beam = new THREE.Group();
+	beam.name = "fallback-beam";
 	const beamAtRoot = beamParent === root;
 	if (beamAtRoot) orientRootBeam(beam, state);
 	addFallbackBeamVisuals(
@@ -305,6 +315,7 @@ export function mountFallbackFixture(
 		attributes,
 		state,
 		showBeamGuides,
+		renderQuality,
 		beamAtRoot,
 	);
 	beamParent.add(beam);

@@ -320,6 +320,81 @@ describe("geometry emitter source layouts", () => {
 });
 
 describe("emitter direction and Patch selection", () => {
+	it("uses the exact four render-quality representations for an active directional emitter", () => {
+		const profile = blankFixtureProfile();
+		const mode = profile.modes[0];
+		mode.channels = [
+			{ ...blankChannel(mode), attribute: "intensity", default_raw: 255 },
+		];
+		mode.geometry = geometryTemplate("fixed", [mode.heads[0].id]);
+		const fixture = {
+			fixture_id: profile.id,
+			universe: 1,
+			address: 1,
+			definition: fixtureDefinitionFromProfileMode(profile, mode),
+			logical_heads: [],
+		} as PatchedFixture;
+		const stageFixture = [
+			{
+				fixture,
+				index: 0,
+				position: {
+					x: 0,
+					y: 0,
+					z: 3,
+					rotationX: 0,
+					rotationY: 0,
+					rotationZ: 0,
+				},
+			},
+		];
+		const sceneFor = (
+			quality: "lines_only" | "lines_and_beams" | "beams" | "improved_beams",
+		) =>
+			buildStageScene(
+				stageFixture,
+				null,
+				new Set(),
+				1,
+				true,
+				true,
+				new Set(),
+				quality,
+			).scene;
+
+		const lines = sceneFor("lines_only");
+		expect(lines.getObjectByName("beam-centerline")).toBeTruthy();
+		expect(lines.getObjectByName("beam-ground-footprint")).toBeTruthy();
+		expect(lines.getObjectByName("beam-volume")).toBeUndefined();
+		const combined = sceneFor("lines_and_beams");
+		expect(combined.getObjectByName("beam-centerline")).toBeTruthy();
+		expect(combined.getObjectByName("beam-ground-footprint")).toBeTruthy();
+		expect(combined.getObjectByName("beam-volume")).toBeTruthy();
+		const beams = sceneFor("beams");
+		expect(beams.getObjectByName("beam-centerline")).toBeUndefined();
+		expect(beams.getObjectByName("beam-ground-footprint")).toBeUndefined();
+		expect(beams.getObjectByName("beam-volume")).toBeTruthy();
+		const improved = sceneFor("improved_beams");
+		expect(improved.getObjectByName("beam-centerline")).toBeUndefined();
+		expect(improved.getObjectByName("beam-improved-volume")).toBeTruthy();
+		expect(
+			(improved.getObjectByName("beam-improved-volume") as THREE.Mesh).material,
+		).toBeInstanceOf(THREE.ShaderMaterial);
+
+		const withoutFloor = buildStageScene(
+			stageFixture,
+			null,
+			new Set(),
+			1,
+			false,
+			true,
+			new Set(),
+			"lines_only",
+		).scene;
+		expect(withoutFloor.getObjectByName("stage-floor")).toBeUndefined();
+		expect(withoutFloor.getObjectByName("beam-ground-footprint")).toBeTruthy();
+	});
+
 	it("uses emitter direction metadata and keeps an inactive geometry source readable", () => {
 		const profile = blankFixtureProfile();
 		const mode = profile.modes[0];
@@ -697,12 +772,16 @@ describe("built-in fixture family mapping and motion", () => {
 			0.8,
 			movingLightTiltRadians(0.75),
 		);
-		const base = moved.object.getObjectByName("fixed-square-base") as THREE.Mesh;
+		const base = moved.object.getObjectByName(
+			"fixed-square-base",
+		) as THREE.Mesh;
 		const yoke = moved.object.getObjectByName("centered-rotating-yoke")!;
 		const head = moved.object.getObjectByName("moving-head-body")!;
 		const lens = moved.object.getObjectByName("light-emitting-surface")!;
 		expect(lens.userData.fixturePart).toBe("moving-front-lens");
-		const size = new THREE.Box3().setFromObject(base).getSize(new THREE.Vector3());
+		const size = new THREE.Box3()
+			.setFromObject(base)
+			.getSize(new THREE.Vector3());
 		expect(base.geometry).toBeInstanceOf(THREE.BoxGeometry);
 		expect(size.x).toBeCloseTo(size.z);
 		expect(base.parent).toBe(moved.object);

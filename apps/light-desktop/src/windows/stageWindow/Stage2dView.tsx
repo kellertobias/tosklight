@@ -1,16 +1,15 @@
-import type { CSSProperties } from "react";
 import { Button } from "@tosklight/ui";
-import { useApp } from "../../state/AppContext";
+import type { CSSProperties } from "react";
 import type {
 	StageFixturePresentation,
 	StageLayoutModel,
 	StageOptionsModel,
 } from "./types";
-import type { StageSelectionModel } from "./useStageSelection";
 import {
 	useStageCanvasGestures,
 	useStageFixtureGestures,
 } from "./useStage2dGestures";
+import type { StageSelectionModel } from "./useStageSelection";
 
 const symbols = ["◉", "◈", "◎", "◐", "◇", "◍"];
 
@@ -79,7 +78,6 @@ export function Stage2dView({
 	options: StageOptionsModel;
 	selection: StageSelectionModel;
 }) {
-	const { state } = useApp();
 	const orderedFixtureIds = fixtures
 		.map((fixture) => fixture.fixtureId)
 		.filter(Boolean);
@@ -122,7 +120,7 @@ export function Stage2dView({
 							}
 						}
 						selected={
-							state.stageShowSelection &&
+							options.showSelection &&
 							selection.fixtureIdSet.has(fixture.fixtureId)
 						}
 						interactions={fixtureInteractions}
