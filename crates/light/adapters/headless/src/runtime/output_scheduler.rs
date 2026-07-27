@@ -3,6 +3,7 @@
 use super::capability_resources::{
     ActiveShowCoordinator, ActiveShowProjection, OutputControlCapability, PlaybackRenderCapability,
 };
+use super::visualization_frame::VisualizationFrameHub;
 use super::{AppState, OutputControl, PersistedOutputRuntime, playback_service};
 use light_application::{
     PlaybackOperation, PlaybackShowScope, PlaybackUnitOfWork, automatic_playback_events,
@@ -45,6 +46,7 @@ pub(super) struct Config {
     pub dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
     pub speed_groups: Arc<Mutex<[light_control::speed::SpeedGroupController; 5]>>,
     pub dynamic_auto_offs: Arc<Mutex<Vec<u16>>>,
+    pub visualization_frames: Arc<VisualizationFrameHub>,
 }
 
 pub(super) struct OutputScheduler {
@@ -76,6 +78,7 @@ struct Runtime {
     pub(super) speed_groups: Arc<Mutex<[light_control::speed::SpeedGroupController; 5]>>,
     pub(super) rate: Arc<AtomicU16>,
     pub(super) dynamic_auto_offs: Arc<Mutex<Vec<u16>>>,
+    pub(super) visualization_frames: Arc<VisualizationFrameHub>,
 }
 
 pub(super) async fn start(config: Config) -> anyhow::Result<OutputScheduler> {
@@ -181,7 +184,13 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         )
         .map_err(io::Error::other)?
     };
-    let frames = output_frames(&mut runtime.control.lock(), rendered.universes);
+    let frames = {
+        let mut control = runtime.control.lock();
+        if !control.hold {
+            runtime.visualization_frames.publish(&rendered, options);
+        }
+        output_frames(&mut control, rendered.universes)
+    };
     runtime
         .output
         .send_routes(
@@ -208,7 +217,7 @@ pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
             )
             .map_err(io::Error::other)?
     };
-    let frames = state.output.render_frames(rendered.universes);
+    let frames = state.output.render_frames_and_publish(&rendered);
     state
         .output
         .send_network_routes(&rendered.routes, &frames, &rendered.patched_slots)
@@ -1586,6 +1595,7 @@ impl SharedResources {
             speed_groups: Arc::clone(&config.speed_groups),
             rate: Arc::clone(&config.rate),
             dynamic_auto_offs: Arc::clone(&config.dynamic_auto_offs),
+            visualization_frames: Arc::clone(&config.visualization_frames),
         }
     }
 

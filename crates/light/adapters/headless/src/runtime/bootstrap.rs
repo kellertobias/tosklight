@@ -68,6 +68,7 @@ struct RuntimeResources {
     pub(super) activation: ActiveShowCoordinator,
     pub(super) dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
     pub(super) dynamic_auto_offs: Arc<Mutex<Vec<u16>>>,
+    pub(super) visualization_frames: Arc<super::visualization_frame::VisualizationFrameHub>,
 }
 
 impl RuntimeResources {
@@ -92,6 +93,8 @@ impl RuntimeResources {
         let activation = ActiveShowCoordinator::new();
         let dynamics = Arc::new(Mutex::new(light_dynamics::DynamicRuntime::default()));
         let dynamic_auto_offs = Arc::new(Mutex::new(Vec::new()));
+        let visualization_frames =
+            Arc::new(super::visualization_frame::VisualizationFrameHub::default());
         dynamics
             .lock()
             .install_definitions(startup.engine.snapshot().dynamics.iter().cloned())
@@ -133,6 +136,7 @@ impl RuntimeResources {
             dynamics: Arc::clone(&dynamics),
             speed_groups: Arc::clone(&startup.speed_groups),
             dynamic_auto_offs: Arc::clone(&dynamic_auto_offs),
+            visualization_frames: Arc::clone(&visualization_frames),
             test_bench: startup.persistent.test_bench,
         })
         .await?;
@@ -151,6 +155,7 @@ impl RuntimeResources {
             activation,
             dynamics,
             dynamic_auto_offs,
+            visualization_frames,
         })
     }
 }
@@ -351,6 +356,7 @@ fn build_app_state(
             startup.speed_groups,
             Arc::clone(&resources.dynamics),
             Arc::clone(&resources.dynamic_auto_offs),
+            Arc::clone(&resources.visualization_frames),
         ),
         active_show: ActiveShowResource::new(
             resources.activation.clone(),

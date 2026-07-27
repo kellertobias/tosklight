@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use light_core::Universe;
 
@@ -128,6 +128,7 @@ impl Engine {
         }
         Ok(RenderResult {
             universes,
+            resolved_values: Arc::new(resolved.values),
             patched_slots,
             revision: snapshot.revision,
             automatic_playback_transitions: resolved.automatic_playback_transitions,

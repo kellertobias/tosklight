@@ -174,6 +174,10 @@ impl Default for RenderOptions {
 #[derive(Clone, Debug)]
 pub struct RenderResult {
     pub universes: HashMap<Universe, DmxFrame>,
+    /// The authoritative semantic values used to produce `universes`. Keeping this immutable
+    /// snapshot with the render result lets observational consumers follow output without
+    /// resolving the engine a second time.
+    pub resolved_values: Arc<HashMap<(FixtureId, AttributeKey), AttributeValue>>,
     /// Highest patched slot for each logical universe. This is kept separately from values so a
     /// patched channel whose default is zero still extends the network payload.
     pub patched_slots: HashMap<Universe, u16>,

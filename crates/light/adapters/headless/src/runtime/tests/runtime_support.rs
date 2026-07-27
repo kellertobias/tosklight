@@ -73,6 +73,7 @@ fn test_state_with_programmers(
                 }))),
                 Arc::new(Mutex::new(light_dynamics::DynamicRuntime::default())),
                 Arc::new(Mutex::new(Vec::new())),
+                Arc::new(crate::runtime::visualization_frame::VisualizationFrameHub::default()),
             ),
             active_show: ActiveShowResource::new(
                 ActiveShowCoordinator::new(),

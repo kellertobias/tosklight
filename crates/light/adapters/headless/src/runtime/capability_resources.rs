@@ -2016,6 +2016,7 @@ pub(super) struct OutputResource {
     speed_groups: Arc<Mutex<[SpeedGroupController; 5]>>,
     dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
     dynamic_auto_offs: Arc<Mutex<Vec<u16>>>,
+    visualization_frames: Arc<super::visualization_frame::VisualizationFrameHub>,
     sound_capture_owners: Arc<Mutex<[Option<SoundCaptureOwner>; 5]>>,
     #[cfg(test)]
     runtime_persistence_attempts: Arc<AtomicU64>,
@@ -2108,6 +2109,7 @@ impl OutputResource {
         speed_groups: Arc<Mutex<[SpeedGroupController; 5]>>,
         dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
         dynamic_auto_offs: Arc<Mutex<Vec<u16>>>,
+        visualization_frames: Arc<super::visualization_frame::VisualizationFrameHub>,
     ) -> Self {
         Self {
             runtime_service,
@@ -2124,6 +2126,7 @@ impl OutputResource {
             speed_groups,
             dynamics,
             dynamic_auto_offs,
+            visualization_frames,
             sound_capture_owners: Arc::new(Mutex::new([None; 5])),
             #[cfg(test)]
             runtime_persistence_attempts: Arc::new(AtomicU64::new(0)),
@@ -2141,6 +2144,12 @@ impl OutputResource {
             .lock()
             .expect("output health mutex poisoned")
             .clone()
+    }
+
+    pub(super) fn latest_visualization_frame(
+        &self,
+    ) -> Option<Arc<super::visualization_frame::PublishedVisualizationFrame>> {
+        self.visualization_frames.latest()
     }
 
     pub(super) fn snapshot(&self) -> Arc<EngineSnapshot> {
@@ -2799,21 +2808,23 @@ impl OutputResource {
         self.sequences.lock().await.clear();
     }
 
-    pub(super) fn render_frames(
+    pub(super) fn render_frames_and_publish(
         &self,
-        universes: HashMap<light_core::Universe, light_output::DmxFrame>,
+        rendered: &light_engine::RenderResult,
     ) -> HashMap<light_core::Universe, light_output::DmxFrame> {
         let mut control = self.control.lock();
         if control.hold {
             return control.last_frames.clone();
         }
-        let mut frames = universes;
+        let mut frames = rendered.universes.clone();
         for (&(universe, address), &value) in &control.raw_overrides {
             if let Some(frame) = frames.get_mut(&universe) {
                 frame[usize::from(address - 1)] = value;
             }
         }
         control.last_frames = frames.clone();
+        self.visualization_frames
+            .publish(rendered, control.render_options());
         frames
     }
 
@@ -4587,6 +4598,7 @@ mod tests {
             }))),
             Arc::new(Mutex::new(light_dynamics::DynamicRuntime::default())),
             Arc::new(Mutex::new(Vec::new())),
+            Arc::new(super::visualization_frame::VisualizationFrameHub::default()),
         );
 
         output.apply_runtime_control(Some(0.5), Some(true)).unwrap();

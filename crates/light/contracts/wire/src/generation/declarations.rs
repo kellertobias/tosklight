@@ -35,6 +35,7 @@ use crate::v2::show_objects::*;
 use crate::v2::speed_group::*;
 use crate::v2::stage_layout::*;
 use crate::v2::virtual_playback_zones::*;
+use crate::v2::visualization::*;
 
 pub(super) fn all(config: &Config) -> Vec<String> {
     let mut declarations = command_line(config);
@@ -58,11 +59,22 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(runtime(config));
     declarations.extend(screen_configuration(config));
     declarations.extend(virtual_playback_zones(config));
+    declarations.extend(visualization(config));
     declarations.extend(selective_import(config));
     declarations.extend(show_library(config));
     declarations.extend(interaction(config));
     declarations.extend(live_actions(config));
     declarations
+}
+
+fn visualization(config: &Config) -> Vec<String> {
+    vec![
+        VisualizationLane::decl(config),
+        VisualizationClientMessage::decl(config),
+        VisualizationValue::decl(config),
+        VisualizationLaneSnapshot::decl(config),
+        VisualizationServerMessage::decl(config),
+    ]
 }
 
 fn dynamics(config: &Config) -> Vec<String> {

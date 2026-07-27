@@ -60,7 +60,7 @@ pub(super) async fn advance_test_clock(
             )
             .map_err(|error| ApiError::internal(error.to_string()))?
     };
-    let frames = state.output.render_frames(rendered.universes);
+    let frames = state.output.render_frames_and_publish(&rendered);
     let snapshot = state.output.snapshot();
     let packets = state
         .output
