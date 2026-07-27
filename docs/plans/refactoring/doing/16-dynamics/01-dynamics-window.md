@@ -280,3 +280,12 @@ The Programmer task row now owns the lane selector at its right edge. Encoder
 page position belongs in the active task label, using `Curves (1/2)` only when
 the task has more than one page; no `1/1` label is shown. This remains pending
 visual acceptance.
+
+### Review iteration 4 — lane selection and attribute flow, awaiting review
+
+Lane rows are now the selection surface: click selects one lane and Shift-click
+(including the desk Shift latch) adds or removes lanes from the multi-edit set.
+The redundant checkbox is removed. Each lane has one regular dropdown containing
+only **Change attribute** and **Delete lane**. Change attribute opens the standard
+desk modal and applies the selected continuous scalar attribute only after
+confirmation.

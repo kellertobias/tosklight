@@ -1,6 +1,5 @@
 import {
 	Button,
-	CheckboxField,
 	ColorPickerField,
 	FormLayout,
 	IconPickerField,
@@ -682,6 +681,7 @@ export function DynamicEditor({
 							dynamic={dynamic}
 							lane={lane}
 							selectedLanes={selectedLanes}
+							shiftArmed={appState.shiftArmed}
 							attributes={attributes}
 							presets={presets}
 							onSelect={selectLane}
@@ -709,6 +709,7 @@ function CurvesView({
 	dynamic,
 	lane,
 	selectedLanes,
+	shiftArmed,
 	attributes,
 	presets,
 	onSelect,
@@ -718,6 +719,7 @@ function CurvesView({
 	dynamic: DynamicObject;
 	lane: DynamicLaneProjection;
 	selectedLanes: ReadonlySet<string>;
+	shiftArmed: boolean;
 	attributes: readonly { id: string; label: string; family: string }[];
 	presets: readonly PresetObject[];
 	onSelect(id: string, additive: boolean): void;
@@ -729,6 +731,7 @@ function CurvesView({
 	): Promise<void>;
 }) {
 	const [menuLaneId, setMenuLaneId] = useState<string | null>(null);
+	const [attributeLaneId, setAttributeLaneId] = useState<string | null>(null);
 	const [randomMethod, setRandomMethod] = useState<
 		"max_min" | "middle_amplitude"
 	>("max_min");
@@ -798,7 +801,9 @@ function CurvesView({
 						<article
 							key={candidate.id}
 							className={`dynamic-lane-overview ${candidate.id === lane.id ? "primary" : ""} ${selected ? "selected" : ""}`}
-							onClick={() => onSelect(candidate.id, false)}
+							onClick={(event) =>
+								onSelect(candidate.id, event.shiftKey || shiftArmed)
+							}
 						>
 							<div className="dynamic-lane-identity">
 								<small>Lane {index + 1}</small>
@@ -823,15 +828,6 @@ function CurvesView({
 								className="dynamic-lane-row-actions"
 								onClick={(event) => event.stopPropagation()}
 							>
-								<CheckboxField
-									label={
-										<span className="sr-only">
-											Select {attribute?.label ?? candidate.attribute} lane
-										</span>
-									}
-									checked={selected}
-									onChange={() => onSelect(candidate.id, true)}
-								/>
 								<Button
 									aria-haspopup="menu"
 									aria-expanded={menuLaneId === candidate.id}
@@ -845,75 +841,18 @@ function CurvesView({
 								</Button>
 								{menuLaneId === candidate.id && (
 									<div
-										className="dynamic-lane-menu"
+										className="dynamic-lane-dropdown"
 										role="menu"
 										aria-label={`${attribute?.label ?? candidate.attribute} lane actions`}
 									>
-										<strong>Attribute</strong>
-										{attributes.map((item) => (
-											<Button
-												key={item.id}
-												role="menuitemradio"
-												aria-checked={candidate.attribute === item.id}
-												className={
-													candidate.attribute === item.id ? "active" : ""
-												}
-												onClick={() => {
-													setMenuLaneId(null);
-													void onMutate(dynamic, {
-														type: "replace_lane",
-														lane_id: candidate.id,
-														lane: { ...candidate, attribute: item.id },
-													});
-												}}
-											>
-												{item.label}
-											</Button>
-										))}
-										<hr />
-										<Button
-											role="menuitem"
-											disabled={index === 0}
-											onClick={() => {
-												setMenuLaneId(null);
-												void onMutate(dynamic, {
-													type: "move_lane",
-													lane_id: candidate.id,
-													index: index - 1,
-												});
-											}}
-										>
-											Move left
-										</Button>
-										<Button
-											role="menuitem"
-											disabled={index === dynamic.body.lanes.length - 1}
-											onClick={() => {
-												setMenuLaneId(null);
-												void onMutate(dynamic, {
-													type: "move_lane",
-													lane_id: candidate.id,
-													index: index + 1,
-												});
-											}}
-										>
-											Move right
-										</Button>
 										<Button
 											role="menuitem"
 											onClick={() => {
 												setMenuLaneId(null);
-												void onMutate(dynamic, {
-													type: "add_lane",
-													lane: {
-														...candidate,
-														id: crypto.randomUUID(),
-													},
-													index: index + 1,
-												});
+												setAttributeLaneId(candidate.id);
 											}}
 										>
-											Duplicate lane
+											Change attribute
 										</Button>
 										<Button
 											role="menuitem"
@@ -936,6 +875,29 @@ function CurvesView({
 					);
 				})}
 			</div>
+			{attributeLaneId && (
+				<ChangeLaneAttributeModal
+					lane={
+						dynamic.body.lanes.find(
+							(candidate) => candidate.id === attributeLaneId,
+						)!
+					}
+					attributes={attributes}
+					onClose={() => setAttributeLaneId(null)}
+					onChoose={(nextAttribute) => {
+						const target = dynamic.body.lanes.find(
+							(candidate) => candidate.id === attributeLaneId,
+						);
+						if (!target) return;
+						setAttributeLaneId(null);
+						void onMutate(dynamic, {
+							type: "replace_lane",
+							lane_id: target.id,
+							lane: { ...target, attribute: nextAttribute },
+						});
+					}}
+				/>
+			)}
 			<section
 				className="dynamic-lane-bottom-editor"
 				aria-label="Curve Composer"
@@ -2485,6 +2447,53 @@ function LaneChooser({
 						onClick={() => onChoose(attribute)}
 					>
 						{busy ? "Creating…" : "Create and edit"}
+					</Button>
+				</footer>
+			</section>
+		</ModalFrame>
+	);
+}
+
+function ChangeLaneAttributeModal({
+	lane,
+	attributes,
+	onClose,
+	onChoose,
+}: {
+	lane: DynamicLaneProjection;
+	attributes: readonly { id: string; label: string; family: string }[];
+	onClose(): void;
+	onChoose(attribute: string): void;
+}) {
+	const [attribute, setAttribute] = useState(lane.attribute);
+	return (
+		<ModalFrame
+			id={`change-lane-attribute-${lane.id}`}
+			ariaLabel="Change lane attribute"
+			title="Change lane attribute"
+			details="Choose the attribute controlled by this lane"
+			onClose={onClose}
+		>
+			<section className="dynamic-create-form">
+				<FormLayout labelPlacement="side">
+					<SelectField
+						label="Attribute"
+						value={attribute}
+						options={attributes.map((candidate) => ({
+							value: candidate.id,
+							label: `${candidate.family} · ${candidate.label}`,
+						}))}
+						onChange={setAttribute}
+					/>
+				</FormLayout>
+				<footer>
+					<Button onClick={onClose}>Cancel</Button>
+					<Button
+						variant="primary"
+						disabled={!attribute || attribute === lane.attribute}
+						onClick={() => onChoose(attribute)}
+					>
+						Change attribute
 					</Button>
 				</footer>
 			</section>
