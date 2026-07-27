@@ -106,6 +106,7 @@ function createStoryDynamic(): DynamicObject {
 				{
 					...pan,
 					mode: "middle_amplitude",
+					speed_multiplier: { numerator: 1, denominator: 2 },
 					middle_amplitude: {
 						...pan.middle_amplitude,
 						middle: { type: "current" },
@@ -296,6 +297,8 @@ function DynamicsProgrammerSurface({
 			<DynamicEditorTaskTabs
 				task={view}
 				onTask={onView}
+				page={editor.session?.encoderPage ?? 1}
+				onPage={(encoderPage) => editor.update({ encoderPage })}
 				dynamic={dynamic.body}
 				laneId={lane?.id}
 				onLane={(id) => {
@@ -308,6 +311,7 @@ function DynamicsProgrammerSurface({
 					dynamic={dynamic.body}
 					lane={lane ?? null}
 					view={view}
+					page={editor.session?.encoderPage ?? 1}
 					keyframeIndex={editor.session?.primaryKeyframeIndex ?? 0}
 					onKeyframeIndex={(primaryKeyframeIndex) =>
 						editor.update({ primaryKeyframeIndex })
@@ -327,7 +331,7 @@ function DynamicsProgrammerSurface({
 	);
 }
 
-function FullApplicationDynamicsMock() {
+function FullApplicationDynamicsMock({ hardware }: { hardware: boolean }) {
 	const [dynamic, setDynamic] = useState(createStoryDynamic);
 	const [message, setMessage] = useState(
 		"Offline discussion mock · changes are kept in Storybook memory only",
@@ -340,6 +344,14 @@ function FullApplicationDynamicsMock() {
 				...instance,
 				name: dynamic.body.name,
 				pool_number: dynamic.body.pool_number,
+				speed_source:
+					dynamic.body.speed.type === "fixed"
+						? "Fixed BPM"
+						: `Speed Group ${dynamic.body.speed.group}`,
+				effective_bpm:
+					dynamic.body.speed.type === "fixed"
+						? 60_000 / dynamic.body.speed.duration_millis
+						: instance.effective_bpm,
 			})),
 			definitions: runtime.definitions.map((status) => ({
 				...status,
@@ -369,6 +381,9 @@ function FullApplicationDynamicsMock() {
 			actions={[
 				{ type: "SET_DOCK_MODE", mode: "builtins" },
 				{ type: "OPEN_BUILTIN", kind: "dynamics" },
+				...(hardware
+					? ([{ type: "SET_MIDI_PROFILE", value: true }] as const)
+					: []),
 			]}
 		>
 			<AppShellView
@@ -447,6 +462,7 @@ function FullApplicationDynamicsMock() {
 					<CommandSectionFixture
 						inheritAppState
 						initialMode="programmer"
+						hardware={hardware}
 						programmer={
 							<DynamicsProgrammerSurface
 								dynamic={dynamic}
@@ -463,5 +479,9 @@ function FullApplicationDynamicsMock() {
 }
 
 export const FullApplicationDiscussion: Story = {
-	render: () => <FullApplicationDynamicsMock />,
+	render: (_args, context) => (
+		<FullApplicationDynamicsMock
+			hardware={context.globals.mode === "hardware"}
+		/>
+	),
 };

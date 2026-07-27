@@ -38,6 +38,7 @@ export function DynamicDefinitionEncoderSurface({
 	dynamic,
 	lane,
 	view,
+	page = 1,
 	keyframeIndex = 0,
 	onKeyframeIndex,
 	onLaneChange,
@@ -46,6 +47,7 @@ export function DynamicDefinitionEncoderSurface({
 	dynamic: DynamicDefinitionProjection;
 	lane: DynamicDefinitionProjection["lanes"][number] | null;
 	view: DynamicEditorView;
+	page?: number;
 	keyframeIndex?: number;
 	onKeyframeIndex?(index: number): void;
 	onLaneChange(
@@ -60,6 +62,7 @@ export function DynamicDefinitionEncoderSurface({
 		<div className="programmer-dynamics-editor-deck">
 			<DynamicEncoderDeck
 				view={view}
+				page={page}
 				lane={lane ?? undefined}
 				dynamic={dynamic}
 				keyframeIndex={keyframeIndex}
@@ -314,6 +317,7 @@ export function ProgrammerDynamicsSurface({
 				dynamic={selectedObject.body}
 				lane={selectedLane}
 				view={editor.session.task}
+				page={editor.session.encoderPage}
 				keyframeIndex={editor.session.primaryKeyframeIndex}
 				onKeyframeIndex={(primaryKeyframeIndex) =>
 					editor.update({ primaryKeyframeIndex })
@@ -412,6 +416,7 @@ export function ProgrammerDynamicsSurface({
 				<div className="programmer-dynamics-editor-deck">
 					<DynamicEncoderDeck
 						view={view}
+						page={editor.session?.encoderPage ?? 1}
 						lane={selectedLane ?? undefined}
 						dynamic={selectedObject.body}
 						keyframeIndex={editor.session?.primaryKeyframeIndex ?? 0}

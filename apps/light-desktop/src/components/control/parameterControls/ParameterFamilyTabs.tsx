@@ -1,5 +1,9 @@
-import { Button } from "@tosklight/ui";
-import { useState } from "react";
+import { Button, SelectField } from "@tosklight/ui";
+import { EncoderGroupTabs } from "@tosklight/ui/encoders";
+import type { DynamicDefinitionProjection } from "../../../api/generated/light-wire";
+import type { DynamicEditorTask } from "../../../features/dynamics/DynamicEditorSessionContext";
+import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
+import { useDynamics } from "../../../features/showObjects/ShowObjectsState";
 import {
 	alignModes,
 	compactFamilyLabels,
@@ -9,10 +13,6 @@ import {
 	specialParameterFamilies,
 } from "./model";
 import type { ParameterController } from "./useParameterController";
-import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
-import type { DynamicEditorTask } from "../../../features/dynamics/DynamicEditorSessionContext";
-import { useDynamics } from "../../../features/showObjects/ShowObjectsState";
-import type { DynamicDefinitionProjection } from "../../../api/generated/light-wire";
 
 function FamilyLabel({ full, compact }: { full: string; compact: string }) {
 	return (
@@ -136,8 +136,9 @@ export function DynamicEditorTaskTabs({
 	dynamic: controlledDynamic,
 	laneId: controlledLaneId,
 	onLane,
-	page = 1,
-	pageCount = 1,
+	page: controlledPage,
+	onPage,
+	pageCount = 2,
 }: {
 	task?: DynamicEditorTask;
 	onTask?(task: DynamicEditorTask): void;
@@ -145,11 +146,15 @@ export function DynamicEditorTaskTabs({
 	laneId?: string | null;
 	onLane?(id: string): void;
 	page?: number;
+	onPage?(page: number): void;
 	pageCount?: number;
 } = {}) {
 	const editor = useDynamicEditorSession();
 	const activeTask = task ?? editor.session?.task;
 	if (!activeTask) return null;
+	const page = controlledPage ?? editor.session?.encoderPage ?? 1;
+	const changePage = (next: number) =>
+		onPage ? onPage(next) : editor.update({ encoderPage: next });
 	if (controlledDynamic)
 		return (
 			<DynamicEditorTaskTabsView
@@ -163,6 +168,7 @@ export function DynamicEditorTaskTabs({
 					onLane ? onLane(id) : editor.update({ primaryLaneId: id })
 				}
 				page={page}
+				onPage={changePage}
 				pageCount={pageCount}
 			/>
 		);
@@ -171,6 +177,7 @@ export function DynamicEditorTaskTabs({
 			activeTask={activeTask}
 			onTask={(next) => (onTask ? onTask(next) : editor.update({ task: next }))}
 			page={page}
+			onPage={changePage}
 			pageCount={pageCount}
 		/>
 	);
@@ -180,11 +187,13 @@ function ConnectedDynamicEditorTaskTabs({
 	activeTask,
 	onTask,
 	page,
+	onPage,
 	pageCount,
 }: {
 	activeTask: DynamicEditorTask;
 	onTask(task: DynamicEditorTask): void;
 	page: number;
+	onPage(page: number): void;
 	pageCount: number;
 }) {
 	const editor = useDynamicEditorSession();
@@ -200,6 +209,7 @@ function ConnectedDynamicEditorTaskTabs({
 			laneId={editor.session?.primaryLaneId}
 			onLane={(id) => editor.update({ primaryLaneId: id })}
 			page={page}
+			onPage={onPage}
 			pageCount={pageCount}
 		/>
 	);
@@ -212,6 +222,7 @@ function DynamicEditorTaskTabsView({
 	laneId,
 	onLane,
 	page,
+	onPage,
 	pageCount,
 }: {
 	activeTask: DynamicEditorTask;
@@ -220,75 +231,50 @@ function DynamicEditorTaskTabsView({
 	laneId?: string | null;
 	onLane(id: string): void;
 	page: number;
+	onPage(page: number): void;
 	pageCount: number;
 }) {
-	const [laneMenuOpen, setLaneMenuOpen] = useState(false);
 	const lane =
 		dynamic?.lanes.find((candidate) => candidate.id === laneId) ??
 		dynamic?.lanes[0];
 	return (
-		<div className="family-tabs dynamics-editor-family-tabs">
-			{(["curves", "phase", "speed"] as const).map((task) => {
-				const baseLabel =
-					task === "phase"
-						? "Phase Spread"
-						: task[0].toUpperCase() + task.slice(1);
-				const label =
-					task === activeTask && pageCount > 1
-						? `${baseLabel} (${page}/${pageCount})`
-						: baseLabel;
-				return (
-					<Button
-						key={task}
-						aria-label={label}
-						className={activeTask === task ? "active" : ""}
-						onClick={() => onTask(task)}
-					>
-						<FamilyLabel
-							full={label}
-							compact={
-								task === "phase"
-									? "Phase"
-									: task === "curves"
-										? pageCount > 1
-											? `Curves (${page}/${pageCount})`
-											: "Curves"
-										: "Speed"
-							}
-						/>
-					</Button>
-				);
-			})}
-			<span className="family-spacer" />
-			{dynamic && lane && (
-				<div className="dynamic-editor-lane-picker">
-					<Button
-						aria-haspopup="menu"
-						aria-expanded={laneMenuOpen}
-						onClick={() => setLaneMenuOpen((current) => !current)}
-					>
-						{lane.attribute} ▾
-					</Button>
-					{laneMenuOpen && (
-						<div role="menu" aria-label="Dynamic lane">
-							{dynamic.lanes.map((candidate) => (
-								<Button
-									key={candidate.id}
-									role="menuitemradio"
-									aria-checked={candidate.id === lane.id}
-									className={candidate.id === lane.id ? "active" : ""}
-									onClick={() => {
-										onLane(candidate.id);
-										setLaneMenuOpen(false);
-									}}
-								>
-									{candidate.attribute}
-								</Button>
-							))}
-						</div>
-					)}
-				</div>
-			)}
-		</div>
+		<EncoderGroupTabs
+			className="family-tabs dynamics-editor-family-tabs"
+			groups={[
+				{
+					id: "curves",
+					label: "Curves",
+					compactLabel: "Curves",
+					pageCount,
+				},
+				{
+					id: "phase",
+					label: "Phase Spread",
+					compactLabel: "Phase",
+				},
+				{ id: "speed", label: "Speed" },
+			]}
+			activeGroup={activeTask}
+			page={page}
+			onChange={(nextTask, nextPage) => {
+				onTask(nextTask);
+				onPage(nextPage);
+			}}
+			trailing={
+				dynamic && lane ? (
+					<SelectField
+						className="dynamic-editor-lane-picker"
+						ariaLabel="Dynamic lane"
+						size="compact"
+						value={lane.id}
+						options={dynamic.lanes.map((candidate) => ({
+							value: candidate.id,
+							label: candidate.attribute,
+						}))}
+						onChange={onLane}
+					/>
+				) : null
+			}
+		/>
 	);
 }

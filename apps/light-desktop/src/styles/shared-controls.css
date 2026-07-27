@@ -2003,28 +2003,11 @@ button:not(:disabled):active {
 	flex: 1;
 }
 .dynamic-editor-lane-picker {
-	position: relative;
 	flex: 0 0 min(190px, 28%);
 }
-.dynamic-editor-lane-picker > .ui-button {
+.dynamic-editor-lane-picker .ui-select-trigger {
 	width: 100%;
 	justify-content: space-between;
-}
-.dynamic-editor-lane-picker > [role="menu"] {
-	position: absolute;
-	z-index: 60;
-	right: 0;
-	bottom: calc(100% + 4px);
-	display: grid;
-	min-width: 180px;
-	padding: 4px;
-	background: #111820;
-	border: 1px solid #3b4a57;
-	border-radius: 6px;
-	box-shadow: 0 8px 24px rgb(0 0 0 / 55%);
-}
-.dynamic-editor-lane-picker > [role="menu"] .ui-button {
-	justify-content: flex-start;
 }
 .family-tabs .special-dialogs {
 	margin-left: 0;

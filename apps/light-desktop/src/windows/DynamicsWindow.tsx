@@ -151,6 +151,7 @@ export function DynamicsWindow({
 			openEditor({
 				dynamicId: outcome.object.id,
 				task: "curves",
+				encoderPage: 1,
 				primaryLaneId: definition.lanes[0]?.id ?? null,
 				primaryKeyframeIndex: 0,
 			});
@@ -349,6 +350,7 @@ export function DynamicsWindow({
 										openEditor({
 											dynamicId: dynamic.id,
 											task: "curves",
+											encoderPage: 1,
 											primaryLaneId: dynamic.body.lanes[0]?.id ?? null,
 											primaryKeyframeIndex: 0,
 										});
@@ -383,6 +385,7 @@ export function DynamicsWindow({
 									openEditor({
 										dynamicId: dynamic.id,
 										task: "curves",
+										encoderPage: 1,
 										primaryLaneId: dynamic.body.lanes[0]?.id ?? null,
 										primaryKeyframeIndex: 0,
 									});
@@ -393,6 +396,7 @@ export function DynamicsWindow({
 									openEditor({
 										dynamicId: dynamic.id,
 										task: "curves",
+										encoderPage: 1,
 										primaryLaneId: dynamic.body.lanes[0]?.id ?? null,
 										primaryKeyframeIndex: 0,
 									});
@@ -474,6 +478,10 @@ export function DynamicEditor({
 		new Set(primaryLane ? [primaryLane] : []),
 	);
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
+	const [previewing, setPreviewing] = useState(false);
+	const [previewPhase, setPreviewPhase] = useState(0);
+	const encoderPage =
+		session?.dynamicId === dynamic.id ? session.encoderPage : 1;
 	const primaryKeyframeIndex =
 		session?.dynamicId === dynamic.id ? session.primaryKeyframeIndex : 0;
 	const setPrimaryKeyframeIndex = (index: number) =>
@@ -504,7 +512,7 @@ export function DynamicEditor({
 	const status = definitionStatus(runtime, dynamic.id);
 	const changeView = (next: DynamicEditorView) => {
 		onViewChange?.(next);
-		if (!onViewChange) updateEditor({ task: next });
+		updateEditor({ task: next, encoderPage: 1 });
 	};
 	const addLane = () =>
 		onMutate(dynamic, {
@@ -531,13 +539,32 @@ export function DynamicEditor({
 			target_binding: { type: "targetless" },
 		});
 	useEffect(() => {
+		if (!previewing) return;
+		let frame = 0;
+		const startedAt = performance.now() - previewPhase * 2_000;
+		const animate = (now: number) => {
+			setPreviewPhase(((now - startedAt) % 2_000) / 2_000);
+			frame = requestAnimationFrame(animate);
+		};
+		frame = requestAnimationFrame(animate);
+		return () => cancelAnimationFrame(frame);
+	}, [previewing]);
+	useEffect(() => {
 		openEditor({
 			dynamicId: dynamic.id,
 			task: view,
+			encoderPage,
 			primaryLaneId: primaryLane,
 			primaryKeyframeIndex,
 		});
-	}, [dynamic.id, openEditor, primaryKeyframeIndex, primaryLane, view]);
+	}, [
+		dynamic.id,
+		encoderPage,
+		openEditor,
+		primaryKeyframeIndex,
+		primaryLane,
+		view,
+	]);
 
 	return (
 		<section
@@ -578,6 +605,18 @@ export function DynamicEditor({
 							label: "Speed",
 							active: view === "speed",
 							onClick: () => changeView("speed"),
+						},
+					],
+					[
+						{
+							id: "preview",
+							label: previewing ? "■ Stop" : "▶ Preview",
+							active: previewing,
+							onClick: () =>
+								setPreviewing((current) => {
+									if (current) setPreviewPhase(0);
+									return !current;
+								}),
 						},
 					],
 					[{ id: "back", label: "← Back to Pool", onClick: onBack }],
@@ -687,6 +726,7 @@ export function DynamicEditor({
 							shiftArmed={appState.shiftArmed}
 							attributes={attributes}
 							primaryKeyframeIndex={primaryKeyframeIndex}
+							previewPhase={previewing ? previewPhase : null}
 							onPrimaryKeyframeIndex={setPrimaryKeyframeIndex}
 							onSelect={selectLane}
 							onReplace={replaceLane}
@@ -723,6 +763,7 @@ function CurvesView({
 	shiftArmed,
 	attributes,
 	primaryKeyframeIndex,
+	previewPhase,
 	onPrimaryKeyframeIndex,
 	onSelect,
 	onReplace,
@@ -734,6 +775,7 @@ function CurvesView({
 	shiftArmed: boolean;
 	attributes: readonly { id: string; label: string; family: string }[];
 	primaryKeyframeIndex: number;
+	previewPhase: number | null;
 	onPrimaryKeyframeIndex(index: number): void;
 	onSelect(id: string, additive: boolean): void;
 	onReplace(next: DynamicLaneProjection): Promise<void>;
@@ -834,13 +876,14 @@ function CurvesView({
 		clientX: number,
 		svg: SVGSVGElement,
 		mutationGroup: string,
+		repetitions: number,
 	) => {
 		if (index === 0) return;
 		const bounds = svg.getBoundingClientRect();
 		const previous = candidate.keyframes.points[index - 1]?.position ?? 0;
 		const next = candidate.keyframes.points[index + 1]?.position ?? 0.999;
 		const position = clamp(
-			(clientX - bounds.left) / Math.max(1, bounds.width),
+			((clientX - bounds.left) / Math.max(1, bounds.width)) * repetitions,
 			previous + 0.01,
 			next - 0.01,
 		);
@@ -867,6 +910,7 @@ function CurvesView({
 					const attribute =
 						attributes.find((item) => item.id === candidate.attribute) ?? null;
 					const selected = selectedLanes.has(candidate.id);
+					const preview = lanePreview(candidate, dynamic.body.lanes);
 					return (
 						<li
 							key={candidate.id}
@@ -884,7 +928,10 @@ function CurvesView({
 								<span className="dynamic-lane-identity">
 									<small>Lane {index + 1}</small>
 									<strong>{attribute?.label ?? candidate.attribute}</strong>
-									<span>{modeLabel(candidate.mode)}</span>
+									<span>
+										{modeLabel(candidate.mode)}
+										{laneSpeedLabel(candidate)}
+									</span>
 								</span>
 								<span className="dynamic-lane-curve">
 									<svg
@@ -898,93 +945,109 @@ function CurvesView({
 											className="grid"
 											d="M0 50H1000M0 100H1000M0 150H1000M250 0V200M500 0V200M750 0V200"
 										/>
-										<path className="curve" d={curvePath(candidate)} />
-										{candidate.mode === "keyframes" && (
-											<g className="dynamic-keyframe-marks">
-												{candidate.keyframes.points.map((point, pointIndex) => (
-													<g key={`${candidate.id}-${pointIndex}`}>
-														<circle
-															className={
-																candidate.id === lane.id &&
-																pointIndex === keyframeIndex
-																	? "selected"
-																	: ""
-															}
-															cx={keyframeX(point.position)}
-															cy={keyframeY(point.source)}
-															r={pointIndex === 0 ? 7 : 8}
-															onPointerDown={(event) => {
-																event.preventDefault();
-																event.stopPropagation();
-																onSelect(candidate.id, false);
-																onPrimaryKeyframeIndex(pointIndex);
-																if (pointIndex === 0) return;
-																event.currentTarget.setPointerCapture(
-																	event.pointerId,
-																);
-																setDraggingKeyframe({
-																	laneId: candidate.id,
-																	index: pointIndex,
-																	pointerId: event.pointerId,
-																	mutationGroup: crypto.randomUUID(),
-																});
-															}}
-															onPointerMove={(event) => {
-																if (
-																	!draggingKeyframe ||
-																	draggingKeyframe.laneId !== candidate.id ||
-																	draggingKeyframe.index !== pointIndex ||
-																	draggingKeyframe.pointerId !== event.pointerId
-																)
-																	return;
-																const svg = event.currentTarget.ownerSVGElement;
-																if (svg)
-																	moveKeyframe(
-																		candidate,
-																		pointIndex,
-																		event.clientX,
-																		svg,
-																		draggingKeyframe.mutationGroup,
-																	);
-															}}
-															onPointerUp={(event) => {
-																if (
-																	draggingKeyframe?.pointerId ===
-																	event.pointerId
-																)
-																	setDraggingKeyframe(null);
-															}}
-															onPointerCancel={() => setDraggingKeyframe(null)}
-														/>
-														<text
-															x={keyframeX(point.position)}
-															y={Math.max(13, keyframeY(point.source) - 13)}
-															textAnchor={pointIndex === 0 ? "start" : "middle"}
-														>
-															{keyframeName(pointIndex)}
-														</text>
-													</g>
-												))}
-												<circle
-													className="loop-close"
-													cx={992}
-													cy={keyframeY(candidate.keyframes.points[0]?.source)}
-													r={7}
-												/>
-												<text
-													x={990}
-													y={Math.max(
-														13,
-														keyframeY(candidate.keyframes.points[0]?.source) -
-															13,
-													)}
-													textAnchor="end"
-												>
-													A′
-												</text>
-											</g>
+										<path className="curve" d={preview.primaryPath} />
+										{preview.repeatedPath && (
+											<path
+												className="curve repeated"
+												d={preview.repeatedPath}
+											/>
+										)}
+										{preview.repetitions > 1 && (
+											<path
+												className="repeat-boundary"
+												d={`M${1000 / preview.repetitions} 0V200`}
+											/>
 										)}
 									</svg>
+									{candidate.mode === "keyframes" && (
+										<span className="dynamic-keyframe-marks">
+											{candidate.keyframes.points.map((point, pointIndex) => (
+												<button
+													type="button"
+													key={`${candidate.id}-${pointIndex}`}
+													aria-label={`${attribute?.label ?? candidate.attribute} keyframe ${keyframeName(pointIndex)}`}
+													className={
+														candidate.id === lane.id &&
+														pointIndex === keyframeIndex
+															? "selected"
+															: ""
+													}
+													style={{
+														left: `${keyframePreviewPercent(point.position, preview.repetitions)}%`,
+														top: `${keyframePreviewTop(point.source)}%`,
+													}}
+													onPointerDown={(event) => {
+														event.preventDefault();
+														event.stopPropagation();
+														onSelect(candidate.id, false);
+														onPrimaryKeyframeIndex(pointIndex);
+														if (pointIndex === 0) return;
+														event.currentTarget.setPointerCapture(
+															event.pointerId,
+														);
+														setDraggingKeyframe({
+															laneId: candidate.id,
+															index: pointIndex,
+															pointerId: event.pointerId,
+															mutationGroup: crypto.randomUUID(),
+														});
+													}}
+													onPointerMove={(event) => {
+														if (
+															!draggingKeyframe ||
+															draggingKeyframe.laneId !== candidate.id ||
+															draggingKeyframe.index !== pointIndex ||
+															draggingKeyframe.pointerId !== event.pointerId
+														)
+															return;
+														const svg =
+															event.currentTarget
+																.closest(".dynamic-lane-curve")
+																?.querySelector("svg") ?? null;
+														if (svg)
+															moveKeyframe(
+																candidate,
+																pointIndex,
+																event.clientX,
+																svg,
+																draggingKeyframe.mutationGroup,
+																preview.repetitions,
+															);
+													}}
+													onPointerUp={(event) => {
+														if (draggingKeyframe?.pointerId === event.pointerId)
+															setDraggingKeyframe(null);
+													}}
+													onPointerCancel={() => setDraggingKeyframe(null)}
+												>
+													<span>{keyframeName(pointIndex)}</span>
+												</button>
+											))}
+											<i
+												className="loop-close"
+												style={{
+													left: `${keyframePreviewPercent(1, preview.repetitions)}%`,
+													top: `${keyframePreviewTop(candidate.keyframes.points[0]?.source)}%`,
+												}}
+											>
+												<span>A′</span>
+											</i>
+										</span>
+									)}
+									{preview.repetitions > 1 && (
+										<span
+											className="dynamic-repeat-label"
+											style={{ left: `${100 / preview.repetitions}%` }}
+										>
+											repeat
+										</span>
+									)}
+									{previewPhase !== null && (
+										<i
+											className="dynamic-preview-playhead"
+											style={{ left: `${previewPhase * 100}%` }}
+										/>
+									)}
 									<span className="dynamic-lane-axis start">0%</span>
 									<span className="dynamic-lane-axis middle">50%</span>
 									<span className="dynamic-lane-axis end">100%</span>
@@ -1366,6 +1429,26 @@ function SpeedView({
 			? Math.max(1, Math.round(60_000 / speed.duration_millis))
 			: null;
 	const beatPhase = primaryRuntime?.beat_phase ?? 0;
+	const tapTimes = useRef<number[]>([]);
+	const tapTempo = () => {
+		const now = performance.now();
+		const previous = tapTimes.current.at(-1);
+		if (previous == null || now - previous > 2_000) tapTimes.current = [now];
+		else tapTimes.current = [...tapTimes.current.slice(-4), now];
+		if (tapTimes.current.length < 2) return;
+		const intervals = tapTimes.current
+			.slice(1)
+			.map((time, index) => time - tapTimes.current[index]);
+		const average =
+			intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
+		onMutate(dynamic, {
+			type: "set_speed",
+			speed: {
+				type: "fixed",
+				duration_millis: Math.max(1, Math.round(average)),
+			},
+		});
+	};
 	return (
 		<div className="dynamic-speed-view">
 			<section className="dynamic-speed-transport">
@@ -1391,25 +1474,34 @@ function SpeedView({
 					}
 				/>
 				{speed.type === "fixed" ? (
-					<NumberField
-						label="Tempo"
-						value={fixedBpm ?? 120}
-						min={1}
-						max={999}
-						unit="BPM"
-						onValueChange={(bpm) =>
-							onMutate(dynamic, {
-								type: "set_speed",
-								speed: {
-									type: "fixed",
-									duration_millis: Math.max(
-										1,
-										Math.round(60_000 / Math.max(1, Number(bpm))),
-									),
-								},
-							})
-						}
-					/>
+					<div className="dynamic-fixed-speed-fields">
+						<NumberField
+							label="Tempo"
+							value={fixedBpm ?? 120}
+							min={1}
+							max={999}
+							unit="BPM"
+							onValueChange={(bpm) =>
+								onMutate(dynamic, {
+									type: "set_speed",
+									speed: {
+										type: "fixed",
+										duration_millis: Math.max(
+											1,
+											Math.round(60_000 / Math.max(1, Number(bpm))),
+										),
+									},
+								})
+							}
+						/>
+						<Button
+							className="dynamic-tap-tempo"
+							aria-label="Tap tempo"
+							onClick={tapTempo}
+						>
+							TAP
+						</Button>
+					</div>
 				) : (
 					<div className="dynamic-speed-source-fields">
 						<SelectField
@@ -1488,6 +1580,7 @@ function SpeedView({
 					/>
 					<SelectField
 						label="Run mode"
+						description="Loop repeats continuously. One-shot stops after one complete cycle."
 						value={dynamic.body.run_mode}
 						options={[
 							{ value: "loop", label: "Loop" },
@@ -1499,6 +1592,7 @@ function SpeedView({
 					/>
 					<SelectField
 						label="Activation"
+						description="Chooses when a newly started Dynamic instance enters its first cycle."
 						value={dynamic.body.default_activation}
 						options={[
 							{ value: "start_now", label: "Start now" },
@@ -1519,6 +1613,7 @@ function SpeedView({
 					/>
 					<SelectField
 						label="Boundary"
+						description="For Next boundary, wait for the next beat or the next four-beat bar."
 						value={dynamic.body.activation_boundary}
 						disabled={
 							speed.type !== "speed_group" ||
@@ -1551,6 +1646,7 @@ function SpeedView({
 
 export function DynamicEncoderDeck({
 	view,
+	page = 1,
 	lane,
 	dynamic,
 	keyframeIndex = 0,
@@ -1559,6 +1655,7 @@ export function DynamicEncoderDeck({
 	onMutate,
 }: {
 	view: DynamicEditorView;
+	page?: number;
 	lane?: DynamicLaneProjection;
 	dynamic: DynamicDefinitionProjection;
 	keyframeIndex?: number;
@@ -1588,6 +1685,7 @@ export function DynamicEncoderDeck({
 			? curveEditorEncoderSlots(
 					lane,
 					dynamic,
+					page,
 					keyframeIndex,
 					onKeyframeIndex,
 					onLaneChange,
@@ -1813,7 +1911,7 @@ export function DynamicEncoderDeck({
 			<EncoderSection
 				showHeader={false}
 				model={{
-					id: `dynamics-${view}`,
+					id: `dynamics-${view}-${page}`,
 					label: `${view === "curves" ? "Curves" : view === "phase" ? "Phase Spread" : "Speed"} encoders`,
 					description: "Turn fine · press-turn coarse · center Set Value",
 					encoders: items,
@@ -1848,6 +1946,7 @@ interface DynamicEncoderSlot {
 function curveEditorEncoderSlots(
 	lane: DynamicLaneProjection | undefined,
 	dynamic: DynamicDefinitionProjection,
+	page: number,
 	keyframeIndex: number,
 	onKeyframeIndex: (index: number) => void,
 	onLaneChange: (
@@ -1916,6 +2015,73 @@ function curveEditorEncoderSlots(
 				group,
 			),
 	};
+	if (page === 2) {
+		const modes = ["keyframes", "max_min", "middle_amplitude"] as const;
+		const modeIndex = lane
+			? Math.max(
+					0,
+					modes.indexOf(lane.mode === "random" ? "max_min" : lane.mode),
+				)
+			: 0;
+		const widthSlot: DynamicEncoderSlot = {
+			id: "curve-width",
+			label: "Curve width",
+			display: lane ? `${Math.round(lane.width * 100)}%` : "—",
+			value: lane?.width ?? 1,
+			minimum: 0.05,
+			maximum: 1,
+			inputScale: 100,
+			fineStep: 0.01,
+			coarseStep: 0.1,
+			disabled,
+			apply: (value, group) =>
+				onLaneChange(
+					(item) => ({ ...item, width: clamp(value, 0.05, 1) }),
+					group,
+				),
+		};
+		return [
+			{
+				id: "curve-method",
+				label: "Curve method",
+				display: lane ? modeLabel(lane.mode) : "—",
+				value: modeIndex,
+				minimum: 0,
+				maximum: modes.length - 1,
+				inputScale: 1,
+				fineStep: 1,
+				coarseStep: 1,
+				disabled,
+				apply: (value, group) =>
+					onLaneChange(
+						(item) => ({
+							...item,
+							mode: modes[wrappedIndex(value, modes.length)],
+						}),
+						group,
+					),
+			},
+			lane && lane.mode !== "keyframes"
+				? functionSelectionSlot(lane, onLaneChange)
+				: {
+						...unassigned("curve-function"),
+						label: "Function",
+						display: "Value mode only",
+					},
+			widthSlot,
+			speedSlot,
+			{
+				...unassigned("keyframe-count"),
+				label: "Keyframes",
+				display: lane ? String(lane.keyframes.points.length) : "—",
+			},
+			{
+				...unassigned("loop-closure"),
+				label: "Loop closure",
+				display: "A → A′",
+			},
+		];
+	}
 	if (!lane || lane.mode === "keyframes") {
 		const resolvedIndex = Math.min(
 			keyframeIndex,
@@ -2632,55 +2798,107 @@ function modeLabel(mode: DynamicLaneModeProjection) {
 	}
 }
 
-function curvePath(lane: DynamicLaneProjection) {
+function lanePreview(
+	lane: DynamicLaneProjection,
+	lanes: readonly DynamicLaneProjection[],
+) {
+	const slowest = Math.min(
+		...lanes.map((candidate) =>
+			Math.max(0.0001, rationalValue(candidate.speed_multiplier)),
+		),
+	);
+	const repetitions = clamp(
+		rationalValue(lane.speed_multiplier) / slowest,
+		1,
+		16,
+	);
 	if (lane.mode === "keyframes") {
-		const points = [
-			...lane.keyframes.points,
-			{
-				position: 1,
-				source: lane.keyframes.points[0]?.source ?? sourceZero,
-			},
-		];
-		return points
-			.map(
-				(point, index) =>
-					`${index === 0 ? "M" : "L"}${keyframeX(point.position)} ${keyframeY(point.source)}`,
+		const cyclePath = (cycle: number) => {
+			const points = [
+				...lane.keyframes.points,
+				{
+					position: 1,
+					source: lane.keyframes.points[0]?.source ?? sourceZero,
+				},
+			]
+				.map((point) => ({
+					...point,
+					timelinePosition: (cycle + point.position) / repetitions,
+				}))
+				.filter((point) => point.timelinePosition <= 1.0001);
+			return points
+				.map(
+					(point, index) =>
+						`${index === 0 ? "M" : "L"}${Math.round(8 + point.timelinePosition * 984)} ${keyframeY(point.source)}`,
+				)
+				.join(" ");
+		};
+		return {
+			repetitions,
+			primaryPath: cyclePath(0),
+			repeatedPath: Array.from(
+				{ length: Math.max(0, Math.ceil(repetitions) - 1) },
+				(_, index) => cyclePath(index + 1),
 			)
-			.join(" ");
+				.filter(Boolean)
+				.join(" "),
+		};
 	}
 	const functionName =
 		lane.mode === "middle_amplitude"
 			? lane.middle_amplitude.function
 			: lane.max_min.function;
-	const cycles = Math.max(2, Math.round(2 / clamp(lane.width, 0.35, 1)));
-	return Array.from({ length: 121 }, (_, index) => {
-		const progress = index / 120;
-		const phase = (progress * cycles) % 1;
-		const shape =
-			functionName === "linear_up"
-				? phase
-				: functionName === "linear_down"
-					? 1 - phase
-					: functionName === "pwm"
-						? phase < 0.5
-							? 1
-							: 0
-						: functionName === "cosinus"
-							? (Math.cos(phase * Math.PI * 2) + 1) / 2
-							: (Math.sin(phase * Math.PI * 2 - Math.PI / 2) + 1) / 2;
-		const minimum =
-			lane.mode === "middle_amplitude"
-				? scalarSourceCurveValue(lane.middle_amplitude.middle) -
-					lane.middle_amplitude.amplitude
-				: scalarSourceCurveValue(lane.max_min.minimum);
-		const maximum =
-			lane.mode === "middle_amplitude"
-				? scalarSourceCurveValue(lane.middle_amplitude.middle) +
-					lane.middle_amplitude.amplitude
-				: scalarSourceCurveValue(lane.max_min.maximum);
-		const value = clamp(minimum + (maximum - minimum) * shape, 0, 1);
-		return `${index === 0 ? "M" : "L"}${Math.round(progress * 1000)} ${Math.round(190 - value * 180)}`;
-	}).join(" ");
+	const path = (start: number, end: number) =>
+		Array.from({ length: 121 }, (_, index) => {
+			const progress = start + ((end - start) * index) / 120;
+			const intervalPhase = (progress * repetitions) % 1;
+			const width = clamp(lane.width, 0.05, 1);
+			const phase = clamp((intervalPhase - (1 - width) / 2) / width, 0, 1);
+			const shape =
+				functionName === "linear_up"
+					? phase
+					: functionName === "linear_down"
+						? 1 - phase
+						: functionName === "pwm"
+							? phase < 0.5
+								? 1
+								: 0
+							: functionName === "cosinus"
+								? (Math.cos(phase * Math.PI * 2) + 1) / 2
+								: (Math.sin(phase * Math.PI * 2 - Math.PI / 2) + 1) / 2;
+			const minimum =
+				lane.mode === "middle_amplitude"
+					? scalarSourceCurveValue(lane.middle_amplitude.middle) -
+						lane.middle_amplitude.amplitude
+					: scalarSourceCurveValue(lane.max_min.minimum);
+			const maximum =
+				lane.mode === "middle_amplitude"
+					? scalarSourceCurveValue(lane.middle_amplitude.middle) +
+						lane.middle_amplitude.amplitude
+					: scalarSourceCurveValue(lane.max_min.maximum);
+			const value = clamp(minimum + (maximum - minimum) * shape, 0, 1);
+			return `${index === 0 ? "M" : "L"}${Math.round(progress * 1000)} ${Math.round(190 - value * 180)}`;
+		}).join(" ");
+	const firstEnd = 1 / repetitions;
+	return {
+		repetitions,
+		primaryPath: path(0, firstEnd),
+		repeatedPath: repetitions > 1 ? path(firstEnd, 1) : "",
+	};
+}
+
+function laneSpeedLabel(lane: DynamicLaneProjection) {
+	const value = rationalValue(lane.speed_multiplier);
+	if (Math.abs(value - 1) < 0.0001) return "";
+	return ` · ${lane.speed_multiplier.numerator}/${lane.speed_multiplier.denominator} speed`;
+}
+
+function keyframePreviewPercent(position: number, repetitions: number) {
+	return 0.8 + (clamp(position, 0, 1) * 98.4) / repetitions;
+}
+
+function keyframePreviewTop(source: DynamicScalarSourceProjection | undefined) {
+	return 9 + (1 - scalarSourceCurveValue(source)) * 70;
 }
 
 function scalarSourceCurveValue(
@@ -2691,10 +2909,6 @@ function scalarSourceCurveValue(
 
 function keyframeName(index: number) {
 	return String.fromCharCode(65 + (index % 26));
-}
-
-function keyframeX(position: number) {
-	return Math.round(8 + clamp(position, 0, 1) * 984);
 }
 
 function keyframeY(source: DynamicScalarSourceProjection | undefined) {

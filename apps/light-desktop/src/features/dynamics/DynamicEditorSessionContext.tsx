@@ -12,6 +12,7 @@ export type DynamicEditorTask = "curves" | "phase" | "speed";
 export interface DynamicEditorSession {
 	dynamicId: string;
 	task: DynamicEditorTask;
+	encoderPage: number;
 	primaryLaneId: string | null;
 	primaryKeyframeIndex: number;
 }

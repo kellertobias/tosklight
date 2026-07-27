@@ -324,3 +324,32 @@ selected keyframe with the production Programmer encoder surface.
 This remains a visual-review checkpoint. Final Dynamics UI automation, pixel
 snapshots, and help screenshots remain blocked until the user explicitly
 accepts the production composition.
+
+### Review iteration 7 — reusable encoder pages and transport preview, awaiting review
+
+Encoder group navigation is now a shared UI component rather than
+Dynamics-only tab behavior. A group declares its page count and encoder models;
+selecting another group opens page one, while selecting the active group cycles
+and wraps its pages. The production Dynamics Programmer uses this contract in
+both touch and hardware modes. Curves demonstrates two real pages: keyframe
+editing on page one and method, function, curve width, lane speed, keyframe
+count, and loop closure on page two. The lane selector is the portal-based desk
+dropdown and opens upward above the complete command surface.
+
+Curve previews normalize their visible interval to the slowest lane. Faster
+lanes repeat proportionally; the first interval remains cyan, its repeat
+boundary is orange, and later intervals are grey without duplicate keyframe
+handles. Keyframes are fixed-size round orange handles even when their SVG
+curve is stretched. The Curve Composer remains pinned to the bottom of the
+workspace. Window Preview/Stop controls a synchronized green playhead across
+every lane.
+
+Phase Spread keeps its left visualization at the available height while its
+right control column scrolls independently. Fixed BPM now includes a large Tap
+Tempo target. Run mode, Activation, and Boundary include short operator-facing
+descriptions. The full-application story follows Storybook's software/hardware
+toolbar mode and renders the corresponding production encoder surface.
+
+This remains a visual-review checkpoint. Final Dynamics UI automation, pixel
+snapshots, and help screenshots remain blocked until the user explicitly
+accepts the production composition.
