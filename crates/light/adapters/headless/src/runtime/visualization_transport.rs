@@ -28,13 +28,15 @@ use std::{
 
 struct SubscriptionClaims {
     output: super::OutputResource,
+    session_id: uuid::Uuid,
     lanes: HashSet<VisualizationLane>,
 }
 
 impl SubscriptionClaims {
-    fn new(output: super::OutputResource) -> Self {
+    fn new(output: super::OutputResource, session_id: uuid::Uuid) -> Self {
         Self {
             output,
+            session_id,
             lanes: HashSet::new(),
         }
     }
@@ -43,6 +45,8 @@ impl SubscriptionClaims {
         for lane in lanes {
             if self.lanes.insert(lane) {
                 self.output.change_visualization_subscribers(lane, 1);
+                self.output
+                    .change_visualization_projection_claim(self.key(lane), 1);
             }
         }
     }
@@ -51,6 +55,22 @@ impl SubscriptionClaims {
         for lane in lanes {
             if self.lanes.remove(&lane) {
                 self.output.change_visualization_subscribers(lane, -1);
+                self.output
+                    .change_visualization_projection_claim(self.key(lane), -1);
+            }
+        }
+    }
+
+    fn key(
+        &self,
+        lane: VisualizationLane,
+    ) -> super::visualization_frame::VisualizationProjectionKey {
+        match lane {
+            VisualizationLane::Normal => {
+                super::visualization_frame::VisualizationProjectionKey::Normal
+            }
+            VisualizationLane::Preload => {
+                super::visualization_frame::VisualizationProjectionKey::Preload(self.session_id)
             }
         }
     }
@@ -60,6 +80,15 @@ impl Drop for SubscriptionClaims {
     fn drop(&mut self) {
         for lane in self.lanes.drain() {
             self.output.change_visualization_subscribers(lane, -1);
+            let key = match lane {
+                VisualizationLane::Normal => {
+                    super::visualization_frame::VisualizationProjectionKey::Normal
+                }
+                VisualizationLane::Preload => {
+                    super::visualization_frame::VisualizationProjectionKey::Preload(self.session_id)
+                }
+            };
+            self.output.change_visualization_projection_claim(key, -1);
         }
     }
 }
@@ -96,7 +125,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
         return;
     }
 
-    let mut subscribed = SubscriptionClaims::new(state.output.clone());
+    let mut subscribed = SubscriptionClaims::new(state.output.clone(), session.id.0);
     let mut interval = tokio::time::interval(Duration::from_millis(100));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut outgoing_sequence = 0_u64;

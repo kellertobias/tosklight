@@ -62,6 +62,7 @@ pub(super) struct VisualizationFrameHub {
     latest: ArcSwapOption<PublishedVisualizationFrame>,
     projections:
         parking_lot::Mutex<HashMap<VisualizationProjectionKey, Arc<ProjectedVisualizationFrame>>>,
+    projection_claims: parking_lot::Mutex<HashMap<VisualizationProjectionKey, u64>>,
     normal_subscribers: AtomicU64,
     preload_subscribers: AtomicU64,
     projection_count: AtomicU64,
@@ -153,7 +154,26 @@ impl VisualizationFrameHub {
         if delta > 0 {
             subscribers.fetch_add(delta as u64, Ordering::Relaxed);
         } else {
-            subscribers.fetch_sub(delta.unsigned_abs().into(), Ordering::Relaxed);
+            let decrement = u64::from(delta.unsigned_abs());
+            let _ = subscribers.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                Some(current.saturating_sub(decrement))
+            });
+        }
+    }
+
+    pub(super) fn change_projection_claim(&self, key: VisualizationProjectionKey, delta: i8) {
+        let mut claims = self.projection_claims.lock();
+        if delta > 0 {
+            *claims.entry(key).or_default() += delta as u64;
+            return;
+        }
+        let Some(current) = claims.get_mut(&key) else {
+            return;
+        };
+        *current = current.saturating_sub(u64::from(delta.unsigned_abs()));
+        if *current == 0 {
+            claims.remove(&key);
+            self.projections.lock().remove(&key);
         }
     }
 
@@ -250,6 +270,8 @@ mod tests {
     use std::{
         collections::HashMap,
         sync::atomic::{AtomicUsize, Ordering as AtomicOrdering},
+        sync::mpsc,
+        thread,
     };
 
     fn rendered(revision: u64) -> RenderResult {
@@ -319,5 +341,79 @@ mod tests {
         hub.change_subscribers(VisualizationLane::Preload, -1);
         assert_eq!(hub.metrics().normal_subscribers, 0);
         assert_eq!(hub.metrics().preload_subscribers, 0);
+    }
+
+    #[test]
+    fn final_projection_claim_releases_session_specific_cache() {
+        let hub = VisualizationFrameHub::default();
+        let key = VisualizationProjectionKey::Preload(Uuid::new_v4());
+        hub.change_projection_claim(key, 1);
+        hub.publish(&rendered(10), RenderOptions::default());
+        let source = hub.latest().unwrap();
+        let builds = AtomicUsize::new(0);
+        let mut build = || {
+            builds.fetch_add(1, AtomicOrdering::Relaxed);
+            Ok(VisualizationLaneSnapshot {
+                revision: 10,
+                generated_at: "2026-07-27T00:00:00Z".into(),
+                grand_master: 1.0,
+                blackout: false,
+                preload: true,
+                values: Vec::new(),
+                dynamic_stack: Vec::new(),
+                profile_output_values: Vec::new(),
+            })
+        };
+        hub.projection(key, &source, &mut build).unwrap();
+        hub.projection(key, &source, &mut build).unwrap();
+        assert_eq!(builds.load(AtomicOrdering::Relaxed), 1);
+
+        hub.change_projection_claim(key, -1);
+        hub.change_projection_claim(key, 1);
+        hub.projection(key, &source, &mut build).unwrap();
+        assert_eq!(builds.load(AtomicOrdering::Relaxed), 2);
+    }
+
+    #[test]
+    fn projection_work_cannot_block_latest_frame_publication() {
+        let hub = Arc::new(VisualizationFrameHub::default());
+        hub.publish(&rendered(10), RenderOptions::default());
+        let source = hub.latest().unwrap();
+        let (projection_started_tx, projection_started_rx) = mpsc::channel();
+        let (release_projection_tx, release_projection_rx) = mpsc::channel();
+        let projection_hub = Arc::clone(&hub);
+        let projection = thread::spawn(move || {
+            projection_hub
+                .projection(VisualizationProjectionKey::Normal, &source, || {
+                    projection_started_tx.send(()).unwrap();
+                    release_projection_rx.recv().unwrap();
+                    Ok(VisualizationLaneSnapshot {
+                        revision: 10,
+                        generated_at: "2026-07-27T00:00:00Z".into(),
+                        grand_master: 1.0,
+                        blackout: false,
+                        preload: false,
+                        values: Vec::new(),
+                        dynamic_stack: Vec::new(),
+                        profile_output_values: Vec::new(),
+                    })
+                })
+                .unwrap();
+        });
+        projection_started_rx.recv().unwrap();
+
+        let (published_tx, published_rx) = mpsc::channel();
+        let publisher_hub = Arc::clone(&hub);
+        thread::spawn(move || {
+            publisher_hub.publish(&rendered(20), RenderOptions::default());
+            published_tx.send(()).unwrap();
+        });
+        published_rx
+            .recv_timeout(Duration::from_millis(100))
+            .expect("publication must not wait for projection work");
+        assert_eq!(hub.latest().unwrap().show_revision, 20);
+
+        release_projection_tx.send(()).unwrap();
+        projection.join().unwrap();
     }
 }

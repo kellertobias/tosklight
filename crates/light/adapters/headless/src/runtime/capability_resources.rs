@@ -2170,6 +2170,15 @@ impl OutputResource {
         self.visualization_frames.change_subscribers(lane, delta);
     }
 
+    pub(super) fn change_visualization_projection_claim(
+        &self,
+        key: super::visualization_frame::VisualizationProjectionKey,
+        delta: i8,
+    ) {
+        self.visualization_frames
+            .change_projection_claim(key, delta);
+    }
+
     pub(super) fn visualization_metrics(&self) -> super::visualization_frame::VisualizationMetrics {
         self.visualization_frames.metrics()
     }
