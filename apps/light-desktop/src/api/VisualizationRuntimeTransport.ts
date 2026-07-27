@@ -14,8 +14,10 @@ import {
 import {
 	arrayAt,
 	booleanAt,
+	enumAt,
 	exactRecordAt,
 	integerAt,
+	nullable,
 	numberAt,
 	stringAt,
 } from "./playbackWirePrimitives";
@@ -110,6 +112,7 @@ export function decodeVisualizationRuntimeSnapshot(
 		"blackout",
 		"preload",
 		"values",
+		"dynamic_stack",
 		"profile_output_values",
 	]);
 	const preload = booleanAt(snapshot.preload, "$.preload");
@@ -125,9 +128,95 @@ export function decodeVisualizationRuntimeSnapshot(
 		blackout: booleanAt(snapshot.blackout, "$.blackout"),
 		preload,
 		values: decodeValues(snapshot.values, "$.values"),
+		dynamic_stack:
+			snapshot.dynamic_stack === undefined
+				? undefined
+				: decodeDynamicStack(snapshot.dynamic_stack, "$.dynamic_stack"),
 		profile_output_values: decodeValues(
 			snapshot.profile_output_values,
 			"$.profile_output_values",
+		),
+	};
+}
+
+function decodeDynamicStack(value: unknown, path: string) {
+	return arrayAt(value, path).map((entry, index) =>
+		decodeDynamicStackEntry(entry, `${path}[${index}]`),
+	);
+}
+
+function decodeDynamicStackEntry(value: unknown, path: string) {
+	const entry = exactRecordAt(value, path, [
+		"fixture_id",
+		"attribute",
+		"entry_type",
+		"priority",
+		"changed_at_millis",
+		"source",
+		"dynamic_id",
+		"pool_number",
+		"name",
+		"runtime_instance_id",
+		"controller_id",
+		"lane_id",
+		"size",
+		"activation_mix",
+		"paused",
+		"hidden",
+		"pending",
+		"winning",
+		"value",
+		"resolved_value",
+	]);
+	return {
+		fixture_id: stringAt(entry.fixture_id, `${path}.fixture_id`),
+		attribute: stringAt(entry.attribute, `${path}.attribute`),
+		entry_type: enumAt(entry.entry_type, `${path}.entry_type`, [
+			"ordinary_static",
+			"dynamic",
+			"fix_at",
+			"dynamic_off",
+			"static",
+		]),
+		priority: signedIntegerAt(entry.priority, `${path}.priority`),
+		changed_at_millis: integerAt(
+			entry.changed_at_millis,
+			`${path}.changed_at_millis`,
+		),
+		source: stringAt(entry.source, `${path}.source`),
+		dynamic_id: nullable(entry.dynamic_id, `${path}.dynamic_id`, stringAt),
+		pool_number: nullable(
+			entry.pool_number,
+			`${path}.pool_number`,
+			integerAt,
+		),
+		name: stringAt(entry.name, `${path}.name`),
+		runtime_instance_id: nullable(
+			entry.runtime_instance_id,
+			`${path}.runtime_instance_id`,
+			stringAt,
+		),
+		controller_id: nullable(
+			entry.controller_id,
+			`${path}.controller_id`,
+			stringAt,
+		),
+		lane_id: nullable(entry.lane_id, `${path}.lane_id`, stringAt),
+		size: nullable(entry.size, `${path}.size`, numberAt),
+		activation_mix: nullable(
+			entry.activation_mix,
+			`${path}.activation_mix`,
+			normalizedAt,
+		),
+		paused: booleanAt(entry.paused, `${path}.paused`),
+		hidden: booleanAt(entry.hidden, `${path}.hidden`),
+		pending: booleanAt(entry.pending, `${path}.pending`),
+		winning: booleanAt(entry.winning, `${path}.winning`),
+		value: nullable(entry.value, `${path}.value`, decodeAttributeValue),
+		resolved_value: nullable(
+			entry.resolved_value,
+			`${path}.resolved_value`,
+			decodeAttributeValue,
 		),
 	};
 }
@@ -136,6 +225,13 @@ function decodeValues(value: unknown, path: string) {
 	return arrayAt(value, path).map((entry, index) =>
 		decodeVisualizationValue(entry, `${path}[${index}]`),
 	);
+}
+
+function signedIntegerAt(value: unknown, path: string) {
+	const integer = numberAt(value, path);
+	if (!Number.isSafeInteger(integer))
+		throw new WireValidationError(path, "integer", value);
+	return integer;
 }
 
 function decodeVisualizationValue(value: unknown, path: string): {

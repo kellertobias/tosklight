@@ -115,6 +115,48 @@ describe("decodeVisualizationRuntimeSnapshot", () => {
 		expect(decoded.profile_output_values).toEqual(decoded.values);
 	});
 
+	it("decodes the Dynamic stack emitted by the production endpoint", () => {
+		const decoded = decodeVisualizationRuntimeSnapshot(
+			{
+				...snapshot(false),
+				dynamic_stack: [
+					{
+						fixture_id: "fixture-1",
+						attribute: "intensity",
+						entry_type: "dynamic",
+						priority: -10,
+						changed_at_millis: 1_234,
+						source: "Programmer",
+						dynamic_id: "33333333-3333-4333-8333-333333333333",
+						pool_number: 1,
+						name: "Pulse",
+						runtime_instance_id: "44444444-4444-4444-8444-444444444444",
+						controller_id: "55555555-5555-4555-8555-555555555555",
+						lane_id: "66666666-6666-4666-8666-666666666666",
+						size: 0.75,
+						activation_mix: 0.5,
+						paused: false,
+						hidden: false,
+						pending: false,
+						winning: true,
+						value: { kind: "normalized", value: 0.4 },
+						resolved_value: { kind: "normalized", value: 0.4 },
+					},
+				],
+			},
+			"normal",
+		);
+
+		expect(decoded.dynamic_stack).toEqual([
+			expect.objectContaining({
+				entry_type: "dynamic",
+				priority: -10,
+				activation_mix: 0.5,
+				winning: true,
+			}),
+		]);
+	});
+
 	it.each([
 		["missing lane", without(snapshot(false), "preload")],
 		["unknown field", { ...snapshot(false), foreign_scope: "other" }],
