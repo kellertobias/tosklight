@@ -2,7 +2,21 @@
 
 Named exclusion zones let an operator define a set of virtual playback cells in which at most one playback may be On at a time.
 
-**Implementation status:** Complete. The operator UI, authoritative server behavior, persistence, restart recovery, help, and paired Playwright coverage are implemented. The executable contract is `VPB-007` in `tests/06-preload-modes-and-virtual-playbacks.spec.ts`.
+**Implementation status:** Complete for the current page-slot-mirroring Virtual
+Playback model. The operator UI, authoritative server behavior, persistence, restart
+recovery, help, and Playwright coverage described here are implemented. The semantic
+contract is `VPB-007` in
+`tests/56-semantic-virtual-playback-exclusion-zone.spec.ts`; the older
+`tests/06-preload-modes-and-virtual-playbacks.spec.ts` remains supplemental
+compatibility coverage.
+
+The future dedicated Virtual Playback range and Follow Main/Pinned page modes are
+specified in the final refactoring queue item,
+[Dedicated Virtual Playbacks and Exclusion Zones](../refactoring/pending/15-virtual-playbacks-and-exclusion-zones.md).
+That pre-alpha schema break deliberately does not migrate this old model; it
+regenerates the repository-owned example shows instead.
+This completed document records shipped behavior and must not be used to claim that
+the dedicated-number model is implemented.
 
 ## Creating a zone
 

@@ -4,6 +4,13 @@
 
 **Manual review and specification only.** This plan records a future operator-behavior audit. It does not implement preload behavior, playback behavior, API behavior, UI changes, OSC behavior, or executable tests.
 
+The dedicated Virtual Playback identity, addressing, exclusion-zone, and
+Virtual-Playback-specific release contract is owned by
+[refactoring chunk 15](../refactoring/pending/15-virtual-playbacks-and-exclusion-zones.md).
+This review retains the broader comparison between Programmer, cue-like scenes,
+ordinary Playbacks, and Virtual Playbacks; it must not define a second Virtual
+Playback model.
+
 ## Goal
 
 Verify that Preload Go behaves correctly when the staged content includes ordinary programmer LTP values, cue-like virtual scenes, real playbacks, and virtual playbacks.

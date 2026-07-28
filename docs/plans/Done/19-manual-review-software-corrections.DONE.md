@@ -27,7 +27,8 @@ Remove the dangerous **Delete Cue** button from the Cue timing/trigger editor. C
 
 ### Virtual Playbacks
 
-Pane Settings contains only the logical **Rows** and **Columns** configuration plus exclusion-zone management after that feature exists. Remove the per-cell Cuelist/action assignment list.
+Pane Settings contains the logical **Rows** and **Columns** configuration plus
+exclusion-zone management. Remove the per-cell Cuelist/action assignment list.
 
 Assigning a Virtual Playback follows the standard playback workflow:
 
