@@ -138,7 +138,7 @@ export function DynamicEditorTaskTabs({
 	onLane,
 	page: controlledPage,
 	onPage,
-	pageCount = 2,
+	pageCount = 1,
 }: {
 	task?: DynamicEditorTask;
 	onTask?(task: DynamicEditorTask): void;
@@ -265,7 +265,6 @@ function DynamicEditorTaskTabsView({
 					<SelectField
 						className="dynamic-editor-lane-picker"
 						ariaLabel="Dynamic lane"
-						size="compact"
 						value={lane.id}
 						options={dynamic.lanes.map((candidate) => ({
 							value: candidate.id,

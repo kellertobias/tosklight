@@ -22,7 +22,6 @@ describe("DynamicEditorTaskTabs", () => {
 					laneId="lane-intensity"
 					onLane={vi.fn()}
 					page={1}
-					pageCount={1}
 				/>
 			</DynamicEditorSessionProvider>,
 		);

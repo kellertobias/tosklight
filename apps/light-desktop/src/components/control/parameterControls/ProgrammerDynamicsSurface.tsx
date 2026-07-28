@@ -14,7 +14,11 @@ import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEdito
 import { useDynamicsActions } from "../../../features/dynamics/DynamicsActionsContext";
 import type { ProgrammerDynamicValue } from "../../../features/programmerValues/contracts";
 import { useProgrammerValuesView } from "../../../features/programmerValues/ProgrammerValuesView";
-import { useDynamics } from "../../../features/showObjects/ShowObjectsState";
+import type { ShowObject } from "../../../features/showObjects/contracts";
+import {
+	useDynamics,
+	usePresets,
+} from "../../../features/showObjects/ShowObjectsState";
 import {
 	type DynamicEditorView,
 	DynamicEncoderDeck,
@@ -36,6 +40,7 @@ const EMPTY_RUNTIME: DynamicRuntimeSnapshotProjection = {
 
 export function DynamicDefinitionEncoderSurface({
 	dynamic,
+	presets = [],
 	lane,
 	view,
 	page = 1,
@@ -45,6 +50,7 @@ export function DynamicDefinitionEncoderSurface({
 	onMutate,
 }: {
 	dynamic: DynamicDefinitionProjection;
+	presets?: readonly ShowObject<"preset">[];
 	lane: DynamicDefinitionProjection["lanes"][number] | null;
 	view: DynamicEditorView;
 	page?: number;
@@ -65,6 +71,7 @@ export function DynamicDefinitionEncoderSurface({
 				page={page}
 				lane={lane ?? undefined}
 				dynamic={dynamic}
+				presets={presets}
 				keyframeIndex={keyframeIndex}
 				onKeyframeIndex={onKeyframeIndex}
 				onLaneChange={onLaneChange}
@@ -83,6 +90,7 @@ export function ProgrammerDynamicsSurface({
 	const editor = useDynamicEditorSession();
 	const showId = useActiveShowId();
 	const definitions = useDynamics();
+	const presets = usePresets();
 	const programmer = useProgrammerValuesView(controller.active);
 	const [runtime, setRuntime] = useState(EMPTY_RUNTIME);
 	const [selectedControllerId, setSelectedControllerId] = useState<
@@ -419,6 +427,7 @@ export function ProgrammerDynamicsSurface({
 						page={editor.session?.encoderPage ?? 1}
 						lane={selectedLane ?? undefined}
 						dynamic={selectedObject.body}
+						presets={presets}
 						keyframeIndex={editor.session?.primaryKeyframeIndex ?? 0}
 						onKeyframeIndex={(primaryKeyframeIndex) =>
 							editor.update({ primaryKeyframeIndex })

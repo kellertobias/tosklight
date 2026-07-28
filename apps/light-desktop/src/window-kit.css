@@ -38,7 +38,8 @@
 	display: flex;
 	border-left: 1px solid var(--line2);
 }
-.ui-window-action-group > .ui-button.active {
+.ui-window-action-group
+	> .ui-button.active:not(.ui-danger):not(.ui-success) {
 	background: #223843;
 	color: var(--cyan);
 }
