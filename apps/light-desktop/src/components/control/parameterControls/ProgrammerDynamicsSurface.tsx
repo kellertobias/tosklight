@@ -1,4 +1,4 @@
-import { Button } from "@tosklight/ui";
+import { Button, SelectField } from "@tosklight/ui";
 import { TouchEncoder } from "@tosklight/ui/encoders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -405,41 +405,27 @@ export function ProgrammerDynamicsSurface({
 		.join(" · ");
 	const toolbar = (
 		<div className="programmer-dynamics-toolbar">
-			<label>
-				<span className="sr-only">Dynamic instance</span>
-				<select
-					aria-label="Dynamic instance"
-					value={selected.controller.controller_id}
-					onChange={(event) => {
-						setSelectedControllerId(event.target.value);
-						setSelectedLaneId(null);
-					}}
-				>
-					{choices.map((choice) => (
-						<option
-							key={choice.controller.controller_id}
-							value={choice.controller.controller_id}
-						>
-							Dynamic {choice.instance.pool_number} · {choice.instance.name} ·{" "}
-							{choice.controller.source}
-						</option>
-					))}
-				</select>
-			</label>
-			<label>
-				<span className="sr-only">Dynamic lane</span>
-				<select
-					aria-label="Dynamic lane"
-					value={selectedLane?.id ?? ""}
-					onChange={(event) => setSelectedLaneId(event.target.value)}
-				>
-					{lanes.map((lane) => (
-						<option key={lane.id} value={lane.id}>
-							{lane.attribute}
-						</option>
-					))}
-				</select>
-			</label>
+			<SelectField
+				ariaLabel="Dynamic instance"
+				value={selected.controller.controller_id}
+				options={choices.map((choice) => ({
+					value: choice.controller.controller_id,
+					label: `Dynamic ${choice.instance.pool_number} · ${choice.instance.name} · ${choice.controller.source}`,
+				}))}
+				onChange={(controllerId) => {
+					setSelectedControllerId(controllerId);
+					setSelectedLaneId(null);
+				}}
+			/>
+			<SelectField
+				ariaLabel="Dynamic lane"
+				value={selectedLane?.id ?? ""}
+				options={lanes.map((lane) => ({
+					value: lane.id,
+					label: lane.attribute,
+				}))}
+				onChange={setSelectedLaneId}
+			/>
 			{(["instance", "curves", "phase", "speed"] as const).map((candidate) => (
 				<Button
 					key={candidate}

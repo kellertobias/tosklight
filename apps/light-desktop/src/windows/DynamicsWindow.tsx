@@ -903,8 +903,7 @@ function CurvesView({
 							aria-current={candidate.id === lane.id}
 							className={`dynamic-lane-overview ${candidate.id === lane.id ? "primary" : ""} ${selected ? "selected" : ""}`}
 						>
-							<button
-								type="button"
+							<Button
 								className="dynamic-lane-select-surface"
 								aria-pressed={selected}
 								onClick={(event) =>
@@ -948,8 +947,7 @@ function CurvesView({
 									{candidate.mode === "keyframes" && (
 										<span className="dynamic-keyframe-marks">
 											{candidate.keyframes.points.map((point, pointIndex) => (
-												<button
-													type="button"
+												<Button
 													key={`${candidate.id}-${pointIndex}`}
 													aria-label={`${attribute?.label ?? candidate.attribute} keyframe ${keyframeName(pointIndex)}`}
 													className={
@@ -1007,7 +1005,7 @@ function CurvesView({
 													onPointerCancel={() => setDraggingKeyframe(null)}
 												>
 													<span>{keyframeName(pointIndex)}</span>
-												</button>
+													</Button>
 											))}
 											<i
 												className="loop-close"
@@ -1032,13 +1030,13 @@ function CurvesView({
 										<i
 											className="dynamic-preview-playhead"
 											style={{ left: `${previewPhase * 100}%` }}
-										/>
+												/>
 									)}
 									<span className="dynamic-lane-axis start">0%</span>
 									<span className="dynamic-lane-axis middle">50%</span>
 									<span className="dynamic-lane-axis end">100%</span>
 								</span>
-							</button>
+							</Button>
 							<div className="dynamic-lane-row-actions">
 								<SelectField
 									className="dynamic-lane-action-select"
