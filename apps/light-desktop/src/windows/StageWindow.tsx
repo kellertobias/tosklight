@@ -21,7 +21,7 @@ export function StageWindow(props: StageWindowProps) {
 		layout,
 		selection.fixtureIdSet,
 		props.patchedFixtures,
-		options.view !== "3d",
+		false,
 	);
 	return (
 		<div
@@ -60,6 +60,13 @@ export function StageWindow(props: StageWindowProps) {
 					layout={layout}
 					options={options}
 					selection={selection}
+					patchedFixtures={stage.stageFixtures}
+					patchSelectionPreview={patchSelectionPreview}
+					patchPreviewFixtures={stage.patchPreviewFixtures}
+					visualizationLane={
+						options.followPreload ? "preload" : "normal"
+					}
+					visualizationActive={active}
 				/>
 			)}
 			{active &&

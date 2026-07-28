@@ -37,7 +37,7 @@ function usePatchedFixtures(override?: readonly PatchedFixture[]) {
 	);
 }
 
-function fixturePresentation(
+export function fixturePresentation(
 	fixture: PatchedFixture,
 	index: number,
 	visualization: VisualizationSnapshot | null,
@@ -184,6 +184,7 @@ export function useStageVisualization(
 		visualizationError: visualizationView.error,
 		fixtures,
 		fixtures3d: useFixtures3d(stageFixtures, layout),
+		stageFixtures,
 		patchPreviewFixtures,
 	};
 }

@@ -1,5 +1,8 @@
 import { Button } from "@tosklight/ui";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useRef } from "react";
+import type { PatchedFixture } from "../../api/types";
+import { useVisualizationRuntimeSnapshotSubscription } from "../../features/visualizationRuntime/VisualizationRuntimeView";
+import type { VisualizationRuntimeLane } from "../../features/visualizationRuntime/contracts";
 import type {
 	StageFixturePresentation,
 	StageLayoutModel,
@@ -10,6 +13,7 @@ import {
 	useStageFixtureGestures,
 } from "./useStage2dGestures";
 import type { StageSelectionModel } from "./useStageSelection";
+import { fixturePresentation } from "./useStageVisualization";
 
 const symbols = ["◉", "◈", "◎", "◐", "◇", "◍"];
 
@@ -71,13 +75,53 @@ export function Stage2dView({
 	layout,
 	options,
 	selection,
+	patchedFixtures = [],
+	patchSelectionPreview = false,
+	patchPreviewFixtures = [],
+	visualizationLane = "normal",
+	visualizationActive = false,
 }: {
 	compact?: boolean;
 	fixtures: StageFixturePresentation[];
 	layout: StageLayoutModel;
 	options: StageOptionsModel;
 	selection: StageSelectionModel;
+	patchedFixtures?: readonly PatchedFixture[];
+	patchSelectionPreview?: boolean;
+	patchPreviewFixtures?: readonly string[];
+	visualizationLane?: VisualizationRuntimeLane;
+	visualizationActive?: boolean;
 }) {
+	const rootRef = useRef<HTMLDivElement>(null);
+	useVisualizationRuntimeSnapshotSubscription(
+		visualizationLane,
+		visualizationActive,
+		(snapshot) => {
+			const root = rootRef.current;
+			if (!root) return;
+			const buttons = new Map(
+				[
+					...root.querySelectorAll<HTMLElement>(
+						".stage-fixture[data-fixture-id]",
+					),
+				].map((button) => [button.dataset.fixtureId, button]),
+			);
+			patchedFixtures.forEach((fixture, index) => {
+				const button = buttons.get(fixture.fixture_id);
+				if (!button) return;
+				applyFixtureVisualization(
+					button,
+					fixturePresentation(
+						fixture,
+						index,
+						snapshot,
+						patchSelectionPreview &&
+							patchPreviewFixtures.includes(fixture.fixture_id),
+					),
+				);
+			});
+		},
+	);
 	const orderedFixtureIds = fixtures
 		.map((fixture) => fixture.fixtureId)
 		.filter(Boolean);
@@ -91,6 +135,7 @@ export function Stage2dView({
 	return (
 		<div
 			className={`stage-canvas stage-mode-${options.mode}`}
+			ref={rootRef}
 			onPointerDown={canvas.begin}
 			onPointerMove={canvas.update}
 			onPointerUp={canvas.finish}
@@ -136,4 +181,24 @@ export function Stage2dView({
 			)}
 		</div>
 	);
+}
+
+function applyFixtureVisualization(
+	button: HTMLElement,
+	fixture: StageFixturePresentation,
+) {
+	button.style.color = fixture.color;
+	button.style.setProperty("--lamp-fill", `${12 + fixture.dimmer * 0.36}%`);
+	button.style.setProperty("--lamp-ring", `${20 + fixture.dimmer * 0.65}%`);
+	button.setAttribute("aria-label", `${fixture.name}, ${fixture.dimmer}%`);
+	const dot = button.querySelector<HTMLElement>(".lamp-color-dot");
+	if (dot) dot.style.background = fixture.color;
+	const line = button.querySelector<HTMLElement>(".lamp-position-line");
+	if (!line) return;
+	line.classList.toggle("active", fixture.dimmer > 0);
+	line.classList.toggle("inactive", fixture.dimmer <= 0);
+	line.style.transform = `rotate(${fixture.pan * 360 - 180}deg)`;
+	line.style.color = fixture.dimmer > 0 ? fixture.color : "";
+	const tilt = line.querySelector<HTMLElement>("i");
+	if (tilt) tilt.style.left = `${fixture.tilt * 100}%`;
 }
