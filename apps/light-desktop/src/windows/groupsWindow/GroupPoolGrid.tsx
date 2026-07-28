@@ -1,4 +1,8 @@
-import { PoolGrid, type PoolSlotViewModel } from "@tosklight/ui/pools";
+import {
+	DEFAULT_POOL_CARD_MINIMUM_WIDTH,
+	PoolGrid,
+	type PoolSlotViewModel,
+} from "@tosklight/ui/pools";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useRef } from "react";
 import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
@@ -17,8 +21,6 @@ import {
 import { useApp } from "../../state/AppContext";
 import { GroupCard } from "./GroupCard";
 import type { FixtureMetadata, Group } from "./model";
-
-const GROUP_POOL_MINIMUM_CARD_WIDTH = 88;
 
 export function GroupPoolGrid({
 	active = true,
@@ -97,7 +99,7 @@ export function GroupPoolGrid({
 	return (
 		<WindowScrollArea>
 			<PoolGrid
-				minimumCardWidth={GROUP_POOL_MINIMUM_CARD_WIDTH}
+				minimumCardWidth={DEFAULT_POOL_CARD_MINIMUM_WIDTH}
 				slots={slots}
 				slotCount={cards.length}
 				emptySlot={(index) => ({

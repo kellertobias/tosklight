@@ -7,6 +7,7 @@ import {
 	TextField,
 } from "@tosklight/ui";
 import {
+	DEFAULT_POOL_CARD_MINIMUM_WIDTH,
 	INDIVIDUAL_POOL_COLOR_FALLBACK,
 	PoolCard,
 	type PoolColorMode,
@@ -33,8 +34,6 @@ import {
 	presetAddress,
 	presetStorageKey,
 } from "../../presetFamilies";
-
-const PRESET_POOL_MINIMUM_CARD_WIDTH = 88;
 
 export type PresetCustomization = {
 	title?: string;
@@ -126,7 +125,7 @@ export function PresetCardGrid({
 	return (
 		<WindowScrollArea>
 			<PoolGrid
-				minimumCardWidth={PRESET_POOL_MINIMUM_CARD_WIDTH}
+				minimumCardWidth={DEFAULT_POOL_CARD_MINIMUM_WIDTH}
 				slots={slots}
 				slotCount={cards.length}
 				emptySlot={(index) => ({

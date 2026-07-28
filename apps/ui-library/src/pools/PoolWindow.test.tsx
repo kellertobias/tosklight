@@ -173,6 +173,14 @@ describe("PoolWindow", () => {
 		expect(screen.getByText("Pool settings")).toBeInTheDocument();
 	});
 
+	it("uses the shared 100px minimum for pool cards", () => {
+		renderPool();
+
+		expect(document.querySelector(".pool-window-grid")).toHaveStyle({
+			"--grid-cell-min": "100px",
+		});
+	});
+
 	it("lets application adapters retain card composition while applying stable slot identity", () => {
 		renderPool({
 			slots: [

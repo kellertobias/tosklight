@@ -51,6 +51,8 @@ export const DEFAULT_POOL_GRID_APPEARANCE: Readonly<PoolGridAppearance> = {
 	setColor: "#1bd6ec",
 };
 
+export const DEFAULT_POOL_CARD_MINIMUM_WIDTH = 100;
+
 export interface PoolWindowProps<SlotId extends string | number>
 	extends PoolGridProps<SlotId> {
 	title: ReactNode;
@@ -65,7 +67,7 @@ export function PoolGrid<SlotId extends string | number>({
 	emptySlot,
 	fillEmptySlots = true,
 	className = "",
-	minimumCardWidth = 88,
+	minimumCardWidth = DEFAULT_POOL_CARD_MINIMUM_WIDTH,
 	appearance,
 	onSlotClick,
 	onSlotPressHold,

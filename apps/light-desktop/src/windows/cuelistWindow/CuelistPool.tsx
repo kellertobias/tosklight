@@ -1,4 +1,5 @@
 import {
+	DEFAULT_POOL_CARD_MINIMUM_WIDTH,
 	PoolCard,
 	PoolGrid,
 	type PoolSlotViewModel,
@@ -67,7 +68,6 @@ interface PoolSlotProps {
 }
 
 const CUELIST_POOL_KINDS = ["cue_list", "playback", "playback_page"] as const;
-const CUELIST_POOL_MINIMUM_CARD_WIDTH = 88;
 
 function CuelistPoolSlot(props: PoolSlotProps) {
 	const { number, playback, runtimeMaster, usage } = props;
@@ -346,7 +346,7 @@ function CuelistPoolCards({
 		>
 			<PoolGrid
 				className="cuelist-pool-grid"
-				minimumCardWidth={CUELIST_POOL_MINIMUM_CARD_WIDTH}
+				minimumCardWidth={DEFAULT_POOL_CARD_MINIMUM_WIDTH}
 				slots={poolSlots}
 				slotCount={search ? undefined : 1000}
 				fillEmptySlots={!search}
