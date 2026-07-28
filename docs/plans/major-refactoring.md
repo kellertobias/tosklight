@@ -500,6 +500,10 @@ plan that remain incomplete or lack retained acceptance evidence:
   remain outstanding.
 - The non-blocking 400-line file and 20-line function design goals continue to identify possible
   cohesive extractions; the enforceable hard source-size ratchet is clean.
+- A repository-wide dead-code and obsolete-compatibility audit is queued after the remaining Stage
+  and Virtual Playback feature migrations. It covers the Rust backend first, followed by the UI,
+  tests, tooling, dependencies, generated contracts, and documentation; see
+  [`refactoring/pending/19-repository-wide-dead-code-removal.md`](refactoring/pending/19-repository-wide-dead-code-removal.md).
 
 Dynamics, full Timecode, Macros, Schedules, `FAT`, and bidirectional external fixtures remain
 deliberately separate product work. Their absence is not an unfinished refactoring implementation.

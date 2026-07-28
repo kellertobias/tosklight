@@ -41,14 +41,16 @@ files, contracts, runtime state, and verification surfaces do not overlap.
 | 14 | [Modular desktop host](finished/14-modular-desktop-host.md) | Completed thin Tauri composition root and cohesive host modules. |
 | 16 | [Dynamics](finished/16-dynamics/README.md) | Completed scalar Dynamics runtime, persistence, Programmer/Cue/Preload, Playback, transport, reviewed UI, compatibility removal, and acceptance evidence. |
 | 17 | [Efficient built-in Stage visualizer](doing/14-efficient-built-in-stage-visualizer.md) | Currently owned; add isolated visualization telemetry, retained rendering, and the four Stage render qualities without slowing engine or DMX output. |
-| 18 | [Dedicated Virtual Playbacks and exclusion zones](pending/15-virtual-playbacks-and-exclusion-zones.md) | Final current queue item; replace page-slot aliases with Virtual Playbacks 1001–9998 and rebuild exclusion zones on the new identity. |
+| 18 | [Dedicated Virtual Playbacks and exclusion zones](pending/15-virtual-playbacks-and-exclusion-zones.md) | Replace page-slot aliases with Virtual Playbacks 1001–9998 and rebuild exclusion zones on the new identity. |
+| 19 | [Repository-wide dead-code removal](pending/19-repository-wide-dead-code-removal.md) | After feature migration stabilizes, audit and safely remove dead backend, UI, test, tooling, dependency, and compatibility code, prioritizing the Rust backend. |
 
 Product-roadmap work under `docs/plans/Next` and `docs/plans/Later` remains separate unless a queue
 file explicitly links it as its behavior contract.
 
-The filenames of the two remaining pending plans retain their originally authored
+The filenames of the Stage and Virtual Playback plans retain their originally authored
 numbers. The table's execution order is authoritative: finish Dynamics first, then
-the built-in Stage visualizer, then Dedicated Virtual Playbacks.
+the built-in Stage visualizer, Dedicated Virtual Playbacks, and the repository-wide
+dead-code removal.
 
 ## Completed Storybook lane
 
@@ -71,7 +73,8 @@ The frontend lane was handed back after its owner:
 The directory move is the machine-readable signal that plan 02 and the frontend contracts it owns
 are stable. That signal is now present.
 
-The current execution order is the built-in Stage visualizer, then Dedicated Virtual Playbacks.
+The current execution order is the built-in Stage visualizer, Dedicated Virtual Playbacks,
+then the repository-wide dead-code removal.
 Before claiming each new plan, query the large Codex usage window with the Tosken Raider MCP
 `get_remaining_usage` tool. Do not start another plan when the remaining large-window allowance is
 below 30%; finish and commit an already claimed coherent plan before stopping.
