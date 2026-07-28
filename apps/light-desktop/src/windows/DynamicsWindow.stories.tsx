@@ -4,14 +4,8 @@ import { useMemo, useState } from "react";
 import { CommandSectionFixture } from "../../../ui-library/storybook/fixtures/controlSection";
 import { ApplicationStateHarness } from "../../../ui-library/storybook/providers/ApplicationStateHarness";
 import type {
-	DynamicActivationPolicyProjection,
 	DynamicDefinitionProjection,
-	DynamicLaneProjection,
-	DynamicPhaseDistributionProjection,
-	DynamicRandomGroupProjection,
 	DynamicRuntimeSnapshotProjection,
-	DynamicSpeedProjection,
-	DynamicTargetBindingProjection,
 	DynamicUpdateIntent,
 } from "../api/generated/light-wire";
 import { DynamicEditorTaskTabs } from "../components/control/parameterControls/ParameterFamilyTabs";
@@ -19,6 +13,7 @@ import { DynamicDefinitionEncoderSurface } from "../components/control/parameter
 import { AppShellView } from "../components/shell/AppShell";
 import { LeftDock } from "../components/shell/LeftDock";
 import { useDynamicEditorSession } from "../features/dynamics/DynamicEditorSessionContext";
+import { applyDynamicUpdateIntent } from "../features/dynamics/dynamicUpdateIntent";
 import type { ShowObject } from "../features/showObjects/contracts";
 import {
 	createDefaultDynamicDefinition,
@@ -182,99 +177,6 @@ const runtime: DynamicRuntimeSnapshotProjection = {
 	],
 };
 
-function applyIntent(
-	definition: DynamicDefinitionProjection,
-	intent: DynamicUpdateIntent,
-): DynamicDefinitionProjection {
-	switch (intent.type) {
-		case "set_name":
-			return { ...definition, name: intent.name };
-		case "set_color":
-			return { ...definition, color: intent.color };
-		case "set_icon":
-			return { ...definition, icon: intent.icon };
-		case "set_target_binding":
-			return {
-				...definition,
-				target_binding: intent.target_binding as DynamicTargetBindingProjection,
-			};
-		case "add_lane": {
-			const lanes = [...definition.lanes];
-			const index = intent.index ?? lanes.length;
-			lanes.splice(index, 0, intent.lane as DynamicLaneProjection);
-			return { ...definition, lanes };
-		}
-		case "replace_lane":
-			return {
-				...definition,
-				lanes: definition.lanes.map((lane) =>
-					lane.id === intent.lane_id
-						? (intent.lane as DynamicLaneProjection)
-						: lane,
-				),
-			};
-		case "delete_lane":
-			return {
-				...definition,
-				lanes: definition.lanes.filter((lane) => lane.id !== intent.lane_id),
-			};
-		case "move_lane": {
-			const lanes = [...definition.lanes];
-			const current = lanes.findIndex((lane) => lane.id === intent.lane_id);
-			if (current < 0) return definition;
-			const [lane] = lanes.splice(current, 1);
-			lanes.splice(Math.max(0, Math.min(intent.index, lanes.length)), 0, lane);
-			return { ...definition, lanes };
-		}
-		case "set_phase":
-			return {
-				...definition,
-				phase: intent.phase as DynamicPhaseDistributionProjection,
-			};
-		case "set_speed":
-			return {
-				...definition,
-				speed: intent.speed as DynamicSpeedProjection,
-			};
-		case "set_overall_speed_multiplier":
-			return { ...definition, overall_speed_multiplier: intent.multiplier };
-		case "set_run_mode":
-			return { ...definition, run_mode: intent.run_mode };
-		case "set_activation":
-			return {
-				...definition,
-				default_activation:
-					intent.activation as DynamicActivationPolicyProjection,
-			};
-		case "set_activation_boundary":
-			return { ...definition, activation_boundary: intent.boundary };
-		case "add_random_group":
-			return {
-				...definition,
-				random_groups: [
-					...definition.random_groups,
-					intent.group as DynamicRandomGroupProjection,
-				],
-			};
-		case "replace_random_group":
-			return {
-				...definition,
-				random_groups: definition.random_groups.map((group) =>
-					group.id === intent.group_id
-						? (intent.group as DynamicRandomGroupProjection)
-						: group,
-				),
-			};
-		case "delete_random_group":
-			return {
-				...definition,
-				random_groups: definition.random_groups.filter(
-					(group) => group.id !== intent.group_id,
-				),
-			};
-	}
-}
-
 function DynamicsProgrammerSurface({
 	dynamic,
 	onMutate,
@@ -374,7 +276,7 @@ function FullApplicationDynamicsMock({
 	) => {
 		setDynamic((current) => {
 			const revision = current.revision + 1;
-			const body = applyIntent(current.body, intent);
+			const body = applyDynamicUpdateIntent(current.body, intent);
 			return {
 				...current,
 				revision,

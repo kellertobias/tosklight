@@ -18,10 +18,18 @@ let deleteArmed = false;
 const deleteDynamic = vi.fn();
 const updateDynamic = vi.fn();
 const resetCommand = vi.fn();
+const showObjectsStore = {
+	getSnapshot: () => ({ dynamics, authorityGeneration: 1 }),
+	beginOptimistic: vi.fn(() => crypto.randomUUID()),
+	settlePending: vi.fn(),
+	installObject: vi.fn(),
+	rollback: vi.fn(),
+};
 
 vi.mock("../features/showObjects/ShowObjectsState", () => ({
 	useDynamics: () => dynamics,
 	usePresets: () => [],
+	useShowObjectsStore: () => showObjectsStore,
 }));
 vi.mock("../features/showObjects/ShowObjectsView", () => ({
 	useShowObjectView: () => undefined,
@@ -128,7 +136,23 @@ describe("DynamicsWindow", () => {
 		dynamics = [];
 		deleteArmed = false;
 		deleteDynamic.mockReset().mockResolvedValue(undefined);
-		updateDynamic.mockReset().mockResolvedValue(undefined);
+		updateDynamic.mockReset().mockImplementation(
+			async (
+				_showId: string,
+				id: string,
+				expectedRevision: number,
+			) => {
+				const object = dynamics.find((candidate) => candidate.id === id);
+				return {
+					request_id: crypto.randomUUID(),
+					replayed: false,
+					show_id: "show-test",
+					show_revision: expectedRevision + 1,
+					event_sequence: expectedRevision + 1,
+					object: { ...object, revision: expectedRevision + 1 },
+				};
+			},
+		);
 		resetCommand.mockReset().mockResolvedValue(true);
 	});
 

@@ -29,7 +29,6 @@ import {
 	WindowSettings,
 } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiRequestError } from "../api/ApiRequestError";
 import { createLightApi } from "../api/client/api";
 import type {
 	DynamicDefinitionProjection,
@@ -50,6 +49,7 @@ import {
 	useHardwareConnected,
 } from "../features/deskSnapshot/DeskSnapshotState";
 import { useDynamicEditorSession } from "../features/dynamics/DynamicEditorSessionContext";
+import { DynamicMutationWriter } from "../features/dynamics/DynamicMutationWriter";
 import { useDynamicsActions } from "../features/dynamics/DynamicsActionsContext";
 import {
 	useProgrammingCommandLineActions,
@@ -59,6 +59,7 @@ import type { ShowObject } from "../features/showObjects/contracts";
 import {
 	useDynamics,
 	usePresets,
+	useShowObjectsStore,
 } from "../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import { useApp } from "../state/AppContext";
@@ -89,6 +90,11 @@ export function DynamicsWindow({
 	const presets = usePresets(active);
 	const isolatedApi = useMemo(() => createLightApi(), []);
 	const api = useDynamicsActions() ?? isolatedApi;
+	const showObjectsStore = useShowObjectsStore();
+	const mutationWriter = useMemo(
+		() => new DynamicMutationWriter(showObjectsStore, api.showObjects),
+		[api.showObjects, showObjectsStore],
+	);
 	const command = useCommandLineSurface({ selection: true, enabled: active });
 	const commandActions = useProgrammingCommandLineActions();
 	const deleteArmed = useProgrammingDeleteCommandActive(active);
@@ -171,31 +177,12 @@ export function DynamicsWindow({
 	) =>
 		run(async () => {
 			if (!showId) throw new Error("No active show");
-			try {
-				await api.showObjects.updateDynamic(
-					showId,
-					dynamic.id,
-					dynamic.revision,
-					intent,
-					mutationGroup,
-				);
-			} catch (cause) {
-				if (!(cause instanceof ApiRequestError) || cause.status !== 409)
-					throw cause;
-				const current =
-					await api.showObjects.object<DynamicDefinitionProjection>(
-						showId,
-						"dynamic",
-						dynamic.id,
-					);
-				await api.showObjects.updateDynamic(
-					showId,
-					dynamic.id,
-					current.revision,
-					intent,
-					mutationGroup,
-				);
-			}
+			await mutationWriter.update(
+				showId,
+				dynamic.id,
+				intent,
+				mutationGroup,
+			);
 		});
 
 	if (selected)

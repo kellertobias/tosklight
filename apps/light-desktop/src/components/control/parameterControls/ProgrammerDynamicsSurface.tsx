@@ -1,7 +1,6 @@
 import { Button } from "@tosklight/ui";
 import { TouchEncoder } from "@tosklight/ui/encoders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiRequestError } from "../../../api/ApiRequestError";
 import type {
 	DynamicDefinitionProjection,
 	DynamicRuntimeControllerProjection,
@@ -11,6 +10,7 @@ import type {
 } from "../../../api/generated/light-wire";
 import { useActiveShowId } from "../../../features/deskSnapshot/DeskSnapshotState";
 import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
+import { DynamicMutationWriter } from "../../../features/dynamics/DynamicMutationWriter";
 import { useDynamicsActions } from "../../../features/dynamics/DynamicsActionsContext";
 import type { ProgrammerDynamicValue } from "../../../features/programmerValues/contracts";
 import { useProgrammerValuesView } from "../../../features/programmerValues/ProgrammerValuesView";
@@ -18,6 +18,7 @@ import type { ShowObject } from "../../../features/showObjects/contracts";
 import {
 	useDynamics,
 	usePresets,
+	useShowObjectsStore,
 } from "../../../features/showObjects/ShowObjectsState";
 import {
 	type DynamicEditorView,
@@ -30,6 +31,14 @@ interface DynamicControllerChoice {
 	instance: DynamicRuntimeInstanceProjection;
 	controller: DynamicRuntimeControllerProjection;
 	definition: DynamicDefinitionProjection | null;
+}
+
+type ControllerValueField = "size" | "speed" | "phase";
+
+interface ControllerValueOverride {
+	size?: number;
+	speed?: number;
+	phase?: number;
 }
 
 const EMPTY_RUNTIME: DynamicRuntimeSnapshotProjection = {
@@ -91,6 +100,14 @@ export function ProgrammerDynamicsSurface({
 	const showId = useActiveShowId();
 	const definitions = useDynamics();
 	const presets = usePresets();
+	const showObjectsStore = useShowObjectsStore();
+	const mutationWriter = useMemo(
+		() =>
+			actions
+				? new DynamicMutationWriter(showObjectsStore, actions.showObjects)
+				: null,
+		[actions, showObjectsStore],
+	);
 	const programmer = useProgrammerValuesView(controller.active);
 	const [runtime, setRuntime] = useState(EMPTY_RUNTIME);
 	const [selectedControllerId, setSelectedControllerId] = useState<
@@ -99,12 +116,21 @@ export function ProgrammerDynamicsSurface({
 	const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
 	const [view, setView] = useState<"instance" | DynamicEditorView>("instance");
 	const [error, setError] = useState<string | null>(null);
+	const [controllerOverrides, setControllerOverrides] = useState<
+		Record<string, ControllerValueOverride>
+	>({});
+	const latestControllerWrites = useRef(new Map<string, string>());
 	const gesture = useRef<{ field: string; id: string; at: number } | null>(
 		null,
 	);
 	const refresh = useCallback(async () => {
-		if (!actions || !showId) return setRuntime(EMPTY_RUNTIME);
-		setRuntime(await actions.dynamics.runtime(showId));
+		if (!actions || !showId) {
+			setRuntime(EMPTY_RUNTIME);
+			return EMPTY_RUNTIME;
+		}
+		const next = await actions.dynamics.runtime(showId);
+		setRuntime(next);
+		return next;
 	}, [actions, showId]);
 	useEffect(() => {
 		void refresh().catch((cause) =>
@@ -127,12 +153,20 @@ export function ProgrammerDynamicsSurface({
 			),
 		[runtime, definitions, controller.selectedFixtureIds, programmer],
 	);
-	const selected =
+	const selectedAuthoritative =
 		choices.find(
 			(choice) => choice.controller.controller_id === selectedControllerId,
 		) ??
 		choices[0] ??
 		null;
+	const selected = selectedAuthoritative
+		? applyControllerOverride(
+				selectedAuthoritative,
+				controllerOverrides[
+					selectedAuthoritative.controller.controller_id
+				],
+			)
+		: null;
 	useEffect(() => {
 		if (selected && selected.controller.controller_id !== selectedControllerId)
 			setSelectedControllerId(selected.controller.controller_id);
@@ -171,12 +205,23 @@ export function ProgrammerDynamicsSurface({
 		return gesture.current.id;
 	}, []);
 	const update = useCallback(
-		async (field: "size" | "speed" | "phase", value: number) => {
+		async (field: ControllerValueField, value: number) => {
 			if (!actions || !selected) return;
+			const controllerId = selected.controller.controller_id;
+			const writeKey = `${controllerId}:${field}`;
+			const writeId = crypto.randomUUID();
+			latestControllerWrites.current.set(writeKey, writeId);
+			setControllerOverrides((current) => ({
+				...current,
+				[controllerId]: {
+					...current[controllerId],
+					[field]: value,
+				},
+			}));
 			setError(null);
 			try {
 				await actions.dynamics.setControllerValueLive(
-					selected.controller.controller_id,
+					controllerId,
 					field,
 					value,
 					groupFor(field),
@@ -184,6 +229,13 @@ export function ProgrammerDynamicsSurface({
 				await refresh();
 			} catch (cause) {
 				setError(cause instanceof Error ? cause.message : String(cause));
+			} finally {
+				if (latestControllerWrites.current.get(writeKey) === writeId) {
+					latestControllerWrites.current.delete(writeKey);
+					setControllerOverrides((current) =>
+						clearControllerOverride(current, controllerId, field),
+					);
+				}
 			}
 		},
 		[actions, groupFor, refresh, selected],
@@ -201,7 +253,11 @@ export function ProgrammerDynamicsSurface({
 	const cycleChoice = useCallback(
 		(delta: number) => {
 			if (!selected || choices.length < 2) return;
-			const current = choices.indexOf(selected);
+			const current = choices.findIndex(
+				(choice) =>
+					choice.controller.controller_id ===
+					selected.controller.controller_id,
+			);
 			const next =
 				(current + Math.sign(delta) + choices.length) % choices.length;
 			setSelectedControllerId(choices[next].controller.controller_id);
@@ -220,37 +276,20 @@ export function ProgrammerDynamicsSurface({
 	);
 	const mutateDefinition = useCallback(
 		async (intent: DynamicUpdateIntent, mutationGroup?: string) => {
-			if (!actions || !showId || !selectedObject) return;
+			if (!mutationWriter || !showId || !selectedObject) return;
 			setError(null);
 			try {
-				await actions.showObjects.updateDynamic(
+				await mutationWriter.update(
 					showId,
 					selectedObject.id,
-					selectedObject.revision,
 					intent,
 					mutationGroup,
 				);
 			} catch (cause) {
-				if (!(cause instanceof ApiRequestError) || cause.status !== 409) {
-					setError(cause instanceof Error ? cause.message : String(cause));
-					return;
-				}
-				const current =
-					await actions.showObjects.object<DynamicDefinitionProjection>(
-						showId,
-						"dynamic",
-						selectedObject.id,
-					);
-				await actions.showObjects.updateDynamic(
-					showId,
-					selectedObject.id,
-					current.revision,
-					intent,
-					mutationGroup,
-				);
+				setError(cause instanceof Error ? cause.message : String(cause));
 			}
 		},
-		[actions, selectedObject, showId],
+		[mutationWriter, selectedObject, showId],
 	);
 	const changeLane = useCallback(
 		async (
@@ -494,7 +533,14 @@ export function ProgrammerDynamicsSurface({
 				label={`Enc 1 · ${dynamicLabel}`}
 				slot={1}
 				attributeLabel={dynamicLabel}
-				value={Math.max(0, choices.indexOf(selected))}
+				value={Math.max(
+					0,
+					choices.findIndex(
+						(choice) =>
+							choice.controller.controller_id ===
+							selected.controller.controller_id,
+					),
+				)}
 				display={status}
 				indexed
 				onStep={(delta) => cycleChoice(delta)}
@@ -667,6 +713,39 @@ function dynamicChoices(
 			left.instance.pool_number - right.instance.pool_number ||
 			left.controller.source.localeCompare(right.controller.source),
 	);
+}
+
+function applyControllerOverride(
+	choice: DynamicControllerChoice,
+	override: ControllerValueOverride | undefined,
+): DynamicControllerChoice {
+	if (!override) return choice;
+	return {
+		...choice,
+		controller: {
+			...choice.controller,
+			size: override.size ?? choice.controller.size,
+			speed_multiplier:
+				override.speed ?? choice.controller.speed_multiplier,
+			phase_offset_degrees:
+				override.phase ?? choice.controller.phase_offset_degrees,
+		},
+	};
+}
+
+function clearControllerOverride(
+	current: Record<string, ControllerValueOverride>,
+	controllerId: string,
+	field: ControllerValueField,
+) {
+	const override = current[controllerId];
+	if (!override || override[field] === undefined) return current;
+	const nextOverride = { ...override };
+	delete nextOverride[field];
+	const next = { ...current };
+	if (Object.keys(nextOverride).length === 0) delete next[controllerId];
+	else next[controllerId] = nextOverride;
+	return next;
 }
 
 function clamp(value: number, minimum: number, maximum: number) {
