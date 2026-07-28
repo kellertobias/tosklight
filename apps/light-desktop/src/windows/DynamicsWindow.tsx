@@ -7,6 +7,7 @@ import {
 	GroupedSelectionField,
 	IconPickerField,
 	MultiValueToggle,
+	MultiValueToggleField,
 	NumberField,
 	SelectField,
 	SwitchField,
@@ -28,7 +29,15 @@ import {
 	WindowScrollArea,
 	WindowSettings,
 } from "@tosklight/ui/window-kit";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	type CSSProperties,
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { createLightApi } from "../api/client/api";
 import type {
 	DynamicDefinitionProjection,
@@ -41,8 +50,11 @@ import type {
 	DynamicRuntimeSnapshotProjection,
 	DynamicScalarSourceProjection,
 	DynamicUpdateIntent,
+	SpeedGroupId,
 } from "../api/generated/light-wire";
 import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
+import { monotonicEpochMillis } from "../components/control/soundToLightAnalyzer";
+import { useSoundToLight } from "../components/control/useSoundToLight";
 import {
 	useActiveShowId,
 	useAttributeRegistry,
@@ -62,7 +74,9 @@ import {
 	useShowObjectsStore,
 } from "../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
+import { useSpeedGroupRuntimeView } from "../features/speedGroupRuntime/SpeedGroupRuntimeView";
 import { useApp } from "../state/AppContext";
+import { useStageLayout } from "./stageWindow/useStageLayout";
 import type { WindowProps } from "./windowTypes";
 import "./DynamicsWindow.css";
 
@@ -98,6 +112,8 @@ export function DynamicsWindow({
 	const command = useCommandLineSurface({ selection: true, enabled: active });
 	const commandActions = useProgrammingCommandLineActions();
 	const deleteArmed = useProgrammingDeleteCommandActive(active);
+	const speedGroupRuntime = useSpeedGroupRuntimeView(active);
+	const soundToLight = useSoundToLight(active);
 	const { open: openEditor, close: closeEditor } = useDynamicEditorSession();
 	const { state: appState, dispatch } = useApp();
 	const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -177,12 +193,7 @@ export function DynamicsWindow({
 	) =>
 		run(async () => {
 			if (!showId) throw new Error("No active show");
-			await mutationWriter.update(
-				showId,
-				dynamic.id,
-				intent,
-				mutationGroup,
-			);
+			await mutationWriter.update(showId, dynamic.id, intent, mutationGroup);
 		});
 
 	if (selected)
@@ -195,6 +206,12 @@ export function DynamicsWindow({
 				attributes={attributes}
 				presets={presets}
 				runtime={runtime}
+				speedGroupBpms={Object.fromEntries(
+					(speedGroupRuntime.projection?.groups ?? []).map((group) => [
+						group.group,
+						group.manualBpm,
+					]),
+				)}
 				selection={command.selected}
 				selectedGroupId={command.selectedGroupId}
 				onBack={() => {
@@ -202,6 +219,14 @@ export function DynamicsWindow({
 					setSelectedId(null);
 				}}
 				onMutate={mutate}
+				onSpeedGroupTap={(group) =>
+					run(async () => {
+						await soundToLight.action(group, {
+							action: "learn",
+							captured_at_millis: monotonicEpochMillis(),
+						});
+					})
+				}
 				onDelete={() =>
 					run(async () => {
 						if (!showId) throw new Error("No active show");
@@ -403,11 +428,13 @@ export function DynamicsWindow({
 				/>
 			</WindowScrollArea>
 			{chooserSlot !== null && (
-				<LaneChooser
-					slot={chooserSlot}
+				<LaneAttributeModal
+					id={`select-lane-attribute-create-${chooserSlot}`}
+					title="Select lane attribute"
+					details={`Create Dynamic ${chooserSlot}`}
 					attributes={attributes}
 					busy={busy}
-					onCancel={() => setChooserSlot(null)}
+					onClose={() => setChooserSlot(null)}
 					onChoose={(attribute) => void create(chooserSlot, attribute)}
 				/>
 			)}
@@ -423,6 +450,7 @@ export interface DynamicEditorProps {
 	attributes: readonly { id: string; label: string; family: string }[];
 	presets: readonly PresetObject[];
 	runtime: DynamicRuntimeSnapshotProjection | null;
+	speedGroupBpms?: Partial<Record<SpeedGroupId, number>>;
 	selection: readonly string[];
 	selectedGroupId: string | null;
 	view?: DynamicEditorView;
@@ -433,6 +461,7 @@ export interface DynamicEditorProps {
 		intent: DynamicUpdateIntent,
 		mutationGroup?: string,
 	): Promise<void>;
+	onSpeedGroupTap?(group: SpeedGroupId): void;
 	onDelete(): void;
 	onMove(poolNumber: number): void;
 	onCopy(poolNumber: number): void;
@@ -450,14 +479,17 @@ export function DynamicEditor({
 	error,
 	attributes,
 	runtime,
+	speedGroupBpms,
 	selection,
 	selectedGroupId,
 	view: controlledView,
 	onViewChange,
 	onBack,
 	onMutate,
+	onSpeedGroupTap,
 }: DynamicEditorProps) {
 	const { state: appState, dispatch } = useApp();
+	const stageLayout = useStageLayout();
 	const {
 		session,
 		open: openEditor,
@@ -473,6 +505,7 @@ export function DynamicEditor({
 		new Set(primaryLane ? [primaryLane] : []),
 	);
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
+	const [addingLane, setAddingLane] = useState(false);
 	const [previewing, setPreviewing] = useState(false);
 	const [previewPhase, setPreviewPhase] = useState(0);
 	const encoderPage =
@@ -505,16 +538,22 @@ export function DynamicEditor({
 	};
 	const running = runningCount(runtime, dynamic.id) > 0;
 	const status = definitionStatus(runtime, dynamic.id);
+	const previewCycleMillis = dynamicPreviewCycleMillis(
+		dynamic.body,
+		speedGroupBpms,
+	);
 	const changeView = (next: DynamicEditorView) => {
 		onViewChange?.(next);
 		updateEditor({ task: next, encoderPage: 1 });
 	};
-	const addLane = () =>
-		onMutate(dynamic, {
+	const addLane = (attribute: string) => {
+		setAddingLane(false);
+		void onMutate(dynamic, {
 			type: "add_lane",
-			lane: createDefaultDynamicLane(attributes[0]?.id ?? "intensity"),
+			lane: createDefaultDynamicLane(attribute),
 			index: null,
 		});
+	};
 	const takeSelection = () =>
 		onMutate(dynamic, {
 			type: "set_target_binding",
@@ -533,6 +572,43 @@ export function DynamicEditor({
 			type: "set_target_binding",
 			target_binding: { type: "targetless" },
 		});
+	const contentSidebar = (
+		<DynamicSelectionPreview
+			dynamic={dynamic}
+			previewPhase={previewing ? previewPhase : 0}
+			selection={selection}
+			positions={stageLayout.positions}
+			positions3d={stageLayout.positions3d}
+		/>
+	);
+	const contentFooter =
+		view === "phase" ? (
+			<DynamicPhaseQuickControls
+				phase={dynamic.body.phase}
+				running={running}
+				selectionCount={selection.length}
+				targetless={dynamic.body.target_binding.type === "targetless"}
+				onPhasePatch={(patch) =>
+					void onMutate(dynamic, {
+						type: "set_phase",
+						phase: { ...dynamic.body.phase, ...patch },
+					})
+				}
+				onTakeSelection={() => void takeSelection()}
+				onClearSelection={() => void clearSelection()}
+			/>
+		) : null;
+	useEffect(() => {
+		if (
+			primaryLane &&
+			dynamic.body.lanes.some((candidate) => candidate.id === primaryLane)
+		)
+			return;
+		const nextLane = dynamic.body.lanes[0]?.id ?? null;
+		setPrimaryLane(nextLane);
+		setSelectedLanes(new Set(nextLane ? [nextLane] : []));
+		updateEditor({ primaryLaneId: nextLane, primaryKeyframeIndex: 0 });
+	}, [dynamic.body.lanes, primaryLane, updateEditor]);
 	useEffect(() => {
 		const sessionLane =
 			session?.dynamicId === dynamic.id ? session.primaryLaneId : null;
@@ -548,14 +624,16 @@ export function DynamicEditor({
 	useEffect(() => {
 		if (!previewing) return;
 		let frame = 0;
-		const startedAt = performance.now() - previewPhase * 2_000;
+		const startedAt = performance.now() - previewPhase * previewCycleMillis;
 		const animate = (now: number) => {
-			setPreviewPhase(((now - startedAt) % 2_000) / 2_000);
+			setPreviewPhase(
+				((now - startedAt) % previewCycleMillis) / previewCycleMillis,
+			);
 			frame = requestAnimationFrame(animate);
 		};
 		frame = requestAnimationFrame(animate);
 		return () => cancelAnimationFrame(frame);
-	}, [previewing]);
+	}, [previewing, previewCycleMillis]);
 	useEffect(() => {
 		openEditor({
 			dynamicId: dynamic.id,
@@ -575,7 +653,7 @@ export function DynamicEditor({
 
 	return (
 		<section
-			className={`dynamics-window dynamics-editor ${compact ? "compact" : ""}`}
+			className={`dynamics-window dynamics-editor dynamic-full-discussion-editor ${compact ? "compact" : ""}`}
 			aria-busy={busy}
 		>
 			<WindowHeader
@@ -590,20 +668,20 @@ export function DynamicEditor({
 								{
 									id: "add-lane",
 									label: "+ Add Lane",
-									onClick: () => void addLane(),
+									onClick: () => setAddingLane(true),
 								},
 							]
 						: [],
 					[
 						{
 							id: "curves",
-							label: "Curves",
+							label: "Lanes",
 							active: view === "curves",
 							onClick: () => changeView("curves"),
 						},
 						{
 							id: "phase",
-							label: "Phase Spread",
+							label: "Phase",
 							active: view === "phase",
 							onClick: () => changeView("phase"),
 						},
@@ -720,6 +798,17 @@ export function DynamicEditor({
 					]}
 				/>
 			)}
+			{addingLane && (
+				<LaneAttributeModal
+					id={`select-lane-attribute-${dynamic.id}`}
+					title="Select lane attribute"
+					details="Choose the attribute controlled by the new lane"
+					attributes={attributes}
+					busy={busy}
+					onClose={() => setAddingLane(false)}
+					onChoose={addLane}
+				/>
+			)}
 			{error && (
 				<p className="dynamics-error" role="alert">
 					{error}
@@ -727,43 +816,583 @@ export function DynamicEditor({
 			)}
 			<div className="dynamics-editor-body">
 				<main className="dynamic-workspace">
-					{view === "curves" && lane && (
-						<CurvesView
-							dynamic={dynamic}
-							lane={lane}
-							selectedLanes={selectedLanes}
-							shiftArmed={appState.shiftArmed}
-							attributes={attributes}
-							primaryKeyframeIndex={primaryKeyframeIndex}
-							previewPhase={previewing ? previewPhase : null}
-							onPrimaryKeyframeIndex={setPrimaryKeyframeIndex}
-							onSelect={selectLane}
-							onReplace={replaceLane}
-							onMutate={onMutate}
-						/>
-					)}
+					{view === "curves" &&
+						(lane ? (
+							<CurvesView
+								dynamic={dynamic}
+								lane={lane}
+								selectedLanes={selectedLanes}
+								shiftArmed={appState.shiftArmed}
+								attributes={attributes}
+								primaryKeyframeIndex={primaryKeyframeIndex}
+								previewPhase={previewing ? previewPhase : null}
+								contentSidebar={contentSidebar}
+								onPrimaryKeyframeIndex={setPrimaryKeyframeIndex}
+								onSelect={selectLane}
+								onReplace={replaceLane}
+								onMutate={onMutate}
+							/>
+						) : (
+							<div className="dynamic-view-with-sidebar">
+								<section className="dynamic-empty-lanes">
+									<Button onClick={() => setAddingLane(true)}>
+										Add first lane
+									</Button>
+								</section>
+								{contentSidebar}
+							</div>
+						))}
 					{view === "phase" && (
-						<PhaseView
-							dynamic={dynamic}
-							lane={lane}
-							running={running}
-							selectionCount={selection.length}
-							onSelectLane={(id) => selectLane(id, false)}
-							onTakeSelection={takeSelection}
-							onClearSelection={clearSelection}
-							onMutate={onMutate}
-						/>
+						<div className="dynamic-view-with-sidebar">
+							<PhaseView
+								dynamic={dynamic}
+								lane={lane}
+								running={running}
+								selectionCount={selection.length}
+								onSelectLane={(id) => selectLane(id, false)}
+								onTakeSelection={takeSelection}
+								onClearSelection={clearSelection}
+								onMutate={onMutate}
+							/>
+							{contentSidebar}
+						</div>
 					)}
 					{view === "speed" && (
-						<SpeedView
-							dynamic={dynamic}
-							runtime={runtime}
-							onMutate={onMutate}
-						/>
+						<div className="dynamic-view-with-sidebar">
+							<SpeedView
+								dynamic={dynamic}
+								runtime={runtime}
+								previewPhase={previewing ? previewPhase : null}
+								speedGroupBpms={speedGroupBpms}
+								onMutate={onMutate}
+								onSpeedGroupTap={onSpeedGroupTap}
+							/>
+							{contentSidebar}
+						</div>
 					)}
 				</main>
+				{contentFooter}
 			</div>
 		</section>
+	);
+}
+
+function DynamicSelectionPreview({
+	dynamic,
+	previewPhase,
+	selection,
+	positions,
+	positions3d,
+}: {
+	dynamic: DynamicObject;
+	previewPhase: number;
+	selection: readonly string[];
+	positions: Record<string, { x: number; y: number; rotation: number }>;
+	positions3d: Record<string, { x: number; z: number }>;
+}) {
+	const selected = selection.length > 0;
+	const previewPositions = useMemo(
+		() =>
+			selected
+				? normalizeSelectedPreviewPositions(selection, positions, positions3d)
+				: virtualFixturePreviewPositions(),
+		[selected, selection, positions, positions3d],
+	);
+	const phaseOffsets = useMemo(
+		() => dynamicPreviewPhaseOffsets(dynamic.body.phase, previewPositions),
+		[dynamic.body.phase, previewPositions],
+	);
+	return (
+		<aside
+			className="dynamic-face-preview-sidebar dynamic-discussion-preview-sidebar"
+			aria-label="Selection preview"
+		>
+			<header>
+				<span>
+					<strong>{selected ? "Selected fixtures" : "Virtual fixtures"}</strong>
+					<small>
+						{selected
+							? "Top-down Stage projection"
+							: "Front-end-only 20 × 20 grid"}
+					</small>
+				</span>
+				<b>{selected ? selection.length : 400}</b>
+			</header>
+			<div
+				className={`dynamic-face-fixture-field ${selected ? "selected-fixtures" : "virtual-fixtures"}`}
+				role="img"
+				aria-label={
+					selected
+						? `Top-down preview of ${selection.length} selected fixtures`
+						: "Front-end-only preview of 400 virtual fixtures"
+				}
+			>
+				{previewPositions.map(({ id, left, top }, index) => {
+					const values = dynamicPreviewValues(
+						dynamic.body,
+						moduloOne(previewPhase + (phaseOffsets[index] ?? 0)),
+					);
+					return (
+						<i
+							key={id}
+							className="dynamic-face-fixture"
+							style={
+								{
+									left: `${left}%`,
+									top: `${top}%`,
+									"--fixture-color": `rgb(${Math.round(values.red * 255)} ${Math.round(values.green * 255)} ${Math.round(values.blue * 255)})`,
+									"--fixture-intensity": values.intensity,
+									"--pan": `${(values.pan - 0.5) * 56}%`,
+									"--tilt": `${(values.tilt - 0.5) * 56}%`,
+								} as CSSProperties
+							}
+						>
+							<span />
+						</i>
+					);
+				})}
+			</div>
+		</aside>
+	);
+}
+
+function normalizeSelectedPreviewPositions(
+	selection: readonly string[],
+	positions: Record<string, { x: number; y: number }>,
+	positions3d: Record<string, { x: number; z: number }>,
+) {
+	const fallback = gridFixturePreviewPositions(selection.length);
+	const resolved = selection.map((id, index) => {
+		const position3d = positions3d[id];
+		if (position3d)
+			return { id, x: position3d.x, z: position3d.z, fallback: false };
+		const position2d = positions[id];
+		if (position2d)
+			return { id, x: position2d.x, z: position2d.y, fallback: false };
+		return {
+			id,
+			x: fallback[index]?.left ?? 50,
+			z: fallback[index]?.top ?? 50,
+			fallback: true,
+		};
+	});
+	const positioned = resolved.filter((position) => !position.fallback);
+	if (positioned.length === 0) return fallback;
+	const xs = positioned.map(({ x }) => x);
+	const zs = positioned.map(({ z }) => z);
+	const minX = Math.min(...xs);
+	const maxX = Math.max(...xs);
+	const minZ = Math.min(...zs);
+	const maxZ = Math.max(...zs);
+	return resolved.map((position, index) =>
+		position.fallback
+			? (fallback[index] ?? { id: position.id, left: 50, top: 50 })
+			: {
+					id: position.id,
+					left: normalizePreviewCoordinate(position.x, minX, maxX),
+					top: normalizePreviewCoordinate(position.z, minZ, maxZ),
+				},
+	);
+}
+
+function normalizePreviewCoordinate(
+	value: number,
+	minimum: number,
+	maximum: number,
+) {
+	if (maximum === minimum) return 50;
+	return 8 + ((value - minimum) / (maximum - minimum)) * 84;
+}
+
+function gridFixturePreviewPositions(count: number) {
+	const columns = Math.max(1, Math.ceil(Math.sqrt(count)));
+	const rows = Math.max(1, Math.ceil(count / columns));
+	return Array.from({ length: count }, (_, index) => ({
+		id: `fixture-${index}`,
+		left: columns === 1 ? 50 : 8 + (index % columns) * (84 / (columns - 1)),
+		top: rows === 1 ? 50 : 8 + Math.floor(index / columns) * (84 / (rows - 1)),
+	}));
+}
+
+function virtualFixturePreviewPositions() {
+	return Array.from({ length: 400 }, (_, index) => ({
+		id: `virtual-fixture-${index}`,
+		left: 5 + (index % 20) * (90 / 19),
+		top: 5 + Math.floor(index / 20) * (90 / 19),
+	}));
+}
+
+function dynamicPreviewPhaseOffsets(
+	phase: DynamicDefinitionProjection["phase"],
+	positions: readonly { id: string; left: number; top: number }[],
+) {
+	const ordered = positions.map((position, index) => ({ position, index }));
+	const center = { left: 50, top: 50 };
+	switch (phase.ordering.type) {
+		case "grid_linear": {
+			const radians = (phase.ordering.angle_degrees * Math.PI) / 180;
+			ordered.sort(
+				(left, right) =>
+					left.position.left * Math.cos(radians) +
+					left.position.top * Math.sin(radians) -
+					(right.position.left * Math.cos(radians) +
+						right.position.top * Math.sin(radians)),
+			);
+			break;
+		}
+		case "radial_out":
+		case "radial_in":
+			ordered.sort((left, right) => {
+				const distance = (item: (typeof ordered)[number]) =>
+					Math.hypot(
+						item.position.left - center.left,
+						item.position.top - center.top,
+					);
+				const comparison = distance(left) - distance(right);
+				return phase.ordering.type === "radial_in" ? -comparison : comparison;
+			});
+			break;
+		case "axial":
+			ordered.sort(
+				(left, right) =>
+					Math.atan2(
+						left.position.top - center.top,
+						left.position.left - center.left,
+					) -
+					Math.atan2(
+						right.position.top - center.top,
+						right.position.left - center.left,
+					),
+			);
+			break;
+		case "random_each_loop": {
+			const seed = phase.ordering.seed;
+			ordered.sort(
+				(left, right) =>
+					previewHash(left.position.id, seed) -
+					previewHash(right.position.id, seed),
+			);
+			break;
+		}
+		case "selection":
+			break;
+	}
+	const blockSize = Math.max(1, Math.round(phase.block_size));
+	const rankCount = Math.ceil(ordered.length / blockSize);
+	const repeats = Math.min(Math.max(1, Math.round(phase.repeats)), rankCount);
+	const offsets = Array.from({ length: positions.length }, () => 0);
+	for (const [spatialRank, entry] of ordered.entries()) {
+		const rank = Math.floor(spatialRank / blockSize);
+		const { local, length } = balancedPreviewRepeat(rank, rankCount, repeats);
+		const wingLocal = phase.wings
+			? Math.min(local, Math.max(0, length - 1 - local))
+			: local;
+		const effectiveLength = phase.wings ? Math.ceil(length / 2) : length;
+		const distributed =
+			phase.anchors_degrees.length >= 2
+				? previewAnchorPhase(phase.anchors_degrees, wingLocal, effectiveLength)
+				: effectiveLength <= 1
+					? 0
+					: (wingLocal / effectiveLength) * phase.span_degrees;
+		offsets[entry.index] = (phase.offset_degrees + distributed) / 360;
+	}
+	return offsets;
+}
+
+function balancedPreviewRepeat(rank: number, count: number, repeats: number) {
+	const base = Math.floor(count / repeats);
+	const extras = count % repeats;
+	let start = 0;
+	for (let repeat = 0; repeat < repeats; repeat += 1) {
+		const length = base + (repeat < extras ? 1 : 0);
+		if (rank < start + length) return { local: rank - start, length };
+		start += length;
+	}
+	return { local: 0, length: 1 };
+}
+
+function previewAnchorPhase(
+	anchors: readonly number[],
+	local: number,
+	length: number,
+) {
+	if (length <= 1) return anchors[0] ?? 0;
+	const progress = local / length;
+	const position = progress * (anchors.length - 1);
+	const leftIndex = Math.min(Math.floor(position), anchors.length - 2);
+	const mix = position - leftIndex;
+	return (
+		(anchors[leftIndex] ?? 0) * (1 - mix) + (anchors[leftIndex + 1] ?? 0) * mix
+	);
+}
+
+function previewHash(value: string, seed: number) {
+	let hash = seed | 0;
+	for (const character of value)
+		hash = Math.imul(hash ^ character.charCodeAt(0), 16_777_619);
+	return hash >>> 0;
+}
+
+function dynamicPreviewValues(
+	dynamic: DynamicDefinitionProjection,
+	phase: number,
+) {
+	const values = new Map<string, number>();
+	for (const lane of dynamic.lanes)
+		values.set(lane.attribute, lanePreviewValue(lane, dynamic, phase));
+	const hasColor = [...values.keys()].some((attribute) =>
+		attribute.startsWith("color."),
+	);
+	return {
+		intensity: clamp(values.get("intensity") ?? 1, 0, 1),
+		red: clamp(values.get("color.red") ?? (hasColor ? 0 : 0.2), 0, 1),
+		green: clamp(values.get("color.green") ?? (hasColor ? 0 : 0.78), 0, 1),
+		blue: clamp(values.get("color.blue") ?? 1, 0, 1),
+		pan: clamp(values.get("pan") ?? 0.5, 0, 1),
+		tilt: clamp(values.get("tilt") ?? 0.5, 0, 1),
+	};
+}
+
+function lanePreviewValue(
+	lane: DynamicLaneProjection,
+	dynamic: DynamicDefinitionProjection,
+	phase: number,
+) {
+	const intervalPhase = moduloOne(phase * rationalValue(lane.speed_multiplier));
+	const functionName =
+		lane.mode === "middle_amplitude"
+			? lane.middle_amplitude.function
+			: lane.mode === "max_min"
+				? lane.max_min.function
+				: null;
+	const width = functionName === "pwm" ? 1 : clamp(lane.width, 0.05, 1);
+	const position = clamp((intervalPhase - (1 - width) / 2) / width, 0, 1);
+	if (lane.mode === "keyframes")
+		return keyframePreviewValue(lane.keyframes.points, position);
+	if (lane.mode === "random") {
+		const group = dynamic.random_groups.find(
+			(candidate) => candidate.id === lane.random_group_id,
+		);
+		if (!group) return 0;
+		const low = scalarSourceCurveValue(group.low);
+		const high = scalarSourceCurveValue(group.high);
+		return previewHash(lane.id, Math.floor(position * 1_000_000)) % 2
+			? high
+			: low;
+	}
+	const shape = periodicPreviewValue(
+		functionName ?? "sinus",
+		position,
+		lane.mode === "middle_amplitude"
+			? lane.middle_amplitude.pwm
+			: lane.max_min.pwm,
+	);
+	if (lane.mode === "middle_amplitude") {
+		const middle = scalarSourceCurveValue(lane.middle_amplitude.middle);
+		return clamp(
+			middle +
+				(shape * 2 - 1) *
+					lane.middle_amplitude.amplitude *
+					lane.middle_amplitude.size,
+			0,
+			1,
+		);
+	}
+	const minimum = scalarSourceCurveValue(lane.max_min.minimum);
+	const maximum = scalarSourceCurveValue(lane.max_min.maximum);
+	const middle = (minimum + maximum) / 2;
+	return clamp(
+		middle +
+			(minimum + (maximum - minimum) * shape - middle) * lane.max_min.size,
+		0,
+		1,
+	);
+}
+
+function keyframePreviewValue(
+	points: readonly {
+		position: number;
+		source: DynamicScalarSourceProjection;
+		interpolation: string;
+	}[],
+	position: number,
+) {
+	if (points.length === 0) return 0;
+	let leftIndex = 0;
+	for (let index = 0; index < points.length; index += 1) {
+		if ((points[index]?.position ?? 1) > position) break;
+		leftIndex = index;
+	}
+	const left = points[leftIndex] ?? points[0];
+	const right = points[leftIndex + 1] ?? points[0];
+	if (!left || !right) return 0;
+	const rightPosition = leftIndex + 1 < points.length ? right.position : 1;
+	const progress = clamp(
+		(position - left.position) /
+			Math.max(Number.EPSILON, rightPosition - left.position),
+		0,
+		1,
+	);
+	const mix = interpolationPreviewValue(progress, left.interpolation);
+	return clamp(
+		scalarSourceCurveValue(left.source) * (1 - mix) +
+			scalarSourceCurveValue(right.source) * mix,
+		0,
+		1,
+	);
+}
+
+function periodicPreviewValue(
+	functionName: DynamicPeriodicFunctionProjection,
+	position: number,
+	pwm: DynamicLaneProjection["max_min"]["pwm"],
+) {
+	switch (functionName) {
+		case "linear_up":
+			return position;
+		case "linear_down":
+			return 1 - position;
+		case "cosinus":
+			return (Math.cos(position * Math.PI * 2) + 1) / 2;
+		case "pwm":
+			return pwmPreviewValue(position, pwm);
+		case "sinus":
+			return (Math.sin(position * Math.PI * 2 - Math.PI / 2) + 1) / 2;
+	}
+}
+
+function pwmPreviewValue(
+	position: number,
+	pwm: DynamicLaneProjection["max_min"]["pwm"],
+) {
+	const total = Math.max(Number.EPSILON, pwm.on + pwm.off);
+	const onEnd = pwm.on / total;
+	const attackEnd = Math.min(pwm.attack / total, onEnd);
+	const decayEnd = Math.min(1, onEnd + pwm.decay / total);
+	if (attackEnd > 0 && position < attackEnd)
+		return interpolationPreviewValue(
+			position / attackEnd,
+			pwm.attack_interpolation,
+		);
+	if (position < onEnd) return 1;
+	if (decayEnd > onEnd && position < decayEnd)
+		return (
+			1 -
+			interpolationPreviewValue(
+				(position - onEnd) / (decayEnd - onEnd),
+				pwm.decay_interpolation,
+			)
+		);
+	return 0;
+}
+
+function interpolationPreviewValue(progress: number, interpolation: string) {
+	switch (interpolation) {
+		case "ease_in":
+			return progress * progress;
+		case "ease_out":
+			return 1 - (1 - progress) * (1 - progress);
+		case "ease_in_out":
+			return progress * progress * (3 - 2 * progress);
+		case "hold":
+			return 0;
+		case "drop":
+			return progress >= 1 ? 1 : 0;
+		default:
+			return progress;
+	}
+}
+
+function moduloOne(value: number) {
+	return ((value % 1) + 1) % 1;
+}
+
+function dynamicPreviewCycleMillis(
+	dynamic: DynamicDefinitionProjection,
+	speedGroupBpms?: Partial<Record<SpeedGroupId, number>>,
+) {
+	const baseCycleMillis =
+		dynamic.speed.type === "fixed"
+			? dynamic.speed.duration_millis
+			: (60_000 / Math.max(1, speedGroupBpms?.[dynamic.speed.group] ?? 120)) *
+				rationalValue(dynamic.speed.beats_per_cycle);
+	return Math.max(
+		1,
+		baseCycleMillis /
+			Math.max(Number.EPSILON, rationalValue(dynamic.overall_speed_multiplier)),
+	);
+}
+
+function DynamicPhaseQuickControls({
+	phase,
+	running,
+	selectionCount,
+	targetless,
+	onPhasePatch,
+	onTakeSelection,
+	onClearSelection,
+}: {
+	phase: DynamicObject["body"]["phase"];
+	running: boolean;
+	selectionCount: number;
+	targetless: boolean;
+	onPhasePatch(patch: Partial<DynamicObject["body"]["phase"]>): void;
+	onTakeSelection(): void;
+	onClearSelection(): void;
+}) {
+	const orderingValue =
+		phase.ordering.type === "radial_in" ? "radial_out" : phase.ordering.type;
+	return (
+		<fieldset
+			className="dynamic-discussion-phase-controls"
+			aria-label="Phase quick controls"
+		>
+			<div className="dynamic-discussion-phase-ordering">
+				<MultiValueToggle
+					ariaLabel="Ordering mode"
+					value={orderingValue}
+					options={[
+						{ value: "selection", label: "Linear" },
+						{ value: "grid_linear", label: "Grid" },
+						{ value: "radial_out", label: "Radial" },
+						{ value: "axial", label: "Radar" },
+						{ value: "random_each_loop", label: "Random" },
+					]}
+					onChange={(type) => {
+						const center =
+							phase.ordering.type === "radial_out" ||
+							phase.ordering.type === "radial_in" ||
+							phase.ordering.type === "axial"
+								? {
+										center_x: phase.ordering.center_x,
+										center_z: phase.ordering.center_z,
+									}
+								: { center_x: 0, center_z: 0 };
+						onPhasePatch({
+							ordering:
+								type === "grid_linear"
+									? { type, angle_degrees: 90 }
+									: type === "radial_out" || type === "axial"
+										? { type, ...center }
+										: type === "random_each_loop"
+											? { type, seed: 201 }
+											: { type: "selection" },
+						});
+					}}
+				/>
+			</div>
+			<div className="dynamic-discussion-phase-actions">
+				<Button
+					disabled={running || selectionCount === 0}
+					onClick={onTakeSelection}
+				>
+					Take Selection
+				</Button>
+				<Button disabled={running || targetless} onClick={onClearSelection}>
+					Clear Selection
+				</Button>
+			</div>
+		</fieldset>
 	);
 }
 
@@ -775,6 +1404,7 @@ function CurvesView({
 	attributes,
 	primaryKeyframeIndex,
 	previewPhase,
+	contentSidebar,
 	onPrimaryKeyframeIndex,
 	onSelect,
 	onReplace,
@@ -787,6 +1417,7 @@ function CurvesView({
 	attributes: readonly { id: string; label: string; family: string }[];
 	primaryKeyframeIndex: number;
 	previewPhase: number | null;
+	contentSidebar?: ReactNode;
 	onPrimaryKeyframeIndex(index: number): void;
 	onSelect(id: string, additive: boolean): void;
 	onReplace(next: DynamicLaneProjection): Promise<void>;
@@ -797,11 +1428,13 @@ function CurvesView({
 	): Promise<void>;
 }) {
 	const [attributeLaneId, setAttributeLaneId] = useState<string | null>(null);
+	const [openLaneMenuId, setOpenLaneMenuId] = useState<string | null>(null);
 	const [draggingKeyframe, setDraggingKeyframe] = useState<{
 		laneId: string;
 		index: number;
 		pointerId: number;
 		mutationGroup: string;
+		grabOffsetX: number;
 	} | null>(null);
 	const [randomMethod, setRandomMethod] = useState<
 		"max_min" | "middle_amplitude"
@@ -841,20 +1474,22 @@ function CurvesView({
 		const method =
 			displayedMethod === "middle_amplitude" ? "middle_amplitude" : "max_min";
 		void onReplace(
-			method === "middle_amplitude"
-				? {
-						...lane,
-						mode: method,
-						middle_amplitude: {
-							...lane.middle_amplitude,
-							function: functionName,
+			normalizePwmLane(
+				method === "middle_amplitude"
+					? {
+							...lane,
+							mode: method,
+							middle_amplitude: {
+								...lane.middle_amplitude,
+								function: functionName,
+							},
+						}
+					: {
+							...lane,
+							mode: method,
+							max_min: { ...lane.max_min, function: functionName },
 						},
-					}
-				: {
-						...lane,
-						mode: method,
-						max_min: { ...lane.max_min, function: functionName },
-					},
+			),
 		);
 	};
 	const attributeLane = attributeLaneId
@@ -874,16 +1509,19 @@ function CurvesView({
 		candidate: DynamicLaneProjection,
 		index: number,
 		clientX: number,
-		svg: SVGSVGElement,
+		timeline: HTMLElement,
 		mutationGroup: string,
 		repetitions: number,
+		grabOffsetX: number,
 	) => {
 		if (index === 0) return;
-		const bounds = svg.getBoundingClientRect();
+		const bounds = timeline.getBoundingClientRect();
 		const previous = candidate.keyframes.points[index - 1]?.position ?? 0;
 		const next = candidate.keyframes.points[index + 1]?.position ?? 0.999;
+		const renderedPercent =
+			((clientX - grabOffsetX - bounds.left) / Math.max(1, bounds.width)) * 100;
 		const position = clamp(
-			((clientX - bounds.left) / Math.max(1, bounds.width)) * repetitions,
+			((renderedPercent - 0.8) / 98.4) * repetitions,
 			previous + 0.01,
 			next - 0.01,
 		);
@@ -904,7 +1542,9 @@ function CurvesView({
 		);
 	};
 	return (
-		<div className="dynamic-curves-view">
+		<div
+			className={`dynamic-curves-view ${contentSidebar ? "has-content-sidebar" : ""}`}
+		>
 			<ul className="dynamic-lane-overview-list" aria-label="Dynamic lanes">
 				{dynamic.body.lanes.map((candidate, index) => {
 					const attribute =
@@ -1019,6 +1659,13 @@ function CurvesView({
 															index: pointIndex,
 															pointerId: event.pointerId,
 															mutationGroup: crypto.randomUUID(),
+															grabOffsetX:
+																event.clientX -
+																(event.currentTarget.getBoundingClientRect()
+																	.left +
+																	event.currentTarget.getBoundingClientRect()
+																		.width /
+																		2),
 														});
 													}}
 													onPointerMove={(event) => {
@@ -1029,18 +1676,16 @@ function CurvesView({
 															draggingKeyframe.pointerId !== event.pointerId
 														)
 															return;
-														const svg =
-															event.currentTarget
-																.closest(".dynamic-lane-curve")
-																?.querySelector("svg") ?? null;
-														if (svg)
+														const timeline = event.currentTarget.parentElement;
+														if (timeline)
 															moveKeyframe(
 																candidate,
 																pointIndex,
 																event.clientX,
-																svg,
+																timeline,
 																draggingKeyframe.mutationGroup,
 																preview.repetitions,
+																draggingKeyframe.grabOffsetX,
 															);
 													}}
 													onPointerUp={(event) => {
@@ -1066,51 +1711,75 @@ function CurvesView({
 								</div>
 							</div>
 							<div className="dynamic-lane-row-actions">
-								<SelectField
-									className="dynamic-lane-action-select"
-									ariaLabel={`${attribute?.label ?? candidate.attribute} lane actions`}
-									value="Lane"
-									size="compact"
-									options={[
-										{
-											value: "change_attribute",
-											label: (
-												<>
-													<span aria-hidden="true">✎</span>
-													<span>Change attribute</span>
-												</>
-											),
-										},
-										{
-											value: "delete_lane",
-											label: (
-												<>
-													<span aria-hidden="true">⌫</span>
-													<span>Delete lane</span>
-												</>
-											),
-											disabled: dynamic.body.lanes.length <= 1,
-											variant: "danger",
-										},
-									]}
-									onChange={(action) => {
-										if (action === "change_attribute")
+								<Button
+									iconOnly
+									className="dynamic-lane-settings-trigger"
+									icon="⚙"
+									aria-label={`${attribute?.label ?? candidate.attribute} lane settings`}
+									aria-expanded={openLaneMenuId === candidate.id}
+									onClick={() =>
+										setOpenLaneMenuId((current) =>
+											current === candidate.id ? null : candidate.id,
+										)
+									}
+								/>
+							</div>
+							{openLaneMenuId === candidate.id && (
+								<div
+									className="dynamic-lane-menu"
+									role="menu"
+									aria-label={`${attribute?.label ?? candidate.attribute} lane menu`}
+								>
+									<Button
+										role="menuitem"
+										onClick={() => {
+											setOpenLaneMenuId(null);
 											setAttributeLaneId(candidate.id);
-										else
+										}}
+									>
+										<span aria-hidden="true">✎</span>
+										Change attribute
+									</Button>
+									<Button
+										role="menuitem"
+										variant="danger"
+										disabled={dynamic.body.lanes.length <= 1}
+										title={
+											dynamic.body.lanes.length <= 1
+												? "A Dynamic requires at least one lane."
+												: undefined
+										}
+										onClick={() => {
+											setOpenLaneMenuId(null);
 											void onMutate(dynamic, {
 												type: "delete_lane",
 												lane_id: candidate.id,
 											});
-									}}
-								/>
-							</div>
+										}}
+									>
+										<span aria-hidden="true">⌫</span>
+										Delete lane
+									</Button>
+									<Button
+										iconOnly
+										className="dynamic-lane-menu-close"
+										icon="×"
+										aria-label="Close lane settings"
+										onClick={() => setOpenLaneMenuId(null)}
+									/>
+								</div>
+							)}
 						</li>
 					);
 				})}
 			</ul>
+			{contentSidebar}
 			{attributeLane && (
-				<ChangeLaneAttributeModal
-					lane={attributeLane}
+				<LaneAttributeModal
+					id={`change-lane-attribute-${attributeLane.id}`}
+					title="Change lane attribute"
+					details="Choose the attribute controlled by this lane"
+					currentAttribute={attributeLane.attribute}
 					attributes={attributes}
 					onClose={() => setAttributeLaneId(null)}
 					onChoose={(nextAttribute) => {
@@ -1286,7 +1955,9 @@ function PhaseView({
 }) {
 	const phaseMode = dynamic.body.phase_mode;
 	const phase =
-		phaseMode === "per_lane" ? (lane?.phase ?? dynamic.body.phase) : dynamic.body.phase;
+		phaseMode === "per_lane"
+			? (lane?.phase ?? dynamic.body.phase)
+			: dynamic.body.phase;
 	const spatialOrdering = isSpatialOrdering(phase.ordering)
 		? phase.ordering
 		: null;
@@ -1304,206 +1975,166 @@ function PhaseView({
 	};
 	return (
 		<div className="dynamic-phase-view">
-			<section className="dynamic-phase-preview">
-				<header>
-					<span>
-						<strong>2D phase distribution</strong>
-						<small>Fixture positions colored by their place in the wave</small>
-					</span>
-					<b>
-						{phase.offset_degrees}° →{" "}
-						{phase.offset_degrees + phase.span_degrees}°
-					</b>
-				</header>
-				<div
-					className="dynamic-phase-position-map"
-					role="img"
-					aria-label="Two dimensional phase spread preview"
-				>
-					{Array.from({ length: 48 }, (_, index) => {
-						const column = index % 8;
-						const row = Math.floor(index / 8);
-						const amount = phasePreviewAmount(index, phase.ordering);
-						return (
-							<i
-								key={index}
-								style={{
-									left: `${8 + column * 12}%`,
-									top: `${10 + row * 16}%`,
-									background: `hsl(${188 + amount * 48} 92% ${52 + amount * 18}%)`,
-									transform: `scale(${0.72 + amount * 0.45})`,
-								}}
-							/>
-						);
-					})}
-				</div>
-				<footer>
-					<span>0°</span>
-					<span>{Math.round(phase.span_degrees / 2)}°</span>
-					<span>{phase.span_degrees}°</span>
-				</footer>
-			</section>
 			<section className="dynamic-phase-controls">
-				<div className="dynamic-phase-scope">
-					<fieldset className="button-group" aria-label="Phase spread scope">
-						<Button
-							active={phaseMode === "uniform"}
-							aria-pressed={phaseMode === "uniform"}
-							onClick={() =>
-								onMutate(dynamic, {
-									type: "set_phase_mode",
-									phase_mode: "uniform",
-								})
-							}
-						>
-							Uniform
-						</Button>
-						<Button
-							active={phaseMode === "per_lane"}
-							aria-pressed={phaseMode === "per_lane"}
-							onClick={() =>
-								onMutate(dynamic, {
-									type: "set_phase_mode",
-									phase_mode: "per_lane",
-								})
-							}
-						>
-							Per lane
-						</Button>
-					</fieldset>
-					{phaseMode === "per_lane" && lane && (
-						<SelectField
-							className="dynamic-phase-lane"
-							label="Lane"
-							ariaLabel="Dynamic phase lane"
-							value={lane.id}
-							options={dynamic.body.lanes.map((candidate, index) => ({
-								value: candidate.id,
-								label: `Lane ${index + 1} · ${candidate.attribute}`,
-							}))}
-							onChange={onSelectLane}
-						/>
-					)}
-				</div>
-				<FormLayout labelPlacement="top">
+				{phaseMode === "per_lane" && lane && (
 					<SelectField
-						className="dynamic-phase-ordering"
-						label="Ordering"
-						value={phase.ordering.type}
-						options={[
-							{ value: "selection", label: "Selection / Group order" },
-							{ value: "grid_linear", label: "Grid linear" },
-							{ value: "radial_out", label: "Radial out" },
-							{ value: "radial_in", label: "Radial in" },
-							{ value: "axial", label: "Axial / Radar" },
-							{ value: "random_each_loop", label: "Random each loop" },
-						]}
-						onChange={(ordering) => update({ ordering: orderingFor(ordering) })}
+						className="dynamic-phase-lane"
+						label="Lane"
+						ariaLabel="Dynamic phase lane"
+						value={lane.id}
+						options={dynamic.body.lanes.map((candidate, index) => ({
+							value: candidate.id,
+							label: `Lane ${index + 1} · ${candidate.attribute}`,
+						}))}
+						onChange={onSelectLane}
 					/>
-					{phase.ordering.type === "grid_linear" && (
-						<NumberField
-							label="Direction"
-							value={phase.ordering.angle_degrees}
-							allowDecimal
-							unit="°"
-							onValueChange={(angle_degrees) =>
-								update({
-									ordering: {
-										type: "grid_linear",
-										angle_degrees: Number(angle_degrees),
-									},
-								})
+				)}
+				<FormLayout labelPlacement="top">
+					<div className="dynamic-phase-ordering-field">
+						<MultiValueToggleField
+							className="dynamic-phase-ordering"
+							label="Ordering mode"
+							value={
+								phase.ordering.type === "radial_in"
+									? "radial_out"
+									: phase.ordering.type
+							}
+							options={[
+								{ value: "selection", label: "Linear" },
+								{ value: "grid_linear", label: "Grid" },
+								{ value: "radial_out", label: "Radial" },
+								{ value: "axial", label: "Radar" },
+								{ value: "random_each_loop", label: "Random" },
+							]}
+							onChange={(ordering) =>
+								update({ ordering: orderingFor(ordering, phase.ordering) })
 							}
 						/>
+					</div>
+					{phase.ordering.type === "grid_linear" && (
+						<div className="dynamic-phase-field dynamic-phase-direction-field">
+							<NumberField
+								label="Direction"
+								value={phase.ordering.angle_degrees}
+								allowDecimal
+								unit="°"
+								onValueChange={(angle_degrees) =>
+									update({
+										ordering: {
+											type: "grid_linear",
+											angle_degrees: Number(angle_degrees),
+										},
+									})
+								}
+							/>
+						</div>
 					)}
 					{spatialOrdering && (
 						<>
-							<NumberField
-								label="Center X"
-								value={spatialOrdering.center_x}
-								allowDecimal
-								onValueChange={(center_x) =>
-									update({
-										ordering: {
-											type: spatialOrdering.type,
-											center_x: Number(center_x),
-											center_z: spatialOrdering.center_z,
-										},
-									})
-								}
-							/>
-							<NumberField
-								label="Center Z"
-								value={spatialOrdering.center_z}
-								allowDecimal
-								onValueChange={(center_z) =>
-									update({
-										ordering: {
-											type: spatialOrdering.type,
-											center_x: spatialOrdering.center_x,
-											center_z: Number(center_z),
-										},
-									})
-								}
-							/>
+							<div className="dynamic-phase-field dynamic-phase-center-x-field">
+								<NumberField
+									label="Center X"
+									value={spatialOrdering.center_x}
+									allowDecimal
+									onValueChange={(center_x) =>
+										update({
+											ordering: {
+												type: spatialOrdering.type,
+												center_x: Number(center_x),
+												center_z: spatialOrdering.center_z,
+											},
+										})
+									}
+								/>
+							</div>
+							<div className="dynamic-phase-field dynamic-phase-center-z-field">
+								<NumberField
+									label="Center Z"
+									value={spatialOrdering.center_z}
+									allowDecimal
+									onValueChange={(center_z) =>
+										update({
+											ordering: {
+												type: spatialOrdering.type,
+												center_x: spatialOrdering.center_x,
+												center_z: Number(center_z),
+											},
+										})
+									}
+								/>
+							</div>
 						</>
 					)}
-					<NumberField
-						label="Offset"
-						value={phase.offset_degrees}
-						allowDecimal
-						unit="°"
-						onValueChange={(offset_degrees) =>
-							update({ offset_degrees: Number(offset_degrees) })
-						}
-					/>
-					<NumberField
-						label="Span"
-						value={phase.span_degrees}
-						allowDecimal
-						unit="°"
-						onValueChange={(span_degrees) =>
-							update({ span_degrees: Number(span_degrees) })
-						}
-					/>
-					<NumberField
-						label="Blocks"
-						value={phase.block_size}
-						min={1}
-						onValueChange={(block_size) =>
-							update({ block_size: Math.max(1, Number(block_size)) })
-						}
-					/>
-					<NumberField
-						label="Repeats"
-						value={phase.repeats}
-						min={1}
-						onValueChange={(repeats) =>
-							update({ repeats: Math.max(1, Number(repeats)) })
-						}
-					/>
-					<SwitchField
-						label="Wings"
-						checked={phase.wings}
-						onChange={(event) => update({ wings: event.target.checked })}
-					/>
-					<TextField
-						className="dynamic-phase-anchors"
-						key={phase.anchors_degrees.join(",")}
-						label="Explicit anchors"
-						defaultValue={phase.anchors_degrees.join(" THRU ")}
-						placeholder="Automatic"
-						onBlur={(event) => {
-							const text = event.target.value.trim();
-							if (!text) {
-								update({ anchors_degrees: [] });
-								return;
-							}
-							const anchors = text.split(/\s*(?:THRU|,)\s*/i).map(Number);
-							if (anchors.every(Number.isFinite))
-								update({ anchors_degrees: anchors });
-						}}
-					/>
+					<div className="dynamic-phase-shared-fields">
+						<div className="dynamic-phase-field dynamic-phase-offset-field">
+							<NumberField
+								label="Offset"
+								value={phase.offset_degrees}
+								allowDecimal
+								unit="°"
+								onValueChange={(offset_degrees) =>
+									update({ offset_degrees: Number(offset_degrees) })
+								}
+							/>
+						</div>
+						<div className="dynamic-phase-field dynamic-phase-span-field">
+							<NumberField
+								label="Span"
+								value={phase.span_degrees}
+								allowDecimal
+								unit="°"
+								onValueChange={(span_degrees) =>
+									update({ span_degrees: Number(span_degrees) })
+								}
+							/>
+						</div>
+						<div className="dynamic-phase-field dynamic-phase-blocks-field">
+							<NumberField
+								label="Blocks"
+								value={phase.block_size}
+								min={1}
+								onValueChange={(block_size) =>
+									update({ block_size: Math.max(1, Number(block_size)) })
+								}
+							/>
+						</div>
+						<div className="dynamic-phase-field dynamic-phase-repeats-field">
+							<NumberField
+								label="Repeats"
+								value={phase.repeats}
+								min={1}
+								onValueChange={(repeats) =>
+									update({ repeats: Math.max(1, Number(repeats)) })
+								}
+							/>
+						</div>
+						<div className="dynamic-phase-field dynamic-phase-wings-field">
+							<SwitchField
+								label="Wings"
+								checked={phase.wings}
+								onChange={(event) => update({ wings: event.target.checked })}
+							/>
+						</div>
+						<div className="dynamic-phase-field dynamic-phase-anchors-field">
+							<TextField
+								className="dynamic-phase-anchors"
+								key={phase.anchors_degrees.join(",")}
+								label="Explicit anchors"
+								defaultValue={phase.anchors_degrees.join(" THRU ")}
+								placeholder="Automatic"
+								onBlur={(event) => {
+									const text = event.target.value.trim();
+									if (!text) {
+										update({ anchors_degrees: [] });
+										return;
+									}
+									const anchors = text.split(/\s*(?:THRU|,)\s*/i).map(Number);
+									if (anchors.every(Number.isFinite))
+										update({ anchors_degrees: anchors });
+								}}
+							/>
+						</div>
+					</div>
 				</FormLayout>
 				<footer className="dynamic-phase-footer">
 					<div className="dynamic-phase-target-actions">
@@ -1542,11 +2173,17 @@ function PhaseView({
 function SpeedView({
 	dynamic,
 	runtime,
+	previewPhase,
+	speedGroupBpms,
 	onMutate,
+	onSpeedGroupTap,
 }: {
 	dynamic: DynamicObject;
 	runtime: DynamicRuntimeSnapshotProjection | null;
+	previewPhase: number | null;
+	speedGroupBpms?: Partial<Record<SpeedGroupId, number>>;
 	onMutate(dynamic: DynamicObject, intent: DynamicUpdateIntent): void;
+	onSpeedGroupTap?(group: SpeedGroupId): void;
 }) {
 	const speed = dynamic.body.speed;
 	const instances =
@@ -1568,9 +2205,17 @@ function SpeedView({
 		speed.type === "fixed"
 			? Math.max(1, Math.round(60_000 / speed.duration_millis))
 			: null;
-	const beatPhase = primaryRuntime?.beat_phase ?? 0;
+	const beatPhase = previewPhase ?? primaryRuntime?.beat_phase ?? 0;
+	const displayedBpm =
+		speed.type === "fixed"
+			? (fixedBpm ?? 120)
+			: (speedGroupBpms?.[speed.group] ?? primaryRuntime?.effective_bpm ?? 120);
 	const tapTimes = useRef<number[]>([]);
 	const tapTempo = () => {
+		if (speed.type === "speed_group") {
+			onSpeedGroupTap?.(speed.group);
+			return;
+		}
 		const now = performance.now();
 		const previous = tapTimes.current.at(-1);
 		if (previous == null || now - previous > 2_000) tapTimes.current = [now];
@@ -1592,6 +2237,21 @@ function SpeedView({
 	return (
 		<div className="dynamic-speed-view">
 			<section className="dynamic-speed-transport">
+				<div
+					className="dynamic-beat-grid"
+					role="img"
+					aria-label={`Speed transport beat grid, phase ${Math.round(clamp(beatPhase, 0, 1) * 100)}%`}
+				>
+					<i style={{ left: `${clamp(beatPhase, 0, 1) * 100}%` }} />
+					<b className="dynamic-beat-phase">
+						Phase {Math.round(clamp(beatPhase, 0, 1) * 100)}%
+					</b>
+					{Array.from({ length: 16 }, (_, index) => (
+						<span key={index} className={index % 4 === 0 ? "bar-start" : ""}>
+							{(index % 4) + 1}
+						</span>
+					))}
+				</div>
 				<MultiValueToggle
 					ariaLabel="Speed source"
 					value={speed.type}
@@ -1634,13 +2294,6 @@ function SpeedView({
 								})
 							}
 						/>
-						<Button
-							className="dynamic-tap-tempo"
-							aria-label="Tap tempo"
-							onClick={tapTempo}
-						>
-							TAP
-						</Button>
 					</div>
 				) : (
 					<div className="dynamic-speed-source-fields">
@@ -1677,22 +2330,23 @@ function SpeedView({
 						/>
 					</div>
 				)}
-				<div
-					className="dynamic-beat-grid"
-					role="img"
-					aria-label="Speed transport beat grid"
+				<Button
+					className="dynamic-tap-tempo"
+					aria-label={
+						speed.type === "fixed"
+							? `Tap fixed tempo, ${Math.round(displayedBpm)} BPM`
+							: `Tap Speed Group ${speed.group} tempo, ${Math.round(displayedBpm)} BPM`
+					}
+					onClick={tapTempo}
 				>
-					<i style={{ left: `${clamp(beatPhase, 0, 1) * 100}%` }} />
-					{Array.from({ length: 16 }, (_, index) => (
-						<span key={index} className={index % 4 === 0 ? "bar-start" : ""}>
-							{(index % 4) + 1}
-						</span>
-					))}
-				</div>
-				<footer>
-					<strong>
-						{primaryRuntime?.effective_bpm?.toFixed(1) ?? fixedBpm ?? "—"} BPM
+					<strong className="speed-group-value">
+						{Math.round(displayedBpm)} BPM
 					</strong>
+					<span className="speed-group-label">
+						{speed.type === "fixed" ? "TAP" : `TAP GROUP ${speed.group}`}
+					</span>
+				</Button>
+				<footer>
 					<span>
 						{runtimeState} · transport {Math.round(beatPhase * 100)}%
 					</span>
@@ -1702,7 +2356,7 @@ function SpeedView({
 				</footer>
 			</section>
 			<section className="dynamic-speed-controls">
-				<FormLayout labelPlacement="side">
+				<FormLayout labelPlacement="top">
 					<NumberField
 						label="Multiplier"
 						value={rationalValue(dynamic.body.overall_speed_multiplier)}
@@ -1831,10 +2485,7 @@ export function DynamicEncoderDeck({
 		group?: string,
 	) =>
 		dynamic.phase_mode === "per_lane" && lane
-			? onLaneChange(
-					(current) => ({ ...current, phase: nextPhase }),
-					group,
-				)
+			? onLaneChange((current) => ({ ...current, phase: nextPhase }), group)
 			: onMutate({ type: "set_phase", phase: nextPhase }, group);
 	const slots: DynamicEncoderSlot[] =
 		view === "curves"
@@ -1853,26 +2504,33 @@ export function DynamicEncoderDeck({
 							label: "Offset",
 							display: `${phase.offset_degrees}°`,
 							value: phase.offset_degrees,
-							minimum: -360,
-							maximum: 360,
+							minimum: -10_000,
+							maximum: 10_000,
 							inputScale: 1,
 							fineStep: 5,
 							coarseStep: 45,
 							apply: (value, group) =>
 								applyPhase({ ...phase, offset_degrees: value }, group),
+							applyRange: (values, group) =>
+								applyPhase(phaseWithExplicitRange(phase, values), group),
 						},
 						{
 							id: "span",
 							label: "Span",
 							display: `${phase.span_degrees}°`,
 							value: phase.span_degrees,
-							minimum: 0,
-							maximum: 720,
+							minimum: -10_000,
+							maximum: 10_000,
 							inputScale: 1,
 							fineStep: 5,
 							coarseStep: 45,
 							apply: (value, group) =>
-								applyPhase({ ...phase, span_degrees: value }, group),
+								applyPhase(
+									{ ...phase, span_degrees: value, anchors_degrees: [] },
+									group,
+								),
+							applyRange: (values, group) =>
+								applyPhase(phaseWithExplicitRange(phase, values), group),
 						},
 						{
 							id: "blocks",
@@ -1996,18 +2654,15 @@ export function DynamicEncoderDeck({
 		},
 		[view],
 	);
-	const applyRange = useCallback(
-		(id: string, points: number[]) => {
-			const slot = slotsRef.current.find((candidate) => candidate.id === id);
-			if (!slot?.applyRange || slot.disabled) return;
-			const scale = slot.inputScale || 1;
-			void slot.applyRange(
-				points.map((point) => clamp(point / scale, slot.minimum, slot.maximum)),
-				crypto.randomUUID(),
-			);
-		},
-		[],
-	);
+	const applyRange = useCallback((id: string, points: number[]) => {
+		const slot = slotsRef.current.find((candidate) => candidate.id === id);
+		if (!slot?.applyRange || slot.disabled) return;
+		const scale = slot.inputScale || 1;
+		void slot.applyRange(
+			points.map((point) => clamp(point / scale, slot.minimum, slot.maximum)),
+			crypto.randomUUID(),
+		);
+	}, []);
 	const selectPreset = useCallback((id: string, value: string) => {
 		const slot = slotsRef.current.find((candidate) => candidate.id === id);
 		if (!slot?.selectPreset || slot.disabled) return;
@@ -2053,7 +2708,7 @@ export function DynamicEncoderDeck({
 				showHeader={false}
 				model={{
 					id: `dynamics-${view}-${page}`,
-					label: `${view === "curves" ? "Curves" : view === "phase" ? "Phase Spread" : "Speed"} encoders`,
+					label: `${view === "curves" ? "Lanes" : view === "phase" ? "Phase" : "Speed"} encoders`,
 					description: "Turn fine · press-turn coarse · center Set Value",
 					encoders: items,
 				}}
@@ -2164,12 +2819,18 @@ function curveEditorEncoderSlots(
 			: undefined,
 		apply: (value, group) =>
 			onLaneChange(
-				(item) => replace(item, { type: "value", value: clamp(value, 0, 1) }),
+				(item) =>
+					normalizePwmLane(
+						replace(item, { type: "value", value: clamp(value, 0, 1) }),
+					),
 				group,
 			),
 		selectPreset: (value, group) =>
 			onLaneChange(
-				(item) => replace(item, scalarSourceFromPresetChoice(value, item.attribute)),
+				(item) =>
+					normalizePwmLane(
+						replace(item, scalarSourceFromPresetChoice(value, item.attribute)),
+					),
 				group,
 			),
 	});
@@ -2358,9 +3019,8 @@ function curveEditorEncoderSlots(
 		];
 		return lane.middle_amplitude.function === "pwm"
 			? [
-					...valueSlots,
+					...middleAmplitudePwmValueSlots(lane, onLaneChange),
 					...pwmEncoderSlots(lane, onLaneChange),
-					widthSlot,
 					speedSlot,
 				]
 			: [
@@ -2401,12 +3061,7 @@ function curveEditorEncoderSlots(
 		})),
 	];
 	return lane.max_min.function === "pwm"
-		? [
-				...valueSlots,
-				...pwmEncoderSlots(lane, onLaneChange),
-				widthSlot,
-				speedSlot,
-			]
+		? [...valueSlots, ...pwmEncoderSlots(lane, onLaneChange), speedSlot]
 		: [
 				...valueSlots,
 				unassigned("bounds-unassigned-1"),
@@ -2414,6 +3069,100 @@ function curveEditorEncoderSlots(
 				widthSlot,
 				speedSlot,
 			];
+}
+
+function middleAmplitudePwmValueSlots(
+	lane: DynamicLaneProjection,
+	onLaneChange: (
+		update: (lane: DynamicLaneProjection) => DynamicLaneProjection,
+		mutationGroup?: string,
+	) => Promise<void>,
+): DynamicEncoderSlot[] {
+	const middle = scalarSourceEncoderValue(lane.middle_amplitude.middle);
+	const top = clamp(middle + lane.middle_amplitude.amplitude, 0, 1);
+	const bottom = clamp(middle - lane.middle_amplitude.amplitude, 0, 1);
+	const slot = (
+		field: "top" | "bottom",
+		value: number,
+	): DynamicEncoderSlot => ({
+		id: `pwm-${field}`,
+		label: field === "top" ? "Top" : "Bottom",
+		display: `${Math.round(value * 100)}%`,
+		value,
+		minimum: 0,
+		maximum: 1,
+		inputScale: 100,
+		fineStep: 0.01,
+		coarseStep: 0.1,
+		apply: (nextValue, group) =>
+			onLaneChange((item) => {
+				const currentMiddle = scalarSourceEncoderValue(
+					item.middle_amplitude.middle,
+				);
+				const currentTop = clamp(
+					currentMiddle + item.middle_amplitude.amplitude,
+					0,
+					1,
+				);
+				const currentBottom = clamp(
+					currentMiddle - item.middle_amplitude.amplitude,
+					0,
+					1,
+				);
+				const nextTop =
+					field === "top" ? clamp(nextValue, currentBottom, 1) : currentTop;
+				const nextBottom =
+					field === "bottom" ? clamp(nextValue, 0, currentTop) : currentBottom;
+				return normalizePwmLane({
+					...item,
+					middle_amplitude: {
+						...item.middle_amplitude,
+						middle: {
+							type: "value",
+							value: (nextTop + nextBottom) / 2,
+						},
+						amplitude: (nextTop - nextBottom) / 2,
+					},
+				});
+			}, group),
+	});
+	return [slot("top", top), slot("bottom", bottom)];
+}
+
+function normalizePwmLane(lane: DynamicLaneProjection) {
+	const functionName =
+		lane.mode === "middle_amplitude"
+			? lane.middle_amplitude.function
+			: lane.mode === "max_min"
+				? lane.max_min.function
+				: null;
+	if (functionName !== "pwm") return lane;
+	const pwm =
+		lane.mode === "middle_amplitude"
+			? lane.middle_amplitude.pwm
+			: lane.max_min.pwm;
+	const on = clamp(pwm.on, 0, 1);
+	const normalizedPwm = {
+		...pwm,
+		attack: clamp(pwm.attack, 0, on),
+		on,
+		decay: clamp(pwm.decay, 0, 1 - on),
+		off: 1 - on,
+	};
+	return lane.mode === "middle_amplitude"
+		? {
+				...lane,
+				width: 1,
+				middle_amplitude: {
+					...lane.middle_amplitude,
+					pwm: normalizedPwm,
+				},
+			}
+		: {
+				...lane,
+				width: 1,
+				max_min: { ...lane.max_min, pwm: normalizedPwm },
+			};
 }
 
 function pwmEncoderSlots(
@@ -2428,62 +3177,51 @@ function pwmEncoderSlots(
 			? lane.middle_amplitude.pwm
 			: lane.max_min.pwm;
 	const slot = (
-		startField: "attack" | "decay",
-		endField: "on" | "off",
+		field: "attack" | "on" | "decay",
 		label: string,
 	): DynamicEncoderSlot => ({
-		id: `pwm-${startField}-${endField}`,
+		id: `pwm-${field}`,
 		label,
-		display: `${Math.round(pwm[startField] * 100)}% ... ${Math.round(pwm[endField] * 100)}%`,
-		value: pwm[startField],
+		display: `${Math.round(pwm[field] * 100)}%`,
+		value: pwm[field],
 		minimum: 0,
 		maximum: 1,
 		inputScale: 100,
 		fineStep: 0.01,
 		coarseStep: 0.1,
 		apply: (value, group) =>
-			onLaneChange((item) => setLanePwmValue(item, startField, value), group),
-		applyRange: (values, group) =>
-			onLaneChange(
-				(item) => {
-					const start = values[0];
-					const end = values[values.length - 1];
-					if (start === undefined || end === undefined) return item;
-					return setLanePwmValue(
-						setLanePwmValue(item, startField, Math.min(start, end)),
-						endField,
-						Math.max(start, end),
-					);
-				},
-				group,
-			),
+			onLaneChange((item) => setLanePwmValue(item, field, value), group),
 	});
-	return [
-		slot("attack", "on", "Attack / On"),
-		slot("decay", "off", "Decay / Off"),
-	];
+	return [slot("attack", "Attack"), slot("on", "On"), slot("decay", "Decay")];
 }
 
 function setLanePwmValue(
 	lane: DynamicLaneProjection,
-	field: "attack" | "on" | "decay" | "off",
+	field: "attack" | "on" | "decay",
 	value: number,
 ): DynamicLaneProjection {
 	const pwm =
 		lane.mode === "middle_amplitude"
 			? lane.middle_amplitude.pwm
 			: lane.max_min.pwm;
-	const nextPwm = { ...pwm, [field]: clamp(value, 0, 1) };
-	if (field === "attack") nextPwm.attack = Math.min(nextPwm.attack, nextPwm.on);
-	if (field === "on") nextPwm.on = Math.max(nextPwm.on, nextPwm.attack);
-	if (field === "decay") nextPwm.decay = Math.min(nextPwm.decay, nextPwm.off);
-	if (field === "off") nextPwm.off = Math.max(nextPwm.off, nextPwm.decay);
+	const nextPwm = { ...pwm };
+	if (field === "attack") nextPwm.attack = clamp(value, 0, nextPwm.on);
+	if (field === "on") {
+		nextPwm.on = clamp(value, nextPwm.attack, 1 - nextPwm.decay);
+		nextPwm.off = 1 - nextPwm.on;
+	}
+	if (field === "decay") nextPwm.decay = clamp(value, 0, nextPwm.off);
 	return lane.mode === "middle_amplitude"
 		? {
 				...lane,
+				width: 1,
 				middle_amplitude: { ...lane.middle_amplitude, pwm: nextPwm },
 			}
-		: { ...lane, max_min: { ...lane.max_min, pwm: nextPwm } };
+		: {
+				...lane,
+				width: 1,
+				max_min: { ...lane.max_min, pwm: nextPwm },
+			};
 }
 
 function scalarSourceEncoderValue(
@@ -2674,6 +3412,22 @@ const interpolations = [
 	"hold",
 	"drop",
 ] as const;
+
+function phaseWithExplicitRange(
+	phase: DynamicDefinitionProjection["phase"],
+	values: number[],
+): DynamicDefinitionProjection["phase"] {
+	if (values.length < 2 || values.some((value) => !Number.isFinite(value)))
+		return phase;
+	const offset = values[0];
+	const anchors = values.map((value) => value - offset);
+	return {
+		...phase,
+		offset_degrees: offset,
+		span_degrees: anchors.at(-1) ?? phase.span_degrees,
+		anchors_degrees: anchors,
+	};
+}
 
 function phaseDirectionSlot(
 	phase: DynamicDefinitionProjection["phase"],
@@ -2918,69 +3672,22 @@ function speedEncoderSlots(
 	];
 }
 
-function LaneChooser({
-	slot,
+function LaneAttributeModal({
+	id,
+	title,
+	details,
+	currentAttribute,
 	attributes,
-	busy,
-	onCancel,
-	onChoose,
-}: {
-	slot: number;
-	attributes: readonly { id: string; label: string; family: string }[];
-	busy: boolean;
-	onCancel(): void;
-	onChoose(attribute: string): void;
-}) {
-	const [attribute, setAttribute] = useState(attributes[0]?.id ?? "");
-	return (
-		<ModalFrame
-			id={`create-dynamic-${slot}`}
-			ariaLabel={`Create Dynamic ${slot}`}
-			title={`Create Dynamic ${slot}`}
-			details="Choose the first lane"
-			onClose={onCancel}
-		>
-			<section className="dynamic-create-form">
-				<p>
-					The Dynamic is created only after a valid scalar lane is selected.
-				</p>
-				<FormLayout labelPlacement="side">
-					<SelectField
-						label="First lane"
-						value={attribute}
-						options={attributes.map((candidate) => ({
-							value: candidate.id,
-							label: `${candidate.family} · ${candidate.label}`,
-						}))}
-						onChange={setAttribute}
-					/>
-				</FormLayout>
-				{attributes.length === 0 && (
-					<p role="alert">No continuous scalar attributes are available.</p>
-				)}
-				<footer>
-					<Button onClick={onCancel}>Cancel</Button>
-					<Button
-						variant="primary"
-						disabled={busy || !attribute}
-						onClick={() => onChoose(attribute)}
-					>
-						{busy ? "Creating…" : "Create and edit"}
-					</Button>
-				</footer>
-			</section>
-		</ModalFrame>
-	);
-}
-
-function ChangeLaneAttributeModal({
-	lane,
-	attributes,
+	busy = false,
 	onClose,
 	onChoose,
 }: {
-	lane: DynamicLaneProjection;
+	id: string;
+	title: string;
+	details: string;
+	currentAttribute?: string;
 	attributes: readonly { id: string; label: string; family: string }[];
+	busy?: boolean;
 	onClose(): void;
 	onChoose(attribute: string): void;
 }) {
@@ -2998,10 +3705,10 @@ function ChangeLaneAttributeModal({
 	}, []);
 	return (
 		<ModalFrame
-			id={`change-lane-attribute-${lane.id}`}
-			ariaLabel="Change lane attribute"
-			title="Change lane attribute"
-			details="Choose the attribute controlled by this lane"
+			id={id}
+			ariaLabel={title}
+			title={title}
+			details={details}
 			dialogClassName="dynamic-attribute-choice-modal"
 			onClose={onClose}
 		>
@@ -3012,12 +3719,13 @@ function ChangeLaneAttributeModal({
 							<h3>{group.family}</h3>
 							<div className="ui-grouped-selection-options">
 								{group.attributes.map((attribute) => {
-									const selected = attribute.id === lane.attribute;
+									const selected = attribute.id === currentAttribute;
 									return (
 										<Button
 											key={attribute.id}
 											active={selected}
 											aria-pressed={selected}
+											disabled={busy}
 											contentAlign="left"
 											onClick={() =>
 												selected ? onClose() : onChoose(attribute.id)
@@ -3266,20 +3974,15 @@ function lanePreview(
 		Array.from({ length: 121 }, (_, index) => {
 			const progress = start + ((end - start) * index) / 120;
 			const intervalPhase = (progress * repetitions) % 1;
-			const width = clamp(lane.width, 0.05, 1);
+			const width = functionName === "pwm" ? 1 : clamp(lane.width, 0.05, 1);
 			const phase = clamp((intervalPhase - (1 - width) / 2) / width, 0, 1);
-			const shape =
-				functionName === "linear_up"
-					? phase
-					: functionName === "linear_down"
-						? 1 - phase
-						: functionName === "pwm"
-							? phase < 0.5
-								? 1
-								: 0
-							: functionName === "cosinus"
-								? (Math.cos(phase * Math.PI * 2) + 1) / 2
-								: (Math.sin(phase * Math.PI * 2 - Math.PI / 2) + 1) / 2;
+			const shape = periodicPreviewValue(
+				functionName,
+				phase,
+				lane.mode === "middle_amplitude"
+					? lane.middle_amplitude.pwm
+					: lane.max_min.pwm,
+			);
 			const minimum =
 				lane.mode === "middle_amplitude"
 					? scalarSourceCurveValue(lane.middle_amplitude.middle) -
@@ -3416,16 +4119,30 @@ function normalizeDegrees(value: number) {
 	return ((value % 360) + 360) % 360;
 }
 
-function orderingFor(type: string): DynamicPhaseOrderingProjection {
+function orderingFor(
+	type: string,
+	current?: DynamicPhaseOrderingProjection,
+): DynamicPhaseOrderingProjection {
 	switch (type) {
 		case "grid_linear":
-			return { type, angle_degrees: 90 };
+			return {
+				type,
+				angle_degrees:
+					current?.type === "grid_linear" ? current.angle_degrees : 90,
+			};
 		case "radial_out":
 		case "radial_in":
 		case "axial":
-			return { type, center_x: 0, center_z: 0 };
+			return {
+				type,
+				center_x: current && isSpatialOrdering(current) ? current.center_x : 0,
+				center_z: current && isSpatialOrdering(current) ? current.center_z : 0,
+			};
 		case "random_each_loop":
-			return { type, seed: Date.now() };
+			return {
+				type,
+				seed: current?.type === "random_each_loop" ? current.seed : Date.now(),
+			};
 		default:
 			return { type: "selection" };
 	}
@@ -3442,36 +4159,6 @@ function isSpatialOrdering(
 		ordering.type === "radial_in" ||
 		ordering.type === "axial"
 	);
-}
-
-function phasePreviewAmount(
-	index: number,
-	ordering: DynamicPhaseOrderingProjection,
-) {
-	const column = index % 8;
-	const row = Math.floor(index / 8);
-	const x = column / 7 - 0.5;
-	const z = row / 5 - 0.5;
-	switch (ordering.type) {
-		case "grid_linear": {
-			const angle = (ordering.angle_degrees * Math.PI) / 180;
-			return clamp(
-				(x * Math.cos(angle) + z * Math.sin(angle) + 0.7) / 1.4,
-				0,
-				1,
-			);
-		}
-		case "radial_out":
-			return clamp(Math.hypot(x, z) / 0.71, 0, 1);
-		case "radial_in":
-			return 1 - clamp(Math.hypot(x, z) / 0.71, 0, 1);
-		case "axial":
-			return normalizeDegrees((Math.atan2(z, x) * 180) / Math.PI) / 360;
-		case "random_each_loop":
-			return ((index * 17 + ordering.seed) % 47) / 46;
-		case "selection":
-			return index / 47;
-	}
 }
 
 function clamp(value: number, minimum: number, maximum: number) {

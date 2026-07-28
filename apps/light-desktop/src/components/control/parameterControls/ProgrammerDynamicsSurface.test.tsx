@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
-import { ModalProvider } from "@tosklight/ui/modals";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProvider } from "../../../state/AppContext";
 import { createDefaultDynamicDefinition } from "../../../windows/DynamicsWindow";
@@ -28,7 +28,7 @@ describe("DynamicDefinitionEncoderSurface", () => {
 		});
 	});
 
-	it("renders the reviewed six-slot Curves deck on software and hardware surfaces", () => {
+	it("renders the reviewed six-slot Lanes deck on software and hardware surfaces", () => {
 		const dynamic = createDefaultDynamicDefinition(201, "intensity", {
 			definition: "dynamic-201",
 			lane: "lane-intensity",
@@ -49,7 +49,7 @@ describe("DynamicDefinitionEncoderSurface", () => {
 			</ModalProvider>,
 		);
 
-		expect(screen.getByLabelText("Curves encoders")).toHaveAttribute(
+		expect(screen.getByLabelText("Lanes encoders")).toHaveAttribute(
 			"data-encoder-surface",
 			"touch",
 		);
@@ -76,7 +76,7 @@ describe("DynamicDefinitionEncoderSurface", () => {
 			</ModalProvider>,
 		);
 
-		expect(screen.getByLabelText("Curves encoders")).toHaveAttribute(
+		expect(screen.getByLabelText("Lanes encoders")).toHaveAttribute(
 			"data-encoder-surface",
 			"hardware",
 		);
@@ -86,12 +86,14 @@ describe("DynamicDefinitionEncoderSurface", () => {
 		expect(screen.getByLabelText("Encoder 1: Top, 100%")).toBeInTheDocument();
 	});
 
-	it("puts every PWM parameter on the single Curves encoder page", () => {
+	it("puts every PWM parameter on the single Lanes encoder page", () => {
 		const dynamic = createDefaultDynamicDefinition(201, "intensity", {
 			definition: "dynamic-201",
 			lane: "lane-intensity",
 		});
 		dynamic.lanes[0].max_min.function = "pwm";
+		dynamic.lanes[0].width = 0.4;
+		const onLaneChange = vi.fn().mockResolvedValue(undefined);
 
 		render(
 			<ModalProvider>
@@ -101,7 +103,7 @@ describe("DynamicDefinitionEncoderSurface", () => {
 						lane={dynamic.lanes[0]}
 						view="curves"
 						page={1}
-						onLaneChange={vi.fn().mockResolvedValue(undefined)}
+						onLaneChange={onLaneChange}
 						onMutate={vi.fn().mockResolvedValue(undefined)}
 					/>
 				</AppProvider>
@@ -111,9 +113,9 @@ describe("DynamicDefinitionEncoderSurface", () => {
 		for (const [slot, label] of [
 			[1, "Top"],
 			[2, "Bottom"],
-			[3, "Attack / On"],
-			[4, "Decay / Off"],
-			[5, "Curve width"],
+			[3, "Attack"],
+			[4, "On"],
+			[5, "Decay"],
 			[6, "Speed"],
 		] as const)
 			expect(
@@ -121,14 +123,30 @@ describe("DynamicDefinitionEncoderSurface", () => {
 			).toBeInTheDocument();
 		expect(
 			screen.getByRole("button", {
-				name: "Set Enc 3 · Attack / On value",
+				name: "Set Enc 3 · Attack value",
 			}),
-		).toHaveTextContent("0%...50%");
+		).toHaveTextContent("0%");
 		expect(
 			screen.getByRole("button", {
-				name: "Set Enc 4 · Decay / Off value",
+				name: "Set Enc 4 · On value",
 			}),
-		).toHaveTextContent("0%...50%");
+		).toHaveTextContent("50%");
+		expect(
+			screen.getByRole("button", {
+				name: "Set Enc 5 · Decay value",
+			}),
+		).toHaveTextContent("0%");
+		expect(
+			screen.queryByRole("group", { name: /Curve width/ }),
+		).not.toBeInTheDocument();
+		fireEvent.keyDown(screen.getByRole("group", { name: "Enc 4 · On" }), {
+			key: "ArrowUp",
+		});
+		const update = onLaneChange.mock.calls[0]?.[0];
+		const updated = update(dynamic.lanes[0]);
+		expect(updated.width).toBe(1);
+		expect(updated.max_min.pwm.on).toBeCloseTo(0.51);
+		expect(updated.max_min.pwm.off).toBeCloseTo(0.49);
 		expect(
 			screen.queryByRole("group", { name: /Function/ }),
 		).not.toBeInTheDocument();
@@ -190,7 +208,9 @@ describe("DynamicDefinitionEncoderSurface", () => {
 			"false",
 		);
 		expect(screen.getByRole("button", { name: /Half/u })).toBeInTheDocument();
-		expect(screen.queryByRole("button", { name: /Red/u })).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: /Red/u }),
+		).not.toBeInTheDocument();
 
 		fireEvent.click(screen.getByRole("button", { name: /Current/u }));
 		const update = onLaneChange.mock.calls[0]?.[0];
@@ -199,7 +219,7 @@ describe("DynamicDefinitionEncoderSurface", () => {
 		});
 	});
 
-	it("edits the selected lane phase from the Phase Spread encoders", () => {
+	it("edits the selected lane phase from the Phase encoders", () => {
 		const dynamic = createDefaultDynamicDefinition(201, "intensity", {
 			definition: "dynamic-201",
 			lane: "lane-intensity",
@@ -234,5 +254,65 @@ describe("DynamicDefinitionEncoderSurface", () => {
 		const update = onLaneChange.mock.calls[0]?.[0];
 		expect(update(lane).phase?.span_degrees).toBe(185);
 		expect(onMutate).not.toHaveBeenCalled();
+	});
+
+	it("accepts an explicit THRU range from Offset and Span encoders", () => {
+		const dynamic = createDefaultDynamicDefinition(201, "intensity", {
+			definition: "dynamic-201",
+			lane: "lane-intensity",
+		});
+		const lane = dynamic.lanes[0];
+		const onLaneChange = vi.fn().mockResolvedValue(undefined);
+		const onMutate = vi.fn().mockResolvedValue(undefined);
+
+		render(
+			<ModalProvider>
+				<AppProvider>
+					<DynamicDefinitionEncoderSurface
+						dynamic={dynamic}
+						lane={lane}
+						view="phase"
+						onLaneChange={onLaneChange}
+						onMutate={onMutate}
+					/>
+				</AppProvider>
+			</ModalProvider>,
+		);
+
+		for (const { encoder, keys, expected } of [
+			{
+				encoder: "Offset",
+				keys: ["0", "THRU", "3", "6", "0", "ENTER"],
+				expected: {
+					offset_degrees: 0,
+					span_degrees: 360,
+					anchors_degrees: [0, 360],
+				},
+			},
+			{
+				encoder: "Span",
+				keys: ["3", "6", "0", "THRU", "0", "ENTER"],
+				expected: {
+					offset_degrees: 360,
+					span_degrees: -360,
+					anchors_degrees: [0, -360],
+				},
+			},
+		]) {
+			fireEvent.click(
+				screen.getByRole("button", {
+					name: new RegExp(`Set Enc \\d · ${encoder} value`, "u"),
+				}),
+			);
+			for (const key of keys)
+				fireEvent.click(screen.getByRole("button", { name: key }));
+			const update = onMutate.mock.calls.at(-1)?.[0];
+			if (!update) throw new Error(`Missing ${encoder} range update`);
+			expect(update.type).toBe("set_phase");
+			if (update.type !== "set_phase")
+				throw new Error(`Unexpected ${encoder} range update`);
+			expect(update.phase).toMatchObject(expected);
+		}
+		expect(onLaneChange).not.toHaveBeenCalled();
 	});
 });

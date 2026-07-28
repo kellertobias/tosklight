@@ -1,4 +1,4 @@
-import { Button, SelectField } from "@tosklight/ui";
+import { Button } from "@tosklight/ui";
 import { EncoderGroupTabs } from "@tosklight/ui/encoders";
 import type { DynamicDefinitionProjection } from "../../../api/generated/light-wire";
 import type { DynamicEditorTask } from "../../../features/dynamics/DynamicEditorSessionContext";
@@ -218,9 +218,6 @@ function ConnectedDynamicEditorTaskTabs({
 function DynamicEditorTaskTabsView({
 	activeTask,
 	onTask,
-	dynamic,
-	laneId,
-	onLane,
 	page,
 	onPage,
 	pageCount,
@@ -234,22 +231,19 @@ function DynamicEditorTaskTabsView({
 	onPage(page: number): void;
 	pageCount: number;
 }) {
-	const lane =
-		dynamic?.lanes.find((candidate) => candidate.id === laneId) ??
-		dynamic?.lanes[0];
 	return (
 		<EncoderGroupTabs
 			className="family-tabs dynamics-editor-family-tabs"
 			groups={[
 				{
 					id: "curves",
-					label: "Curves",
-					compactLabel: "Curves",
+					label: "Lanes",
+					compactLabel: "Lanes",
 					pageCount,
 				},
 				{
 					id: "phase",
-					label: "Phase Spread",
+					label: "Phase",
 					compactLabel: "Phase",
 				},
 				{ id: "speed", label: "Speed" },
@@ -260,20 +254,6 @@ function DynamicEditorTaskTabsView({
 				onTask(nextTask);
 				onPage(nextPage);
 			}}
-			trailing={
-				dynamic && lane ? (
-					<SelectField
-						className="dynamic-editor-lane-picker"
-						ariaLabel="Dynamic lane"
-						value={lane.id}
-						options={dynamic.lanes.map((candidate) => ({
-							value: candidate.id,
-							label: candidate.attribute,
-						}))}
-						onChange={onLane}
-					/>
-				) : null
-			}
 		/>
 	);
 }

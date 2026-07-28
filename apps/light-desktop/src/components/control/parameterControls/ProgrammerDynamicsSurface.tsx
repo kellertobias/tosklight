@@ -162,9 +162,7 @@ export function ProgrammerDynamicsSurface({
 	const selected = selectedAuthoritative
 		? applyControllerOverride(
 				selectedAuthoritative,
-				controllerOverrides[
-					selectedAuthoritative.controller.controller_id
-				],
+				controllerOverrides[selectedAuthoritative.controller.controller_id],
 			)
 		: null;
 	useEffect(() => {
@@ -255,8 +253,7 @@ export function ProgrammerDynamicsSurface({
 			if (!selected || choices.length < 2) return;
 			const current = choices.findIndex(
 				(choice) =>
-					choice.controller.controller_id ===
-					selected.controller.controller_id,
+					choice.controller.controller_id === selected.controller.controller_id,
 			);
 			const next =
 				(current + Math.sign(delta) + choices.length) % choices.length;
@@ -435,8 +432,10 @@ export function ProgrammerDynamicsSurface({
 					{candidate === "instance"
 						? "Instance"
 						: candidate === "phase"
-							? "Phase Spread"
-							: candidate[0].toUpperCase() + candidate.slice(1)}
+							? "Phase"
+							: candidate === "curves"
+								? "Lanes"
+								: candidate[0].toUpperCase() + candidate.slice(1)}
 				</Button>
 			))}
 		</div>
@@ -711,8 +710,7 @@ function applyControllerOverride(
 		controller: {
 			...choice.controller,
 			size: override.size ?? choice.controller.size,
-			speed_multiplier:
-				override.speed ?? choice.controller.speed_multiplier,
+			speed_multiplier: override.speed ?? choice.controller.speed_multiplier,
 			phase_offset_degrees:
 				override.phase ?? choice.controller.phase_offset_degrees,
 		},

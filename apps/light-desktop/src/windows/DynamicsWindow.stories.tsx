@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { GridDesktop, PaneView } from "@tosklight/ui/desktop";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { CommandSectionFixture } from "../../../ui-library/storybook/fixtures/controlSection";
 import { ApplicationStateHarness } from "../../../ui-library/storybook/providers/ApplicationStateHarness";
 import type {
-	DynamicDefinitionProjection,
 	DynamicRuntimeSnapshotProjection,
 	DynamicUpdateIntent,
+	SpeedGroupId,
 } from "../api/generated/light-wire";
 import { DynamicEditorTaskTabs } from "../components/control/parameterControls/ParameterFamilyTabs";
 import { DynamicDefinitionEncoderSurface } from "../components/control/parameterControls/ProgrammerDynamicsSurface";
@@ -247,6 +247,31 @@ function FullApplicationDynamicsMock({
 			: "Offline discussion mock · changes are kept in Storybook memory only",
 	);
 	const [view, setView] = useState<DynamicEditorView>("curves");
+	const [speedGroupBpms, setSpeedGroupBpms] = useState<
+		Record<SpeedGroupId, number>
+	>({ A: 120, B: 96, C: 128, D: 140, E: 72 });
+	const speedGroupTapTimes = useRef<Partial<Record<SpeedGroupId, number[]>>>(
+		{},
+	);
+	const tapSpeedGroup = (group: SpeedGroupId) => {
+		const now = performance.now();
+		const previous = speedGroupTapTimes.current[group]?.at(-1);
+		const times =
+			previous == null || now - previous > 2_000
+				? [now]
+				: [...(speedGroupTapTimes.current[group] ?? []).slice(-4), now];
+		speedGroupTapTimes.current[group] = times;
+		if (times.length < 2) {
+			setMessage(`First tap captured for Speed Group ${group}`);
+			return;
+		}
+		const intervals = times.slice(1).map((time, index) => time - times[index]);
+		const average =
+			intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
+		const bpm = Math.max(1, Math.min(999, Math.round(60_000 / average)));
+		setSpeedGroupBpms((current) => ({ ...current, [group]: bpm }));
+		setMessage(`Speed Group ${group} tapped to ${bpm} BPM`);
+	};
 	const storyRuntime = useMemo(
 		() => ({
 			...runtime,
@@ -261,14 +286,14 @@ function FullApplicationDynamicsMock({
 				effective_bpm:
 					dynamic.body.speed.type === "fixed"
 						? 60_000 / dynamic.body.speed.duration_millis
-						: instance.effective_bpm,
+						: speedGroupBpms[dynamic.body.speed.group],
 			})),
 			definitions: runtime.definitions.map((status) => ({
 				...status,
 				lane_count: dynamic.body.lanes.length,
 			})),
 		}),
-		[dynamic],
+		[dynamic, speedGroupBpms],
 	);
 	const mutate = async (
 		intent: DynamicUpdateIntent,
@@ -336,41 +361,45 @@ function FullApplicationDynamicsMock({
 								secondary: message,
 							}}
 						>
-							<DynamicEditor
-								dynamic={dynamic}
-								compact={false}
-								busy={false}
-								error={null}
-								attributes={attributes}
-								presets={[]}
-								runtime={storyRuntime}
-								selection={runtime.instances[0].targets}
-								selectedGroupId="group-front-wash"
-								view={view}
-								onViewChange={setView}
-								onBack={() => setMessage("Back to Pool requested")}
-								onMutate={async (_object, intent, mutationGroup) =>
-									mutate(intent, mutationGroup)
-								}
-								onDelete={() =>
-									setMessage("Delete requested · ignored by offline mock")
-								}
-								onMove={(poolNumber) => {
-									setDynamic((current) => ({
-										...current,
-										revision: current.revision + 1,
-										body: {
-											...current.body,
-											pool_number: poolNumber,
+							<div className="dynamic-full-discussion-editor">
+								<DynamicEditor
+									dynamic={dynamic}
+									compact={false}
+									busy={false}
+									error={null}
+									attributes={attributes}
+									presets={[]}
+									runtime={storyRuntime}
+									speedGroupBpms={speedGroupBpms}
+									selection={runtime.instances[0].targets}
+									selectedGroupId="group-front-wash"
+									view={view}
+									onViewChange={setView}
+									onBack={() => setMessage("Back to Pool requested")}
+									onMutate={async (_object, intent, mutationGroup) =>
+										mutate(intent, mutationGroup)
+									}
+									onSpeedGroupTap={tapSpeedGroup}
+									onDelete={() =>
+										setMessage("Delete requested · ignored by offline mock")
+									}
+									onMove={(poolNumber) => {
+										setDynamic((current) => ({
+											...current,
 											revision: current.revision + 1,
-										},
-									}));
-									setMessage(`Moved locally to Dynamic ${poolNumber}`);
-								}}
-								onCopy={(poolNumber) =>
-									setMessage(`Copy requested for Dynamic ${poolNumber}`)
-								}
-							/>
+											body: {
+												...current.body,
+												pool_number: poolNumber,
+												revision: current.revision + 1,
+											},
+										}));
+										setMessage(`Moved locally to Dynamic ${poolNumber}`);
+									}}
+									onCopy={(poolNumber) =>
+										setMessage(`Copy requested for Dynamic ${poolNumber}`)
+									}
+								/>
+							</div>
 						</PaneView>
 					</GridDesktop>
 				}

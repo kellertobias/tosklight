@@ -18,6 +18,7 @@ let deleteArmed = false;
 const deleteDynamic = vi.fn();
 const updateDynamic = vi.fn();
 const resetCommand = vi.fn();
+const speedGroupAction = vi.fn();
 const showObjectsStore = {
 	getSnapshot: () => ({ dynamics, authorityGeneration: 1 }),
 	beginOptimistic: vi.fn(() => crypto.randomUUID()),
@@ -33,6 +34,16 @@ vi.mock("../features/showObjects/ShowObjectsState", () => ({
 }));
 vi.mock("../features/showObjects/ShowObjectsView", () => ({
 	useShowObjectView: () => undefined,
+}));
+vi.mock("../components/control/useSoundToLight", () => ({
+	useSoundToLight: () => ({
+		action: speedGroupAction,
+	}),
+}));
+vi.mock("../features/speedGroupRuntime/SpeedGroupRuntimeView", () => ({
+	useSpeedGroupRuntimeView: () => ({
+		projection: null,
+	}),
 }));
 vi.mock("../features/deskSnapshot/DeskSnapshotState", () => ({
 	useActiveShowId: () => "show-test",
@@ -150,24 +161,23 @@ describe("DynamicsWindow", () => {
 		dynamics = [];
 		deleteArmed = false;
 		deleteDynamic.mockReset().mockResolvedValue(undefined);
-		updateDynamic.mockReset().mockImplementation(
-			async (
-				_showId: string,
-				id: string,
-				expectedRevision: number,
-			) => {
-				const object = dynamics.find((candidate) => candidate.id === id);
-				return {
-					request_id: crypto.randomUUID(),
-					replayed: false,
-					show_id: "show-test",
-					show_revision: expectedRevision + 1,
-					event_sequence: expectedRevision + 1,
-					object: { ...object, revision: expectedRevision + 1 },
-				};
-			},
-		);
+		updateDynamic
+			.mockReset()
+			.mockImplementation(
+				async (_showId: string, id: string, expectedRevision: number) => {
+					const object = dynamics.find((candidate) => candidate.id === id);
+					return {
+						request_id: crypto.randomUUID(),
+						replayed: false,
+						show_id: "show-test",
+						show_revision: expectedRevision + 1,
+						event_sequence: expectedRevision + 1,
+						object: { ...object, revision: expectedRevision + 1 },
+					};
+				},
+			);
 		resetCommand.mockReset().mockResolvedValue(true);
+		speedGroupAction.mockReset().mockResolvedValue({});
 	});
 
 	it("uses the shared pool without pagination or implementation legend", () => {
@@ -219,18 +229,129 @@ describe("DynamicsWindow", () => {
 		).toBeInTheDocument();
 	});
 
-	it("opens the standard creation modal before choosing the first lane", () => {
+	it("uses the production selection preview and Phase footer", () => {
+		dynamics = [dynamicObject()];
+		const { container } = renderWindow();
+
+		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
+		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
+
+		expect(
+			container.querySelector('aside[aria-label="Selection preview"]'),
+		).toBeInTheDocument();
+		expect(
+			container.querySelector(
+				'[role="img"][aria-label="Front-end-only preview of 400 virtual fixtures"]',
+			),
+		).toBeInTheDocument();
+		const quickControls = screen.getByRole("group", {
+			name: "Phase quick controls",
+		});
+		expect(
+			within(quickControls).getByRole("radio", { name: "Linear" }),
+		).toBeInTheDocument();
+		expect(
+			within(quickControls).getByRole("button", { name: "Take Selection" }),
+		).toBeDisabled();
+	});
+
+	it("sends speed-group taps to the selected group", async () => {
+		const object = dynamicObject();
+		object.body.speed = {
+			type: "speed_group",
+			group: "A",
+			beats_per_cycle: { numerator: 4, denominator: 1 },
+		};
+		dynamics = [object];
+		renderWindow();
+		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
+		fireEvent.click(screen.getByRole("button", { name: "Speed" }));
+
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Tap Speed Group A tempo, 120 BPM",
+			}),
+		);
+		await vi.waitFor(() =>
+			expect(speedGroupAction).toHaveBeenCalledWith("A", {
+				action: "learn",
+				captured_at_millis: expect.any(Number),
+			}),
+		);
+	});
+
+	it("shows the defensive first-lane action for a zero-lane projection", async () => {
+		const object = dynamicObject();
+		object.body.lanes = [];
+		dynamics = [object];
+		renderWindow();
+		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
+
+		fireEvent.click(screen.getByRole("button", { name: "Add first lane" }));
+		const dialog = screen.getByRole("dialog", {
+			name: "Select lane attribute",
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Pan" }));
+
+		await vi.waitFor(() =>
+			expect(updateDynamic).toHaveBeenCalledWith(
+				"show-test",
+				"dynamic-1",
+				3,
+				expect.objectContaining({
+					type: "add_lane",
+					lane: expect.objectContaining({ attribute: "pan" }),
+				}),
+				undefined,
+			),
+		);
+	});
+
+	it("uses the lane attribute picker when creating a Dynamic", () => {
 		renderWindow();
 
 		fireEvent.click(screen.getAllByRole("button", { name: /Empty/i })[0]);
 
+		const dialog = screen.getByRole("dialog", {
+			name: "Select lane attribute",
+		});
+		expect(dialog).toBeInTheDocument();
+		expect(within(dialog).getByText("Create Dynamic 1")).toBeInTheDocument();
 		expect(
-			screen.getByRole("dialog", { name: "Create Dynamic 1" }),
+			within(dialog).getByRole("button", { name: "Intensity" }),
 		).toBeInTheDocument();
-		expect(screen.getByText("Choose the first lane")).toBeInTheDocument();
 		expect(
-			screen.getByRole("button", { name: "Create and edit" }),
+			within(dialog).getByRole("button", { name: "Pan" }),
 		).toBeInTheDocument();
+		expect(within(dialog).queryByLabelText("First lane")).toBeNull();
+		expect(
+			within(dialog).queryByRole("button", { name: "Create and edit" }),
+		).toBeNull();
+	});
+
+	it("uses the lane attribute picker before adding a lane", async () => {
+		dynamics = [dynamicObject()];
+		renderWindow();
+		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
+
+		fireEvent.click(screen.getByRole("button", { name: "+ Add Lane" }));
+		const dialog = screen.getByRole("dialog", {
+			name: "Select lane attribute",
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Pan" }));
+
+		await vi.waitFor(() =>
+			expect(updateDynamic).toHaveBeenCalledWith(
+				"show-test",
+				"dynamic-1",
+				3,
+				expect.objectContaining({
+					type: "add_lane",
+					lane: expect.objectContaining({ attribute: "pan" }),
+				}),
+				undefined,
+			),
+		);
 	});
 
 	it("deletes an occupied Dynamic when Delete is armed", async () => {
@@ -316,6 +437,70 @@ describe("DynamicsWindow", () => {
 		expect(laneList.querySelector("button button")).toBeNull();
 	});
 
+	it("maps a dragged keyframe center to the cursor without horizontal drift", async () => {
+		dynamics = [dynamicObject({ mode: "keyframes" })];
+		renderWindow();
+		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
+
+		const keyframe = screen.getByRole("button", {
+			name: "Intensity keyframe B",
+		});
+		const timeline = keyframe.parentElement;
+		expect(timeline).not.toBeNull();
+		Object.defineProperty(keyframe, "setPointerCapture", {
+			configurable: true,
+			value: vi.fn(),
+		});
+		Object.defineProperty(keyframe, "getBoundingClientRect", {
+			configurable: true,
+			value: () => ({
+				left: 190,
+				width: 50,
+				right: 240,
+				top: 0,
+				bottom: 50,
+				height: 50,
+				x: 190,
+				y: 0,
+				toJSON: () => undefined,
+			}),
+		});
+		Object.defineProperty(timeline, "getBoundingClientRect", {
+			configurable: true,
+			value: () => ({
+				left: 100,
+				width: 1000,
+				right: 1100,
+				top: 0,
+				bottom: 120,
+				height: 120,
+				x: 100,
+				y: 0,
+				toJSON: () => undefined,
+			}),
+		});
+
+		fireEvent.pointerDown(keyframe, { pointerId: 9, clientX: 215 });
+		fireEvent.pointerMove(keyframe, { pointerId: 9, clientX: 500 });
+
+		await vi.waitFor(() => {
+			const intent = updateDynamic.mock.calls.at(-1)?.[3];
+			expect(intent).toEqual(
+				expect.objectContaining({
+					type: "replace_lane",
+					lane: expect.objectContaining({
+						keyframes: expect.objectContaining({
+							points: [
+								expect.objectContaining({ position: 0 }),
+								expect.objectContaining({ position: expect.closeTo(0.398, 3) }),
+							],
+						}),
+					}),
+				}),
+			);
+		});
+	});
+
 	it("uses and clears the software Shift latch for additive lane selection", () => {
 		dynamics = [dynamicObject({ multipleLanes: true })];
 		renderWindow();
@@ -339,29 +524,32 @@ describe("DynamicsWindow", () => {
 		expect(shiftLatch).toHaveAttribute("aria-pressed", "false");
 	});
 
-	it("switches phase spread between uniform and per-lane configuration", async () => {
+	it("uses an ordering-mode toggle without exposing uniform or per-lane scope", async () => {
 		dynamics = [dynamicObject({ multipleLanes: true })];
 		renderWindow();
 		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
-		fireEvent.click(screen.getByRole("button", { name: "Phase Spread" }));
+		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
 
 		expect(
-			screen.getByRole("group", { name: "Phase spread scope" }),
+			screen.getByRole("radiogroup", { name: "Ordering mode" }),
 		).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: "Uniform" })).toHaveAttribute(
-			"aria-pressed",
-			"true",
-		);
+		expect(screen.queryByRole("button", { name: "Uniform" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Per lane" })).toBeNull();
 		expect(screen.queryByLabelText("Dynamic phase lane")).toBeNull();
 
-		fireEvent.click(screen.getByRole("button", { name: "Per lane" }));
+		fireEvent.click(screen.getByRole("radio", { name: "Grid" }));
 
 		await vi.waitFor(() =>
 			expect(updateDynamic).toHaveBeenCalledWith(
 				"show-test",
 				"dynamic-1",
 				3,
-				{ type: "set_phase_mode", phase_mode: "per_lane" },
+				expect.objectContaining({
+					type: "set_phase",
+					phase: expect.objectContaining({
+						ordering: expect.objectContaining({ type: "grid_linear" }),
+					}),
+				}),
 				undefined,
 			),
 		);
@@ -381,7 +569,7 @@ describe("DynamicsWindow", () => {
 		dynamics = [object];
 		renderWindow();
 		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
-		fireEvent.click(screen.getByRole("button", { name: "Phase Spread" }));
+		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
 
 		const lanePicker = screen.getByLabelText("Dynamic phase lane");
 		expect(lanePicker).toHaveTextContent("Lane 1 · intensity");
@@ -523,6 +711,7 @@ describe("DynamicsWindow", () => {
 					lane_id: "lane-1",
 					lane: expect.objectContaining({
 						mode: "max_min",
+						width: 1,
 						max_min: expect.objectContaining({ function: "pwm" }),
 					}),
 				}),
@@ -537,9 +726,15 @@ describe("DynamicsWindow", () => {
 		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Intensity lane actions" }),
+			screen.getByRole("button", { name: "Intensity lane settings" }),
 		);
-		fireEvent.click(screen.getByRole("option", { name: "Change attribute" }));
+		const menu = screen.getByRole("menu", { name: "Intensity lane menu" });
+		expect(
+			within(menu).getByRole("menuitem", { name: "Delete lane" }),
+		).toBeDisabled();
+		fireEvent.click(
+			within(menu).getByRole("menuitem", { name: "Change attribute" }),
+		);
 
 		const dialog = screen.getByRole("dialog", {
 			name: "Change lane attribute",

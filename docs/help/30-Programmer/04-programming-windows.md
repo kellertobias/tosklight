@@ -9,7 +9,7 @@ Use the window that gives the clearest view of the current task; all of them ope
 | Channels | Channel-oriented value and source inspection. |
 | Groups | Reusable ordered selections and group masters. |
 | Presets | Mixed, Intensity, Color, Position, and Beam pools. |
-| Dynamics | Numbered Dynamic pool, scalar-lane editor, Phase Spread, Speed, targets, and running state. |
+| Dynamics | Numbered Dynamic pool, Lanes, Phase, Speed, targets, and running state. |
 | Cuelists / Cues | Cue content, order, timing, triggers, tracking, and execution. |
 | DMX | Final universe output and diagnostic overrides. |
 

@@ -26,8 +26,11 @@ describe("DynamicEditorTaskTabs", () => {
 			</DynamicEditorSessionProvider>,
 		);
 
-		expect(screen.getByRole("button", { name: "Curves" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Lanes" })).toBeInTheDocument();
 		expect(screen.queryByText(/1\/1/)).toBeNull();
+		expect(
+			screen.queryByRole("combobox", { name: "Dynamic lane" }),
+		).not.toBeInTheDocument();
 
 		rerender(
 			<DynamicEditorSessionProvider>
@@ -44,11 +47,11 @@ describe("DynamicEditorTaskTabs", () => {
 		);
 
 		expect(
-			screen.getByRole("button", { name: "Curves (1/2)" }),
+			screen.getByRole("button", { name: "Lanes (1/2)" }),
 		).toBeInTheDocument();
 	});
 
-	it("cycles the active Curves encoder page and resets another task to page one", () => {
+	it("cycles the active Lanes encoder page and resets another task to page one", () => {
 		const dynamic = createDefaultDynamicDefinition(201, "intensity", {
 			definition: "dynamic-201",
 			lane: "lane-intensity",
@@ -70,7 +73,7 @@ describe("DynamicEditorTaskTabs", () => {
 			</DynamicEditorSessionProvider>,
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: "Curves (1/2)" }));
+		fireEvent.click(screen.getByRole("button", { name: "Lanes (1/2)" }));
 		expect(onTask).toHaveBeenLastCalledWith("curves");
 		expect(onPage).toHaveBeenLastCalledWith(2);
 
@@ -88,7 +91,7 @@ describe("DynamicEditorTaskTabs", () => {
 				/>
 			</DynamicEditorSessionProvider>,
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Phase Spread" }));
+		fireEvent.click(screen.getByRole("button", { name: "Phase" }));
 		expect(onTask).toHaveBeenLastCalledWith("phase");
 		expect(onPage).toHaveBeenLastCalledWith(1);
 	});
