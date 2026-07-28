@@ -18,6 +18,7 @@ DynamicDefinition
   target_binding: LiveGroup | FrozenTargets | Targetless
   lanes: ordered DynamicLane[]
   random_groups: local RandomGroup[]
+  phase_mode: Uniform | PerLane
   phase: PhaseDistribution
   speed: DynamicSpeed
   default_activation: ActivationPolicy
@@ -25,7 +26,10 @@ DynamicDefinition
 
 The exact Rust/wire names may follow repository conventions, but those fields and ownership boundaries are required.
 
-`DynamicLane` contains one canonical continuous-scalar attribute, all preserved Keyframes/Max-min/Middle-amplitude configurations, the selected mode, per-lane multiplier, width/scale, optional local Random-group link, and validation state. Each scalar source is:
+`DynamicLane` contains one canonical continuous-scalar attribute, all preserved
+Keyframes/Max-min/Middle-amplitude configurations, the selected mode, per-lane multiplier,
+width/scale, optional per-lane Phase Spread, optional local Random-group link, and validation
+state. Each scalar source is:
 
 ```text
 Current
@@ -237,7 +241,11 @@ Dynamic/lane/playback speed scales decision interval and pulse duration inversel
 
 ## Phase projection
 
-Phase order, Blocks, balanced Repeats, Wings, endpoint-exclusive Span/Offset, explicit `THRU`, spatial center, missing-position append behavior, and Random-each-loop use the exact pipeline in the Dynamics Window plan.
+Phase order, Blocks, balanced Repeats, Wings, endpoint-exclusive Span/Offset, explicit `THRU`,
+spatial center, missing-position append behavior, and Random-each-loop use the exact pipeline in
+the Dynamics Window plan. Definitions default to Uniform for compatibility. Per-lane mode captures
+one phase map per lane at instance start; legacy runtime snapshots containing only the shared
+target phase map expand that map across all lanes during restoration.
 
 The Dynamics Runtime owns a replaceable target-ordering provider that currently consumes Stage X/Z positions directly. It does not persist a private selection-grid schema. A later shared grid implementation may replace the provider without changing Dynamic definitions or instance semantics.
 

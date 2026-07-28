@@ -337,6 +337,7 @@ fn dynamic_playback_definition(
         },
         lanes: Vec::new(),
         random_groups: Vec::new(),
+        phase_spread_mode: light_dynamics::DynamicPhaseSpreadMode::Uniform,
         phase: light_dynamics::PhaseDistribution {
             ordering: light_dynamics::PhaseOrdering::Selection,
             offset_degrees: 0.0,

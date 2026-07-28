@@ -87,6 +87,7 @@ fn dynamics(config: &Config) -> Vec<String> {
         DynamicTargetBindingProjection::decl(config),
         DynamicLaneProjection::decl(config),
         DynamicLaneModeProjection::decl(config),
+        DynamicPhaseSpreadModeProjection::decl(config),
         DynamicKeyframeConfigurationProjection::decl(config),
         DynamicKeyframeProjection::decl(config),
         DynamicMaxMinConfigurationProjection::decl(config),

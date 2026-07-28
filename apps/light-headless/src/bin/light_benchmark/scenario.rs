@@ -437,6 +437,7 @@ impl BenchmarkDynamic {
             },
             speed_multiplier: Rational::ONE,
             width: 1.0,
+            phase: None,
             random_group_id: None,
         };
         let definition = DynamicDefinition {
@@ -472,6 +473,7 @@ impl BenchmarkDynamic {
                 ..lane
             }],
             random_groups: vec![],
+            phase_spread_mode: light_dynamics::DynamicPhaseSpreadMode::Uniform,
             phase: PhaseDistribution {
                 ordering: PhaseOrdering::Selection,
                 offset_degrees: 0.0,

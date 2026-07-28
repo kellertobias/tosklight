@@ -131,8 +131,11 @@ The lane menu changes the attribute or deletes that lane. The bottom composer sw
 Keyframes, Max/Min, and Middle/Amplitude while the normal Programmer encoder surface becomes the
 Dynamics encoder surface; pressing an encoder-group tab advances its additional pages when present.
 Phase Spread controls ordered target projection, Offset/Span, Blocks, Repeats, Wings, and spatial
-ordering. Speed uses either fixed BPM or one authoritative Speed Group, with multiplier, run mode,
-activation, and boundary controls. **One-shot** runs one complete effective cycle and then stops.
+ordering. Choose **Uniform** to use one spread for every lane, or **Per lane** to select a lane and
+give it its own spread. Switching to Per lane starts each lane with the current Uniform settings;
+switching back to Uniform keeps the lane settings available for a later return. Speed uses either
+fixed BPM or one authoritative Speed Group, with multiplier, run mode, activation, and boundary
+controls. **One-shot** runs one complete effective cycle and then stops.
 The editor contains no private fixture preview or browser-side evaluator: open a Stage pane and
 choose Live or **Follow Preload** for authoritative visualization.
 

@@ -101,13 +101,15 @@ export type DeskUnlockRequest = { pin?: string | null, };
 
 export type UserCreateRequest = { request_id: string, name: string, enabled: boolean, };
 
-export type DynamicDefinitionProjection = { id: string, pool_number: number, revision: number, name: string, color?: string | null, icon?: string | null, target_binding: DynamicTargetBindingProjection, lanes: Array<DynamicLaneProjection>, random_groups: Array<DynamicRandomGroupProjection>, phase: DynamicPhaseDistributionProjection, speed: DynamicSpeedProjection, overall_speed_multiplier: DynamicRationalProjection, run_mode: DynamicRunModeProjection, default_activation: DynamicActivationPolicyProjection, activation_boundary: DynamicActivationBoundaryProjection, };
+export type DynamicDefinitionProjection = { id: string, pool_number: number, revision: number, name: string, color?: string | null, icon?: string | null, target_binding: DynamicTargetBindingProjection, lanes: Array<DynamicLaneProjection>, random_groups: Array<DynamicRandomGroupProjection>, phase_mode: DynamicPhaseSpreadModeProjection, phase: DynamicPhaseDistributionProjection, speed: DynamicSpeedProjection, overall_speed_multiplier: DynamicRationalProjection, run_mode: DynamicRunModeProjection, default_activation: DynamicActivationPolicyProjection, activation_boundary: DynamicActivationBoundaryProjection, };
 
 export type DynamicTargetBindingProjection = { "type": "live_group", group_id: string, } | { "type": "frozen_targets", targets: Array<string>, } | { "type": "targetless" };
 
-export type DynamicLaneProjection = { id: string, attribute: string, mode: DynamicLaneModeProjection, keyframes: DynamicKeyframeConfigurationProjection, max_min: DynamicMaxMinConfigurationProjection, middle_amplitude: DynamicMiddleAmplitudeConfigurationProjection, speed_multiplier: DynamicRationalProjection, width: number, random_group_id?: string | null, };
+export type DynamicLaneProjection = { id: string, attribute: string, mode: DynamicLaneModeProjection, keyframes: DynamicKeyframeConfigurationProjection, max_min: DynamicMaxMinConfigurationProjection, middle_amplitude: DynamicMiddleAmplitudeConfigurationProjection, speed_multiplier: DynamicRationalProjection, width: number, random_group_id?: string | null, phase?: DynamicPhaseDistributionProjection | null, };
 
 export type DynamicLaneModeProjection = "keyframes" | "max_min" | "middle_amplitude" | "random";
+
+export type DynamicPhaseSpreadModeProjection = "uniform" | "per_lane";
 
 export type DynamicKeyframeConfigurationProjection = { points: Array<DynamicKeyframeProjection>, size: number, };
 
@@ -190,7 +192,7 @@ export type DynamicDeleteActionRequest = { request_id: string, expected_revision
 
 export type DynamicUpdateActionRequest = { request_id: string, expected_revision: number, mutation_group?: string | null, intent: DynamicUpdateIntent, };
 
-export type DynamicUpdateIntent = { "type": "set_name", name: string, } | { "type": "set_color", color: string | null, } | { "type": "set_icon", icon: string | null, } | { "type": "set_target_binding", target_binding: unknown, } | { "type": "add_lane", lane: unknown, index: number | null, } | { "type": "replace_lane", lane_id: string, lane: unknown, } | { "type": "delete_lane", lane_id: string, } | { "type": "move_lane", lane_id: string, index: number, } | { "type": "set_phase", phase: unknown, } | { "type": "set_speed", speed: unknown, } | { "type": "set_overall_speed_multiplier", multiplier: DynamicRationalProjection, } | { "type": "set_run_mode", run_mode: DynamicRunModeProjection, } | { "type": "set_activation", activation: unknown, } | { "type": "set_activation_boundary", boundary: DynamicActivationBoundaryProjection, } | { "type": "add_random_group", group: unknown, } | { "type": "replace_random_group", group_id: string, group: unknown, } | { "type": "delete_random_group", group_id: string, };
+export type DynamicUpdateIntent = { "type": "set_name", name: string, } | { "type": "set_color", color: string | null, } | { "type": "set_icon", icon: string | null, } | { "type": "set_target_binding", target_binding: unknown, } | { "type": "add_lane", lane: unknown, index: number | null, } | { "type": "replace_lane", lane_id: string, lane: unknown, } | { "type": "delete_lane", lane_id: string, } | { "type": "move_lane", lane_id: string, index: number, } | { "type": "set_phase", phase: unknown, } | { "type": "set_phase_mode", phase_mode: DynamicPhaseSpreadModeProjection, } | { "type": "set_speed", speed: unknown, } | { "type": "set_overall_speed_multiplier", multiplier: DynamicRationalProjection, } | { "type": "set_run_mode", run_mode: DynamicRunModeProjection, } | { "type": "set_activation", activation: unknown, } | { "type": "set_activation_boundary", boundary: DynamicActivationBoundaryProjection, } | { "type": "add_random_group", group: unknown, } | { "type": "replace_random_group", group_id: string, group: unknown, } | { "type": "delete_random_group", group_id: string, };
 
 export type EventCapability = "programmer" | "playback" | "show" | "desk" | "output" | "system";
 
@@ -1062,6 +1064,10 @@ active_programmers: unknown[], highlight_states: Array<RuntimeBootstrapHighlight
 
 export type RuntimeReadinessSnapshot = { status: string, active_show: string | null, active_show_error: string | null, recovery_mode: boolean, snapshot_revision: number, };
 
+export type RuntimeVisualizationDiagnostics = { normal_subscribers: number, preload_subscribers: number, projections: number, projection_micros: number, payload_bytes: number, source_age_millis: number, skipped_source_frames: number, };
+
+export type RuntimeDiagnosticsSnapshot = { output: RuntimeOutputHealth, output_bind_ip: string, output_routes: unknown, route_send_errors: unknown, active_programmers: unknown, active_playbacks: unknown, move_in_black: unknown, timecode_source: string | null, media_servers: unknown, snapshot_revision: number, visualization: RuntimeVisualizationDiagnostics, };
+
 export type ScreenPlaybackSurfaceRow = { first_playback_slot: number, has_fader: boolean, button_count: number, };
 
 export type ScreenPlaybackSurfaceLayout = { playbacks_per_row: number, rows: Array<ScreenPlaybackSurfaceRow>, };
@@ -1089,6 +1095,24 @@ export type VirtualPlaybackExclusionUpdateRequest = { request_id: string, zones:
 export type VirtualPlaybackExclusionUpdateOutcome = { request_id: string, show_id: string, desk_id: string, surface_id: string, zones: Array<VirtualPlaybackExclusionZone>, replayed: boolean, changed: boolean, };
 
 export type VirtualPlaybackExclusionZonesChange = { show_id: string, desk_id: string, surface_id: string, };
+
+export type VisualizationLane = "normal" | "preload";
+
+export type VisualizationClientMessage = { "type": "subscribe", lanes: Array<VisualizationLane>, max_rate_hz: number, } | { "type": "unsubscribe", lanes: Array<VisualizationLane>, } | { "type": "resynchronize", lane: VisualizationLane, };
+
+export type VisualizationValue = { fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, };
+
+export type VisualizationValueKey = { fixture_id: string, attribute: string, };
+
+export type VisualizationStackEntryType = "ordinary_static" | "dynamic" | "fix_at" | "dynamic_off" | "static";
+
+export type VisualizationDynamicStackEntry = { fixture_id: string, attribute: string, entry_type: VisualizationStackEntryType, priority: number, changed_at_millis: number, source: string, dynamic_id: string | null, pool_number: number | null, name: string, runtime_instance_id: string | null, controller_id: string | null, lane_id: string | null, size: number | null, activation_mix: number | null, paused: boolean, hidden: boolean, pending: boolean, winning: boolean, value: ProgrammingPreloadAttributeValue | null, resolved_value: ProgrammingPreloadAttributeValue | null, };
+
+export type VisualizationLaneSnapshot = { revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, dynamic_stack?: Array<VisualizationDynamicStackEntry>, profile_output_values: Array<VisualizationValue>, };
+
+export type VisualizationLaneDelta = { revision: number, generated_at: string, grand_master: number, blackout: boolean, preload: boolean, values: Array<VisualizationValue>, removed_values: Array<VisualizationValueKey>, dynamic_stack: Array<VisualizationDynamicStackEntry>, profile_output_values: Array<VisualizationValue>, removed_profile_output_values: Array<VisualizationValueKey>, };
+
+export type VisualizationServerMessage = { "type": "hello", protocol_version: number, max_rate_hz: number, lanes: Array<VisualizationLane>, } | { "type": "snapshot", lane: VisualizationLane, sequence: number, source_frame: number, source_timestamp: string, published_at: string, snapshot: VisualizationLaneSnapshot, } | { "type": "delta", lane: VisualizationLane, sequence: number, source_frame: number, source_timestamp: string, published_at: string, delta: VisualizationLaneDelta, } | { "type": "heartbeat", sequence: number, published_at: string, } | { "type": "structural_invalidation", revision: number, } | { "type": "error", code: string, message: string, };
 
 export type SelectiveImportObjectKey = { kind: string, id: string, };
 

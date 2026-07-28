@@ -83,7 +83,7 @@ For a targetless Dynamic:
 The standalone `experiments/dynamics-editor` is the full-view baseline, except that production removes its mock fixture grid and preview playhead. While the editor is open, the existing Programmer control section replaces its ordinary Intensity/Color/Position family row with three Dynamic editor tasks:
 
 1. **Curves** — scalar lane mode, sources, functions, keyframes, interpolation, Size, Width, and per-lane speed.
-2. **Phase Spread** — one shared target projection, phase expression, offset/span, Blocks, Repeats, Wings, spatial center, and ordering.
+2. **Phase Spread** — a Uniform projection shared by all lanes or a Per-lane projection, with phase expression, offset/span, Blocks, Repeats, Wings, spatial center, and ordering.
 3. **Speed** — fixed duration or Speed Group, beats per cycle, overall multiplier, activation policy, quantization, and transport status.
 
 The editor uses the normal six-slot ToskLight encoder surface in the existing Programmer control section. The Dynamics pane never renders a second encoder row. Slots never shift when a control is unavailable; an unsupported slot remains visible, numbered, and disabled. Software encoder gestures remain relative, the center **Set Value** path remains explicit absolute entry, and hardware/software fine/coarse semantics use the shared encoder contract.
@@ -164,7 +164,11 @@ Pulse durations are deterministically drawn, bounded to at least one evaluator/o
 
 ## Phase Spread
 
-One phase projection is shared by every lane in an instance. It assigns phase only; it never changes target membership or stored selection order.
+Phase Spread has two explicit modes. **Uniform** shares one phase projection across every lane in
+an instance. **Per lane** stores and evaluates a projection for each lane. Entering Per-lane mode
+copies the current Uniform projection into lanes without an override, so the visible result does
+not jump. Returning to Uniform retains the per-lane projections for a later return. Both modes
+assign phase only; neither changes target membership or stored selection order.
 
 Available orderings are:
 
@@ -191,7 +195,10 @@ Automatic Phase Span is cyclic and endpoint-exclusive for every span. Thus 360°
 
 Explicit phase entry accepts scalar degrees and `THRU` expressions. The existing deterministic multi-point spread resolver places explicit anchors. `0 THRU 360` over four ranks remains endpoint-exclusive at 0°, 90°, 180°, 270°. `0 THRU 360 THRU 0` over eight ranks yields 0°, 90°, 180°, 270°, 270°, 180°, 90°, 0°. Blocks, Repeats, and Wings then operate through the pipeline above.
 
-Random each loop derives a deterministic per-instance permutation from the Dynamic seed, instance identity, loop index, and stable target identity before phase assignment.
+Random each loop derives a deterministic per-instance permutation from the Dynamic seed, instance
+identity, loop index, and stable target identity before phase assignment. Uniform mode shares that
+permutation across lanes even when their speed multipliers differ. Per-lane mode advances each
+lane's random ordering at its own effective loop boundary.
 
 ## Speed view
 

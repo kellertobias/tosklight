@@ -348,6 +348,7 @@ fn runtime_with_controllers(controllers: Vec<DynamicController>) -> DynamicRunti
             .unwrap(),
             targets: Vec::new(),
             phase_by_target: Vec::new(),
+            phase_by_lane_target: Vec::new(),
             controllers,
             controller_transitions: Vec::new(),
             started_at_millis: 0,

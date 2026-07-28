@@ -706,7 +706,8 @@ fn apply_dynamic_update_intent(
                 })?;
         }
         DynamicUpdateIntent::AddLane { lane, index } => {
-            let lane = decode_dynamic_part("lane", lane)?;
+            let mut lane: light_dynamics::DynamicLane = decode_dynamic_part("lane", lane)?;
+            seed_lane_phase(definition, &mut lane);
             let index = index.unwrap_or(definition.lanes.len());
             if index > definition.lanes.len() {
                 return Err(ApiError::bad_request("Dynamic lane index is out of range"));
@@ -716,6 +717,7 @@ fn apply_dynamic_update_intent(
         DynamicUpdateIntent::ReplaceLane { lane_id, lane } => {
             let mut lane: light_dynamics::DynamicLane = decode_dynamic_part("lane", lane)?;
             lane.id = lane_id;
+            seed_lane_phase(definition, &mut lane);
             let stored = definition
                 .lanes
                 .iter_mut()
@@ -742,6 +744,23 @@ fn apply_dynamic_update_intent(
         }
         DynamicUpdateIntent::SetPhase { phase } => {
             definition.phase = decode_dynamic_part("phase", phase)?;
+        }
+        DynamicUpdateIntent::SetPhaseMode { phase_mode } => {
+            definition.phase_spread_mode = match phase_mode {
+                light_wire::v2::dynamics::DynamicPhaseSpreadModeProjection::Uniform => {
+                    light_dynamics::DynamicPhaseSpreadMode::Uniform
+                }
+                light_wire::v2::dynamics::DynamicPhaseSpreadModeProjection::PerLane => {
+                    light_dynamics::DynamicPhaseSpreadMode::PerLane
+                }
+            };
+            if definition.phase_spread_mode == light_dynamics::DynamicPhaseSpreadMode::PerLane {
+                for lane in &mut definition.lanes {
+                    if lane.phase.is_none() {
+                        lane.phase = Some(definition.phase.clone());
+                    }
+                }
+            }
         }
         DynamicUpdateIntent::SetSpeed { speed } => {
             definition.speed = decode_dynamic_part("speed", speed)?;
@@ -802,6 +821,17 @@ fn apply_dynamic_update_intent(
         }
     }
     Ok(())
+}
+
+fn seed_lane_phase(
+    definition: &light_dynamics::DynamicDefinition,
+    lane: &mut light_dynamics::DynamicLane,
+) {
+    if definition.phase_spread_mode == light_dynamics::DynamicPhaseSpreadMode::PerLane
+        && lane.phase.is_none()
+    {
+        lane.phase = Some(definition.phase.clone());
+    }
 }
 
 fn decode_dynamic_part<T: serde::de::DeserializeOwned>(

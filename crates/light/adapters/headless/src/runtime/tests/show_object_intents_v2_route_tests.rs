@@ -158,6 +158,130 @@ async fn dynamic_object_intents_are_revisioned_atomic_and_replay_safe() {
 }
 
 #[tokio::test]
+async fn dynamic_phase_mode_seeds_per_lane_phase_without_discarding_it_in_uniform_mode() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show_id = create_seeded_show(&state, &app, &token, "Dynamic phase modes", &[]).await;
+    let definition = dynamic_definition_json(27);
+    let original_lane = definition["lanes"][0].clone();
+    let (status, created) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        "/api/v2/dynamics/create",
+        serde_json::json!({
+            "request_id": "phase-mode-create",
+            "definition": definition
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    assert_eq!(created["object"]["body"]["phase_mode"], "uniform");
+    assert!(created["object"]["body"]["lanes"][0]["phase"].is_null());
+    let dynamic_id = created["object"]["id"].as_str().unwrap();
+
+    let (status, per_lane) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/update"),
+        serde_json::json!({
+            "request_id": "phase-mode-per-lane",
+            "expected_revision": 1,
+            "intent": {"type": "set_phase_mode", "phase_mode": "per_lane"}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{per_lane}");
+    assert_eq!(per_lane["object"]["body"]["phase_mode"], "per_lane");
+    assert_eq!(
+        per_lane["object"]["body"]["lanes"][0]["phase"],
+        per_lane["object"]["body"]["phase"]
+    );
+
+    let (status, uniform) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/update"),
+        serde_json::json!({
+            "request_id": "phase-mode-uniform",
+            "expected_revision": 2,
+            "intent": {"type": "set_phase_mode", "phase_mode": "uniform"}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{uniform}");
+    assert_eq!(uniform["object"]["body"]["phase_mode"], "uniform");
+    assert_eq!(
+        uniform["object"]["body"]["lanes"][0]["phase"], uniform["object"]["body"]["phase"],
+        "uniform mode retains per-lane configuration for a later switch back"
+    );
+
+    let (status, per_lane_again) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/update"),
+        serde_json::json!({
+            "request_id": "phase-mode-per-lane-again",
+            "expected_revision": 3,
+            "intent": {"type": "set_phase_mode", "phase_mode": "per_lane"}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{per_lane_again}");
+
+    let mut added_lane = original_lane.clone();
+    added_lane["id"] = serde_json::json!(Uuid::new_v4());
+    let added_lane_id = added_lane["id"].as_str().unwrap().to_owned();
+    let (status, added) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/update"),
+        serde_json::json!({
+            "request_id": "phase-mode-add-lane",
+            "expected_revision": 4,
+            "intent": {"type": "add_lane", "lane": added_lane, "index": null}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{added}");
+    assert_eq!(
+        added["object"]["body"]["lanes"][1]["phase"], added["object"]["body"]["phase"],
+        "a lane added in per-lane mode inherits the uniform phase when omitted"
+    );
+
+    let mut replacement = original_lane;
+    replacement["phase"] = serde_json::Value::Null;
+    let (status, replaced) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/update"),
+        serde_json::json!({
+            "request_id": "phase-mode-replace-lane",
+            "expected_revision": 5,
+            "intent": {
+                "type": "replace_lane",
+                "lane_id": added_lane_id,
+                "lane": replacement
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{replaced}");
+    assert_eq!(
+        replaced["object"]["body"]["lanes"][1]["phase"], replaced["object"]["body"]["phase"],
+        "a replacement lane in per-lane mode inherits the uniform phase when omitted"
+    );
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn dynamic_live_http_is_fire_and_forget_without_request_identity() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

@@ -112,6 +112,32 @@ describe("DynamicMutationWriter", () => {
 		);
 		expect(store.getSnapshot().error?.message).toBe("disk unavailable");
 	});
+
+	it("projects a phase-spread scope change while the server write is pending", async () => {
+		const { store } = readyStore();
+		let resolve!: (outcome: ShowObjectActionOutcome) => void;
+		const updateDynamic = vi.fn(
+			() =>
+				new Promise<ShowObjectActionOutcome>((next) => {
+					resolve = next;
+				}),
+		);
+		const writer = new DynamicMutationWriter(store, {
+			object: vi.fn(),
+			updateDynamic,
+		});
+		const intent: DynamicUpdateIntent = {
+			type: "set_phase_mode",
+			phase_mode: "per_lane",
+		};
+		const pending = writer.update(SHOW_ID, DYNAMIC_ID, intent);
+
+		expect(store.getSnapshot().dynamics[0].body.phase_mode).toBe("per_lane");
+		await vi.waitFor(() => expect(updateDynamic).toHaveBeenCalledOnce());
+		resolve(outcome(2, intent));
+		await pending;
+		expect(store.getSnapshot().dynamics[0].body.phase_mode).toBe("per_lane");
+	});
 });
 
 function readyStore() {

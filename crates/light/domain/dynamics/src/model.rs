@@ -16,6 +16,8 @@ pub struct DynamicDefinition {
     pub lanes: Vec<DynamicLane>,
     #[serde(default)]
     pub random_groups: Vec<DynamicRandomGroup>,
+    #[serde(default, rename = "phase_mode", alias = "phase_spread_mode")]
+    pub phase_spread_mode: DynamicPhaseSpreadMode,
     pub phase: PhaseDistribution,
     pub speed: DynamicSpeed,
     #[serde(default)]
@@ -46,7 +48,26 @@ pub struct DynamicLane {
     pub speed_multiplier: Rational,
     pub width: f32,
     #[serde(default)]
+    pub phase: Option<PhaseDistribution>,
+    #[serde(default)]
     pub random_group_id: Option<Uuid>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicPhaseSpreadMode {
+    #[default]
+    Uniform,
+    PerLane,
+}
+
+impl DynamicDefinition {
+    pub fn phase_for_lane<'a>(&'a self, lane: &'a DynamicLane) -> &'a PhaseDistribution {
+        match self.phase_spread_mode {
+            DynamicPhaseSpreadMode::Uniform => &self.phase,
+            DynamicPhaseSpreadMode::PerLane => lane.phase.as_ref().unwrap_or(&self.phase),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

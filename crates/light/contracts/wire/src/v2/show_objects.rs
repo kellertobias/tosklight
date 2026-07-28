@@ -2,7 +2,8 @@
 
 use super::{
     dynamics::{
-        DynamicActivationBoundaryProjection, DynamicRationalProjection, DynamicRunModeProjection,
+        DynamicActivationBoundaryProjection, DynamicPhaseSpreadModeProjection,
+        DynamicRationalProjection, DynamicRunModeProjection,
     },
     events::{OutputDeliveryMode, OutputProtocol, OutputRoute, OutputRouteChange},
 };
@@ -285,6 +286,9 @@ pub enum DynamicUpdateIntent {
     SetPhase {
         #[ts(type = "unknown")]
         phase: serde_json::Value,
+    },
+    SetPhaseMode {
+        phase_mode: DynamicPhaseSpreadModeProjection,
     },
     SetSpeed {
         #[ts(type = "unknown")]

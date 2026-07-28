@@ -198,4 +198,41 @@ describe("DynamicDefinitionEncoderSurface", () => {
 			type: "current",
 		});
 	});
+
+	it("edits the selected lane phase from the Phase Spread encoders", () => {
+		const dynamic = createDefaultDynamicDefinition(201, "intensity", {
+			definition: "dynamic-201",
+			lane: "lane-intensity",
+		});
+		const lane = dynamic.lanes[0];
+		dynamic.phase_mode = "per_lane";
+		lane.phase = { ...dynamic.phase, span_degrees: 180 };
+		const onLaneChange = vi.fn().mockResolvedValue(undefined);
+		const onMutate = vi.fn().mockResolvedValue(undefined);
+
+		render(
+			<ModalProvider>
+				<AppProvider>
+					<DynamicDefinitionEncoderSurface
+						dynamic={dynamic}
+						lane={lane}
+						view="phase"
+						onLaneChange={onLaneChange}
+						onMutate={onMutate}
+					/>
+				</AppProvider>
+			</ModalProvider>,
+		);
+
+		expect(
+			screen.getByRole("button", { name: "Set Enc 2 · Span value" }),
+		).toHaveTextContent("180°");
+		fireEvent.keyDown(screen.getByRole("group", { name: "Enc 2 · Span" }), {
+			key: "ArrowUp",
+		});
+
+		const update = onLaneChange.mock.calls[0]?.[0];
+		expect(update(lane).phase?.span_degrees).toBe(185);
+		expect(onMutate).not.toHaveBeenCalled();
+	});
 });

@@ -63,6 +63,11 @@ export function applyDynamicUpdateIntent(
 				...definition,
 				phase: intent.phase as DynamicPhaseDistributionProjection,
 			};
+		case "set_phase_mode":
+			return {
+				...definition,
+				phase_mode: intent.phase_mode,
+			};
 		case "set_speed":
 			return {
 				...definition,

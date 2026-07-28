@@ -71,7 +71,10 @@ function decodeDynamic(
 		recordAt(body.target_binding, `${path}.target_binding`);
 		recordAt(body.phase, `${path}.phase`);
 		recordAt(body.speed, `${path}.speed`);
-		return body as unknown as ShowObjectBodies["dynamic"];
+		return {
+			...body,
+			phase_mode: body.phase_mode === "per_lane" ? "per_lane" : "uniform",
+		} as unknown as ShowObjectBodies["dynamic"];
 	} catch (cause) {
 		const raw =
 			value && typeof value === "object" && !Array.isArray(value)
@@ -100,6 +103,7 @@ function decodeDynamic(
 			target_binding: { type: "targetless" },
 			lanes: [],
 			random_groups: [],
+			phase_mode: "uniform",
 			phase: {
 				ordering: { type: "selection" },
 				offset_degrees: 0,

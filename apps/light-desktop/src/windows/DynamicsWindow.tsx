@@ -534,6 +534,18 @@ export function DynamicEditor({
 			target_binding: { type: "targetless" },
 		});
 	useEffect(() => {
+		const sessionLane =
+			session?.dynamicId === dynamic.id ? session.primaryLaneId : null;
+		if (
+			!sessionLane ||
+			sessionLane === primaryLane ||
+			!dynamic.body.lanes.some((candidate) => candidate.id === sessionLane)
+		)
+			return;
+		setPrimaryLane(sessionLane);
+		setSelectedLanes(new Set([sessionLane]));
+	}, [dynamic.body.lanes, dynamic.id, primaryLane, session]);
+	useEffect(() => {
 		if (!previewing) return;
 		let frame = 0;
 		const startedAt = performance.now() - previewPhase * 2_000;
@@ -733,8 +745,10 @@ export function DynamicEditor({
 					{view === "phase" && (
 						<PhaseView
 							dynamic={dynamic}
+							lane={lane}
 							running={running}
 							selectionCount={selection.length}
+							onSelectLane={(id) => selectLane(id, false)}
 							onTakeSelection={takeSelection}
 							onClearSelection={clearSelection}
 							onMutate={onMutate}
@@ -1239,25 +1253,41 @@ function deleteKeyframeFromLane(
 
 function PhaseView({
 	dynamic,
+	lane,
 	running,
 	selectionCount,
+	onSelectLane,
 	onTakeSelection,
 	onClearSelection,
 	onMutate,
 }: {
 	dynamic: DynamicObject;
+	lane?: DynamicLaneProjection;
 	running: boolean;
 	selectionCount: number;
+	onSelectLane(id: string): void;
 	onTakeSelection(): void;
 	onClearSelection(): void;
 	onMutate(dynamic: DynamicObject, intent: DynamicUpdateIntent): void;
 }) {
-	const phase = dynamic.body.phase;
+	const phaseMode = dynamic.body.phase_mode;
+	const phase =
+		phaseMode === "per_lane" ? (lane?.phase ?? dynamic.body.phase) : dynamic.body.phase;
 	const spatialOrdering = isSpatialOrdering(phase.ordering)
 		? phase.ordering
 		: null;
-	const update = (patch: Partial<typeof phase>) =>
-		onMutate(dynamic, { type: "set_phase", phase: { ...phase, ...patch } });
+	const update = (patch: Partial<typeof phase>) => {
+		const nextPhase = { ...phase, ...patch };
+		if (phaseMode === "per_lane" && lane) {
+			onMutate(dynamic, {
+				type: "replace_lane",
+				lane_id: lane.id,
+				lane: { ...lane, phase: nextPhase },
+			});
+			return;
+		}
+		onMutate(dynamic, { type: "set_phase", phase: nextPhase });
+	};
 	return (
 		<div className="dynamic-phase-view">
 			<section className="dynamic-phase-preview">
@@ -1300,6 +1330,47 @@ function PhaseView({
 				</footer>
 			</section>
 			<section className="dynamic-phase-controls">
+				<div className="dynamic-phase-scope">
+					<fieldset className="button-group" aria-label="Phase spread scope">
+						<Button
+							active={phaseMode === "uniform"}
+							aria-pressed={phaseMode === "uniform"}
+							onClick={() =>
+								onMutate(dynamic, {
+									type: "set_phase_mode",
+									phase_mode: "uniform",
+								})
+							}
+						>
+							Uniform
+						</Button>
+						<Button
+							active={phaseMode === "per_lane"}
+							aria-pressed={phaseMode === "per_lane"}
+							onClick={() =>
+								onMutate(dynamic, {
+									type: "set_phase_mode",
+									phase_mode: "per_lane",
+								})
+							}
+						>
+							Per lane
+						</Button>
+					</fieldset>
+					{phaseMode === "per_lane" && lane && (
+						<SelectField
+							className="dynamic-phase-lane"
+							label="Lane"
+							ariaLabel="Dynamic phase lane"
+							value={lane.id}
+							options={dynamic.body.lanes.map((candidate, index) => ({
+								value: candidate.id,
+								label: `Lane ${index + 1} · ${candidate.attribute}`,
+							}))}
+							onChange={onSelectLane}
+						/>
+					)}
+				</div>
 				<FormLayout labelPlacement="top">
 					<SelectField
 						className="dynamic-phase-ordering"
@@ -1737,6 +1808,20 @@ export function DynamicEncoderDeck({
 	const accumulated = useRef(
 		new Map<string, { observedBase: number; value: number }>(),
 	);
+	const phase =
+		dynamic.phase_mode === "per_lane"
+			? (lane?.phase ?? dynamic.phase)
+			: dynamic.phase;
+	const applyPhase = (
+		nextPhase: DynamicDefinitionProjection["phase"],
+		group?: string,
+	) =>
+		dynamic.phase_mode === "per_lane" && lane
+			? onLaneChange(
+					(current) => ({ ...current, phase: nextPhase }),
+					group,
+				)
+			: onMutate({ type: "set_phase", phase: nextPhase }, group);
 	const slots: DynamicEncoderSlot[] =
 		view === "curves"
 			? curveEditorEncoderSlots(
@@ -1752,118 +1837,79 @@ export function DynamicEncoderDeck({
 						{
 							id: "offset",
 							label: "Offset",
-							display: `${dynamic.phase.offset_degrees}°`,
-							value: dynamic.phase.offset_degrees,
+							display: `${phase.offset_degrees}°`,
+							value: phase.offset_degrees,
 							minimum: -360,
 							maximum: 360,
 							inputScale: 1,
 							fineStep: 5,
 							coarseStep: 45,
 							apply: (value, group) =>
-								onMutate(
-									{
-										type: "set_phase",
-										phase: {
-											...dynamic.phase,
-											offset_degrees: value,
-										},
-									},
-									group,
-								),
+								applyPhase({ ...phase, offset_degrees: value }, group),
 						},
 						{
 							id: "span",
 							label: "Span",
-							display: `${dynamic.phase.span_degrees}°`,
-							value: dynamic.phase.span_degrees,
+							display: `${phase.span_degrees}°`,
+							value: phase.span_degrees,
 							minimum: 0,
 							maximum: 720,
 							inputScale: 1,
 							fineStep: 5,
 							coarseStep: 45,
 							apply: (value, group) =>
-								onMutate(
-									{
-										type: "set_phase",
-										phase: {
-											...dynamic.phase,
-											span_degrees: value,
-										},
-									},
-									group,
-								),
+								applyPhase({ ...phase, span_degrees: value }, group),
 						},
 						{
 							id: "blocks",
 							label: "Blocks",
-							display: String(dynamic.phase.block_size),
-							value: dynamic.phase.block_size,
+							display: String(phase.block_size),
+							value: phase.block_size,
 							minimum: 1,
 							maximum: 10_000,
 							inputScale: 1,
 							fineStep: 1,
 							coarseStep: 5,
 							apply: (value, group) =>
-								onMutate(
-									{
-										type: "set_phase",
-										phase: {
-											...dynamic.phase,
-											block_size: Math.max(1, Math.round(value)),
-										},
-									},
+								applyPhase(
+									{ ...phase, block_size: Math.max(1, Math.round(value)) },
 									group,
 								),
 						},
 						{
 							id: "repeats",
 							label: "Repeats",
-							display: String(dynamic.phase.repeats),
-							value: dynamic.phase.repeats,
+							display: String(phase.repeats),
+							value: phase.repeats,
 							minimum: 1,
 							maximum: 10_000,
 							inputScale: 1,
 							fineStep: 1,
 							coarseStep: 5,
 							apply: (value, group) =>
-								onMutate(
-									{
-										type: "set_phase",
-										phase: {
-											...dynamic.phase,
-											repeats: Math.max(1, Math.round(value)),
-										},
-									},
+								applyPhase(
+									{ ...phase, repeats: Math.max(1, Math.round(value)) },
 									group,
 								),
 						},
 						{
 							id: "wings",
 							label: "Wings",
-							display: dynamic.phase.wings ? "On" : "Off",
-							value: dynamic.phase.wings ? 1 : 0,
+							display: phase.wings ? "On" : "Off",
+							value: phase.wings ? 1 : 0,
 							minimum: 0,
 							maximum: 1,
 							inputScale: 1,
 							fineStep: 1,
 							coarseStep: 1,
-							choices: encoderChoices("Wings", dynamic.phase.wings ? 1 : 0, [
+							choices: encoderChoices("Wings", phase.wings ? 1 : 0, [
 								{ label: "Off" },
 								{ label: "On" },
 							]),
 							apply: (value, group) =>
-								onMutate(
-									{
-										type: "set_phase",
-										phase: {
-											...dynamic.phase,
-											wings: value >= 0.5,
-										},
-									},
-									group,
-								),
+								applyPhase({ ...phase, wings: value >= 0.5 }, group),
 						},
-						phaseDirectionSlot(dynamic, onMutate),
+						phaseDirectionSlot(phase, applyPhase),
 					]
 				: speedEncoderSlots(dynamic, onMutate);
 	const items: EncoderSectionItem[] = slots.map((slot, index) => ({
@@ -2616,13 +2662,13 @@ const interpolations = [
 ] as const;
 
 function phaseDirectionSlot(
-	dynamic: DynamicDefinitionProjection,
-	onMutate: (
-		intent: DynamicUpdateIntent,
+	phase: DynamicDefinitionProjection["phase"],
+	applyPhase: (
+		phase: DynamicDefinitionProjection["phase"],
 		mutationGroup?: string,
 	) => Promise<void>,
 ): DynamicEncoderSlot {
-	const ordering = dynamic.phase.ordering;
+	const ordering = phase.ordering;
 	const direction = ordering.type === "grid_linear";
 	const spatial = isSpatialOrdering(ordering);
 	const value = direction
@@ -2646,17 +2692,14 @@ function phaseDirectionSlot(
 		coarseStep: direction ? 45 : 1,
 		disabled: !direction && !spatial,
 		apply: (next, group) =>
-			onMutate(
+			applyPhase(
 				{
-					type: "set_phase",
-					phase: {
-						...dynamic.phase,
-						ordering: direction
-							? { ...ordering, angle_degrees: normalizeDegrees(next) }
-							: spatial
-								? { ...ordering, center_x: next }
-								: ordering,
-					},
+					...phase,
+					ordering: direction
+						? { ...ordering, angle_degrees: normalizeDegrees(next) }
+						: spatial
+							? { ...ordering, center_x: next }
+							: ordering,
 				},
 				group,
 			),
@@ -3003,6 +3046,7 @@ export function createDefaultDynamicDefinition(
 		target_binding: { type: "targetless" },
 		lanes: [createDefaultDynamicLane(attribute, ids.lane)],
 		random_groups: [],
+		phase_mode: "uniform",
 		phase: {
 			ordering: { type: "selection" },
 			offset_degrees: 0,
@@ -3060,6 +3104,7 @@ export function createDefaultDynamicLane(
 		speed_multiplier: { numerator: 1, denominator: 1 },
 		width: 1,
 		random_group_id: null,
+		phase: null,
 	};
 }
 

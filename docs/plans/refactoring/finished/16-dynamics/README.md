@@ -49,6 +49,9 @@ Ordinary Presets remain static-only in this release. Dynamic lanes may use live 
 - [Programmer Dynamics Modal and Encoder](02-programmer-dynamics-modal-and-encoder.md) defines pool use, the Dynamics encoder, Dynamic Off, `FixAT`, command grammar, Fixture Sheet feedback, and Programmer behavior.
 - [Runtime and Instance Semantics](03-runtime-and-instance-semantics.md) defines the portable schema, references, instances, evaluation, phase, Random, transitions, tracking, Preload, persistence, API/event boundary, removal of legacy Cue phasers, and backend tests.
 - [Playback Assignment](04-playback-assignment.md) defines singleton and independent instances on Playbacks, fader/button choices, speed, pause, auto-off, addressing, and feedback.
+- [Uniform and Per-lane Phase Spread](05-uniform-and-per-lane-phase-spread.md) records the
+  compatibility-safe follow-up that lets one spread apply to every lane or stores one spread per
+  lane.
 
 ## Implementation order
 

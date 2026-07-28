@@ -61,6 +61,14 @@ pub(super) fn definition(value: &domain::DynamicDefinition) -> wire::DynamicDefi
         target_binding: target_binding(&value.target_binding),
         lanes: value.lanes.iter().map(lane).collect(),
         random_groups: value.random_groups.iter().map(random_group).collect(),
+        phase_mode: match value.phase_spread_mode {
+            domain::DynamicPhaseSpreadMode::Uniform => {
+                wire::DynamicPhaseSpreadModeProjection::Uniform
+            }
+            domain::DynamicPhaseSpreadMode::PerLane => {
+                wire::DynamicPhaseSpreadModeProjection::PerLane
+            }
+        },
         phase: phase(&value.phase),
         speed: speed(&value.speed),
         overall_speed_multiplier: rational(value.overall_speed_multiplier),
@@ -136,6 +144,7 @@ fn lane(value: &domain::DynamicLane) -> wire::DynamicLaneProjection {
         speed_multiplier: rational(value.speed_multiplier),
         width: value.width,
         random_group_id: value.random_group_id,
+        phase: value.phase.as_ref().map(phase),
     }
 }
 

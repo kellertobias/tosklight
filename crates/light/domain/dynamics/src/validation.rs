@@ -136,15 +136,12 @@ pub fn validate_definition(definition: &DynamicDefinition) -> Result<(), Dynamic
         }
         validate_lane(lane, &random_ids)?;
     }
-    if !definition.phase.offset_degrees.is_finite()
-        || !definition.phase.span_degrees.is_finite()
-        || definition.phase.block_size == 0
-        || definition.phase.repeats == 0
+    if !valid_phase(&definition.phase)
         || definition
-            .phase
-            .anchors_degrees
+            .lanes
             .iter()
-            .any(|value| !value.is_finite())
+            .filter_map(|lane| lane.phase.as_ref())
+            .any(|phase| !valid_phase(phase))
     {
         return Err(DynamicValidationError::Phase);
     }
@@ -158,6 +155,14 @@ pub fn validate_definition(definition: &DynamicDefinition) -> Result<(), Dynamic
         return Err(DynamicValidationError::Speed);
     }
     Ok(())
+}
+
+fn valid_phase(phase: &crate::PhaseDistribution) -> bool {
+    phase.offset_degrees.is_finite()
+        && phase.span_degrees.is_finite()
+        && phase.block_size > 0
+        && phase.repeats > 0
+        && phase.anchors_degrees.iter().all(|value| value.is_finite())
 }
 
 fn validate_lane(

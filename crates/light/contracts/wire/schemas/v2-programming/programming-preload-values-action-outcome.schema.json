@@ -130,6 +130,9 @@
         "phase": {
           "$ref": "#/$defs/DynamicPhaseDistributionProjection"
         },
+        "phase_mode": {
+          "$ref": "#/$defs/DynamicPhaseSpreadModeProjection"
+        },
         "pool_number": {
           "type": "integer",
           "format": "uint16",
@@ -165,6 +168,7 @@
         "target_binding",
         "lanes",
         "random_groups",
+        "phase_mode",
         "phase",
         "speed",
         "overall_speed_multiplier",
@@ -263,6 +267,16 @@
         },
         "mode": {
           "$ref": "#/$defs/DynamicLaneModeProjection"
+        },
+        "phase": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DynamicPhaseDistributionProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "random_group_id": {
           "type": [
@@ -519,6 +533,13 @@
             "seed"
           ]
         }
+      ]
+    },
+    "DynamicPhaseSpreadModeProjection": {
+      "type": "string",
+      "enum": [
+        "uniform",
+        "per_lane"
       ]
     },
     "DynamicPwmShapeProjection": {

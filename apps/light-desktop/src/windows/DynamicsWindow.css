@@ -545,6 +545,29 @@
 	gap: 0.3rem;
 }
 
+.dynamic-phase-scope {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(10rem, 1fr);
+	align-items: end;
+	gap: 0.45rem;
+	margin-bottom: 0.55rem;
+	padding-bottom: 0.55rem;
+	border-bottom: 1px solid #293640;
+}
+
+.dynamic-phase-scope > .button-group {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.35rem;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.dynamic-phase-lane .ui-select-trigger {
+	width: 100%;
+}
+
 .dynamic-phase-controls .ui-form-layout > * {
 	min-width: 0;
 }

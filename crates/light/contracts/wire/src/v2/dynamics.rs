@@ -21,6 +21,7 @@ pub struct DynamicDefinitionProjection {
     pub target_binding: DynamicTargetBindingProjection,
     pub lanes: Vec<DynamicLaneProjection>,
     pub random_groups: Vec<DynamicRandomGroupProjection>,
+    pub phase_mode: DynamicPhaseSpreadModeProjection,
     pub phase: DynamicPhaseDistributionProjection,
     pub speed: DynamicSpeedProjection,
     pub overall_speed_multiplier: DynamicRationalProjection,
@@ -50,6 +51,9 @@ pub struct DynamicLaneProjection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub random_group_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub phase: Option<DynamicPhaseDistributionProjection>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -59,6 +63,14 @@ pub enum DynamicLaneModeProjection {
     MaxMin,
     MiddleAmplitude,
     Random,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum DynamicPhaseSpreadModeProjection {
+    #[default]
+    Uniform,
+    PerLane,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

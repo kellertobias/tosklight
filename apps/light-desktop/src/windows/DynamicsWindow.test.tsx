@@ -254,6 +254,63 @@ describe("DynamicsWindow", () => {
 		expect(laneButtons[1]).toHaveAttribute("aria-pressed", "true");
 	});
 
+	it("switches phase spread between uniform and per-lane configuration", async () => {
+		dynamics = [dynamicObject({ multipleLanes: true })];
+		renderWindow();
+		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
+		fireEvent.click(screen.getByRole("button", { name: "Phase Spread" }));
+
+		expect(
+			screen.getByRole("group", { name: "Phase spread scope" }),
+		).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Uniform" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		expect(screen.queryByLabelText("Dynamic phase lane")).toBeNull();
+
+		fireEvent.click(screen.getByRole("button", { name: "Per lane" }));
+
+		await vi.waitFor(() =>
+			expect(updateDynamic).toHaveBeenCalledWith(
+				"show-test",
+				"dynamic-1",
+				3,
+				{ type: "set_phase_mode", phase_mode: "per_lane" },
+				undefined,
+			),
+		);
+	});
+
+	it("selects which lane is edited in per-lane phase spread mode", () => {
+		const object = dynamicObject({ multipleLanes: true });
+		object.body.phase_mode = "per_lane";
+		object.body.lanes[0].phase = {
+			...object.body.phase,
+			span_degrees: 180,
+		};
+		object.body.lanes[1].phase = {
+			...object.body.phase,
+			span_degrees: 720,
+		};
+		dynamics = [object];
+		renderWindow();
+		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
+		fireEvent.click(screen.getByRole("button", { name: "Phase Spread" }));
+
+		const lanePicker = screen.getByLabelText("Dynamic phase lane");
+		expect(lanePicker).toHaveTextContent("Lane 1 · intensity");
+		expect(screen.getByLabelText("Span")).toHaveValue("180");
+
+		fireEvent.click(lanePicker);
+		fireEvent.click(screen.getByRole("option", { name: "Lane 2 · pan" }));
+
+		expect(screen.getByLabelText("Dynamic phase lane")).toHaveTextContent(
+			"Lane 2 · pan",
+		);
+		expect(screen.getByLabelText("Span")).toHaveValue("720");
+	});
+
 	it("shows every keyframe as a directly selectable card", () => {
 		dynamics = [dynamicObject({ mode: "keyframes" })];
 		renderWindow();

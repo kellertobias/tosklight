@@ -108,7 +108,10 @@ pub struct DynamicInstanceSnapshot {
     pub id: Uuid,
     pub definition: DynamicDefinition,
     pub targets: Vec<FixtureId>,
+    #[serde(default)]
     pub phase_by_target: Vec<(FixtureId, f32)>,
+    #[serde(default)]
+    pub phase_by_lane_target: Vec<(Uuid, FixtureId, f32)>,
     pub controllers: Vec<DynamicController>,
     #[serde(default)]
     pub controller_transitions: Vec<DynamicControllerTransitionSnapshot>,
@@ -188,7 +191,7 @@ struct DynamicInstance {
     id: Uuid,
     definition: Arc<DynamicDefinition>,
     targets: Vec<FixtureId>,
-    phase_by_target: HashMap<FixtureId, f32>,
+    phase_by_lane_target: HashMap<(Uuid, FixtureId), f32>,
     controllers: HashMap<Uuid, DynamicController>,
     controller_transitions: HashMap<Uuid, DynamicControllerTransitionSnapshot>,
     started_at_millis: u64,
@@ -234,11 +237,35 @@ impl DynamicRuntime {
                     .copied()
                     .collect::<Vec<_>>();
                 controller_transitions.sort_by_key(|transition| transition.controller_id);
-                let mut phase_by_target = instance
-                    .phase_by_target
+                let mut phase_by_lane_target = instance
+                    .phase_by_lane_target
                     .iter()
-                    .map(|(target, phase)| (*target, *phase))
+                    .map(|((lane_id, target), phase)| (*lane_id, *target, *phase))
                     .collect::<Vec<_>>();
+                phase_by_lane_target.sort_by_key(|(lane_id, target, _)| (*lane_id, target.0));
+                let mut phase_by_target = if instance.definition.phase_spread_mode
+                    == crate::DynamicPhaseSpreadMode::Uniform
+                {
+                    instance
+                        .definition
+                        .lanes
+                        .first()
+                        .map(|lane| {
+                            instance
+                                .targets
+                                .iter()
+                                .filter_map(|target| {
+                                    instance
+                                        .phase_by_lane_target
+                                        .get(&(lane.id, *target))
+                                        .map(|phase| (*target, *phase))
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
                 phase_by_target.sort_by_key(|(target, _)| target.0);
                 let mut random_streams = instance
                     .random_streams
@@ -263,6 +290,7 @@ impl DynamicRuntime {
                     definition: instance.definition.as_ref().clone(),
                     targets: instance.targets.clone(),
                     phase_by_target,
+                    phase_by_lane_target,
                     controllers,
                     controller_transitions,
                     started_at_millis: instance.started_at_millis,
@@ -305,6 +333,10 @@ impl DynamicRuntime {
                     .iter()
                     .any(|(_, phase)| !phase.is_finite())
                 || stored
+                    .phase_by_lane_target
+                    .iter()
+                    .any(|(_, _, phase)| !phase.is_finite())
+                || stored
                     .last_sample_values
                     .iter()
                     .chain(&stored.synchronized_hold_values)
@@ -322,7 +354,7 @@ impl DynamicRuntime {
                 .definitions
                 .get(&stored.definition.id)
                 .cloned()
-                .unwrap_or_else(|| Arc::new(stored.definition));
+                .unwrap_or_else(|| Arc::new(stored.definition.clone()));
             let bound = !matches!(definition.target_binding, DynamicTargetBinding::Targetless);
             if bound && bound_instances.insert(definition.id, stored.id).is_some() {
                 return Err(DynamicRuntimeError::InvalidSnapshot(
@@ -382,13 +414,30 @@ impl DynamicRuntime {
                     )
                 })
                 .collect();
+            let mut phase_by_lane_target = stored
+                .definition
+                .lanes
+                .iter()
+                .flat_map(|lane| {
+                    stored
+                        .phase_by_target
+                        .iter()
+                        .map(move |(target, phase)| ((lane.id, *target), *phase))
+                })
+                .collect::<HashMap<_, _>>();
+            phase_by_lane_target.extend(
+                stored
+                    .phase_by_lane_target
+                    .iter()
+                    .map(|(lane_id, target, phase)| ((*lane_id, *target), *phase)),
+            );
             instances.insert(
                 stored.id,
                 DynamicInstance {
                     id: stored.id,
                     definition,
                     targets: stored.targets,
-                    phase_by_target: stored.phase_by_target.into_iter().collect(),
+                    phase_by_lane_target,
                     controllers,
                     controller_transitions,
                     started_at_millis: stored.started_at_millis,
@@ -541,15 +590,20 @@ impl DynamicRuntime {
         }
 
         let instance_id = Uuid::new_v4();
-        let phase_by_target = project_phase(
-            &definition.phase,
-            &request.target_scope.ordered_targets,
-            &request.stage_positions,
-            0,
-        )
-        .into_iter()
-        .map(|phase| (phase.target, phase.degrees))
-        .collect();
+        let phase_by_lane_target = definition
+            .lanes
+            .iter()
+            .flat_map(|lane| {
+                project_phase(
+                    definition.phase_for_lane(lane),
+                    &request.target_scope.ordered_targets,
+                    &request.stage_positions,
+                    0,
+                )
+                .into_iter()
+                .map(move |phase| ((lane.id, phase.target), phase.degrees))
+            })
+            .collect();
         let mut controllers = HashMap::new();
         controllers.insert(request.controller.id, request.controller.clone());
         let controller_transitions = HashMap::from([(
@@ -569,7 +623,7 @@ impl DynamicRuntime {
             id: instance_id,
             definition,
             targets: request.target_scope.ordered_targets,
-            phase_by_target,
+            phase_by_lane_target,
             controllers,
             controller_transitions,
             started_at_millis: request.now_millis,
@@ -930,21 +984,32 @@ impl DynamicRuntime {
                     .clamp(0.0, 1.0)
             }
         });
-        let random_phase_by_target = matches!(
-            definition.phase.ordering,
-            crate::PhaseOrdering::RandomEachLoop { .. }
-        )
-        .then(|| {
-            project_phase(
-                &definition.phase,
-                &targets,
-                &HashMap::new(),
-                elapsed / cycle_duration_millis.max(1),
-            )
-            .into_iter()
-            .map(|phase| (phase.target, phase.degrees))
-            .collect::<HashMap<_, _>>()
-        });
+        let random_phase_by_lane_target = definition
+            .lanes
+            .iter()
+            .filter_map(|lane| {
+                let phase = definition.phase_for_lane(lane);
+                matches!(phase.ordering, crate::PhaseOrdering::RandomEachLoop { .. }).then(|| {
+                    let loop_index = match definition.phase_spread_mode {
+                        crate::DynamicPhaseSpreadMode::Uniform => {
+                            elapsed / cycle_duration_millis.max(1)
+                        }
+                        crate::DynamicPhaseSpreadMode::PerLane => {
+                            ((elapsed as f64 * lane.speed_multiplier.factor())
+                                / cycle_duration_millis.max(1) as f64)
+                                .floor() as u64
+                        }
+                    };
+                    (
+                        lane.id,
+                        project_phase(phase, &targets, &HashMap::new(), loop_index)
+                            .into_iter()
+                            .map(|phase| (phase.target, phase.degrees))
+                            .collect::<HashMap<_, _>>(),
+                    )
+                })
+            })
+            .collect::<HashMap<_, _>>();
         for controller in controllers {
             if controller.size == 0.0 {
                 continue;
@@ -960,14 +1025,14 @@ impl DynamicRuntime {
                 });
             let activation_mix = transition_mix(transition, now_millis);
             for target in &targets {
-                let phase = random_phase_by_target
-                    .as_ref()
-                    .and_then(|phases| phases.get(target))
-                    .or_else(|| instance.phase_by_target.get(target))
-                    .copied()
-                    .unwrap_or(0.0)
-                    + controller.phase_offset_degrees;
                 for lane in &definition.lanes {
+                    let phase = random_phase_by_lane_target
+                        .get(&lane.id)
+                        .and_then(|phases| phases.get(target))
+                        .or_else(|| instance.phase_by_lane_target.get(&(lane.id, *target)))
+                        .copied()
+                        .unwrap_or(0.0)
+                        + controller.phase_offset_degrees;
                     let random_envelope = lane.random_group_id.and_then(|group_id| {
                         definition
                             .random_groups

@@ -57,6 +57,7 @@ fn lane() -> DynamicLane {
         },
         speed_multiplier: Rational::ONE,
         width: 1.0,
+        phase: None,
         random_group_id: None,
     }
 }
@@ -72,6 +73,7 @@ fn definition(lane: DynamicLane) -> DynamicDefinition {
         target_binding: DynamicTargetBinding::Targetless,
         lanes: vec![lane],
         random_groups: vec![],
+        phase_spread_mode: DynamicPhaseSpreadMode::Uniform,
         phase: PhaseDistribution {
             ordering: PhaseOrdering::Selection,
             offset_degrees: 0.0,
@@ -89,6 +91,59 @@ fn definition(lane: DynamicLane) -> DynamicDefinition {
         default_activation: ActivationPolicy::StartNow,
         activation_boundary: ActivationBoundary::Beat,
     }
+}
+
+fn selection_phase(offset_degrees: f32) -> PhaseDistribution {
+    PhaseDistribution {
+        ordering: PhaseOrdering::Selection,
+        offset_degrees,
+        span_degrees: 360.0,
+        block_size: 1,
+        repeats: 1,
+        wings: false,
+        anchors_degrees: vec![],
+    }
+}
+
+#[test]
+fn legacy_phase_spread_defaults_to_uniform_without_lane_configuration() {
+    let source = definition(lane());
+    let mut stored = serde_json::to_value(source).unwrap();
+    stored.as_object_mut().unwrap().remove("phase_mode");
+    stored["lanes"][0].as_object_mut().unwrap().remove("phase");
+
+    let restored: DynamicDefinition = serde_json::from_value(stored).unwrap();
+
+    assert_eq!(restored.phase_spread_mode, DynamicPhaseSpreadMode::Uniform);
+    assert_eq!(restored.lanes[0].phase, None);
+    assert_eq!(restored.phase_for_lane(&restored.lanes[0]), &restored.phase);
+}
+
+#[test]
+fn per_lane_phase_configuration_round_trips_and_is_validated() {
+    let mut configured_lane = lane();
+    configured_lane.phase = Some(PhaseDistribution {
+        ordering: PhaseOrdering::RandomEachLoop { seed: 42 },
+        offset_degrees: 30.0,
+        span_degrees: 180.0,
+        block_size: 2,
+        repeats: 2,
+        wings: true,
+        anchors_degrees: vec![0.0, 90.0, 0.0],
+    });
+    let mut configured = definition(configured_lane);
+    configured.phase_spread_mode = DynamicPhaseSpreadMode::PerLane;
+
+    let restored: DynamicDefinition =
+        serde_json::from_value(serde_json::to_value(&configured).unwrap()).unwrap();
+    assert_eq!(restored, configured);
+    validate_definition(&restored).unwrap();
+
+    configured.lanes[0].phase.as_mut().unwrap().block_size = 0;
+    assert_eq!(
+        validate_definition(&configured),
+        Err(DynamicValidationError::Phase)
+    );
 }
 
 #[test]
@@ -300,6 +355,246 @@ fn phase_span_is_endpoint_exclusive_and_balanced_repeats_restart_the_wave() {
         phases.iter().map(|phase| phase.degrees).collect::<Vec<_>>(),
         [0.0, 120.0, 240.0, 0.0, 180.0]
     );
+}
+
+#[test]
+fn uniform_and_per_lane_phase_modes_sample_the_expected_lane_phase() {
+    let first = lane();
+    let first_id = first.id;
+    let mut second = lane();
+    let second_id = second.id;
+    second.phase = Some(selection_phase(180.0));
+    let mut dynamic = definition(first);
+    dynamic.lanes.push(second);
+    let definition_id = dynamic.id;
+    let target = FixtureId::new();
+
+    let sample = |dynamic: DynamicDefinition| {
+        let mut runtime = DynamicRuntime::default();
+        runtime.install_definitions([dynamic]).unwrap();
+        let instance = runtime
+            .start(start_request(
+                definition_id,
+                controller(0, 1, false),
+                target,
+                0,
+                false,
+            ))
+            .unwrap();
+        runtime
+            .sample(instance, 0, 1_000, 10, &Sources { current: 0.0 })
+            .unwrap()
+            .into_iter()
+            .map(|sample| (sample.lane_id, sample.value))
+            .collect::<HashMap<_, _>>()
+    };
+
+    let uniform = sample(dynamic.clone());
+    assert_eq!(uniform[&first_id], 0.0);
+    assert_eq!(
+        uniform[&second_id], 0.0,
+        "uniform mode ignores lane overrides"
+    );
+
+    dynamic.phase_spread_mode = DynamicPhaseSpreadMode::PerLane;
+    let per_lane = sample(dynamic);
+    assert_eq!(per_lane[&first_id], 0.0);
+    assert_eq!(
+        per_lane[&second_id], 1.0,
+        "per-lane mode applies the lane's 180 degree offset"
+    );
+}
+
+#[test]
+fn per_lane_phase_snapshot_captures_stage_order_and_legacy_snapshots_expand_uniform_phase() {
+    let first = lane();
+    let first_id = first.id;
+    let mut spatial = lane();
+    let spatial_id = spatial.id;
+    let mut spatial_phase = selection_phase(0.0);
+    spatial_phase.ordering = PhaseOrdering::GridLinear { angle_degrees: 0.0 };
+    spatial.phase = Some(spatial_phase);
+    let mut dynamic = definition(first);
+    dynamic.phase_spread_mode = DynamicPhaseSpreadMode::PerLane;
+    dynamic.lanes.push(spatial);
+    let definition_id = dynamic.id;
+    let targets = [FixtureId::new(), FixtureId::new()];
+    let mut runtime = DynamicRuntime::default();
+    runtime.install_definitions([dynamic]).unwrap();
+    let instance = runtime
+        .start(DynamicStartRequest {
+            definition_id,
+            controller: controller(0, 1, false),
+            target_scope: DynamicTargetScope {
+                ordered_targets: targets.to_vec(),
+            },
+            stage_positions: HashMap::from([
+                (targets[0], SpatialPosition { x: 2.0, z: 0.0 }),
+                (targets[1], SpatialPosition { x: 0.0, z: 0.0 }),
+            ]),
+            now_millis: 0,
+            activation_policy_override: None,
+            activation_delay_millis: 0,
+            activation_duration_millis: 0,
+            reuse_matching_targetless: false,
+        })
+        .unwrap();
+    let snapshot = runtime.snapshot();
+    let phases = snapshot.instances[0]
+        .phase_by_lane_target
+        .iter()
+        .map(|(lane_id, target, phase)| ((*lane_id, *target), *phase))
+        .collect::<HashMap<_, _>>();
+    assert_eq!(phases[&(first_id, targets[0])], 0.0);
+    assert_eq!(phases[&(first_id, targets[1])], 180.0);
+    assert_eq!(phases[&(spatial_id, targets[0])], 180.0);
+    assert_eq!(phases[&(spatial_id, targets[1])], 0.0);
+
+    let mut legacy_dynamic = definition(lane());
+    legacy_dynamic.lanes.push(lane());
+    let legacy_definition_id = legacy_dynamic.id;
+    let mut legacy_runtime = DynamicRuntime::default();
+    legacy_runtime
+        .install_definitions([legacy_dynamic.clone()])
+        .unwrap();
+    let legacy_instance = legacy_runtime
+        .start(start_request(
+            legacy_definition_id,
+            controller(1, 1, false),
+            targets[0],
+            0,
+            false,
+        ))
+        .unwrap();
+    let expected = legacy_runtime
+        .sample(legacy_instance, 250, 1_000, 10, &Sources { current: 0.0 })
+        .unwrap();
+    let mut legacy_snapshot = legacy_runtime.snapshot();
+    legacy_snapshot.instances[0].phase_by_lane_target.clear();
+    let mut restored = DynamicRuntime::default();
+    restored.install_definitions([legacy_dynamic]).unwrap();
+    restored.restore_snapshot(legacy_snapshot).unwrap();
+    assert_eq!(
+        restored
+            .sample(legacy_instance, 250, 1_000, 10, &Sources { current: 0.0 },)
+            .unwrap(),
+        expected,
+        "old phase_by_target snapshots expand across every lane"
+    );
+
+    // Keep the original instance live so the captured phase assertion exercises a valid snapshot.
+    assert_eq!(runtime.snapshot().instances[0].id, instance);
+}
+
+#[test]
+fn random_each_loop_is_recomputed_per_lane_without_reordering_uniform_lanes() {
+    let stable = lane();
+    let stable_id = stable.id;
+    let mut random = lane();
+    let random_id = random.id;
+    let mut random_phase = selection_phase(0.0);
+    random_phase.ordering = PhaseOrdering::RandomEachLoop { seed: 91 };
+    random.phase = Some(random_phase);
+    let mut dynamic = definition(stable);
+    dynamic.phase_spread_mode = DynamicPhaseSpreadMode::PerLane;
+    dynamic.lanes.push(random);
+    let definition_id = dynamic.id;
+    let targets = (1..=6)
+        .map(|value| FixtureId(Uuid::from_u128(value)))
+        .collect::<Vec<_>>();
+    let mut runtime = DynamicRuntime::default();
+    runtime.install_definitions([dynamic]).unwrap();
+    let instance = runtime
+        .start(DynamicStartRequest {
+            definition_id,
+            controller: controller(0, 1, false),
+            target_scope: DynamicTargetScope {
+                ordered_targets: targets,
+            },
+            stage_positions: HashMap::new(),
+            now_millis: 0,
+            activation_policy_override: None,
+            activation_delay_millis: 0,
+            activation_duration_millis: 0,
+            reuse_matching_targetless: false,
+        })
+        .unwrap();
+    let values = |runtime: &mut DynamicRuntime, lane_id, now| {
+        runtime
+            .sample(instance, now, 1_000, 10, &Sources { current: 0.0 })
+            .unwrap()
+            .into_iter()
+            .filter(|sample| sample.lane_id == lane_id)
+            .map(|sample| (sample.target, sample.value))
+            .collect::<HashMap<_, _>>()
+    };
+    let stable_first = values(&mut runtime, stable_id, 0);
+    let random_first = values(&mut runtime, random_id, 0);
+    assert!((1..=32).any(|loop_index| {
+        let now = loop_index * 1_000;
+        values(&mut runtime, stable_id, now) == stable_first
+            && values(&mut runtime, random_id, now) != random_first
+    }));
+}
+
+#[test]
+fn uniform_random_each_loop_shares_one_permutation_across_different_lane_speeds() {
+    let first = lane();
+    let first_id = first.id;
+    let mut second = lane();
+    let second_id = second.id;
+    second.speed_multiplier = Rational {
+        numerator: 2,
+        denominator: 1,
+    };
+    let mut dynamic = definition(first);
+    dynamic.phase.ordering = PhaseOrdering::RandomEachLoop { seed: 117 };
+    dynamic.lanes.push(second);
+    let definition_id = dynamic.id;
+    let targets = (1..=6)
+        .map(|value| FixtureId(Uuid::from_u128(value)))
+        .collect::<Vec<_>>();
+    let mut runtime = DynamicRuntime::default();
+    runtime.install_definitions([dynamic]).unwrap();
+    let instance = runtime
+        .start(DynamicStartRequest {
+            definition_id,
+            controller: controller(0, 1, false),
+            target_scope: DynamicTargetScope {
+                ordered_targets: targets,
+            },
+            stage_positions: HashMap::new(),
+            now_millis: 0,
+            activation_policy_override: None,
+            activation_delay_millis: 0,
+            activation_duration_millis: 0,
+            reuse_matching_targetless: false,
+        })
+        .unwrap();
+
+    for loop_index in 0..=32 {
+        let samples = runtime
+            .sample(
+                instance,
+                loop_index * 1_000,
+                1_000,
+                10,
+                &Sources { current: 0.0 },
+            )
+            .unwrap();
+        let lane_values = |lane_id| {
+            samples
+                .iter()
+                .filter(|sample| sample.lane_id == lane_id)
+                .map(|sample| (sample.target, sample.value))
+                .collect::<HashMap<_, _>>()
+        };
+        assert_eq!(
+            lane_values(first_id),
+            lane_values(second_id),
+            "uniform phase spread must use one permutation for loop {loop_index}"
+        );
+    }
 }
 
 #[test]

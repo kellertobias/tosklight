@@ -295,6 +295,68 @@ fn startup_load_restores_persisted_dynamic_runtime_and_programmer_identity() {
 }
 
 #[test]
+fn startup_loads_legacy_dynamic_phase_spread_as_uniform() {
+    let (state, data_dir) = test_state();
+    let dynamic_id = Uuid::new_v4();
+    let mut legacy = serde_json::to_value(command_test_dynamic(dynamic_id, 8)).unwrap();
+    assert!(
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("phase_mode")
+            .is_some(),
+        "the current definition fixture must serialize the compatibility field"
+    );
+    assert!(
+        legacy["lanes"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("phase")
+            .is_some(),
+        "the current lane fixture must serialize the compatibility field"
+    );
+    let show_path = data_dir.join("shows/legacy-dynamic-phase-spread.show");
+    let store = light_show::ShowStore::create(&show_path, "Legacy Dynamic phase spread")
+        .unwrap()
+        .0;
+    store
+        .put_object("dynamic", &dynamic_id.to_string(), &legacy, 0)
+        .unwrap();
+    let show = state
+        .installation
+        .upsert_show(
+            "Legacy Dynamic phase spread",
+            &show_path.display().to_string(),
+            false,
+        )
+        .unwrap();
+    store.set_identity(show.id, &show.name, None).unwrap();
+    state.installation.set_active_show(Some(show.id)).unwrap();
+    drop(store);
+    drop(state);
+
+    let startup = super::startup_state::StartupState::load(startup_options::StartupOptions {
+        data_dir: data_dir.clone(),
+        fixture_package_dir: None,
+        bind: "127.0.0.1:0".parse().unwrap(),
+        test_bench: true,
+        osc_bind_override: None,
+        output_bind_override: None,
+    })
+    .unwrap();
+    let restored = startup.engine.snapshot();
+    assert_eq!(restored.dynamics.len(), 1);
+    assert_eq!(
+        restored.dynamics[0].phase_spread_mode,
+        light_dynamics::DynamicPhaseSpreadMode::Uniform
+    );
+    assert_eq!(restored.dynamics[0].lanes[0].phase, None);
+
+    drop(startup);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
 fn malformed_show_runtime_is_cleared_without_discarding_valid_dynamic_definitions() {
     let (state, data_dir) = test_state();
     let dynamic_id = Uuid::new_v4();
