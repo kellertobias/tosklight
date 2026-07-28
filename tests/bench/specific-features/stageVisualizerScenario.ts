@@ -141,6 +141,65 @@ export class BrowserStageVisualizer {
 		return (await this.diagnostics()).stage.frames.length;
 	}
 
+	async captureRetainedSceneState(): Promise<{
+		sceneBuilds: number;
+		sceneDisposals: number;
+		rendererContextsCreated: number;
+		rendererContextsDisposed: number;
+	}> {
+		const { stage } = await this.diagnostics();
+		return {
+			sceneBuilds: stage.sceneBuilds.length,
+			sceneDisposals: stage.sceneDisposals,
+			rendererContextsCreated: stage.rendererContextsCreated,
+			rendererContextsDisposed: stage.rendererContextsDisposed,
+		};
+	}
+
+	async expectNoStructuralRebuildSince(
+		baseline: Awaited<ReturnType<BrowserStageVisualizer["captureRetainedSceneState"]>>,
+	): Promise<void> {
+		const current = await this.captureRetainedSceneState();
+		expect(current.sceneBuilds).toBe(baseline.sceneBuilds);
+		expect(current.sceneDisposals).toBe(baseline.sceneDisposals);
+		expect(current.rendererContextsCreated).toBe(
+			baseline.rendererContextsCreated,
+		);
+		expect(current.rendererContextsDisposed).toBe(
+			baseline.rendererContextsDisposed,
+		);
+	}
+
+	async expectSettledRendererIdle(): Promise<void> {
+		await this.page.waitForTimeout(300);
+		const settled = (await this.diagnostics()).stage;
+		await this.page.waitForTimeout(300);
+		const idle = (await this.diagnostics()).stage;
+		expect(idle.renders.length).toBe(settled.renders.length);
+		expect(idle.rafCallbacks).toBe(settled.rafCallbacks);
+	}
+
+	async expectRendererReleasedSince(
+		baseline: Awaited<ReturnType<BrowserStageVisualizer["captureRetainedSceneState"]>>,
+	): Promise<void> {
+		await expect
+			.poll(
+				async () =>
+					(await this.diagnostics()).stage.rendererContextsDisposed,
+			)
+			.toBeGreaterThan(baseline.rendererContextsDisposed);
+	}
+
+	async expectRendererCreatedSince(
+		baseline: Awaited<ReturnType<BrowserStageVisualizer["captureRetainedSceneState"]>>,
+	): Promise<void> {
+		await expect
+			.poll(
+				async () => (await this.diagnostics()).stage.rendererContextsCreated,
+			)
+			.toBeGreaterThan(baseline.rendererContextsCreated);
+	}
+
 	async waitForChangingFrame(): Promise<void> {
 		await this.page.waitForTimeout(220);
 	}

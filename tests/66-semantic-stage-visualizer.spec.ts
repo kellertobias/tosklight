@@ -55,6 +55,7 @@ scenario(
 			followPreload: false,
 			renderQuality: StageRenderQuality.LinesAndBeams,
 		});
+		const retainedScene = await t.stage.captureRetainedSceneState();
 		const changingFrames = await t.stage.beginChangingFrameMeasurement();
 		await t.timing.programmerFade.via.api.set("1s");
 		await t.encoder.position.pan.via.api.set(75);
@@ -75,6 +76,8 @@ scenario(
 			});
 			await t.stage.expectQuality(live, quality);
 		}
+		await t.stage.expectNoStructuralRebuildSince(retainedScene);
+		await t.stage.expectSettledRendererIdle();
 
 		await t.stage.interruptVisualization();
 		await t.stage.expectStale(live);
@@ -86,5 +89,19 @@ scenario(
 		await t.stage.expectRecovered(preload);
 
 		await t.stage.expectContextRecovery(live);
+		const beforeViewSwitch = await t.stage.captureRetainedSceneState();
+		await live.configure({
+			view: StageView.TwoDimensional,
+			followPreload: false,
+			renderQuality: StageRenderQuality.ImprovedBeams,
+		});
+		await t.stage.expectRendererReleasedSince(beforeViewSwitch);
+		const beforeRestore = await t.stage.captureRetainedSceneState();
+		await live.configure({
+			view: StageView.ThreeDimensional,
+			followPreload: false,
+			renderQuality: StageRenderQuality.ImprovedBeams,
+		});
+		await t.stage.expectRendererCreatedSince(beforeRestore);
 	},
 );

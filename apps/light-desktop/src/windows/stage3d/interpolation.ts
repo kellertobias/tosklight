@@ -2,6 +2,22 @@ import type { AttributeValue, VisualizationSnapshot } from "../../api/types";
 
 export const STAGE_INTERPOLATION_MILLIS = 100;
 
+export function stageVisualizationChanged(
+	from: VisualizationSnapshot,
+	to: VisualizationSnapshot,
+) {
+	return (
+		from.preload !== to.preload ||
+		from.blackout !== to.blackout ||
+		from.grand_master !== to.grand_master ||
+		!sameEntries(from.values, to.values) ||
+		!sameEntries(
+			from.profile_output_values ?? [],
+			to.profile_output_values ?? [],
+		)
+	);
+}
+
 export function remainingStageInterpolationMillis(
 	generatedAt: string,
 	now = Date.now(),
@@ -117,6 +133,63 @@ function interpolateAttribute(
 
 function entryKey(entry: { fixture_id: string; attribute: string }) {
 	return `${entry.fixture_id}\u0000${entry.attribute}`;
+}
+
+function sameEntries<
+	T extends {
+		fixture_id: string;
+		attribute: string;
+		value: AttributeValue;
+	},
+>(left: readonly T[], right: readonly T[]) {
+	if (left.length !== right.length) return false;
+	for (let index = 0; index < left.length; index++) {
+		const leftEntry = left[index];
+		const rightEntry = right[index];
+		if (
+			!leftEntry ||
+			!rightEntry ||
+			leftEntry.fixture_id !== rightEntry.fixture_id ||
+			leftEntry.attribute !== rightEntry.attribute ||
+			!sameAttribute(leftEntry.value, rightEntry.value)
+		)
+			return false;
+	}
+	return true;
+}
+
+function sameAttribute(left: AttributeValue, right: AttributeValue) {
+	if (left.kind !== right.kind) return false;
+	switch (left.kind) {
+		case "normalized":
+		case "raw_dmx":
+		case "raw_dmx_exact":
+		case "discrete":
+			return left.value === right.value;
+		case "spread":
+			return (
+				left.value.length ===
+					(right as Extract<AttributeValue, { kind: "spread" }>).value
+						.length &&
+				left.value.every(
+					(value, index) =>
+						value ===
+						(right as Extract<AttributeValue, { kind: "spread" }>).value[
+							index
+						],
+				)
+			);
+		case "color_xyz": {
+			const value = (
+				right as Extract<AttributeValue, { kind: "color_xyz" }>
+			).value;
+			return (
+				left.value.x === value.x &&
+				left.value.y === value.y &&
+				left.value.z === value.z
+			);
+		}
+	}
 }
 
 function lerp(from: number, to: number, progress: number) {

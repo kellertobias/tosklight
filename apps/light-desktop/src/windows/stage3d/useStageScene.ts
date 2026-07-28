@@ -21,6 +21,7 @@ import {
 import {
 	interpolateVisualizationSnapshot,
 	remainingStageInterpolationMillis,
+	stageVisualizationChanged,
 } from "./interpolation";
 import { StageModelCache } from "./modelCache";
 
@@ -267,6 +268,11 @@ export function useStageScene({
 		};
 		if (!from || !target) {
 			apply(target, true);
+			return;
+		}
+		if (!stageVisualizationChanged(from, target)) {
+			displayedVisualizationRef.current = target;
+			visualizationSettledRef.current = true;
 			return;
 		}
 		const interpolationMillis = remainingStageInterpolationMillis(

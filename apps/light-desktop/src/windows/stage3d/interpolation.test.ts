@@ -3,6 +3,7 @@ import type { VisualizationSnapshot } from "../../api/types";
 import {
 	interpolateVisualizationSnapshot,
 	remainingStageInterpolationMillis,
+	stageVisualizationChanged,
 } from "./interpolation";
 
 describe("interpolateVisualizationSnapshot", () => {
@@ -58,6 +59,34 @@ describe("interpolateVisualizationSnapshot", () => {
 		expect(
 			remainingStageInterpolationMillis("2026-07-27T00:00:00.000Z", now),
 		).toBe(0);
+	});
+
+	it("ignores source metadata churn when the visible Stage values are unchanged", () => {
+		const from = snapshot(1, false, [
+			normalized("intensity", 0.5),
+			color("color", 0.1, 0.2, 0.3),
+		]);
+		const to = {
+			...snapshot(2, false, [
+				normalized("intensity", 0.5),
+				color("color", 0.1, 0.2, 0.3),
+			]),
+			source_frame: 42,
+		};
+
+		expect(stageVisualizationChanged(from, to)).toBe(false);
+		expect(
+			stageVisualizationChanged(from, {
+				...to,
+				grand_master: 0.5,
+			}),
+		).toBe(true);
+		expect(
+			stageVisualizationChanged(from, {
+				...to,
+				values: [normalized("intensity", 0.75)],
+			}),
+		).toBe(true);
 	});
 });
 
