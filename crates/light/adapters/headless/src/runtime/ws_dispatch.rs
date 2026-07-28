@@ -17,6 +17,46 @@ pub(super) fn dispatch_live_action(
     session: &Session,
     frame: LiveActionFrame,
 ) -> WsResponse {
+    dispatch_live_action_inner(state, session, frame, false)
+}
+
+/// Production Dynamic actions wait for the current active-show operation
+/// instead of reporting ordinary render-loop contention as a show change.
+pub(super) async fn dispatch_live_action_live(
+    state: &AppState,
+    session: &Session,
+    frame: LiveActionFrame,
+) -> WsResponse {
+    if !is_dynamic_action(&frame.action) {
+        return dispatch_live_action(state, session, frame);
+    }
+    let revision = state.output.snapshot().revision;
+    if let Err(error) = validate_frame(state, session, &frame) {
+        return failed_response(frame.request_id, revision, error);
+    }
+    let show_before = state.active_show.current().as_ref().map(|show| show.id);
+    let activation = state.active_show.acquire().await;
+    let show_after = state.active_show.current().as_ref().map(|show| show.id);
+    if show_before != show_after {
+        drop(activation);
+        return failed_response(
+            frame.request_id,
+            revision,
+            "The active show changed before the Dynamic action could run. Tap the Dynamic again."
+                .into(),
+        );
+    }
+    let response = dispatch_live_action_inner(state, session, frame, true);
+    drop(activation);
+    response
+}
+
+fn dispatch_live_action_inner(
+    state: &AppState,
+    session: &Session,
+    frame: LiveActionFrame,
+    dynamic_activation_held: bool,
+) -> WsResponse {
     let revision = state.output.snapshot().revision;
     if let Err(error) = validate_frame(state, session, &frame) {
         return failed_response(frame.request_id, revision, error);
@@ -24,7 +64,14 @@ pub(super) fn dispatch_live_action(
     let request_id = frame.request_id;
     let context = interaction_context(session, &request_id);
     let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
-    let result = dispatch_action(state, session, frame.action, &context, &ports);
+    let result = dispatch_action(
+        state,
+        session,
+        frame.action,
+        &context,
+        &ports,
+        dynamic_activation_held,
+    );
     match result.response {
         Ok(payload) => WsResponse {
             protocol_version: 2,
@@ -70,6 +117,7 @@ fn dispatch_action(
     action: LiveAction,
     context: &light_application::ActionContext,
     ports: &command_http::ServerProgrammingPorts<'_>,
+    dynamic_activation_held: bool,
 ) -> ActionOutput {
     match action {
         LiveAction::SpeedGroup(request) => runtime_output(ws_speed_group_action(
@@ -196,46 +244,93 @@ fn dispatch_action(
         LiveAction::FixtureControl(request) => {
             dispatch_fixture_control(state, session, request, context)
         }
-        LiveAction::DynamicToggle(request) => run_interaction(state, session, context, || {
-            ActionOutput::plain(dispatch_dynamic_toggle(state, session, context, request))
-        }),
-        LiveAction::DynamicStart(request) => run_interaction(state, session, context, || {
-            ActionOutput::plain(dispatch_dynamic_start(state, session, context, request))
-        }),
-        LiveAction::DynamicOff(request) => run_interaction(state, session, context, || {
-            ActionOutput::plain(dispatch_dynamic_off(state, session, context, request))
-        }),
-        LiveAction::DynamicSize(request) => run_interaction(state, session, context, || {
-            ActionOutput::plain(dispatch_dynamic_update(
-                state,
-                session,
-                context,
-                request,
-                DynamicUpdateField::Size,
-            ))
-        }),
-        LiveAction::DynamicSpeed(request) => run_interaction(state, session, context, || {
-            ActionOutput::plain(dispatch_dynamic_update(
-                state,
-                session,
-                context,
-                request,
-                DynamicUpdateField::Speed,
-            ))
-        }),
-        LiveAction::DynamicPhase(request) => run_interaction(state, session, context, || {
-            ActionOutput::plain(dispatch_dynamic_update(
-                state,
-                session,
-                context,
-                request,
-                DynamicUpdateField::Phase,
-            ))
-        }),
-        LiveAction::DynamicFixAt(request) => run_interaction(state, session, context, || {
-            ActionOutput::plain(dispatch_dynamic_fix_at(state, session, context, request))
-        }),
+        LiveAction::DynamicToggle(request) => run_interaction_with_activation(
+            state,
+            session,
+            context,
+            dynamic_activation_held,
+            || ActionOutput::plain(dispatch_dynamic_toggle(state, session, context, request)),
+        ),
+        LiveAction::DynamicStart(request) => run_interaction_with_activation(
+            state,
+            session,
+            context,
+            dynamic_activation_held,
+            || ActionOutput::plain(dispatch_dynamic_start(state, session, context, request)),
+        ),
+        LiveAction::DynamicOff(request) => run_interaction_with_activation(
+            state,
+            session,
+            context,
+            dynamic_activation_held,
+            || ActionOutput::plain(dispatch_dynamic_off(state, session, context, request)),
+        ),
+        LiveAction::DynamicSize(request) => run_interaction_with_activation(
+            state,
+            session,
+            context,
+            dynamic_activation_held,
+            || {
+                ActionOutput::plain(dispatch_dynamic_update(
+                    state,
+                    session,
+                    context,
+                    request,
+                    DynamicUpdateField::Size,
+                ))
+            },
+        ),
+        LiveAction::DynamicSpeed(request) => run_interaction_with_activation(
+            state,
+            session,
+            context,
+            dynamic_activation_held,
+            || {
+                ActionOutput::plain(dispatch_dynamic_update(
+                    state,
+                    session,
+                    context,
+                    request,
+                    DynamicUpdateField::Speed,
+                ))
+            },
+        ),
+        LiveAction::DynamicPhase(request) => run_interaction_with_activation(
+            state,
+            session,
+            context,
+            dynamic_activation_held,
+            || {
+                ActionOutput::plain(dispatch_dynamic_update(
+                    state,
+                    session,
+                    context,
+                    request,
+                    DynamicUpdateField::Phase,
+                ))
+            },
+        ),
+        LiveAction::DynamicFixAt(request) => run_interaction_with_activation(
+            state,
+            session,
+            context,
+            dynamic_activation_held,
+            || ActionOutput::plain(dispatch_dynamic_fix_at(state, session, context, request)),
+        ),
     }
+}
+
+fn is_dynamic_action(action: &LiveAction) -> bool {
+    matches!(
+        action,
+        LiveAction::DynamicToggle(_)
+            | LiveAction::DynamicStart(_)
+            | LiveAction::DynamicOff(_)
+            | LiveAction::DynamicSize(_)
+            | LiveAction::DynamicSpeed(_)
+            | LiveAction::DynamicPhase(_)
+            | LiveAction::DynamicFixAt(_)
+    )
 }
 
 fn dispatch_dynamic_toggle(
@@ -517,9 +612,23 @@ fn run_interaction(
     context: &light_application::ActionContext,
     action: impl FnOnce() -> ActionOutput,
 ) -> ActionOutput {
-    let _activation = match try_programming_activation(state) {
-        Ok(activation) => activation,
-        Err(error) => return ActionOutput::plain(Err(error)),
+    run_interaction_with_activation(state, session, context, false, action)
+}
+
+fn run_interaction_with_activation(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    activation_held: bool,
+    action: impl FnOnce() -> ActionOutput,
+) -> ActionOutput {
+    let _activation = if activation_held {
+        None
+    } else {
+        match try_programming_activation(state) {
+            Ok(activation) => Some(activation),
+            Err(error) => return ActionOutput::plain(Err(error)),
+        }
     };
     let before = tracked_state(state, session);
     match state.programming.run_external_interaction(

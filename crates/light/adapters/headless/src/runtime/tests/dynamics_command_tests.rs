@@ -380,8 +380,9 @@ fn websocket_dynamic_toggle_matches_the_authoritative_target_scope() {
     let fixture_b = light_core::FixtureId::new();
     let dynamic_id = uuid::Uuid::new_v4();
     let mut snapshot = light_engine::EngineSnapshot::default();
-    snapshot.fixtures =
-        vec![operational_fixture(fixture_a), operational_fixture(fixture_b)].into();
+    let mut second_fixture = operational_fixture(fixture_b);
+    second_fixture.address = Some(2);
+    snapshot.fixtures = vec![operational_fixture(fixture_a), second_fixture].into();
     snapshot.dynamics = vec![command_test_dynamic(dynamic_id, 1)].into();
     state.output.replace_snapshot(snapshot).unwrap();
     let show = state
@@ -438,6 +439,139 @@ fn websocket_dynamic_toggle_matches_the_authoritative_target_scope() {
     let runtime = state.output.dynamic_runtime_snapshot();
     assert_eq!(runtime.instances.len(), 1);
     assert_eq!(runtime.instances[0].targets, vec![fixture_b]);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn production_dynamic_action_waits_for_active_show_contention() {
+    let (state, data_dir) = test_state();
+    let user = state.installation.users().unwrap().remove(0);
+    let session = Session {
+        id: SessionId::new(),
+        user: user.clone(),
+        token: "dynamic-contention".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id, user.id);
+    state.sessions.insert_session(session.clone());
+    let fixture = light_core::FixtureId::new();
+    let dynamic_id = uuid::Uuid::new_v4();
+    let mut snapshot = light_engine::EngineSnapshot::default();
+    snapshot.fixtures = vec![operational_fixture(fixture)].into();
+    snapshot.dynamics = vec![command_test_dynamic(dynamic_id, 1)].into();
+    state.output.replace_snapshot(snapshot).unwrap();
+    let show = state
+        .installation
+        .upsert_show(
+            "Dynamic Contention",
+            &data_dir
+                .join("shows/dynamic-contention.show")
+                .display()
+                .to_string(),
+            false,
+        )
+        .unwrap();
+    state.active_show.replace_current(Some(show));
+    let request_id = "dynamic-contention-toggle";
+    let frame = live_action_frame(
+        &session,
+        request_id,
+        light_wire::v2::live_action::LiveAction::DynamicToggle(
+            light_wire::v2::dynamics::DynamicStartLiveActionRequest {
+                dynamic_id,
+                request: light_wire::v2::dynamics::DynamicStartActionRequest {
+                    request_id: request_id.into(),
+                    targets: vec![fixture.0],
+                    overrides: light_wire::v2::dynamics::DynamicInstanceOverridesProjection {
+                        size: 1.0,
+                        speed_multiplier:
+                            light_wire::v2::dynamics::DynamicRationalProjection {
+                                numerator: 1,
+                                denominator: 1,
+                            },
+                        phase_offset_degrees: 0.0,
+                    },
+                    timing: light_wire::v2::dynamics::DynamicValueTimingProjection::default(),
+                },
+            },
+        ),
+    );
+    let contention = state.active_show.acquire().await;
+    let dispatch_state = state.clone();
+    let dispatch_session = session.clone();
+    let action = tokio::spawn(async move {
+        dispatch_live_action_live(&dispatch_state, &dispatch_session, frame).await
+    });
+    tokio::task::yield_now().await;
+    assert!(
+        !action.is_finished(),
+        "the Dynamic action should wait while the active-show operation is held"
+    );
+
+    drop(contention);
+    let response = action.await.unwrap();
+    assert!(response.ok, "{:?}", response.error);
+    assert_eq!(response.payload.as_ref().unwrap()["started"], true);
+    assert_eq!(state.output.dynamic_runtime_snapshot().instances.len(), 1);
+
+    let changed_request_id = "dynamic-contention-show-change";
+    let changed_frame = live_action_frame(
+        &session,
+        changed_request_id,
+        light_wire::v2::live_action::LiveAction::DynamicToggle(
+            light_wire::v2::dynamics::DynamicStartLiveActionRequest {
+                dynamic_id,
+                request: light_wire::v2::dynamics::DynamicStartActionRequest {
+                    request_id: changed_request_id.into(),
+                    targets: vec![fixture.0],
+                    overrides: light_wire::v2::dynamics::DynamicInstanceOverridesProjection {
+                        size: 1.0,
+                        speed_multiplier:
+                            light_wire::v2::dynamics::DynamicRationalProjection {
+                                numerator: 1,
+                                denominator: 1,
+                            },
+                        phase_offset_degrees: 0.0,
+                    },
+                    timing: light_wire::v2::dynamics::DynamicValueTimingProjection::default(),
+                },
+            },
+        ),
+    );
+    let contention = state.active_show.acquire().await;
+    let dispatch_state = state.clone();
+    let dispatch_session = session.clone();
+    let changed_action = tokio::spawn(async move {
+        dispatch_live_action_live(&dispatch_state, &dispatch_session, changed_frame).await
+    });
+    tokio::task::yield_now().await;
+    let replacement = state
+        .installation
+        .upsert_show(
+            "Replacement Show",
+            &data_dir
+                .join("shows/replacement.show")
+                .display()
+                .to_string(),
+            false,
+        )
+        .unwrap();
+    state.active_show.replace_current(Some(replacement));
+    drop(contention);
+    let changed = changed_action.await.unwrap();
+    assert!(!changed.ok);
+    assert_eq!(
+        changed.error.as_deref(),
+        Some(
+            "The active show changed before the Dynamic action could run. Tap the Dynamic again."
+        )
+    );
+    assert_eq!(
+        state.output.dynamic_runtime_snapshot().instances.len(),
+        1,
+        "a rejected action must not toggle the existing Dynamic instance"
+    );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 

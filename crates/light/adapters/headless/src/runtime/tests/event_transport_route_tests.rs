@@ -64,7 +64,8 @@ async fn malformed_correlated_action_returns_v2_failure_without_mutating_program
             request_id: Some("malformed-action".into()),
             error: "invalid action frame: session_id is not a UUID".into(),
         },
-    );
+    )
+    .await;
     let event_transport::ServerMessage::Command(response) = response else {
         panic!("correlated malformed actions must return an action response");
     };
@@ -114,7 +115,8 @@ async fn v2_subscription_dispatches_an_action_and_keeps_delivering_events() {
             session_id: session.id.0,
             action: light_wire::v2::live_action::LiveAction::ProgrammerUndo,
         }),
-    );
+    )
+    .await;
     let event_transport::ServerMessage::Command(response) = response else {
         panic!("command frames should return command responses");
     };

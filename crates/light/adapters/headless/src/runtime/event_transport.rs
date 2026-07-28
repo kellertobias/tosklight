@@ -4,7 +4,7 @@ mod adapter;
 
 use super::{
     ApiError, AppState, EventResource, Session, WsResponse, authenticate_token,
-    dispatch_live_action,
+    dispatch_live_action_live,
 };
 use axum::{
     Router,
@@ -113,12 +113,16 @@ async fn handle_loop_item(
         LoopItem::Delivery(Some(message)) => send_wire(socket, message).await,
         LoopItem::Delivery(None) | LoopItem::Client(None) => false,
         LoopItem::Client(Some(message)) => {
-            send_server_message(socket, client_response(stream, state, session, message)).await
+            send_server_message(
+                socket,
+                client_response(stream, state, session, message).await,
+            )
+            .await
         }
     }
 }
 
-pub(super) fn client_response(
+pub(super) async fn client_response(
     stream: &EventStream,
     state: &AppState,
     session: &Session,
@@ -134,7 +138,7 @@ pub(super) fn client_response(
             })
         }
         ClientMessage::Action(action) => {
-            ServerMessage::Command(dispatch_live_action(state, session, action))
+            ServerMessage::Command(dispatch_live_action_live(state, session, action).await)
         }
         ClientMessage::Invalid {
             request_id: Some(request_id),
