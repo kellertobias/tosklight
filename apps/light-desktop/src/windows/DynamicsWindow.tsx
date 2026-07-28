@@ -917,47 +917,78 @@ function CurvesView({
 							aria-current={candidate.id === lane.id}
 							className={`dynamic-lane-overview ${candidate.id === lane.id ? "primary" : ""} ${selected ? "selected" : ""}`}
 						>
-							<Button
-								className="dynamic-lane-select-surface"
-								aria-pressed={selected}
-								onClick={(event) =>
-									onSelect(candidate.id, event.shiftKey || shiftArmed)
-								}
-							>
-								<span className="dynamic-lane-identity">
-									<small>Lane {index + 1}</small>
-									<strong>{attribute?.label ?? candidate.attribute}</strong>
-									<span>
-										{modeLabel(candidate.mode)}
-										{laneSpeedLabel(candidate)}
+							<div className="dynamic-lane-content">
+								<button
+									type="button"
+									className="dynamic-lane-identity-select"
+									aria-label={`Select lane ${index + 1}, ${attribute?.label ?? candidate.attribute}`}
+									aria-pressed={selected}
+									onClick={(event) =>
+										onSelect(candidate.id, event.shiftKey || shiftArmed)
+									}
+								>
+									<span className="dynamic-lane-identity">
+										<small>Lane {index + 1}</small>
+										<strong>{attribute?.label ?? candidate.attribute}</strong>
+										<span>
+											{modeLabel(candidate.mode)}
+											{laneSpeedLabel(candidate)}
+										</span>
 									</span>
-								</span>
-								<span className="dynamic-lane-curve">
-									<svg
-										viewBox="0 0 1000 200"
-										preserveAspectRatio="none"
-										role="img"
-										aria-label={`${attribute?.label ?? candidate.attribute}: ${modeLabel(candidate.mode)}`}
+								</button>
+								<div className="dynamic-lane-curve">
+									<button
+										type="button"
+										className="dynamic-lane-curve-select"
+										aria-label={`Select ${attribute?.label ?? candidate.attribute} lane from curve`}
+										aria-pressed={selected}
+										onClick={(event) =>
+											onSelect(candidate.id, event.shiftKey || shiftArmed)
+										}
 									>
-										<title>{modeLabel(candidate.mode)}</title>
-										<path
-											className="grid"
-											d="M0 50H1000M0 100H1000M0 150H1000M250 0V200M500 0V200M750 0V200"
-										/>
-										<path className="curve" d={preview.primaryPath} />
-										{preview.repeatedPath && (
+										<svg
+											viewBox="0 0 1000 200"
+											preserveAspectRatio="none"
+											role="img"
+											aria-label={`${attribute?.label ?? candidate.attribute}: ${modeLabel(candidate.mode)}`}
+										>
+											<title>{modeLabel(candidate.mode)}</title>
 											<path
-												className="curve repeated"
-												d={preview.repeatedPath}
+												className="grid"
+												d="M0 50H1000M0 100H1000M0 150H1000M250 0V200M500 0V200M750 0V200"
 											/>
-										)}
+											<path className="curve" d={preview.primaryPath} />
+											{preview.repeatedPath && (
+												<path
+													className="curve repeated"
+													d={preview.repeatedPath}
+												/>
+											)}
+											{preview.repetitions > 1 && (
+												<path
+													className="repeat-boundary"
+													d={`M${1000 / preview.repetitions} 0V200`}
+												/>
+											)}
+										</svg>
 										{preview.repetitions > 1 && (
-											<path
-												className="repeat-boundary"
-												d={`M${1000 / preview.repetitions} 0V200`}
+											<span
+												className="dynamic-repeat-label"
+												style={{ left: `${100 / preview.repetitions}%` }}
+											>
+												repeat
+											</span>
+										)}
+										{previewPhase !== null && (
+											<i
+												className="dynamic-preview-playhead"
+												style={{ left: `${previewPhase * 100}%` }}
 											/>
 										)}
-									</svg>
+										<span className="dynamic-lane-axis start">0%</span>
+										<span className="dynamic-lane-axis middle">50%</span>
+										<span className="dynamic-lane-axis end">100%</span>
+									</button>
 									{candidate.mode === "keyframes" && (
 										<span className="dynamic-keyframe-marks">
 											{candidate.keyframes.points.map((point, pointIndex) => (
@@ -1019,7 +1050,7 @@ function CurvesView({
 													onPointerCancel={() => setDraggingKeyframe(null)}
 												>
 													<span>{keyframeName(pointIndex)}</span>
-													</Button>
+												</Button>
 											))}
 											<i
 												className="loop-close"
@@ -1032,25 +1063,8 @@ function CurvesView({
 											</i>
 										</span>
 									)}
-									{preview.repetitions > 1 && (
-										<span
-											className="dynamic-repeat-label"
-											style={{ left: `${100 / preview.repetitions}%` }}
-										>
-											repeat
-										</span>
-									)}
-									{previewPhase !== null && (
-										<i
-											className="dynamic-preview-playhead"
-											style={{ left: `${previewPhase * 100}%` }}
-												/>
-									)}
-									<span className="dynamic-lane-axis start">0%</span>
-									<span className="dynamic-lane-axis middle">50%</span>
-									<span className="dynamic-lane-axis end">100%</span>
-								</span>
-							</Button>
+								</div>
+							</div>
 							<div className="dynamic-lane-row-actions">
 								<SelectField
 									className="dynamic-lane-action-select"

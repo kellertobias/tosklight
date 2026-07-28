@@ -117,11 +117,15 @@
 	box-shadow: inset 3px 0 #4edcff;
 }
 
-.dynamic-lane-select-surface {
+.dynamic-lane-content {
 	min-width: 0;
 	display: grid;
 	grid-template-columns: 7.4rem minmax(12rem, 1fr);
 	align-items: stretch;
+}
+
+.dynamic-lane-identity-select,
+.dynamic-lane-curve-select {
 	padding: 0;
 	border: 0;
 	background: transparent;
@@ -131,13 +135,20 @@
 	cursor: pointer;
 }
 
-.dynamic-lane-select-surface:focus-visible {
+.dynamic-lane-identity-select:focus-visible,
+.dynamic-lane-curve-select:focus-visible {
 	outline: 2px solid var(--cyan);
 	outline-offset: -2px;
 }
 
+.dynamic-lane-identity-select {
+	display: block;
+	min-width: 0;
+}
+
 .dynamic-lane-identity {
 	display: flex;
+	height: 100%;
 	flex-direction: column;
 	justify-content: center;
 	gap: 0.1rem;
@@ -153,6 +164,15 @@
 
 .dynamic-lane-curve {
 	position: relative;
+	min-width: 0;
+	background: linear-gradient(180deg, #111820, #0c1117);
+}
+
+.dynamic-lane-curve-select {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100%;
 	min-width: 0;
 	padding: 0.15rem 0.4rem 0.8rem;
 	background: linear-gradient(180deg, #111820, #0c1117);
@@ -194,7 +214,42 @@
 	pointer-events: none;
 }
 
-.dynamic-keyframe-marks button,
+.dynamic-keyframe-marks button {
+	position: absolute;
+	width: 3.125rem;
+	min-width: 3.125rem;
+	height: 3.125rem;
+	min-height: 3.125rem;
+	padding: 0;
+	transform: translate(-50%, -50%);
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: #ffb55f;
+	font: inherit;
+	pointer-events: auto;
+	cursor: ew-resize;
+}
+
+.dynamic-keyframe-marks button::before {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 0.9rem;
+	height: 0.9rem;
+	transform: translate(-50%, -50%);
+	border: 2px solid #ff9e36;
+	border-radius: 50%;
+	background: #0b1115;
+	box-shadow: 0 0 0.35rem rgb(255 158 54 / 20%);
+	content: "";
+}
+
+.dynamic-keyframe-marks button:focus-visible::before {
+	outline: 2px solid var(--cyan);
+	outline-offset: 2px;
+}
+
 .dynamic-keyframe-marks i {
 	position: absolute;
 	width: 0.9rem;
@@ -208,10 +263,9 @@
 	color: #ffb55f;
 	font: inherit;
 	pointer-events: auto;
-	cursor: ew-resize;
 }
 
-.dynamic-keyframe-marks button.selected {
+.dynamic-keyframe-marks button.selected::before {
 	background: #ff9e36;
 }
 
@@ -220,7 +274,19 @@
 	cursor: default;
 }
 
-.dynamic-keyframe-marks button > span,
+.dynamic-keyframe-marks button > span {
+	position: absolute;
+	bottom: calc(50% + 0.55rem);
+	left: 50%;
+	transform: translateX(-50%);
+	color: #ffb55f;
+	font:
+		700 0.63rem ui-monospace,
+		monospace;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
 .dynamic-keyframe-marks i > span {
 	position: absolute;
 	bottom: calc(100% + 0.12rem);

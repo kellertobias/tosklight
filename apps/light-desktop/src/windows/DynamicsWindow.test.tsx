@@ -6,7 +6,7 @@ import {
 	within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AppProvider } from "../state/AppContext";
+import { AppProvider, useApp } from "../state/AppContext";
 import {
 	createDefaultDynamicDefinition,
 	createDefaultDynamicLane,
@@ -94,8 +94,22 @@ vi.mock(
 function renderWindow() {
 	return render(
 		<AppProvider>
+			<TestShiftLatch />
 			<DynamicsWindow compact={false} />
 		</AppProvider>,
+	);
+}
+
+function TestShiftLatch() {
+	const { state, dispatch } = useApp();
+	return (
+		<button
+			type="button"
+			aria-pressed={state.shiftArmed}
+			onClick={() => dispatch({ type: "SET_SHIFT_ARMED", value: true })}
+		>
+			Arm software Shift
+		</button>
 	);
 }
 
@@ -236,22 +250,93 @@ describe("DynamicsWindow", () => {
 		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
 
 		const laneList = screen.getByRole("list", { name: "Dynamic lanes" });
-		const laneButtons = within(laneList)
-			.getAllByRole("button")
-			.filter((button) =>
-				button.classList.contains("dynamic-lane-select-surface"),
-			);
-		expect(laneButtons).toHaveLength(2);
-		expect(laneButtons[0]).toHaveAttribute("aria-pressed", "true");
-		expect(laneButtons[1]).toHaveAttribute("aria-pressed", "false");
+		const laneOneIdentity = within(laneList).getByRole("button", {
+			name: "Select lane 1, Intensity",
+		});
+		const laneOneCurve = within(laneList).getByRole("button", {
+			name: "Select Intensity lane from curve",
+		});
+		const laneTwoIdentity = within(laneList).getByRole("button", {
+			name: "Select lane 2, Pan",
+		});
+		const laneTwoCurve = within(laneList).getByRole("button", {
+			name: "Select Pan lane from curve",
+		});
+		expect(laneOneIdentity).toHaveAttribute("aria-pressed", "true");
+		expect(laneOneCurve).toHaveAttribute("aria-pressed", "true");
+		expect(laneTwoIdentity).toHaveAttribute("aria-pressed", "false");
+		expect(laneTwoCurve).toHaveAttribute("aria-pressed", "false");
 
-		fireEvent.click(laneButtons[1]);
-		expect(laneButtons[0]).toHaveAttribute("aria-pressed", "false");
-		expect(laneButtons[1]).toHaveAttribute("aria-pressed", "true");
+		fireEvent.click(laneTwoCurve);
+		expect(laneOneIdentity).toHaveAttribute("aria-pressed", "false");
+		expect(laneOneCurve).toHaveAttribute("aria-pressed", "false");
+		expect(laneTwoIdentity).toHaveAttribute("aria-pressed", "true");
+		expect(laneTwoCurve).toHaveAttribute("aria-pressed", "true");
 
-		fireEvent.click(laneButtons[0], { shiftKey: true });
-		expect(laneButtons[0]).toHaveAttribute("aria-pressed", "true");
-		expect(laneButtons[1]).toHaveAttribute("aria-pressed", "true");
+		fireEvent.click(laneOneIdentity, { shiftKey: true });
+		expect(laneOneIdentity).toHaveAttribute("aria-pressed", "true");
+		expect(laneOneCurve).toHaveAttribute("aria-pressed", "true");
+		expect(laneTwoIdentity).toHaveAttribute("aria-pressed", "true");
+		expect(laneTwoCurve).toHaveAttribute("aria-pressed", "true");
+		expect(laneList.querySelector("button button")).toBeNull();
+	});
+
+	it("keeps keyframe pointer interaction isolated from lane background selection", () => {
+		const object = dynamicObject({ multipleLanes: true, mode: "keyframes" });
+		object.body.lanes[1].mode = "keyframes";
+		dynamics = [object];
+		renderWindow();
+		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
+
+		const laneList = screen.getByRole("list", { name: "Dynamic lanes" });
+		const laneOneIdentity = within(laneList).getByRole("button", {
+			name: "Select lane 1, Intensity",
+		});
+		const laneTwoIdentity = within(laneList).getByRole("button", {
+			name: "Select lane 2, Pan",
+		});
+		const laneTwoCurve = within(laneList).getByRole("button", {
+			name: "Select Pan lane from curve",
+		});
+		const keyframe = within(laneList).getByRole("button", {
+			name: "Pan keyframe B",
+		});
+		const setPointerCapture = vi.fn();
+		Object.defineProperty(keyframe, "setPointerCapture", {
+			configurable: true,
+			value: setPointerCapture,
+		});
+
+		fireEvent.pointerDown(keyframe, { pointerId: 17 });
+
+		expect(setPointerCapture).toHaveBeenCalledWith(17);
+		expect(laneOneIdentity).toHaveAttribute("aria-pressed", "false");
+		expect(laneTwoIdentity).toHaveAttribute("aria-pressed", "true");
+		expect(laneTwoCurve).toHaveAttribute("aria-pressed", "true");
+		expect(laneList.querySelector("button button")).toBeNull();
+	});
+
+	it("uses and clears the software Shift latch for additive lane selection", () => {
+		dynamics = [dynamicObject({ multipleLanes: true })];
+		renderWindow();
+		fireEvent.contextMenu(screen.getByRole("button", { name: /Pulse/i }));
+
+		const shiftLatch = screen.getByRole("button", {
+			name: "Arm software Shift",
+		});
+		const laneTwoIdentity = screen.getByRole("button", {
+			name: "Select lane 2, Pan",
+		});
+		fireEvent.click(shiftLatch);
+		expect(shiftLatch).toHaveAttribute("aria-pressed", "true");
+
+		fireEvent.click(laneTwoIdentity);
+
+		expect(
+			screen.getByRole("button", { name: "Select lane 1, Intensity" }),
+		).toHaveAttribute("aria-pressed", "true");
+		expect(laneTwoIdentity).toHaveAttribute("aria-pressed", "true");
+		expect(shiftLatch).toHaveAttribute("aria-pressed", "false");
 	});
 
 	it("switches phase spread between uniform and per-lane configuration", async () => {

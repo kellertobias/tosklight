@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import resolver from "../../../../tools/artifact-paths.cjs";
 
@@ -183,6 +183,162 @@ for (const story of stories) {
 		expect(errors).toEqual([]);
 	});
 }
+
+test("Dynamics lane layout preserves full-width geometry and isolated interactions", async ({
+	page,
+}, testInfo) => {
+	const artifactDirectory = `${artifactPaths.visual}/dynamics-lane-regression`;
+	mkdirSync(artifactDirectory, { recursive: true });
+	const measurements: Array<Record<string, unknown>> = [];
+	const storyUrl =
+		"/iframe.html?id=tosklight-windows-dynamics--full-application-discussion&viewMode=story";
+	const viewports = [
+		{ width: 1280, height: 720, mode: "software" },
+		{ width: 1920, height: 1080, mode: "software" },
+		{ width: 900, height: 720, mode: "software" },
+		{ width: 1280, height: 720, mode: "hardware" },
+		{ width: 1920, height: 1080, mode: "hardware" },
+	] as const;
+
+	for (const viewport of viewports) {
+		await page.setViewportSize(viewport);
+		await page.goto(`${storyUrl}&globals=mode:${viewport.mode}`);
+		await page.evaluate(() => document.fonts.ready);
+		const shot = page.locator("[data-documentation-shot]");
+		await expect(shot).toHaveAttribute("data-documentation-ready", "true");
+		await page.addStyleTag({
+			content:
+				"*,*::before,*::after{animation:none!important;caret-color:transparent!important;transition:none!important}",
+		});
+
+		const geometry = await page
+			.locator(".dynamic-lane-overview")
+			.evaluateAll((rows) =>
+				rows.map((row) => {
+					const bounds = (selector: string) => {
+						const element =
+							selector === ":scope" ? row : row.querySelector(selector);
+						if (!(element instanceof HTMLElement))
+							throw new Error(`Missing ${selector}`);
+						const box = element.getBoundingClientRect();
+						return {
+							x: box.x,
+							y: box.y,
+							width: box.width,
+							height: box.height,
+							right: box.right,
+						};
+					};
+					return {
+						row: bounds(":scope"),
+						content: bounds(".dynamic-lane-content"),
+						identity: bounds(".dynamic-lane-identity-select"),
+						curve: bounds(".dynamic-lane-curve"),
+						curveSelect: bounds(".dynamic-lane-curve-select"),
+						action: bounds(".dynamic-lane-row-actions"),
+					};
+				}),
+			);
+		expect(geometry).toHaveLength(3);
+		expect(
+			await page.locator(".dynamic-lane-overview button button").count(),
+		).toBe(0);
+
+		const list = await page
+			.locator(".dynamic-lane-overview-list")
+			.boundingBox();
+		expect(list).not.toBeNull();
+		measurements.push({ viewport, list, lanes: geometry });
+		for (const lane of geometry) {
+			expect(lane.row.width).toBeGreaterThan((list?.width ?? 0) - 20);
+			expect(
+				Math.abs(
+					lane.content.width + lane.action.width - lane.row.width,
+				),
+			).toBeLessThanOrEqual(3);
+			expect(
+				Math.abs(
+					lane.identity.width + lane.curve.width - lane.content.width,
+				),
+			).toBeLessThanOrEqual(1);
+			expect(lane.curve.width).toBeGreaterThan(190);
+			expect(lane.curve.width).toBeGreaterThan(lane.identity.width * 2);
+			expect(lane.curveSelect.width).toBeCloseTo(lane.curve.width, 0);
+			expect(lane.curveSelect.height).toBeCloseTo(lane.curve.height, 0);
+			expect(lane.action.right).toBeLessThanOrEqual(viewport.width);
+		}
+		for (const key of ["identity", "curve", "action"] as const) {
+			expect(geometry[1][key].x).toBeCloseTo(geometry[0][key].x, 0);
+			expect(geometry[2][key].x).toBeCloseTo(geometry[0][key].x, 0);
+		}
+
+		const screenshotPath = `${artifactDirectory}/${viewport.mode}-${viewport.width}x${viewport.height}.png`;
+		await page.screenshot({ path: screenshotPath });
+		await testInfo.attach(
+			`Dynamics lanes ${viewport.mode} ${viewport.width}x${viewport.height}`,
+			{ path: screenshotPath, contentType: "image/png" },
+		);
+	}
+	writeFileSync(
+		`${artifactDirectory}/geometry.json`,
+		`${JSON.stringify(measurements, null, 2)}\n`,
+	);
+
+	await page.setViewportSize({ width: 1280, height: 720 });
+	await page.goto(`${storyUrl}&globals=mode:software`);
+	await page.evaluate(() => document.fonts.ready);
+	await expect(page.locator("[data-documentation-shot]")).toHaveAttribute(
+		"data-documentation-ready",
+		"true",
+	);
+
+	const intensityIdentity = page.getByRole("button", {
+		name: "Select lane 1, Intensity",
+	});
+	const blueIdentity = page.getByRole("button", {
+		name: "Select lane 2, Blue",
+	});
+	const panCurve = page.getByRole("button", {
+		name: "Select Pan lane from curve",
+	});
+	await blueIdentity.click();
+	await expect(intensityIdentity).toHaveAttribute("aria-pressed", "false");
+	await expect(blueIdentity).toHaveAttribute("aria-pressed", "true");
+
+	await page.keyboard.down("Shift");
+	await panCurve.click();
+	await page.keyboard.up("Shift");
+	await expect(blueIdentity).toHaveAttribute("aria-pressed", "true");
+	await expect(panCurve).toHaveAttribute("aria-pressed", "true");
+
+	const keyframe = page.getByRole("button", {
+		name: "Intensity keyframe B",
+	});
+	const before = await keyframe.boundingBox();
+	expect(before).not.toBeNull();
+	const beforeLeft = await keyframe.evaluate(
+		(element) => (element as HTMLElement).style.left,
+	);
+	await page.mouse.move(
+		(before?.x ?? 0) + (before?.width ?? 0) / 2,
+		(before?.y ?? 0) + (before?.height ?? 0) / 2,
+	);
+	await page.mouse.down();
+	await page.mouse.move(
+		(before?.x ?? 0) + (before?.width ?? 0) / 2 + 48,
+		(before?.y ?? 0) + (before?.height ?? 0) / 2,
+		{ steps: 8 },
+	);
+	await page.mouse.up();
+	await expect
+		.poll(() =>
+			keyframe.evaluate((element) => (element as HTMLElement).style.left),
+		)
+		.not.toBe(beforeLeft);
+	await expect(intensityIdentity).toHaveAttribute("aria-pressed", "true");
+	await expect(blueIdentity).toHaveAttribute("aria-pressed", "false");
+	await expect(panCurve).toHaveAttribute("aria-pressed", "false");
+});
 
 test("every story family has autodocs source preview", () => {
 	const documentedTitles = new Set(docs.map((entry) => entry.title));
