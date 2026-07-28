@@ -141,6 +141,34 @@ Reasoning: this application spans Rust, TypeScript, SQL, WebGL, GPU APIs, and IP
 
 Consequence: code review and CI enforce dependency direction, shared-component boundaries, generated-type consistency and focused units. There is no arbitrary line-count rule; responsibility and comprehensibility are the standard.
 
+## ADR-013 — Keep Viz separate from the built-in Stage visualizer
+
+Status: Accepted
+
+The high-quality Viz renderer and the Stage visualizer embedded in ToskLight
+are separate runtime products. The embedded Stage remains a retained,
+lightweight WebGL renderer inside `apps/light-desktop`; it consumes a dedicated,
+bounded visualization feed and prioritizes Live/Preload latency and engine/DMX
+isolation. The Viz renderer remains a supervised Rust process with its own
+native rendering surface and quality budget.
+
+The built-in Stage does not stream video from `apps/viz-renderer`, and Viz is
+not required for ToskLight to visualize a show. The two renderers may share
+fixture definitions, model assets, semantic resolved-value contracts, and
+benchmark scenes, but they do not share runtime renderer ownership.
+
+Reasoning: a rendered video path adds process startup, GPU readback,
+encoding/decoding, and presentation latency to the desk's operational surface,
+and would make basic Stage feedback depend on the much larger Viz delivery.
+Conversely, forcing high-quality rendering into the Tauri WebView would weaken
+the dedicated renderer's quality and isolation goals.
+
+Consequence: high-quality materials, shadows, haze, volumetric occlusion,
+recording, and advanced optics belong to Viz. The embedded Stage deliberately
+keeps schematic fixture bodies, additive beams, and low-cost navigation while
+meeting the performance contract in
+[`../../refactoring/doing/14-efficient-built-in-stage-visualizer.md`](../../refactoring/doing/14-efficient-built-in-stage-visualizer.md).
+
 ## Open decisions
 
 The canonical plan maintains the complete decision list. The most consequential unresolved items are:

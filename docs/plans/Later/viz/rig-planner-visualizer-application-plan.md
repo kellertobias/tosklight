@@ -54,6 +54,14 @@ The planning model is authoritative. Neither the WebGL viewport nor the Rust ren
 
 ## 3. Scope boundaries
 
+The Viz application is not the Stage visualizer embedded in ToskLight. The
+embedded Stage remains an independently runnable, efficient Live/Preload
+surface under
+[`../../refactoring/doing/14-efficient-built-in-stage-visualizer.md`](../../refactoring/doing/14-efficient-built-in-stage-visualizer.md).
+It does not launch Viz or consume a rendered video stream from Viz. Shared
+fixture definitions, model assets, resolved-value contracts, and benchmark
+scenes are encouraged, but either renderer must run without the other.
+
 ### 3.1 Version 1 scope
 
 - Parametric rectangular room and basic stage creation.
