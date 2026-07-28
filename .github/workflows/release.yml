@@ -443,7 +443,7 @@ jobs:
         if: matrix.desktop
         shell: bash
         run: |
-          config=".artifacts/tmp/tauri-control-release.json"
+          config="$(npm run --silent artifact-path -- tmp)/tauri-control-release.json"
           node tools/write-tauri-artifact-config.mjs control "$config"
           npm run --prefix apps/light-desktop tauri:build -- --target ${{ matrix.target }} --config "$config"
 
@@ -472,7 +472,7 @@ jobs:
         if: matrix.slug == 'macos-arm64'
         shell: bash
         run: |
-          config=".artifacts/tmp/tauri-hardware-release.json"
+          config="$(npm run --silent artifact-path -- tmp)/tauri-hardware-release.json"
           node tools/write-tauri-artifact-config.mjs hardware "$config"
           npm run --prefix apps/light-hardware-controls tauri:build -- --target ${{ matrix.target }} --config "$config"
 

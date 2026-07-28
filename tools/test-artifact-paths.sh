@@ -123,7 +123,7 @@ if (LIGHT_ARTIFACTS_DIR=""; light_init_artifact_paths "$TEST_ROOT/repository" >/
   exit 1
 fi
 
-if rg -n '\$RUNNER_TEMP|os\.tmpdir\(\)|mktemp -d\)' \
+if grep -ERn '\$RUNNER_TEMP|os\.tmpdir\(\)|mktemp -d\)' \
   "$ROOT/.github" \
   "$ROOT/tools"/*.mjs \
   "$ROOT/tools/semantic-test-docs"/*.mjs \
@@ -145,7 +145,7 @@ if [[ -n "$unexpected" ]]; then
   echo "Run: npm run clean:root" >&2
   exit 1
 fi
-if rg -n --pcre2 '(?<![.[:alnum:]_-])artifacts/' \
+if grep -ERn '(^|[^.[:alnum:]_-])artifacts/' \
   "$ROOT/.github" \
   "$ROOT/package.json" \
   "$ROOT/apps"/*/package.json \
@@ -156,19 +156,21 @@ if rg -n --pcre2 '(?<![.[:alnum:]_-])artifacts/' \
   echo "error: repository-owned command references the legacy undotted artifacts directory" >&2
   exit 1
 fi
-if rg -Fq '/artifacts/' "$ROOT/.gitignore"; then
+if grep -Fq '/artifacts/' "$ROOT/.gitignore"; then
   echo "error: .gitignore hides the forbidden undotted artifact root" >&2
   exit 1
 fi
 
-rg -Fq 'target-dir = ".artifacts/build/cargo"' "$ROOT/.cargo/config.toml"
-rg -Fq 'outputDir: artifactPaths.results' "$ROOT/playwright.config.ts"
-rg -Fq 'outDir: artifactPaths.controlFrontend' "$ROOT/apps/light-desktop/vite.config.ts"
-rg -Fq 'cacheDir: `${artifactPaths.viteCache}/light-desktop`' "$ROOT/apps/light-desktop/vite.config.ts"
-rg -Fq 'outDir: artifactPaths.hardwareFrontend' "$ROOT/apps/light-hardware-controls/vite.config.ts"
-rg -Fq 'cacheDir: `${artifactPaths.viteCache}/light-hardware-controls`' "$ROOT/apps/light-hardware-controls/vite.config.ts"
-rg -Fq 'cacheDir: `${artifactPaths.viteCache}/ui-library-vitest`' "$ROOT/apps/ui-library/vitest.config.ts"
-rg -Fq 'cacheDir: `${artifactPaths.viteCache}/ui-library-storybook`' "$ROOT/apps/ui-library/storybook/config/main.ts"
-rg -Fq 'cacheDir: `${artifactPaths.viteCache}/root`' "$ROOT/vitest.config.ts"
+grep -Fq 'target-dir = ".artifacts/build/cargo"' "$ROOT/.cargo/config.toml"
+grep -Fq 'outputDir: artifactPaths.results' "$ROOT/playwright.config.ts"
+grep -Fq 'outDir: artifactPaths.controlFrontend' "$ROOT/apps/light-desktop/vite.config.ts"
+grep -Fq 'cacheDir: `${artifactPaths.viteCache}/light-desktop`' "$ROOT/apps/light-desktop/vite.config.ts"
+grep -Fq 'outDir: artifactPaths.hardwareFrontend' "$ROOT/apps/light-hardware-controls/vite.config.ts"
+grep -Fq 'cacheDir: `${artifactPaths.viteCache}/light-hardware-controls`' "$ROOT/apps/light-hardware-controls/vite.config.ts"
+grep -Fq 'cacheDir: `${artifactPaths.viteCache}/ui-library-vitest`' "$ROOT/apps/ui-library/vitest.config.ts"
+grep -Fq 'cacheDir: `${artifactPaths.viteCache}/ui-library-storybook`' "$ROOT/apps/ui-library/storybook/config/main.ts"
+grep -Fq 'cacheDir: `${artifactPaths.viteCache}/root`' "$ROOT/vitest.config.ts"
+grep -Fq 'config="$(npm run --silent artifact-path -- tmp)/tauri-control-release.json"' "$ROOT/.github/workflows/release.yml"
+grep -Fq 'config="$(npm run --silent artifact-path -- tmp)/tauri-hardware-release.json"' "$ROOT/.github/workflows/release.yml"
 
 echo "Artifact path, migration, override, and cleanup safety tests passed."
