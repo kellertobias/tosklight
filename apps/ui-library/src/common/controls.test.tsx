@@ -474,6 +474,29 @@ describe("shared controls", () => {
 		fireEvent.click(screen.getByRole("button", { name: /Universe/ }));
 		expect(screen.getByRole("listbox").closest("[data-modal-id]")).toBe(modal);
 	});
+	it("supports a destructive picker option without coloring its closed trigger", () => {
+		render(
+			<SelectField
+				ariaLabel="Lane actions"
+				value="Lane"
+				options={[
+					{ value: "change", label: "✎ Change attribute" },
+					{
+						value: "delete",
+						label: "⌫ Delete lane",
+						variant: "danger",
+					},
+				]}
+				onChange={() => undefined}
+			/>,
+		);
+		const trigger = screen.getByRole("button", { name: "Lane actions" });
+		expect(trigger).not.toHaveClass("ui-danger");
+		fireEvent.click(trigger);
+		expect(screen.getByRole("option", { name: "⌫ Delete lane" })).toHaveClass(
+			"ui-danger",
+		);
+	});
 	it("dismisses the touch picker with escape", () => {
 		render(
 			<SelectField

@@ -44,6 +44,7 @@ export interface TouchEncoderProps {
 	onStep(delta: number, undoGroup?: string | null): void;
 	onSet(value: number): void;
 	onSetRange?(points: number[]): void;
+	onPresetSelect?(value: string): void;
 	onRelease?(): void;
 }
 
@@ -223,6 +224,7 @@ function TouchEncoderEditor({
 	onInput,
 	onSubmit,
 	onClose,
+	onPresetSelect,
 	onRelease,
 }: {
 	label: string;
@@ -234,6 +236,7 @@ function TouchEncoderEditor({
 	onInput(value: string): void;
 	onSubmit(value?: string): void;
 	onClose(): void;
+	onPresetSelect?(value: string): void;
 	onRelease?(): void;
 }) {
 	return (
@@ -248,6 +251,7 @@ function TouchEncoderEditor({
 			allowThrough={allowThrough}
 			presets={presets}
 			presetsOnly={presetsOnly}
+			onPresetSelect={onPresetSelect}
 			onRelease={canRelease ? onRelease : undefined}
 		/>
 	);
@@ -387,6 +391,7 @@ export function TouchEncoder({
 	onStep,
 	onSet,
 	onSetRange,
+	onPresetSelect,
 	onRelease,
 }: TouchEncoderProps) {
 	const [editing, setEditing] = useState(false);
@@ -501,6 +506,7 @@ export function TouchEncoder({
 					onInput={setInputValue}
 					onSubmit={submit}
 					onClose={() => setEditing(false)}
+					onPresetSelect={onPresetSelect}
 					onRelease={
 						onRelease
 							? () => {

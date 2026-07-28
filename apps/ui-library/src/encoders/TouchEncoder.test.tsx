@@ -268,6 +268,39 @@ describe("TouchEncoder", () => {
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
 
+	it("can select source presets without parsing their identifiers as numbers", () => {
+		const onPresetSelect = vi.fn();
+		const { onSet } = renderEncoder({
+			presets: {
+				selectedValue: "current",
+				groups: [
+					{
+						label: "Source",
+						options: [{ value: "current", label: "Current" }],
+					},
+					{
+						label: "Position",
+						options: [{ value: "preset:2.4", label: "Center" }],
+					},
+				],
+			},
+			onPresetSelect,
+		});
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Show presets" }));
+		expect(screen.getByRole("button", { name: "Current" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Center" }));
+
+		expect(onPresetSelect).toHaveBeenCalledWith("preset:2.4");
+		expect(onSet).not.toHaveBeenCalled();
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+	});
+
 	it("offers a background-free chevron surface and direct preset chooser for discrete values", () => {
 		const { onSet, onStep } = renderEncoder({
 			display: "Loop",

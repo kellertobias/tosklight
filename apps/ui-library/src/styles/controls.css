@@ -70,6 +70,28 @@
 	text-align: left;
 }
 
+.encoder-group-paged .family-label-full,
+.encoder-group-paged .family-label-compact {
+	align-items: baseline;
+	gap: 0.35em;
+}
+
+.encoder-group-paged .family-label-full {
+	display: inline-flex;
+}
+
+.encoder-group-page {
+	display: inline-block;
+	min-width: 3ch;
+	margin-left: 0.35em;
+	color: var(--muted);
+	font-size: 0.68em;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	text-align: center;
+	white-space: nowrap;
+}
+
 .ui-button-icon {
 	display: inline-flex;
 	align-items: center;
@@ -233,6 +255,83 @@
 	background: #153541;
 	color: var(--cyan);
 	box-shadow: 0 1px 8px #0008;
+}
+
+.ui-cycling-value-toggle.ui-button {
+	width: 7.5rem;
+	min-height: 3rem;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding: 2px;
+	overflow: hidden;
+	border-radius: 6px;
+	background: #090d10;
+	white-space: nowrap;
+}
+
+.ui-cycling-value-toggle.ui-button:not(:disabled):active {
+	transform: none;
+}
+
+.ui-cycling-value-option {
+	width: 100%;
+	height: 0.62rem;
+	display: grid;
+	flex: 0 0 0.62rem;
+	place-items: center;
+	overflow: hidden;
+	border-radius: 3px;
+	color: #667681;
+	font-size: 0.48rem;
+	font-weight: 700;
+	line-height: 1;
+	transition:
+		flex-basis 120ms ease,
+		height 120ms ease,
+		background 120ms ease,
+		color 120ms ease,
+		font-size 120ms ease;
+}
+
+.ui-cycling-value-option.is-active {
+	height: 1.35rem;
+	flex-basis: 1.35rem;
+	background: #153541;
+	color: var(--cyan);
+	font-size: 0.68rem;
+	box-shadow: 0 1px 6px #0008;
+}
+
+.ui-faded-divider {
+	display: block;
+	flex: none;
+	opacity: 0.72;
+	pointer-events: none;
+}
+
+.ui-faded-divider.is-horizontal {
+	width: 100%;
+	height: 2px;
+	background: linear-gradient(
+		to right,
+		transparent,
+		color-mix(in srgb, var(--cyan) 76%, var(--muted)) 28%,
+		color-mix(in srgb, var(--cyan) 76%, var(--muted)) 72%,
+		transparent
+	);
+}
+
+.ui-faded-divider.is-vertical {
+	width: 2px;
+	height: 100%;
+	background: linear-gradient(
+		to bottom,
+		transparent,
+		color-mix(in srgb, var(--cyan) 76%, var(--muted)) 28%,
+		color-mix(in srgb, var(--cyan) 76%, var(--muted)) 72%,
+		transparent
+	);
 }
 
 .ui-check-control,

@@ -125,6 +125,26 @@
   box-shadow: inset 0 -3px 0 var(--cyan);
 }
 
+.ui-window-action-group > .ui-button.ui-success {
+  background: #10351b;
+  color: var(--green);
+}
+
+.ui-window-action-group > .ui-button.ui-danger {
+  background: #301417;
+  color: var(--red);
+}
+
+.ui-window-action-group > .ui-button.ui-success:hover:not(:disabled) {
+  background: #174a25;
+  box-shadow: inset 0 -3px 0 var(--green);
+}
+
+.ui-window-action-group > .ui-button.ui-danger:hover:not(:disabled) {
+  background: #46191d;
+  box-shadow: inset 0 -3px 0 var(--red);
+}
+
 .ui-window-settings-action > .ui-button {
   min-width: 88px;
 }

@@ -37,4 +37,29 @@ describe("EncoderGroupTabs", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Speed" }));
 		expect(onChange).toHaveBeenLastCalledWith("speed", 1);
 	});
+
+	it("keeps every paged group marker visible with fixed-width counter styling", () => {
+		render(
+			<EncoderGroupTabs
+				groups={[
+					{ id: "curves", label: "Curves", pageCount: 2 },
+					{ id: "shape", label: "Shape", pageCount: 2 },
+				]}
+				activeGroup="curves"
+				page={2}
+				onChange={() => undefined}
+			/>,
+		);
+
+		const curves = screen.getByRole("button", { name: "Curves (2/2)" });
+		const shape = screen.getByRole("button", { name: "Shape (1/2)" });
+		expect(curves).toHaveClass("encoder-group-paged");
+		expect(shape).toHaveClass("encoder-group-paged");
+		expect(
+			curves.querySelector(".family-label-full .encoder-group-page"),
+		).toHaveTextContent("2/2");
+		expect(
+			shape.querySelector(".family-label-full .encoder-group-page"),
+		).toHaveTextContent("1/2");
+	});
 });

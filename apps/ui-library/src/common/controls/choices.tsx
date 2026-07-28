@@ -18,6 +18,7 @@ import { createPortal } from "react-dom";
 import { activeModalPortalRoot } from "../ModalPortal";
 import {
 	Button,
+	type ButtonVariant,
 	type ControlSize,
 	FormField,
 	type LabelPlacement,
@@ -27,6 +28,7 @@ export interface SelectOption<T extends string = string> {
 	value: T;
 	label: ReactNode;
 	disabled?: boolean;
+	variant?: ButtonVariant;
 }
 
 export interface MultiValueToggleProps<T extends string> {
@@ -204,6 +206,7 @@ function SelectOptions<T extends string>({
 						id={`${id}-option-${index}`}
 						aria-selected={option.value === value}
 						active={option.value === value}
+						variant={option.variant}
 						className={index === active ? "is-highlighted" : ""}
 						disabled={option.disabled}
 						onPointerMove={() => setActive(index)}

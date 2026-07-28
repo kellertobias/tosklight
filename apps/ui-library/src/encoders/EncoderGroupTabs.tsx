@@ -40,17 +40,14 @@ export function EncoderGroupTabs<T extends string>({
 				const active = group.id === activeGroup;
 				const visiblePage = active ? Math.min(Math.max(page, 1), pageCount) : 1;
 				const fullLabel =
-					active && pageCount > 1
+					pageCount > 1
 						? `${group.label} (${visiblePage}/${pageCount})`
 						: group.label;
 				const compactBase = group.compactLabel ?? group.label;
-				const compactLabel =
-					active && pageCount > 1
-						? `${compactBase} (${visiblePage}/${pageCount})`
-						: compactBase;
 				return (
 					<Button
 						key={group.id}
+						className={pageCount > 1 ? "encoder-group-paged" : ""}
 						aria-label={fullLabel}
 						active={active}
 						onClick={() =>
@@ -61,10 +58,20 @@ export function EncoderGroupTabs<T extends string>({
 						}
 					>
 						<span className="family-label-full" aria-hidden="true">
-							{fullLabel}
+							{group.label}
+							{pageCount > 1 && (
+								<small className="encoder-group-page">
+									{visiblePage}/{pageCount}
+								</small>
+							)}
 						</span>
 						<span className="family-label-compact" aria-hidden="true">
-							{compactLabel}
+							{compactBase}
+							{pageCount > 1 && (
+								<small className="encoder-group-page">
+									{visiblePage}/{pageCount}
+								</small>
+							)}
 						</span>
 					</Button>
 				);

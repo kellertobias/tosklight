@@ -14,6 +14,7 @@ import {
 import { createPortal } from "react-dom";
 import {
 	Button,
+	type ButtonVariant,
 	ModalTitleBar,
 	SearchBar,
 	type SearchFeatureProps,
@@ -33,6 +34,8 @@ export interface WindowAction {
 	disabled?: boolean;
 	ariaLabel?: string;
 	onLongPress?: () => void;
+	variant?: ButtonVariant;
+	className?: string;
 }
 export interface WindowSettingsTab {
 	id: string;
@@ -60,7 +63,8 @@ function WindowActionButton({ action }: { action: WindowAction }) {
 		<Button
 			aria-label={action.ariaLabel}
 			disabled={action.disabled}
-			className={action.active ? "active" : ""}
+			variant={action.variant}
+			className={`${action.active ? "active" : ""} ${action.className ?? ""}`.trim()}
 			onPointerDown={
 				action.onLongPress &&
 				(() => {

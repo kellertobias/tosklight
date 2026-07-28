@@ -36,6 +36,7 @@ export interface HardwareEncoderDisplayProps {
 	onSecondaryEditRange?: (points: number[]) => void;
 	canRelease?: boolean;
 	presets?: ModalNumberPresetConfig;
+	onPresetSelect?: (value: string) => void;
 	onRelease?: () => void;
 }
 
@@ -96,6 +97,7 @@ function HardwareEncoderEditor({
 	onSecondaryEditRange,
 	canRelease,
 	presets,
+	onPresetSelect,
 	onRelease,
 }: {
 	slot: number;
@@ -110,6 +112,7 @@ function HardwareEncoderEditor({
 	onSecondaryEditRange?: (points: number[]) => void;
 	canRelease: boolean;
 	presets?: ModalNumberPresetConfig;
+	onPresetSelect?: (value: string) => void;
 	onRelease?: () => void;
 }) {
 	const selectedTarget = editor.target === "secondary" ? secondary : target;
@@ -133,6 +136,7 @@ function HardwareEncoderEditor({
 				editor.target === "primary" ? onEditRange : onSecondaryEditRange,
 			)}
 			presets={presets}
+			onPresetSelect={onPresetSelect}
 			beforeTitle={
 				editor.selectable && secondary ? (
 					<div className="hardware-encoder-target-selector">
@@ -182,6 +186,7 @@ export const HardwareEncoderDisplayView = forwardRef<
 		onSecondaryEditRange,
 		canRelease = false,
 		presets,
+		onPresetSelect,
 		onRelease,
 	},
 	ref,
@@ -277,6 +282,7 @@ export const HardwareEncoderDisplayView = forwardRef<
 					onSecondaryEditRange={onSecondaryEditRange}
 					canRelease={canRelease}
 					presets={presets}
+					onPresetSelect={onPresetSelect}
 					onRelease={onRelease}
 				/>
 			)}

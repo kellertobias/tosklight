@@ -257,6 +257,17 @@
   box-shadow: inset 4px 0 var(--cyan);
 }
 
+.ui-select-options .ui-button.ui-danger {
+  border-color: #743136;
+  background: #301417;
+  color: var(--red);
+}
+
+.ui-select-options .ui-button.ui-danger.is-highlighted {
+  border-color: var(--red);
+  background: #46191d;
+}
+
 .ui-visually-hidden-select {
   position: absolute !important;
   width: 1px !important;

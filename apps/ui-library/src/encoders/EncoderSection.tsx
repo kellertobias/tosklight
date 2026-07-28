@@ -33,6 +33,7 @@ export interface EncoderSectionItem {
 	indexed?: boolean;
 	canRelease?: boolean;
 	presets?: ModalNumberPresetConfig;
+	range?: boolean;
 	touchInteraction?: TouchEncoderInteraction;
 }
 
@@ -47,6 +48,7 @@ export interface EncoderSectionCallbacks {
 	onRelativeChange?(id: string, delta: number, undoGroup?: string | null): void;
 	onAbsoluteChange?(id: string, value: number): void;
 	onRangeChange?(id: string, points: number[]): void;
+	onPresetSelect?(id: string, value: string): void;
 	onRelease?(id: string): void;
 	onHardwareDisplayRef?(
 		slot: number,
@@ -155,8 +157,13 @@ function EncoderItem({
 				}
 				onSet={(value) => callbacks.onAbsoluteChange?.(encoder.id, value)}
 				onSetRange={
-					callbacks.onRangeChange
+					encoder.range && callbacks.onRangeChange
 						? (points) => callbacks.onRangeChange?.(encoder.id, points)
+						: undefined
+				}
+				onPresetSelect={
+					callbacks.onPresetSelect
+						? (value) => callbacks.onPresetSelect?.(encoder.id, value)
 						: undefined
 				}
 				onRelease={
@@ -196,9 +203,14 @@ function EncoderItem({
 			}
 			canRelease={encoder.canRelease}
 			presets={encoder.presets}
+			onPresetSelect={
+				callbacks.onPresetSelect
+					? (value) => callbacks.onPresetSelect?.(encoder.id, value)
+					: undefined
+			}
 			onEdit={absoluteHandler(encoder, callbacks)}
 			onEditRange={
-				callbacks.onRangeChange
+				encoder.range && callbacks.onRangeChange
 					? (points) => callbacks.onRangeChange?.(encoder.id, points)
 					: undefined
 			}

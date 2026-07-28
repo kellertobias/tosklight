@@ -45,6 +45,7 @@ export interface ModalNumberEditorProps {
 	fader?: ModalNumberFaderConfig;
 	presets?: ModalNumberPresetConfig;
 	presetsOnly?: boolean;
+	onPresetSelect?(value: string): void;
 	unit?: ReactNode;
 	onRelease?(): void;
 	releaseLabel?: string;
@@ -108,6 +109,7 @@ export function ModalNumberEditor({
 	fader,
 	presets,
 	presetsOnly = false,
+	onPresetSelect,
 	unit,
 	onRelease,
 	releaseLabel = "Release",
@@ -198,6 +200,11 @@ export function ModalNumberEditor({
 					<ModalNumberPresets
 						config={presets}
 						onSelect={(next) => {
+							if (onPresetSelect) {
+								onPresetSelect(next);
+								onClose();
+								return;
+							}
 							onChange(next);
 							onSubmit(next);
 						}}

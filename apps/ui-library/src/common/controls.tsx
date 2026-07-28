@@ -5,6 +5,8 @@
  * can keep one concise import without coupling to the internal module layout.
  */
 export * from "./controls/choices";
+export * from "./controls/CyclingValueToggle";
+export * from "./controls/FadedDivider";
 export * from "./controls/formFields";
 export * from "./controls/foundation";
 export * from "./controls/FileDropField";
