@@ -17,7 +17,7 @@ cp "$ROOT/tools/artifact-layout.conf" "$TEST_ROOT/repository/tools/artifact-layo
 LIGHT_ARTIFACTS_DIR="$TEST_ROOT/artifacts with spaces"
 unset LIGHT_DATA_DIR CARGO_TARGET_DIR LIGHT_CONTROL_FRONTEND_DIR LIGHT_HARDWARE_FRONTEND_DIR
 unset LIGHT_STORYBOOK_UI_DIR LIGHT_PNPM_STORE_DIR LIGHT_VITE_CACHE_DIR LIGHT_PYTHON_CACHE_DIR
-unset LIGHT_MANUAL_ROOT LIGHT_ICON_CONTACT_SHEETS_DIR LIGHT_RELEASE_DIR LIGHT_RUNTIME_DATA_DIR
+unset LIGHT_MANUAL_ROOT LIGHT_ICON_CONTACT_SHEETS_DIR LIGHT_RELEASE_DIR LIGHT_PERFORMANCE_DIR LIGHT_RUNTIME_DATA_DIR
 unset LIGHT_TEST_COVERAGE_DIR LIGHT_PLAYWRIGHT_REPORT_DIR LIGHT_TEST_RESULTS_DIR
 unset LIGHT_VISUAL_INSPECTION_DIR LIGHT_TMP_DIR LIGHT_PAGES_DIR LIGHT_SAFARI_DIR
 light_init_artifact_paths "$TEST_ROOT/repository"
@@ -29,6 +29,7 @@ light_init_artifact_paths "$TEST_ROOT/repository"
 [[ "$LIGHT_PYTHON_CACHE_DIR" == "$TEST_ROOT/artifacts with spaces/cache/python" ]]
 [[ "$LIGHT_MANUAL_ROOT" == "$TEST_ROOT/artifacts with spaces/generated/manual" ]]
 [[ "$LIGHT_RELEASE_DIR" == "$TEST_ROOT/artifacts with spaces/release" ]]
+[[ "$LIGHT_PERFORMANCE_DIR" == "$TEST_ROOT/artifacts with spaces/performance" ]]
 [[ "$LIGHT_TEST_RESULTS_DIR" == "$TEST_ROOT/artifacts with spaces/test/results" ]]
 [[ "$LIGHT_PLAYWRIGHT_REPORT_DIR" == "$TEST_ROOT/artifacts with spaces/test/playwright-report" ]]
 [[ "$LIGHT_TMP_DIR" == "$TEST_ROOT/artifacts with spaces/tmp" ]]
@@ -36,6 +37,7 @@ light_init_artifact_paths "$TEST_ROOT/repository"
 [[ "$TMPDIR" == "$LIGHT_TMP_DIR" && "$TMP" == "$LIGHT_TMP_DIR" && "$TEMP" == "$LIGHT_TMP_DIR" ]]
 [[ "$PYTHONPYCACHEPREFIX" == "$LIGHT_PYTHON_CACHE_DIR" ]]
 [[ "$(node -e 'const { artifactPaths } = require(process.argv[1]); process.stdout.write(artifactPaths.tmp)' "$ROOT/tools/artifact-paths.cjs")" == "$LIGHT_TMP_DIR" ]]
+[[ "$(node -e 'const { artifactPaths } = require(process.argv[1]); process.stdout.write(artifactPaths.performance)' "$ROOT/tools/artifact-paths.cjs")" == "$LIGHT_PERFORMANCE_DIR" ]]
 [[ "$(PYTHONPATH="$ROOT/tools" python3 -c 'from artifact_paths import artifact_path; print(artifact_path("LIGHT_TMP_DIR", "TMP_ROOT"))')" == "$LIGHT_TMP_DIR" ]]
 
 printf root-file > "$TEST_ROOT/repository/README.md"

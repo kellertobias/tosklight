@@ -70,6 +70,13 @@ export interface FrontendStageRenderDiagnostic {
 	textures: number;
 }
 
+export interface FrontendStageModelLoadDiagnostic {
+	startedAt: number;
+	finishedAt: number | null;
+	durationMs: number | null;
+	status: "loading" | "ready" | "error";
+}
+
 export interface FrontendStageFrameDiagnostic {
 	lane: "normal" | "preload";
 	sourceFrame: number | null;
@@ -89,6 +96,11 @@ export interface FrontendStageDiagnostics {
 	visualizationRequests: readonly FrontendStageVisualizationDiagnostic[];
 	frames: readonly FrontendStageFrameDiagnostic[];
 	sceneBuilds: readonly FrontendStageSceneBuildDiagnostic[];
+	modelLoads: readonly FrontendStageModelLoadDiagnostic[];
+	modelCacheHits: number;
+	modelCacheMisses: number;
+	modelClones: number;
+	modelCacheDisposals: number;
 	renders: readonly FrontendStageRenderDiagnostic[];
 	sceneDisposals: number;
 	rendererContextsCreated: number;
@@ -134,8 +146,13 @@ class FrontendPerformanceDiagnostics {
 		[];
 	private readonly stageFrames: FrontendStageFrameDiagnostic[] = [];
 	private readonly stageSceneBuilds: FrontendStageSceneBuildDiagnostic[] = [];
+	private readonly stageModelLoads: FrontendStageModelLoadDiagnostic[] = [];
 	private readonly stageRenders: FrontendStageRenderDiagnostic[] = [];
 	private stageSceneDisposals = 0;
+	private stageModelCacheHits = 0;
+	private stageModelCacheMisses = 0;
+	private stageModelClones = 0;
+	private stageModelCacheDisposals = 0;
 	private stageRendererContextsCreated = 0;
 	private stageRendererContextsDisposed = 0;
 	private stageRafCallbacks = 0;
@@ -300,7 +317,11 @@ class FrontendPerformanceDiagnostics {
 		};
 		pushBounded(this.stageVisualizationRequests, sample, 2_048);
 		let finished = false;
-		return (result?: { generated_at: string }, error?: unknown) => {
+		return (
+			result?: { generated_at: string },
+			error?: unknown,
+			payloadBytes?: number,
+		) => {
 			if (finished) return;
 			finished = true;
 			const receivedAt = Date.now();
@@ -308,7 +329,7 @@ class FrontendPerformanceDiagnostics {
 			sample.durationMs = now() - sample.startedAt;
 			sample.status = error == null ? "ready" : "error";
 			if (!result) return;
-			sample.payloadBytes = serializedModelBytes(result);
+			sample.payloadBytes = payloadBytes ?? serializedModelBytes(result);
 			sample.sourceGeneratedAt = result.generated_at;
 			const sourceAt = Date.parse(result.generated_at);
 			sample.sourceAgeMs = Number.isFinite(sourceAt)
@@ -319,6 +340,37 @@ class FrontendPerformanceDiagnostics {
 
 	recordStageSceneBuild(sample: FrontendStageSceneBuildDiagnostic) {
 		pushBounded(this.stageSceneBuilds, sample, 1_024);
+	}
+
+	beginStageModelLoad() {
+		const sample: FrontendStageModelLoadDiagnostic = {
+			startedAt: now(),
+			finishedAt: null,
+			durationMs: null,
+			status: "loading",
+		};
+		pushBounded(this.stageModelLoads, sample, 1_024);
+		let finished = false;
+		return (error?: unknown) => {
+			if (finished) return;
+			finished = true;
+			sample.finishedAt = now();
+			sample.durationMs = sample.finishedAt - sample.startedAt;
+			sample.status = error == null ? "ready" : "error";
+		};
+	}
+
+	recordStageModelCacheLookup(hit: boolean) {
+		if (hit) this.stageModelCacheHits++;
+		else this.stageModelCacheMisses++;
+	}
+
+	recordStageModelClone() {
+		this.stageModelClones++;
+	}
+
+	recordStageModelCacheDisposal() {
+		this.stageModelCacheDisposals++;
 	}
 
 	recordStageFrameReceived({
@@ -445,6 +497,11 @@ class FrontendPerformanceDiagnostics {
 				),
 				frames: this.stageFrames.map((sample) => ({ ...sample })),
 				sceneBuilds: this.stageSceneBuilds.map((sample) => ({ ...sample })),
+				modelLoads: this.stageModelLoads.map((sample) => ({ ...sample })),
+				modelCacheHits: this.stageModelCacheHits,
+				modelCacheMisses: this.stageModelCacheMisses,
+				modelClones: this.stageModelClones,
+				modelCacheDisposals: this.stageModelCacheDisposals,
 				renders: this.stageRenders.map((sample) => ({ ...sample })),
 				sceneDisposals: this.stageSceneDisposals,
 				rendererContextsCreated: this.stageRendererContextsCreated,

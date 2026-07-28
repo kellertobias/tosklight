@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { frontendPerformanceDiagnostics } from "../features/frontendWarmup/diagnostics";
 import type { VisualizationRuntimeScope } from "../features/visualizationRuntime/contracts";
 import { VisualizationRuntimeProtocolError } from "../features/visualizationRuntime/transport";
 import {
@@ -51,6 +52,9 @@ class FakeWebSocket extends EventTarget {
 
 describe("HttpVisualizationRuntimeTransport", () => {
 	it("loads only the exact v1 Visualization endpoint with authenticated headers", async () => {
+		const diagnosticCount =
+			frontendPerformanceDiagnostics.snapshot().stage.visualizationRequests
+				.length;
 		const fetch = vi.fn(
 			async (
 				_input: Parameters<typeof globalThis.fetch>[0],
@@ -72,6 +76,18 @@ describe("HttpVisualizationRuntimeTransport", () => {
 		expect(headers.get("x-tosk-show")).toBe(SHOW_ID);
 		expect(fetch.mock.calls[0]?.[0]).not.toContain("bootstrap");
 		expect(fetch.mock.calls[0]?.[0]).not.toContain("playbacks");
+		expect(
+			frontendPerformanceDiagnostics.snapshot().stage.visualizationRequests[
+				diagnosticCount
+			],
+		).toMatchObject({
+			lane: "normal",
+			status: "ready",
+			payloadBytes: new TextEncoder().encode(JSON.stringify(snapshot(false)))
+				.byteLength,
+			receivedAt: expect.any(Number),
+			durationMs: expect.any(Number),
+		});
 	});
 
 	it("keeps the preload lane on its independent query", async () => {
@@ -91,6 +107,43 @@ describe("HttpVisualizationRuntimeTransport", () => {
 		expect(fetch.mock.calls[0]?.[0]).toBe(
 			"http://desk.test/api/v2/output/visualization?preload=true",
 		);
+	});
+
+	it("correlates optional HTTP source metadata without adding it to the domain snapshot", async () => {
+		const baseline = frontendPerformanceDiagnostics.snapshot().stage;
+		const frameCount = baseline.frames.length;
+		const requestCount = baseline.visualizationRequests.length;
+		const sourceTimestamp = new Date(Date.now() - 25).toISOString();
+		const fetch = vi.fn(async () =>
+			response({
+				...snapshot(false),
+				generated_at: new Date().toISOString(),
+				source_frame: 42,
+				source_timestamp: sourceTimestamp,
+			}),
+		);
+
+		const decoded = await createTransport(fetch).loadSnapshot(scope, "normal");
+
+		expect(decoded).not.toHaveProperty("source_frame");
+		expect(decoded).not.toHaveProperty("source_timestamp");
+		expect(
+			frontendPerformanceDiagnostics.snapshot().stage.visualizationRequests[
+				requestCount
+			],
+		).toMatchObject({
+			sourceGeneratedAt: sourceTimestamp,
+			sourceAgeMs: expect.any(Number),
+		});
+		expect(
+			frontendPerformanceDiagnostics.snapshot().stage.frames[frameCount],
+		).toMatchObject({
+			lane: "normal",
+			sourceFrame: 42,
+			sourceGeneratedAt: sourceTimestamp,
+			sourceToReceiveMs: expect.any(Number),
+			projectionToReceiveMs: expect.any(Number),
+		});
 	});
 
 	it("multiplexes claimed lanes over the dedicated authenticated stream", () => {
@@ -288,7 +341,23 @@ describe("decodeVisualizationRuntimeSnapshot", () => {
 	it("tolerates unknown fields for forward-compatible Visualization payloads", () => {
 		expect(
 			decodeVisualizationRuntimeSnapshot(
-				{ ...snapshot(false), future_projection: { version: 3 } },
+				{
+					...snapshot(false),
+					future_projection: { version: 3 },
+					values: [
+						{
+							...(snapshot(false).values as Array<Record<string, unknown>>)[0],
+							future_value_metadata: { source: "new-server" },
+						},
+					],
+					profile_output_values: [
+						{
+							...(snapshot(false)
+								.profile_output_values as Array<Record<string, unknown>>)[0],
+							future_profile_metadata: true,
+						},
+					],
+				},
 				"normal",
 			),
 		).toMatchObject({ revision: 7, preload: false });

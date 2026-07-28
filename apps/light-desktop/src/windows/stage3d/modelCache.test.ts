@@ -4,6 +4,10 @@ import { StageModelCache } from "./modelCache";
 
 describe("StageModelCache", () => {
 	it("loads one decoded template, clones instances, and owns final disposal", async () => {
+		const { frontendPerformanceDiagnostics } = await import(
+			"../../features/frontendWarmup/diagnostics"
+		);
+		const baseline = frontendPerformanceDiagnostics.snapshot().stage;
 		const geometry = new THREE.BoxGeometry(1, 1, 1);
 		const material = new THREE.MeshStandardMaterial();
 		const geometryDispose = vi.spyOn(geometry, "dispose");
@@ -32,5 +36,13 @@ describe("StageModelCache", () => {
 		await expect(cache.clone("fixture.glb")).rejects.toThrow(
 			"Stage model cache is closed",
 		);
+		const measured = frontendPerformanceDiagnostics.snapshot().stage;
+		expect(measured.modelCacheMisses - baseline.modelCacheMisses).toBe(1);
+		expect(measured.modelCacheHits - baseline.modelCacheHits).toBe(1);
+		expect(measured.modelClones - baseline.modelClones).toBe(2);
+		expect(measured.modelCacheDisposals - baseline.modelCacheDisposals).toBe(1);
+		expect(measured.modelLoads.slice(baseline.modelLoads.length)).toEqual([
+			expect.objectContaining({ status: "ready", durationMs: expect.any(Number) }),
+		]);
 	});
 });

@@ -128,6 +128,12 @@ describe("frontend performance diagnostics", () => {
 			geometryCount: 20,
 			materialCount: 12,
 		});
+		const finishModelLoad = diagnostics.beginStageModelLoad();
+		diagnostics.recordStageModelCacheLookup(false);
+		diagnostics.recordStageModelCacheLookup(true);
+		finishModelLoad();
+		diagnostics.recordStageModelClone();
+		diagnostics.recordStageModelCacheDisposal();
 		diagnostics.recordStageRendererCreated();
 		diagnostics.recordStageRafCallback();
 		diagnostics.recordStageRender({
@@ -162,6 +168,11 @@ describe("frontend performance diagnostics", () => {
 				}),
 			],
 			sceneBuilds: [expect.objectContaining({ fixtureCount: 49 })],
+			modelLoads: [expect.objectContaining({ status: "ready" })],
+			modelCacheHits: 1,
+			modelCacheMisses: 1,
+			modelClones: 1,
+			modelCacheDisposals: 1,
 			renders: [expect.objectContaining({ calls: 8 })],
 			sceneDisposals: 1,
 			rendererContextsCreated: 1,

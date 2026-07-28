@@ -2183,6 +2183,21 @@ impl OutputResource {
         self.visualization_frames.metrics()
     }
 
+    pub(super) fn record_visualization_snapshot_route(
+        &self,
+        projection_duration: Duration,
+        serialization_duration: Duration,
+        payload_bytes: u64,
+        source: Option<&super::visualization_frame::PublishedVisualizationFrame>,
+    ) {
+        self.visualization_frames.record_snapshot_route(
+            projection_duration,
+            serialization_duration,
+            payload_bytes,
+            source,
+        );
+    }
+
     pub(super) fn snapshot(&self) -> Arc<EngineSnapshot> {
         self.engine.snapshot()
     }

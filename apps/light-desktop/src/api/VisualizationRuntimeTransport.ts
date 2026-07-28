@@ -16,7 +16,6 @@ import {
 	arrayAt,
 	booleanAt,
 	enumAt,
-	exactRecordAt,
 	integerAt,
 	nullable,
 	numberAt,
@@ -73,9 +72,21 @@ export class HttpVisualizationRuntimeTransport
 			throw new VisualizationRuntimeHttpError(asError(reason).message, 0);
 		}
 		try {
-			const value = await responseValue(response);
-			const decoded = decodeVisualizationRuntimeSnapshot(value, lane);
-			finishDiagnostic(decoded);
+			const payload = await responseValue(response);
+			const source = decodeVisualizationHttpSource(payload.value);
+			const decoded = decodeVisualizationRuntimeSnapshot(payload.value, lane);
+			finishDiagnostic(
+				{ generated_at: source.timestamp ?? decoded.generated_at },
+				undefined,
+				payload.bytes,
+			);
+			if (source.timestamp)
+				frontendPerformanceDiagnostics.recordStageFrameReceived({
+					lane,
+					sourceFrame: source.frame,
+					sourceGeneratedAt: source.timestamp,
+					publishedAt: decoded.generated_at,
+				});
 			return decoded;
 		} catch (reason) {
 			finishDiagnostic(undefined, reason);
@@ -377,10 +388,7 @@ function applyVisualizationDelta(
 
 function decodeRemovedValueKeys(value: unknown, path: string) {
 	return arrayAt(value, path).map((entry, index) => {
-		const key = exactRecordAt(entry, `${path}[${index}]`, [
-			"fixture_id",
-			"attribute",
-		]);
+		const key = recordAt(entry, `${path}[${index}]`);
 		return `${stringAt(key.fixture_id, `${path}[${index}].fixture_id`)}\u0000${stringAt(
 			key.attribute,
 			`${path}[${index}].attribute`,
@@ -435,6 +443,20 @@ export function decodeVisualizationRuntimeSnapshot(
 			snapshot.profile_output_values,
 			"$.profile_output_values",
 		),
+	};
+}
+
+function decodeVisualizationHttpSource(value: unknown) {
+	const snapshot = recordAt(value, "$");
+	return {
+		frame:
+			snapshot.source_frame === undefined
+				? null
+				: integerAt(snapshot.source_frame, "$.source_frame"),
+		timestamp:
+			snapshot.source_timestamp === undefined
+				? null
+				: timestampAt(snapshot.source_timestamp, "$.source_timestamp"),
 	};
 }
 
@@ -516,11 +538,7 @@ function decodeVisualizationValue(
 	attribute: string;
 	value: AttributeValue;
 } {
-	const entry = exactRecordAt(value, path, [
-		"fixture_id",
-		"attribute",
-		"value",
-	]);
+	const entry = recordAt(value, path);
 	return {
 		fixture_id: stringAt(entry.fixture_id, `${path}.fixture_id`),
 		attribute: stringAt(entry.attribute, `${path}.attribute`),
@@ -549,13 +567,14 @@ function normalizedAt(value: unknown, path: string) {
 
 async function responseValue(response: Response) {
 	const text = await response.text();
+	const bytes = new TextEncoder().encode(text).byteLength;
 	if (!response.ok)
 		throw new VisualizationRuntimeHttpError(
 			text || `${response.status} ${response.statusText}`,
 			response.status,
 		);
 	try {
-		return text ? (JSON.parse(text) as unknown) : null;
+		return { value: text ? (JSON.parse(text) as unknown) : null, bytes };
 	} catch {
 		throw new VisualizationRuntimeProtocolError(
 			"Visualization response was not valid JSON",

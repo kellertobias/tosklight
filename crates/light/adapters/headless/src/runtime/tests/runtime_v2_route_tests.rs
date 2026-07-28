@@ -135,3 +135,74 @@ async fn runtime_v2_preserves_diagnostics_auth_and_recovery_reporting() {
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[tokio::test]
+async fn visualization_snapshot_reports_authoritative_source_and_route_costs() {
+    let (state, data_dir) = test_state();
+    let rendered = {
+        let _activation = state.active_show.acquire().await;
+        state
+            .output
+            .render_with_playback_events(
+                &state.active_show.output_projection(),
+                &state.playback.render_capability(),
+                state.output.render_options(),
+            )
+            .expect("render one authoritative output frame")
+    };
+    state.output.render_frames_and_publish(&rendered);
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+
+    let visualization = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/output/visualization")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(visualization.status(), StatusCode::OK);
+    let visualization = json(visualization).await;
+    assert_eq!(visualization["source_frame"], 1);
+    assert!(
+        chrono::DateTime::parse_from_rfc3339(
+            visualization["source_timestamp"]
+                .as_str()
+                .expect("source timestamp")
+        )
+        .is_ok()
+    );
+
+    let diagnostics = app
+        .oneshot(
+            Request::get("/api/v2/diagnostics")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(diagnostics.status(), StatusCode::OK);
+    let visualization_metrics = &json(diagnostics).await["visualization"];
+    assert_eq!(visualization_metrics["snapshot_requests"], 1);
+    assert_eq!(visualization_metrics["snapshot_source_frame"], 1);
+    assert!(
+        visualization_metrics["snapshot_projection_micros"].is_number(),
+        "projection is measured independently"
+    );
+    assert!(
+        visualization_metrics["snapshot_serialization_micros"].is_number(),
+        "payload serialization is measured independently"
+    );
+    assert!(
+        visualization_metrics["snapshot_payload_bytes"]
+            .as_u64()
+            .is_some_and(|bytes| bytes > 0)
+    );
+    assert!(visualization_metrics["snapshot_source_age_millis"].is_number());
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}

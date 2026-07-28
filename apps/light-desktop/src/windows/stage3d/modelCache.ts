@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { frontendPerformanceDiagnostics } from "../../features/frontendWarmup/diagnostics";
 
 function parseModel(buffer: ArrayBuffer) {
 	return new Promise<THREE.Group>((resolve, reject) => {
@@ -63,14 +64,25 @@ export class StageModelCache {
 	async clone(source: string) {
 		if (this.disposed) throw new Error("The Stage model cache is closed");
 		let template = this.templates.get(source);
+		frontendPerformanceDiagnostics.recordStageModelCacheLookup(Boolean(template));
 		if (!template) {
-			template = this.load(source).then((model) => {
-				markSharedResources(model);
-				return model;
-			});
+			const finishLoad = frontendPerformanceDiagnostics.beginStageModelLoad();
+			template = this.load(source).then(
+				(model) => {
+					markSharedResources(model);
+					finishLoad();
+					return model;
+				},
+				(error) => {
+					finishLoad(error);
+					throw error;
+				},
+			);
 			this.templates.set(source, template);
 		}
-		return (await template).clone(true);
+		const clone = (await template).clone(true);
+		frontendPerformanceDiagnostics.recordStageModelClone();
+		return clone;
 	}
 
 	dispose() {
@@ -79,5 +91,6 @@ export class StageModelCache {
 		for (const template of this.templates.values())
 			void template.then(disposeTemplate).catch(() => undefined);
 		this.templates.clear();
+		frontendPerformanceDiagnostics.recordStageModelCacheDisposal();
 	}
 }

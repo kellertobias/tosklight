@@ -40,6 +40,7 @@ const artifactPaths = Object.freeze({
   manual: artifact("LIGHT_MANUAL_ROOT", "MANUAL_ROOT"),
   iconContactSheets: artifact("LIGHT_ICON_CONTACT_SHEETS_DIR", "ICON_CONTACT_SHEETS"),
   release: artifact("LIGHT_RELEASE_DIR", "RELEASE_ROOT"),
+  performance: artifact("LIGHT_PERFORMANCE_DIR", "PERFORMANCE_ROOT"),
   runtime: absolute(configured(
     Object.hasOwn(process.env, "LIGHT_DATA_DIR") ? "LIGHT_DATA_DIR" : "LIGHT_RUNTIME_DATA_DIR",
     path.join(artifactRoot, layout.RUNTIME_DATA),

@@ -42,6 +42,12 @@ pub(super) struct VisualizationMetrics {
     pub(super) payload_bytes: u64,
     pub(super) source_age_millis: u64,
     pub(super) skipped_source_frames: u64,
+    pub(super) snapshot_requests: u64,
+    pub(super) snapshot_projection_micros: u64,
+    pub(super) snapshot_serialization_micros: u64,
+    pub(super) snapshot_payload_bytes: u64,
+    pub(super) snapshot_source_frame: u64,
+    pub(super) snapshot_source_age_millis: u64,
 }
 
 /// An immutable semantic frame known to have crossed the authoritative output boundary.
@@ -70,6 +76,12 @@ pub(super) struct VisualizationFrameHub {
     payload_bytes: AtomicU64,
     source_age_millis: AtomicU64,
     skipped_source_frames: AtomicU64,
+    snapshot_requests: AtomicU64,
+    snapshot_projection_micros: AtomicU64,
+    snapshot_serialization_micros: AtomicU64,
+    snapshot_payload_bytes: AtomicU64,
+    snapshot_source_frame: AtomicU64,
+    snapshot_source_age_millis: AtomicU64,
 }
 
 impl VisualizationFrameHub {
@@ -177,6 +189,32 @@ impl VisualizationFrameHub {
         }
     }
 
+    pub(super) fn record_snapshot_route(
+        &self,
+        projection_duration: Duration,
+        serialization_duration: Duration,
+        payload_bytes: u64,
+        source: Option<&PublishedVisualizationFrame>,
+    ) {
+        self.snapshot_requests.fetch_add(1, Ordering::Relaxed);
+        self.snapshot_projection_micros
+            .store(duration_micros(projection_duration), Ordering::Relaxed);
+        self.snapshot_serialization_micros
+            .store(duration_micros(serialization_duration), Ordering::Relaxed);
+        self.snapshot_payload_bytes
+            .store(payload_bytes, Ordering::Relaxed);
+        self.snapshot_source_frame.store(
+            source.map_or(0, |source| source.sequence),
+            Ordering::Relaxed,
+        );
+        self.snapshot_source_age_millis.store(
+            source
+                .and_then(|source| source.generated_at.elapsed().ok())
+                .map_or(0, |age| age.as_millis().min(u128::from(u64::MAX)) as u64),
+            Ordering::Relaxed,
+        );
+    }
+
     pub(super) fn metrics(&self) -> VisualizationMetrics {
         VisualizationMetrics {
             normal_subscribers: self.normal_subscribers.load(Ordering::Relaxed),
@@ -186,6 +224,14 @@ impl VisualizationFrameHub {
             payload_bytes: self.payload_bytes.load(Ordering::Relaxed),
             source_age_millis: self.source_age_millis.load(Ordering::Relaxed),
             skipped_source_frames: self.skipped_source_frames.load(Ordering::Relaxed),
+            snapshot_requests: self.snapshot_requests.load(Ordering::Relaxed),
+            snapshot_projection_micros: self.snapshot_projection_micros.load(Ordering::Relaxed),
+            snapshot_serialization_micros: self
+                .snapshot_serialization_micros
+                .load(Ordering::Relaxed),
+            snapshot_payload_bytes: self.snapshot_payload_bytes.load(Ordering::Relaxed),
+            snapshot_source_frame: self.snapshot_source_frame.load(Ordering::Relaxed),
+            snapshot_source_age_millis: self.snapshot_source_age_millis.load(Ordering::Relaxed),
         }
     }
 }

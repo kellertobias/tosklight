@@ -1064,7 +1064,7 @@ active_programmers: unknown[], highlight_states: Array<RuntimeBootstrapHighlight
 
 export type RuntimeReadinessSnapshot = { status: string, active_show: string | null, active_show_error: string | null, recovery_mode: boolean, snapshot_revision: number, };
 
-export type RuntimeVisualizationDiagnostics = { normal_subscribers: number, preload_subscribers: number, projections: number, projection_micros: number, payload_bytes: number, source_age_millis: number, skipped_source_frames: number, };
+export type RuntimeVisualizationDiagnostics = { normal_subscribers: number, preload_subscribers: number, projections: number, projection_micros: number, payload_bytes: number, source_age_millis: number, skipped_source_frames: number, snapshot_requests: number, snapshot_projection_micros: number, snapshot_serialization_micros: number, snapshot_payload_bytes: number, snapshot_source_frame: number, snapshot_source_age_millis: number, };
 
 export type RuntimeDiagnosticsSnapshot = { output: RuntimeOutputHealth, output_bind_ip: string, output_routes: unknown, route_send_errors: unknown, active_programmers: unknown, active_playbacks: unknown, move_in_black: unknown, timecode_source: string | null, media_servers: unknown, snapshot_revision: number, visualization: RuntimeVisualizationDiagnostics, };
 

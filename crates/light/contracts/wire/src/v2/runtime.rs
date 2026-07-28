@@ -201,6 +201,18 @@ pub struct RuntimeVisualizationDiagnostics {
     pub source_age_millis: u64,
     #[ts(type = "number")]
     pub skipped_source_frames: u64,
+    #[ts(type = "number")]
+    pub snapshot_requests: u64,
+    #[ts(type = "number")]
+    pub snapshot_projection_micros: u64,
+    #[ts(type = "number")]
+    pub snapshot_serialization_micros: u64,
+    #[ts(type = "number")]
+    pub snapshot_payload_bytes: u64,
+    #[ts(type = "number")]
+    pub snapshot_source_frame: u64,
+    #[ts(type = "number")]
+    pub snapshot_source_age_millis: u64,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]

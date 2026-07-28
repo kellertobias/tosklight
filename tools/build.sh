@@ -408,6 +408,7 @@ print_artifact_path() {
     pages) printf '%s\n' "$LIGHT_PAGES_DIR" ;;
     safari) printf '%s\n' "$LIGHT_SAFARI_DIR" ;;
     release) printf '%s\n' "$LIGHT_RELEASE_DIR" ;;
+    performance) printf '%s\n' "$LIGHT_PERFORMANCE_DIR" ;;
     runtime) printf '%s\n' "$LIGHT_RUNTIME_DATA_DIR" ;;
     tmp) printf '%s\n' "$LIGHT_TMP_DIR" ;;
     test-results) printf '%s\n' "$LIGHT_TEST_RESULTS_DIR" ;;

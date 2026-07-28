@@ -84,6 +84,12 @@ pub(super) async fn diagnostics(
             payload_bytes: visualization.payload_bytes,
             source_age_millis: visualization.source_age_millis,
             skipped_source_frames: visualization.skipped_source_frames,
+            snapshot_requests: visualization.snapshot_requests,
+            snapshot_projection_micros: visualization.snapshot_projection_micros,
+            snapshot_serialization_micros: visualization.snapshot_serialization_micros,
+            snapshot_payload_bytes: visualization.snapshot_payload_bytes,
+            snapshot_source_frame: visualization.snapshot_source_frame,
+            snapshot_source_age_millis: visualization.snapshot_source_age_millis,
         },
     }))
 }
@@ -193,11 +199,33 @@ pub(super) async fn visualization_snapshot(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let session = authenticate(&state, &headers)?;
     show.verify(&state)?;
-    Ok(Json(visualization_snapshot_for_session(
-        &state,
-        &session,
-        query.preload,
-    )?))
+    let source = state.output.latest_visualization_frame();
+    let projection_started = Instant::now();
+    let mut snapshot = visualization_snapshot_for_session(&state, &session, query.preload)?;
+    let projection_duration = projection_started.elapsed();
+    if let Some(source) = source.as_ref()
+        && let Some(snapshot) = snapshot.as_object_mut()
+    {
+        snapshot.insert("source_frame".into(), source.sequence.into());
+        snapshot.insert(
+            "source_timestamp".into(),
+            chrono::DateTime::<chrono::Utc>::from(source.generated_at)
+                .to_rfc3339()
+                .into(),
+        );
+    }
+    let serialization_started = Instant::now();
+    let payload_bytes = serde_json::to_vec(&snapshot)
+        .map_err(|error| ApiError::internal(error.to_string()))?
+        .len() as u64;
+    let serialization_duration = serialization_started.elapsed();
+    state.output.record_visualization_snapshot_route(
+        projection_duration,
+        serialization_duration,
+        payload_bytes,
+        source.as_deref(),
+    );
+    Ok(Json(snapshot))
 }
 
 pub(super) fn visualization_snapshot_for_session(
