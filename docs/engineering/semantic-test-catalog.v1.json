@@ -1051,7 +1051,7 @@
       "title": "preserves ordered typed sources while Highlight power stays independent",
       "source": {
         "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-        "line": 23,
+        "line": 17,
         "column": 1
       },
       "preconditions": [
@@ -1069,7 +1069,7 @@
           "order": 0,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 27,
+            "line": 21,
             "column": 9
           }
         },
@@ -1087,7 +1087,7 @@
           "order": 1,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 28,
+            "line": 22,
             "column": 9
           }
         }
@@ -1110,7 +1110,7 @@
           "order": 2,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 30,
+            "line": 24,
             "column": 9
           }
         },
@@ -1131,7 +1131,7 @@
           "order": 4,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 33,
+            "line": 27,
             "column": 9
           }
         },
@@ -1149,7 +1149,7 @@
           "order": 6,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 35,
+            "line": 29,
             "column": 24
           }
         },
@@ -1168,7 +1168,7 @@
           "order": 7,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 37,
+            "line": 31,
             "column": 9
           }
         },
@@ -1187,7 +1187,7 @@
           "order": 8,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 38,
+            "line": 32,
             "column": 9
           }
         },
@@ -1205,7 +1205,7 @@
           "order": 9,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 39,
+            "line": 33,
             "column": 23
           }
         },
@@ -1224,7 +1224,7 @@
           "order": 12,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 43,
+            "line": 37,
             "column": 9
           }
         },
@@ -1243,7 +1243,7 @@
           "order": 13,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 45,
+            "line": 39,
             "column": 10
           }
         },
@@ -1262,7 +1262,7 @@
           "order": 14,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 46,
+            "line": 40,
             "column": 10
           }
         },
@@ -1281,7 +1281,7 @@
           "order": 15,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 48,
+            "line": 42,
             "column": 10
           }
         }
@@ -1304,7 +1304,7 @@
           "order": 3,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 31,
+            "line": 25,
             "column": 9
           }
         },
@@ -1324,7 +1324,7 @@
           "order": 5,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 34,
+            "line": 28,
             "column": 9
           }
         },
@@ -1345,7 +1345,7 @@
           "order": 10,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 40,
+            "line": 34,
             "column": 3
           }
         },
@@ -1366,7 +1366,7 @@
           "order": 11,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 41,
+            "line": 35,
             "column": 3
           }
         }
@@ -1396,7 +1396,7 @@
       "title": "normalized Dimmer absolute and relative API intents retain distinct semantics",
       "source": {
         "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-        "line": 53,
+        "line": 47,
         "column": 1
       },
       "preconditions": [
@@ -1416,7 +1416,7 @@
           "order": 0,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 57,
+            "line": 51,
             "column": 9
           }
         },
@@ -1434,7 +1434,7 @@
           "order": 1,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 58,
+            "line": 52,
             "column": 9
           }
         },
@@ -1452,7 +1452,7 @@
           "order": 2,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 59,
+            "line": 53,
             "column": 9
           }
         }
@@ -1475,7 +1475,7 @@
           "order": 4,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 61,
+            "line": 55,
             "column": 9
           }
         },
@@ -1497,7 +1497,7 @@
           "order": 6,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 64,
+            "line": 58,
             "column": 9
           }
         },
@@ -1517,7 +1517,7 @@
           "order": 7,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 65,
+            "line": 59,
             "column": 9
           }
         },
@@ -1539,7 +1539,7 @@
           "order": 8,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 66,
+            "line": 60,
             "column": 9
           }
         },
@@ -1559,7 +1559,7 @@
           "order": 9,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 67,
+            "line": 61,
             "column": 9
           }
         },
@@ -1581,7 +1581,7 @@
           "order": 10,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 68,
+            "line": 62,
             "column": 9
           }
         },
@@ -1601,7 +1601,7 @@
           "order": 11,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 69,
+            "line": 63,
             "column": 9
           }
         }
@@ -1623,7 +1623,7 @@
           "order": 3,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 60,
+            "line": 54,
             "column": 9
           }
         },
@@ -1643,7 +1643,7 @@
           "order": 5,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 62,
+            "line": 56,
             "column": 9
           }
         },
@@ -1664,7 +1664,7 @@
           "order": 12,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 70,
+            "line": 64,
             "column": 9
           }
         }
@@ -1701,7 +1701,7 @@
       "title": "live Group references refresh while dereferenced captures retain concrete fixtures",
       "source": {
         "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-        "line": 74,
+        "line": 68,
         "column": 1
       },
       "preconditions": [
@@ -1721,7 +1721,7 @@
           "order": 0,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 78,
+            "line": 72,
             "column": 9
           }
         },
@@ -1739,7 +1739,7 @@
           "order": 1,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 79,
+            "line": 73,
             "column": 9
           }
         },
@@ -1757,7 +1757,7 @@
           "order": 2,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 80,
+            "line": 74,
             "column": 9
           }
         }
@@ -1781,7 +1781,7 @@
           "order": 3,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 82,
+            "line": 76,
             "column": 9
           }
         },
@@ -1803,7 +1803,7 @@
           "order": 4,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 83,
+            "line": 77,
             "column": 9
           }
         },
@@ -1823,7 +1823,7 @@
           "order": 5,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 85,
+            "line": 79,
             "column": 9
           }
         },
@@ -1845,7 +1845,7 @@
           "order": 6,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 86,
+            "line": 80,
             "column": 9
           }
         },
@@ -1867,7 +1867,7 @@
           "order": 9,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 90,
+            "line": 84,
             "column": 9
           }
         },
@@ -1888,7 +1888,7 @@
           "order": 10,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 91,
+            "line": 85,
             "column": 9
           }
         },
@@ -1910,7 +1910,7 @@
           "order": 12,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 93,
+            "line": 87,
             "column": 9
           }
         }
@@ -1932,7 +1932,7 @@
           "order": 7,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 87,
+            "line": 81,
             "column": 9
           }
         },
@@ -1953,7 +1953,7 @@
           "order": 8,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 88,
+            "line": 82,
             "column": 9
           }
         },
@@ -1973,7 +1973,7 @@
           "order": 11,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 92,
+            "line": 86,
             "column": 9
           }
         },
@@ -1993,7 +1993,7 @@
           "order": 13,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 94,
+            "line": 88,
             "column": 9
           }
         },
@@ -2013,7 +2013,7 @@
           "order": 14,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 95,
+            "line": 89,
             "column": 9
           }
         }
@@ -2047,7 +2047,7 @@
       "title": "Preset families record and recall through pool, keypad, API, and OSC",
       "source": {
         "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-        "line": 99,
+        "line": 93,
         "column": 1
       },
       "preconditions": [
@@ -2067,7 +2067,7 @@
           "order": 0,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 103,
+            "line": 97,
             "column": 9
           }
         },
@@ -2085,7 +2085,7 @@
           "order": 1,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 104,
+            "line": 98,
             "column": 9
           }
         },
@@ -2103,7 +2103,7 @@
           "order": 2,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 105,
+            "line": 99,
             "column": 9
           }
         }
@@ -2137,23 +2137,23 @@
           "order": 3,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 179,
+            "line": 190,
             "column": 18
           }
         },
         {
           "kind": "step",
-          "description": "Add the PaneType.Groups pane with layout { slug: \"groups\", column: 1, row: 1, width: 12, height: 18 }.",
+          "description": "Add the PaneType.Presets pane with layout { slug: \"presets\", column: 1, row: 1, width: 12, height: 18 }.",
           "call": "desktopBuilder.addPane",
           "arguments": [
-            "PaneType.Groups",
-            "{ slug: \"groups\", column: 1, row: 1, width: 12, height: 18 }"
+            "PaneType.Presets",
+            "{ slug: \"presets\", column: 1, row: 1, width: 12, height: 18 }"
           ],
           "presentation": {
             "omitStructuredArguments": true
           },
-          "expression": "desktop.addPane(PaneType.Groups, { slug: \"groups\", column: 1, row: 1, width: 12, height: 18, })",
-          "sourceCode": "desktop.addPane(PaneType.Groups, {\n\t\tslug: \"groups\",\n\t\tcolumn: 1,\n\t\trow: 1,\n\t\twidth: 12,\n\t\theight: 18,\n\t})",
+          "expression": "desktop.addPane(PaneType.Presets, { slug: \"presets\", column: 1, row: 1, width: 12, height: 18, })",
+          "sourceCode": "desktop.addPane(PaneType.Presets, {\n\t\tslug: \"presets\",\n\t\tcolumn: 1,\n\t\trow: 1,\n\t\twidth: 12,\n\t\theight: 18,\n\t})",
           "surfaces": [
             "Browser UI",
             "Desktop layout"
@@ -2162,23 +2162,23 @@
           "order": 4,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 180,
+            "line": 191,
             "column": 2
           }
         },
         {
           "kind": "step",
-          "description": "Add the PaneType.Presets pane with layout { slug: \"presets\", column: 13, row: 1, width: 12, height: 18 }.",
+          "description": "Add the PaneType.Fixtures pane with layout { slug: \"fixtures\", column: 13, row: 1, width: 6, height: 18 }.",
           "call": "desktopBuilder.addPane",
           "arguments": [
-            "PaneType.Presets",
-            "{ slug: \"presets\", column: 13, row: 1, width: 12, height: 18 }"
+            "PaneType.Fixtures",
+            "{ slug: \"fixtures\", column: 13, row: 1, width: 6, height: 18 }"
           ],
           "presentation": {
             "omitStructuredArguments": true
           },
-          "expression": "desktop.addPane(PaneType.Presets, { slug: \"presets\", column: 13, row: 1, width: 12, height: 18, })",
-          "sourceCode": "desktop.addPane(PaneType.Presets, {\n\t\tslug: \"presets\",\n\t\tcolumn: 13,\n\t\trow: 1,\n\t\twidth: 12,\n\t\theight: 18,\n\t})",
+          "expression": "desktop.addPane(PaneType.Fixtures, { slug: \"fixtures\", column: 13, row: 1, width: 6, height: 18, })",
+          "sourceCode": "desktop.addPane(PaneType.Fixtures, {\n\t\tslug: \"fixtures\",\n\t\tcolumn: 13,\n\t\trow: 1,\n\t\twidth: 6,\n\t\theight: 18,\n\t})",
           "surfaces": [
             "Browser UI",
             "Desktop layout"
@@ -2187,7 +2187,32 @@
           "order": 5,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 187,
+            "line": 198,
+            "column": 2
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Add the PaneType.Stage pane with layout { slug: \"stage\", column: 19, row: 1, width: 6, height: 18 }.",
+          "call": "desktopBuilder.addPane",
+          "arguments": [
+            "PaneType.Stage",
+            "{ slug: \"stage\", column: 19, row: 1, width: 6, height: 18 }"
+          ],
+          "presentation": {
+            "omitStructuredArguments": true
+          },
+          "expression": "desktop.addPane(PaneType.Stage, { slug: \"stage\", column: 19, row: 1, width: 6, height: 18, })",
+          "sourceCode": "desktop.addPane(PaneType.Stage, {\n\t\tslug: \"stage\",\n\t\tcolumn: 19,\n\t\trow: 1,\n\t\twidth: 6,\n\t\theight: 18,\n\t})",
+          "surfaces": [
+            "Browser UI",
+            "Desktop layout"
+          ],
+          "phase": "helper:openPools",
+          "order": 6,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 205,
             "column": 2
           }
         },
@@ -2203,10 +2228,10 @@
             "Desktop layout"
           ],
           "phase": "helper:openPools",
-          "order": 6,
+          "order": 7,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 194,
+            "line": 212,
             "column": 8
           }
         },
@@ -2225,10 +2250,10 @@
             "Typed API"
           ],
           "phase": "scenario",
-          "order": 7,
+          "order": 8,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 107,
+            "line": 101,
             "column": 9
           }
         },
@@ -2247,10 +2272,10 @@
             "Typed API"
           ],
           "phase": "scenario",
-          "order": 8,
+          "order": 9,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 109,
+            "line": 103,
             "column": 9
           }
         },
@@ -2269,10 +2294,10 @@
             "Typed API"
           ],
           "phase": "scenario",
-          "order": 9,
+          "order": 10,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 110,
+            "line": 104,
             "column": 9
           }
         },
@@ -2291,10 +2316,10 @@
             "Typed API"
           ],
           "phase": "scenario",
-          "order": 10,
+          "order": 11,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 111,
+            "line": 105,
             "column": 9
           }
         },
@@ -2313,10 +2338,10 @@
             "Typed API"
           ],
           "phase": "scenario",
-          "order": 11,
+          "order": 12,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 112,
+            "line": 106,
             "column": 9
           }
         },
@@ -2336,10 +2361,10 @@
             "Typed API"
           ],
           "phase": "scenario",
-          "order": 12,
+          "order": 13,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 114,
+            "line": 108,
             "column": 9
           }
         },
@@ -2359,10 +2384,10 @@
             "Presets"
           ],
           "phase": "scenario",
-          "order": 13,
+          "order": 14,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 117,
+            "line": 111,
             "column": 9
           }
         },
@@ -2382,10 +2407,10 @@
             "Presets"
           ],
           "phase": "scenario",
-          "order": 14,
+          "order": 15,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 120,
+            "line": 114,
             "column": 9
           }
         },
@@ -2401,10 +2426,10 @@
             "OSC"
           ],
           "phase": "scenario",
-          "order": 15,
+          "order": 16,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 124,
+            "line": 118,
             "column": 9
           }
         },
@@ -2424,32 +2449,10 @@
             "Typed API"
           ],
           "phase": "scenario",
-          "order": 16,
+          "order": 17,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 126,
-            "column": 10
-          }
-        },
-        {
-          "kind": "step",
-          "description": "Preset → osc → recall with PresetFamily.Mixed, 2.",
-          "call": "preset.via.osc.recall",
-          "arguments": [
-            "PresetFamily.Mixed",
-            "2"
-          ],
-          "expression": "t.preset.via.osc.recall(PresetFamily.Mixed, 2)",
-          "sourceCode": "t.preset.via.osc.recall(PresetFamily.Mixed, 2)",
-          "surfaces": [
-            "OSC",
-            "Presets"
-          ],
-          "phase": "scenario",
-          "order": 18,
-          "source": {
-            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 130,
+            "line": 120,
             "column": 10
           }
         },
@@ -2468,7 +2471,7 @@
           "order": 19,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 132,
+            "line": 125,
             "column": 10
           }
         },
@@ -2491,7 +2494,7 @@
           "order": 20,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 135,
+            "line": 128,
             "column": 9
           }
         },
@@ -2514,21 +2517,21 @@
           "order": 21,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 138,
+            "line": 131,
             "column": 9
           }
         },
         {
           "kind": "step",
-          "description": "Preset → pool → edit with PresetFamily.Mixed, 1, { title: \"Stage look\", color: \"#1bd6ec\", icon: \"★\" }.",
+          "description": "Preset → pool → edit with PresetFamily.Mixed, 1, { title: \"Stage look\" }.",
           "call": "preset.via.pool.edit",
           "arguments": [
             "PresetFamily.Mixed",
             "1",
-            "{ title: \"Stage look\", color: \"#1bd6ec\", icon: \"★\" }"
+            "{ title: \"Stage look\" }"
           ],
-          "expression": "t.preset.via.pool.edit(PresetFamily.Mixed, 1, { title: \"Stage look\", color: \"#1bd6ec\", icon: \"★\", })",
-          "sourceCode": "t.preset.via.pool.edit(PresetFamily.Mixed, 1, {\n\t\t\ttitle: \"Stage look\",\n\t\t\tcolor: \"#1bd6ec\",\n\t\t\ticon: \"★\",\n\t\t})",
+          "expression": "t.preset.via.pool.edit(PresetFamily.Mixed, 1, { title: \"Stage look\", })",
+          "sourceCode": "t.preset.via.pool.edit(PresetFamily.Mixed, 1, {\n\t\t\ttitle: \"Stage look\",\n\t\t})",
           "surfaces": [
             "Pool UI",
             "Presets"
@@ -2537,7 +2540,7 @@
           "order": 32,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 146,
+            "line": 139,
             "column": 9
           }
         },
@@ -2556,28 +2559,46 @@
           "order": 34,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 157,
+            "line": 146,
             "column": 9
           }
         },
         {
           "kind": "step",
-          "description": "Selection → fixtures → api → item with 102.",
-          "call": "selection.fixtures.via.api.item",
-          "arguments": [
-            "102"
-          ],
-          "expression": "t.selection.fixtures.via.api.item(102)",
-          "sourceCode": "t.selection.fixtures.via.api.item(102)",
+          "description": "Clear the current selection.",
+          "call": "selection.clear",
+          "arguments": [],
+          "expression": "t.selection.clear()",
+          "sourceCode": "t.selection.clear()",
           "surfaces": [
-            "Selection",
-            "Typed API"
+            "Selection"
           ],
           "phase": "scenario",
           "order": 35,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 158,
+            "line": 147,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Preset → tap empty pool slot with PresetFamily.Mixed, 9.",
+          "call": "preset.tapEmptyPoolSlot",
+          "arguments": [
+            "PresetFamily.Mixed",
+            "9"
+          ],
+          "expression": "t.preset.tapEmptyPoolSlot(PresetFamily.Mixed, 9)",
+          "sourceCode": "t.preset.tapEmptyPoolSlot(PresetFamily.Mixed, 9)",
+          "surfaces": [
+            "Presets"
+          ],
+          "phase": "scenario",
+          "order": 37,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 149,
             "column": 9
           }
         },
@@ -2596,7 +2617,47 @@
             "Presets"
           ],
           "phase": "scenario",
-          "order": 36,
+          "order": 39,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 152,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Selection → observe.",
+          "call": "selection.observe",
+          "arguments": [],
+          "expression": "t.selection.observe()",
+          "sourceCode": "t.selection.observe()",
+          "surfaces": [
+            "Selection"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 41,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 227,
+            "column": 26
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Preset → pool → recall with PresetFamily.Mixed, 1.",
+          "call": "preset.via.pool.recall",
+          "arguments": [
+            "PresetFamily.Mixed",
+            "1"
+          ],
+          "expression": "t.preset.via.pool.recall(PresetFamily.Mixed, 1)",
+          "sourceCode": "t.preset.via.pool.recall(PresetFamily.Mixed, 1)",
+          "surfaces": [
+            "Pool UI",
+            "Presets"
+          ],
+          "phase": "scenario",
+          "order": 47,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
             "line": 159,
@@ -2605,20 +2666,20 @@
         },
         {
           "kind": "step",
-          "description": "Preset → keypad → delete with PresetFamily.Color, 1.",
-          "call": "preset.via.keypad.delete",
+          "description": "Preset → keypad → recall with PresetFamily.Position, 1.",
+          "call": "preset.via.keypad.recall",
           "arguments": [
-            "PresetFamily.Color",
+            "PresetFamily.Position",
             "1"
           ],
-          "expression": "t.preset.via.keypad.delete(PresetFamily.Color, 1)",
-          "sourceCode": "t.preset.via.keypad.delete(PresetFamily.Color, 1)",
+          "expression": "t.preset.via.keypad.recall(PresetFamily.Position, 1)",
+          "sourceCode": "t.preset.via.keypad.recall(PresetFamily.Position, 1)",
           "surfaces": [
             "Command keypad",
             "Presets"
           ],
           "phase": "scenario",
-          "order": 39,
+          "order": 50,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
             "line": 163,
@@ -2627,23 +2688,253 @@
         },
         {
           "kind": "step",
-          "description": "Preset → recall with PresetFamily.Intensity, 1.",
-          "call": "preset.recall",
-          "arguments": [
-            "PresetFamily.Intensity",
-            "1"
-          ],
-          "expression": "t.preset.recall(PresetFamily.Intensity, 1)",
-          "sourceCode": "t.preset.recall(PresetFamily.Intensity, 1)",
+          "description": "Selection → observe.",
+          "call": "selection.observe",
+          "arguments": [],
+          "expression": "t.selection.observe()",
+          "sourceCode": "t.selection.observe()",
           "surfaces": [
-            "Presets"
+            "Selection"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 51,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 227,
+            "column": 26
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Clear Programmer values through the encoder intent.",
+          "call": "encoder.clear",
+          "arguments": [],
+          "expression": "t.encoder.clear()",
+          "sourceCode": "t.encoder.clear()",
+          "surfaces": [
+            "Encoder controls",
+            "Programmer"
           ],
           "phase": "scenario",
-          "order": 41,
+          "order": 54,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
             "line": 166,
             "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Clear the current selection.",
+          "call": "selection.clear",
+          "arguments": [],
+          "expression": "t.selection.clear()",
+          "sourceCode": "t.selection.clear()",
+          "surfaces": [
+            "Selection"
+          ],
+          "phase": "scenario",
+          "order": 55,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 167,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Preset → api → recall with PresetFamily.Color, 1.",
+          "call": "preset.via.api.recall",
+          "arguments": [
+            "PresetFamily.Color",
+            "1"
+          ],
+          "expression": "t.preset.via.api.recall(PresetFamily.Color, 1)",
+          "sourceCode": "t.preset.via.api.recall(PresetFamily.Color, 1)",
+          "surfaces": [
+            "Presets",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 57,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 169,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Selection → observe.",
+          "call": "selection.observe",
+          "arguments": [],
+          "expression": "t.selection.observe()",
+          "sourceCode": "t.selection.observe()",
+          "surfaces": [
+            "Selection"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 59,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 227,
+            "column": 26
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Preset → api → recall with PresetFamily.Color, 1.",
+          "call": "preset.via.api.recall",
+          "arguments": [
+            "PresetFamily.Color",
+            "1"
+          ],
+          "expression": "t.preset.via.api.recall(PresetFamily.Color, 1)",
+          "sourceCode": "t.preset.via.api.recall(PresetFamily.Color, 1)",
+          "surfaces": [
+            "Presets",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 62,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 172,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Connect the simulated attached hardware surface.",
+          "call": "hardware.connect",
+          "arguments": [],
+          "expression": "t.hardware.connect()",
+          "sourceCode": "t.hardware.connect()",
+          "surfaces": [
+            "Attached hardware",
+            "OSC"
+          ],
+          "phase": "scenario",
+          "order": 63,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 174,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Preset → osc → recall with PresetFamily.Mixed, 2.",
+          "call": "preset.via.osc.recall",
+          "arguments": [
+            "PresetFamily.Mixed",
+            "2"
+          ],
+          "expression": "t.preset.via.osc.recall(PresetFamily.Mixed, 2)",
+          "sourceCode": "t.preset.via.osc.recall(PresetFamily.Mixed, 2)",
+          "surfaces": [
+            "OSC",
+            "Presets"
+          ],
+          "phase": "scenario",
+          "order": 64,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 176,
+            "column": 10
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Selection → observe.",
+          "call": "selection.observe",
+          "arguments": [],
+          "expression": "t.selection.observe()",
+          "sourceCode": "t.selection.observe()",
+          "surfaces": [
+            "Selection"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 65,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 227,
+            "column": 26
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Highlight → osc → toggle.",
+          "call": "highlight.via.osc.toggle",
+          "arguments": [],
+          "expression": "t.highlight.via.osc.toggle()",
+          "sourceCode": "t.highlight.via.osc.toggle()",
+          "surfaces": [
+            "Highlight",
+            "OSC"
+          ],
+          "phase": "scenario",
+          "order": 70,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 180,
+            "column": 10
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Selection → observe.",
+          "call": "selection.observe",
+          "arguments": [],
+          "expression": "t.selection.observe()",
+          "sourceCode": "t.selection.observe()",
+          "surfaces": [
+            "Selection"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 71,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 227,
+            "column": 26
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Highlight → osc → toggle.",
+          "call": "highlight.via.osc.toggle",
+          "arguments": [],
+          "expression": "t.highlight.via.osc.toggle()",
+          "sourceCode": "t.highlight.via.osc.toggle()",
+          "surfaces": [
+            "Highlight",
+            "OSC"
+          ],
+          "phase": "scenario",
+          "order": 74,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 182,
+            "column": 10
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Disconnect the simulated attached hardware surface.",
+          "call": "hardware.disconnect",
+          "arguments": [],
+          "expression": "t.hardware.disconnect()",
+          "sourceCode": "t.hardware.disconnect()",
+          "surfaces": [
+            "Attached hardware",
+            "OSC"
+          ],
+          "phase": "cleanup",
+          "order": 75,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 184,
+            "column": 10
           }
         }
       ],
@@ -2662,10 +2953,10 @@
             "Presets"
           ],
           "phase": "scenario",
-          "order": 17,
+          "order": 18,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 129,
+            "line": 123,
             "column": 10
           }
         },
@@ -2686,7 +2977,7 @@
           "order": 22,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 142,
+            "line": 135,
             "column": 10
           }
         },
@@ -2708,7 +2999,7 @@
           "order": 23,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 143,
+            "line": 136,
             "column": 10
           }
         },
@@ -2729,7 +3020,7 @@
           "order": 24,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 142,
+            "line": 135,
             "column": 10
           }
         },
@@ -2751,7 +3042,7 @@
           "order": 25,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 143,
+            "line": 136,
             "column": 10
           }
         },
@@ -2772,7 +3063,7 @@
           "order": 26,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 142,
+            "line": 135,
             "column": 10
           }
         },
@@ -2794,7 +3085,7 @@
           "order": 27,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 143,
+            "line": 136,
             "column": 10
           }
         },
@@ -2815,7 +3106,7 @@
           "order": 28,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 142,
+            "line": 135,
             "column": 10
           }
         },
@@ -2837,7 +3128,7 @@
           "order": 29,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 143,
+            "line": 136,
             "column": 10
           }
         },
@@ -2858,7 +3149,7 @@
           "order": 30,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 142,
+            "line": 135,
             "column": 10
           }
         },
@@ -2880,21 +3171,21 @@
           "order": 31,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 143,
+            "line": 136,
             "column": 10
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "Preset → button: PresetFamily.Mixed, 1, { title: \"Stage look\", color: \"#1bd6ec\", icon: \"★\" }.",
+          "description": "Preset → button: PresetFamily.Mixed, 1, { title: \"Stage look\" }.",
           "call": "preset.expect.button",
           "arguments": [
             "PresetFamily.Mixed",
             "1",
-            "{ title: \"Stage look\", color: \"#1bd6ec\", icon: \"★\" }"
+            "{ title: \"Stage look\" }"
           ],
-          "expression": "t.preset.expect(PresetFamily.Mixed, 1).button({ title: \"Stage look\", color: \"#1bd6ec\", icon: \"★\", })",
-          "sourceCode": "t.preset.expect(PresetFamily.Mixed, 1).button({\n\t\t\ttitle: \"Stage look\",\n\t\t\tcolor: \"#1bd6ec\",\n\t\t\ticon: \"★\",\n\t\t})",
+          "expression": "t.preset.expect(PresetFamily.Mixed, 1).button({ title: \"Stage look\", })",
+          "sourceCode": "t.preset.expect(PresetFamily.Mixed, 1).button({\n\t\t\ttitle: \"Stage look\",\n\t\t})",
           "surfaces": [
             "Presets"
           ],
@@ -2902,28 +3193,129 @@
           "order": 33,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 151,
+            "line": 142,
             "column": 9
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "{ fixture: 102 } DMX equals { Intensity: 179 }.",
-          "call": "expectFixtureDMX",
+          "description": "Preset → expect visible selection count: 0.",
+          "call": "preset.expectVisibleSelectionCount",
           "arguments": [
-            "{ fixture: 102 }",
-            "{ Intensity: 179 }"
+            "0"
           ],
-          "expression": "t.expectFixtureDMX({ fixture: 102 }, { Intensity: 179 })",
-          "sourceCode": "t.expectFixtureDMX({ fixture: 102 }, { Intensity: 179 })",
+          "expression": "t.preset.expectVisibleSelectionCount(0)",
+          "sourceCode": "t.preset.expectVisibleSelectionCount(0)",
           "surfaces": [
-            "DMX output"
+            "Presets"
           ],
           "phase": "scenario",
-          "order": 37,
+          "order": 36,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 160,
+            "line": 148,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Selection.",
+          "call": "expect.selection",
+          "arguments": [],
+          "expression": "t.expect.selection()",
+          "sourceCode": "t.expect.selection()",
+          "surfaces": [
+            "Semantic oracle"
+          ],
+          "phase": "scenario",
+          "order": 38,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 150,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Poll → to be: <generated: callback>, count = 2.",
+          "call": "expect.poll.toBe",
+          "arguments": [
+            "<generated: callback>",
+            "count = 2"
+          ],
+          "expression": "expect .poll(async () => (await t.selection.observe()).selected.length) .toBe(count)",
+          "sourceCode": "expect\n\t\t.poll(async () => (await t.selection.observe()).selected.length)\n\t\t.toBe(count)",
+          "surfaces": [
+            "Semantic oracle"
+          ],
+          "phase": "helper:waitForSelectionCount",
+          "order": 40,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 219,
+            "column": 8
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "<unresolved: selection.targets.map((target) => target.number)> equals [102, 101].",
+          "call": "expect.toEqual",
+          "arguments": [
+            "<unresolved: selection.targets.map((target) => target.number)>",
+            "[102, 101]"
+          ],
+          "expression": "expect(selection.targets.map((target) => target.number)).toEqual([102, 101])",
+          "sourceCode": "expect(selection.targets.map((target) => target.number)).toEqual([102, 101])",
+          "surfaces": [
+            "Semantic oracle"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 42,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 2
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "$selection.expression (from selection.observe) equals { type: \"static\" }.",
+          "call": "expect.toEqual",
+          "arguments": [
+            "$selection.expression (from selection.observe)",
+            "{ type: \"static\" }"
+          ],
+          "expression": "expect(selection.expression).toEqual({ type: \"static\" })",
+          "sourceCode": "expect(selection.expression).toEqual({ type: \"static\" })",
+          "surfaces": [
+            "Semantic oracle"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 43,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 229,
+            "column": 2
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Preset → expect visible selection: 101, 102.",
+          "call": "preset.expectVisibleSelection",
+          "arguments": [
+            "101",
+            "102"
+          ],
+          "expression": "t.preset.expectVisibleSelection(101, 102)",
+          "sourceCode": "t.preset.expectVisibleSelection(101, 102)",
+          "surfaces": [
+            "Presets"
+          ],
+          "phase": "scenario",
+          "order": 44,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 155,
             "column": 9
           }
         },
@@ -2941,7 +3333,70 @@
             "DMX output"
           ],
           "phase": "scenario",
-          "order": 38,
+          "order": 45,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 156,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "{ fixture: 102 } DMX equals { Intensity: 0 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "{ fixture: 102 }",
+            "{ Intensity: 0 }"
+          ],
+          "expression": "t.expectFixtureDMX({ fixture: 102 }, { Intensity: 0 })",
+          "sourceCode": "t.expectFixtureDMX({ fixture: 102 }, { Intensity: 0 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 46,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 157,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "{ fixture: 101 } DMX equals { Intensity: 179 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "{ fixture: 101 }",
+            "{ Intensity: 179 }"
+          ],
+          "expression": "t.expectFixtureDMX({ fixture: 101 }, { Intensity: 179 })",
+          "sourceCode": "t.expectFixtureDMX({ fixture: 101 }, { Intensity: 179 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 48,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 160,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "{ fixture: 102 } DMX equals { Intensity: 179 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "{ fixture: 102 }",
+            "{ Intensity: 179 }"
+          ],
+          "expression": "t.expectFixtureDMX({ fixture: 102 }, { Intensity: 179 })",
+          "sourceCode": "t.expectFixtureDMX({ fixture: 102 }, { Intensity: 179 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 49,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
             "line": 161,
@@ -2950,44 +3405,253 @@
         },
         {
           "kind": "expected-outcome",
-          "description": "Preset → absent: PresetFamily.Color, 1.",
-          "call": "preset.expect.absent",
+          "description": "<unresolved: selection.targets.map((target) => target.number)> equals [102, 101].",
+          "call": "expect.toEqual",
           "arguments": [
-            "PresetFamily.Color",
-            "1"
+            "<unresolved: selection.targets.map((target) => target.number)>",
+            "[102, 101]"
           ],
-          "expression": "t.preset.expect(PresetFamily.Color, 1).absent()",
-          "sourceCode": "t.preset.expect(PresetFamily.Color, 1).absent()",
+          "expression": "expect(selection.targets.map((target) => target.number)).toEqual([102, 101])",
+          "sourceCode": "expect(selection.targets.map((target) => target.number)).toEqual([102, 101])",
+          "surfaces": [
+            "Semantic oracle"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 52,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 2
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "$selection.expression (from selection.observe) equals { type: \"static\" }.",
+          "call": "expect.toEqual",
+          "arguments": [
+            "$selection.expression (from selection.observe)",
+            "{ type: \"static\" }"
+          ],
+          "expression": "expect(selection.expression).toEqual({ type: \"static\" })",
+          "sourceCode": "expect(selection.expression).toEqual({ type: \"static\" })",
+          "surfaces": [
+            "Semantic oracle"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 53,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 229,
+            "column": 2
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Preset → expect visible selection count: 0.",
+          "call": "preset.expectVisibleSelectionCount",
+          "arguments": [
+            "0"
+          ],
+          "expression": "t.preset.expectVisibleSelectionCount(0)",
+          "sourceCode": "t.preset.expectVisibleSelectionCount(0)",
           "surfaces": [
             "Presets"
           ],
           "phase": "scenario",
-          "order": 40,
+          "order": 56,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 164,
+            "line": 168,
             "column": 9
           }
         },
         {
           "kind": "expected-outcome",
-          "description": "<observed: t.preset.routeReports.at(-1)> matches { action: \"recall\", family: PresetFamily.Intensity, candidates: [\"api\", \"keypad\", \"pool\"], selected: expect.stringMatching(/^(api|keypad|pool)$/) }.",
-          "call": "expect.toMatchObject",
+          "description": "Poll → to be: <generated: callback>, count = 2.",
+          "call": "expect.poll.toBe",
           "arguments": [
-            "<observed: t.preset.routeReports.at(-1)>",
-            "{ action: \"recall\", family: PresetFamily.Intensity, candidates: [\"api\", \"keypad\", \"pool\"], selected: expect.stringMatching(/^(api|keypad|pool)$/) }"
+            "<generated: callback>",
+            "count = 2"
           ],
-          "expression": "expect(t.preset.routeReports.at(-1)).toMatchObject({ action: \"recall\", family: PresetFamily.Intensity, candidates: [\"api\", \"keypad\", \"pool\"], selected: expect.stringMatching(/^(…",
-          "sourceCode": "expect(t.preset.routeReports.at(-1)).toMatchObject({\n\t\t\taction: \"recall\",\n\t\t\tfamily: PresetFamily.Intensity,\n\t\t\tcandidates: [\"api\", \"keypad\", \"pool\"],\n\t\t\tselected: expect.stringMatching(/^(api|keypad|pool)$/),\n\t\t})",
+          "expression": "expect .poll(async () => (await t.selection.observe()).selected.length) .toBe(count)",
+          "sourceCode": "expect\n\t\t.poll(async () => (await t.selection.observe()).selected.length)\n\t\t.toBe(count)",
           "surfaces": [
             "Semantic oracle"
           ],
-          "phase": "scenario",
-          "order": 42,
+          "phase": "helper:waitForSelectionCount",
+          "order": 58,
           "source": {
             "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
-            "line": 167,
-            "column": 3
+            "line": 219,
+            "column": 8
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "<unresolved: selection.targets.map((target) => target.number)> equals [102, 101].",
+          "call": "expect.toEqual",
+          "arguments": [
+            "<unresolved: selection.targets.map((target) => target.number)>",
+            "[102, 101]"
+          ],
+          "expression": "expect(selection.targets.map((target) => target.number)).toEqual([102, 101])",
+          "sourceCode": "expect(selection.targets.map((target) => target.number)).toEqual([102, 101])",
+          "surfaces": [
+            "Semantic oracle"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 60,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 2
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "$selection.expression (from selection.observe) equals { type: \"static\" }.",
+          "call": "expect.toEqual",
+          "arguments": [
+            "$selection.expression (from selection.observe)",
+            "{ type: \"static\" }"
+          ],
+          "expression": "expect(selection.expression).toEqual({ type: \"static\" })",
+          "sourceCode": "expect(selection.expression).toEqual({ type: \"static\" })",
+          "surfaces": [
+            "Semantic oracle"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 61,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 229,
+            "column": 2
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "<unresolved: selection.targets.map((target) => target.number)> equals [102, 101].",
+          "call": "expect.toEqual",
+          "arguments": [
+            "<unresolved: selection.targets.map((target) => target.number)>",
+            "[102, 101]"
+          ],
+          "expression": "expect(selection.targets.map((target) => target.number)).toEqual([102, 101])",
+          "sourceCode": "expect(selection.targets.map((target) => target.number)).toEqual([102, 101])",
+          "surfaces": [
+            "Semantic oracle"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 66,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 2
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "$selection.expression (from selection.observe) equals { type: \"static\" }.",
+          "call": "expect.toEqual",
+          "arguments": [
+            "$selection.expression (from selection.observe)",
+            "{ type: \"static\" }"
+          ],
+          "expression": "expect(selection.expression).toEqual({ type: \"static\" })",
+          "sourceCode": "expect(selection.expression).toEqual({ type: \"static\" })",
+          "surfaces": [
+            "Semantic oracle"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 67,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 229,
+            "column": 2
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "{ fixture: 101 } DMX equals { Intensity: 179 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "{ fixture: 101 }",
+            "{ Intensity: 179 }"
+          ],
+          "expression": "t.expectFixtureDMX({ fixture: 101 }, { Intensity: 179 })",
+          "sourceCode": "t.expectFixtureDMX({ fixture: 101 }, { Intensity: 179 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 68,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 178,
+            "column": 10
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "{ fixture: 102 } DMX equals { Intensity: 179 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "{ fixture: 102 }",
+            "{ Intensity: 179 }"
+          ],
+          "expression": "t.expectFixtureDMX({ fixture: 102 }, { Intensity: 179 })",
+          "sourceCode": "t.expectFixtureDMX({ fixture: 102 }, { Intensity: 179 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 69,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 179,
+            "column": 10
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "<unresolved: selection.targets.map((target) => target.number)> equals [102, 101].",
+          "call": "expect.toEqual",
+          "arguments": [
+            "<unresolved: selection.targets.map((target) => target.number)>",
+            "[102, 101]"
+          ],
+          "expression": "expect(selection.targets.map((target) => target.number)).toEqual([102, 101])",
+          "sourceCode": "expect(selection.targets.map((target) => target.number)).toEqual([102, 101])",
+          "surfaces": [
+            "Semantic oracle"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 72,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 2
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "$selection.expression (from selection.observe) equals { type: \"static\" }.",
+          "call": "expect.toEqual",
+          "arguments": [
+            "$selection.expression (from selection.observe)",
+            "{ type: \"static\" }"
+          ],
+          "expression": "expect(selection.expression).toEqual({ type: \"static\" })",
+          "sourceCode": "expect(selection.expression).toEqual({ type: \"static\" })",
+          "surfaces": [
+            "Semantic oracle"
+          ],
+          "phase": "helper:expectPresetTargetSelection",
+          "order": 73,
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 229,
+            "column": 2
           }
         }
       ],
@@ -3004,6 +3668,7 @@
         "DMX output",
         "Desktop layout",
         "Encoder controls",
+        "Highlight",
         "OSC",
         "Pool UI",
         "Presets",
@@ -3021,7 +3686,93 @@
         "constraint": "parallel"
       },
       "lastRun": null,
-      "diagnostics": []
+      "diagnostics": [
+        {
+          "code": "unresolved-expression",
+          "message": "Call expression selection.targets.map((target) => target.number) is dynamic and was not executed.",
+          "expression": "selection.targets.map((target) => target.number)",
+          "relatedCall": "expect.toEqual",
+          "relatedSource": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 2
+          },
+          "sourceCode": "selection.targets.map((target) => target.number)",
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 9
+          }
+        },
+        {
+          "code": "unresolved-expression",
+          "message": "Call expression selection.targets.map((target) => target.number) is dynamic and was not executed.",
+          "expression": "selection.targets.map((target) => target.number)",
+          "relatedCall": "expect.toEqual",
+          "relatedSource": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 2
+          },
+          "sourceCode": "selection.targets.map((target) => target.number)",
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 9
+          }
+        },
+        {
+          "code": "unresolved-expression",
+          "message": "Call expression selection.targets.map((target) => target.number) is dynamic and was not executed.",
+          "expression": "selection.targets.map((target) => target.number)",
+          "relatedCall": "expect.toEqual",
+          "relatedSource": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 2
+          },
+          "sourceCode": "selection.targets.map((target) => target.number)",
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 9
+          }
+        },
+        {
+          "code": "unresolved-expression",
+          "message": "Call expression selection.targets.map((target) => target.number) is dynamic and was not executed.",
+          "expression": "selection.targets.map((target) => target.number)",
+          "relatedCall": "expect.toEqual",
+          "relatedSource": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 2
+          },
+          "sourceCode": "selection.targets.map((target) => target.number)",
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 9
+          }
+        },
+        {
+          "code": "unresolved-expression",
+          "message": "Call expression selection.targets.map((target) => target.number) is dynamic and was not executed.",
+          "expression": "selection.targets.map((target) => target.number)",
+          "relatedCall": "expect.toEqual",
+          "relatedSource": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 2
+          },
+          "sourceCode": "selection.targets.map((target) => target.number)",
+          "source": {
+            "file": "tests/38-semantic-command-programmer-group-preset.spec.ts",
+            "line": 228,
+            "column": 9
+          }
+        }
+      ]
     },
     {
       "id": "BENCH-CUE-PLAYBACK-001",
@@ -31481,7 +32232,7 @@
     },
     {
       "id": "CROSS-002",
-      "title": "browser live-reconciles external REST and command-WebSocket mutations",
+      "title": "browser live-reconciles external REST and typed live-action mutations",
       "source": {
         "file": "tests/55-semantic-osc-api-and-cross-surface.spec.ts",
         "line": 204,
@@ -43882,115 +44633,6 @@
       "diagnostics": []
     },
     {
-      "id": "MANUAL-019",
-      "title": "Development stays out of operator panes and remains available through Desk Status",
-      "source": {
-        "file": "tests/63-semantic-operator-shell.spec.ts",
-        "line": 39,
-        "column": 1
-      },
-      "preconditions": [
-        {
-          "kind": "precondition",
-          "description": "Use the isolated Show.TwelveDimmers show.",
-          "call": "show.use",
-          "arguments": [
-            "Show.TwelveDimmers"
-          ],
-          "expression": "t.show.use(Show.TwelveDimmers)",
-          "sourceCode": "t.show.use(Show.TwelveDimmers)",
-          "surfaces": [
-            "Show files"
-          ],
-          "phase": "scenario",
-          "order": 0,
-          "source": {
-            "file": "tests/63-semantic-operator-shell.spec.ts",
-            "line": 43,
-            "column": 9
-          }
-        },
-        {
-          "kind": "precondition",
-          "description": "Open the ToskLight browser application.",
-          "call": "app.open",
-          "arguments": [],
-          "expression": "t.app.open()",
-          "sourceCode": "t.app.open()",
-          "surfaces": [
-            "Browser UI"
-          ],
-          "phase": "scenario",
-          "order": 1,
-          "source": {
-            "file": "tests/63-semantic-operator-shell.spec.ts",
-            "line": 44,
-            "column": 9
-          }
-        },
-        {
-          "kind": "precondition",
-          "description": "The ToskLight browser application is ready.",
-          "call": "app.expect.ready",
-          "arguments": [],
-          "expression": "t.app.expect.ready()",
-          "sourceCode": "t.app.expect.ready()",
-          "surfaces": [
-            "Browser UI"
-          ],
-          "phase": "scenario",
-          "order": 2,
-          "source": {
-            "file": "tests/63-semantic-operator-shell.spec.ts",
-            "line": 45,
-            "column": 9
-          }
-        }
-      ],
-      "steps": [],
-      "expectedOutcomes": [
-        {
-          "kind": "expected-outcome",
-          "description": "Operator shell → expect development diagnostics boundary.",
-          "call": "operatorShell.expectDevelopmentDiagnosticsBoundary",
-          "arguments": [],
-          "expression": "t.operatorShell.expectDevelopmentDiagnosticsBoundary()",
-          "sourceCode": "t.operatorShell.expectDevelopmentDiagnosticsBoundary()",
-          "surfaces": [
-            "Browser UI",
-            "Operator shell"
-          ],
-          "phase": "scenario",
-          "order": 3,
-          "source": {
-            "file": "tests/63-semantic-operator-shell.spec.ts",
-            "line": 46,
-            "column": 9
-          }
-        }
-      ],
-      "contextLabels": [
-        {
-          "kind": "show",
-          "label": "Twelve Dimmers"
-        }
-      ],
-      "testedSurfaces": [
-        "Browser UI",
-        "Operator shell",
-        "Show files"
-      ],
-      "migration": {
-        "status": "migrated-semantic-world",
-        "contract": "repository contract",
-        "helperFamily": "semantic-operator-shell",
-        "artifacts": "standard failure evidence",
-        "constraint": "parallel"
-      },
-      "lastRun": null,
-      "diagnostics": []
-    },
-    {
       "id": "COMMAND-HISTORY-001",
       "title": "Command Line history shows accepted and rejected desk commands once",
       "source": {
@@ -46726,6 +47368,855 @@
       },
       "lastRun": null,
       "diagnostics": []
+    },
+    {
+      "id": "STAGE-001",
+      "title": "authoritative Live and Preload Stage surfaces stay current, recover independently, and preserve output",
+      "source": {
+        "file": "tests/66-semantic-stage-visualizer.spec.ts",
+        "line": 12,
+        "column": 1
+      },
+      "preconditions": [
+        {
+          "kind": "precondition",
+          "description": "Use the isolated Show.DefaultStage show.",
+          "call": "show.use",
+          "arguments": [
+            "Show.DefaultStage"
+          ],
+          "expression": "t.show.use(Show.DefaultStage)",
+          "sourceCode": "t.show.use(Show.DefaultStage)",
+          "surfaces": [
+            "Show files"
+          ],
+          "phase": "scenario",
+          "order": 0,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 16,
+            "column": 9
+          }
+        },
+        {
+          "kind": "precondition",
+          "description": "Open the ToskLight browser application.",
+          "call": "app.open",
+          "arguments": [],
+          "expression": "t.app.open()",
+          "sourceCode": "t.app.open()",
+          "surfaces": [
+            "Browser UI"
+          ],
+          "phase": "scenario",
+          "order": 2,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 18,
+            "column": 9
+          }
+        },
+        {
+          "kind": "precondition",
+          "description": "The ToskLight browser application is ready.",
+          "call": "app.expect.ready",
+          "arguments": [],
+          "expression": "t.app.expect.ready()",
+          "sourceCode": "t.app.expect.ready()",
+          "surfaces": [
+            "Browser UI"
+          ],
+          "phase": "scenario",
+          "order": 3,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 19,
+            "column": 9
+          }
+        }
+      ],
+      "steps": [
+        {
+          "kind": "step",
+          "description": "Stage → prepare socket recovery proof.",
+          "call": "stage.prepareSocketRecoveryProof",
+          "arguments": [],
+          "expression": "t.stage.prepareSocketRecoveryProof()",
+          "sourceCode": "t.stage.prepareSocketRecoveryProof()",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 1,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 17,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Desktop → configure with \"Stage runtime proof\".",
+          "call": "desktop.configure",
+          "arguments": [
+            "\"Stage runtime proof\""
+          ],
+          "presentation": {
+            "badges": [
+              {
+                "kind": "desktop",
+                "label": "Stage runtime proof"
+              }
+            ],
+            "omitArguments": [
+              0
+            ]
+          },
+          "expression": "t.desktop.configure(\"Stage runtime proof\")",
+          "sourceCode": "t.desktop.configure(\"Stage runtime proof\")",
+          "surfaces": [
+            "Browser UI",
+            "Desktop layout"
+          ],
+          "phase": "scenario",
+          "order": 4,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 21,
+            "column": 19
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Add the PaneType.Stage pane with layout { slug: \"live-stage\", column: 1, row: 1, width: 12, height: 18 }.",
+          "call": "desktopBuilder.addPane",
+          "arguments": [
+            "PaneType.Stage",
+            "{ slug: \"live-stage\", column: 1, row: 1, width: 12, height: 18 }"
+          ],
+          "presentation": {
+            "omitStructuredArguments": true
+          },
+          "expression": "desktop.addPane(PaneType.Stage, { slug: \"live-stage\", column: 1, row: 1, width: 12, height: 18, })",
+          "sourceCode": "desktop.addPane(PaneType.Stage, {\n\t\t\tslug: \"live-stage\",\n\t\t\tcolumn: 1,\n\t\t\trow: 1,\n\t\t\twidth: 12,\n\t\t\theight: 18,\n\t\t})",
+          "surfaces": [
+            "Browser UI",
+            "Desktop layout"
+          ],
+          "phase": "scenario",
+          "order": 5,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 22,
+            "column": 16
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Add the PaneType.Stage pane with layout { slug: \"preload-stage\", column: 13, row: 1, width: 12, height: 18 }.",
+          "call": "desktopBuilder.addPane",
+          "arguments": [
+            "PaneType.Stage",
+            "{ slug: \"preload-stage\", column: 13, row: 1, width: 12, height: 18 }"
+          ],
+          "presentation": {
+            "omitStructuredArguments": true
+          },
+          "expression": "desktop.addPane(PaneType.Stage, { slug: \"preload-stage\", column: 13, row: 1, width: 12, height: 18, })",
+          "sourceCode": "desktop.addPane(PaneType.Stage, {\n\t\t\tslug: \"preload-stage\",\n\t\t\tcolumn: 13,\n\t\t\trow: 1,\n\t\t\twidth: 12,\n\t\t\theight: 18,\n\t\t})",
+          "surfaces": [
+            "Browser UI",
+            "Desktop layout"
+          ],
+          "phase": "scenario",
+          "order": 6,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 29,
+            "column": 19
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Apply the configured Desktop layout.",
+          "call": "desktopBuilder.apply",
+          "arguments": [],
+          "expression": "desktop.apply()",
+          "sourceCode": "desktop.apply()",
+          "surfaces": [
+            "Browser UI",
+            "Desktop layout"
+          ],
+          "phase": "scenario",
+          "order": 7,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 46,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Advance the test clock by \"1ms\".",
+          "call": "clock.advanceBy",
+          "arguments": [
+            "\"1ms\""
+          ],
+          "expression": "t.clock.advanceBy(\"1ms\")",
+          "sourceCode": "t.clock.advanceBy(\"1ms\")",
+          "surfaces": [
+            "Test clock"
+          ],
+          "phase": "scenario",
+          "order": 8,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 47,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Clear the current selection.",
+          "call": "selection.clear",
+          "arguments": [],
+          "expression": "t.selection.clear()",
+          "sourceCode": "t.selection.clear()",
+          "surfaces": [
+            "Selection"
+          ],
+          "phase": "scenario",
+          "order": 11,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 51,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Selection → fixtures → click → item with 201.",
+          "call": "selection.fixtures.via.click.item",
+          "arguments": [
+            "201"
+          ],
+          "expression": "t.selection.fixtures.via.click.item(201)",
+          "sourceCode": "t.selection.fixtures.via.click.item(201)",
+          "surfaces": [
+            "Browser UI",
+            "Selection"
+          ],
+          "phase": "scenario",
+          "order": 12,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 52,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Stage → begin changing frame measurement.",
+          "call": "stage.beginChangingFrameMeasurement",
+          "arguments": [],
+          "expression": "t.stage.beginChangingFrameMeasurement()",
+          "sourceCode": "t.stage.beginChangingFrameMeasurement()",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 13,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 58,
+            "column": 32
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Timing → programmer fade → api → set with \"1s\".",
+          "call": "timing.programmerFade.via.api.set",
+          "arguments": [
+            "\"1s\""
+          ],
+          "expression": "t.timing.programmerFade.via.api.set(\"1s\")",
+          "sourceCode": "t.timing.programmerFade.via.api.set(\"1s\")",
+          "surfaces": [
+            "Cue timing",
+            "Programmer timing",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 14,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 59,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Encoder → position → pan → api → set with 75.",
+          "call": "encoder.position.pan.via.api.set",
+          "arguments": [
+            "75"
+          ],
+          "expression": "t.encoder.position.pan.via.api.set(75)",
+          "sourceCode": "t.encoder.position.pan.via.api.set(75)",
+          "surfaces": [
+            "Encoder controls",
+            "Programmer",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 15,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 60,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Execute the desk command \"AT 80\".",
+          "call": "command.execute",
+          "arguments": [
+            "\"AT 80\""
+          ],
+          "expression": "t.command.execute(\"AT 80\")",
+          "sourceCode": "t.command.execute(\"AT 80\")",
+          "surfaces": [
+            "Command line"
+          ],
+          "phase": "scenario",
+          "order": 16,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 61,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Advance the test clock by \"500ms\".",
+          "call": "clock.advanceBy",
+          "arguments": [
+            "\"500ms\""
+          ],
+          "expression": "t.clock.advanceBy(\"500ms\")",
+          "sourceCode": "t.clock.advanceBy(\"500ms\")",
+          "surfaces": [
+            "Test clock"
+          ],
+          "phase": "scenario",
+          "order": 17,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 62,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Stage → wait for changing frame.",
+          "call": "stage.waitForChangingFrame",
+          "arguments": [],
+          "expression": "t.stage.waitForChangingFrame()",
+          "sourceCode": "t.stage.waitForChangingFrame()",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 18,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 63,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Advance the test clock by \"500ms\".",
+          "call": "clock.advanceBy",
+          "arguments": [
+            "\"500ms\""
+          ],
+          "expression": "t.clock.advanceBy(\"500ms\")",
+          "sourceCode": "t.clock.advanceBy(\"500ms\")",
+          "surfaces": [
+            "Test clock"
+          ],
+          "phase": "scenario",
+          "order": 20,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 65,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Stage → wait for changing frame.",
+          "call": "stage.waitForChangingFrame",
+          "arguments": [],
+          "expression": "t.stage.waitForChangingFrame()",
+          "sourceCode": "t.stage.waitForChangingFrame()",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 21,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 66,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Stage → assert changing frame budget with $changingFrames (result of stage.beginChangingFrameMeasurement).",
+          "call": "stage.assertChangingFrameBudget",
+          "arguments": [
+            "$changingFrames (result of stage.beginChangingFrameMeasurement)"
+          ],
+          "expression": "t.stage.assertChangingFrameBudget(changingFrames)",
+          "sourceCode": "t.stage.assertChangingFrameBudget(changingFrames)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 23,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 68,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Stage → interrupt visualization.",
+          "call": "stage.interruptVisualization",
+          "arguments": [],
+          "expression": "t.stage.interruptVisualization()",
+          "sourceCode": "t.stage.interruptVisualization()",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 28,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 79,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Encoder → intensity → dimmer → api → set with 40.",
+          "call": "encoder.intensity.dimmer.via.api.set",
+          "arguments": [
+            "40"
+          ],
+          "expression": "t.encoder.intensity.dimmer.via.api.set(40)",
+          "sourceCode": "t.encoder.intensity.dimmer.via.api.set(40)",
+          "surfaces": [
+            "Encoder controls",
+            "Programmer",
+            "Typed API"
+          ],
+          "phase": "scenario",
+          "order": 30,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 81,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Advance the test clock by \"1s\".",
+          "call": "clock.advanceBy",
+          "arguments": [
+            "\"1s\""
+          ],
+          "expression": "t.clock.advanceBy(\"1s\")",
+          "sourceCode": "t.clock.advanceBy(\"1s\")",
+          "surfaces": [
+            "Test clock"
+          ],
+          "phase": "scenario",
+          "order": 31,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 82,
+            "column": 9
+          }
+        },
+        {
+          "kind": "step",
+          "description": "Stage → resume visualization.",
+          "call": "stage.resumeVisualization",
+          "arguments": [],
+          "expression": "t.stage.resumeVisualization()",
+          "sourceCode": "t.stage.resumeVisualization()",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 33,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 84,
+            "column": 9
+          }
+        }
+      ],
+      "expectedOutcomes": [
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect lane: $live (result of desktopBuilder.addPane), \"live\".",
+          "call": "stage.expectLane",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)",
+            "\"live\""
+          ],
+          "expression": "t.stage.expectLane(live, \"live\")",
+          "sourceCode": "t.stage.expectLane(live, \"live\")",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 9,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 48,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect lane: $preload (result of desktopBuilder.addPane), \"preload\".",
+          "call": "stage.expectLane",
+          "arguments": [
+            "$preload (result of desktopBuilder.addPane)",
+            "\"preload\""
+          ],
+          "expression": "t.stage.expectLane(preload, \"preload\")",
+          "sourceCode": "t.stage.expectLane(preload, \"preload\")",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 10,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 49,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "fixture(201) DMX equals { Intensity: 102 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "fixture(201)",
+            "{ Intensity: 102 }"
+          ],
+          "expression": "t.expectFixtureDMX(fixture(201), { Intensity: 102 })",
+          "sourceCode": "t.expectFixtureDMX(fixture(201), { Intensity: 102 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 19,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 64,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "fixture(201) DMX equals { Intensity: 204 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "fixture(201)",
+            "{ Intensity: 204 }"
+          ],
+          "expression": "t.expectFixtureDMX(fixture(201), { Intensity: 204 })",
+          "sourceCode": "t.expectFixtureDMX(fixture(201), { Intensity: 204 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 22,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 67,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect quality: $live (result of desktopBuilder.addPane), StageRenderQuality.LinesOnly.",
+          "call": "stage.expectQuality",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)",
+            "StageRenderQuality.LinesOnly"
+          ],
+          "expression": "t.stage.expectQuality(live, quality)",
+          "sourceCode": "t.stage.expectQuality(live, quality)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario:iteration-1",
+          "order": 24,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 76,
+            "column": 10
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect quality: $live (result of desktopBuilder.addPane), StageRenderQuality.LinesAndBeams.",
+          "call": "stage.expectQuality",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)",
+            "StageRenderQuality.LinesAndBeams"
+          ],
+          "expression": "t.stage.expectQuality(live, quality)",
+          "sourceCode": "t.stage.expectQuality(live, quality)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario:iteration-2",
+          "order": 25,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 76,
+            "column": 10
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect quality: $live (result of desktopBuilder.addPane), StageRenderQuality.Beams.",
+          "call": "stage.expectQuality",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)",
+            "StageRenderQuality.Beams"
+          ],
+          "expression": "t.stage.expectQuality(live, quality)",
+          "sourceCode": "t.stage.expectQuality(live, quality)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario:iteration-3",
+          "order": 26,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 76,
+            "column": 10
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect quality: $live (result of desktopBuilder.addPane), StageRenderQuality.ImprovedBeams.",
+          "call": "stage.expectQuality",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)",
+            "StageRenderQuality.ImprovedBeams"
+          ],
+          "expression": "t.stage.expectQuality(live, quality)",
+          "sourceCode": "t.stage.expectQuality(live, quality)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario:iteration-4",
+          "order": 27,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 76,
+            "column": 10
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect stale: $live (result of desktopBuilder.addPane).",
+          "call": "stage.expectStale",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)"
+          ],
+          "expression": "t.stage.expectStale(live)",
+          "sourceCode": "t.stage.expectStale(live)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 29,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 80,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "fixture(201) DMX equals { Intensity: 102 }.",
+          "call": "expectFixtureDMX",
+          "arguments": [
+            "fixture(201)",
+            "{ Intensity: 102 }"
+          ],
+          "expression": "t.expectFixtureDMX(fixture(201), { Intensity: 102 })",
+          "sourceCode": "t.expectFixtureDMX(fixture(201), { Intensity: 102 })",
+          "surfaces": [
+            "DMX output"
+          ],
+          "phase": "scenario",
+          "order": 32,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 83,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect recovered: $live (result of desktopBuilder.addPane).",
+          "call": "stage.expectRecovered",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)"
+          ],
+          "expression": "t.stage.expectRecovered(live)",
+          "sourceCode": "t.stage.expectRecovered(live)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 34,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 85,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect recovered: $preload (result of desktopBuilder.addPane).",
+          "call": "stage.expectRecovered",
+          "arguments": [
+            "$preload (result of desktopBuilder.addPane)"
+          ],
+          "expression": "t.stage.expectRecovered(preload)",
+          "sourceCode": "t.stage.expectRecovered(preload)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 35,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 86,
+            "column": 9
+          }
+        },
+        {
+          "kind": "expected-outcome",
+          "description": "Stage → expect context recovery: $live (result of desktopBuilder.addPane).",
+          "call": "stage.expectContextRecovery",
+          "arguments": [
+            "$live (result of desktopBuilder.addPane)"
+          ],
+          "expression": "t.stage.expectContextRecovery(live)",
+          "sourceCode": "t.stage.expectContextRecovery(live)",
+          "surfaces": [
+            "Browser UI",
+            "Stage",
+            "Visualization runtime"
+          ],
+          "phase": "scenario",
+          "order": 36,
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 88,
+            "column": 9
+          }
+        }
+      ],
+      "contextLabels": [
+        {
+          "kind": "show",
+          "label": "Default Stage"
+        }
+      ],
+      "testedSurfaces": [
+        "Browser UI",
+        "Command line",
+        "Cue timing",
+        "DMX output",
+        "Desktop layout",
+        "Encoder controls",
+        "Programmer",
+        "Programmer timing",
+        "Selection",
+        "Show files",
+        "Stage",
+        "Test clock",
+        "Typed API",
+        "Visualization runtime"
+      ],
+      "migration": {
+        "status": "unresolved",
+        "contract": "unresolved",
+        "helperFamily": "unresolved",
+        "artifacts": "unresolved",
+        "constraint": "unresolved"
+      },
+      "lastRun": null,
+      "diagnostics": [
+        {
+          "code": "missing-migration-status",
+          "message": "No exact source, ID, and title match exists in the generated migration inventory.",
+          "source": {
+            "file": "tests/66-semantic-stage-visualizer.spec.ts",
+            "line": 12,
+            "column": 1
+          }
+        }
+      ]
     },
     {
       "id": "BENCH-PRODUCT-DEMO-001",

@@ -292,10 +292,10 @@ test("repository compiler finds every marked scenario once and stays determinist
 		).size,
 		first.scenarioCount,
 	);
-		assert.equal(
-			first.scenarios.filter((scenario) => scenario.id === "PROG-002").length,
-			8,
-		);
+	assert.equal(
+		first.scenarios.filter((scenario) => scenario.id === "PROG-002").length,
+		8,
+	);
 	assert.ok(
 		first.scenarios.every(
 			(scenario) =>
@@ -325,7 +325,7 @@ test("repository compiler finds every marked scenario once and stays determinist
 	);
 	assert.ok(
 		presetScenario.expectedOutcomes.some((outcome) =>
-			outcome.description.includes("<observed: t.preset.routeReports.at(-1)>"),
+			outcome.description.includes("Preset → expect visible selection"),
 		),
 	);
 	assert.ok(
@@ -339,7 +339,9 @@ test("repository compiler finds every marked scenario once and stays determinist
 });
 
 test("Playwright JSON merges only into separate last-run metadata with aggregate precedence", () => {
-	const fixture = fs.mkdtempSync(path.join(artifactPaths.tmp, "light-results-"));
+	const fixture = fs.mkdtempSync(
+		path.join(artifactPaths.tmp, "light-results-"),
+	);
 	const report = path.join(fixture, "report.json");
 	fs.writeFileSync(
 		report,
@@ -542,7 +544,9 @@ test("CLI check rejects stale alternate outputs and accepts a subsequent write",
 });
 
 test("CLI refuses run-specific results in the canonical documentation directory", () => {
-	const fixture = fs.mkdtempSync(path.join(artifactPaths.tmp, "light-doc-results-"));
+	const fixture = fs.mkdtempSync(
+		path.join(artifactPaths.tmp, "light-doc-results-"),
+	);
 	const report = path.join(fixture, "report.json");
 	fs.writeFileSync(report, JSON.stringify({ suites: [] }));
 	const cli = path.join(root, "tools/semantic-test-docs/cli.mjs");
