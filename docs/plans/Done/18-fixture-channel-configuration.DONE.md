@@ -99,7 +99,7 @@ A physical DMX channel can expose several ordered, non-overlapping functions. A 
 - continuous mapping with a physical range;
 - named fixed value;
 - indexed color or gobo slots; or
-- a control or macro function.
+- a fixture control function.
 
 Only explicitly active programming claims a function. When several programmed attributes target functions on the same physical channel, the configured highest-priority function owns the output. Releasing it reveals the next active function or the channel default. Defaults do not permanently claim a function. New continuous functions default to priority 0, indexed or fixed functions to priority 100, and safety/control functions to priority 200; the fixture author can change the priority.
 

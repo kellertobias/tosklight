@@ -26,7 +26,7 @@ Keep title cards only where they introduce a real new chapter in the demo. The r
 - the initial product/demo title card;
 - **Output Configuration**, after patch/setup work and before route configuration;
 - **Group Preparation**;
-- **Built-in Control Macros** or a similarly clear title for the lamp/control macro workflow;
+- **Built-in Fixture Control Actions** or a similarly clear title for the lamp/control workflow;
 - **Preset Programming**;
 - **Cue Programming**; and
 - **Busking** or later playback-operation chapters as needed.
@@ -69,9 +69,11 @@ Group preparation can keep its current broad flow, but the revised demo must add
 
 If the modal-centering defect is fixed before this plan is implemented, the demo revision should still include a regression check or visual assertion path that keeps the record modal centered.
 
-## Built-in control macros
+## Built-in fixture control actions
 
-Replace the current "Turn lights on" framing. The title should be **Built-in Control Macros** or a similarly clear operator label, not "Turn lights on".
+Replace the current "Turn lights on" framing. The title should be **Built-in Fixture Control
+Actions** or a similarly clear operator label, not "Turn lights on". These actions are fixture
+profile controls, not operator-authored [Macros](../Later/46-macros-and-scheduled-macros.md).
 
 The supporting text should describe the purpose, for example:
 
@@ -80,12 +82,13 @@ The supporting text should describe the purpose, for example:
 In the visible workflow:
 
 - clear the selection if the intent is to apply the action globally;
-- open Programmer control and the special/control macro dialog;
+- open Programmer control and the special/control action dialog;
 - highlight **Lamp On** and run it;
 - briefly highlight other available actions such as **Fan Auto**, **Reset**, and **Lamp Off**; and
 - update the current-action narration to describe what each highlighted action would do.
 
-The section should demonstrate that these are fixture control macros available from the desk, not just one lamp-on button.
+The section should demonstrate that these are fixture control actions available from the desk, not
+just one lamp-on button.
 
 ## Preset programming issues to verify
 
@@ -124,7 +127,8 @@ The implementation is complete only when the maintained demo video and test sati
 7. Output route work is introduced by an **Output Configuration** title card.
 8. Group pools are correct for a new show when group preparation starts.
 9. Record and related modals are centered in the visible app surface.
-10. Built-in control macros replace the old "Turn lights on" chapter and explain Lamp On, Fan Auto, Reset, Lamp Off, and related actions.
+10. Built-in fixture control actions replace the old "Turn lights on" chapter and explain Lamp On,
+    Fan Auto, Reset, Lamp Off, and related actions.
 11. Preset pools are correct for a new show when preset programming starts.
 12. Red preset programming does not perform redundant zeroing of unchanged color channels.
 13. Current-action narration describes operator intent and outcome, not literal clicks.

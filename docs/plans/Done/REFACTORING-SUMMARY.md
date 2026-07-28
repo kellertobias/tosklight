@@ -187,7 +187,7 @@ contracts, and two desktop cases that run separately under `npm run test:desktop
 
 - DMX-008 minimum-universe padding/default behavior and the named PRELOAD/MANUAL UI contracts remain
   product work, not hidden refactor failures.
-- Dynamics, Macros, scheduled Macros, Timecode, managed assets, and bidirectional external fixtures
+- Dynamics, Macros, Schedules, Timecode, managed assets, and bidirectional external fixtures
   remain future products. Only their architectural seams exist.
 - The contract-only `ServerContext` test export and feature composition under
   `features/server/` are retained deliberately; neither is a broad runtime provider.

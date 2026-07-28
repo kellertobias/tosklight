@@ -20,7 +20,7 @@ flowchart LR
   HTTP["HTTP command API"] --> ADAPTERS
   MIDI["MIDI / Matter"] --> ADAPTERS
   MACRO["Future Macro Runtime"] --> ADAPTERS
-  SCHEDULE["Wall-clock Macro Scheduler"] --> MACRO
+  SCHEDULE["Future Schedule Service"] --> MACRO
 
   ADAPTERS --> APP["Typed application services"]
 
@@ -255,20 +255,16 @@ Efficiency is a hard architecture requirement, not a post-refactor polish item. 
 - Dynamics, Macros, Timecode, sound-to-light detection, and external-device adapters may schedule or submit contributions, but they must not block output frame generation.
 - If the system cannot keep the configured output rate, it must report actionable output health and overload diagnostics rather than silently producing stale or irregular frames.
 
-## Future Macro architecture
+## Macro architecture boundary
 
-Macros belong above the domain services in the application layer, never inside the render loop.
+The refactor established language-neutral `MacroRuntime`, `MacroHost`, and `MacroService`
+application seams above the domain services and outside the render loop. The completed proof does
+not define the Macro product.
 
-- `MacroDefinition` is a portable show object with stable identity, source, future language identifier, declared capabilities, dependencies, and revision.
-- No Macro language is selected during this refactor.
-- A language-neutral `MacroRuntime` port allows a future Lua, JavaScript, custom DSL, or other sandboxed implementation.
-- `MacroService` supervises short- and long-running Macro instances.
-- A future Macro host API can query fixtures, positions, Groups, Presets, Dynamics, Cues, Playbacks, and authoritative runtime state and can submit typed application commands.
-- Long-running Macros may wait for timers, application events, or typed operator input without blocking the render loop.
-- HTTP/HTTPS access goes through an application-owned port providing cancellation, limits, errors, and audit even when arbitrary URLs are allowed.
-- Cue and Timecode references execute a Macro by stable ID. Those are ordinary Macro executions, not scheduled Macros.
-- `MacroSchedule` is a separate portable show object for daily or one-time wall-clock execution, with explicit timezone and per-schedule skip or catch-up behavior.
-- Selective cross-show import loads Macro definitions and their dependencies into the current show.
+The sole current specification for language, packages, permissions, execution, persistence,
+interaction, panes, Programmer access, and scheduling integration is
+[Macros](Later/46-macros-and-scheduled-macros.md). This historical refactor plan must not be used
+as an alternate Macro definition.
 
 ## Timecode and managed assets
 
@@ -367,7 +363,7 @@ These are architectural tests using fakes, not production feature implementation
 - Add a fake fixed contribution to prove a future stomp or `FAT` value can control the overlapping animated attribute without special-casing Groups, Cues, fixtures, or DMX output.
 - Add a fake bidirectional external-fixture adapter without changing DMX delivery.
 - Add a fake language-neutral Macro runtime that queries fixtures, performs a revisioned position change, waits for typed input, triggers a Playback, and makes a mocked HTTP request.
-- Add fake daily and one-time Macro schedules with skip and catch-up policies.
+- Add fake daily and one-time Schedule invocations of a fake Macro with skip and catch-up policies.
 - Add a fake managed asset and timeline operation to prove the Timecode seams.
 
 ### 8. Remove compatibility facades and document the result
@@ -406,11 +402,10 @@ These are architectural tests using fakes, not production feature implementation
 
 ## Assumptions and deferred decisions
 
-- Dynamics, Timecode, Macros, scheduled Macros, a `FAT` command, and bidirectional external fixtures are not implemented during this refactor.
+- Dynamics, Timecode, Macros, Schedules, a `FAT` command, and bidirectional external fixtures are not implemented during this refactor.
 - The architecture supports future static and stateful animated attribute values, but does not choose the Dynamics schema or pause behavior.
-- No Macro language or sandbox runtime is selected.
-- Macro source is expected to belong to the show and be selectively importable with dependencies.
-- Future Macros may perform arbitrary HTTP/HTTPS requests through an application-owned auditable port.
+- Macro product decisions made after this refactor are owned exclusively by
+  [Macros](Later/46-macros-and-scheduled-macros.md).
 - Device-observed versus desk-desired value authority remains a future fixture-feature decision.
 - Internal Rust and TypeScript APIs and REST/WebSocket v1 may break. Visible UI behavior, OSC, and persisted user data remain compatibility surfaces.
 - Existing unrelated working-tree changes must remain untouched and be excluded from refactor commits.
@@ -506,9 +501,10 @@ plan that remain incomplete or lack retained acceptance evidence:
 - The non-blocking 400-line file and 20-line function design goals continue to identify possible
   cohesive extractions; the enforceable hard source-size ratchet is clean.
 
-Dynamics, full Timecode, Macro language/runtime selection, scheduled Macros, `FAT`, and
-bidirectional external fixtures remain deliberately separate product work. Their absence is not an
-unfinished refactoring implementation.
+Dynamics, full Timecode, Macros, Schedules, `FAT`, and bidirectional external fixtures remain
+deliberately separate product work. Their absence is not an unfinished refactoring implementation.
+The later Macro product definition, including language and runtime selection, is owned exclusively
+by [`Later/46-macros-and-scheduled-macros.md`](Later/46-macros-and-scheduled-macros.md).
 
 ### Durable handoff documentation
 

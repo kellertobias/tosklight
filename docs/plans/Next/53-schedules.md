@@ -80,7 +80,12 @@ The Schedule must use the same authoritative Playback service as UI, keyboard, O
 
 Once Macros exist, a Schedule can start a Macro by stable Macro identity. Scheduled Macro execution must use the same Macro service as manual, Cue, Playback, Timecode, HTTP, OSC, or other supported Macro triggers.
 
-The Schedule feature must not select or implement the Macro language. If a Macro target is unavailable, invalid, blocked by permissions, already running in a disallowed duplicate mode, or unable to start, the Schedule records a failed occurrence without blocking the desk.
+The Schedule feature must not define Macro language, package, permission, Programmer, dialog,
+duplicate-instance, or lifecycle behavior. Those semantics are owned exclusively by
+[Macros](../Later/46-macros-and-scheduled-macros.md). This plan supplies the wall-clock occurrence,
+resolved desk-alias audience, and Schedule source context to that service. If a Macro target is
+unavailable, invalid, blocked by permissions, already running in a disallowed duplicate mode, or
+unable to start, the Schedule records a failed occurrence without blocking the desk.
 
 ## Timezone and clock behavior
 

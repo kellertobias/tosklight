@@ -24,11 +24,17 @@ This is not a minor polish item. It belongs in the first-priority Next plan, [Pr
 the [consolidated execution record](../major-refactoring.md#consolidated-execution-record). The
 other items in this plan remain feature work here.
 
-The direct programmer encoder type should be removed again. Fixed actions such as Lamp On, Lamp Off, Reset, and similar preset generation should be handled through special dialogs or through the DMX/timecode/master-macro surface, not as a direct encoder type.
+The direct programmer encoder type should be removed again. Fixed actions such as Lamp On, Lamp
+Off, Reset, and similar preset generation should be handled through special dialogs or through the
+DMX/timecode/master control-action surface, not as a direct encoder type. These fixed fixture
+control actions are not operator-authored [Macros](../Later/46-macros-and-scheduled-macros.md).
 
-### DMX, timecode, and master macro surface
+### DMX, timecode, and master control-action surface
 
-The surface opened from DMX/timecode/master controls should show Grand Master and Blackout vertically on the left. The right side should show macros such as Lamp On, Lamp Off, Reset, and similar actions. When fixtures are selected, macros should act on the selection and label themselves accordingly, such as Selected Lamps On instead of All Lamps On.
+The surface opened from DMX/timecode/master controls should show Grand Master and Blackout
+vertically on the left. The right side should show fixed fixture control actions such as Lamp On,
+Lamp Off, Reset, and similar actions. When fixtures are selected, these actions should act on the
+selection and label themselves accordingly, such as Selected Lamps On instead of All Lamps On.
 
 The middle area should show running sources in tabs such as Running Playbacks, Running Dynamics, and Active Programmers. Each tab should show a count. The list should include a clear Stop Everything action, and clicking an individual running item should clearly turn it off.
 
@@ -46,6 +52,6 @@ Make the seconds in the clock slightly larger while preserving the existing cloc
 2. Position and other special dialogs use a polished, professional layout.
 3. Relative encoders and Programmer Fade time are tracked by their own non-minor plan.
 4. The direct programmer encoder type is absent from operator-facing encoder choices.
-5. DMX/timecode/master controls expose Grand Master, Blackout, macros, and running-source stop controls with clear labels.
+5. DMX/timecode/master controls expose Grand Master, Blackout, fixed fixture control actions, and running-source stop controls with clear labels.
 6. The app icon symbol update is blocked until the required SVG is provided.
 7. Clock seconds are larger without breaking layout.

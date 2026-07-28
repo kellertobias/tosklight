@@ -12,7 +12,7 @@ Default object-type colors are:
 
 - Dynamics: light blue or cyan;
 - Cuelists and Sequences: lime green;
-- Macros: dark red once Macros are implemented;
+- Macros: dark red once [Macros](../Later/46-macros-and-scheduled-macros.md) are implemented;
 - Groups: pale yellow, leaning toward a soft orange-yellow; and
 - Presets: grey for now.
 

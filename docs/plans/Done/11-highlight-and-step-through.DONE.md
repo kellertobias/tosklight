@@ -12,7 +12,7 @@ Highlight is especially useful while focusing or positioning several fixtures. P
 
 ## Highlight output is not programmer data
 
-Highlight is a transient output layer, not a programmer value, preset, Cue value, or selection macro.
+Highlight is a transient output layer, not a programmer value, preset, Cue value, or selection shortcut.
 
 - Turning Highlight on must not add Intensity, Color, Beam, Position, or other values to the programmer.
 - Highlight values must never be included by Record, Update, Merge, presets, Cues, or any other store operation.

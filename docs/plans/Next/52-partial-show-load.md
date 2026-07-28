@@ -23,7 +23,7 @@ The preview must support selecting:
 - Dynamics;
 - Cuelists and Cues;
 - Playbacks and page assignments;
-- Macros and scheduled Macros once those show objects exist; and
+- Macro packages and Schedules once those show objects exist; and
 - any future portable show object type that participates in the general selective-import workflow.
 
 The confirmation step must clearly show whether the operation is **Replace by position** or **Add to end**. It must also show what references will be preserved, rewritten, left unresolved, or skipped before the operator commits the load.
@@ -91,7 +91,11 @@ Objects not selected for import must not be partly created just because another 
 
 ## Surface and compatibility requirements
 
-Partial Show Load should use the general selective-import workflow described by the major refactor plan rather than separate copy paths for Presets, Macros, Dynamics, patch data, or Cuelists.
+Partial Show Load should use the general selective-import workflow described by the major refactor
+plan rather than separate copy paths for Presets, Dynamics, patch data, or Cuelists. Macro package,
+revision, storage, library-comparison, and dependency semantics are defined only by
+[Macros](../Later/46-macros-and-scheduled-macros.md); this plan owns only their participation in
+the shared selective-import workflow.
 
 The Show menu, File Manager show picker, command/API surface, and any future OSC or hardware action that starts a partial load must use compatible vocabulary for selected sections, replacement mode, additive mode, dependency preview, conflict state, and confirmation.
 
