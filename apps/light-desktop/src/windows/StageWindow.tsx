@@ -21,6 +21,7 @@ export function StageWindow(props: StageWindowProps) {
 		layout,
 		selection.fixtureIdSet,
 		props.patchedFixtures,
+		options.view !== "3d",
 	);
 	return (
 		<div
@@ -50,6 +51,7 @@ export function StageWindow(props: StageWindowProps) {
 					patchPreviewFixtures={stage.patchPreviewFixtures}
 					camera3d={props.camera3d}
 					selection={selection}
+					active={active}
 				/>
 			) : (
 				<Stage2dView

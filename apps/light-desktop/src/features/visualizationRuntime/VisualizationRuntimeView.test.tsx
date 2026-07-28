@@ -10,6 +10,7 @@ import { VisualizationRuntimeStore } from "./store";
 import type { VisualizationRuntimeTransport } from "./transport";
 import {
 	VisualizationRuntimeProvider,
+	useVisualizationRuntimeSnapshotSubscription,
 	useVisualizationRuntimeView,
 } from "./VisualizationRuntimeView";
 
@@ -86,6 +87,34 @@ describe("VisualizationRuntimeProvider", () => {
 		expect(transport.loadSnapshot).toHaveBeenCalledOnce();
 	});
 
+	it("delivers live frames imperatively without reconciling the observing component", async () => {
+		const transport = fakeTransport();
+		const store = new VisualizationRuntimeStore();
+		const renders = vi.fn();
+		const snapshots = vi.fn();
+		render(
+			provider(
+				<ImperativeProbe renders={renders} snapshots={snapshots} />,
+				transport,
+				{ store },
+			),
+		);
+		await waitFor(() =>
+			expect(screen.getByText("normal:ready:1")).toBeInTheDocument(),
+		);
+		const readyRenders = renders.mock.calls.length;
+
+		act(() =>
+			store.install("normal", { ...snapshot("normal"), revision: 2 }),
+		);
+
+		expect(snapshots).toHaveBeenLastCalledWith(
+			expect.objectContaining({ revision: 2 }),
+		);
+		expect(renders).toHaveBeenCalledTimes(readyRenders);
+		expect(screen.getByText("normal:ready:1")).toBeInTheDocument();
+	});
+
 	it("clears immediately and drops a late response after server replacement", async () => {
 		const first = deferred<VisualizationSnapshot>();
 		const transportA = fakeTransport(() => first.promise);
@@ -128,6 +157,26 @@ function Probe({
 	});
 	return (
 		<span>{`${lane}:${view.status}:${view.snapshot?.revision ?? "—"}`}</span>
+	);
+}
+
+function ImperativeProbe({
+	renders,
+	snapshots,
+}: {
+	renders: () => void;
+	snapshots: (snapshot: VisualizationSnapshot) => void;
+}) {
+	renders();
+	const view = useVisualizationRuntimeView({
+		lane: "normal",
+		enabled: true,
+		intervalMillis: 250,
+		reconcileSnapshots: false,
+	});
+	useVisualizationRuntimeSnapshotSubscription("normal", true, snapshots);
+	return (
+		<span>{`normal:${view.status}:${view.snapshot?.revision ?? "—"}`}</span>
 	);
 }
 

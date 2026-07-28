@@ -47,9 +47,7 @@ export function bindStagePointerInteraction(
 	};
 	const up = () => {
 		controller.interactingRef.current = false;
-		controller.setRenderVisualization(
-			controller.latestVisualizationRef.current,
-		);
+		controller.installVisualization(controller.latestVisualizationRef.current);
 	};
 	renderer.domElement.addEventListener("pointerdown", down);
 	renderer.domElement.addEventListener("pointerup", up);

@@ -34,6 +34,7 @@ export interface VisualizationRuntimeViewOptions {
 	lane?: VisualizationRuntimeLane;
 	enabled?: boolean;
 	intervalMillis: number;
+	reconcileSnapshots?: boolean;
 }
 
 const StoreContext = createContext<VisualizationRuntimeStore | null>(null);
@@ -92,6 +93,7 @@ export function useVisualizationRuntimeView({
 	lane = "normal",
 	enabled = true,
 	intervalMillis,
+	reconcileSnapshots = true,
 }: VisualizationRuntimeViewOptions): VisualizationRuntimeView {
 	useVisualizationRuntimeActivation(lane, enabled, intervalMillis);
 	return useVisualizationRuntimeSelector(
@@ -100,7 +102,11 @@ export function useVisualizationRuntimeView({
 				enabled ? selectLane(state, lane) : DISABLED_VIEW,
 			[enabled, lane],
 		),
-		equalView,
+		useCallback(
+			(left: VisualizationRuntimeView, right: VisualizationRuntimeView) =>
+				equalView(left, right, reconcileSnapshots),
+			[reconcileSnapshots],
+		),
 		enabled,
 	);
 }
@@ -113,6 +119,33 @@ export function useVisualizationRuntimeSnapshot(
 
 export function useVisualizationRuntimeStore() {
 	return useContext(StoreContext) ?? fallbackStore;
+}
+
+export function useVisualizationRuntimeSnapshotSubscription(
+	lane: VisualizationRuntimeLane,
+	enabled: boolean,
+	onSnapshot: (snapshot: VisualizationSnapshot) => void,
+) {
+	const store = useVisualizationRuntimeStore();
+	const listener = useRef(onSnapshot);
+	useLayoutEffect(() => {
+		listener.current = onSnapshot;
+	}, [onSnapshot]);
+	useEffect(() => {
+		if (!enabled) return;
+		let installed: VisualizationSnapshot | null = null;
+		const synchronize = () => {
+			const snapshot = store.getSnapshot()[lane].snapshot;
+			if (!snapshot || snapshot === installed) return;
+			installed = snapshot;
+			listener.current(snapshot);
+		};
+		synchronize();
+		const unsubscribe = store.subscribe(synchronize);
+		return () => {
+			unsubscribe();
+		};
+	}, [enabled, lane, store]);
 }
 
 /**
@@ -196,10 +229,11 @@ function selectLane(
 function equalView(
 	left: VisualizationRuntimeView,
 	right: VisualizationRuntimeView,
+	reconcileSnapshots: boolean,
 ) {
 	return (
 		left.status === right.status &&
-		left.snapshot === right.snapshot &&
+		(!reconcileSnapshots || left.snapshot === right.snapshot) &&
 		left.error === right.error &&
 		left.ready === right.ready
 	);

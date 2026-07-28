@@ -1,11 +1,8 @@
 import {
-	type Dispatch,
 	type MutableRefObject,
-	type SetStateAction,
 	useEffect,
 	useMemo,
 	useRef,
-	useState,
 } from "react";
 import type * as THREE from "three";
 import type { VisualizationSnapshot } from "../../api/types";
@@ -38,9 +35,7 @@ export type StageSceneController = {
 	invalidateRef: MutableRefObject<(() => void) | null>;
 	displayedVisualizationRef: MutableRefObject<VisualizationSnapshot | null>;
 	visualizationSettledRef: MutableRefObject<boolean>;
-	setRenderVisualization: Dispatch<
-		SetStateAction<VisualizationSnapshot | null>
-	>;
+	installVisualization: (snapshot: VisualizationSnapshot | null) => void;
 };
 
 function retainFixtureModels(
@@ -154,22 +149,25 @@ export function useStageScene({
 	const selectionRef = useRef({ selected, showSelection });
 	const displayedVisualizationRef = useRef(visualization);
 	const visualizationSettledRef = useRef(true);
+	const installVisualizationRef = useRef<
+		(snapshot: VisualizationSnapshot | null) => void
+	>(() => undefined);
 	if (!modelCacheRef.current) modelCacheRef.current = new StageModelCache();
 	const modelCache = modelCacheRef.current;
-	const [renderVisualization, setRenderVisualization] = useState(visualization);
 	callbacksRef.current = callbacks;
 	selectionRef.current = { selected, showSelection };
 
 	useEffect(() => {
 		latestVisualizationRef.current = visualization;
-		if (!interactingRef.current) setRenderVisualization(visualization);
+		if (!interactingRef.current)
+			installVisualizationRef.current(visualization);
 	}, [visualization]);
 
 	useEffect(() => {
 		const startedAt = performance.now();
 		const next = buildStageScene(
 			fixtures,
-			renderVisualization,
+			latestVisualizationRef.current,
 			showSelection ? new Set(selected) : new Set(),
 			environmentBrightness,
 			showFloorGrid,
@@ -239,9 +237,6 @@ export function useStageScene({
 	);
 
 	useEffect(() => {
-		if (!sceneRef.current) return;
-		const target = renderVisualization;
-		const from = displayedVisualizationRef.current;
 		let frame: number | null = null;
 		const apply = (
 			snapshot: VisualizationSnapshot | null,
@@ -266,41 +261,50 @@ export function useStageScene({
 			);
 			invalidateRef.current?.();
 		};
-		if (!from || !target) {
-			apply(target, true);
-			return;
-		}
-		if (!stageVisualizationChanged(from, target)) {
-			displayedVisualizationRef.current = target;
-			visualizationSettledRef.current = true;
-			return;
-		}
-		const interpolationMillis = remainingStageInterpolationMillis(
-			target.generated_at,
-		);
-		if (interpolationMillis === 0) {
-			apply(target, true);
-			return;
-		}
-		const startedAt = performance.now();
-		const step = (now: number) => {
-			const progress = Math.min(
-				1,
-				Math.max(0, (now - startedAt) / interpolationMillis),
+		installVisualizationRef.current = (target) => {
+			latestVisualizationRef.current = target;
+			if (interactingRef.current || !sceneRef.current) return;
+			if (frame !== null) cancelAnimationFrame(frame);
+			frame = null;
+			const from = displayedVisualizationRef.current;
+			if (!from || !target) {
+				apply(target, true);
+				return;
+			}
+			if (!stageVisualizationChanged(from, target)) {
+				displayedVisualizationRef.current = target;
+				visualizationSettledRef.current = true;
+				return;
+			}
+			const interpolationMillis = remainingStageInterpolationMillis(
+				target.generated_at,
 			);
-			apply(
-				interpolateVisualizationSnapshot(from, target, progress),
-				progress >= 1,
-			);
-			if (progress < 1) frame = requestAnimationFrame(step);
+			if (interpolationMillis === 0) {
+				apply(target, true);
+				return;
+			}
+			const startedAt = performance.now();
+			const step = (now: number) => {
+				const progress = Math.min(
+					1,
+					Math.max(0, (now - startedAt) / interpolationMillis),
+				);
+				apply(
+					interpolateVisualizationSnapshot(from, target, progress),
+					progress >= 1,
+				);
+				if (progress < 1) frame = requestAnimationFrame(step);
+				else frame = null;
+			};
+			frame = requestAnimationFrame(step);
 		};
-		frame = requestAnimationFrame(step);
+		installVisualizationRef.current(latestVisualizationRef.current);
 		return () => {
 			if (frame !== null) cancelAnimationFrame(frame);
+			installVisualizationRef.current = () => undefined;
 		};
 	}, [
 		fixtures,
-		renderVisualization,
 		showBeamGuides,
 		renderQuality,
 		selected,
@@ -318,7 +322,8 @@ export function useStageScene({
 			invalidateRef,
 			displayedVisualizationRef,
 			visualizationSettledRef,
-			setRenderVisualization,
+			installVisualization: (snapshot) =>
+				installVisualizationRef.current(snapshot),
 		}),
 		[],
 	);

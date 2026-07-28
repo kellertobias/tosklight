@@ -8,11 +8,16 @@ import { fixtureValue } from "../fixtureVisualization";
 import { migrateStagePosition, type Stage3dFixture } from "../stage3dScene";
 import type { StageFixturePresentation, StageLayoutModel } from "./types";
 
-function useVisualizationView(followPreload: boolean, active: boolean) {
+function useVisualizationView(
+	followPreload: boolean,
+	active: boolean,
+	reconcileSnapshots: boolean,
+) {
 	return useVisualizationRuntimeView({
 		lane: followPreload ? "preload" : "normal",
 		enabled: active,
 		intervalMillis: 100,
+		reconcileSnapshots,
 	});
 }
 
@@ -148,9 +153,14 @@ export function useStageVisualization(
 	layout: StageLayoutModel,
 	selectedFixtureIds: ReadonlySet<string>,
 	patchedFixtures?: readonly PatchedFixture[],
+	reconcileSnapshots = true,
 ) {
 	const bootstrapReady = useBootstrapReady();
-	const visualizationView = useVisualizationView(followPreload, active);
+	const visualizationView = useVisualizationView(
+		followPreload,
+		active,
+		reconcileSnapshots,
+	);
 	const visualization = visualizationView.snapshot;
 	const stageFixtures = usePatchedFixtures(patchedFixtures);
 	const patchPreviewFixtures = useMemo(

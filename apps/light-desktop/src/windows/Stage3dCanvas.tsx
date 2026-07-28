@@ -1,5 +1,7 @@
 import { useRef } from "react";
 import type { VisualizationSnapshot } from "../api/types";
+import { useVisualizationRuntimeSnapshotSubscription } from "../features/visualizationRuntime/VisualizationRuntimeView";
+import type { VisualizationRuntimeLane } from "../features/visualizationRuntime/contracts";
 import { useApp } from "../state/AppContext";
 import type { StageRenderQuality } from "../types";
 import {
@@ -26,6 +28,8 @@ interface Props {
 	renderQuality: StageRenderQuality;
 	environmentBrightness: number;
 	camera3d?: StageCamera;
+	visualizationLane?: VisualizationRuntimeLane;
+	visualizationActive?: boolean;
 	onSelect: (fixtureId: string, additive: boolean) => void;
 }
 
@@ -40,6 +44,8 @@ export function Stage3dCanvas({
 	renderQuality,
 	environmentBrightness,
 	camera3d,
+	visualizationLane = "normal",
+	visualizationActive = false,
 	onSelect,
 }: Props) {
 	const { state, dispatch } = useApp();
@@ -61,6 +67,11 @@ export function Stage3dCanvas({
 		environmentBrightness,
 		callbacks: { onSelect },
 	});
+	useVisualizationRuntimeSnapshotSubscription(
+		visualizationLane,
+		visualizationActive,
+		controller.installVisualization,
+	);
 	const { cameraRef, controlsRef, cameraTargetRef } = useStageRenderer({
 		hostRef,
 		controller,
