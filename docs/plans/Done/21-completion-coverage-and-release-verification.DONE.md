@@ -259,7 +259,9 @@ This remains a release/certification gate rather than an ordinary hermetic CI te
 
 When every automated case above passes:
 
-- update `docs/todo-completion-audit.md` with current, reproducible counts and the exact commands used;
+- retain completion counts and exact verification commands in this result and the
+  refactoring summary instead of maintaining the retired
+  `docs/todo-completion-audit.md` scratch report;
 - update the testing coverage indexes with `MATTER-002`, extended `SHOW-005`, `UPDATE-002`, `HIGHLIGHT-004` through `HIGHLIGHT-006`, and `FIXTURE-002`;
 - ensure every completed planned-feature link resolves to a tracked `.DONE.md` file;
 - verify the Feature 20 rename is included as both the deletion of the old path and addition of the `.DONE.md` path before committing;
