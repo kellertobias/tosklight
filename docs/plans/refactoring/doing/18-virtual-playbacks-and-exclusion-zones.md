@@ -2,12 +2,15 @@
 
 ## Queue position and status
 
-**Pending, implementation-ready, and last in the current refactoring queue.**
+**Doing, claimed after the completed focused Dynamics lane-layout regression and before
+repository-wide dead-code removal.**
 
-Execute this plan after Dynamics and the built-in Stage visualizer. The current
-[Dynamics plan](../doing/16-dynamics/README.md) remains claimed. Move this file to `doing/` before changing
-implementation code, then follow the state and verification workflow in
-[`../README.md`](../README.md).
+**Completion usage gate: above 75% large-window remaining usage.**
+
+Execute this plan after the focused
+[Dynamics lane-layout regression](../finished/14a-dynamics-lane-layout-and-interaction-regression.md).
+This file was moved to `doing/` before changing implementation code; follow the state and
+verification workflow in [`../README.md`](../README.md).
 
 This document is the single implementation contract for the dedicated Virtual
 Playback refactor and its exclusion zones. The current page-slot implementation
@@ -235,6 +238,42 @@ The following remain separate by design:
 Do not create another Virtual Playback identity or exclusion-zone implementation plan.
 Add newly discovered requirements to this file while it is pending or doing.
 
+### Completion-pass documentation and visual checklist
+
+Do not apply this checklist early: each item replaces a truthful description or
+characterization of the current page-slot implementation only after the dedicated
+identity, page modes, and sparse-grid runtime are authoritative.
+
+- Update `docs/help/05-Pane-Reference/02-cues-and-playbacks.md` and
+  `docs/help/40-Running-a-Show/05-virtual-playbacks.md` with the 1001–9998 range,
+  rejected 9999 boundary, row-major cell mapping, 8,998-cell product limit, Follow
+  Main and Pinned behavior, unambiguous `Virtual P.NNNN` labels, and server-owned
+  exclusion arbitration across applicable surfaces.
+- Update `docs/help/50-Protocols/01-osc-rest-and-websocket.md` so protocol examples
+  distinguish dedicated Virtual Playback addresses from physical current-page and
+  explicit-page Playback controls; remove any compatibility wording that would imply
+  an old page-slot alias remains.
+- Update `.tour/glossary/domain.md` with dedicated Virtual Playback identity, surface
+  cell position, effective page, and exclusion-zone partition definitions. Update
+  `.tour/tours/26-playback-runtime.md` with the shared Playback runtime path,
+  physical-versus-virtual address domains, Preload capture identity, and serialized
+  peer release.
+- Replace the 1–12 Storybook row/column controls, page-slot fixture data, and
+  `cell 128 unavailable` characterization in
+  `apps/light-desktop/src/components/control/virtualPlayback/VirtualPlaybackGrid.stories.tsx`
+  and `apps/ui-library/storybook/tests/ui-stories.spec.ts`. Add representative 20×20,
+  sparse large-grid, Follow Main, Pinned, overlapping-zone, hidden-membership,
+  configured-color, active, error, and accessibility states without mounting all
+  8,998 expensive controllers.
+- Refresh `panes/virtual-playbacks.png` from the production-backed documentation
+  story and `panes/virtual-playbacks-settings.png` through the live desktop path in
+  `docs/help/screenshot-manifest.json`. Review both visually in software-only and
+  hardware-connected layouts before accepting them.
+- Refresh `docs/help/99-Development/02-help-coverage.md`,
+  `docs/help/99-Development/02-test-bench-coverage.md`, and the generated semantic
+  coverage catalog only after executable `VPB-007`, Preload, auto-off, and
+  cross-surface coverage proves the same shipped contract.
+
 ## Verification and completion
 
 Start with focused domain, wire, adapter, UI, and semantic checks, then run every
@@ -250,8 +289,10 @@ affected broader gate. Completion requires at least:
 4. UI tests for 20×20 sparse grids, large-grid virtualization, fixed logical geometry,
    Follow Main, Pinned, multiple panes, assignment/configuration, hidden active sources,
    exclusion editing, overlap, accessibility, and errors.
-5. Cross-surface tests for software, command/keyboard, REST, WebSocket, OSC,
-   attached-hardware, Preload, runtime/output feedback, and different-desk isolation.
+5. Cross-surface tests for software, software/hardware Shift zone selection, REST,
+   WebSocket, OSC, attached-hardware, Preload, runtime/output feedback, and
+   different-desk isolation. Virtual Playbacks do not consume the physical F1–F8
+   Playback shortcuts.
 6. Updated semantic `VPB-007` coverage for the new identity and exclusion contract.
    Delete obsolete old-model assertions instead of retaining a compatibility suite.
 7. Focused Preload and auto-off scenarios proving normal release/ownership behavior on
@@ -265,3 +306,59 @@ affected broader gate. Completion requires at least:
 
 Do not mark this chunk complete from plans, generated types, static checks, component
 stories, or mocked runtime evidence alone.
+
+## Progress checkpoint — 2026-07-28
+
+This plan remains **doing**. The latest large-window usage checkpoint was 77%, and the
+strict completion threshold is above 75%, so no later queue phase has been claimed.
+
+Implemented and focused-verified so far:
+
+- dedicated physical and page-qualified Virtual Playback identities, topology, wire
+  projections, regenerated canonical shows, sparse grids, Follow Main/Pinned modes,
+  Preload capture, automatic release paths, revisioned desk-partitioned zones, restart
+  normalization, and dedicated OSC routing;
+- the large-grid scroll/click retention regression and undersized-grid cell overlap;
+- strict preload projection decoding for Virtual identities and fader pickup state;
+- exact Virtual OSC exclusion audit provenance; and
+- named-zone creation after topology authority settles;
+- strict `virtual_playbacks` data in the live documentation seed and the remaining
+  focused/shared Playback-page test fixtures reached by the full UI gate; and
+- current production Storybook states for 20×20, sparse-large, Pinned, overlapping,
+  hidden-member, and error cases.
+
+Current verification evidence:
+
+- `cargo check -p light-headless-runtime --lib` passed;
+- `cargo build -p light-headless --no-default-features` passed;
+- focused Rust identity, engine boundary, topology, preload, OSC, UI component,
+  canonical-show, `PRELOAD-004`, and `VPB-007` checks passed;
+- direct full API Playwright coverage passed, 24/24; and
+- focused named-zone `VPB-007 @bench @ui` passed;
+- the focused component suites passed, 56/56, and the Storybook contract passed;
+- `npm run storybook:build`, the focused help screenshot gate, the live desktop help
+  screenshot gate, and `npm run manual` passed; the Virtual Playback pane and its
+  in-pane exclusion-zone settings screenshots were visually reviewed;
+- the semantic catalog was regenerated and `npm run test:semantic-test-docs` passed,
+  8/8; and
+- after the strict-schema fixture corrections, the owned focused Playback subset
+  passed 6/10. The remaining four failures are the existing physical SET interaction
+  regression: the card receives focus but the Playback Configuration dialog does not
+  open.
+
+Still required before completion:
+
+- make the required full UI and complete E2E gates green. The latest full UI run was
+  117 passed, 1 skipped, and 37 failed. Dedicated Virtual Playback layout, zone,
+  Preload, and named-zone cases passed; twelve old Playback-page fixture failures were
+  corrected afterward. The remaining failures span fixture-schema, stale dock/control
+  selectors, telemetry, physical Playback Configuration, frontend warmup, and Stage
+  performance;
+- make `npm run test:unit` green. Semantic documentation passed, but the repository
+  architecture gate currently reports direct Dynamics wire-DTO imports, duplicate
+  package-owned CSS rules, and a stale test-bench migration inventory;
+- rerun the broad gates after those failures are resolved, then run the packaged
+  desktop/readiness/log and both software-only and hardware-connected layout reviews;
+  and
+- only then add `## Result`, move this file to `finished/`, and create the plan's
+  semantic commit.

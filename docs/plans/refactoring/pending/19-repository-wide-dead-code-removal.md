@@ -1,17 +1,23 @@
 # Repository-wide Dead-code Removal
 
+## Usage Limits:
+This plan should not get started if remaining usage is below 74%
+If the usage drops below 65%, wrap up and give me a summary.
+
 ## Queue position and status
 
-**Pending and ordered after the built-in Stage visualizer and Dedicated Virtual
-Playbacks.**
+**Pending and ordered after Dedicated Virtual Playbacks and before benchmark-show construction.**
+
+**Completion usage gate: above 65% large-window remaining usage.**
 
 Claim this plan only after
-[`14-efficient-built-in-stage-visualizer.md`](../doing/14-efficient-built-in-stage-visualizer.md)
-and
-[`15-virtual-playbacks-and-exclusion-zones.md`](15-virtual-playbacks-and-exclusion-zones.md)
-are finished. Those feature migrations deliberately retain transitional paths while
-their callers and compatibility boundaries are changing; auditing first would create
-false positives or force the same code to be inspected twice.
+[`18-virtual-playbacks-and-exclusion-zones.md`](../finished/18-virtual-playbacks-and-exclusion-zones.md)
+is finished. Dynamics and Virtual Playback feature migrations deliberately retain
+transitional paths while their callers and compatibility boundaries are changing;
+auditing first would create false positives or force the same code to be inspected
+twice. Finish this audit before building
+[`20-three-tier-demo-and-benchmark-shows.md`](20-three-tier-demo-and-benchmark-shows.md)
+so the workloads and subsequent renderer profiling start from the smaller, current codebase.
 
 Move this file to `doing/` before changing implementation code, query Tosken Raider as
 required by the queue README, and follow the normal verification, Result, finished-plan,

@@ -3,14 +3,52 @@
 This plan follows the completed
 [`Dynamics`](../finished/16-dynamics/README.md) plan.
 
+## Usage Limits:
+This plan should not get started if remaining usage is below 60%
+If the usage drops below 50%, wrap up and give me a summary.
+
 ## Status
 
-**DOING.** This plan defines the active refactor, settings, and acceptance
-contract for the Stage visualizer embedded in ToskLight.
+**PENDING AFTER THE THREE-TIER DEMO AND BENCHMARK SHOWS.** This plan retains the refactor, settings,
+implementation evidence, and acceptance contract for the Stage visualizer embedded in
+ToskLight. Work completed while this plan was previously claimed remains valid; the plan was
+returned to `pending/` when the queue was reordered so Dynamics, Dedicated Virtual Playbacks and
+exclusion zones, dead-code removal, and construction of the benchmark workloads finish before
+renderer optimization resumes. This final phase runs the complete performance sweep against
+those workloads.
 
-Dynamics is complete and this file is claimed under the refactoring queue
-workflow. The renderer, transport, benchmarks, executable tests, and UI changes
-must still satisfy the phased gates below.
+**Completion usage gate: above 50% large-window remaining usage.**
+
+Do not resume implementation until the earlier queue phases are finished and this file is moved
+back to `doing/`. The renderer, transport, benchmarks, executable tests, and UI changes must still
+satisfy the phased gates below.
+
+The production implementation and focused browser/operator checks are present,
+but the plan remains open. The canonical 300-second Default Stage and
+1,000-instance large-scene packaged reports and the 1800-second
+retained-resource report still
+require an unlocked, visible desktop session. A first Default Stage run exposed
+client-cadence drift, incomplete finalized-frame reporting, output-timer
+contention, and active-show activation blocking the output scheduler. Those
+defects now have focused checks. The packaged locked-screen probe at
+`.artifacts/performance/stage/packaged-tauri-default-stage-2026-07-28T14-44-35-895Z.json`
+completed two active-show round trips with zero output deadline misses, a
+2.799 ms maximum Stage-window output tick, no p99 regression, and a 164 ms
+maximum source cadence gap within each continuous show activation. It submitted
+no canvas frames because the macOS session was locked, so it cannot replace the
+canonical visual rerun. Fresh focused Chromium runs pass `STAGE-001`,
+`STAGE-PERF-001`, and the superseded 500-instance `STAGE-PERF-002`; `STAGE-001` also
+captures the live 3D compositor surface without a preserved drawing buffer.
+The packaged macOS bundle passes its five-second startup smoke check. Actual
+supported Windows and Linux reports and the measurement-backed
+minimum/recommended hardware contract also remain release gates. A later
+locked-screen packaged probe at
+`.artifacts/performance/stage/packaged-tauri-default-stage-2026-07-28T14-54-39-092Z.json`
+adds a successful one-second desktop-process suspend/resume cycle, four
+successful show transitions, a 147 ms maximum continuous-segment source gap,
+and zero output deadline misses; its absent canvas submissions remain failed
+visual evidence. The accepted Apple capability sub-spike below does not replace
+the canonical runs.
 
 This plan supersedes the earlier proposal to add an opt-in high-fidelity profile
 to the embedded Stage renderer. High-quality rendering belongs to the separate
@@ -56,6 +94,15 @@ The built-in Stage visualizer must:
    their cost.
 6. Never delay engine evaluation, playback, Programmer transitions, command
    handling, or DMX/network output.
+
+The embedded-Stage release target and intended supported ceiling is **1,000
+fixture instances for the exact mixed profile below**. It becomes a supported
+claim only after the canonical packaged, retained-resource, and supported-
+platform gates pass; it is not a schema limit or a promise for 1,000 worst-case
+emitters. Higher fixture counts may be claimed only for a separately measured
+headless/output configuration in which every Stage surface is disabled; a
+headless result must not be presented as evidence that the embedded visualizer
+supports the same count.
 
 The embedded view remains a visualization and programming aid. It is not
 photometric proof and does not attempt the dedicated Viz application's quality
@@ -463,6 +510,22 @@ the resolved color, the beam does not visibly continue through the first opaque
 occluder from the accepted camera views, the occluder casts a stable shadow,
 and the complete large-scene benchmark remains within budget.
 
+The packaged Apple-GPU capability and visual sub-spike accepted this technique
+on 2026-07-28 on an arm64 Apple M5 Max host with 64 GiB of memory. Its
+500-instance scene exercised the production shader,
+contributor budget, surface light, first-hit shortening, and shadow
+configuration with eight 128-by-128 PCF soft-shadow maps. Resolved-color
+receiver luminance moved from 0 to 213.8, the retained beam stopped at the
+5.81 m occluder before the 6.71 m receiver, and the shadow probe darkened from
+21.1 to 9.6. Sixty frames measured a 3 ms p95 and 4 ms maximum after
+synchronizing each measurement with `gl.finish`; GPU timer queries were
+unavailable in the packaged WebView and remain recorded as unavailable rather
+than inferred. The production extension is integrated, but this sub-spike does
+not complete the Phase 0 gate by itself: the canonical packaged Default Stage
+and complete large-scene runs remain required. Actual supported Windows and
+Linux packaged reports also remain release gates rather than being implied by
+this Apple Silicon result.
+
 If that spike passes, surface illumination, bounded occlusion, and shadows are
 required parts of **Improved beams**. If it fails on a supported graphics
 capability or performance gate:
@@ -541,8 +604,21 @@ stable and the full resolution returns immediately when movement settles.
 Create deterministic packaged-app benchmarks for:
 
 - the Default Stage Show;
-- a large show with 500 fixture instances, representative moving heads,
-  multi-source washes/blinders, multi-patch instances, and Venue scenery;
+- a large show with exactly 1,000 fixture instances, representative moving
+  heads, multi-source washes/blinders, multi-patch instances, Venue scenery,
+  and at least 40 Showtec Sunstrip LED RGB fixtures in the 30-channel mode;
+- a realistic patch which prefers the shipped higher-channel Sunstrip,
+  profile, beam, and wash modes over a scene dominated by small generic RGB
+  fixtures, packs those fixtures across multiple substantially occupied DMX
+  universes without requiring the last channel of every universe to be used,
+  and records the resulting profile/mode inventory and slot occupancy;
+- approximately 20 simultaneously running production Dynamic instances which
+  partition the Dynamic-driven fixtures without overlap: every applicable
+  intensity and color value on the Sunstrips and color-capable fixtures, and
+  every applicable intensity, pan, tilt, and color value on the beam/wash
+  moving lights, must be driven by a Dynamic;
+- a distinct population of fixed conventional dimmers whose intensity remains
+  static throughout the same run as the no-Dynamic control population;
 - every render quality, including rapid switching without resource retention;
 - the Improved-beams occluder scene with a lit Stage element and cast shadow
   when that capability passes its spike;
