@@ -3,6 +3,7 @@ import {
 	fireEvent,
 	render as rtlRender,
 	screen,
+	within,
 } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -208,6 +209,30 @@ describe("TouchEncoder", () => {
 		expect(encoder).toHaveAccessibleDescription(
 			/The upper third increases the value and the lower third decreases it/u,
 		);
+	});
+
+	it("keeps an indexed value reachable when its only valid action is release", () => {
+		const onRelease = vi.fn();
+		const { onStep, onSet } = renderEncoder({
+			display: "gobo.dots",
+			indexed: true,
+			canRelease: true,
+			onRelease,
+		});
+		const encoder = screen.getByRole("group", { name: "Enc 1 · Pan" });
+		expect(encoder).not.toHaveAttribute("aria-disabled", "true");
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
+		);
+		const dialog = screen.getByRole("dialog", { name: "Enc 1 · Pan value" });
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Release", exact: true }),
+		);
+
+		expect(onRelease).toHaveBeenCalledOnce();
+		expect(onStep).not.toHaveBeenCalled();
+		expect(onSet).not.toHaveBeenCalled();
 	});
 
 	it("keeps internal values separate from rendered and entered values", () => {

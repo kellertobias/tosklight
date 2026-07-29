@@ -146,6 +146,9 @@ scenario(
 		await t.encoder.clear();
 		await t.selection.clear();
 		await t.preset.expectVisibleSelectionCount(0);
+		await t.clock.advanceStep();
+		await t.expectFixtureDMX({ fixture: 101 }, { Intensity: 0 });
+		await t.expectFixtureDMX({ fixture: 102 }, { Intensity: 0 });
 		await t.preset.tapEmptyPoolSlot(PresetFamily.Mixed, 9);
 		await t.expect.selection();
 

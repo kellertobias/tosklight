@@ -86,19 +86,9 @@ export function PresetRecallProvider({
 			values,
 		],
 	);
-	const actions = useMemo<PresetRecallActions>(
-		() =>
-			writer ?? {
-				recall: async () => {
-					onError?.(new Error("Preset recall is unavailable"));
-					return null;
-				},
-			},
-		[onError, writer],
-	);
 	useStrictModeSafeStop(writer);
 	return (
-		<PresetRecallContext.Provider value={actions}>
+		<PresetRecallContext.Provider value={writer}>
 			{children}
 		</PresetRecallContext.Provider>
 	);

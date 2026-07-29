@@ -22,6 +22,7 @@ import {
 } from "../support/catalog";
 import { replaceProgrammingSelection } from "../bench/command-selection/programmingSelection";
 import { applyProgrammerSelectionValue } from "../bench/programmer/programmerValues";
+import { currentFixtureDefinition } from "../support/fixtureSchema";
 
 test("BENCH-DISCRETE-SPECIAL-001 @bench @ui › profile-derived discrete values remain semantic through API set and visible release", async ({
 	api,
@@ -217,7 +218,9 @@ async function installFixtures(
 	profile: FixtureProfile,
 	numbers: number[],
 ): Promise<string[]> {
-	const definition = fixtureDefinitionFromProfileMode(profile, profile.modes[0]);
+	const definition = currentFixtureDefinition(
+		fixtureDefinitionFromProfileMode(profile, profile.modes[0]),
+	);
 	const fixtureIds = numbers.map(() => crypto.randomUUID());
 	const source = (await objects<Record<string, unknown>>(api, "patched_fixture"))[0]
 		.body;

@@ -222,6 +222,7 @@ function usePresetsWindowModel({
 		customizations,
 		groupsVisible,
 		selectionCount: selection?.selected.length ?? 0,
+		recallReady: presetRecall.actions !== null,
 		storeArmed: state.storeArmed,
 		updateArmed: state.updateArmed,
 		setArmed: state.presetSetArmed,
@@ -264,6 +265,7 @@ export function PresetsWindow(props: WindowProps) {
 				surfaceKey={model.colorSurfaceKey}
 				fallbackMode={model.legacyColorsEnabled ? "type" : "individual"}
 				selectionCount={model.selectionCount}
+				recallReady={model.recallReady}
 				storeArmed={model.storeArmed}
 				updateArmed={model.updateArmed}
 				setArmed={model.setArmed}

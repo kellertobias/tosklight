@@ -2,6 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
 import { type DmxProtocol, DmxReceiver } from "../core/protocols";
+import { CURRENT_FIXTURE_PROFILE_SCHEMA_VERSION } from "../../support/fixtureSchema";
 
 export type NetworkProtocol = "art_net" | "sacn";
 export type NetworkDeliveryMode = "broadcast" | "multicast" | "unicast";
@@ -357,7 +358,7 @@ function sixteenBitFixture(input: {
 }) {
 	const channelId = crypto.randomUUID();
 	const profile = {
-		schema_version: 2,
+		schema_version: CURRENT_FIXTURE_PROFILE_SCHEMA_VERSION,
 		id: input.profileId,
 		revision: 1,
 		manufacturer: "ToskLight Test",
@@ -396,7 +397,7 @@ function sixteenBitFixture(input: {
 		logical_heads: [],
 		multipatch: [],
 		definition: {
-			schema_version: 2,
+			schema_version: CURRENT_FIXTURE_PROFILE_SCHEMA_VERSION,
 			id: input.profileId,
 			revision: 1,
 			manufacturer: "ToskLight Test",

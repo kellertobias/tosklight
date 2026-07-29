@@ -1024,7 +1024,12 @@ async function installPlayback(api: ApiDriver): Promise<{ firstCueListId: string
   }
   for (const [number, name, playback] of [[1, "Main", 1], [2, "Page 2", 2]] as const) {
     const existing = (await objects(api, "playback_page")).find((page) => page.id === String(number));
-    await putObject(api, "playback_page", String(number), { number, name, slots: { "1": playback } }, existing?.revision ?? 0);
+    await putObject(api, "playback_page", String(number), {
+      number,
+      name,
+      slots: { "1": playback },
+      virtual_playbacks: existing?.body.virtual_playbacks ?? {},
+    }, existing?.revision ?? 0);
   }
   return { firstCueListId, secondCueListId };
 }

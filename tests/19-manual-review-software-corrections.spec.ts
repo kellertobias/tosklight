@@ -4,8 +4,11 @@ import { expect, test } from "./bench/core/fixtures";
 test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
   test("POOL-SQUARE @ui › Group Pool cards remain square through pane resize and maximize", async ({ api, desk, page }) => {
     await desk.open(api.baseUrl);
-    await page.getByRole("button", { name: "DESKTOPS", exact: true }).click();
-    await page.getByRole("button", { name: /New desktop/ }).click();
+    const newDesktop = page.getByRole("button", { name: /New desktop/ });
+    if (!(await newDesktop.isVisible())) {
+      await page.getByRole("button", { name: "Desktops / Built-ins", exact: true }).click();
+    }
+    await newDesktop.click();
     const grid = page.locator(".desk-grid");
     const gridBox = await grid.boundingBox();
     expect(gridBox).not.toBeNull();
@@ -43,7 +46,7 @@ test.describe("docs/testing/10-desk-lock-and-operator-ui.md", () => {
     await desk.open(api.baseUrl);
     await desk.recordStep("TERMINOLOGY", "Saved workspace arrangements use Desktop everywhere; physical and protocol control surfaces retain desk terminology.");
 
-    const desktops = page.getByRole("button", { name: "DESKTOPS", exact: true });
+    const desktops = page.getByRole("button", { name: "Desktops / Built-ins", exact: true });
     await expect(desktops).toBeVisible();
     await expect(page.getByRole("button", { name: "DESKS", exact: true })).toHaveCount(0);
     await desktops.click();
@@ -392,7 +395,7 @@ async function longPress(target: Locator): Promise<void> {
 }
 
 async function addPaneToNewDesktop(page: Page, name: "File Manager" | "Text Editor" | "Help" | "Cues · Cuelist"): Promise<Locator> {
-  await page.getByRole("button", { name: "DESKTOPS", exact: true }).click();
+  await page.getByRole("button", { name: "Desktops / Built-ins", exact: true }).click();
   await page.getByRole("button", { name: /New desktop/ }).click();
   const grid = page.locator(".desk-grid");
   const box = await grid.boundingBox();
@@ -413,7 +416,7 @@ async function addPaneToNewDesktop(page: Page, name: "File Manager" | "Text Edit
 }
 
 async function openBuiltIn(page: Page, name: "DMX" | "Stage") {
-  await page.getByRole("button", { name: "BUILT-INS", exact: true }).click();
+  await page.getByRole("button", { name: "Desktops / Built-ins", exact: true }).click();
   await page.locator(".dock-entry").filter({ hasText: name }).first().click();
 }
 

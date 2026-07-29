@@ -400,10 +400,11 @@ export function TouchEncoder({
 	const hasChoices = Boolean(
 		presets?.groups.some((group) => group.options.length),
 	);
-	const unavailable = disabled || indexed || (choiceMode && !hasChoices);
+	const unavailable =
+		disabled || (indexed && !canRelease) || (choiceMode && !hasChoices);
 	const interaction = useTouchEncoderInteraction({
 		continuous: !choiceMode,
-		disabled: unavailable,
+		disabled: unavailable || indexed,
 		fastStep,
 		indexed,
 		onStep,
@@ -416,7 +417,7 @@ export function TouchEncoder({
 	const renderedValue = display ?? formatValue?.(value) ?? String(value);
 	const clamp = (next: number) => Math.max(minimum, Math.min(maximum, next));
 	const openEditor = () => {
-		if (unavailable || !interaction.canActivate()) return;
+		if (unavailable || (!indexed && !interaction.canActivate())) return;
 		setInputValue(String(Number((value * resolvedInputScale).toFixed(4))));
 		setEditing(true);
 	};
@@ -436,7 +437,14 @@ export function TouchEncoder({
 		onStep(Math.sign(-event.deltaY) * (event.shiftKey ? fastStep : slowStep));
 	};
 	const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-		if (disabled || indexed) return;
+		if (disabled) return;
+		if (indexed) {
+			if (canRelease && (event.key === "Enter" || event.key === " ")) {
+				event.preventDefault();
+				openEditor();
+			}
+			return;
+		}
 		if (event.key === "ArrowUp" || event.key === "ArrowRight") {
 			event.preventDefault();
 			onStep(slowStep);
@@ -482,9 +490,11 @@ export function TouchEncoder({
 					display={renderedValue}
 					choiceMode={choiceMode}
 					hasChoices={hasChoices}
-					indexed={indexed}
+					indexed={indexed && !canRelease}
 					label={label}
-					onStep={interaction.step}
+					onStep={(delta) => {
+						if (!indexed) interaction.step(delta);
+					}}
 					onSet={openEditor}
 					slot={slot}
 					slowStep={slowStep}
@@ -502,7 +512,7 @@ export function TouchEncoder({
 					allowThrough={Boolean(onSetRange)}
 					canRelease={canRelease}
 					presets={presets}
-					presetsOnly={choiceMode}
+					presetsOnly={choiceMode || indexed}
 					onInput={setInputValue}
 					onSubmit={submit}
 					onClose={() => setEditing(false)}

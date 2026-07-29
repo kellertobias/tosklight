@@ -454,7 +454,9 @@ export class DeskDriver {
   }
 
   async openFixtures(): Promise<void> {
-    await this.page.getByRole("button", { name: "BUILT-INS" }).click();
+    await this.page
+      .getByRole("button", { name: "Desktops / Built-ins", exact: true })
+      .click();
     await this.page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
   }
 }

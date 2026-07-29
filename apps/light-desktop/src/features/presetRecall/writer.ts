@@ -19,6 +19,7 @@ import type {
 	PresetRecallTransport,
 	RecallPresetInput,
 } from "./contracts";
+import { PresetRecallTransportError } from "./contracts";
 
 interface PresetAuthoritySnapshot {
 	object: ShowObject<"preset"> | null;
@@ -62,26 +63,72 @@ export class PresetRecallWriter implements PresetRecallActions {
 		if (this.stopped) return null;
 		if (this.active)
 			return this.refuse("A Preset recall is already in progress");
-		let authority: RecallAuthority;
-		try {
-			authority = this.capture(input);
-		} catch (reason) {
-			return this.refuse(asError(reason).message);
-		}
 		this.active = true;
+		let authority: RecallAuthority | null = null;
+		let repairedConflict = false;
 		try {
-			const outcome = await this.send(authority);
-			if (!this.isCurrent(authority)) return null;
-			assertOutcome(authority.request, outcome, this.options.scope.userId);
-			if (!(await this.reconcile(authority, outcome))) return null;
-			this.options.onError?.(
-				outcome.warning ? new Error(outcome.warning) : null,
-			);
-			return outcome;
+			for (let attempt = 0; attempt < 2; attempt += 1) {
+				authority = await this.captureWhenReady(input);
+				try {
+					const outcome = await this.send(authority);
+					if (!this.isCurrent(authority)) return null;
+					assertOutcome(authority.request, outcome, this.options.scope.userId);
+					if (!(await this.reconcile(authority, outcome))) return null;
+					this.options.onError?.(
+						outcome.warning ? new Error(outcome.warning) : null,
+					);
+					return outcome;
+				} catch (reason) {
+					const error = asError(reason);
+					if (
+						attempt === 0 &&
+						error instanceof PresetRecallTransportError &&
+						error.kind === "conflict"
+					) {
+						if (error.currentRelatedRevision !== null) {
+							this.options.showStore.installShowRevision(
+								this.options.scope.showId,
+								error.currentRelatedRevision,
+								authority.showGeneration,
+							);
+						} else {
+							await this.repairConflict(error, authority);
+						}
+						repairedConflict = true;
+						authority = null;
+						continue;
+					}
+					throw error;
+				}
+			}
+			return null;
 		} catch (reason) {
+			if (!authority) return this.refuse(asError(reason).message);
+			if (repairedConflict) {
+				this.options.onError?.(asError(reason));
+				return null;
+			}
 			return this.fail(asError(reason), authority);
 		} finally {
 			this.active = false;
+		}
+	}
+
+	private async captureWhenReady(input: RecallPresetInput) {
+		const deadline = performance.now() + 1_000;
+		for (;;) {
+			try {
+				return this.capture(input);
+			} catch (reason) {
+				const error = asError(reason);
+				if (
+					error.message !== "Preset recall authority is still loading" ||
+					performance.now() >= deadline ||
+					this.stopped
+				)
+					throw error;
+				await new Promise((resolve) => setTimeout(resolve, 25));
+			}
 		}
 	}
 

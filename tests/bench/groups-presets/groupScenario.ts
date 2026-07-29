@@ -218,9 +218,17 @@ export class BrowserGroups {
 				},
 			});
 		} else if (route === "pool") {
-			await this.commands.via.ui.type("SET");
+			const commandLine = this.page.getByRole("textbox", {
+				name: "Command line",
+				exact: true,
+			});
+			await commandLine.fill("SET");
+			await expect(commandLine).toHaveValue("SET");
 			await this.desk.click(this.groupCard(number));
-			const dialog = this.page.getByRole("dialog", { name: "Group properties" });
+			const dialog = this.page.getByRole("dialog", {
+				name: "Group properties",
+				exact: true,
+			});
 			await dialog.getByLabel("Group name").fill(properties.name);
 			if (properties.icon)
 				await choosePicker(dialog, this.page, "Icon", `Use ${properties.icon}`);
@@ -380,8 +388,26 @@ async function choosePicker(
 		label === "Color"
 			? dialog.getByRole("button", { name: /#[0-9a-f]{6}/i })
 			: dialog.getByRole("button", {
-					name: new RegExp(`Choose ${label}`, "i"),
+					name: `Choose ${label.toLowerCase()}`,
+					exact: true,
 				});
 	await trigger.click();
-	await page.getByRole(label === "Color" ? "option" : "button", { name: option }).click();
+	if (label === "Color") {
+		const picker = page.getByRole("region", { name: "Color", exact: true });
+		const paletteOption = picker.getByRole("option", {
+			name: option,
+			exact: true,
+		});
+		if (await paletteOption.isVisible()) {
+			await paletteOption.click();
+		} else {
+			const color = option.replace(/^Use color /, "");
+			await picker.getByRole("textbox", { name: "Custom hex" }).fill(color);
+			await picker.getByRole("button", { name: "Use custom color" }).click();
+		}
+	} else
+		await page
+			.getByRole("dialog", { name: "Choose icon", exact: true })
+			.getByRole("button", { name: option, exact: true })
+			.click();
 }

@@ -264,6 +264,7 @@ async function installTwinPlaybacks(api: ApiDriver): Promise<string> {
 		number: 1,
 		name: "Main",
 		slots: { "1": 1, "2": 2 },
+		virtual_playbacks: {},
 	});
 	return cueListId;
 }

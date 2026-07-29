@@ -164,10 +164,14 @@ export class BrowserProgrammerFade implements ProgrammerFadeSetPort {
 		const box = await input.boundingBox();
 		if (!box) throw new Error("Visible Programmer Fade fader has no pointer box");
 		const current = await this.currentMillis();
+		const endpointZone = Math.min(
+			box.height / 3,
+			Math.max(18, Math.min(36, box.height * 0.1)),
+		);
+		const travelHeight = Math.max(1, box.height - endpointZone * 2);
 		const y = (value: number) =>
-			box.y + 8 + (1 - value / 20_000) * Math.max(1, box.height - 16);
+			box.y + endpointZone + (1 - value / 20_000) * travelHeight;
 		const x = box.x + box.width / 2;
-		const trackHeight = Math.max(1, box.height - 16);
 		let observed = current;
 		let targetY = y(millis);
 		for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -178,7 +182,7 @@ export class BrowserProgrammerFade implements ProgrammerFadeSetPort {
 			await this.page.waitForTimeout(50);
 			observed = await this.currentMillis();
 			if (observed === millis) return;
-			targetY -= ((millis - observed) / 20_000) * trackHeight;
+			targetY -= ((millis - observed) / 20_000) * travelHeight;
 		}
 	}
 

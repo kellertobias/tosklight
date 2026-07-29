@@ -408,11 +408,13 @@ export class BrowserEncoders {
 		await this.activateFamily(family);
 		const control = this.softwareControl(label);
 		await expect(control).toBeVisible();
-		for (let remaining = steps; remaining > 0; remaining -= 1)
+		for (let remaining = steps; remaining > 0; remaining -= 1) {
 			await control.dispatchEvent("wheel", {
 				deltaY: operation === "add" ? -1 : 1,
 				shiftKey: true,
 			});
+			await this.page.waitForTimeout(20);
+		}
 	}
 
 	private async activateFamily(family: string): Promise<void> {
@@ -426,7 +428,10 @@ export class BrowserEncoders {
 				.getByRole("button", { name: "Fixtures", exact: true });
 			if (!(await fixtures.isVisible()))
 				await this.page
-					.getByRole("button", { name: "BUILT-INS", exact: true })
+					.getByRole("button", {
+						name: "Desktops / Built-ins",
+						exact: true,
+					})
 					.click();
 			await expect(fixtures).toBeVisible();
 			await fixtures.click();

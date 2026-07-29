@@ -17,11 +17,9 @@ export function usePresetRecallBoundaries(state: ServerState) {
 						baseUrl: configuredServerUrl(),
 						sessionToken: state.session.token,
 						deskBoundaryToken: browserDeskBoundaryToken(),
-						recall: (scope, request) =>
-							state.api.programming.presetRecallLiveAction(scope, request),
 					})
 				: null,
-		[state.api, state.session],
+		[state.session],
 	);
 	return {
 		presetRecallTransport,

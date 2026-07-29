@@ -598,7 +598,12 @@ async function activatePatchLayer(desk: DeskDriver, patchWindow: Locator, layer:
 }
 
 async function openBuiltIn(desk: DeskDriver, app: Locator, name: string): Promise<void> {
-  await desk.click(app.getByRole("button", { name: "BUILT-INS", exact: true }));
+    await desk.click(
+      app.getByRole("button", {
+        name: "Desktops / Built-ins",
+        exact: true,
+      }),
+    );
   await desk.click(app.locator(".dock-entry").filter({ hasText: name }).first());
 }
 

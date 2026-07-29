@@ -16,14 +16,15 @@ export class BrowserOperatorShell {
 		const physicalDesk = { ...this.api.session!.desk };
 		const sessionId = this.api.session!.session_id;
 		const desktops = this.page.getByRole("button", {
-			name: "DESKTOPS",
+			name: "Desktops / Built-ins",
 			exact: true,
 		});
 		await expect(desktops).toBeVisible();
 		await expect(
 			this.page.getByRole("button", { name: "DESKS", exact: true }),
 		).toHaveCount(0);
-		await this.desk.click(desktops);
+		if ((await desktops.getAttribute("data-dock-mode")) !== "desks")
+			await this.desk.click(desktops);
 		await expect(
 			this.page.getByRole("button", { name: "New desktop", exact: false }),
 		).toBeVisible();
@@ -109,9 +110,8 @@ export class BrowserOperatorShell {
 			.click();
 		const browser = this.page.locator(".fixture-browser-modal");
 		await expect(
-			browser.locator("header.fixture-browser-header .console-search"),
+			browser.getByRole("textbox", { name: "Search", exact: true }),
 		).toBeVisible();
-		await expect(browser.locator(":scope > .console-search")).toHaveCount(0);
 		await expect(
 			browser
 				.locator(".fixture-picker-columns > section")
@@ -136,11 +136,15 @@ export class BrowserOperatorShell {
 			.click();
 		const library = this.page.getByRole("dialog", { name: "Fixture Library" });
 		await expect(library).toBeVisible();
-		const titleActions = this.page.locator("#setup-section-actions");
-		await expect(titleActions.locator(".console-search")).toBeVisible();
+		await expect(
+			library.getByRole("textbox", {
+				name: "Search fixture library",
+				exact: true,
+			}),
+		).toBeVisible();
 		for (const name of ["Import GDTF", "Create fixture"])
 			await expect(
-				titleActions.getByRole("button", { name, exact: true }),
+				library.getByRole("button", { name, exact: true }),
 			).toBeVisible();
 		await expect(
 			this.page

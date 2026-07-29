@@ -631,8 +631,15 @@ async function pointerSet(
 	const box = await slider.boundingBox();
 	if (!box) throw new Error("Special-dialog fader has no pointer box");
 	const x = box.x + box.width / 2;
-	const y = box.y + 8 + (1 - percentage / 100) * Math.max(1, box.height - 16);
-	await page.mouse.move(x, box.y + box.height - 8);
+	const endpointZone = Math.min(
+		box.height / 3,
+		Math.max(18, Math.min(36, box.height * 0.1)),
+	);
+	const y =
+		box.y +
+		endpointZone +
+		(1 - percentage / 100) * Math.max(1, box.height - endpointZone * 2);
+	await page.mouse.move(x, box.y + box.height - endpointZone);
 	await page.mouse.down();
 	await page.mouse.move(x, y, { steps: 8 });
 	await page.mouse.up();

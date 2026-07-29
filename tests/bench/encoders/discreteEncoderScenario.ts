@@ -103,15 +103,22 @@ export class BrowserDiscreteEncoders {
 		await this.desk.click(
 			this.page.getByRole("button", { name: family, exact: true }),
 		);
-		const control = this.page.getByRole("region", {
+		const control = this.page.getByRole("group", {
 			name: new RegExp(`^Enc \\d+ · ${escapeRegex(label)}$`),
 		});
 		await expect(control).toBeVisible();
 		await this.desk.click(
 			control.getByRole("button", {
-				name: `Release ${label}`,
-				exact: true,
+				name: new RegExp(
+					`^Set Enc \\d+ · ${escapeRegex(label)} value$`,
+				),
 			}),
+		);
+		const dialog = this.page.getByRole("dialog", {
+			name: new RegExp(`^Enc \\d+ · ${escapeRegex(label)} value$`),
+		});
+		await this.desk.click(
+			dialog.getByRole("button", { name: "Release", exact: true }),
 		);
 	}
 

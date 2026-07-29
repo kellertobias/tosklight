@@ -510,24 +510,26 @@ describe("PresetRecallWriter", () => {
 		await expect(writerRecall).resolves.toBeNull();
 	});
 
-	it("repairs every narrow authority after a revision conflict", async () => {
+	it("installs the related Show revision and retries without broad repair", async () => {
 		const setup = harness(async () => {
 			throw new PresetRecallTransportError(
 				"revision conflict",
 				"conflict",
 				409,
 				7,
-				9,
+				13,
 				false,
 			);
 		});
 
 		await expect(setup.writer.recall(input)).resolves.toBeNull();
 
-		expect(setup.repairValues).toHaveBeenCalledOnce();
-		expect(setup.repairCaptureMode).toHaveBeenCalledOnce();
-		expect(setup.repairSelection).toHaveBeenCalledOnce();
-		expect(setup.loadPreset).toHaveBeenCalledWith(SHOW_ID, "2.7");
+		expect(setup.recall).toHaveBeenCalledTimes(2);
+		expect(setup.recall.mock.calls[1][1].expectedShowRevision).toBe(13);
+		expect(setup.repairValues).not.toHaveBeenCalled();
+		expect(setup.repairCaptureMode).not.toHaveBeenCalled();
+		expect(setup.repairSelection).not.toHaveBeenCalled();
+		expect(setup.loadPreset).not.toHaveBeenCalled();
 		expect(setup.onError).toHaveBeenCalledWith(
 			expect.objectContaining({ message: "revision conflict" }),
 		);

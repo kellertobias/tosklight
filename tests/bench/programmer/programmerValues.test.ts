@@ -438,6 +438,7 @@ function valuesProjection(revision: number, userId = USER_ID) {
 		revision,
 		fixture_values: [],
 		group_values: [],
+		dynamic_values: [],
 	};
 }
 

@@ -88,6 +88,7 @@ interface PresetCardGridProps {
 	surfaceKey: string;
 	fallbackMode: PoolColorMode;
 	selectionCount: number;
+	recallReady: boolean;
 	storeArmed: boolean;
 	updateArmed: boolean;
 	setArmed: boolean;
@@ -103,6 +104,7 @@ export function PresetCardGrid({
 	surfaceKey,
 	fallbackMode,
 	selectionCount,
+	recallReady,
 	storeArmed,
 	updateArmed,
 	setArmed,
@@ -168,7 +170,16 @@ export function PresetCardGrid({
 					const cardColor = customization?.color ?? preset?.body.color;
 					return (
 						<PoolCard
-							disabled={filtered}
+							disabled={
+								filtered ||
+								Boolean(
+									preset &&
+										!recallReady &&
+										!storeArmed &&
+										!updateArmed &&
+										!setArmed,
+								)
+							}
 							className={`preset-card preset-family-${preset ? storedFamily.toLowerCase() : family.toLowerCase()} ${presentation.className} ${filtered ? "filtered" : ""}`}
 							style={presentation.style}
 							onClick={() => onActivate(index)}

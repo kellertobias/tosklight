@@ -17,6 +17,7 @@ import {
 	extractFixtureAsset,
 	selectConfinedFile,
 } from "../support/updateHighlight/system";
+import { currentFixtureDefinition } from "../support/fixtureSchema";
 
 type FixtureAssetContext = Pick<
 	BenchUiContext,
@@ -323,9 +324,11 @@ async function patchProfileAndRestart(
 	{ api, bench }: FixtureAssetContext,
 	revisions: any[],
 ): Promise<void> {
-	const definition = fixtureDefinitionFromProfileMode(
-		revisions[1],
-		revisions[1].modes[0],
+	const definition = currentFixtureDefinition(
+		fixtureDefinitionFromProfileMode(
+			revisions[1],
+			revisions[1].modes[0],
+		),
 	);
 	const fixture = (await objects<any>(api, "patched_fixture"))[0];
 	await putObject(

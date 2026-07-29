@@ -20,6 +20,7 @@ import {
 	readPatchSnapshot,
 	setFixtureAddressThroughApi,
 } from "./support/operator";
+import { CURRENT_FIXTURE_PROFILE_SCHEMA_VERSION } from "./support/fixtureSchema";
 
 interface ConversionObservation {
 	percent: number;
@@ -1046,7 +1047,7 @@ async function installSixteenBitMatrix(
 }
 
 /**
- * A complete schema-v2 patched fixture: one u16 intensity channel on a 2-slot split.
+ * A complete current-schema patched fixture: one u16 intensity channel on a 2-slot split.
  * The raw profile snapshot is the engine's authoritative source; the derived
  * definition fields mirror the profile's byte-stable projection. "fine_first"
  * reserves slot 1 as the channel's explicit secondary (fine) slot, so the coarse
@@ -1068,7 +1069,7 @@ function sixteenBitPatchedFixture(options: {
 	const fineSlot = options.layout === "fine_first" ? 1 : 2;
 	const coarseOffset = options.layout === "fine_first" ? 1 : 0;
 	const profile = {
-		schema_version: 2,
+		schema_version: CURRENT_FIXTURE_PROFILE_SCHEMA_VERSION,
 		id: profileId,
 		revision: 1,
 		manufacturer: "ToskLight Test",
@@ -1109,7 +1110,7 @@ function sixteenBitPatchedFixture(options: {
 		logical_heads: [],
 		multipatch: [],
 		definition: {
-			schema_version: 2,
+			schema_version: CURRENT_FIXTURE_PROFILE_SCHEMA_VERSION,
 			id: profileId,
 			revision: 1,
 			manufacturer: "ToskLight Test",

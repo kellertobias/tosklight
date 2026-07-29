@@ -32,7 +32,9 @@ test("FIXTURE-SHEET-001 @bench @ui › resolved-color dots retain their fill and
 
 async function openFixtures(page: Page): Promise<void> {
   const entry = page.locator(".dock-entry").filter({ hasText: "Fixtures" }).first();
-  if (!await entry.isVisible()) await page.getByRole("button", { name: "BUILT-INS", exact: true }).click();
+  if (!await entry.isVisible()) {
+    await page.getByRole("button", { name: "Desktops / Built-ins", exact: true }).click();
+  }
   await entry.click();
   await expect(page.locator(".fixture-window")).toBeVisible();
   await expect(page.locator(".fixture-window .color-dot").first()).toBeVisible();

@@ -31,7 +31,6 @@ describe("Preset recall acceptance intent", () => {
 
 		expect(outcome).toMatchObject({
 			status: "no_change",
-			replayed: true,
 			preset: { id: "2.1", revision: 4, body: presetBody() },
 			appliedFixtures: 1,
 		});
@@ -53,7 +52,6 @@ describe("Preset recall acceptance intent", () => {
 		).toBe(false);
 		const action = calls.find((call) => call.init?.method === "POST");
 		expect(JSON.parse(String(action?.init?.body))).toEqual({
-			request_id: REQUEST_ID,
 			address: { family: "color", number: 1 },
 			expected_preset_revision: 4,
 			expected_show_revision: 12,
@@ -198,6 +196,7 @@ function valuesSnapshot() {
 			revision: 6,
 			fixture_values: [],
 			group_values: [],
+			dynamic_values: [],
 		},
 	};
 }
@@ -239,14 +238,14 @@ function interactionSnapshot() {
 
 function noChangeOutcome() {
 	return {
-		request_id: REQUEST_ID,
 		correlation_id: CORRELATION_ID,
-		replayed: true,
 		show_revision: 12,
 		programmer_revision: 6,
 		capture_mode_revision: 3,
 		selection_revision: 8,
 		applied_fixtures: 1,
+		selected_targets: 0,
+		disposition: "recalled",
 		active_context: "preset:2.1",
 		preset: { id: "2.1", revision: 4, body: presetBody() },
 		status: "no_change",

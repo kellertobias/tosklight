@@ -211,19 +211,7 @@ export class BrowserFiles {
 			await expect(
 				manager.getByRole("button", { name: ".operator-note, file" }),
 			).toHaveCount(0);
-			await this.desk.click(
-				manager
-					.locator(".file-manager-header-actions")
-					.getByRole("button", { name: "View", exact: true }),
-			);
-			await this.desk.click(
-				this.page
-					.getByRole("menu", { name: "View menu" })
-					.getByRole("menuitemcheckbox", {
-						name: "Show Hidden Files",
-						exact: true,
-					}),
-			);
+			await this.configureManagerHiddenFiles(manager, true);
 			await expect(
 				manager.getByRole("button", { name: ".operator-note, file" }),
 			).toBeVisible();
@@ -232,6 +220,9 @@ export class BrowserFiles {
 				manager.getByRole("button", { name: "alpha.txt, file" }),
 			);
 			await this.beginEdit(manager, "Copy");
+			await expect(
+				manager.getByRole("button", { name: "Copy Here" }),
+			).toBeVisible();
 			await manager
 				.getByRole("button", { name: "Destination, folder" })
 				.dblclick();
@@ -244,6 +235,9 @@ export class BrowserFiles {
 				manager.getByRole("button", { name: "alpha.txt, file" }),
 			);
 			await this.beginEdit(manager, "Copy");
+			await expect(
+				manager.getByRole("button", { name: "Copy Here" }),
+			).toBeVisible();
 			await manager
 				.getByRole("button", { name: "Destination, folder" })
 				.dblclick();
@@ -442,7 +436,10 @@ export class BrowserFiles {
 		await this.desk.click(
 			settings.getByRole("tab", { name: "Text Editor", exact: true }),
 		);
-		const toggle = settings.getByRole("switch", { name: "Read-only pane" });
+		const toggle = settings.getByRole("switch", {
+			name: "Editing",
+			exact: true,
+		});
 		if ((await toggle.isChecked()) !== readOnly)
 			await this.desk.click(toggle.locator("xpath=.."));
 		await this.desk.click(settings.getByRole("radio", { name: mode }));
@@ -452,16 +449,14 @@ export class BrowserFiles {
 	}
 
 	private async beginEdit(manager: Locator, action: string) {
-		await this.desk.click(
-			manager
-				.locator(".file-manager-header-actions")
-				.getByRole("button", { name: "Edit", exact: true }),
-		);
-		await this.desk.click(
-			this.page
-				.getByRole("menu", { name: "Edit menu" })
-				.getByRole("menuitem", { name: action, exact: true }),
-		);
+		await manager
+			.locator(".file-manager-header-actions")
+			.getByRole("button", { name: "Edit", exact: true })
+			.click();
+		const menuItem = this.page
+			.getByRole("menu", { name: "Edit menu" })
+			.getByRole("menuitem", { name: action, exact: true });
+		await menuItem.dispatchEvent("click");
 	}
 
 	private async seedText(prefix: string, extension: string, text: string) {
@@ -477,20 +472,33 @@ export class BrowserFiles {
 	}
 
 	private async refreshManager(manager: Locator): Promise<void> {
-		const view = manager
-			.locator(".file-manager-header-actions")
-			.getByRole("button", { name: "View", exact: true });
-		for (let index = 0; index < 2; index += 1) {
-			await this.desk.click(view);
-			await this.desk.click(
-				this.page
-					.getByRole("menu", { name: "View menu" })
-					.getByRole("menuitemcheckbox", {
-						name: "Show Hidden Files",
-						exact: true,
-					}),
-			);
-		}
+		await this.configureManagerHiddenFiles(manager, true);
+		await this.configureManagerHiddenFiles(manager, false);
+	}
+
+	private async configureManagerHiddenFiles(
+		manager: Locator,
+		visible: boolean,
+	): Promise<void> {
+		await this.desk.click(
+			manager.getByRole("button", { name: "Settings", exact: true }),
+		);
+		const settings = this.page.getByRole("dialog", {
+			name: "Pane Settings",
+			exact: true,
+		});
+		await this.desk.click(
+			settings.getByRole("tab", { name: "File Manager", exact: true }),
+		);
+		const toggle = settings.getByRole("switch", {
+			name: "Hidden files",
+			exact: true,
+		});
+		if ((await toggle.isChecked()) !== visible)
+			await this.desk.click(toggle.locator("..").locator(".ui-switch-track"));
+		await this.desk.click(
+			settings.getByRole("button", { name: "Close settings", exact: true }),
+		);
 	}
 
 	private readText(path: string): Promise<{ text: string; revision: number }> {

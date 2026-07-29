@@ -786,7 +786,12 @@ async function installCuelist(api: ApiDriver, options: InstallOptions): Promise<
   } catch {
     page = null;
   }
-  await putObject(api, "playback_page", "1", { number: 1, name: "Main", slots: { ...(page?.body.slots ?? {}), [String(playback)]: playback } }, page?.revision ?? 0);
+  await putObject(api, "playback_page", "1", {
+    number: 1,
+    name: "Main",
+    slots: { ...(page?.body.slots ?? {}), [String(playback)]: playback },
+    virtual_playbacks: page?.body.virtual_playbacks ?? {},
+  }, page?.revision ?? 0);
   return { id, name: options.name };
 }
 

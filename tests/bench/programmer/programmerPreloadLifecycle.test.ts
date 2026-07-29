@@ -255,6 +255,7 @@ function valuesProjection(revision: number) {
 		revision,
 		fixture_values: [],
 		group_values: [],
+		dynamic_values: [],
 	};
 }
 

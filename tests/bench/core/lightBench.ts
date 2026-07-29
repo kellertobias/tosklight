@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { ApiDriver, type Session } from "./api";
 import { DmxReceiver, OscHardware } from "./protocols";
 import artifactResolver from "../../../tools/artifact-paths.cjs";
+import { CURRENT_FIXTURE_PROFILE_SCHEMA_VERSION } from "../../support/fixtureSchema";
 
 const { artifactPaths } = artifactResolver;
 
@@ -297,14 +298,36 @@ export class LightBench {
 }
 
 function dimmer(fixtureId: string, number: number) {
+  const profileId = crypto.randomUUID();
+  const modeId = crypto.randomUUID();
+  const headId = crypto.randomUUID();
+  const profile = {
+    schema_version: CURRENT_FIXTURE_PROFILE_SCHEMA_VERSION,
+    id: profileId, revision: 1, manufacturer: "E2E", name: "Generic Dimmer",
+    short_name: "Generic Dimmer", fixture_type: "dimmer", patch_policy: "dmx",
+    modes: [{
+      id: modeId, name: "1ch", splits: [{ number: 1, footprint: 1 }],
+      heads: [{ id: headId, name: "Main", master_shared: true }],
+      channels: [{
+        id: crypto.randomUUID(), head_id: headId, split: 1,
+        fixture_attribute: "intensity", attribute: "intensity",
+        canonical_transform: "identity", resolution: "u8", secondary_slots: [],
+        default_raw: 0, highlight_raw: 255, physical_min: 0, physical_max: 1,
+        unit: null, invert: false, snap: false, reacts_to_virtual_intensity: false,
+        reacts_to_sequence_master: true, reacts_to_group_master: true,
+        reacts_to_grand_master: true, behavior: "controlled", functions: [],
+      }],
+    }],
+  };
   return {
     fixture_id: fixtureId, fixture_number: number, name: `Dimmer ${number}`,
     definition: {
-      schema_version: 1, id: crypto.randomUUID(), revision: 1, manufacturer: "E2E",
+      schema_version: CURRENT_FIXTURE_PROFILE_SCHEMA_VERSION, id: profileId, revision: 1, manufacturer: "E2E",
       device_type: "dimmer", name: "Generic Dimmer", model: "Generic Dimmer", mode: "1ch", footprint: 1,
       heads: [{ index: 0, name: "Main", shared: true, parameters: [{ attribute: "intensity", components: [{ offset: 0, byte_order: "msb_first" }], default: 0, virtual_dimmer: false, metadata: { physical_min: 0, physical_max: 1, unit: null, invert: false, wrap: false, curve: "linear" }, capabilities: [] }] }],
       color_calibration: null, physical: {}, model_asset: null, icon_asset: null, hazardous: false,
       direct_control_protocols: [], signal_loss_policy: { type: "hold_last" }, safe_values: {},
+      profile_id: profileId, mode_id: modeId, profile_snapshot: profile,
     },
     universe: 1, address: number, layer_id: "default", direct_control: null,
     location: { x: number * 500, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, logical_heads: [], multipatch: [],

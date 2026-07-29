@@ -230,6 +230,7 @@ async function seedLargeShow(api: ApiDriver) {
 						(((number - 1) * 64 + index) % 100) + 501,
 					]),
 				),
+				virtual_playbacks: {},
 			}),
 		);
 	await runInBatches(work);

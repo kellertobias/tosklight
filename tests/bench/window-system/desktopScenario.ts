@@ -518,7 +518,7 @@ async function applyPaneConfiguration<T extends PaneType>(
 				})
 				.click();
 		await setSwitch(dialog, "Preload source", options.followPreload);
-		await setSwitch(dialog, "Beam direction guides", options.beamGuides);
+		await setSwitch(dialog, "Beam direction guidelines", options.beamGuides);
 		if (options.renderQuality)
 			await dialog
 				.getByRole("radio", {
@@ -538,18 +538,32 @@ async function applyPaneConfiguration<T extends PaneType>(
 					exact: true,
 				})
 				.click();
-		await setSwitch(dialog, "Enable pool colors", options.poolColors);
+		if (options.poolColors !== undefined)
+			await dialog
+				.getByRole("button", {
+					name: options.poolColors ? "Type colors" : "Individual colors",
+					exact: true,
+				})
+				.click();
 	}
 	if (type === "virtual_playbacks") {
 		await dialog.getByRole("tab", { name: "Virtual Playbacks" }).click();
 		if (options.rows !== undefined)
 			await dialog.getByLabel("Rows").fill(String(options.rows));
-		if (options.columns !== undefined)
-			await dialog.getByLabel("Columns").fill(String(options.columns));
-	}
+			if (options.columns !== undefined)
+				await dialog.getByLabel("Columns").fill(String(options.columns));
+			if (options.pageMode !== undefined)
+				await dialog
+					.getByRole("radio", {
+						name: options.pageMode === "follow_main" ? "Follow Main" : "Pinned",
+					})
+					.click();
+			if (options.pageMode === "pinned" && options.pinnedPage !== undefined)
+				await dialog.getByLabel("Pinned page").fill(String(options.pinnedPage));
+		}
 	if (options.showGroupShortcuts !== undefined) {
 		await dialog.getByRole("tab", { name: "Shortcuts" }).click();
-		await setSwitch(dialog, "Show group shortcuts", options.showGroupShortcuts);
+		await setSwitch(dialog, "Group shortcuts", options.showGroupShortcuts);
 	}
 }
 

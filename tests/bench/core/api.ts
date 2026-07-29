@@ -637,7 +637,6 @@ export class ApiDriver {
         capacity: 32,
         rate_limits: [],
       }));
-      const requestId = crypto.randomUUID();
       return await new Promise<CommandResponse<T>>((resolve, reject) => {
         const finish = (response?: CommandResponse<T>, error?: Error) => {
           clearTimeout(timer);

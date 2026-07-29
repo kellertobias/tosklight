@@ -46,13 +46,12 @@ export class BrowserSystemIntegrations {
 				"Desk installation · shared across shows and Desktops",
 			),
 		).toBeVisible();
-		const disabled = settings.getByRole("switch", {
-			name: "Matter server disabled",
+		const matterSwitch = settings.getByRole("switch", {
+			name: "Matter server",
+			exact: true,
 		});
-		if (await disabled.count()) await disabled.click();
-		await expect(
-			settings.getByRole("switch", { name: "Matter server enabled" }),
-		).toBeChecked();
+		if (!(await matterSwitch.isChecked())) await matterSwitch.click();
+		await expect(matterSwitch).toBeChecked();
 		await expect
 			.poll(
 				async () =>
@@ -60,9 +59,7 @@ export class BrowserSystemIntegrations {
 						.configuration.matter_enabled,
 			)
 			.toBe(true);
-		await settings
-			.getByRole("switch", { name: "Matter server enabled" })
-			.click();
+		await matterSwitch.click();
 		await expect
 			.poll(
 				async () =>

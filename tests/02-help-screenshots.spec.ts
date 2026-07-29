@@ -55,7 +55,7 @@ test("captures help and README screenshots from the default show desk @ui @docs"
   await openSeededDefaultStageShow(api);
 
   await desk.open(api.baseUrl);
-  await page.getByRole("button", { name: "DESKTOPS" }).click();
+  await showDockMode(page, "desks");
   await page.getByRole("button", { name: /Programming/ }).click();
   await selectFixtures(page, desk, "1 + 2 + 3 + 4 + 5 + 6");
   await setDimmerByTouch(page, 50);
@@ -73,7 +73,7 @@ test("captures help and README screenshots from the default show desk @ui @docs"
   await expect(page.locator(".playback-fader-bank")).toContainText("Front Fresnels");
   await page.screenshot({ path: shot("cuelist-playback.png"), fullPage: true });
 
-  await page.getByRole("button", { name: "BUILT-INS" }).click();
+  await showDockMode(page, "builtins");
   await page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
   await expect(page.locator(".fixture-window")).toBeVisible();
   await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "next" }, true, undefined, { deskId: api.session!.desk.id });
@@ -105,6 +105,13 @@ function shot(file: string): string {
 
 function workflowShot(file: string): string {
   return capturePath(`workflows/${file}`);
+}
+
+async function showDockMode(page: Page, mode: "desks" | "builtins") {
+  const toggle = page.getByRole("button", { name: "Desktops / Built-ins", exact: true });
+  if ((await toggle.getAttribute("data-dock-mode")) !== mode) {
+    await toggle.click();
+  }
 }
 
 const workflowScreenshots = [
@@ -241,7 +248,7 @@ async function captureWorkflowReference(page: Page) {
   await page.getByRole("button", { name: "Close Import GDTF", exact: true }).click();
   await page.getByRole("button", { name: "Close Fixture Library", exact: true }).click();
 
-  await page.getByRole("button", { name: "BUILT-INS" }).click();
+  await showDockMode(page, "builtins");
   await page.locator(".dock-entry").filter({ hasText: "Stage" }).click();
   await expect(page.locator(".stage-window")).toBeVisible();
   await page.locator(".stage-window").screenshot({ path: workflowShot("stage-window-2d.png") });
@@ -260,7 +267,7 @@ async function captureWorkflowReference(page: Page) {
 }
 
 async function capturePaneReference(page: Page, selectedDmx: { universe: number; address: number }) {
-  await page.getByRole("button", { name: "DESKTOPS" }).click();
+  await showDockMode(page, "desks");
   await page.getByRole("button", { name: /New desktop/ }).click();
   await expect(page.locator(".empty-desk")).toBeVisible();
   for (const [, title, slug, settingsTab] of paneReference) {
@@ -290,7 +297,7 @@ async function capturePaneReference(page: Page, selectedDmx: { universe: number;
     await pane.screenshot({ path: paneShot(`${slug}.png`) });
     if (slug === "file-manager") {
       // The File Manager pane has no header Settings button; continue on a fresh desktop.
-      await page.getByRole("button", { name: "DESKTOPS" }).click();
+      await showDockMode(page, "desks");
       await page.getByRole("button", { name: /New desktop/ }).click();
       await expect(page.locator(".empty-desk")).toBeVisible();
       continue;
@@ -382,7 +389,18 @@ async function seedScreenshotProgramming(api: ApiDriver, showId: string) {
   for (const [id, name] of groups.slice(0, 4).map(([id, name]) => [id, name] as const)) {
     await put(api, showId, "playback", String(Number(id) + 1), playback(Number(id) + 1, name, { type: "group", group_id: id }, ["select", "flash", "select_dereferenced"]));
   }
-  await put(api, showId, "playback_page", "1", { number: 1, name: "Main", slots: { "1": 1, "2": 2, "3": 3, "4": 4, "5": 5 } });
+  await put(api, showId, "playback_page", "1", {
+    number: 1,
+    name: "Main",
+    slots: { "1": 1, "2": 2, "3": 3, "4": 4, "5": 5 },
+    virtual_playbacks: {
+      "1001": playback(1001, "Opening Sequence", { type: "cue_list", cue_list_id: cueListId }),
+      "1002": playback(1002, "Front Fresnels", { type: "group", group_id: "1" }, ["select", "flash", "select_dereferenced"]),
+      "1003": playback(1003, "Back Fresnels", { type: "group", group_id: "2" }, ["select", "flash", "select_dereferenced"]),
+      "1004": playback(1004, "LED Washes", { type: "group", group_id: "3" }, ["select", "flash", "select_dereferenced"]),
+      "1005": playback(1005, "Floor PARs", { type: "group", group_id: "4" }, ["select", "flash", "select_dereferenced"]),
+    },
+  });
   await api.request("POST", "/api/v2/files/shows/operations", { operation: "create_file", sources: [], destination: "", name: SCREENSHOT_TEXT_FILE });
   const empty = await api.request<any>("GET", `/api/v2/files/shows/text?path=${encodeURIComponent(SCREENSHOT_TEXT_FILE)}`);
   await api.request("PUT", "/api/v2/files/shows/text", {
@@ -427,8 +445,8 @@ async function selectFixtures(page: Page, desk: { command(value: string): Promis
 }
 
 async function setDimmerByTouch(page: Page, value: number) {
-  const encoder = page.locator(".touch-encoder").filter({ hasText: "Enc 1 · Dimmer" });
-  await encoder.getByRole("button", { name: "Set Value" }).click();
+  const encoder = page.getByRole("group", { name: "Enc 1 · Dimmer", exact: true });
+  await encoder.getByRole("button", { name: "Set Enc 1 · Dimmer value" }).click();
   await expect(page.getByRole("dialog", { name: "Enc 1 · Dimmer value" })).toBeVisible();
   await page.keyboard.type(String(value));
   await page.keyboard.press("Enter");
@@ -440,13 +458,13 @@ async function setStagePaneTo3d(page: Page) {
   await page.getByRole("tab", { name: "Stage", exact: true }).click();
   await page.getByRole("radio", { name: "3D" }).click();
   await page.getByRole("tab", { name: "Shortcuts", exact: true }).click();
-  await page.getByLabel("Show group shortcuts").check({ force: true });
+  await page.getByRole("switch", { name: "Group shortcuts", exact: true }).check({ force: true });
   await page.getByRole("button", { name: "Close settings" }).click();
   await expect(stagePane.locator("canvas")).toBeVisible();
 }
 
 async function openCuelistDetailWithPlayback(page: Page) {
-  await page.getByRole("button", { name: "BUILT-INS" }).click();
+  await showDockMode(page, "builtins");
   await page.locator(".dock-entry").filter({ hasText: "Cuelists" }).click();
   const firstCuelist = page.locator(".cuelist-card").first();
   await firstCuelist.click();

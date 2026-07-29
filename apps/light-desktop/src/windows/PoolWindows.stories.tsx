@@ -218,6 +218,7 @@ export function MarketingPresetWindow({
 					surfaceKey={`show:${SHOW_ID}:builtin:preset`}
 					fallbackMode="type"
 					selectionCount={2}
+					recallReady
 					storeArmed={false}
 					updateArmed={false}
 					setArmed={false}
