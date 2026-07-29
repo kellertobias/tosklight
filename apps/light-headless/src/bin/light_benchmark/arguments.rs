@@ -60,7 +60,7 @@ pub struct Arguments {
     pub patch_gate: bool,
     pub fixtures_per_universe: Option<u16>,
     pub rate_hz: Option<u16>,
-    pub demo_show: bool,
+    pub sustained_show: bool,
     pub fixture_package_dir: Option<String>,
 }
 
@@ -134,7 +134,7 @@ impl Default for Arguments {
             patch_gate: false,
             fixtures_per_universe: None,
             rate_hz: None,
-            demo_show: false,
+            sustained_show: false,
             fixture_package_dir: None,
         }
     }
@@ -202,7 +202,7 @@ impl Arguments {
                         "rate Hz",
                     )? as u16);
                 }
-                "--demo-show" => parsed.demo_show = true,
+                "--sustained-show" | "--demo-show" => parsed.sustained_show = true,
                 "--fixture-package-dir" => {
                     let path = required_value(&mut arguments, &argument)?;
                     if path.trim().is_empty() {
@@ -231,8 +231,8 @@ impl Arguments {
           --hardware-label TEXT        Reference-machine description included in JSON\n\
           --fixtures-per-universe N    Equal-size fixtures filling every universe (1-128)\n\
           --rate-hz N                  Scheduled output rate, 1-240 (profile floor still applies)\n\
-          --demo-show                  Use the real mixed-fixture sustained demo show\n\
-          --fixture-package-dir PATH   Fixture packages used by --demo-show\n\
+          --sustained-show             Use the mixed-fixture sustained benchmark show\n\
+          --fixture-package-dir PATH   Fixture packages used by --sustained-show\n\
           --mutation-gate              Run the large-show incremental mutation gate\n\
           --patch-gate                 Run the real persisted Patch transaction gate\n\
           -h, --help\n"
@@ -316,7 +316,7 @@ mod tests {
             "32",
             "--rate-hz",
             "110",
-            "--demo-show",
+            "--sustained-show",
             "--fixture-package-dir",
             "assets/fixture-library",
             "--mutation-gate",
@@ -330,7 +330,7 @@ mod tests {
         assert_eq!(arguments.hardware_label.as_deref(), Some("Test host"));
         assert_eq!(arguments.fixtures_per_universe, Some(32));
         assert_eq!(arguments.rate_hz, Some(110));
-        assert!(arguments.demo_show);
+        assert!(arguments.sustained_show);
         assert_eq!(
             arguments.fixture_package_dir.as_deref(),
             Some("assets/fixture-library")
@@ -348,6 +348,13 @@ mod tests {
         assert!(Arguments::parse(["--rate-hz".into(), "241".into()]).is_err());
         assert!(Arguments::parse(["--fixtures-per-universe".into(), "3".into()]).is_err());
         assert!(Arguments::parse(["--fixtures-per-universe".into(), "256".into()]).is_err());
+    }
+
+    #[test]
+    fn accepts_the_legacy_demo_show_flag_as_an_unadvertised_alias() {
+        let arguments = parsed(&["--demo-show"]);
+        assert!(arguments.sustained_show);
+        assert!(!Arguments::help().contains("--demo-show"));
     }
 
     #[test]

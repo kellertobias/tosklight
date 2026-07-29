@@ -100,7 +100,7 @@ function main() {
 		"1",
 		"--rate-hz",
 		"125",
-		"--demo-show",
+		"--sustained-show",
 		"--fixture-package-dir",
 		"assets/fixture-library",
 	];

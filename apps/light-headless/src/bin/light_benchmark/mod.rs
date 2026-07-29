@@ -1,5 +1,4 @@
 mod arguments;
-mod demo_show;
 mod loopback;
 mod metadata;
 mod mutation;
@@ -9,6 +8,7 @@ mod runner;
 mod sampled;
 mod scenario;
 mod statistics;
+mod sustained_show;
 
 pub use arguments::{Arguments, ParseOutcome};
 pub use report::BenchmarkReport;

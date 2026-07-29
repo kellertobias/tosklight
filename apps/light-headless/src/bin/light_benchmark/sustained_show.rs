@@ -164,7 +164,9 @@ pub fn build(
     package_dir: &Path,
 ) -> Result<BenchmarkScenario, String> {
     if config.universes != UNIVERSES as u16 {
-        return Err("the sustained demo show requires the 32-universe hard-floor profile".into());
+        return Err(
+            "the sustained benchmark show requires the 32-universe hard-floor profile".into(),
+        );
     }
     let layout = prepare_layout(package_dir)?;
 
@@ -199,7 +201,7 @@ pub fn build(
             number: 1,
             action: PoolPlaybackAction::Go,
         })
-        .map_err(|error| format!("activate demo-show playback: {error}"))?;
+        .map_err(|error| format!("activate sustained-show playback: {error}"))?;
     programmers.set_many(
         session,
         fixture_ids
@@ -267,7 +269,7 @@ fn prepare_layout(package_dir: &Path) -> Result<DemoLayout, String> {
         let used = used_slots(universe);
         let remaining = usize::from(SLOTS_PER_UNIVERSE)
             .checked_sub(used)
-            .ok_or_else(|| format!("demo show overfilled a universe with {used} slots"))?;
+            .ok_or_else(|| format!("sustained show overfilled a universe with {used} slots"))?;
         let (three_count, four_count) = rgb_fill_counts(remaining)?;
         rgb_three_count += three_count;
         rgb_four_count += four_count;
@@ -313,7 +315,7 @@ fn patch_layout_fixtures(
         }
         if address != SLOTS_PER_UNIVERSE + 1 {
             return Err(format!(
-                "demo show universe {universe} ended at address {address}"
+                "sustained show universe {universe} ended at address {address}"
             ));
         }
     }
@@ -326,7 +328,7 @@ impl DemoLayout {
             * usize::from(self.templates.rgb_three.footprint())
             + self.rgb_four_count * usize::from(self.templates.rgb_four.footprint());
         ScenarioFixtureInventory {
-            scenario: "mixed_manufacturer_demo_show",
+            scenario: "mixed_manufacturer_sustained_show",
             entries: vec![
                 self.templates.sunstrip.inventory(SUNSTRIP_QUANTITY),
                 self.templates.ledwash.inventory(LEDWASH_QUANTITY),
@@ -426,7 +428,7 @@ fn patched_fixture(
 fn demo_group(fixtures: &[FixtureId]) -> GroupDefinition {
     GroupDefinition {
         id: GROUP_ID.into(),
-        name: "Sustained demo-show fixtures".into(),
+        name: "Sustained benchmark-show fixtures".into(),
         fixtures: fixtures.to_vec(),
         programming: [(AttributeKey::intensity(), AttributeValue::Normalized(0.2))].into(),
         master: 0.9,
@@ -439,7 +441,7 @@ fn demo_playback() -> (CueList, PlaybackDefinition) {
     let cue = Cue {
         id: fixed_uuid(0x84, 1),
         number: 1.0,
-        name: "Overlapping demo-show intensity and Dynamic".into(),
+        name: "Overlapping sustained-show intensity and Dynamic".into(),
         changes: vec![],
         fade_millis: 0,
         delay_millis: 0,
@@ -457,7 +459,7 @@ fn demo_playback() -> (CueList, PlaybackDefinition) {
     };
     let cue_list = CueList {
         id: cue_list_id,
-        name: "Sustained demo-show playback".into(),
+        name: "Sustained benchmark-show playback".into(),
         priority: 10,
         mode: CueListMode::Sequence,
         looped: false,
@@ -475,7 +477,7 @@ fn demo_playback() -> (CueList, PlaybackDefinition) {
     };
     let playback = PlaybackDefinition {
         number: 1,
-        name: "Sustained demo-show playback".into(),
+        name: "Sustained benchmark-show playback".into(),
         target: PlaybackTarget::CueList { cue_list_id },
         buttons: [
             PlaybackButtonAction::GoMinus,
@@ -529,7 +531,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rgb_par_modes_fill_the_evenly_distributed_demo_show() {
+    fn rgb_par_modes_fill_the_evenly_distributed_sustained_show() {
         assert_eq!(rgb_fill_counts(339).unwrap(), (113, 0));
         assert_eq!(rgb_fill_counts(376).unwrap(), (124, 1));
         assert_eq!(rgb_fill_counts(406).unwrap(), (134, 1));
@@ -537,7 +539,7 @@ mod tests {
     }
 
     #[test]
-    fn shipped_profiles_build_the_exact_fully_packed_demo_show() {
+    fn shipped_profiles_build_the_exact_fully_packed_sustained_show() {
         let package_dir =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fixture-library");
         let scenario = build(

@@ -39,9 +39,9 @@ pub fn run(arguments: &Arguments) -> Result<BenchmarkReport, String> {
         if let Some(fixtures_per_universe) = arguments.fixtures_per_universe {
             config.fixtures_per_universe = fixtures_per_universe;
         }
-        if arguments.demo_show {
+        if arguments.sustained_show {
             eprintln!(
-                "benchmarking {:?}: mixed-fixture demo show across {} fully packed universes at {} Hz",
+                "benchmarking {:?}: mixed-fixture sustained show across {} fully packed universes at {} Hz",
                 profile, config.universes, config.rate_hz
             );
         } else {
@@ -186,7 +186,7 @@ fn run_scenario(
         universes: config.universes,
         slots_per_universe: SLOTS_PER_UNIVERSE,
         fixture_count: scenario.fixture_count,
-        fixtures_per_universe: (!arguments.demo_show).then_some(config.fixtures_per_universe),
+        fixtures_per_universe: (!arguments.sustained_show).then_some(config.fixtures_per_universe),
         fixture_footprint: scenario.fixture_footprint,
         fixture_inventory: scenario.fixture_inventory.clone(),
         configured_rate_hz: config.rate_hz,
@@ -251,12 +251,12 @@ fn prepare_scenario(
         ),
     };
     let destination = loopback.as_ref().map(LoopbackDelivery::destination);
-    let scenario = if arguments.demo_show {
+    let scenario = if arguments.sustained_show {
         let package_dir = arguments
             .fixture_package_dir
             .as_deref()
-            .ok_or_else(|| "--demo-show requires --fixture-package-dir".to_owned())?;
-        crate::light_benchmark::demo_show::build(
+            .ok_or_else(|| "--sustained-show requires --fixture-package-dir".to_owned())?;
+        crate::light_benchmark::sustained_show::build(
             config,
             arguments.protocol,
             destination,
