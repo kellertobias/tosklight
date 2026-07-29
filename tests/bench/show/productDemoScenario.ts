@@ -117,7 +117,7 @@ export class BrowserProductDemo {
 
 			await configureOutput(desk, page, app, bench);
 			await demonstrateGroups(desk, app, keypad, api);
-			await demonstrateFixtureControls(desk, page, app, keypad, api);
+			await demonstrateFixtureControls(desk, page, demo, app, keypad, api);
 			await demonstratePresetRecall(desk, app, keypad, api);
 			await demonstrateCueProgramming(desk, app, api, showId);
 			await demonstrateBusking(desk, demo, api, bench, showId);
@@ -273,6 +273,7 @@ async function demonstrateGroups(
 async function demonstrateFixtureControls(
 	desk: DeskDriver,
 	page: Page,
+	demo: Locator,
 	app: Locator,
 	keypad: Locator,
 	api: ApiDriver,
@@ -289,6 +290,7 @@ async function demonstrateFixtureControls(
 	);
 	const dialog = page.locator(".special-dialog-card");
 	await expect(dialog).toContainText(/1 fixtures? selected/);
+	await expectCenteredInDemoSurface(dialog, demo);
 	for (const name of ["Lamps On", "Fan Auto", "Reset", "Lamp Off"]) {
 		const action = dialog.getByRole("button", { name, exact: true });
 		await expect(action).toBeVisible();
@@ -327,7 +329,7 @@ async function demonstrateCueProgramming(
 ) {
 	await desk.titleCard(
 		"CUE PROGRAMMING",
-		"Fixture Sheet, Color and Position presets, and the final seven-Cuelist topology remain visible together.",
+		"Inspect the final seven-Cuelist topology after using the Fixture Sheet and canonical Color and Position preset pools.",
 	);
 	await openBuiltIn(desk, app, "Cuelists");
 	await expect(app.locator(".cuelist-window")).toContainText("Start");
@@ -592,4 +594,20 @@ async function expectLiveOutput(api: ApiDriver) {
 			),
 		)
 		.toBe(true);
+}
+
+async function expectCenteredInDemoSurface(dialog: Locator, surface: Locator) {
+	const [dialogBox, surfaceBox] = await Promise.all([
+		dialog.boundingBox(),
+		surface.boundingBox(),
+	]);
+	if (!dialogBox || !surfaceBox) {
+		throw new Error("The product demo dialog or surface has no visible bounds");
+	}
+	const dialogCenterX = dialogBox.x + dialogBox.width / 2;
+	const dialogCenterY = dialogBox.y + dialogBox.height / 2;
+	const surfaceCenterX = surfaceBox.x + surfaceBox.width / 2;
+	const surfaceCenterY = surfaceBox.y + surfaceBox.height / 2;
+	expect(Math.abs(dialogCenterX - surfaceCenterX)).toBeLessThanOrEqual(4);
+	expect(Math.abs(dialogCenterY - surfaceCenterY)).toBeLessThanOrEqual(4);
 }

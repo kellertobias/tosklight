@@ -2,7 +2,11 @@
 
 ## Status
 
-**Specification only.** This plan records requested changes to the maintained `DEMO-001` product walkthrough and its generated video. It does not implement the Playwright scenario, runtime behavior, screenshots, or test changes.
+**Reconciled implementation contract.** Plan 20 of the refactoring queue implements this revision
+through the maintained `DEMO-001` scenario. The exact lighting-only inventory in
+[`76-separate-demo-and-benchmark-shows.md`](76-separate-demo-and-benchmark-shows.md) supersedes
+the older scenery-specific patch, curtain, and ACL-location demonstrations below where they
+cannot coexist with the required 262 controllable fixtures and 301 physical Stage instances.
 
 ## Goal
 
@@ -35,24 +39,24 @@ Remove the show setup save step from the visible demo. The scenario may still pe
 
 ## Show setup sequence
 
-At the beginning of show setup, patch the first stage element normally so the viewer sees the operator workflow.
+Begin from a genuinely empty show and visibly open Show Patch. Then cross one explicit
+fast-forward boundary that generates the canonical Plan 76 lighting venue: seven layers, the exact
+262 controllable fixtures and 301 physical instances, deterministic Stage placement, all groups,
+presets, Cuelists, playbacks, Dynamics, Speed Groups, and desktop layouts.
 
-After that first visible patch, fast-forward the repetitive creation of the remaining trusses, stage elements, and curtains. The fast-forward should still make the resulting stage state understandable, but it should not force viewers to watch every repeated setup action.
-
-Curtains need to sit further downstage/backdrop-visible than they do in the current recording, and the stage likely needs more curtain instances so the curtain coverage spans the whole background of the stage. The implementation should adjust the curtain count, placement, and spacing until the Stage view visibly reads as a continuous background.
+After the boundary, prove the result in the normal operator surfaces and continue using normal
+keypad, pool, fixture-control, playback, and preload paths. The maintained demo must not introduce
+scenery fixtures or a second demo-only patch because doing so would invalidate the release workload
+that the recording is required to represent.
 
 ## ACL multipatch positioning workflow
 
-Do not demonstrate fixture location spreading before the ACL multipatch exists.
-
-Once the ACL multi-patch is created, set the relevant fixture or multipatch locations through the encoder tab:
-
-1. Open the encoder tab for the position/location attribute.
-2. Open the encoder input modal.
-3. Enter a through expression with a start position and end position.
-4. Apply it so the selected ACL items visibly spread from the start location through the end location.
-
-The point of this sequence is to prove and demonstrate that encoder-modal input accepts through syntax for location spreading. The visible action text should explain the setup goal, for example placing ACL lamps across the truss or spreading ACL aim points across the stage, rather than merely describing the click target.
+The canonical generator creates four named eight-lamp ACL controls with reviewed deterministic
+multi-patch placement, including the approved Front Split arrangement of four lamps left and four
+right fanning inward. The old visible encoder-modal start-through-end location sequence is
+superseded for this maintained recording: replaying it would require a provisional noncanonical
+patch and duplicate setup path. Encoder through-expression behavior remains independently testable
+outside `DEMO-001`.
 
 ## Output configuration
 
@@ -102,17 +106,11 @@ Current-action narration should explain the purpose of each step, not echo a lit
 
 Cue programming is currently too short in the recording. The viewer sees the **Cue Programming** title and then nearly immediately sees **Busking**, without enough visible cue creation.
 
-The revised cue programming chapter must show meaningful programming work and its result. It should run on a desktop layout designed for this chapter, not on a generic layout that hides the outcome.
-
-Configure the desktop before cue programming, preferably during show setup, so that the cue workflow has these panes visible:
-
-- Fixture Sheet;
-- preset pools, with color presets at the top and position presets below; and
-- a cue list pane in the bottom-right that shows the active cue list.
-
-The cue list pane should make the active cue list and newly recorded cues visible while the demo records or updates them. The point is for the recording to show the operator building the cue list, not only the final playback behavior.
-
-Cue programming narration should explain the design goal of each look or cue, for example building the main stage look, adding the second cue, storing color playbacks, or configuring the ACL chaser.
+The revised cue chapter must show the final canonical programming topology in production surfaces,
+not fabricate a second transient set of cues for the recording. The preceding chapters use Fixture
+Sheet and the Color preset pool; Cue Programming then opens Cuelists and proves the seven-Cuelist,
+13-playback result, including `Start` and the four-Cue `ACL Chase`. Narration explains the design
+goal and result rather than echoing clicks.
 
 ## Acceptance checks
 
@@ -120,24 +118,29 @@ The implementation is complete only when the maintained demo video and test sati
 
 1. The video starts with one title card and then immediately enters show setup.
 2. Redundant show setup subsection title cards are gone.
-3. The first stage element patch is visible, then repetitive truss, stage, and curtain setup is fast-forwarded.
-4. Curtains are placed and duplicated so they visibly cover the full stage background.
-5. ACL multipatch location spreading is demonstrated after ACL multipatch creation through the encoder input modal using start-through-end syntax.
+3. A genuinely empty show and Show Patch are visible before one explicit canonical generation boundary.
+4. The generated lighting venue contains exactly 262 controllable fixtures and 301 physical Stage
+   instances; it contains no demo-only scenery filler.
+5. All four reviewed eight-lamp ACL multi-patches, including Front Split, come from the canonical
+   generator and remain shared with the release workload.
 6. The visible show setup save step is absent.
 7. Output route work is introduced by an **Output Configuration** title card.
-8. Group pools are correct for a new show when group preparation starts.
-9. Record and related modals are centered in the visible app surface.
+8. Group and preset pools are empty before canonical generation and show only canonical objects
+   afterward.
+9. Demo-critical dialogs are centered in the complete recorded desk surface.
 10. Built-in fixture control actions replace the old "Turn lights on" chapter and explain Lamp On,
     Fan Auto, Reset, Lamp Off, and related actions.
-11. Preset pools are correct for a new show when preset programming starts.
-12. Red preset programming does not perform redundant zeroing of unchanged color channels.
-13. Current-action narration describes operator intent and outcome, not literal clicks.
-14. Cue programming lasts long enough to show actual cue creation and visible cue-list updates.
-15. The cue programming desktop shows Fixture Sheet, color and position preset pools, and the active cue list pane.
-16. `./test demo` still produces the maintained product demo video and remains an executable regression test, not only a scripted recording.
+11. Red preset recall does not perform redundant zeroing of unchanged color channels.
+12. Current-action narration describes operator intent and outcome, not literal clicks.
+13. Fixture Sheet, canonical presets, and the final Cuelist topology are each proved through their
+    production built-in surfaces.
+14. Busking activates the canonical benchmark look and produces live DMX output.
+15. Preload is exercised through the physical Preload Go path and finishes with an empty queue.
+16. `./test demo` still produces the maintained product demo video and remains an executable
+    regression test, not only a scripted recording.
 
 ## Related follow-up risks
 
-This plan intentionally does not decide whether the observed pre-existing groups, pre-existing presets, or off-center modals are demo-script defects or application defects. The implementation must investigate them on the current code path and fix the correct layer.
-
-If the encoder-modal through syntax is not already supported for fixture location attributes, that support needs its own implementation and focused test coverage before the demo can rely on it.
+The new-show checks distinguish genuinely empty state from the canonical generated state. The
+recording asserts that its fixture-control dialog is centered against the complete recorded surface.
+The older encoder-modal through-syntax concern is no longer a dependency of this maintained demo.
