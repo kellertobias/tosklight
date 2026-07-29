@@ -2,7 +2,7 @@
 
 ## Status
 
-**Reconciled implementation contract.** Plan 20 of the refactoring queue implements this revision
+**Implemented and reconciled — 2026-07-29.** Plan 20 of the refactoring queue implements this revision
 through the maintained `DEMO-001` scenario. The exact lighting-only inventory in
 [`76-separate-demo-and-benchmark-shows.md`](76-separate-demo-and-benchmark-shows.md) supersedes
 the older scenery-specific patch, curtain, and ACL-location demonstrations below where they
@@ -144,3 +144,23 @@ The implementation is complete only when the maintained demo video and test sati
 The new-show checks distinguish genuinely empty state from the canonical generated state. The
 recording asserts that its fixture-control dialog is centered against the complete recorded surface.
 The older encoder-modal through-syntax concern is no longer a dependency of this maintained demo.
+
+## Result
+
+`DEMO-001` now starts from an empty show, crosses one explicit canonical-generation boundary, and
+continues through production Show Patch, output routing, Fixture Sheet, fixture-control, preset,
+Cuelist, playback, preload, Programmer, Stage, and live DMX paths. The maintained recording passed
+with `LIGHT_VISUAL_RECORDING=1 LIGHT_UPDATE_DEMO_SHOW=1 npm run test:demo`.
+
+Generated visual evidence:
+
+- `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-h265.mp4` — 1920×1080,
+  25 fps, 162.84 seconds;
+- `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-1920x1080.png`; and
+- `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-contact-sheet.png`.
+
+The run refreshed `assets/demo.show`; its SQLite integrity check passes and it contains the exact
+262 patched fixtures, 38 Groups, 30 presets, 30 Dynamics, seven Cuelists, and 13 Playbacks. The
+fixture-control dialog has executable centering coverage against the complete recorded desk
+surface. The royalty-free Theater script and script-specific Theater Cues remain pending exactly
+as allowed by Plan 76.

@@ -6,7 +6,7 @@ If the usage drops below 60%, wrap up and give me a summary.
 
 ## Queue position and status
 
-**Doing after repository-wide dead-code removal and before final Stage optimization.**
+**Finished before final Stage optimization.**
 
 **Completion usage gate: above 50% large-window remaining usage.**
 
@@ -129,3 +129,68 @@ Before completion:
    measurements, limitations, and commit;
 4. move this file to `finished/`; and
 5. create the semantic commit required by the queue workflow.
+
+## Result
+
+Completed on 2026-07-29 with 91% large-window usage remaining.
+
+### Generated tiers and runtime evidence
+
+- The canonical demo generator produces exactly 262 controllable fixtures, 301 physical Stage
+  instances, 3,783 occupied DMX slots, seven layers, 38 Groups, 30 presets, 30 Dynamics, seven
+  Cuelists, 13 Playbacks, Speed Groups A–E, and the reviewed four-set ACL layout. The focused
+  `tests/76-demo-show-generation.spec.ts` runtime path passed with all 12 canonical benchmark
+  assignments active.
+- `tests/76-interactive-large-tier.spec.ts` passed in 28.3 seconds. It proves the exact
+  970-record/1,000-instance interactive tier, 40 RGB Sunstrips, 20 active address-partitioned
+  Dynamics, 440 fixed-control physical instances, 18,840 occupied slots across 37 universes, a
+  visible 3D Stage, a simultaneously visible Fixture Sheet, and changing rendered frames.
+- Short release-mode informational headless probes on an Apple M5 Max with 18 logical CPUs:
+  - 2,000 fixtures: 60.20 achieved ticks/s at the 60 Hz target, zero dropped/deferred ticks and
+    zero deadline misses, 11.60 ms total-pipeline p99, 82,001,920 resident bytes;
+  - 4,000 fixtures: 39.63 achieved ticks/s, 20 dropped ticks, 38 deferred ticks, 40 deadline
+    misses, 25.72 ms total-pipeline p99, 150,061,056 resident bytes. This tier is explicitly
+    informational and non-blocking.
+
+Headless reports:
+
+- `.artifacts/performance/headless-stress-2000-2026-07-29T14-47-25-310Z.json`
+- `.artifacts/performance/headless-stress-4000-2026-07-29T14-47-28-270Z.json`
+
+### Maintained demo artifacts
+
+`LIGHT_VISUAL_RECORDING=1 LIGHT_UPDATE_DEMO_SHOW=1 npm run test:demo` passed in 2.8 minutes and
+refreshed the integrity-checked `assets/demo.show`. Visual inspection used:
+
+- `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-h265.mp4` — HEVC,
+  1920×1080, 25 fps, 162.84 seconds, 44,425,246 bytes;
+- `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo.webm` — 60,126,305 bytes;
+- `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-1920x1080.png`; and
+- `.artifacts/test/visual-inspection/product-demo/tosklight-product-demo-contact-sheet.png`.
+
+### Verification
+
+- `npm run test:e2e -- tests/76-demo-show-generation.spec.ts`
+- `npm run test:e2e --workspace @tosklight/light-desktop -- tests/product-demo.spec.ts`
+- `LIGHT_VISUAL_RECORDING=1 LIGHT_UPDATE_DEMO_SHOW=1 npm run test:demo`
+- `npm run test:e2e --workspace @tosklight/light-desktop -- tests/76-interactive-large-tier.spec.ts`
+- `node --test tools/stage-dynamics-scene.test.mjs tools/stage-large-scene.test.mjs`
+- `cargo test -p light-headless-runtime dynamic_coverage --lib`
+- `npx vitest run tests/bench/show/plannedDemoPlaybacks.test.ts tests/bench/show/plannedDemoDynamics.test.ts`
+- product-demo mapping/control workspace tests, frontend build, Biome, source-size ratchet, semantic
+  catalog generation, test-bench inventory generation, `git diff --check`, and SQLite
+  `PRAGMA integrity_check`.
+
+### Limitations and deferred gates
+
+- The complete packaged three-tier duration sweep, the large end-to-end suite, the 100 Hz
+  interactive rate report, and release-blocking renderer gates remain explicitly owned by Plan 21.
+  A diagnostic packaged large-tier probe before the compact address partition exposed 13,080
+  Programmer Dynamic values repeatedly embedding unrelated multi-lane definitions and growing
+  persisted Programmer history beyond Node's JSON string ceiling. The workload now uses 20
+  non-overlapping fixture/attribute partitions with compact single-lane targetless definitions;
+  the bounded interactive acceptance passes. The full packaged rerun remains part of Plan 21.
+- `Show LED Random Strobe` is active but the selected shipped Generic RGBW LED profile exposes no
+  compatible `strobe` address; no unsupported channel is manufactured.
+- The royalty-free Theater source has not been supplied. The Theater desktop persists, while
+  script-specific Theater content remains explicitly pending under Plan 76.
